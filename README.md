@@ -3,6 +3,8 @@
 
 > *Transparent memory and abstraction for agentic AI systems — deterministic, explainable, and emotive-aware.*
 
+Because in AI, memory without traceability or understanding is just confusion.
+
 ---
 
 ## 🚀 Overview
@@ -15,6 +17,8 @@ It combines:
 
 KATO is derived from the heritage of the **GAIuS** framework, retaining its most valuable core — a **transparent, symbolic, and physics-informed learning process** — while focusing on a single critical component:  
 a **rote memorizer and abstracter** that excels at clarity, precision, and accountability.
+
+Like GAIuS before it, KATO adheres to [ExCITE AI](https://medium.com/@sevakavakians/what-is-excite-ai-712afd372af4) principles.
 
 ---
 

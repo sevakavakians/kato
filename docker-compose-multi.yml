@@ -1,0 +1,105 @@
+version: '3.8'
+
+services:
+  # MongoDB - Shared knowledge base
+  mongodb:
+    image: mongo:4.4
+    container_name: mongo-kb-${USER:-kato}
+    ports:
+      - "27017:27017"
+    volumes:
+      - kato-mongo-data:/data/db
+    networks:
+      - kato-network
+    restart: unless-stopped
+
+  # REST Gateway - Single instance handling all REST requests
+  rest-gateway:
+    build:
+      context: ./kato-gateway
+      dockerfile: Dockerfile
+    container_name: kato-rest-gateway-${USER:-kato}
+    ports:
+      - "8000:8000"
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - GATEWAY_PORT=8000
+      # Define processor mappings
+      - KATO_P1=p46b6b076c:kato-instance-1-${USER:-kato}:1441
+      - KATO_P2=pd5d9e6c4c:kato-instance-2-${USER:-kato}:1441
+      - KATO_P3=p847675347:kato-instance-3-${USER:-kato}:1441
+    volumes:
+      # Mount kato protobuf files for gateway to use
+      - ./kato:/kato:ro
+    networks:
+      - kato-network
+    depends_on:
+      - kato-instance-1
+      - kato-instance-2
+      - kato-instance-3
+    restart: unless-stopped
+
+  # KATO Instance 1 - Processor p46b6b076c
+  kato-instance-1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: kato:latest
+    container_name: kato-instance-1-${USER:-kato}
+    environment:
+      - HOSTNAME=kato-instance-1-${USER:-kato}
+      - PORT=1441
+      - LOG_LEVEL=${KATO_LOG_LEVEL:-INFO}
+      - MONGO_BASE_URL=mongodb://mongodb:27017
+      - MANIFEST={"id":"p46b6b076c","name":"TestProcessor","classifier":"CVC","max_sequence_length":0,"persistence":5,"smoothness":3,"auto_act_method":"none","auto_act_threshold":0.8,"always_update_frequencies":false,"max_predictions":100,"recall_threshold":0.1,"quiescence":3,"search_depth":10,"sort":true,"process_predictions":true}
+    networks:
+      - kato-network
+    depends_on:
+      - mongodb
+    restart: unless-stopped
+
+  # KATO Instance 2 - Processor pd5d9e6c4c (P1)
+  kato-instance-2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: kato:latest
+    container_name: kato-instance-2-${USER:-kato}
+    environment:
+      - HOSTNAME=kato-instance-2-${USER:-kato}
+      - PORT=1441
+      - LOG_LEVEL=${KATO_LOG_LEVEL:-INFO}
+      - MONGO_BASE_URL=mongodb://mongodb:27017
+      - MANIFEST={"id":"pd5d9e6c4c","name":"P1","classifier":"CVC","max_sequence_length":0,"persistence":5,"smoothness":3,"auto_act_method":"none","auto_act_threshold":0.8,"always_update_frequencies":false,"max_predictions":100,"recall_threshold":0.1,"quiescence":3,"search_depth":10,"sort":true,"process_predictions":true}
+    networks:
+      - kato-network
+    depends_on:
+      - mongodb
+    restart: unless-stopped
+
+  # KATO Instance 3 - Processor p847675347 (P2)
+  kato-instance-3:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: kato:latest
+    container_name: kato-instance-3-${USER:-kato}
+    environment:
+      - HOSTNAME=kato-instance-3-${USER:-kato}
+      - PORT=1441
+      - LOG_LEVEL=${KATO_LOG_LEVEL:-INFO}
+      - MONGO_BASE_URL=mongodb://mongodb:27017
+      - MANIFEST={"id":"p847675347","name":"P2","classifier":"CVC","max_sequence_length":0,"persistence":5,"smoothness":3,"auto_act_method":"none","auto_act_threshold":0.8,"always_update_frequencies":false,"max_predictions":100,"recall_threshold":0.1,"quiescence":3,"search_depth":10,"sort":true,"process_predictions":true}
+    networks:
+      - kato-network
+    depends_on:
+      - mongodb
+    restart: unless-stopped
+
+volumes:
+  kato-mongo-data:
+    driver: local
+
+networks:
+  kato-network:
+    driver: bridge

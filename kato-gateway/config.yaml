@@ -1,0 +1,23 @@
+# KATO REST Gateway Configuration
+port: 8000
+log_level: INFO
+timeout: 30
+max_connections: 10
+
+# Processor configurations
+# These can also be provided via environment variables
+processors:
+  - id: "p46b6b076c"
+    name: "TestProcessor"
+    grpc_endpoint: "kato-instance-1:1441"
+    description: "Default test processor"
+    
+  - id: "pd5d9e6c4c"
+    name: "P1"
+    grpc_endpoint: "kato-instance-2:1441"
+    description: "Processor P1 for testing"
+    
+  - id: "p847675347"
+    name: "P2"
+    grpc_endpoint: "kato-instance-3:1441"
+    description: "Processor P2 for testing"

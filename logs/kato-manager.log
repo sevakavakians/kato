@@ -1,0 +1,1256 @@
+[0;31m[ERROR][0m Missing dependencies: docker
+[0;31m[ERROR][0m Please install missing dependencies before running KATO
+[0;31m[ERROR][0m Missing dependencies: docker
+[0;31m[ERROR][0m Please install missing dependencies before running KATO
+[0;31m[ERROR][0m Missing dependencies: docker
+[0;31m[ERROR][0m Please install missing dependencies before running KATO
+[0;31m[ERROR][0m Missing dependencies: docker
+[0;31m[ERROR][0m Please install missing dependencies before running KATO
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: TestProcessor (ID: kato-processor-1755542471)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Creating Docker network: kato-network
+[0;34m[INFO][0m Creating and starting MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Creating and starting KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Using processor: TestProcessor (ID: kato-processor-1755542471)
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Building KATO Docker image: kato:latest
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Building KATO Docker image: kato:latest
+[0;32m[SUCCESS][0m KATO Docker image built successfully
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: TestProcessor (ID: kato-processor-1755542693)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m MongoDB already running: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Creating and starting KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Using processor: TestProcessor (ID: kato-processor-1755542693)
+[0;34m[INFO][0m Waiting for KATO API to be ready...
+[0;31m[ERROR][0m KATO API failed to start
+[0;34m[INFO][0m Showing last 50 lines of KATO logs:
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Showing last 50 lines of KATO logs:
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Building KATO Docker image: kato:latest
+[0;32m[SUCCESS][0m KATO Docker image built successfully
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: TestProcessor (ID: kato-processor-1755542823)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m MongoDB already running: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Running KATO test suite...
+[0;34m[INFO][0m Running tests with pipenv...
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Running KATO test suite...
+[0;34m[INFO][0m Running tests with pipenv...
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Running KATO test suite...
+[0;34m[INFO][0m Running tests with pipenv...
+[0;34m[INFO][0m Docker found via command -v: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: TestProcessor (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m MongoDB already running: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found via command -v: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: TestProcessor (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found via command -v: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found via command -v: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: TestProcessor (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found via command -v: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found via command -v: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found via command -v: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: pd5d9e6c4c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found via command -v: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: pd5d9e6c4c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: pd5d9e6c4c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: TestProcessor (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m MongoDB already running: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Building KATO Docker image: kato:latest
+[0;32m[SUCCESS][0m KATO Docker image built successfully
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: pd5d9e6c4c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Building KATO Docker image: kato:latest
+[0;32m[SUCCESS][0m KATO Docker image built successfully
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-processor-1755552601)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m MongoDB already running: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Building KATO Docker image: kato:latest
+[0;32m[SUCCESS][0m KATO Docker image built successfully
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-processor-1755552689)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Building KATO Docker image: kato:latest
+[0;32m[SUCCESS][0m KATO Docker image built successfully
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-processor-1755552798)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Building KATO Docker image: kato:latest
+[0;32m[SUCCESS][0m KATO Docker image built successfully
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-processor-1755552889)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Building KATO Docker image: kato:latest
+[0;32m[SUCCESS][0m KATO Docker image built successfully
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-processor-1755553011)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Building KATO Docker image: kato:latest
+[0;32m[SUCCESS][0m KATO Docker image built successfully
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-processor-1755553174)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Creating Docker network: kato-network
+[0;34m[INFO][0m Creating and starting MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Creating and starting KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-processor-1755553174)
+[0;34m[INFO][0m Waiting for KATO API to be ready...
+[0;31m[ERROR][0m KATO API failed to start
+[0;34m[INFO][0m Showing last 50 lines of KATO logs:
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: pd5d9e6c4c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m MongoDB already running: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[1;33m[WARNING][0m KATO already running: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Building KATO Docker image: kato:latest
+[0;32m[SUCCESS][0m KATO Docker image built successfully
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-processor-1755553592)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m MongoDB already running: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[1;33m[WARNING][0m KATO already running: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Running KATO test suite...
+[0;34m[INFO][0m Running tests with pipenv...
+[0;34m[INFO][0m Docker found via command -v: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m MongoDB already running: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[1;33m[WARNING][0m KATO already running: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m MongoDB already running: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[1;33m[WARNING][0m KATO already running: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m MongoDB already running: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[1;33m[WARNING][0m KATO already running: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m MongoDB already running: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[1;33m[WARNING][0m KATO already running: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m MongoDB already running: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[1;33m[WARNING][0m KATO already running: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: pd5d9e6c4c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m MongoDB already running: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[1;33m[WARNING][0m KATO already running: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m MongoDB already running: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[1;33m[WARNING][0m KATO already running: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-processor-1755554410)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Creating Docker network: kato-network
+[0;34m[INFO][0m Creating and starting MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Creating and starting KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-processor-1755554410)
+[0;34m[INFO][0m Waiting for KATO API to be ready...
+[0;31m[ERROR][0m KATO API failed to start
+[0;34m[INFO][0m Showing last 50 lines of KATO logs:
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-processor-1755554571)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-processor-1755555214)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Creating and starting KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-processor-1755555214)
+[0;34m[INFO][0m Waiting for KATO API to be ready...
+[0;31m[ERROR][0m KATO API failed to start
+[0;34m[INFO][0m Showing last 50 lines of KATO logs:
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-processor-1755555391)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-processor-1755555418)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Creating and starting KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-processor-1755555418)
+[0;34m[INFO][0m Waiting for KATO API to be ready...
+[0;32m[SUCCESS][0m KATO API is ready on port 8000
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: pd5d9e6c4c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m MongoDB already running: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[1;33m[WARNING][0m KATO already running: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Building KATO Docker image: kato:latest
+[0;32m[SUCCESS][0m KATO Docker image built successfully
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-processor-1755555527)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-processor-1755555554)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Creating and starting KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-processor-1755555554)
+[0;34m[INFO][0m Waiting for KATO API to be ready...
+[0;32m[SUCCESS][0m KATO API is ready on port 8000
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: pd5d9e6c4c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m MongoDB already running: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[1;33m[WARNING][0m KATO already running: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Building KATO Docker image: kato:latest
+[0;32m[SUCCESS][0m KATO Docker image built successfully
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-processor-1755555884)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Creating and starting KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-processor-1755555884)
+[0;34m[INFO][0m Waiting for KATO API to be ready...
+[0;32m[SUCCESS][0m KATO API is ready on port 8000
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: pd5d9e6c4c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m MongoDB already running: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[1;33m[WARNING][0m KATO already running: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Building KATO Docker image: kato:latest
+[0;32m[SUCCESS][0m KATO Docker image built successfully
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-processor-1755556197)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Creating and starting KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-processor-1755556197)
+[0;34m[INFO][0m Waiting for KATO API to be ready...
+[0;32m[SUCCESS][0m KATO API is ready on port 8000
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: pd5d9e6c4c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m MongoDB already running: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[1;33m[WARNING][0m KATO already running: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Building KATO Docker image: kato:latest
+[0;32m[SUCCESS][0m KATO Docker image built successfully
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-processor-1755556328)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Creating and starting KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-processor-1755556328)
+[0;34m[INFO][0m Waiting for KATO API to be ready...
+[0;32m[SUCCESS][0m KATO API is ready on port 8000
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: pd5d9e6c4c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m MongoDB already running: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[1;33m[WARNING][0m KATO already running: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: pd5d9e6c4c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m MongoDB already running: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[1;33m[WARNING][0m KATO already running: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Running KATO test suite...
+[0;34m[INFO][0m Running tests with pipenv...
+[0;34m[INFO][0m Docker found via command -v: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found via command -v: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found via command -v: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found via command -v: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found via command -v: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found via command -v: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found via command -v: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: pd5d9e6c4c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found via command -v: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found at: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Running KATO test suite...
+[0;34m[INFO][0m Running tests with pipenv...
+[0;34m[INFO][0m Docker found via command -v: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /Applications/Docker.app/Contents/Resources/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: pd5d9e6c4c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Creating and starting MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Running KATO test suite...
+[0;34m[INFO][0m Running tests with pipenv...
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: pd5d9e6c4c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Running KATO test suite...
+[0;34m[INFO][0m Running tests with pipenv...
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: pd5d9e6c4c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Building KATO Docker image: kato:latest
+[0;32m[SUCCESS][0m KATO Docker image built successfully
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Creating and starting MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Running KATO test suite...
+[0;34m[INFO][0m Running tests with pipenv...
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Cleaning up KATO system...
+[0;34m[INFO][0m Removing network: kato-network
+[0;32m[SUCCESS][0m Cleanup completed
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Running KATO test suite...
+[0;34m[INFO][0m Running tests with pipenv...
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Running KATO test suite...
+[0;34m[INFO][0m Running tests with pipenv...
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-processor-1755568201)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Creating and starting MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-processor-1755568212)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Creating and starting KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-processor-1755568212)
+[0;34m[INFO][0m Waiting for KATO API to be ready...
+[0;31m[ERROR][0m KATO API failed to start
+[0;34m[INFO][0m Showing last 50 lines of KATO logs:
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Using processor: P1 (ID: p46b6b076c)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m MongoDB already running: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[1;33m[WARNING][0m KATO already running: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Building KATO Docker image: kato:latest
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Building KATO Docker image: kato:latest
+[0;32m[SUCCESS][0m KATO Docker image built successfully
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-processor-1755568587)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-processor-1755568623)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Creating and starting KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-processor-1755568623)
+[0;34m[INFO][0m Waiting for KATO API to be ready...
+[0;32m[SUCCESS][0m KATO API is ready on port 8000
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Building KATO Docker image: kato:latest
+[0;32m[SUCCESS][0m KATO Docker image built successfully
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-processor-1755568690)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Building KATO Docker image: kato:latest
+[0;32m[SUCCESS][0m KATO Docker image built successfully
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-processor-1755568801)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Creating Docker network: kato-network
+[0;34m[INFO][0m Creating and starting MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Creating and starting KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-processor-1755568801)
+[0;34m[INFO][0m Waiting for KATO API to be ready...
+[0;32m[SUCCESS][0m KATO API is ready on port 8000
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Building KATO Docker image: kato:latest
+[0;32m[SUCCESS][0m KATO Docker image built successfully
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-processor-1755569061)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Running KATO test suite...
+[0;34m[INFO][0m Running tests with pipenv...
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Stopping KATO services...
+[0;34m[INFO][0m Stopping KATO container: kato-api-sevakavakians-1
+[0;34m[INFO][0m Stopping MongoDB container: mongo-kb-sevakavakians-1
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Building KATO Docker image: kato:latest
+[0;32m[SUCCESS][0m KATO Docker image built successfully
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-processor-1755605966)
+[0;34m[INFO][0m Classifier: CVC, Max Predictions: 100
+[0;34m[INFO][0m Starting existing MongoDB container: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting existing KATO container: kato-api-sevakavakians-1
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Running KATO test suite...
+[0;34m[INFO][0m Running tests with pipenv...

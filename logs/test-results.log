@@ -1,0 +1,1244 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.9.23, pytest-7.2.1, pluggy-1.0.0 -- /Users/sevakavakians/.local/share/virtualenvs/sevakavakians-IczYcfnC/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/sevakavakians/PROGRAMMING/kato
+collecting ... collected 23 items
+
+tests/test_cvc_vectors.py::test_cvc_vector_classifier FAILED             [  4%]
+tests/test_dvc_vectors.py::test_dvc_vector_classifier FAILED             [  8%]
+tests/test_emotive_engine.py::test_emotive_perception FAILED             [ 13%]
+tests/test_emotive_engine.py::test_emotive_perception_more_emotives FAILED [ 17%]
+tests/test_emotive_engine.py::test_emotive_perception_less_emotives FAILED [ 21%]
+tests/test_emotive_engine.py::test_emotive_predictions_and_updating FAILED [ 26%]
+tests/test_kb_load_store.py::test_store_kb_to_file FAILED                [ 30%]
+tests/test_kb_load_store.py::test_load_kb_from_json FAILED               [ 34%]
+tests/test_manual_model_learning.py::test_manual_model_learning FAILED   [ 39%]
+tests/test_max_seq_length.py::test_max_seq_length_0 FAILED               [ 43%]
+tests/test_observe_emotives_only.py::test_observe_only_emotives PASSED   [ 47%]
+tests/test_predictions.py::test_get_predictions_1 PASSED                 [ 52%]
+tests/test_predictions.py::test_get_predictions_1_b FAILED               [ 56%]
+tests/test_predictions.py::test_get_predictions_2 FAILED                 [ 60%]
+tests/test_predictions.py::test_get_predictions_3 FAILED                 [ 65%]
+tests/test_predictions.py::test_get_predictions_4 FAILED                 [ 69%]
+tests/test_predictions.py::test_get_predictions_5 FAILED                 [ 73%]
+tests/test_predictions.py::test_get_predictions_6 FAILED                 [ 78%]
+tests/test_recall_threshold.py::test_change_recall_threshold FAILED      [ 82%]
+tests/test_recall_threshold.py::test_increment_recall_threshold FAILED   [ 86%]
+tests/test_recall_threshold.py::test_exceed_threshold FAILED             [ 91%]
+tests/test_restapi_calls.py::test_rest_api_calls PASSED                  [ 95%]
+tests/test_target_class.py::test_target_class FAILED                     [100%]
+
+=================================== FAILURES ===================================
+__________________________ test_cvc_vector_classifier __________________________
+
+setup_and_teardown = <lib.dependencies.MyFixture object at 0x10a652dc0>
+
+    def test_cvc_vector_classifier(setup_and_teardown):
+    #     os.popen(f'pip../dev-tools/run-agent --container-version local -a {APACHE_CONFIG} -g test-genomes/simple.genome')
+    #     sleep(3)
+        agent = AgentClient(AGENT_INFO)
+        agent.connect()
+    
+        agent.set_ingress_nodes(['P1'])
+        agent.set_query_nodes(['P1'])
+    
+    
+        assert agent.clear_all_memory() == "all-cleared"
+        assert agent.get_wm() == []
+    
+        # "Adding blue 1"
+>       assert agent.observe({"strings": [],
+                               "vectors": [[2,2]],
+                              "emotives": {}}) == 'observed'
+E       AssertionError: assert 'failed' == 'observed'
+E         - observed
+E         + failed
+
+tests/test_cvc_vectors.py:24: AssertionError
+---------------------------- Captured stdout setup -----------------------------
+Loading genome from: /Users/sevakavakians/PROGRAMMING/kato/kato-tests/test-genomes/simple.genome
+Extracted parameters from genome: {'id': 'p46b6b076c', 'name': 'P1', 'classifier': 'CVC', 'max_predictions': 100, 'recall_threshold': 0.1, 'persistence': 5, 'search_depth': 10, 'port': 8000, 'smoothness': 3, 'quiescence': 3, 'max_sequence_length': 0, 'auto_act_threshold': 0.8, 'always_update_frequencies': False, 'sort': True, 'process_predictions': True}
+KATO is already running, skipping startup
+Processor state reset successfully
+----------------------------- Captured stdout call -----------------------------
+observe failed: 500, <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN"
+        "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+    <head>
+        <meta http-equiv="Content-Type" content="text/html;charset=utf-8">
+        <title>Error response</title>
+    </head>
+    <body>
+        <h1>Error response</h1>
+        <p>Error code: 500</p>
+        <p>Message: gRPC error: Expected a message object, but got [2, 2]..</p>
+        <p>Error code explanation: 500 - Server got itself in trouble.</p>
+    </body>
+</html>
+
+--------------------------- Captured stdout teardown ---------------------------
+KATO was already running, not stopping
+__________________________ test_dvc_vector_classifier __________________________
+
+setup_and_teardown = <lib.dependencies.MyFixture object at 0x10a69e940>
+
+    def test_dvc_vector_classifier(setup_and_teardown):
+        agent = AgentClient(AGENT_INFO)
+        agent.connect()
+        agent.set_ingress_nodes(['P1'])
+        agent.set_query_nodes(['P1'])
+    
+        assert agent.clear_all_memory() == 'all-cleared'
+        assert agent.get_wm() == []
+    
+        ## Kick it off with some initial data for the lowest manipulative:
+        data = {"strings": ['more-symbol-placeholder'],
+                "vectors": [[0,1,2,3,4],[5,6,7,8,9]], # should become --> [[5,7,9,11,13]],
+                "emotives": {}}
+    
+    
+>       assert agent.observe(data)== 'observed'
+E       AssertionError: assert 'failed' == 'observed'
+E         - observed
+E         + failed
+
+tests/test_dvc_vectors.py:25: AssertionError
+---------------------------- Captured stdout setup -----------------------------
+Loading genome from: /Users/sevakavakians/PROGRAMMING/kato/kato-tests/test-genomes/dvc_classifier.genome
+Extracted parameters from genome: {'id': 'p46b6b076c', 'name': 'P1', 'classifier': 'DVC', 'max_predictions': 100, 'recall_threshold': 0.1, 'persistence': 5, 'search_depth': 10, 'port': 8000, 'smoothness': 3, 'quiescence': 3, 'max_sequence_length': 0, 'auto_act_threshold': 0.8, 'always_update_frequencies': False, 'sort': True, 'process_predictions': True}
+KATO is already running, skipping startup
+Processor state reset successfully
+----------------------------- Captured stdout call -----------------------------
+observe failed: 500, <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN"
+        "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+    <head>
+        <meta http-equiv="Content-Type" content="text/html;charset=utf-8">
+        <title>Error response</title>
+    </head>
+    <body>
+        <h1>Error response</h1>
+        <p>Error code: 500</p>
+        <p>Message: gRPC error: Expected a message object, but got [0, 1, 2, 3, 4]..</p>
+        <p>Error code explanation: 500 - Server got itself in trouble.</p>
+    </body>
+</html>
+
+--------------------------- Captured stdout teardown ---------------------------
+KATO was already running, not stopping
+___________________________ test_emotive_perception ____________________________
+
+setup_and_teardown = <lib.dependencies.MyFixture object at 0x107793370>
+
+    def test_emotive_perception(setup_and_teardown):
+        '''Observed emotives must get averaged through multiple manipulative pathways and/or sources for each event.
+        The percept emotives must be that dictionary of averaged emotives.
+        Additionally, the current sequence of emotives (i.e. anything observed after 'learn', 'clear_wm', or 'clear_all_memory')
+        must also be averaged per emotive prior to learning and for passing through abstractions.
+    
+        ## Test when emotives align with strings data for each event.
+        '''
+    
+        agent = AgentClient(AGENT_INFO)
+        agent.connect()
+        agent.set_ingress_nodes(['P1'])
+        agent.set_query_nodes(['P1'])
+    
+        ## learn from empty KB
+        test_queue = [{'strings': ['rolling'], 'vectors': [], 'emotives': {'emotive-1': 3, 'emotive-2': 4}},
+                      {'strings': ['utility'], 'vectors': [], 'emotives': {'emotive-1': 6, 'emotive-2': 6}},
+                      {'strings': ['test'],    'vectors': [], 'emotives': {'emotive-4': 9, 'emotive-2': 9}},
+                      {'strings': ['full'],    'vectors': [], 'emotives': {'emotive-4': 10}},
+                      {'strings': ['symbols'], 'vectors': [], 'emotives': {'emotive-3': 8}}
+                     ]
+    
+        assert agent.clear_all_memory() == 'all-cleared'
+        data = test_queue[0]
+        assert remove_id_and_timestamp(agent.observe(data)) == {'auto_learned_model': '', 'status': 'observed'}
+>       assert remove_id_and_timestamp(agent.get_percept_data()) == {'strings': ['rolling'], 'vectors': [], 'path': ['P1-p46b6b076c-process'],
+                                                                    'metadata': {},
+                                                                    'emotives': {'emotive-1': 3, 'emotive-2': 4}}
+E       AssertionError: assert {'emotives': ...'vectors': []} == {'emotives': ...olling'], ...}
+E         Omitting 3 identical items, use -vv to show
+E         Differing items:
+E         {'path': ['KatoProcessor-kato-processor-1755568801-process']} != {'path': ['P1-p46b6b076c-process']}
+E         Right contains 1 more item:
+E         {'metadata': {}}
+E         Full diff:
+E           {...
+E         
+E         ...Full output truncated (13 lines hidden), use '-vv' to show
+
+tests/test_emotive_engine.py:43: AssertionError
+---------------------------- Captured stdout setup -----------------------------
+Loading genome from: /Users/sevakavakians/PROGRAMMING/kato/kato-tests/test-genomes/simple.genome
+Extracted parameters from genome: {'id': 'p46b6b076c', 'name': 'P1', 'classifier': 'CVC', 'max_predictions': 100, 'recall_threshold': 0.1, 'persistence': 5, 'search_depth': 10, 'port': 8000, 'smoothness': 3, 'quiescence': 3, 'max_sequence_length': 0, 'auto_act_threshold': 0.8, 'always_update_frequencies': False, 'sort': True, 'process_predictions': True}
+KATO is already running, skipping startup
+Processor state reset successfully
+____________________ test_emotive_perception_more_emotives _____________________
+
+setup_and_teardown = <lib.dependencies.MyFixture object at 0x107793370>
+
+    def test_emotive_perception_more_emotives(setup_and_teardown):
+        '''Observed emotives must get averaged through multiple manipulative pathways and/or sources for each event.
+        The percept emotives must be that dictionary of averaged emotives.
+        Additionally, the current sequence of emotives (i.e. anything observed after 'learn', 'clear_wm', or 'clear_all_memory')
+        must also be averaged per emotive prior to learning and for passing through abstractions.
+    
+        ## Test when there are more emotives passed than strings/vectors data events.
+        '''
+    
+        agent = AgentClient(AGENT_INFO)
+        agent.connect()
+        agent.set_ingress_nodes(['P1'])
+        agent.set_query_nodes(['P1'])
+    
+        assert agent.clear_all_memory() == 'all-cleared'
+    
+        test_queue = [{'strings': ['rolling'], 'vectors': [], 'emotives': {'emotive-1': 3, 'emotive-2': 4}},
+                      {'strings': ['utility'], 'vectors': [], 'emotives': {'emotive-1': 6, 'emotive-2': 6}},
+                      {'strings': ['test'],    'vectors': [], 'emotives': {'emotive-4': 9, 'emotive-2': 9}},
+                      {'strings': [],          'vectors': [], 'emotives': {'emotive-4': 10}},
+                      {'strings': [],          'vectors': [], 'emotives': {'emotive-3': 8}}
+                     ]
+        expected_percepts = [
+                    {'strings': ['rolling'], 'vectors': [], 'path': ['P1-p46b6b076c-process'],
+                    'metadata': {}, 'emotives': {'emotive-2': 4, 'emotive-1': 3}},
+                    {'strings': ['utility'], 'vectors': [], 'path': ['P1-p46b6b076c-process'],
+                    'metadata': {}, 'emotives': {'emotive-2': 6, 'emotive-1': 6}},
+                    {'strings': ['test'], 'vectors': [], 'path': ['P1-p46b6b076c-process'],
+                    'metadata': {}, 'emotives': {'emotive-2': 9, 'emotive-4': 9}},
+                    {'strings': [], 'vectors': [], 'path': ['P1-p46b6b076c-process'],
+                    'metadata': {}, 'emotives': {'emotive-4': 10}},
+                    {'strings': [], 'vectors': [], 'path': ['P1-p46b6b076c-process'],
+                    'metadata': {}, 'emotives': {'emotive-3': 8}}
+                    ]
+    
+        expected_cognition = [
+            {'symbols': ['rolling'], 'emotives': {'emotive-2': 4, 'emotive-1': 3}, 'predictions': [],
+                'command': '',
+                'metadata': {},
+                'path': [],
+                'strings': [],
+                'vectors': [],
+                'working_memory': [['rolling']]},
+            {'symbols': ['utility'], 'predictions': [], 'emotives': {'emotive-2': 6, 'emotive-1': 6},
+                'command': '',
+                'metadata': {},
+                'path': [],
+                'strings': [],
+                'vectors': [],
+                'working_memory': [['rolling'], ['utility']]},
+            {'predictions': [], 'emotives': {'emotive-4': 9, 'emotive-2': 9}, 'symbols': ['test'],
+                'command': '',
+                'metadata': {},
+                'path': [],
+                'strings': [],
+                'vectors': [],
+                'working_memory': [['rolling'], ['utility'], ['test']]},
+            {'emotives': {'emotive-4': 10}, 'symbols': [], 'predictions': [],
+                'command': '',
+                'metadata': {},
+                'path': [],
+                'strings': [],
+                'vectors': [],
+                'working_memory': [['rolling'], ['utility'], ['test']]},
+            {'symbols': [], 'emotives': {'emotive-3': 8}, 'predictions': [],
+                'command': '',
+                'metadata': {},
+                'path': [],
+                'strings': [],
+                'vectors': [],
+                'working_memory': [['rolling'], ['utility'], ['test']]}
+            ]
+    
+        for i, data in enumerate(test_queue):
+            assert remove_id_and_timestamp(agent.observe(data)) == {'auto_learned_model': '', 'status': 'observed'}
+>           assert remove_id_and_timestamp(agent.get_percept_data()) == expected_percepts[i]
+E           AssertionError: assert {'emotives': ...'vectors': []} == {'emotives': ...olling'], ...}
+E             Omitting 3 identical items, use -vv to show
+E             Differing items:
+E             {'path': ['KatoProcessor-kato-processor-1755568801-process']} != {'path': ['P1-p46b6b076c-process']}
+E             Right contains 1 more item:
+E             {'metadata': {}}
+E             Full diff:
+E               {...
+E             
+E             ...Full output truncated (13 lines hidden), use '-vv' to show
+
+tests/test_emotive_engine.py:634: AssertionError
+____________________ test_emotive_perception_less_emotives _____________________
+
+setup_and_teardown = <lib.dependencies.MyFixture object at 0x107793370>
+
+    def test_emotive_perception_less_emotives(setup_and_teardown):
+        '''Observed emotives must get averaged through multiple manipulative pathways and/or sources for each event.
+        The percept emotives must be that dictionary of averaged emotives.
+        Additionally, the current sequence of emotives (i.e. anything observed after 'learn', 'clear_wm', or 'clear_all_memory')
+        must also be averaged per emotive prior to learning and for passing through abstractions.
+    
+        ## Test when there are less emotives passed than strings/vectors data events.
+        '''
+        # genome = file2json('./test-genomes/simple.genome')
+        agent = AgentClient(AGENT_INFO)
+        agent.connect()
+        agent.set_ingress_nodes(['P1'])
+        agent.set_query_nodes(['P1'])
+    
+        assert agent.clear_all_memory() == 'all-cleared'
+    
+        test_queue = [{'strings': ['rolling'], 'vectors': [], 'emotives': {'emotive-1': 3, 'emotive-2': 4}},
+                      {'strings': ['utility'], 'vectors': [], 'emotives': {'emotive-1': 6, 'emotive-2': 6}},
+                      {'strings': ['test'],    'vectors': [], 'emotives': {}},
+                      {'strings': ['with'],    'vectors': [], 'emotives': {'emotive-4': 10}},
+                      {'strings': ['less'],    'vectors': [], 'emotives': {}},
+                      {'strings': ['emotives'], 'vectors': [], 'emotives': {'emotive-3': 8}}
+                     ]
+    
+        expected_percept_data_queue = [{'strings': ['rolling'], 'vectors': [], 'metadata': {}, 'path': ['P1-p46b6b076c-process'], 'emotives': {'emotive-1': 3, 'emotive-2': 4}},
+                      {'strings': ['utility'], 'vectors': [], 'metadata': {},  'path': ['P1-p46b6b076c-process'], 'emotives': {'emotive-1': 6, 'emotive-2': 6}},
+                      {'strings': ['test'],    'vectors': [], 'metadata': {},  'path': ['P1-p46b6b076c-process'], 'emotives': {}},
+                      {'strings': ['with'],    'vectors': [], 'metadata': {},  'path': ['P1-p46b6b076c-process'], 'emotives': {'emotive-4': 10}},
+                      {'strings': ['less'],    'vectors': [], 'metadata': {}, 'path': ['P1-p46b6b076c-process'], 'emotives': {}},
+                      {'strings': ['emotives'], 'vectors': [], 'metadata': {}, 'path': ['P1-p46b6b076c-process'], 'emotives': {'emotive-3': 8}}
+                     ]
+    
+        expected_cognition_data_queue = [
+                    {'emotives':  {'emotive-1': 3,'emotive-2': 4},
+                        'symbols': ['rolling'],
+                        'predictions': [],
+                'command': '',
+                'metadata': {},
+                'path': [],
+                'strings': [],
+                'vectors': [],
+                'working_memory': [['rolling']]},
+                    {'emotives': {'emotive-1': 6, 'emotive-2': 6},
+                        'predictions': [],
+                        'symbols': ['utility'],
+                'command': '',
+                'metadata': {},
+                'path': [],
+                'strings': [],
+                'vectors': [],
+                'working_memory': [['rolling'], ['utility']]},
+                    {'emotives': {},
+                        'predictions': [],
+                        'symbols': ['test'],
+                'command': '',
+                'metadata': {},
+                'path': [],
+                'strings': [],
+                'vectors': [],
+                'working_memory': [['rolling'], ['utility'], ['test']]},
+                    {'emotives': {'emotive-4': 10},
+                        'predictions': [],
+                        'symbols': ['with'],
+                'command': '',
+                'metadata': {},
+                'path': [],
+                'strings': [],
+                'vectors': [],
+                'working_memory': [['rolling'], ['utility'], ['test'], ['with']]},
+                    {'emotives': {},
+                        'predictions': [],
+                        'symbols': ['less'],
+                'command': '',
+                'metadata': {},
+                'path': [],
+                'strings': [],
+                'vectors': [],
+                'working_memory': [['rolling'], ['utility'], ['test'], ['with'], ['less']]},
+                    {'emotives': {'emotive-3': 8},
+                        'predictions': [],
+                        'symbols': ['emotives'],
+                'command': '',
+                'metadata': {},
+                'path': [],
+                'strings': [],
+                'vectors': [],
+                'working_memory': [['rolling'], ['utility'], ['test'], ['with'], ['less'], ['emotives']]}
+                    ]
+    
+        for i, data in enumerate(test_queue):
+            assert remove_id_and_timestamp(agent.observe(data)) == {'auto_learned_model': '', 'status': 'observed'}
+>           assert remove_id_and_timestamp(agent.get_percept_data()) == expected_percept_data_queue[i]
+E           AssertionError: assert {'emotives': ...'vectors': []} == {'emotives': ...olling'], ...}
+E             Omitting 3 identical items, use -vv to show
+E             Differing items:
+E             {'path': ['KatoProcessor-kato-processor-1755568801-process']} != {'path': ['P1-p46b6b076c-process']}
+E             Right contains 1 more item:
+E             {'metadata': {}}
+E             Full diff:
+E               {...
+E             
+E             ...Full output truncated (13 lines hidden), use '-vv' to show
+
+tests/test_emotive_engine.py:739: AssertionError
+____________________ test_emotive_predictions_and_updating _____________________
+
+setup_and_teardown = <lib.dependencies.MyFixture object at 0x107793370>
+
+    def test_emotive_predictions_and_updating(setup_and_teardown):
+    
+        agent = AgentClient(AGENT_INFO)
+        agent.connect()
+    
+        agent.set_ingress_nodes(['P1'])
+        agent.set_query_nodes(['P1'])
+    
+        assert agent.clear_all_memory() == 'all-cleared'
+    
+        test_queue = [{'strings': ['rolling'], 'vectors': [], 'emotives': {'emotive-1': 3, 'emotive-2': 4}},
+                      {'strings': ['utility'], 'vectors': [], 'emotives': {'emotive-1': 6, 'emotive-2': 6}},
+                      {'strings': ['test'],    'vectors': [], 'emotives': {'emotive-4': 9, 'emotive-2': 9}},
+                      {'strings': ['full'],    'vectors': [], 'emotives': {'emotive-4': 10}},
+                      {'strings': ['symbols'], 'vectors': [], 'emotives': {'emotive-3': 8}}
+                     ]
+    
+    
+        for i, data in enumerate(test_queue):
+            assert remove_id_and_timestamp(agent.observe(data)) == {'auto_learned_model': '', 'status': 'observed'}
+        assert agent.learn() == 'MODEL|d670208dde2ae11227ce9f5a82addcfab5431dbe'
+>       assert agent.get_model('d670208dde2ae11227ce9f5a82addcfab5431dbe') == {"name" : "d670208dde2ae11227ce9f5a82addcfab5431dbe",
+                    "emotives" : { "emotive-1" : [9], "emotive-2" : [19], "emotive-3" : [8], "emotive-4" : [19] },
+                    "frequency" : 1, "length" : 5,
+                    "metadata": [{}, {}, {}, {}, {}],
+                    "sequence" : [ [ "rolling" ], [ "utility" ], [ "test" ], [ "full" ], [ "symbols" ] ] }
+E       AttributeError: 'AgentClient' object has no attribute 'get_model'
+
+tests/test_emotive_engine.py:766: AttributeError
+--------------------------- Captured stdout teardown ---------------------------
+KATO was already running, not stopping
+____________________________ test_store_kb_to_file _____________________________
+
+    def test_store_kb_to_file():
+        sleep(3)
+        BOTTLE_INFO = {'api_key': 'ABCD-1234',
+                        'name': 'localhost',
+                        'domain': ':8000',
+                        'secure': False, }
+    
+        agent = AgentClient(BOTTLE_INFO)
+        agent.connect()
+    
+        agent.set_ingress_nodes(['P1'])
+        agent.set_query_nodes(['P1'])
+    
+    
+        assert agent.clear_all_memory() == "all-cleared"
+        assert agent.get_wm() == []
+>       agent.change_genes(gene_data={'near_vector_count': 3})
+E       AttributeError: 'AgentClient' object has no attribute 'change_genes'
+
+tests/test_kb_load_store.py:23: AttributeError
+____________________________ test_load_kb_from_json ____________________________
+
+    def test_load_kb_from_json():
+    
+        BOTTLE_INFO = {'api_key': 'ABCD-1234',
+                    'name': 'localhost',
+                    'domain': ':8000',
+                    'secure': False, }
+    
+        agent = AgentClient(BOTTLE_INFO)
+        agent.connect()
+    
+        agent.set_ingress_nodes(['P1'])
+        agent.set_query_nodes(['P1'])
+    
+    
+        assert agent.clear_all_memory() == "all-cleared"
+        assert agent.get_wm() == []
+>       agent.change_genes(gene_data={'near_vector_count': 3})
+E       AttributeError: 'AgentClient' object has no attribute 'change_genes'
+
+tests/test_kb_load_store.py:138: AttributeError
+__________________________ test_manual_model_learning __________________________
+
+self = <Response [404]>, kwargs = {}
+
+    def json(self, **kwargs):
+        r"""Returns the json-encoded content of a response, if any.
+    
+        :param \*\*kwargs: Optional arguments that ``json.loads`` takes.
+        :raises requests.exceptions.JSONDecodeError: If the response body does not
+            contain valid json.
+        """
+    
+        if not self.encoding and self.content and len(self.content) > 3:
+            # No encoding set. JSON RFC 4627 section 3 states we should expect
+            # UTF-8, -16 or -32. Detect which one to use; If the detection or
+            # decoding fails, fall back to `self.text` (using charset_normalizer to make
+            # a best guess).
+            encoding = guess_json_utf(self.content)
+            if encoding is not None:
+                try:
+                    return complexjson.loads(self.content.decode(encoding), **kwargs)
+                except UnicodeDecodeError:
+                    # Wrong UTF codec detected; usually because it's not UTF-8
+                    # but some other 8-bit codec.  This is an RFC violation,
+                    # and the server didn't bother to tell us what codec *was*
+                    # used.
+                    pass
+                except JSONDecodeError as e:
+                    raise RequestsJSONDecodeError(e.msg, e.doc, e.pos)
+    
+        try:
+>           return complexjson.loads(self.text, **kwargs)
+
+../../../.local/share/virtualenvs/sevakavakians-IczYcfnC/lib/python3.9/site-packages/requests/models.py:971: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+s = '<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN"\n        "http://www.w3.org/TR/html4/strict.dtd">\n<html>\n    <hea...e: Not Found.</p>\n        <p>Error code explanation: 404 - Nothing matches the given URI.</p>\n    </body>\n</html>\n'
+cls = None, object_hook = None, parse_float = None, parse_int = None
+parse_constant = None, object_pairs_hook = None, kw = {}
+
+    def loads(s, *, cls=None, object_hook=None, parse_float=None,
+            parse_int=None, parse_constant=None, object_pairs_hook=None, **kw):
+        """Deserialize ``s`` (a ``str``, ``bytes`` or ``bytearray`` instance
+        containing a JSON document) to a Python object.
+    
+        ``object_hook`` is an optional function that will be called with the
+        result of any object literal decode (a ``dict``). The return value of
+        ``object_hook`` will be used instead of the ``dict``. This feature
+        can be used to implement custom decoders (e.g. JSON-RPC class hinting).
+    
+        ``object_pairs_hook`` is an optional function that will be called with the
+        result of any object literal decoded with an ordered list of pairs.  The
+        return value of ``object_pairs_hook`` will be used instead of the ``dict``.
+        This feature can be used to implement custom decoders.  If ``object_hook``
+        is also defined, the ``object_pairs_hook`` takes priority.
+    
+        ``parse_float``, if specified, will be called with the string
+        of every JSON float to be decoded. By default this is equivalent to
+        float(num_str). This can be used to use another datatype or parser
+        for JSON floats (e.g. decimal.Decimal).
+    
+        ``parse_int``, if specified, will be called with the string
+        of every JSON int to be decoded. By default this is equivalent to
+        int(num_str). This can be used to use another datatype or parser
+        for JSON integers (e.g. float).
+    
+        ``parse_constant``, if specified, will be called with one of the
+        following strings: -Infinity, Infinity, NaN.
+        This can be used to raise an exception if invalid JSON numbers
+        are encountered.
+    
+        To use a custom ``JSONDecoder`` subclass, specify it with the ``cls``
+        kwarg; otherwise ``JSONDecoder`` is used.
+        """
+        if isinstance(s, str):
+            if s.startswith('\ufeff'):
+                raise JSONDecodeError("Unexpected UTF-8 BOM (decode using utf-8-sig)",
+                                      s, 0)
+        else:
+            if not isinstance(s, (bytes, bytearray)):
+                raise TypeError(f'the JSON object must be str, bytes or bytearray, '
+                                f'not {s.__class__.__name__}')
+            s = s.decode(detect_encoding(s), 'surrogatepass')
+    
+        if (cls is None and object_hook is None and
+                parse_int is None and parse_float is None and
+                parse_constant is None and object_pairs_hook is None and not kw):
+>           return _default_decoder.decode(s)
+
+/usr/local/Cellar/python@3.9/3.9.23/Frameworks/Python.framework/Versions/3.9/lib/python3.9/json/__init__.py:346: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <json.decoder.JSONDecoder object at 0x105f24af0>
+s = '<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN"\n        "http://www.w3.org/TR/html4/strict.dtd">\n<html>\n    <hea...e: Not Found.</p>\n        <p>Error code explanation: 404 - Nothing matches the given URI.</p>\n    </body>\n</html>\n'
+_w = <built-in method match of re.Pattern object at 0x105eee570>
+
+    def decode(self, s, _w=WHITESPACE.match):
+        """Return the Python representation of ``s`` (a ``str`` instance
+        containing a JSON document).
+    
+        """
+>       obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+
+/usr/local/Cellar/python@3.9/3.9.23/Frameworks/Python.framework/Versions/3.9/lib/python3.9/json/decoder.py:337: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <json.decoder.JSONDecoder object at 0x105f24af0>
+s = '<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN"\n        "http://www.w3.org/TR/html4/strict.dtd">\n<html>\n    <hea...e: Not Found.</p>\n        <p>Error code explanation: 404 - Nothing matches the given URI.</p>\n    </body>\n</html>\n'
+idx = 0
+
+    def raw_decode(self, s, idx=0):
+        """Decode a JSON document from ``s`` (a ``str`` beginning with
+        a JSON document) and return a 2-tuple of the Python
+        representation and the index in ``s`` where the document ended.
+    
+        This can be used to decode a JSON document from a string that may
+        have extraneous data at the end.
+    
+        """
+        try:
+            obj, end = self.scan_once(s, idx)
+        except StopIteration as err:
+>           raise JSONDecodeError("Expecting value", s, err.value) from None
+E           json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+/usr/local/Cellar/python@3.9/3.9.23/Frameworks/Python.framework/Versions/3.9/lib/python3.9/json/decoder.py:355: JSONDecodeError
+
+During handling of the above exception, another exception occurred:
+
+setup_and_teardown = <lib.dependencies.KatoTestFixture object at 0x1076897f0>
+
+    def test_manual_model_learning(setup_and_teardown):
+        # genome_file = './test-genomes/simple.genome'
+        # stopit(genome_file)
+        # sleep(3)
+        # startit(genome_file, 'config/apache2-site.conf')
+        # sleep(3)
+        # os.popen(f'../dev-tools/run-agent --container-version local  -a {APACHE_CONFIG} -g test-genomes/simple.genome')
+        # sleep(3)
+        assert remove_id_and_timestamp(requests.post(f"{ADDRESS}/p46b6b076c/clear-all-memory",
+                                            headers={'X-API-KEY': 'ABCD-1234'}).json()) == {'id': 'p46b6b076c',
+                                                                                            'interval': 0,
+                                                                                            'message': 'all-cleared',
+                                                                                            'status': 'okay'}
+    
+        data = {'strings': ['red'], 'vectors': [], 'emotives': {}}
+        assert remove_id_and_timestamp(requests.post(f"{ADDRESS}/p46b6b076c/observe",
+                                            headers={'X-API-KEY': 'ABCD-1234'},
+                                            json={'data': data}).json()) == {'id': 'p46b6b076c',
+                                                                            'interval': 1,
+                                                                            'message': {'auto_learned_model': '', 'status': 'observed'},
+                                                                            'status': 'okay'}
+    
+        data = {'strings': ['round'], 'vectors': [], 'emotives': {}}
+        assert remove_id_and_timestamp(requests.post(f"{ADDRESS}/p46b6b076c/observe",
+                                            headers={'X-API-KEY': 'ABCD-1234'},
+                                            json={'data': data}).json()) == {'id': 'p46b6b076c',
+                                                                            'interval': 2,
+                                                                            'message': {'auto_learned_model': '', 'status': 'observed'},
+                                                                            'status': 'okay'}
+    
+        data = {'strings': ['delicious'], 'vectors': [], 'emotives': {}}
+        assert remove_id_and_timestamp(requests.post(f"{ADDRESS}/p46b6b076c/observe",
+                                            headers={'X-API-KEY': 'ABCD-1234'},
+                                            json={'data': data}).json()) == {'id': 'p46b6b076c',
+                                                                            'interval': 3,
+                                                                            'message': {'auto_learned_model': '', 'status': 'observed'},
+                                                                            'status': 'okay'}
+        assert remove_id_and_timestamp(requests.post(f"{ADDRESS}/p46b6b076c/learn",
+                                            headers={'X-API-KEY': 'ABCD-1234'}).json()) == {'id': 'p46b6b076c',
+                                                                            'interval': 3,
+                                                                            'message': 'MODEL|3be34c1d86c104fa70a47fb4e641f5bc9a2a2e7f',
+                                                                            'status': 'okay'}
+    
+>       assert remove_id_and_timestamp(requests.get(f"{ADDRESS}/p46b6b076c/model/3be34c1d86c104fa70a47fb4e641f5bc9a2a2e7f",
+                                            headers={'X-API-KEY': 'ABCD-1234'}).json()) == {'id': 'p46b6b076c',
+                                                                                            'interval': 3,
+                                                                                            'message': {'emotives': {},
+                                                                                                        'metadata': [{}, {}, {}],
+                                                                                                        'frequency': 1,
+                                                                                                        'length': 3,
+                                                                                                        'name': '3be34c1d86c104fa70a47fb4e641f5bc9a2a2e7f',
+                                                                                                        'sequence': [['red'], ['round'], ['delicious']],
+                                                                                                        },
+                                                                                            'status': 'okay'}
+
+tests/test_manual_model_learning.py:66: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Response [404]>, kwargs = {}
+
+    def json(self, **kwargs):
+        r"""Returns the json-encoded content of a response, if any.
+    
+        :param \*\*kwargs: Optional arguments that ``json.loads`` takes.
+        :raises requests.exceptions.JSONDecodeError: If the response body does not
+            contain valid json.
+        """
+    
+        if not self.encoding and self.content and len(self.content) > 3:
+            # No encoding set. JSON RFC 4627 section 3 states we should expect
+            # UTF-8, -16 or -32. Detect which one to use; If the detection or
+            # decoding fails, fall back to `self.text` (using charset_normalizer to make
+            # a best guess).
+            encoding = guess_json_utf(self.content)
+            if encoding is not None:
+                try:
+                    return complexjson.loads(self.content.decode(encoding), **kwargs)
+                except UnicodeDecodeError:
+                    # Wrong UTF codec detected; usually because it's not UTF-8
+                    # but some other 8-bit codec.  This is an RFC violation,
+                    # and the server didn't bother to tell us what codec *was*
+                    # used.
+                    pass
+                except JSONDecodeError as e:
+                    raise RequestsJSONDecodeError(e.msg, e.doc, e.pos)
+    
+        try:
+            return complexjson.loads(self.text, **kwargs)
+        except JSONDecodeError as e:
+            # Catch JSON-related errors and raise as requests.JSONDecodeError
+            # This aliases json.JSONDecodeError and simplejson.JSONDecodeError
+>           raise RequestsJSONDecodeError(e.msg, e.doc, e.pos)
+E           requests.exceptions.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+../../../.local/share/virtualenvs/sevakavakians-IczYcfnC/lib/python3.9/site-packages/requests/models.py:975: JSONDecodeError
+---------------------------- Captured stdout setup -----------------------------
+KATO is already running, skipping startup
+Processor state reset successfully
+--------------------------- Captured stdout teardown ---------------------------
+KATO was already running, not stopping
+____________________________ test_max_seq_length_0 _____________________________
+
+    def test_max_seq_length_0():
+        BOTTLE_INFO = {'api_key': 'ABCD-1234',
+                        'name': 'localhost',
+                        'domain': ':8000',
+                        'secure': False, }
+    
+        agent = AgentClient(BOTTLE_INFO)
+        agent.connect()
+    
+>       assert agent.set_ingress_nodes(['P1']) == [{'id': 'p46b6b076c', 'name': 'P1'}]
+E       AssertionError: assert None == [{'id': 'p46b6b076c', 'name': 'P1'}]
+E        +  where None = <bound method AgentClient.set_ingress_nodes of <lib.dependencies.AgentClient object at 0x107962880>>(['P1'])
+E        +    where <bound method AgentClient.set_ingress_nodes of <lib.dependencies.AgentClient object at 0x107962880>> = <lib.dependencies.AgentClient object at 0x107962880>.set_ingress_nodes
+
+tests/test_max_seq_length.py:15: AssertionError
+___________________________ test_get_predictions_1_b ___________________________
+
+setup_and_teardown = <lib.dependencies.KatoTestFixture object at 0x1077adf40>
+
+    def test_get_predictions_1_b(setup_and_teardown):
+        "Is needed by tests get_predictions 2, 3, 4, and 5."
+        # genome = Genome(inject_genome('./test-genomes/simple.genome'))
+        assert remove_id_and_timestamp(requests.post(f"{ADDRESS}/p46b6b076c/clear-all-memory",
+                                            headers={'X-API-KEY': 'ABCD-1234'}).json()) == {'id': 'p46b6b076c',
+                                                                                            'interval': 0,
+                                                                                            'message': 'all-cleared',
+                                                                                            'status': 'okay'}
+    
+        model_queue = [
+            ['past-symbol-1-1', 'past-symbol-1-2', 'past-symbol-1-3'],
+            ['past-symbol-2-1', 'past-symbol-2-2', 'past-symbol-2-3', 'past-symbol-2-4'],
+            ['present-symbol-1-1', 'present-symbol-1-2', 'present-symbol-1-3'],
+            ['present-symbol-2-1', 'present-symbol-2-2', 'present-symbol-2-3', 'present-symbol-2-4'],
+            ['future-symbol-1-1', 'future-symbol-1-2', 'future-symbol-1-3'],
+            ['future-symbol-2-1', 'future-symbol-2-2', 'future-symbol-2-3', 'future-symbol-2-4'],
+        ]
+    
+        ## Learn sequence:
+        assert remove_id_and_timestamp(requests.post(f"{ADDRESS}/p46b6b076c/working-memory/clear",
+                                            headers={'X-API-KEY': 'ABCD-1234'}).json()) == {'id': 'p46b6b076c',
+                                                                                            'interval': 0,
+                                                                                            'message': 'wm-cleared',
+                                                                                            'status': 'okay'}
+        for i, event in enumerate(model_queue, start=1):
+            data = {'strings': event, 'vectors': [], 'emotives': {}}
+            assert remove_id_and_timestamp(requests.post(f"{ADDRESS}/p46b6b076c/observe",
+                                            headers={'X-API-KEY': 'ABCD-1234'},
+                                            json={'data': data}).json()) == {'id': 'p46b6b076c',
+                                                                            'interval': i,
+                                                                            'message': {'auto_learned_model': '', 'status': 'observed'},
+                                                                            'status': 'okay'}
+        assert remove_id_and_timestamp(requests.post(f"{ADDRESS}/p46b6b076c/learn",
+                                            headers={'X-API-KEY': 'ABCD-1234'}).json()) == {'id': 'p46b6b076c',
+                                                                                            'interval': 6,
+                                                                                            'message': 'MODEL|94fb8bfc5f24a1c22457e3d811663d00b2a2b4bd',
+                                                                                            'status': 'okay'}
+    
+        ## Test for partial match.  Some events in 'present'.
+        # =======================================================================
+        # test_queue = [['present-symbol-1-1', 'present-symbol-1-2', 'present-symbol-1-3'],
+        #                ['present-symbol-2-1', 'present-symbol-2-2', 'present-symbol-2-3', 'present-symbol-2-4']]
+        # =======================================================================
+        test_queue = [['present-symbol-1-3'], ['present-symbol-2-2', 'present-symbol-2-3']]
+    
+        expected_results = [
+            {
+                'name': '94fb8bfc5f24a1c22457e3d811663d00b2a2b4bd',
+                'evidence': 0.14285714285714285,
+                'frequency': 1,
+    
+                'emotives': {},
+                'confidence': 0.42857142857142855,
+                'potential': 1.726082242137,
+                'confluence': 0.999999999445,
+                'entropy': 1.464105807593,
+                'fragmentation': 1,
+                'hamiltonian': 0.639151193285,
+                'grand_hamiltonian': 0.333333333333,
+                'itfdf_similarity': 0.654653670708,
+                'similarity': 0.25,
+                'snr': 1,
+                'past': [
+                    ['past-symbol-1-1', 'past-symbol-1-2', 'past-symbol-1-3'],
+                    ['past-symbol-2-1', 'past-symbol-2-2', 'past-symbol-2-3', 'past-symbol-2-4'],
+                ],
+                'missing': ['present-symbol-1-1', 'present-symbol-1-2', 'present-symbol-2-1', 'present-symbol-2-4'],
+                'matches': ['present-symbol-1-3', 'present-symbol-2-2', 'present-symbol-2-3'],
+                'present': [
+                    ['present-symbol-1-1', 'present-symbol-1-2', 'present-symbol-1-3'],
+                    ['present-symbol-2-1', 'present-symbol-2-2', 'present-symbol-2-3', 'present-symbol-2-4'],
+                ],
+                'future': [
+                    ['future-symbol-1-1', 'future-symbol-1-2', 'future-symbol-1-3'],
+                    ['future-symbol-2-1', 'future-symbol-2-2', 'future-symbol-2-3', 'future-symbol-2-4'],
+                ],
+                'extras': [],
+                'type': 'prototypical',
+            }
+        ]
+    
+        assert remove_id_and_timestamp(requests.post(f"{ADDRESS}/p46b6b076c/working-memory/clear",
+                                            headers={'X-API-KEY': 'ABCD-1234'}).json()) == {'id': 'p46b6b076c',
+                                                                                            'interval': 6,
+                                                                                            'message': 'wm-cleared',
+                                                                                            'status': 'okay'}
+        for i, event in enumerate(test_queue, start=7):
+            data = {'strings': event, 'vectors': [], 'emotives': {}}
+            assert remove_id_and_timestamp(requests.post(f"{ADDRESS}/p46b6b076c/observe",
+                                            headers={'X-API-KEY': 'ABCD-1234'},
+                                            json={'data': data}).json()) == {'id': 'p46b6b076c',
+                                                                            'interval': i,
+                                                                            'message': {'auto_learned_model': '', 'status': 'observed'},
+                                                                            'status': 'okay'}
+    
+        assert remove_id_and_timestamp(requests.post(f"{ADDRESS}/p46b6b076c/predictions",
+                                            headers={'X-API-KEY': 'ABCD-1234'}).json())['message'] == expected_results
+        assert remove_id_and_timestamp(requests.post(f"{ADDRESS}/p46b6b076c/working-memory/clear",
+                                            headers={'X-API-KEY': 'ABCD-1234'}).json()) == {'id': 'p46b6b076c',
+                                                                                            'interval': 8,
+                                                                                            'message': 'wm-cleared',
+                                                                                            'status': 'okay'}
+    
+        # Test for full present match.  All events in 'present'.
+        test_queue = [
+            ['present-symbol-1-1', 'present-symbol-1-2', 'present-symbol-1-3'],
+            ['present-symbol-2-1', 'present-symbol-2-2', 'present-symbol-2-3', 'present-symbol-2-4'],
+        ]
+    
+        expected_results = [
+            {
+                'name': '94fb8bfc5f24a1c22457e3d811663d00b2a2b4bd',
+                'evidence': 0.333333333333,
+                'frequency': 1,
+                'emotives': {},
+                'confidence': 1,
+                'potential': 3.333333333333333,
+                'confluence': 0.999999999445,
+                'entropy': 1.464105807593,
+                'fragmentation': 0,
+                'hamiltonian': 0.639151193285,
+                'grand_hamiltonian': 0.333333333333,
+                'itfdf_similarity': 0.9999999999999998,
+                'similarity': 0.5,
+                'snr': 1,
+                'past': [
+                    ['past-symbol-1-1', 'past-symbol-1-2', 'past-symbol-1-3'],
+                    ['past-symbol-2-1', 'past-symbol-2-2', 'past-symbol-2-3', 'past-symbol-2-4'],
+                ],
+                'missing': [],
+                'matches': [
+                    'present-symbol-1-1',
+                    'present-symbol-1-2',
+                    'present-symbol-1-3',
+                    'present-symbol-2-1',
+                    'present-symbol-2-2',
+                    'present-symbol-2-3',
+                    'present-symbol-2-4',
+                ],
+                'present': [
+                    ['present-symbol-1-1', 'present-symbol-1-2', 'present-symbol-1-3'],
+                    ['present-symbol-2-1', 'present-symbol-2-2', 'present-symbol-2-3', 'present-symbol-2-4'],
+                ],
+                'future': [
+                    ['future-symbol-1-1', 'future-symbol-1-2', 'future-symbol-1-3'],
+                    ['future-symbol-2-1', 'future-symbol-2-2', 'future-symbol-2-3', 'future-symbol-2-4'],
+                ],
+                'extras': [],
+                'type': 'prototypical',
+            }
+        ]
+    
+        assert remove_id_and_timestamp(requests.post(f"{ADDRESS}/p46b6b076c/working-memory/clear",
+                                            headers={'X-API-KEY': 'ABCD-1234'}).json()) == {'id': 'p46b6b076c',
+                                                                                            'interval': 8,
+                                                                                            'message': 'wm-cleared',
+                                                                                            'status': 'okay'}
+        for i, event in enumerate(test_queue, start=9):
+            data = {'strings': event, 'vectors': [], 'emotives': {}}
+            assert remove_id_and_timestamp(requests.post(f"{ADDRESS}/p46b6b076c/observe",
+                                            headers={'X-API-KEY': 'ABCD-1234'},
+                                            json={'data': data}).json()) == {'id': 'p46b6b076c',
+                                                                            'interval': i,
+                                                                            'message': {'auto_learned_model': '', 'status': 'observed'},
+                                                                            'status': 'okay'}
+    
+        actual_results = remove_id_and_timestamp(requests.post(f"{ADDRESS}/p46b6b076c/predictions",
+                                            headers={'X-API-KEY': 'ABCD-1234'}).json())
+>       assert actual_results['message'] == expected_results
+E       AssertionError: assert [{'confidence...5807593, ...}] == [{'confidence...5807593, ...}]
+E         At index 0 diff: {'itfdf_similarity': 1, 'grand_hamiltonian': 0.333333333333, 'type': 'prototypical', 'name': '94fb8bfc5f24a1c22457e3d811663d00b2a2b4bd', 'snr': 1, 'matches': ['present-symbol-1-1', 'present-symbol-1-2', 'present-symbol-1-3', 'present-symbol-2-1', 'present-symbol-2-2', 'present-symbol-2-3', 'present-symbol-2-4'], 'past': [['past-symbol-1-1', 'past-symbol-1-2', 'past-symbol-1-3'], ['past-symbol-2-1', 'past-symbol-2-2', 'past-symbol-2-3', 'past-symbol-2-4']], 'frequency': 1, 'missing': [], 'potential': 3.333333333333, 'present': [['present-symbol-1-1', 'pr...
+E         
+E         ...Full output truncated (50 lines hidden), use '-vv' to show
+
+tests/test_predictions.py:299: AssertionError
+____________________________ test_get_predictions_2 ____________________________
+
+setup_and_teardown = <lib.dependencies.KatoTestFixture object at 0x1077adf40>
+
+    def test_get_predictions_2(setup_and_teardown):
+        "Needs test_get_predictions_1_b"
+        assert remove_id_and_timestamp(requests.post(f"{ADDRESS}/p46b6b076c/working-memory/clear",
+                                            headers={'X-API-KEY': 'ABCD-1234'}).json()) == {'id': 'p46b6b076c',
+                                                                                            'interval': 10,
+                                                                                            'message': 'wm-cleared',
+                                                                                            'status': 'okay'}
+        assert remove_id_and_timestamp(requests.get(f"{ADDRESS}/p46b6b076c/percept-data",
+                                            headers={'X-API-KEY': 'ABCD-1234'}).json()) == {'id': 'p46b6b076c',
+                                                                                            'interval': 10,
+                                                                                            'message': {},
+                                                                                            'status': 'okay'}
+>       assert remove_id_and_timestamp(requests.get(f"{ADDRESS}/p46b6b076c/working-memory",
+                                            headers={'X-API-KEY': 'ABCD-1234'}).json()) == {'id': 'p46b6b076c',
+                                                                                            'interval': 10,
+                                                                                            'message': [],
+                                                                                            'status': 'okay'}
+E       AssertionError: assert {'message': [...atus': 'okay'} == {'id': 'p46b6...atus': 'okay'}
+E         Omitting 2 identical items, use -vv to show
+E         Right contains 2 more items:
+E         {'id': 'p46b6b076c', 'interval': 10}
+E         Full diff:
+E         - {'id': 'p46b6b076c', 'interval': 10, 'message': [], 'status': 'okay'}
+E         + {'message': [], 'status': 'okay'}
+
+tests/test_predictions.py:315: AssertionError
+____________________________ test_get_predictions_3 ____________________________
+
+setup_and_teardown = <lib.dependencies.KatoTestFixture object at 0x1077adf40>
+
+    def test_get_predictions_3(setup_and_teardown):
+        "Needs test_get_predictions_1_b"
+    
+>       assert remove_id_and_timestamp(requests.post(f"{ADDRESS}/p46b6b076c/working-memory/clear",
+                                            headers={'X-API-KEY': 'ABCD-1234'}).json()) == {'id': 'p46b6b076c',
+                                                                                            'interval': 12,
+                                                                                            'message': 'wm-cleared',
+                                                                                            'status': 'okay'}
+E       AssertionError: assert {'id': 'p46b6...atus': 'okay'} == {'id': 'p46b6...atus': 'okay'}
+E         Omitting 3 identical items, use -vv to show
+E         Differing items:
+E         {'interval': 10} != {'interval': 12}
+E         Full diff:
+E         - {'id': 'p46b6b076c', 'interval': 12, 'message': 'wm-cleared', 'status': 'okay'}
+E         ?                                   ^
+E         + {'id': 'p46b6b076c', 'interval': 10, 'message': 'wm-cleared', 'status': 'okay'}...
+E         
+E         ...Full output truncated (2 lines hidden), use '-vv' to show
+
+tests/test_predictions.py:469: AssertionError
+____________________________ test_get_predictions_4 ____________________________
+
+setup_and_teardown = <lib.dependencies.KatoTestFixture object at 0x1077adf40>
+
+    def test_get_predictions_4(setup_and_teardown):
+        "Needs test_get_predictions_1_b"
+        # genome = Genome(inject_genome('./test-genomes/simple.genome'))
+>       assert remove_id_and_timestamp(requests.post(f"{ADDRESS}/p46b6b076c/working-memory/clear",
+                                            headers={'X-API-KEY': 'ABCD-1234'}).json()) == {'id': 'p46b6b076c',
+                                                                                            'interval': 17,
+                                                                                            'message': 'wm-cleared',
+                                                                                            'status': 'okay'}
+E       AssertionError: assert {'id': 'p46b6...atus': 'okay'} == {'id': 'p46b6...atus': 'okay'}
+E         Omitting 3 identical items, use -vv to show
+E         Differing items:
+E         {'interval': 10} != {'interval': 17}
+E         Full diff:
+E         - {'id': 'p46b6b076c', 'interval': 17, 'message': 'wm-cleared', 'status': 'okay'}
+E         ?                                   ^
+E         + {'id': 'p46b6b076c', 'interval': 10, 'message': 'wm-cleared', 'status': 'okay'}...
+E         
+E         ...Full output truncated (2 lines hidden), use '-vv' to show
+
+tests/test_predictions.py:663: AssertionError
+____________________________ test_get_predictions_5 ____________________________
+
+setup_and_teardown = <lib.dependencies.KatoTestFixture object at 0x1077adf40>
+
+    def test_get_predictions_5(setup_and_teardown):
+        "Needs test_get_predictions_1_b"
+        # genome = Genome(inject_genome('./test-genomes/simple.genome'))
+>       assert remove_id_and_timestamp(requests.post(f"{ADDRESS}/p46b6b076c/working-memory/clear",
+                                            headers={'X-API-KEY': 'ABCD-1234'}).json()) == {'id': 'p46b6b076c',
+                                                                                            'interval': 18,
+                                                                                            'message': 'wm-cleared',
+                                                                                            'status': 'okay'}
+E       AssertionError: assert {'id': 'p46b6...atus': 'okay'} == {'id': 'p46b6...atus': 'okay'}
+E         Omitting 3 identical items, use -vv to show
+E         Differing items:
+E         {'interval': 10} != {'interval': 18}
+E         Full diff:
+E         - {'id': 'p46b6b076c', 'interval': 18, 'message': 'wm-cleared', 'status': 'okay'}
+E         ?                                   ^
+E         + {'id': 'p46b6b076c', 'interval': 10, 'message': 'wm-cleared', 'status': 'okay'}...
+E         
+E         ...Full output truncated (2 lines hidden), use '-vv' to show
+
+tests/test_predictions.py:851: AssertionError
+____________________________ test_get_predictions_6 ____________________________
+
+setup_and_teardown = <lib.dependencies.KatoTestFixture object at 0x1077adf40>
+
+    def test_get_predictions_6(setup_and_teardown):
+        "Making sure predictions aren't wiped out, prematurely."
+        # genome = Genome(inject_genome('./test-genomes/simple.genome'))
+        assert remove_id_and_timestamp(requests.post(f"{ADDRESS}/p46b6b076c/clear-all-memory",
+                                            headers={'X-API-KEY': 'ABCD-1234'}).json()) == {'id': 'p46b6b076c',
+                                                                                            'interval': 0,
+                                                                                            'message': 'all-cleared',
+                                                                                            'status': 'okay'}
+    
+        assert remove_id_and_timestamp(requests.get(f"{ADDRESS}/p46b6b076c/percept-data",
+                                            headers={'X-API-KEY': 'ABCD-1234'}).json()) == {'id': 'p46b6b076c',
+                                                                                            'interval': 0,
+                                                                                            'message': {},
+                                                                                            'status': 'okay'}
+>       assert remove_id_and_timestamp(requests.get(f"{ADDRESS}/p46b6b076c/working-memory",
+                                            headers={'X-API-KEY': 'ABCD-1234'}).json()) == {'id': 'p46b6b076c',
+                                                                                            'interval': 0,
+                                                                                            'message': [],
+                                                                                            'status': 'okay'}
+E       AssertionError: assert {'message': [...atus': 'okay'} == {'id': 'p46b6...atus': 'okay'}
+E         Omitting 2 identical items, use -vv to show
+E         Right contains 2 more items:
+E         {'id': 'p46b6b076c', 'interval': 0}
+E         Full diff:
+E         - {'id': 'p46b6b076c', 'interval': 0, 'message': [], 'status': 'okay'}
+E         + {'message': [], 'status': 'okay'}
+
+tests/test_predictions.py:1039: AssertionError
+--------------------------- Captured stdout teardown ---------------------------
+KATO was already running, not stopping
+_________________________ test_change_recall_threshold _________________________
+
+setup_and_teardown = <lib.dependencies.KatoTestFixture object at 0x10a691850>
+
+    def test_change_recall_threshold(setup_and_teardown):
+        assert remove_id_and_timestamp(requests.post(f"{ADDRESS}/p46b6b076c/clear-all-memory",
+                                            headers={'X-API-KEY': 'ABCD-1234'}).json()) == {'id': 'p46b6b076c',
+                                                                                            'interval': 0,
+                                                                                            'message': 'all-cleared',
+                                                                                            'status': 'okay'}
+    
+        ## Get current recall_threshold value
+        assert remove_id_and_timestamp(requests.get(f"{ADDRESS}/p46b6b076c/gene/recall_threshold",
+                                            headers={'X-API-KEY': 'ABCD-1234'}).json()) == {'id': 'p46b6b076c',
+                                                                                            'interval': 0,
+                                                                                            'message': 0.1,
+                                                                                            'status': 'okay'}
+    
+        model_queue = [
+            ["past-symbol-1-1", "past-symbol-1-2", "past-symbol-1-3"],
+            ["past-symbol-2-1", "past-symbol-2-2", "past-symbol-2-3", "past-symbol-2-4"],
+            ["present-symbol-1-1", "present-symbol-1-2", "present-symbol-1-3"],
+            ["present-symbol-2-1", "present-symbol-2-2", "present-symbol-2-3", "present-symbol-2-4"],
+            ["future-symbol-1-1", "future-symbol-1-2", "future-symbol-1-3"],
+            ["future-symbol-2-1", "future-symbol-2-2", "future-symbol-2-3", "future-symbol-2-4"],
+        ]
+    
+        ## Test for partial match
+        test_queue = [
+            ["present-symbol-1-1", "present-symbol-1-2", "present-symbol-1-3"],
+            ["present-symbol-2-1", "present-symbol-2-2", "present-symbol-2-3", "present-symbol-2-4"],
+        ]
+    
+        expected_populated_results = [
+            {
+                "name": "94fb8bfc5f24a1c22457e3d811663d00b2a2b4bd",
+                "evidence": 0.3333333333333333,
+                "frequency": 1.0,
+    
+                'emotives': {},
+                "confidence": 1.0,
+                "potential": 3.333333333333,
+                'confluence': 0.999999999445,
+                'entropy': 1.464105807593,
+                'fragmentation': 0.0,
+                'hamiltonian': 0.639151193285,
+                'grand_hamiltonian': 0.333333333333,
+                'itfdf_similarity': 1.0,
+                'similarity': 0.5,
+                'snr': 1.0,
+                "past": [
+                    ["past-symbol-1-1", "past-symbol-1-2", "past-symbol-1-3"],
+                    ["past-symbol-2-1", "past-symbol-2-2", "past-symbol-2-3", "past-symbol-2-4"],
+                ],
+                "missing": [],
+                "matches": [
+                    "present-symbol-1-1",
+                    "present-symbol-1-2",
+                    "present-symbol-1-3",
+                    "present-symbol-2-1",
+                    "present-symbol-2-2",
+                    "present-symbol-2-3",
+                    "present-symbol-2-4",
+                ],
+                "present": [
+                    ["present-symbol-1-1", "present-symbol-1-2", "present-symbol-1-3"],
+                    ["present-symbol-2-1", "present-symbol-2-2", "present-symbol-2-3", "present-symbol-2-4"],
+                ],
+                "future": [
+                    ["future-symbol-1-1", "future-symbol-1-2", "future-symbol-1-3"],
+                    ["future-symbol-2-1", "future-symbol-2-2", "future-symbol-2-3", "future-symbol-2-4"],
+                ],
+                "extras": [],
+                'type': 'prototypical',
+            }
+        ]
+    
+        ## Learn sequence:
+        assert remove_id_and_timestamp(requests.post(f"{ADDRESS}/p46b6b076c/working-memory/clear",
+                                            headers={'X-API-KEY': 'ABCD-1234'}).json()) == {'id': 'p46b6b076c',
+                                                                                            'interval': 0,
+                                                                                            'message': 'wm-cleared',
+                                                                                            'status': 'okay'}
+    
+        for i, event in enumerate(model_queue, start=1):
+            data = {"strings": event, "vectors": [], "emotives": {}}
+>           assert remove_id_and_timestamp(requests.post(f"{ADDRESS}/p46b6b076c/observe",
+                                            headers={'X-API-KEY': 'ABCD-1234'},
+                                            json={'data':data}).json()) == {'id': 'p46b6b076c',
+                                                                            'interval': i,
+                                                                            'message': 'observed',
+                                                                            'status': 'okay'}
+E           AssertionError: assert {'id': 'p46b6...atus': 'okay'} == {'id': 'p46b6...atus': 'okay'}
+E             Omitting 3 identical items, use -vv to show
+E             Differing items:
+E             {'message': {'auto_learned_model': '', 'status': 'observed'}} != {'message': 'observed'}
+E             Full diff:
+E               {
+E                'id': 'p46b6b076c',
+E                'interval': 1,...
+E             
+E             ...Full output truncated (6 lines hidden), use '-vv' to show
+
+tests/test_recall_threshold.py:102: AssertionError
+---------------------------- Captured stdout setup -----------------------------
+KATO is already running, skipping startup
+Processor state reset successfully
+_______________________ test_increment_recall_threshold ________________________
+
+setup_and_teardown = <lib.dependencies.KatoTestFixture object at 0x10a691850>
+
+    def test_increment_recall_threshold(setup_and_teardown):
+        assert remove_id_and_timestamp(requests.post(f"{ADDRESS}/p46b6b076c/clear-all-memory",
+                                            headers={'X-API-KEY': 'ABCD-1234'}).json()) == {'id': 'p46b6b076c',
+                                                                                            'interval': 0,
+                                                                                            'message': 'all-cleared',
+                                                                                            'status': 'okay'}
+    
+        ## Get current recall_threshold value
+        assert remove_id_and_timestamp(requests.get(f"{ADDRESS}/p46b6b076c/gene/recall_threshold",
+                                            headers={'X-API-KEY': 'ABCD-1234'}).json()) == {'id': 'p46b6b076c',
+                                                                                            'interval': 0,
+                                                                                            'message': 0.1,
+                                                                                            'status': 'okay'}
+    
+        model_queue = [
+            ["past-symbol-1-1", "past-symbol-1-2", "past-symbol-1-3"],
+            ["past-symbol-2-1", "past-symbol-2-2", "past-symbol-2-3", "past-symbol-2-4"],
+            ["present-symbol-1-1", "present-symbol-1-2", "present-symbol-1-3"],
+            ["present-symbol-2-1", "present-symbol-2-2", "present-symbol-2-3", "present-symbol-2-4"],
+            ["future-symbol-1-1", "future-symbol-1-2", "future-symbol-1-3"],
+            ["future-symbol-2-1", "future-symbol-2-2", "future-symbol-2-3", "future-symbol-2-4"],
+        ]
+    
+        ## Test for partial match
+        test_queue = [
+            ["present-symbol-1-1", "present-symbol-1-2", "present-symbol-1-3"],
+            ["present-symbol-2-1", "present-symbol-2-2", "present-symbol-2-3", "present-symbol-2-4"],
+        ]
+    
+        ## Learn sequence:
+        for i, event in enumerate(model_queue, start=1):
+            data = {"strings": event, "vectors": [], "emotives": {}}
+>           assert remove_id_and_timestamp(requests.post(f"{ADDRESS}/p46b6b076c/observe",
+                                            headers={'X-API-KEY': 'ABCD-1234'},
+                                            json={'data':data}).json()) == {'id': 'p46b6b076c',
+                                                                            'interval': i,
+                                                                            'message': 'observed',
+                                                                            'status': 'okay'}
+E           AssertionError: assert {'id': 'p46b6...atus': 'okay'} == {'id': 'p46b6...atus': 'okay'}
+E             Omitting 3 identical items, use -vv to show
+E             Differing items:
+E             {'message': {'auto_learned_model': '', 'status': 'observed'}} != {'message': 'observed'}
+E             Full diff:
+E               {
+E                'id': 'p46b6b076c',
+E                'interval': 1,...
+E             
+E             ...Full output truncated (6 lines hidden), use '-vv' to show
+
+tests/test_recall_threshold.py:246: AssertionError
+____________________________ test_exceed_threshold _____________________________
+
+    def test_exceed_threshold():
+        # genome = Genome(inject_genome('./test-genomes/exceed_threshold.genome')) ## max_sequence_length = 5 for P1, = 3 for P2
+        # client = get_client(BOTTLE_INFO)
+        # agent.receive_unique_ids(False)
+>       assert agent.clear_all_memory(nodes=["P1"]) == 'all-cleared'
+E       NameError: name 'agent' is not defined
+
+tests/test_recall_threshold.py:408: NameError
+--------------------------- Captured stdout teardown ---------------------------
+KATO was already running, not stopping
+______________________________ test_target_class _______________________________
+
+setup_and_teardown = <lib.dependencies.KatoTestFixture object at 0x1076e3700>
+
+    def test_target_class(setup_and_teardown):
+        # Test target class functionality using REST API
+        assert remove_id_and_timestamp(requests.post(f"{ADDRESS}/p46b6b076c/clear-all-memory",
+                                            headers={'X-API-KEY': 'ABCD-1234'}).json()) == {'id': 'p46b6b076c',
+                                                                                            'interval': 0,
+                                                                                            'message': 'all-cleared',
+                                                                                            'status': 'okay'}
+>       assert remove_id_and_timestamp(requests.get(f"{ADDRESS}/p46b6b076c/working-memory",
+                                            headers={'X-API-KEY': 'ABCD-1234'}).json()) == {'id': 'p46b6b076c',
+                                                                                            'interval': 0,
+                                                                                            'message': [],
+                                                                                            'status': 'okay'}
+E       AssertionError: assert {'message': [...atus': 'okay'} == {'id': 'p46b6...atus': 'okay'}
+E         Omitting 2 identical items, use -vv to show
+E         Right contains 2 more items:
+E         {'id': 'p46b6b076c', 'interval': 0}
+E         Full diff:
+E         - {'id': 'p46b6b076c', 'interval': 0, 'message': [], 'status': 'okay'}
+E         + {'message': [], 'status': 'okay'}
+
+tests/test_target_class.py:27: AssertionError
+---------------------------- Captured stdout setup -----------------------------
+KATO is already running, skipping startup
+Processor state reset successfully
+--------------------------- Captured stdout teardown ---------------------------
+KATO was already running, not stopping
+=========================== short test summary info ============================
+FAILED tests/test_cvc_vectors.py::test_cvc_vector_classifier - AssertionError...
+FAILED tests/test_dvc_vectors.py::test_dvc_vector_classifier - AssertionError...
+FAILED tests/test_emotive_engine.py::test_emotive_perception - AssertionError...
+FAILED tests/test_emotive_engine.py::test_emotive_perception_more_emotives - ...
+FAILED tests/test_emotive_engine.py::test_emotive_perception_less_emotives - ...
+FAILED tests/test_emotive_engine.py::test_emotive_predictions_and_updating - ...
+FAILED tests/test_kb_load_store.py::test_store_kb_to_file - AttributeError: '...
+FAILED tests/test_kb_load_store.py::test_load_kb_from_json - AttributeError: ...
+FAILED tests/test_manual_model_learning.py::test_manual_model_learning - requ...
+FAILED tests/test_max_seq_length.py::test_max_seq_length_0 - AssertionError: ...
+FAILED tests/test_predictions.py::test_get_predictions_1_b - AssertionError: ...
+FAILED tests/test_predictions.py::test_get_predictions_2 - AssertionError: as...
+FAILED tests/test_predictions.py::test_get_predictions_3 - AssertionError: as...
+FAILED tests/test_predictions.py::test_get_predictions_4 - AssertionError: as...
+FAILED tests/test_predictions.py::test_get_predictions_5 - AssertionError: as...
+FAILED tests/test_predictions.py::test_get_predictions_6 - AssertionError: as...
+FAILED tests/test_recall_threshold.py::test_change_recall_threshold - Asserti...
+FAILED tests/test_recall_threshold.py::test_increment_recall_threshold - Asse...
+FAILED tests/test_recall_threshold.py::test_exceed_threshold - NameError: nam...
+FAILED tests/test_target_class.py::test_target_class - AssertionError: assert...
+========================= 20 failed, 3 passed in 7.42s =========================

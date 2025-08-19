@@ -5,6 +5,7 @@
 
 Because in AI, memory without traceability or understanding is just confusion.
 
+![alt text](assets/kato-graphic.png "KATO crystal")
 ---
 
 ## 🚀 Overview
@@ -28,3 +29,47 @@ Like GAIuS before it, KATO adheres to [ExCITE AI](https://medium.com/@sevakavaki
 - **Multi-Modal Support** – Works with text, vision, sensor data, and more.
 - **Emotive Processing** – Associates data with emotional context when relevant.
 - **Explainable Outputs** – Every abstraction and decision is linked to traceable input sequences.
+
+# Architecture Summary
+
+## High-Level Summary
+
+Kato is a framework for building and running artificially intelligent agents. It is based on a distributed, message-passing architecture where multiple "kato processors" can be networked together to form a larger kato system. The system is designed to be deployed in Docker containers.
+
+## Core Components
+
+*   **Kato Processor (`KatoProcessor` class):** This is the main program of the system. Each kato processor is an independent agent with its own "genome" that defines its characteristics and behavior. It can perceive its environment, learn from experience, and make predictions.
+
+*   **gRPC Server (`KatoEngineServicer`):** Each kato processor runs a gRPC server that exposes the `KatoEngine` service. This service provides a well-defined API for interacting with the kato processor, allowing other components to send it observations, issue commands, and inspect its internal state.
+
+*   **Modeler (`Modeler` class):** This is the core of the kato processor's learning and prediction capabilities. It maintains a working memory of recent events, learns new models from this memory, and uses these models to generate predictions about future events.
+
+*   **Classifier (`Classifier` class):** This component is responsible for processing raw input data (specifically, vectors) and classifying it into a set of known symbols. This is a form of feature extraction that simplifies the input for the `Modeler`.
+
+*   **Knowledge Base:** The system uses a knowledge base (likely MongoDB, as suggested by the `README.md`) to store learned models and other persistent data. The `Modeler` interacts with the knowledge base to save and retrieve information.
+
+*   **NodeClient:** This is a gRPC client that allows kato processors to communicate with each other. This enables the creation of complex, multi-agent systems where processors can collaborate and exchange information.
+
+## Architectural Patterns
+
+*   **Microservices-like Architecture:** The system is composed of small, independent services (the kato processors) that communicate over a network using a well-defined API (gRPC). This allows for scalability and flexibility.
+
+*   **Message-Passing:** The kato processors communicate by passing messages to each other. This is a common pattern in distributed systems and allows for loose coupling between components.
+
+*   **Event-Driven Architecture:** The kato processors are driven by events, which can be observations from the environment or messages from other processors. The `observe` method is the primary event handler.
+
+*   **Component-Based Design:** The `KatoProcessor` is composed of several smaller, more specialized components (the `Modeler`, `Classifier`, etc.). This makes the system easier to understand, maintain, and extend.
+
+## Data Flow
+
+1.  **Observation:** An external entity or another kato processor sends an observation to a kato processor's gRPC server via the `Observe` RPC.
+2.  **Processing Pipeline:** The observation may be passed through a pipeline of operations before being processed by the target kato processor. This is defined by `InputPipeline` and can include LLMs, SLMs, neural network or GPT processes.
+3.  **Symbolization:** The `Classifier` processes the raw data in the observation and converts it into a set of symbols.
+4.  **Modeling and Prediction:** The `Modeler` receives the symbols, updates its working memory, and generates predictions based on its learned models.
+5.  **Action/Communication:** The kato processor can then take action based on the predictions, which may involve sending messages to other kato processors via the `NodeClient`.
+
+## Deployment
+
+The system is designed to be deployed in Docker containers. The `Dockerfile` defines the container image, and `supervisord` is used to manage the `cp-engine` process within the container. This makes it easy to deploy and manage the system in a variety of environments.
+
+---

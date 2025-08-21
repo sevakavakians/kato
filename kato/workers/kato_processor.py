@@ -144,7 +144,8 @@ class KatoProcessor:
             self.percept_data = {'strings': string_data, 
                                     'vectors': vector_data, 
                                     'emotives': emotives_data, 
-                                    'path': data['path']}
+                                    'path': data['path'],
+                                    'metadata': data.get('metadata', {})}
 
             self.symbols = []
             symbols = []

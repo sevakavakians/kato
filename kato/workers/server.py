@@ -400,9 +400,56 @@ class KatoEngineServicer(kato_proc_pb2_grpc.KatoEngineServicer):
     def GetCognitionData(self, request, context):
         logger.debug(f'request={request} context={context}')
         try:
-            response = kato_proc_pb2.CognitionObject(**self.primitive.cognition_data)
-            # response = Struct()
-            # response.update({'data': m})
+            # Get cognition data from primitive
+            cog_data = self.primitive.cognition_data
+            
+            # Create CognitionObject and populate fields
+            response = kato_proc_pb2.CognitionObject()
+            
+            # Handle predictions (list of Prediction objects)
+            if 'predictions' in cog_data and cog_data['predictions']:
+                for pred in cog_data['predictions']:
+                    # Create Prediction message and add to response
+                    pred_msg = kato_proc_pb2.Prediction()
+                    # Use MessageToDict/ParseDict for complex nested structures
+                    from google.protobuf import json_format
+                    json_format.ParseDict(pred, pred_msg)
+                    response.predictions.append(pred_msg)
+            
+            # Handle emotives (map)
+            if 'emotives' in cog_data:
+                for k, v in cog_data['emotives'].items():
+                    response.emotives[k] = float(v)
+            
+            # Handle simple fields
+            if 'symbols' in cog_data:
+                response.symbols.extend(cog_data['symbols'])
+            if 'command' in cog_data:
+                response.command = cog_data['command']
+            if 'metadata' in cog_data:
+                for k, v in cog_data['metadata'].items():
+                    response.metadata[k] = str(v)
+            if 'path' in cog_data:
+                response.path.extend(cog_data['path'])
+            if 'strings' in cog_data:
+                response.strings.extend(cog_data['strings'])
+            
+            # Handle vectors (list of lists -> ListValue)
+            if 'vectors' in cog_data:
+                from google.protobuf.struct_pb2 import ListValue
+                for vector in cog_data['vectors']:
+                    list_val = ListValue()
+                    list_val.extend(vector)
+                    response.vectors.append(list_val)
+            
+            # Handle working_memory (list of lists -> ListValue)
+            if 'working_memory' in cog_data:
+                from google.protobuf.struct_pb2 import ListValue
+                for wm_item in cog_data['working_memory']:
+                    list_val = ListValue()
+                    list_val.extend(wm_item)
+                    response.working_memory.append(list_val)
+            
             return kato_proc_pb2.CognitionResponse(
                 status=kato_proc_pb2.CognitionResponse.OKAY,
                 id=self.primitive.id,
@@ -541,15 +588,21 @@ class KatoEngineServicer(kato_proc_pb2_grpc.KatoEngineServicer):
     def GetWorkingMemory(self, request, context):
         logger.debug(f'request={request} context={context}')
         try:
-            m = {'data': list(self.primitive.modeler.WM)}
-            response = Struct()
-            response.update(m)
+            wm_list = list(self.primitive.modeler.WM)
+            logger.info(f"Working memory raw: {self.primitive.modeler.WM}")
+            logger.info(f"Working memory as list: {wm_list}")
+            
+            # Convert working memory to JSON string as message instead of using Struct
+            import json
+            wm_json = json.dumps(wm_list)
+            logger.info(f"Working memory as JSON: {wm_json}")
+            
             return kato_proc_pb2.StandardResponse(
                 status=kato_proc_pb2.StandardResponse.OKAY,
                 id=self.primitive.id,
                 interval=self.primitive.time,
                 time_stamp=time.time(),
-                response=response,
+                message=wm_json,
             )
         except BaseException:
             logger.error(f'{traceback.format_exc()}')

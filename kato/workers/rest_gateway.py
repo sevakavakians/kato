@@ -108,25 +108,19 @@ class RestGatewayHandler(BaseHTTPRequestHandler):
 
     def handle_connect(self):
         """Connect endpoint - returns mock genome structure for API compatibility"""
-        # Create mock genome structure matching the test expectations
+        # Create mock genome structure matching the single processor architecture
+        # Get the processor ID from the environment or use default
+        import os
+        processor_id = os.environ.get('PROCESSOR_ID', 'pd5d9e6c4c')
+        processor_name = os.environ.get('PROCESSOR_NAME', 'P1')
+        
         genome = {
             "elements": {
                 "nodes": [
                     {
                         "data": {
-                            "name": "P1",
-                            "id": "pd5d9e6c4c",
-                            "classifier": "CVC",
-                            "max_predictions": 100,
-                            "recall_threshold": 0.1,
-                            "persistence": 5,
-                            "search_depth": 10
-                        }
-                    },
-                    {
-                        "data": {
-                            "name": "P2", 
-                            "id": "p847675347",
+                            "name": processor_name,
+                            "id": processor_id,
                             "classifier": "CVC",
                             "max_predictions": 100,
                             "recall_threshold": 0.1,
@@ -158,8 +152,9 @@ class RestGatewayHandler(BaseHTTPRequestHandler):
             # Extract processor ID from path: /{processor_id}/status
             processor_id = self.path.split('/')[1]
             
-            # Determine processor name based on ID
-            processor_name = "P1" if processor_id == "pd5d9e6c4c" else "P2"
+            # Use processor name from environment variable
+            import os
+            processor_name = os.environ.get('PROCESSOR_NAME', 'P1')
             
             with grpc.insecure_channel('localhost:1441') as channel:
                 stub = kato_proc_pb2_grpc.KatoEngineStub(channel)
@@ -206,9 +201,29 @@ class RestGatewayHandler(BaseHTTPRequestHandler):
                 request = empty_pb2.Empty()
                 response = stub.GetWorkingMemory(request)
                 
+                logger.info(f"WM gRPC response type: {type(response)}")
+                logger.info(f"WM gRPC response has message attr: {hasattr(response, 'message')}")
+                logger.info(f"WM gRPC response.message: {response.message if hasattr(response, 'message') else 'No message attr'}")
+                
+                # Extract working memory data from the message field (now JSON)
+                wm_data = []
+                if hasattr(response, 'message') and response.message:
+                    try:
+                        import json
+                        wm_data = json.loads(response.message)
+                        logger.info(f"WM parsed JSON data: {wm_data}")
+                    except json.JSONDecodeError as e:
+                        logger.error(f"Failed to parse WM JSON: {e}")
+                        wm_data = []
+                
+                logger.info(f"WM final data: {wm_data}")
+                
                 result = {
+                    "id": response.id,
+                    "interval": response.interval,
+                    "time_stamp": response.time_stamp,
                     "status": "okay",
-                    "message": response.wm if hasattr(response, 'wm') else []
+                    "message": wm_data
                 }
                 
                 self.send_response(200)
@@ -491,11 +506,20 @@ class RestGatewayHandler(BaseHTTPRequestHandler):
                 request = empty_pb2.Empty()
                 response = stub.GetCognitionData(request)
                 
+                # TODO: Fix working_memory field in CognitionObject
+                # The GetCognitionData in server.py creates a CognitionObject from 
+                # self.primitive.cognition_data which includes working_memory as a list,
+                # but the protobuf conversion seems to drop or incorrectly handle it.
+                # As a result, the working_memory field always returns empty [].
+                # This needs investigation into the protobuf definition and conversion.
+                
                 # Extract cognition data - this returns a CognitionObject directly
                 cognition_data = {}
                 if hasattr(response, 'response') and response.response:
                     from google.protobuf import json_format
-                    cognition_data = json_format.MessageToDict(response.response)
+                    # Use preserving_proto_field_name=True to keep snake_case field names
+                    cognition_data = json_format.MessageToDict(response.response, 
+                                                              preserving_proto_field_name=True)
                 
                 result = {
                     "id": processor_id,

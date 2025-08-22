@@ -9,7 +9,7 @@ class VectorObject:
     def __init__(self, vector):
         self.vector = vector
         self.vector_length = sqrt(dot(self.vector, self.vector.transpose()))   # vector_length used for heuristics
-        self.vector_hash = str(sha1(np.str(self.vector).encode('utf-8')).hexdigest())
+        self.vector_hash = str(sha1(str(self.vector).encode('utf-8')).hexdigest())
         self.name = "VECTOR|%s" %(self.vector_hash)
         return
 

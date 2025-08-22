@@ -29,6 +29,64 @@ Like GAIuS before it, KATO adheres to [ExCITE AI](https://medium.com/@sevakavaki
 - **Multi-Modal Support** – Works with text, vision, sensor data, and more.
 - **Emotive Processing** – Associates data with emotional context when relevant.
 - **Explainable Outputs** – Every abstraction and decision is linked to traceable input sequences.
+- **Temporal Sequence Modeling** – Sophisticated past/present/future segmentation in predictions.
+- **Alphanumeric Event Sorting** – Consistent ordering within events while preserving sequence order.
+
+## 🧪 Testing
+
+KATO includes a comprehensive test suite with 76+ tests covering unit, integration, and API functionality.
+
+### Running Tests
+
+```bash
+# Navigate to test directory
+cd kato-tests
+
+# Run all tests
+./run_tests.sh
+
+# Run specific test categories
+./run_tests.sh --unit          # Unit tests only
+./run_tests.sh --integration   # Integration tests only
+./run_tests.sh --api           # API tests only
+
+# Run with options
+./run_tests.sh --verbose       # Verbose output
+./run_tests.sh --parallel      # Run tests in parallel
+```
+
+### Test Coverage
+
+- **Unit Tests**: Observations, memory management, model hashing, predictions, sorting behavior
+- **Integration Tests**: End-to-end sequence learning, recall, and complex scenarios
+- **API Tests**: REST endpoints, error handling, and protocol compliance
+
+### Key Test Features
+
+- **Deterministic Hash Verification**: Validates MODEL| and VECTOR| prefix consistency
+- **Sorting Behavior**: Tests KATO's alphanumeric sorting within events
+- **Stateful Testing**: Captures KATO's sequence learning and memory persistence
+- **Multi-modal Support**: Tests strings, vectors, and emotives processing
+
+For detailed test documentation, see [TEST_DOCUMENTATION.md](TEST_DOCUMENTATION.md).
+
+### Core Behaviors
+
+#### Sequence Processing
+- **Event Structure**: Observations are organized as events containing multiple symbols/strings
+- **Alphanumeric Sorting**: Strings within each event are sorted alphanumerically
+- **Sequence Preservation**: The order of events in a sequence is always preserved
+- **Empty Events**: Empty observations are ignored and don't change state
+
+#### Prediction Structure
+KATO's predictions use sophisticated temporal segmentation:
+- **Past**: Events before the current matching state
+- **Present**: All contiguous events identified by matching symbols (partial matches supported)
+- **Future**: Events after the present state
+- **Missing**: Symbols expected in present events but not observed
+- **Extras**: Symbols observed but not expected in present events
+
+For detailed behavior documentation, see [KATO_BEHAVIOR_DOCUMENTATION.md](kato-tests-v2/KATO_BEHAVIOR_DOCUMENTATION.md).
 
 # Architecture Summary
 

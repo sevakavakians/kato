@@ -22,6 +22,7 @@ MONGO_CONTAINER_NAME="mongo-kb-${USER}-1"
 KATO_CONTAINER_NAME="kato-api-${USER}-1"
 MONGO_DB_PORT="27017"
 KATO_API_PORT="8000"
+CONFIG_FILE="/tmp/kato-config-${USER}.json"
 
 # Default KATO configuration
 DEFAULT_API_KEY="ABCD-1234"
@@ -418,6 +419,7 @@ start_mongodb() {
 # Start KATO
 start_kato() {
     local status=$(container_status "$KATO_CONTAINER_NAME")
+    local need_readiness_check=1
     
     case $status in
         "running")
@@ -427,48 +429,119 @@ start_kato() {
         "stopped")
             log_info "Starting existing KATO container: $KATO_CONTAINER_NAME"
             docker start "$KATO_CONTAINER_NAME"
-            return 0
+            ;;
+        "not_found")
+            # Create new container
+            log_info "Creating and starting KATO container: $KATO_CONTAINER_NAME"
+            log_info "Using processor: $PROCESSOR_NAME (ID: $PROCESSOR_ID)"
+            
+            # Build genome manifest from parameters
+            local genome_content
+            genome_content=$(build_genome_manifest)
+            
+            # Save configuration to file for status command
+            cat > "$CONFIG_FILE" <<EOF
+{
+    "processor_id": "$PROCESSOR_ID",
+    "processor_name": "$PROCESSOR_NAME",
+    "classifier": "$CLASSIFIER",
+    "max_predictions": $MAX_PREDICTIONS,
+    "recall_threshold": $RECALL_THRESHOLD,
+    "persistence": $PERSISTENCE,
+    "search_depth": $SEARCH_DEPTH,
+    "log_level": "$LOG_LEVEL",
+    "tag": "$TAG"
+}
+EOF
+            
+            docker run -d \
+                --name "$KATO_CONTAINER_NAME" \
+                --network "$DOCKER_NETWORK" \
+                -p "$API_PORT:8000" \
+                -p "1441:1441" \
+                -e "HOSTNAME=$KATO_CONTAINER_NAME" \
+                -e "PORT=1441" \
+                -e "LOG_LEVEL=$LOG_LEVEL" \
+                -e "MONGO_BASE_URL=mongodb://$MONGO_CONTAINER_NAME:27017" \
+                -e "MANIFEST=$genome_content" \
+                -e "SOURCES=[]" \
+                -e "TARGETS=[]" \
+                -e "AS_INPUTS=[]" \
+                -e "PROCESSOR_ID=$PROCESSOR_ID" \
+                -e "PROCESSOR_NAME=$PROCESSOR_NAME" \
+                "$DOCKER_IMAGE_NAME:$TAG"
             ;;
     esac
-    
-    # Create new container
-    log_info "Creating and starting KATO container: $KATO_CONTAINER_NAME"
-    log_info "Using processor: $PROCESSOR_NAME (ID: $PROCESSOR_ID)"
-    
-    # Build genome manifest from parameters
-    local genome_content
-    genome_content=$(build_genome_manifest)
-    
-    docker run -d \
-        --name "$KATO_CONTAINER_NAME" \
-        --network "$DOCKER_NETWORK" \
-        -p "$API_PORT:8000" \
-        -p "1441:1441" \
-        -e "HOSTNAME=$KATO_CONTAINER_NAME" \
-        -e "PORT=1441" \
-        -e "LOG_LEVEL=$LOG_LEVEL" \
-        -e "MONGO_BASE_URL=mongodb://$MONGO_CONTAINER_NAME:27017" \
-        -e "MANIFEST=$genome_content" \
-        -e "SOURCES=[]" \
-        -e "TARGETS=[]" \
-        -e "AS_INPUTS=[]" \
-        -e "PROCESSOR_ID=$PROCESSOR_ID" \
-        -e "PROCESSOR_NAME=$PROCESSOR_NAME" \
-        "$DOCKER_IMAGE_NAME:$TAG"
         
     # Wait for KATO to be ready
     log_info "Waiting for KATO API to be ready..."
     local retries=30
-    while ! curl -s "http://localhost:$API_PORT/kato-api/ping" > /dev/null 2>&1; do
-        retries=$((retries - 1))
-        if [[ $retries -eq 0 ]]; then
-            log_error "KATO API failed to start"
-            show_logs "kato"
-            return 1
+    local ping_ready=0
+    local fully_ready=0
+    
+    # Phase 1: Wait for ping endpoint to respond
+    while [[ $ping_ready -eq 0 ]]; do
+        if curl -s "http://localhost:$API_PORT/kato-api/ping" > /dev/null 2>&1; then
+            ping_ready=1
+            log_info "KATO API is responding to ping"
+        else
+            retries=$((retries - 1))
+            if [[ $retries -eq 0 ]]; then
+                log_error "KATO API failed to start (ping timeout)"
+                show_logs "kato"
+                return 1
+            fi
+            sleep 2
         fi
-        sleep 2
     done
-    log_success "KATO API is ready on port $API_PORT"
+    
+    # Phase 2: Verify processor is accessible and matches expected ID
+    log_info "Verifying processor $PROCESSOR_ID is accessible..."
+    retries=20
+    while [[ $fully_ready -eq 0 ]]; do
+        # Try to ping the specific processor
+        local ping_response=$(curl -s "http://localhost:$API_PORT/$PROCESSOR_ID/ping" 2>/dev/null)
+        local ping_status=$?
+        
+        if [[ $ping_status -eq 0 ]] && [[ ! -z "$ping_response" ]]; then
+            # Check if the processor ID matches (handle JSON with spaces)
+            local returned_id=$(echo "$ping_response" | grep -o '"id"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)"$/\1/')
+            if [[ "$returned_id" == "$PROCESSOR_ID" ]]; then
+                log_info "Processor ID verified: $PROCESSOR_ID"
+                
+                # Phase 3: Verify processor can handle operations
+                log_info "Testing processor operations..."
+                local clear_response=$(curl -s -X POST \
+                    -H "X-API-KEY: ABCD-1234" \
+                    "http://localhost:$API_PORT/$PROCESSOR_ID/clear-all-memory" 2>/dev/null)
+                local clear_status=$?
+                
+                if [[ $clear_status -eq 0 ]] && [[ "$clear_response" == *"all-cleared"* ]]; then
+                    fully_ready=1
+                    log_success "KATO processor $PROCESSOR_ID is fully operational on port $API_PORT"
+                else
+                    log_info "Processor not fully ready yet (clear-memory test failed)"
+                fi
+            else
+                log_info "Processor ID mismatch (expected: $PROCESSOR_ID, got: $returned_id)"
+            fi
+        else
+            log_info "Processor $PROCESSOR_ID not yet accessible"
+        fi
+        
+        if [[ $fully_ready -eq 0 ]]; then
+            retries=$((retries - 1))
+            if [[ $retries -eq 0 ]]; then
+                log_error "KATO processor failed to become fully operational"
+                show_logs "kato"
+                return 1
+            fi
+            sleep 3
+        fi
+    done
+    
+    # Give it one more second for any final initialization
+    sleep 1
 }
 
 # Stop services
@@ -486,6 +559,9 @@ stop_services() {
         log_info "Stopping MongoDB container: $MONGO_CONTAINER_NAME"
         docker stop "$MONGO_CONTAINER_NAME"
     fi
+    
+    # Clean up config file
+    [[ -f "$CONFIG_FILE" ]] && rm -f "$CONFIG_FILE"
     
     log_success "KATO services stopped"
 }
@@ -523,11 +599,56 @@ show_status() {
     echo
     echo "Configuration:"
     echo "-------------"
-    printf "%-20s %s\n" "Processor Name:" "$PROCESSOR_NAME"
-    printf "%-20s %s\n" "Processor ID:" "$PROCESSOR_ID"
-    printf "%-20s %s\n" "Classifier:" "$CLASSIFIER"
-    printf "%-20s %s\n" "Max Predictions:" "$MAX_PREDICTIONS"
-    printf "%-20s %s\n" "Recall Threshold:" "$RECALL_THRESHOLD"
+    
+    # Try to get configuration from multiple sources
+    local show_processor_id=""
+    local show_processor_name=""
+    local show_classifier=""
+    local show_max_predictions=""
+    local show_recall_threshold=""
+    
+    # First, try to load from saved config file
+    if [[ -f "$CONFIG_FILE" ]]; then
+        show_processor_id=$(grep '"processor_id"' "$CONFIG_FILE" 2>/dev/null | sed 's/.*"processor_id": *"\([^"]*\)".*/\1/')
+        show_processor_name=$(grep '"processor_name"' "$CONFIG_FILE" 2>/dev/null | sed 's/.*"processor_name": *"\([^"]*\)".*/\1/')
+        show_classifier=$(grep '"classifier"' "$CONFIG_FILE" 2>/dev/null | sed 's/.*"classifier": *"\([^"]*\)".*/\1/')
+        show_max_predictions=$(grep '"max_predictions"' "$CONFIG_FILE" 2>/dev/null | sed 's/.*"max_predictions": *\([0-9]*\).*/\1/')
+        show_recall_threshold=$(grep '"recall_threshold"' "$CONFIG_FILE" 2>/dev/null | sed 's/.*"recall_threshold": *\([0-9.]*\).*/\1/')
+    fi
+    
+    # If container is running, verify/override with actual container configuration
+    if [[ "$kato_status" == "running" ]]; then
+        # Extract configuration from running container's environment variables
+        local actual_processor_id=$(docker inspect "$KATO_CONTAINER_NAME" 2>/dev/null | grep '"PROCESSOR_ID=' | sed 's/.*"PROCESSOR_ID=\([^"]*\)".*/\1/')
+        local actual_processor_name=$(docker inspect "$KATO_CONTAINER_NAME" 2>/dev/null | grep '"PROCESSOR_NAME=' | sed 's/.*"PROCESSOR_NAME=\([^"]*\)".*/\1/')
+        
+        # Extract from MANIFEST JSON if individual vars are not found
+        if [[ -z "$actual_processor_id" ]] || [[ -z "$actual_processor_name" ]]; then
+            local manifest=$(docker inspect "$KATO_CONTAINER_NAME" 2>/dev/null | grep '"MANIFEST=' | sed 's/.*"MANIFEST=\(.*\)",$/\1/' | sed 's/\\n//g' | sed 's/\\"/"/g')
+            if [[ -n "$manifest" ]]; then
+                actual_processor_id=$(echo "$manifest" | sed -n 's/.*"id": *"\([^"]*\)".*/\1/p')
+                actual_processor_name=$(echo "$manifest" | sed -n 's/.*"name": *"\([^"]*\)".*/\1/p')
+                local actual_classifier=$(echo "$manifest" | sed -n 's/.*"classifier": *"\([^"]*\)".*/\1/p')
+                local actual_max_predictions=$(echo "$manifest" | sed -n 's/.*"max_predictions": *\([0-9]*\).*/\1/p')
+                local actual_recall_threshold=$(echo "$manifest" | sed -n 's/.*"recall_threshold": *\([0-9.]*\).*/\1/p')
+            fi
+        fi
+        
+        # Use actual values from container if found
+        [[ -n "$actual_processor_id" ]] && show_processor_id="$actual_processor_id"
+        [[ -n "$actual_processor_name" ]] && show_processor_name="$actual_processor_name"
+        [[ -n "$actual_classifier" ]] && show_classifier="$actual_classifier"
+        [[ -n "$actual_max_predictions" ]] && show_max_predictions="$actual_max_predictions"
+        [[ -n "$actual_recall_threshold" ]] && show_recall_threshold="$actual_recall_threshold"
+    fi
+    
+    # Display configuration with fallback to defaults
+    printf "%-20s %s\n" "Processor Name:" "${show_processor_name:-$PROCESSOR_NAME}"
+    printf "%-20s %s\n" "Processor ID:" "${show_processor_id:-$PROCESSOR_ID}"
+    printf "%-20s %s\n" "Classifier:" "${show_classifier:-$CLASSIFIER}"
+    printf "%-20s %s\n" "Max Predictions:" "${show_max_predictions:-$MAX_PREDICTIONS}"
+    printf "%-20s %s\n" "Recall Threshold:" "${show_recall_threshold:-$RECALL_THRESHOLD}"
+    
     printf "%-20s %s\n" "Log Level:" "$LOG_LEVEL"
     printf "%-20s %s\n" "Docker Tag:" "$TAG"
     

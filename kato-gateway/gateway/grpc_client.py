@@ -162,7 +162,8 @@ class KatoGrpcClient:
             wm_data = []
             if hasattr(response, 'response') and response.response:
                 # Convert the Struct to a dictionary using protobuf's json_format
-                struct_dict = json_format.MessageToDict(response.response)
+                struct_dict = json_format.MessageToDict(response.response,
+                                                        always_print_fields_with_no_presence=True)
                 wm_data = struct_dict.get('data', [])
             return {
                 "id": processor_id,
@@ -324,28 +325,18 @@ class KatoGrpcClient:
         try:
             response = stub.ShowStatus(request)
             
-            # Determine processor name based on ID (for test compatibility)
-            processor_name = "P1" if processor_id == "pd5d9e6c4c" else "P2"
+            # Convert the Struct response to a dictionary
+            status_dict = {}
+            if hasattr(response, 'response') and response.response:
+                status_dict = json_format.MessageToDict(response.response,
+                                                        always_print_fields_with_no_presence=True)
             
             return {
                 "id": processor_id,
-                "interval": 0,
+                "interval": response.interval if hasattr(response, 'interval') else 0,
                 "time_stamp": time.time(),
                 "status": "okay",
-                "message": {
-                    "AUTOLEARN": False,
-                    "PREDICT": True,
-                    "SLEEPING": False,
-                    "emotives": {},
-                    "last_learned_model_name": "",
-                    "models_kb": "{KB| objects: 0}",
-                    "name": processor_name,
-                    "num_observe_call": 0,
-                    "size_WM": 0,
-                    "target": "",
-                    "time": 0,
-                    "vectors_kb": "{KB| objects: 0}"
-                }
+                "message": status_dict
             }
         except grpc.RpcError as e:
             logger.error(f"gRPC error for get_status {processor_id}: {e}")

@@ -76,9 +76,14 @@ class Classifier:
             if not percept_vector.isNull():
                 recognized_objects, _discovered_object = vector_searches.vectorSearch(percept_vector, list(self.vectors_kb.values()), self.search_depth, self.primers)
                 recognized_symbols = []
-                for vector in recognized_objects:
-                    self.deferred_vectors_for_learning.append(vector)
-                    recognized_symbols.append(vector.name)
+                if recognized_objects:
+                    for vector in recognized_objects:
+                        self.deferred_vectors_for_learning.append(vector)
+                        recognized_symbols.append(vector.name)
+                # If no objects were recognized (e.g., empty KB), use the percept vector itself
+                if not recognized_symbols:
+                    self.deferred_vectors_for_learning.append(percept_vector)
+                    recognized_symbols = [percept_vector.name]
                 return recognized_symbols
             else:
                 self.deferred_vectors_for_learning.append(percept_vector)

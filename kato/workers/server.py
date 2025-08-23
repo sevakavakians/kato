@@ -73,7 +73,7 @@ class KatoEngineServicer(kato_proc_pb2_grpc.KatoEngineServicer):
         """Get observations from Manipulatives (percepts/models/strings, utilities, actions)."""
         logger.debug(f'request={request} context={context}')
         try:
-            vectors = [list(v.items()) for v in request.vectors]
+            vectors = [list(v.values) for v in request.vectors]
             data = json_format.MessageToDict(request, preserving_proto_field_name=True)
             data['vectors'] = vectors
             if 'strings' not in data:
@@ -130,18 +130,20 @@ class KatoEngineServicer(kato_proc_pb2_grpc.KatoEngineServicer):
             m = {
                 "name": self.primitive.name,
                 "time": self.primitive.time,
-                "SLEEPING": self.primitive.SLEEP,
+                "SLEEPING": False,  # KatoProcessor doesn't have SLEEP attribute
                 "PREDICT": self.primitive.modeler.predict,
+                "AUTOLEARN": False,  # Add AUTOLEARN for compatibility
                 "emotives": self.primitive.current_emotives,
-                "target": self.primitive.modeler.target_class,
+                "target": self.primitive.modeler.target_class if hasattr(self.primitive.modeler, 'target_class') else "",
                 "size_WM": len(list(chain(*self.primitive.modeler.WM))),
+                "num_observe_call": self.primitive.time,  # Use time as proxy for observe calls
                 "vectors_kb": "{KB| objects: %s}" % (self.primitive.knowledge.vectors_kb.count_documents({})),
                 "models_kb": "{KB| objects: %s}" % (self.primitive.knowledge.models_kb.count_documents({})),
-                "last_command": self.primitive.last_command,
-                "last_learned_model_name": self.primitive.modeler.last_learned_model_name,
+                "last_command": self.primitive.last_command if hasattr(self.primitive, 'last_command') else "",
+                "last_learned_model_name": f"MODEL|{self.primitive.modeler.last_learned_model_name}" if self.primitive.modeler.last_learned_model_name else "",
             }
             response = Struct()
-            response.update({'data': m})
+            response.update(m)
             return kato_proc_pb2.StandardResponse(
                 status=kato_proc_pb2.StandardResponse.OKAY,
                 id=self.primitive.id,

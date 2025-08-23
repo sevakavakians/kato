@@ -26,7 +26,7 @@ def calculate_diff_lengths(data):
 class CVCSearcher:
     def __init__(self, procs_for_searches, vectors_kb):
         self.procs = procs_for_searches
-        self.datasubset = vectors_kb.values()
+        self.datasubset = list(vectors_kb.values())
 
     def assignNewlyLearnedToWorkers(self, new_vectors):
         "Assigning newly learned to workers so that we don't re-assign from scratch every time."
@@ -34,9 +34,20 @@ class CVCSearcher:
 
     def findNearestPoints(self, state): #_kb):
         "Where state (point) is a VectorObject and returned is the nearest VectorObject."
-        work_list = [(state, element) for element in self.datasubset]
-        with Pool(processes=self.procs) as pool:
-            results = pool.map(calculate_diff_lengths, work_list)
+        # If there are no vectors in the knowledge base yet, return empty list
+        if not self.datasubset or len(self.datasubset) == 0:
+            return []
+        
+        # If we have only one processor or few data points, skip multiprocessing
+        if self.procs == 1 or len(self.datasubset) < 3:
+            results = []
+            for element in self.datasubset:
+                results.append(calculate_diff_lengths((state, element)))
+        else:
+            work_list = [(state, element) for element in self.datasubset]
+            with Pool(processes=self.procs) as pool:
+                results = pool.map(calculate_diff_lengths, work_list)
+        
         return [i.name for i, v in heapq.nsmallest(3,[x for x in results],key=itemgetter(1))]
 
     def clearModelsFromRAM(self):

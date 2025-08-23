@@ -37,7 +37,8 @@ class KatoProcessor:
         self.SORT = self.genome_manifest["sort"]
         self.time = 0
 
-        self.procs_for_searches = int(cpu_count())
+        # Limit processors to avoid multiprocessing issues in Docker
+        self.procs_for_searches = min(1, int(cpu_count()))
 
         self.genome_manifest["kb_id"] = self.id
         self.classifier = Classifier(self.procs_for_searches, **self.genome_manifest)
@@ -171,8 +172,7 @@ class KatoProcessor:
                 self.predictions = self.modeler.processEvents(data['unique_id'])
 
             ### Add WM length check and reduce size:
-            if self.modeler.max_sequence_length != 0 and (sum(len(x) for x in self.modeler.WM) >= self.modeler.max_sequence_length):
-    #                if self.modeler.max_sequence_length != 0 and (len(self.modeler.WM) >= self.modeler.max_sequence_length):
+            if self.modeler.max_sequence_length != 0 and (len(self.modeler.WM) >= self.modeler.max_sequence_length):
                 if len(self.modeler.WM) > 1:
                     wm_tail = self.modeler.WM[-1]  ## Keep the last event to set as first event in new sequence.
                     self.learn()  ##  Without using the network-wide 'learn' command, this will just learn what's in this CP's WM and, clear out the WM.

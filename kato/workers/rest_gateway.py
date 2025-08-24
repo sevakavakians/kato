@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-REST-to-gRPC Gateway for KATO
-Provides HTTP REST endpoints that translate to gRPC calls for backward compatibility with tests.
+REST-to-ZMQ Gateway for KATO
+Provides HTTP REST endpoints that translate to ZMQ calls for backward compatibility with tests.
 """
 
 import json
@@ -10,9 +10,8 @@ import time
 from threading import Thread
 from urllib.parse import parse_qs
 
-import grpc
-from kato import kato_proc_pb2, kato_proc_pb2_grpc
-from google.protobuf import empty_pb2
+from kato.workers.zmq_client import ZMQClient
+from kato.workers.zmq_pool import get_global_pool, set_global_pool, cleanup_global_pool, ZMQConnectionPool
 
 # Simple HTTP server implementation
 from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -88,162 +87,190 @@ class RestGatewayHandler(BaseHTTPRequestHandler):
             # Extract processor ID from path: /{processor_id}/ping
             processor_id = self.path.split('/')[1]
             
-            with grpc.insecure_channel('localhost:1441') as channel:
-                stub = kato_proc_pb2_grpc.KatoEngineStub(channel)
-                request = empty_pb2.Empty()
-                response = stub.GetName(request)
-                
-                result = {
-                    "id": processor_id,
-                    "interval": response.interval,
-                    "time_stamp": response.time_stamp,
-                    "status": "okay",
-                    "message": "okay"
-                }
-                
-                self.send_response(200)
-                self.send_header('Content-Type', 'application/json')
-                self.end_headers()
-                self.wfile.write(json.dumps(result).encode())
+            pool = get_global_pool()
+            response = pool.execute('get_name')
+            
+            result = {
+                "id": processor_id,
+                "interval": response.get('interval', 0),
+                "time_stamp": response.get('time_stamp', time.time()),
+                "status": "okay",
+                "message": "okay"
+            }
+            
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(result).encode())
                 
         except Exception as e:
-            logger.error(f"Processor ping gRPC error: {e}")
-            self.send_error(500, f"gRPC error: {e}")
+            logger.error(f"Processor ping error: {e}")
+            self.send_error(500, str(e))
 
     def handle_connect(self):
-        """Connect endpoint - returns mock genome structure for API compatibility"""
-        # Create mock genome structure matching the single processor architecture
-        # Get the processor ID from the environment or use default
-        import os
-        processor_id = os.environ.get('PROCESSOR_ID', 'pd5d9e6c4c')
-        processor_name = os.environ.get('PROCESSOR_NAME', 'P1')
-        
-        genome = {
-            "elements": {
-                "nodes": [
-                    {
-                        "data": {
-                            "name": processor_name,
-                            "id": processor_id,
-                            "classifier": "CVC",
-                            "max_predictions": 100,
-                            "recall_threshold": 0.1,
-                            "persistence": 5,
-                            "search_depth": 10
-                        }
-                    }
-                ]
-            },
-            "agent": "api-test",
-            "description": "Test the api calls."
-        }
+        """Handle connect endpoint for compatibility"""
+        # Get genome info if available
+        pool = get_global_pool()
+        try:
+            genome_info = pool.execute('get_genome')
+        except:
+            genome_info = {}
         
         response = {
             "status": "okay",
-            "connection": "okay", 
-            "genome": genome,
-            "genie": "api-test"
+            "message": "connected",
+            "genome": genome_info  # Add genome for test compatibility
         }
-        
         self.send_response(200)
         self.send_header('Content-Type', 'application/json')
         self.end_headers()
         self.wfile.write(json.dumps(response).encode())
 
     def handle_status(self):
-        """Status endpoint - returns processor status information"""
+        """Handle status endpoint"""
         try:
-            # Extract processor ID from path: /{processor_id}/status
-            processor_id = self.path.split('/')[1]
+            pool = get_global_pool()
+            response = pool.execute('get_name')
             
-            # Use processor name from environment variable
-            import os
-            processor_name = os.environ.get('PROCESSOR_NAME', 'P1')
+            result = {
+                "status": "okay",
+                "processor": response.get('message', 'unknown'),
+                "id": response.get('id'),
+                "time_stamp": response.get('time_stamp', time.time()),
+                "message": response  # Add full response as message for compatibility
+            }
             
-            with grpc.insecure_channel('localhost:1441') as channel:
-                stub = kato_proc_pb2_grpc.KatoEngineStub(channel)
-                
-                # Get processor status via gRPC
-                request = empty_pb2.Empty()
-                response = stub.ShowStatus(request)
-                
-                # Convert the Struct response to a dictionary
-                status_dict = {}
-                if hasattr(response, 'response') and response.response:
-                    from google.protobuf import json_format
-                    status_dict = json_format.MessageToDict(response.response, 
-                                                            always_print_fields_with_no_presence=True)
-                    # Convert None values to empty strings for compatibility
-                    def fix_none_values(obj):
-                        if isinstance(obj, dict):
-                            return {k: fix_none_values(v) for k, v in obj.items()}
-                        elif obj is None:
-                            return ''
-                        else:
-                            return obj
-                    status_dict = fix_none_values(status_dict)
-                
-                # Build status response
-                result = {
-                    "id": processor_id,
-                    "interval": response.interval if hasattr(response, 'interval') else 0,
-                    "time_stamp": time.time(),
-                    "status": "okay",
-                    "message": status_dict
-                }
-                
-                self.send_response(200)
-                self.send_header('Content-Type', 'application/json')
-                self.end_headers()
-                self.wfile.write(json.dumps(result).encode())
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(result).encode())
                 
         except Exception as e:
-            logger.error(f"Status gRPC error: {e}")
-            self.send_error(500, f"gRPC error: {e}")
+            logger.error(f"Status error: {e}")
+            self.send_error(500, str(e))
 
     def handle_get_working_memory(self):
-        """Get working memory via gRPC"""
+        """Handle get working memory request"""
         try:
-            with grpc.insecure_channel('localhost:1441') as channel:
-                stub = kato_proc_pb2_grpc.KatoEngineStub(channel)
-                request = empty_pb2.Empty()
-                response = stub.GetWorkingMemory(request)
+            pool = get_global_pool()
+            wm = pool.execute('get_working_memory')
+            
+            # Wrap in message for test compatibility
+            result = {"message": wm}
+            
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(result).encode())
                 
-                logger.info(f"WM gRPC response type: {type(response)}")
-                logger.info(f"WM gRPC response has message attr: {hasattr(response, 'message')}")
-                logger.info(f"WM gRPC response.message: {response.message if hasattr(response, 'message') else 'No message attr'}")
+        except Exception as e:
+            logger.error(f"Get working memory error: {e}")
+            self.send_error(500, str(e))
+
+    def handle_get_predictions(self):
+        """Handle get predictions request"""
+        try:
+            pool = get_global_pool()
+            predictions = pool.execute('get_predictions')
+            
+            # Wrap in message for test compatibility
+            result = {"message": predictions}
+            
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(result).encode())
                 
-                # Extract working memory data from the message field (now JSON)
-                wm_data = []
-                if hasattr(response, 'message') and response.message:
-                    try:
-                        import json
-                        wm_data = json.loads(response.message)
-                        logger.info(f"WM parsed JSON data: {wm_data}")
-                    except json.JSONDecodeError as e:
-                        logger.error(f"Failed to parse WM JSON: {e}")
-                        wm_data = []
+        except Exception as e:
+            logger.error(f"Get predictions error: {e}")
+            self.send_error(500, str(e))
+
+    def handle_get_percept_data(self):
+        """Handle get percept data request"""
+        try:
+            pool = get_global_pool()
+            percept_data = pool.execute('get_percept_data')
+            
+            # Wrap in message for test compatibility
+            result = {"message": percept_data}
+            
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(result).encode())
                 
-                logger.info(f"WM final data: {wm_data}")
+        except Exception as e:
+            logger.error(f"Get percept data error: {e}")
+            self.send_error(500, str(e))
+
+    def handle_get_cognition_data(self):
+        """Handle get cognition data request"""
+        try:
+            pool = get_global_pool()
+            cognition_data = pool.execute('get_cognition_data')
+            
+            # Wrap in message for test compatibility
+            result = {"message": cognition_data}
+            
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(result).encode())
                 
-                result = {
-                    "id": response.id,
-                    "interval": response.interval,
-                    "time_stamp": response.time_stamp,
-                    "status": "okay",
-                    "message": wm_data
-                }
+        except Exception as e:
+            logger.error(f"Get cognition data error: {e}")
+            self.send_error(500, str(e))
+
+    def handle_get_gene(self):
+        """Handle get gene request"""
+        try:
+            # Extract gene name from path: /{processor_id}/gene/{gene_name}
+            parts = self.path.split('/')
+            gene_name = parts[-1]
+            
+            pool = get_global_pool()
+            gene_value = pool.execute('get_gene', gene_name)
+            
+            result = {
+                "gene_name": gene_name,
+                "gene_value": gene_value,
+                "message": {"gene_name": gene_name, "gene_value": gene_value}
+            }
+            
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(result).encode())
                 
+        except Exception as e:
+            logger.error(f"Get gene error: {e}")
+            self.send_error(500, str(e))
+
+    def handle_get_model(self):
+        """Handle get model request"""
+        try:
+            # Extract model ID from path: /{processor_id}/model/{model_id}
+            parts = self.path.split('/')
+            model_id = parts[-1]
+            
+            pool = get_global_pool()
+            model = pool.execute('get_model', model_id)
+            
+            if model:
+                result = {"message": model}
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
                 self.wfile.write(json.dumps(result).encode())
+            else:
+                self.send_error(404, f"Model {model_id} not found")
+                    
         except Exception as e:
-            logger.error(f"GetWorkingMemory gRPC error: {e}")
-            self.send_error(500, f"gRPC error: {e}")
+            logger.error(f"Get model error: {e}")
+            self.send_error(500, str(e))
 
     def handle_observe(self):
-        """Handle observe requests via gRPC"""
+        """Handle observe requests via ZMQ"""
         try:
             # Extract processor ID from path: /{processor_id}/observe
             processor_id = self.path.split('/')[1]
@@ -259,457 +286,206 @@ class RestGatewayHandler(BaseHTTPRequestHandler):
             else:
                 observation_data = data.get('data', {})  # Wrapped format
             
-            with grpc.insecure_channel('localhost:1441') as channel:
-                stub = kato_proc_pb2_grpc.KatoEngineStub(channel)
-                
-                # Create observation request
-                request = kato_proc_pb2.Observation()
-                request.unique_id = observation_data.get('unique_id', f'rest-{int(time.time() * 1000000)}')
-                
-                # Add strings
-                if 'strings' in observation_data:
-                    request.strings.extend(observation_data['strings'])
-                
-                # Add vectors
-                if 'vectors' in observation_data:
-                    from google.protobuf.struct_pb2 import ListValue
-                    for vector in observation_data['vectors']:
-                        if isinstance(vector, list):
-                            try:
-                                list_value = ListValue()
-                                list_value.extend(vector)
-                                request.vectors.append(list_value)
-                            except Exception as e:
-                                logger.error(f"Failed to add vector {vector}: {e}")
-                                raise
-                
-                # Add emotives
-                if 'emotives' in observation_data:
-                    for key, value in observation_data['emotives'].items():
-                        request.emotives[key] = float(value)
-                
-                response = stub.Observe(request)
-                
-                result = {
-                    "id": processor_id,
-                    "interval": response.interval if hasattr(response, 'interval') else 0,
-                    "time_stamp": response.time_stamp if hasattr(response, 'time_stamp') else time.time(),
-                    "status": "okay",
-                    "message": {
-                        "status": "observed",
-                        "auto_learned_model": ""  # This field is expected by tests
-                    },
-                    "unique_id": response.unique_id
-                }
-                
-                self.send_response(200)
-                self.send_header('Content-Type', 'application/json')
-                self.end_headers()
-                self.wfile.write(json.dumps(result).encode())
+            # Add unique_id if not present
+            if 'unique_id' not in observation_data:
+                observation_data['unique_id'] = f'rest-{int(time.time() * 1000000)}'
+            
+            pool = get_global_pool()
+            response = pool.execute('observe', observation_data)
+            
+            result = {
+                "id": processor_id,
+                "interval": response.get('interval', 0),
+                "time_stamp": response.get('time_stamp', time.time()),
+                "status": response.get('status', 'okay'),
+                "message": {"status": "observed"}  # Return dict for test compatibility
+            }
+            
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(result).encode())
                 
         except Exception as e:
-            logger.error(f"Observe gRPC error: {e}")
-            self.send_error(500, f"gRPC error: {e}")
+            logger.error(f"Observe error: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            self.send_error(500, str(e))
 
     def handle_clear_all_memory(self):
-        """Handle clear all memory via gRPC"""
+        """Handle clear all memory request"""
         try:
             # Extract processor ID from path: /{processor_id}/clear-all-memory
             processor_id = self.path.split('/')[1]
             
-            with grpc.insecure_channel('localhost:1441') as channel:
-                stub = kato_proc_pb2_grpc.KatoEngineStub(channel)
-                request = empty_pb2.Empty()
-                response = stub.ClearAllMemory(request)
-                
-                result = {
-                    "id": processor_id,
-                    "interval": response.interval if hasattr(response, 'interval') else 0,
-                    "time_stamp": response.time_stamp if hasattr(response, 'time_stamp') else time.time(),
-                    "status": "okay",
-                    "message": "all-cleared"
-                }
-                
-                self.send_response(200)
-                self.send_header('Content-Type', 'application/json')
-                self.end_headers()
-                self.wfile.write(json.dumps(result).encode())
+            pool = get_global_pool()
+            response = pool.execute('clear_all_memory')
+            
+            result = {
+                "id": processor_id,
+                "interval": response.get('interval', 0),
+                "time_stamp": response.get('time_stamp', time.time()),
+                "status": response.get('status', 'okay'),
+                "message": response.get('message', 'all-cleared')
+            }
+            
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(result).encode())
                 
         except Exception as e:
-            logger.error(f"ClearAllMemory gRPC error: {e}")
-            self.send_error(500, f"gRPC error: {e}")
+            logger.error(f"Clear all memory error: {e}")
+            self.send_error(500, str(e))
 
     def handle_clear_working_memory(self):
-        """Handle clear working memory via gRPC"""
+        """Handle clear working memory request"""
         try:
-            # Extract processor ID from path: /{processor_id}/clear-working-memory
+            # Extract processor ID from path
             processor_id = self.path.split('/')[1]
             
-            with grpc.insecure_channel('localhost:1441') as channel:
-                stub = kato_proc_pb2_grpc.KatoEngineStub(channel)
-                request = empty_pb2.Empty()
-                response = stub.ClearWorkingMemory(request)
-                
-                result = {
-                    "id": processor_id,
-                    "interval": response.interval if hasattr(response, 'interval') else 0,
-                    "time_stamp": response.time_stamp if hasattr(response, 'time_stamp') else time.time(),
-                    "status": "okay",
-                    "message": "wm-cleared"
-                }
-                
-                self.send_response(200)
-                self.send_header('Content-Type', 'application/json')
-                self.end_headers()
-                self.wfile.write(json.dumps(result).encode())
+            pool = get_global_pool()
+            response = pool.execute('clear_working_memory')
+            
+            result = {
+                "id": processor_id,
+                "interval": response.get('interval', 0),
+                "time_stamp": response.get('time_stamp', time.time()),
+                "status": response.get('status', 'okay'),
+                "message": response.get('message', 'wm-cleared')
+            }
+            
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(result).encode())
                 
         except Exception as e:
-            logger.error(f"ClearWorkingMemory gRPC error: {e}")
-            self.send_error(500, f"gRPC error: {e}")
+            logger.error(f"Clear working memory error: {e}")
+            self.send_error(500, str(e))
 
     def handle_learn(self):
-        """Handle learn requests via gRPC"""
+        """Handle learn request"""
         try:
-            # Extract processor ID from path: /{processor_id}/learn
+            # Extract processor ID from path
             processor_id = self.path.split('/')[1]
             
-            with grpc.insecure_channel('localhost:1441') as channel:
-                stub = kato_proc_pb2_grpc.KatoEngineStub(channel)
-                request = empty_pb2.Empty()
-                response = stub.Learn(request)
-                
-                result = {
-                    "id": processor_id,
-                    "interval": response.interval if hasattr(response, 'interval') else 0,
-                    "time_stamp": response.time_stamp if hasattr(response, 'time_stamp') else time.time(),
-                    "status": "okay",
-                    "message": response.message
-                }
-                
-                self.send_response(200)
-                self.send_header('Content-Type', 'application/json')
-                self.end_headers()
-                self.wfile.write(json.dumps(result).encode())
-                
-        except Exception as e:
-            logger.error(f"Learn gRPC error: {e}")
-            self.send_error(500, f"gRPC error: {e}")
-
-    def handle_get_predictions(self):
-        """Handle get predictions requests via gRPC"""
-        try:
-            # Extract processor ID from path: /{processor_id}/predictions
-            processor_id = self.path.split('/')[1]
+            # Get optional parameters from POST data
+            if self.headers.get('Content-Length'):
+                content_length = int(self.headers['Content-Length'])
+                post_data = self.rfile.read(content_length)
+                data = json.loads(post_data.decode())
+            else:
+                data = {}
             
-            with grpc.insecure_channel('localhost:1441') as channel:
-                stub = kato_proc_pb2_grpc.KatoEngineStub(channel)
-                request = empty_pb2.Empty()
-                response = stub.GetAllPredictions(request)
-                
-                # Extract predictions from the Struct response
-                predictions = []
-                if hasattr(response, 'response') and response.response:
-                    # Convert the Struct to a dictionary
-                    from google.protobuf import json_format
-                    struct_dict = json_format.MessageToDict(response.response,
-                                                            always_print_fields_with_no_presence=True)
-                    raw_predictions = struct_dict.get('data', [])
-                    
-                    # Convert values for test compatibility - handle precision differences
-                    def convert_numbers(obj):
-                        if isinstance(obj, dict):
-                            result = {}
-                            for k, v in obj.items():
-                                if k == 'similarity' and isinstance(v, float):
-                                    # Convert similarity to int if it's 1.0
-                                    if abs(v - 1.0) < 0.0001:
-                                        result[k] = 1
-                                    elif abs(v - 0.6666666666666666) < 0.001:  # For 2/3 similarity
-                                        result[k] = 0.666666687  # Exact value expected by test
-                                    else:
-                                        result[k] = v
-                                elif k in ['hamiltonian', 'grand_hamiltonian'] and isinstance(v, float):
-                                    # Convert very close to 1.0 values to the exact format expected
-                                    if abs(v - 1.0) < 0.0001:
-                                        result[k] = 1.0000000000000004  # Exact value expected by tests
-                                    else:
-                                        result[k] = v
-                                elif k == 'entropy' and isinstance(v, float):
-                                    # Handle entropy precision - convert to expected format
-                                    if abs(v - 4.392317422779) < 0.0001:
-                                        result[k] = 4.39231742277876  # Exact value expected by tests
-                                    else:
-                                        result[k] = v
-                                else:
-                                    result[k] = convert_numbers(v)
-                            return result
-                        elif isinstance(obj, list):
-                            return [convert_numbers(item) for item in obj]
-                        elif isinstance(obj, float) and obj.is_integer():
-                            return int(obj)
-                        else:
-                            return obj
-                    
-                    predictions = convert_numbers(raw_predictions)
-                
-                result = {
-                    "id": processor_id,
-                    "interval": response.interval if hasattr(response, 'interval') else 0,
-                    "time_stamp": response.time_stamp if hasattr(response, 'time_stamp') else time.time(),
-                    "status": "okay",
-                    "message": predictions
-                }
-                
-                self.send_response(200)
-                self.send_header('Content-Type', 'application/json')
-                self.end_headers()
-                self.wfile.write(json.dumps(result).encode())
-                
-        except Exception as e:
-            logger.error(f"GetPredictions gRPC error: {e}")
-            self.send_error(500, f"gRPC error: {e}")
-
-    def handle_get_percept_data(self):
-        """Handle get percept data requests via gRPC"""
-        try:
-            # Extract processor ID from path: /{processor_id}/percept-data
-            processor_id = self.path.split('/')[1]
+            learning_flag = data.get('learning_flag', True)
+            manual_flag = data.get('manual_flag', False)
+            auto_act_flag = data.get('auto_act_flag', False)
             
-            with grpc.insecure_channel('localhost:1441') as channel:
-                stub = kato_proc_pb2_grpc.KatoEngineStub(channel)
-                request = empty_pb2.Empty()
-                response = stub.GetPerceptData(request)
-                
-                # Extract percept data from the Struct response
-                percept_data = {}
-                if hasattr(response, 'response') and response.response:
-                    from google.protobuf import json_format
-                    struct_dict = json_format.MessageToDict(response.response,
-                                                            always_print_fields_with_no_presence=True)
-                    percept_data = struct_dict.get('data', {})
-                
-                result = {
-                    "id": processor_id,
-                    "interval": response.interval if hasattr(response, 'interval') else 0,
-                    "time_stamp": response.time_stamp if hasattr(response, 'time_stamp') else time.time(),
-                    "status": "okay",
-                    "message": percept_data
-                }
-                
-                self.send_response(200)
-                self.send_header('Content-Type', 'application/json')
-                self.end_headers()
-                self.wfile.write(json.dumps(result).encode())
-                
-        except Exception as e:
-            logger.error(f"GetPerceptData gRPC error: {e}")
-            self.send_error(500, f"gRPC error: {e}")
-
-    def handle_get_cognition_data(self):
-        """Handle get cognition data requests via gRPC"""
-        try:
-            # Extract processor ID from path: /{processor_id}/cognition-data  
-            processor_id = self.path.split('/')[1]
+            pool = get_global_pool()
+            response = pool.execute('learn', learning_flag, manual_flag, auto_act_flag)
             
-            with grpc.insecure_channel('localhost:1441') as channel:
-                stub = kato_proc_pb2_grpc.KatoEngineStub(channel)
-                request = empty_pb2.Empty()
-                response = stub.GetCognitionData(request)
-                
-                # TODO: Fix working_memory field in CognitionObject
-                # The GetCognitionData in server.py creates a CognitionObject from 
-                # self.primitive.cognition_data which includes working_memory as a list,
-                # but the protobuf conversion seems to drop or incorrectly handle it.
-                # As a result, the working_memory field always returns empty [].
-                # This needs investigation into the protobuf definition and conversion.
-                
-                # Extract cognition data - this returns a CognitionObject directly
-                cognition_data = {}
-                if hasattr(response, 'response') and response.response:
-                    from google.protobuf import json_format
-                    # Use preserving_proto_field_name=True to keep snake_case field names
-                    cognition_data = json_format.MessageToDict(response.response, 
-                                                              preserving_proto_field_name=True,
-                                                              always_print_fields_with_no_presence=True)
-                
-                result = {
-                    "id": processor_id,
-                    "interval": response.interval if hasattr(response, 'interval') else 0,
-                    "time_stamp": response.time_stamp if hasattr(response, 'time_stamp') else time.time(),
-                    "status": "okay",
-                    "message": cognition_data
-                }
-                
-                self.send_response(200)
-                self.send_header('Content-Type', 'application/json')
-                self.end_headers()
-                self.wfile.write(json.dumps(result).encode())
-                
-        except Exception as e:
-            logger.error(f"GetCognitionData gRPC error: {e}")
-            self.send_error(500, f"gRPC error: {e}")
-
-    def handle_get_gene(self):
-        """Handle get gene requests via gRPC"""
-        try:
-            # Extract processor ID and gene name from path: /{processor_id}/gene/{gene_name}
-            path_parts = self.path.split('/')
-            processor_id = path_parts[1]
-            gene_name = path_parts[3]  # /processor_id/gene/gene_name
+            result = {
+                "id": processor_id,
+                "interval": response.get('interval', 0),
+                "time_stamp": response.get('time_stamp', time.time()),
+                "status": response.get('status', 'okay'),
+                "message": response.get('message', 'learning-called')
+            }
             
-            with grpc.insecure_channel('localhost:1441') as channel:
-                stub = kato_proc_pb2_grpc.KatoEngineStub(channel)
-                request = kato_proc_pb2.Gene(gene=gene_name)
-                response = stub.GetGene(request)
-                
-                # Extract gene value from the Struct response
-                gene_value = None
-                if hasattr(response, 'response') and response.response:
-                    from google.protobuf import json_format
-                    struct_dict = json_format.MessageToDict(response.response,
-                                                            always_print_fields_with_no_presence=True)
-                    gene_value = struct_dict.get('data')
-                
-                result = {
-                    "id": processor_id,
-                    "interval": response.interval if hasattr(response, 'interval') else 0,
-                    "time_stamp": response.time_stamp if hasattr(response, 'time_stamp') else time.time(),
-                    "status": "okay",
-                    "message": gene_value
-                }
-                
-                self.send_response(200)
-                self.send_header('Content-Type', 'application/json')
-                self.end_headers()
-                self.wfile.write(json.dumps(result).encode())
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(result).encode())
                 
         except Exception as e:
-            logger.error(f"GetGene gRPC error: {e}")
-            self.send_error(500, f"gRPC error: {e}")
+            logger.error(f"Learn error: {e}")
+            self.send_error(500, str(e))
 
     def handle_gene_change(self):
-        """Handle gene modification requests"""
+        """Handle gene change request"""
         try:
-            # Extract processor ID from path: /{processor_id}/genes/change
+            # Extract processor ID from path
             processor_id = self.path.split('/')[1]
             
             content_length = int(self.headers['Content-Length'])
             post_data = self.rfile.read(content_length)
-            request_data = json.loads(post_data.decode())
+            data = json.loads(post_data.decode())
             
-            # Handle both formats: {'data': {'gene': value}} and {'name': 'gene', 'value': value}
-            if 'data' in request_data:
-                # Format from test: {'data': {'recall_threshold': 0.6}}
-                gene_data = request_data['data']
-                # Just return success for all gene changes
-                message = 'updated-genes'
-            else:
-                # Alternative format: {'name': 'gene', 'value': value}
-                gene_name = request_data.get('name')
-                gene_value = request_data.get('value')
-                message = f"Gene {gene_name} set to {gene_value}"
+            gene_name = data.get('gene_name')
+            gene_value = data.get('gene_value')
             
-            # For now, just return success - actual gene modification would require
-            # implementation in the gRPC server
+            if not gene_name or gene_value is None:
+                self.send_error(400, "gene_name and gene_value required")
+                return
+            
+            pool = get_global_pool()
+            response = pool.execute('change_gene', gene_name, gene_value)
+            
             result = {
                 "id": processor_id,
-                "interval": 8,  # Match test expectation
-                "time_stamp": time.time(),
-                "status": "okay",
-                "message": message
+                "status": response.get('status', 'okay'),
+                "message": response.get('message')
             }
             
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
             self.wfile.write(json.dumps(result).encode())
-            
+                
         except Exception as e:
             logger.error(f"Gene change error: {e}")
             self.send_error(500, str(e))
 
-    def handle_get_model(self):
-        """Handle get model requests"""
-        try:
-            # Extract processor ID and model name from path: /{processor_id}/model/{model_name}
-            path_parts = self.path.split('/')
-            processor_id = path_parts[1]
-            model_name = path_parts[3] if len(path_parts) > 3 else ''
-            
-            # For now, return a mock model - actual implementation would call gRPC
-            result = {
-                "id": processor_id,
-                "interval": 0,
-                "time_stamp": time.time(),
-                "status": "okay",
-                "message": {
-                    "name": model_name,
-                    "frequency": 1,
-                    "length": 3,
-                    "sequence": [],
-                    "emotives": {},
-                    "metadata": []
-                }
-            }
-            
-            self.send_response(200)
-            self.send_header('Content-Type', 'application/json')
-            self.end_headers()
-            self.wfile.write(json.dumps(result).encode())
-            
-        except Exception as e:
-            logger.error(f"Get model error: {e}")
-            self.send_error(500, str(e))
-
     def log_message(self, format, *args):
-        """Override to use our logger"""
-        logger.info(f"{self.address_string()} - {format % args}")
+        """Override to use our logger instead of stderr"""
+        logger.info("%s - %s" % (self.address_string(), format % args))
 
 
 class RestGateway:
-    def __init__(self, port=8000):
+    """REST gateway server that forwards requests to ZMQ backend"""
+    
+    def __init__(self, port=8000, zmq_host='localhost', zmq_port=5555):
         self.port = port
+        self.zmq_host = zmq_host
+        self.zmq_port = zmq_port
         self.server = None
-        self.thread = None
+        self.server_thread = None
+        self.connection_pool = None
         
     def start(self):
         """Start the REST gateway server"""
         logger.info(f"Starting REST gateway on port {self.port}")
+        
+        # Initialize the connection pool
+        self.connection_pool = ZMQConnectionPool(
+            host=self.zmq_host,
+            port=self.zmq_port,
+            timeout=5000,
+            health_check_interval=30,
+            reconnect_interval=1000
+        )
+        set_global_pool(self.connection_pool)
+        logger.info(f"Initialized ZMQ connection pool to {self.zmq_host}:{self.zmq_port}")
+        
         self.server = ThreadedHTTPServer(('0.0.0.0', self.port), RestGatewayHandler)
-        self.thread = Thread(target=self.server.serve_forever)
-        self.thread.daemon = True
-        self.thread.start()
+        self.server_thread = Thread(target=self.server.serve_forever)
+        self.server_thread.daemon = True
+        self.server_thread.start()
         logger.info(f"REST gateway started on http://0.0.0.0:{self.port}")
         
     def stop(self):
         """Stop the REST gateway server"""
+        logger.info("Stopping REST gateway")
+        
+        # Cleanup connection pool
+        if self.connection_pool:
+            stats = self.connection_pool.get_stats()
+            logger.info(f"Connection pool stats at shutdown: {stats}")
+            self.connection_pool.shutdown()
+            cleanup_global_pool()
+        
         if self.server:
-            logger.info("Stopping REST gateway")
             self.server.shutdown()
-            self.server.server_close()
-            if self.thread:
-                self.thread.join()
-
-
-if __name__ == '__main__':
-    import time
-    import signal
-    import sys
-    
-    logging.basicConfig(level=logging.INFO)
-    
-    gateway = RestGateway()
-    gateway.start()
-    
-    def signal_handler(sig, frame):
-        gateway.stop()
-        sys.exit(0)
-    
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
-    
-    try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        gateway.stop()
+            self.server_thread.join()
+        logger.info("REST gateway stopped")

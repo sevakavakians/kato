@@ -1,9 +1,8 @@
 Cython
-grpcio
-grpcio-tools
 numpy
-protobuf
 pymongo
 scipy
 six
 ia-sdk
+pyzmq
+msgpack

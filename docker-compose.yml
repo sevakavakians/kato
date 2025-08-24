@@ -20,10 +20,11 @@ services:
     container_name: kato-api-${USER:-kato}-1
     ports:
       - "${KATO_API_PORT:-8000}:8000"
-      - "${KATO_GRPC_PORT:-1441}:1441"
+      - "${KATO_ZMQ_PORT:-5555}:5555"
     environment:
       - HOSTNAME=kato-api-${USER:-kato}-1
-      - PORT=1441
+      - ZMQ_PORT=5555
+      - REST_PORT=8000
       - LOG_LEVEL=${KATO_LOG_LEVEL:-INFO}
       - MONGO_BASE_URL=mongodb://mongodb:27017
       - MANIFEST=${KATO_MANIFEST:-{"id":"kato-docker","name":"KatoProcessor","classifier":"CVC","max_sequence_length":0,"persistence":5,"smoothness":3,"auto_act_method":"none","auto_act_threshold":0.8,"always_update_frequencies":false,"max_predictions":100,"recall_threshold":0.1,"quiescence":3,"search_depth":10,"sort":true,"process_predictions":true}}

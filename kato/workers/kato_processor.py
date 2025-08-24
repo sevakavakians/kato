@@ -9,14 +9,7 @@ from kato.workers.classifier import Classifier
 from kato.workers.modeler import Modeler
 from kato.informatics.metrics import average_emotives
 
-import grpc
-from kato import kato_proc_pb2_grpc
-from google.protobuf.struct_pb2 import Struct, ListValue
-from google.protobuf.json_format import ParseDict, MessageToDict
-from kato.kato_proc_pb2 import google_dot_protobuf_dot_empty__pb2 as pb_empty
-from kato.kato_proc_pb2 import Prediction, Observation
 
-EMPTY = pb_empty.Empty()
 
 
 logger = logging.getLogger('kato.workers.kato-processor')
@@ -37,8 +30,8 @@ class KatoProcessor:
         self.SORT = self.genome_manifest["sort"]
         self.time = 0
 
-        # Limit processors to avoid multiprocessing issues in Docker
-        self.procs_for_searches = min(1, int(cpu_count()))
+        # Use all available processors now that we're using ZMQ instead of gRPC
+        self.procs_for_searches = int(cpu_count())
 
         self.genome_manifest["kb_id"] = self.id
         self.classifier = Classifier(self.procs_for_searches, **self.genome_manifest)

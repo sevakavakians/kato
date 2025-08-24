@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 KATO Engine Entry Point
-Main entry point for starting the KATO gRPC server.
+Main entry point for starting the KATO ZMQ server.
 """
 
 import json
@@ -10,13 +10,11 @@ import os
 import signal
 import sys
 import time
-from concurrent import futures
+from threading import Thread
 
-import grpc
 from kato.workers.kato_processor import KatoProcessor
-from kato.workers.server import KatoEngineServicer
+from kato.workers.zmq_server import ZMQServer
 from kato.workers.rest_gateway import RestGateway
-from kato import kato_proc_pb2_grpc
 
 # Set up logging
 logging.basicConfig(
@@ -28,9 +26,10 @@ logger = logging.getLogger('kato.engine')
 
 class KatoEngine:
     def __init__(self):
-        self.server = None
+        self.zmq_server = None
         self.processor = None
         self.rest_gateway = None
+        self.zmq_thread = None
         
     def load_manifest(self):
         """Load processor configuration from environment."""
@@ -47,7 +46,7 @@ class KatoEngine:
             raise ValueError(f"Invalid JSON in MANIFEST environment variable: {e}")
     
     def start_server(self):
-        """Initialize and start the KATO gRPC server."""
+        """Initialize and start the KATO ZMQ server."""
         logger.info("Starting KATO Engine...")
         
         # Load configuration
@@ -57,20 +56,18 @@ class KatoEngine:
         logger.info("Initializing KATO Processor...")
         self.processor = KatoProcessor(manifest)
         
-        # Create gRPC server
-        port = os.environ.get('PORT', '1441')
-        logger.info(f"Starting gRPC server on port {port}...")
+        # Create ZMQ server
+        port = int(os.environ.get('ZMQ_PORT', '5555'))
+        logger.info(f"Starting ZMQ server on port {port}...")
         
-        self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
-        servicer = KatoEngineServicer(self.processor)
-        kato_proc_pb2_grpc.add_KatoEngineServicer_to_server(servicer, self.server)
+        self.zmq_server = ZMQServer(self.processor, port=port)
         
-        listen_addr = f'[::]:{port}'
-        self.server.add_insecure_port(listen_addr)
+        # Start ZMQ server in a thread
+        self.zmq_thread = Thread(target=self.zmq_server.start)
+        self.zmq_thread.daemon = True
+        self.zmq_thread.start()
         
-        # Start gRPC server
-        self.server.start()
-        logger.info(f"KATO Engine started successfully on {listen_addr}")
+        logger.info(f"ZMQ server started successfully on port {port}")
         logger.info(f"Processor '{self.processor.name}' (ID: {self.processor.id}) is ready")
         
         # Start REST gateway for backward compatibility with tests
@@ -80,17 +77,19 @@ class KatoEngine:
         self.rest_gateway.start()
         logger.info(f"REST gateway started on port {rest_port}")
         
-        return self.server
+        return self.zmq_server
     
     def stop_server(self):
         """Gracefully stop the server."""
         if self.rest_gateway:
             logger.info("Stopping REST gateway...")
             self.rest_gateway.stop()
-        if self.server:
-            logger.info("Stopping KATO Engine...")
-            self.server.stop(grace=5)
-            logger.info("KATO Engine stopped")
+        if self.zmq_server:
+            logger.info("Stopping ZMQ server...")
+            self.zmq_server.stop()
+            if self.zmq_thread:
+                self.zmq_thread.join(timeout=5)
+            logger.info("ZMQ server stopped")
     
     def run(self):
         """Run the server and wait for termination."""

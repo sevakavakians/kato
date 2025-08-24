@@ -66,6 +66,7 @@ class Classifier:
 
     def process(self, vector_data):
         logger.debug(vector_data)
+        # Convert list of lists to numpy arrays
         vector_data = [array(v) for v in vector_data]
         logger.debug(vector_data)
         percept_vector = reduce(lambda x,y: x+y, vector_data)

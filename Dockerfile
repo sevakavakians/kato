@@ -19,8 +19,10 @@ ENV HOSTNAME 'change-via-run-cmd'
 ENV SOURCES 'change-via-run-cmd'
 ENV TARGETS 'change-via-run-cmd'
 ENV AS_INPUTS 'change-via-run-cmd'
-ENV PORT 1441
-EXPOSE 1441
+ENV ZMQ_PORT 5555
+ENV REST_PORT 8000
+EXPOSE 5555
+EXPOSE 8000
 
 RUN apt-get update && apt-get install -y apt-utils make automake gcc g++ subversion python3-dev gfortran libfreetype6-dev libpng-dev libopenblas-dev linux-headers-generic
 
@@ -28,8 +30,6 @@ COPY ./ /kato
 WORKDIR /kato
 # RUN pip3 install Cython
 RUN pip install --trusted-host pypi.python.org -r requirements.txt
-# Regenerate protobuf files in container environment to ensure compatibility
-RUN python3 -m grpc_tools.protoc --python_out=. --grpc_python_out=. --proto_path=. kato/kato_proc.proto
 RUN pip install -v .
 WORKDIR /
 RUN rm -fr /kato

@@ -98,21 +98,25 @@ Kato is a framework for building and running artificially intelligent agents. It
 
 *   **Kato Processor (`KatoProcessor` class):** This is the main program of the system. Each kato processor is an independent agent with its own "genome" that defines its characteristics and behavior. It can perceive its environment, learn from experience, and make predictions.
 
-*   **gRPC Server (`KatoEngineServicer`):** Each kato processor runs a gRPC server that exposes the `KatoEngine` service. This service provides a well-defined API for interacting with the kato processor, allowing other components to send it observations, issue commands, and inspect its internal state.
+*   **ZeroMQ Server (`ZMQServer`):** Each kato processor runs a ZeroMQ server that provides high-performance, asynchronous messaging. This server handles all RPC-style communications with the processor, supporting multiprocessing-friendly operations essential for large dataset processing.
+
+*   **REST Gateway (`RestGateway`):** A HTTP REST API gateway that translates REST requests to ZeroMQ calls, providing backward compatibility with existing test infrastructure and enabling easy integration with web-based clients.
+
+*   **Connection Pool (`ZMQConnectionPool`):** A thread-local connection pooling system that maintains persistent ZeroMQ connections per thread, eliminating connection churn and improving performance. Features automatic health checks and reconnection logic.
 
 *   **Modeler (`Modeler` class):** This is the core of the kato processor's learning and prediction capabilities. It maintains a working memory of recent events, learns new models from this memory, and uses these models to generate predictions about future events.
 
 *   **Classifier (`Classifier` class):** This component is responsible for processing raw input data (specifically, vectors) and classifying it into a set of known symbols. This is a form of feature extraction that simplifies the input for the `Modeler`.
 
-*   **Knowledge Base:** The system uses a knowledge base (likely MongoDB, as suggested by the `README.md`) to store learned models and other persistent data. The `Modeler` interacts with the knowledge base to save and retrieve information.
+*   **Knowledge Base:** The system uses MongoDB to store learned models and other persistent data. The `Modeler` interacts with the knowledge base to save and retrieve information.
 
-*   **NodeClient:** This is a gRPC client that allows kato processors to communicate with each other. This enables the creation of complex, multi-agent systems where processors can collaborate and exchange information.
+*   **ZMQ Client (`ZMQClient`):** A ZeroMQ client that enables communication between components and processors. Supports automatic reconnection and provides a clean API for all processor operations.
 
 ## Architectural Patterns
 
-*   **Microservices-like Architecture:** The system is composed of small, independent services (the kato processors) that communicate over a network using a well-defined API (gRPC). This allows for scalability and flexibility.
+*   **Microservices-like Architecture:** The system is composed of small, independent services (the kato processors) that communicate over a network using ZeroMQ for high-performance messaging. This allows for scalability and flexibility.
 
-*   **Message-Passing:** The kato processors communicate by passing messages to each other. This is a common pattern in distributed systems and allows for loose coupling between components.
+*   **Message-Passing:** The kato processors communicate using ZeroMQ's REQ/REP pattern with MessagePack serialization for efficient binary messaging. This provides low-latency, high-throughput communication suitable for real-time AI processing.
 
 *   **Event-Driven Architecture:** The kato processors are driven by events, which can be observations from the environment or messages from other processors. The `observe` method is the primary event handler.
 
@@ -120,11 +124,11 @@ Kato is a framework for building and running artificially intelligent agents. It
 
 ## Data Flow
 
-1.  **Observation:** An external entity or another kato processor sends an observation to a kato processor's gRPC server via the `Observe` RPC.
+1.  **Observation:** An external entity sends an observation to the REST Gateway, which translates it to a ZeroMQ message and forwards it to the kato processor's ZMQ server.
 2.  **Processing Pipeline:** The observation may be passed through a pipeline of operations before being processed by the target kato processor. This is defined by `InputPipeline` and can include LLMs, SLMs, neural network or GPT processes.
 3.  **Symbolization:** The `Classifier` processes the raw data in the observation and converts it into a set of symbols.
 4.  **Modeling and Prediction:** The `Modeler` receives the symbols, updates its working memory, and generates predictions based on its learned models.
-5.  **Action/Communication:** The kato processor can then take action based on the predictions, which may involve sending messages to other kato processors via the `NodeClient`.
+5.  **Action/Communication:** The kato processor can then take action based on the predictions, which may involve sending messages to other kato processors via ZeroMQ.
 
 ## Deployment
 

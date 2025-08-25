@@ -235,8 +235,8 @@ class ZMQServer:
     def _handle_get_working_memory(self):
         """Handle get working memory request."""
         try:
-            # Get working memory from modeler's WM
-            wm = list(self.primitive.modeler.WM)
+            # Get working memory using the get_wm method
+            wm = self.primitive.get_wm()
             return {
                 'status': 'okay',
                 'data': wm
@@ -257,10 +257,16 @@ class ZMQServer:
             pred_list = []
             for pred in predictions:
                 # Extract the fields that exist in Prediction dict
+                # Add MODEL| prefix to name for consistency with learn response
+                name = pred.get('name', '')
+                if name and not name.startswith('MODEL|'):
+                    name = f'MODEL|{name}'
+                
                 pred_dict = {
-                    'name': pred.get('name'),
+                    'name': name,
                     'confidence': pred.get('confidence'),
                     'similarity': pred.get('similarity'),
+                    'matches': pred.get('matches', []),
                     'past': pred.get('past', []),
                     'present': pred.get('present', []),
                     'future': pred.get('future', []),
@@ -346,6 +352,7 @@ class ZMQServer:
         """Handle get model request."""
         try:
             model_id = params.get('model_id')
+            logger.info(f"Get model request: model_id={model_id}")
             if not model_id:
                 return {
                     'status': 'error',
@@ -359,7 +366,9 @@ class ZMQServer:
             else:
                 model_name = model_id
                 
+            logger.info(f"Looking for model with name: '{model_name}' (length: {len(model_name)})")
             model = self.primitive.modeler.models_kb.find_one({"name": model_name})
+            logger.info(f"Model lookup result: {model is not None}")
             if model:
                 return {
                     'status': 'okay',

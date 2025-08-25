@@ -12,6 +12,7 @@ from urllib.parse import parse_qs
 
 from kato.workers.zmq_client import ZMQClient
 from kato.workers.zmq_pool import get_global_pool, set_global_pool, cleanup_global_pool, ZMQConnectionPool
+from kato.workers.zmq_switcher import get_zmq_client, get_zmq_implementation
 
 # Simple HTTP server implementation
 from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -160,6 +161,7 @@ class RestGatewayHandler(BaseHTTPRequestHandler):
                 "processor": response.get('message', 'unknown'),
                 "id": response.get('id'),
                 "time_stamp": response.get('time_stamp', time.time()),
+                "interval": response.get('interval', 0),
                 "message": response  # Add full response as message for compatibility
             }
             
@@ -248,8 +250,9 @@ class RestGatewayHandler(BaseHTTPRequestHandler):
         """Handle get gene request"""
         try:
             # Extract gene name from path: /{processor_id}/gene/{gene_name}
+            from urllib.parse import unquote
             parts = self.path.split('/')
-            gene_name = parts[-1]
+            gene_name = unquote(parts[-1])  # URL-decode the gene name
             
             pool = get_global_pool()
             gene_value = pool.execute('get_gene', gene_name)
@@ -274,8 +277,9 @@ class RestGatewayHandler(BaseHTTPRequestHandler):
         """Handle get model request"""
         try:
             # Extract model ID from path: /{processor_id}/model/{model_id}
+            from urllib.parse import unquote
             parts = self.path.split('/')
-            model_id = parts[-1]
+            model_id = unquote(parts[-1])  # URL-decode the model ID
             
             pool = get_global_pool()
             response = pool.execute('get_model', model_id)
@@ -398,19 +402,20 @@ class RestGatewayHandler(BaseHTTPRequestHandler):
             processor_id = self.path.split('/')[1]
             
             # Get optional parameters from POST data
+            data = {}
             if self.headers.get('Content-Length'):
                 content_length = int(self.headers['Content-Length'])
-                post_data = self.rfile.read(content_length)
-                data = json.loads(post_data.decode())
-            else:
-                data = {}
+                if content_length > 0:
+                    post_data = self.rfile.read(content_length)
+                    if post_data:
+                        data = json.loads(post_data.decode())
             
             learning_flag = data.get('learning_flag', True)
             manual_flag = data.get('manual_flag', False)
             auto_act_flag = data.get('auto_act_flag', False)
             
             pool = get_global_pool()
-            response = pool.execute('learn', learning_flag, manual_flag, auto_act_flag)
+            response = pool.execute('learn')
             
             result = {
                 "id": processor_id,
@@ -439,15 +444,26 @@ class RestGatewayHandler(BaseHTTPRequestHandler):
             post_data = self.rfile.read(content_length)
             data = json.loads(post_data.decode())
             
-            gene_name = data.get('gene_name')
-            gene_value = data.get('gene_value')
-            
-            if not gene_name or gene_value is None:
-                self.send_error(400, "gene_name and gene_value required")
-                return
-            
+            # Support both formats:
+            # 1. Direct format: {"gene_name": "foo", "gene_value": 1}
+            # 2. Data wrapper format: {"data": {"recall_threshold": 0.6, ...}}
             pool = get_global_pool()
-            response = pool.execute('change_gene', gene_name, gene_value)
+            
+            if 'data' in data:
+                # Handle multiple gene updates in data wrapper format
+                genes_to_update = data['data']
+                for gene_name, gene_value in genes_to_update.items():
+                    response = pool.execute('change_gene', gene_name, gene_value)
+            else:
+                # Handle single gene update in direct format
+                gene_name = data.get('gene_name')
+                gene_value = data.get('gene_value')
+                
+                if not gene_name or gene_value is None:
+                    self.send_error(400, "gene_name and gene_value required")
+                    return
+                
+                response = pool.execute('change_gene', gene_name, gene_value)
             
             result = {
                 "id": processor_id,

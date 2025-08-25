@@ -229,10 +229,10 @@ class ZMQClient:
             model_id: Model ID to retrieve
             
         Returns:
-            Model dictionary
+            Full response with status and model information
         """
         response = self.call('get_model', {'model_id': model_id})
-        return response.get('model')
+        return response
         
     def change_gene(self, gene_name, gene_value):
         """Change a gene value.

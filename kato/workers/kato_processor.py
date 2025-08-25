@@ -107,9 +107,10 @@ class KatoProcessor:
         logger.debug(f'learn called in {self.name}-{self.id}')
         self.classifier.learn()
         model_name = self.modeler.learn() # Returns the name of the model just learned.
-        if not model_name:
-            return
-        return f"MODEL|{model_name}"
+        if model_name:
+            return f"MODEL|{model_name}"
+        # Return a consistent response even for empty/single sequences
+        return "learning-called"
 
     def delete_model(self, name):
         """Delete model with the given name from both models-kb and RAM."""
@@ -165,15 +166,16 @@ class KatoProcessor:
                 self.predictions = self.modeler.processEvents(data['unique_id'])
 
             ### Add WM length check and reduce size:
+            auto_learned_model = None
             if self.modeler.max_sequence_length != 0 and (len(self.modeler.WM) >= self.modeler.max_sequence_length):
                 if len(self.modeler.WM) > 1:
                     wm_tail = self.modeler.WM[-1]  ## Keep the last event to set as first event in new sequence.
-                    self.learn()  ##  Without using the network-wide 'learn' command, this will just learn what's in this CP's WM and, clear out the WM.
+                    auto_learned_model = self.learn()  ##  Without using the network-wide 'learn' command, this will just learn what's in this CP's WM and, clear out the WM.
                     self.modeler.setWM([wm_tail])
                 else:
-                    self.learn()  ##  Without using the network-wide 'learn' command, this will just learn what's in this CP's WM and, clear out the WM.
+                    auto_learned_model = self.learn()  ##  Without using the network-wide 'learn' command, this will just learn what's in this CP's WM and, clear out the WM.
 
-            return unique_id
+            return {'unique_id': unique_id, 'auto_learned_model': auto_learned_model}
             
     def get_predictions(self, unique_id={}):
         logger.debug(f'get_prediction with unique_id {unique_id} {self.name}-{self.id}')

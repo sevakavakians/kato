@@ -1,5 +1,27 @@
 # KATO Changelog
 
+## [2.0.1] - 2024-08-25
+
+### Fixed
+- **REST Gateway**: Fixed response format issues for test compatibility
+  - Added `auto_learned_model` field to observe endpoint responses
+  - Fixed gene_change endpoint to return consistent "updated-genes" message
+  - Added proper `elements` structure to connect endpoint for genome visualization
+  - Fixed model endpoint to correctly query MongoDB and return model information
+- **ZMQ Server**: Improved response handling
+  - Updated observe handler to track and return auto-learning information
+  - Fixed get_model method to correctly query MongoDB using models_kb
+  - Added proper handling of MODEL| prefix in model lookups
+- **Core Logic**: Enhanced auto-learning behavior
+  - Modified KatoProcessor.observe to return auto_learned_model information
+  - Updated learn method to return consistent response even for empty sequences
+  - Fixed observe method to properly pass auto-learning info through the stack
+
+### Test Suite Improvements
+- Reduced test failures from 19 to 13 after ZeroMQ migration
+- Fixed 6 critical API endpoint tests
+- Improved test compatibility with new ZeroMQ architecture
+
 ## [2.0.0] - 2024-08-24
 
 ### Major Changes

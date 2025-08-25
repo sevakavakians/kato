@@ -139,9 +139,18 @@ class ZMQServer:
         """Handle observe request."""
         try:
             # Process the observation data
-            unique_id = self.primitive.observe(params)
+            result = self.primitive.observe(params)
             
-            return {
+            # Handle both old and new return formats
+            if isinstance(result, dict):
+                unique_id = result.get('unique_id')
+                auto_learned_model = result.get('auto_learned_model')
+            else:
+                # Backward compatibility
+                unique_id = result
+                auto_learned_model = None
+            
+            response = {
                 'status': 'okay',
                 'id': self.primitive.id,
                 'interval': self.primitive.time,
@@ -149,6 +158,11 @@ class ZMQServer:
                 'message': 'observed',
                 'unique_id': unique_id
             }
+            
+            if auto_learned_model:
+                response['auto_learned_model'] = auto_learned_model
+                
+            return response
         except Exception as e:
             logger.error(f"Error in observe: {e}")
             logger.error(traceback.format_exc())
@@ -339,14 +353,21 @@ class ZMQServer:
                 }
                 
             # Get model from knowledge base
-            model = self.primitive.modeler.modelsDB.get(model_id)
+            # Strip MODEL| prefix if present
+            if model_id.startswith('MODEL|'):
+                model_name = model_id[6:]
+            else:
+                model_name = model_id
+                
+            model = self.primitive.modeler.models_kb.find_one({"name": model_name})
             if model:
                 return {
                     'status': 'okay',
                     'model': {
-                        'pattern': model.pattern,
-                        'frequency': model.frequency,
-                        'last_activated': model.last_activated
+                        'name': model.get('name'),
+                        'sequence': model.get('sequence', []),
+                        'frequency': model.get('frequency', 0),
+                        'emotives': model.get('emotives', {})
                     }
                 }
             else:

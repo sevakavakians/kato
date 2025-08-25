@@ -24,13 +24,21 @@ Input (Observation) → Processing → Working Memory → Learning → Long-Term
 
 ### Distributed Deployment
 
-KATO supports distributed deployment with multiple processors:
+KATO uses a high-performance architecture with ZeroMQ for inter-process communication:
 
 ```
-REST Client → REST Gateway (Port 8000) → KATO Processors (gRPC)
-                    ↓
-            Sticky Routing by Processor ID
+REST Client → REST Gateway (Port 8000) → ZMQ Pool → ZMQ Server → KATO Processors
+                    ↓                        ↓           ↓
+            HTTP to ZMQ Translation    Connection Pool  Internal Queue
+                    ↓                        ↓           ↓  
+            Processor ID Routing      Load Balancing   Process Isolation
 ```
+
+**Key Components:**
+- **REST Gateway**: HTTP API endpoints, translates REST calls to ZMQ messages
+- **ZMQ Pool**: Connection pooling and load balancing for ZMQ clients  
+- **ZMQ Server**: High-performance message queue server (Port 5555)
+- **KATO Processor**: Core AI processing engine with working memory and models
 
 ## End-to-End Behavior
 

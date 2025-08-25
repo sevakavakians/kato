@@ -241,26 +241,26 @@ def test_context_switching(kato_fixture):
                     break
 
 
-def test_max_sequence_length_auto_learn(kato_with_genome):
+def test_max_sequence_length_auto_learn(kato_fixture):
     """Test automatic learning when max_sequence_length is reached."""
-    # Use genome with max_sequence_length = 3
-    fixture = kato_with_genome("test-genomes/max_seq_3.genome")
-    fixture.clear_all_memory()
+    # Clear memory first, then set max_sequence_length
+    kato_fixture.clear_working_memory()  # Only clear working memory, not genes
+    kato_fixture.update_genes({"max_sequence_length": 3})
     
     # Observe exactly max_sequence_length events
     events = ['auto1', 'auto2', 'auto3']
     for event in events:
-        fixture.observe({'strings': [event], 'vectors': [], 'emotives': {}})
+        kato_fixture.observe({'strings': [event], 'vectors': [], 'emotives': {}})
     
     # Should auto-learn and clear working memory except last
-    wm = fixture.get_working_memory()
+    wm = kato_fixture.get_working_memory()
     assert len(wm) == 1
     assert wm == [['auto3']]
     
     # Verify sequence was learned
-    fixture.clear_working_memory()
-    fixture.observe({'strings': ['auto1'], 'vectors': [], 'emotives': {}})
-    predictions = fixture.get_predictions()
+    kato_fixture.clear_working_memory()
+    kato_fixture.observe({'strings': ['auto1'], 'vectors': [], 'emotives': {}})
+    predictions = kato_fixture.get_predictions()
     
     # Should predict the learned sequence
     for pred in predictions:

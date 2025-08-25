@@ -397,28 +397,67 @@ class ZMQServer:
             gene_name = params.get('gene_name')
             gene_value = params.get('gene_value')
             
+            logger.info(f"[GENE_CHANGE] Received request: {gene_name} = {gene_value}")
+            
             if not gene_name or gene_value is None:
+                logger.error(f"[GENE_CHANGE] Missing parameters: gene_name={gene_name}, gene_value={gene_value}")
                 return {
                     'status': 'error',
                     'message': 'gene_name and gene_value parameters required'
                 }
                 
-            # Update the gene
+            # Update the gene in genome_manifest
+            old_genome_value = self.primitive.genome_manifest.get(gene_name)
             self.primitive.genome_manifest[gene_name] = gene_value
+            logger.info(f"[GENE_CHANGE] Updated genome_manifest[{gene_name}]: {old_genome_value} -> {gene_value}")
             
-            # Apply changes if it's a critical gene
-            if gene_name == 'max_predictions':
-                self.primitive.modeler.max_predictions = gene_value
-            elif gene_name == 'recall_threshold':
-                self.primitive.modeler.recall_threshold = gene_value
-            elif gene_name == 'classifier':
-                # Classifier changes require reinitialization
-                pass  # TODO: Handle classifier changes
+            # Apply changes to the appropriate component
+            if hasattr(self.primitive, gene_name):
+                old_value = getattr(self.primitive, gene_name, None)
+                setattr(self.primitive, gene_name, gene_value)
+                logger.info(f"[GENE_CHANGE] Updated primitive.{gene_name}: {old_value} -> {gene_value}")
+            
+            if hasattr(self.primitive.modeler, gene_name):
+                old_value = getattr(self.primitive.modeler, gene_name, None)
+                setattr(self.primitive.modeler, gene_name, gene_value)
+                logger.info(f"[GENE_CHANGE] Updated modeler.{gene_name}: {old_value} -> {gene_value}")
+                # Verify the update
+                new_value = getattr(self.primitive.modeler, gene_name)
+                logger.info(f"[GENE_CHANGE] Verified modeler.{gene_name} is now: {new_value}")
+            
+            if hasattr(self.primitive.classifier, gene_name):
+                old_value = getattr(self.primitive.classifier, gene_name, None)
+                setattr(self.primitive.classifier, gene_name, gene_value)
+                logger.info(f"[GENE_CHANGE] Updated classifier.{gene_name}: {old_value} -> {gene_value}")
+            
+            # Always check all components to ensure complete update
+            found = False
+            actual_value = None
+            
+            # Verify the update actually worked
+            if hasattr(self.primitive.modeler, gene_name):
+                actual_value = getattr(self.primitive.modeler, gene_name)
+                found = True
+                logger.info(f"[GENE_CHANGE] VERIFICATION: modeler.{gene_name} = {actual_value} (expected: {gene_value})")
+                if actual_value != gene_value:
+                    logger.error(f"[GENE_CHANGE] VALUE MISMATCH: Expected {gene_value}, got {actual_value}")
+            elif hasattr(self.primitive, gene_name):
+                actual_value = getattr(self.primitive, gene_name)
+                found = True
+                logger.info(f"[GENE_CHANGE] VERIFICATION: primitive.{gene_name} = {actual_value} (expected: {gene_value})")
+            elif hasattr(self.primitive.classifier, gene_name):
+                actual_value = getattr(self.primitive.classifier, gene_name)
+                found = True
+                logger.info(f"[GENE_CHANGE] VERIFICATION: classifier.{gene_name} = {actual_value} (expected: {gene_value})")
+            
+            if not found:
+                logger.warning(f"[GENE_CHANGE] Gene {gene_name} not found in primitive, modeler, or classifier")
                 
             return {
                 'status': 'okay',
                 'id': self.primitive.id,
-                'message': f'Gene {gene_name} updated to {gene_value}'
+                'message': f'Gene {gene_name} updated to {gene_value}',
+                'actual_value': actual_value
             }
         except Exception as e:
             logger.error(f"Error changing gene: {e}")

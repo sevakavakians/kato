@@ -318,6 +318,114 @@ pytest tests/unit/test_observations.py -v
 ./kato-manager.sh status
 ```
 
+#### Auto-Learning Tests Failing
+
+**Symptoms:**
+- `test_max_sequence_length` tests fail
+- Working memory doesn't clear when reaching max_sequence_length
+- Auto-learning not triggered
+
+**Root Causes and Solutions:**
+
+1. **Method Name Mismatch in REST Gateway**
+
+*Problem:* REST gateway calls wrong ZMQ method name (`gene_change` instead of `change_gene`).
+
+*Symptoms:*
+```bash
+# Gene updates fail silently
+curl -X POST http://localhost:8000/p5f2b9323c3/genes/change \
+  -d '{"data": {"max_sequence_length": 3}}'
+# Returns success but gene value unchanged
+```
+
+*Solution:* Fixed in `kato/workers/rest_gateway.py:463-466`:
+```python
+# OLD (incorrect)
+response = pool.execute('gene_change', gene_name, gene_value)
+
+# NEW (correct)  
+response = pool.execute('change_gene', gene_name, gene_value)
+```
+
+2. **Docker Container Not Including Code Changes**
+
+*Problem:* Modified code not appearing in running container due to Docker layer caching.
+
+*Symptoms:*
+- Code changes don't take effect after restart
+- Debug logs missing from container output
+- Gene updates work locally but not in container
+
+*Solution:* Rebuild Docker image from scratch:
+```bash
+/usr/local/bin/docker system prune -f
+/usr/local/bin/docker rmi kato:latest
+/usr/local/bin/docker build --no-cache -t kato:latest /Users/sevakavakians/PROGRAMMING/kato
+./kato-manager.sh restart
+```
+
+3. **Test Isolation Issues with Gene Values**
+
+*Problem:* Gene values persist between tests, causing unpredictable failures.
+
+*Symptoms:*
+- Tests pass individually but fail when run together
+- Gene values from previous tests affect subsequent tests
+- Intermittent test failures
+
+*Solution:* Modified `kato_fixtures.py` to handle gene isolation:
+```python
+def clear_all_memory(self, reset_genes: bool = True) -> str:
+    """Clear all memory and optionally reset genes to defaults."""
+    if reset_genes:
+        self.reset_genes_to_defaults()
+    # ... rest of method
+```
+
+And updated problematic tests:
+```python
+def test_max_sequence_length(kato_fixture):
+    # Clear memory first, then set gene (don't call clear_all_memory after)
+    kato_fixture.clear_working_memory()  # Only clear WM, not genes
+    kato_fixture.update_genes({"max_sequence_length": 3})
+    # ... rest of test
+```
+
+4. **ZMQ Communication Failures**
+
+*Problem:* "Resource temporarily unavailable" errors preventing processor communication.
+
+*Symptoms:*
+```bash
+curl http://localhost:8000/p5f2b9323c3/ping
+# Returns HTML error page instead of JSON
+```
+
+*Solution:* Restart KATO with proper processor ID:
+```bash
+PROCESSOR_ID=p5f2b9323c3 PROCESSOR_NAME=P1 ./kato-manager.sh restart
+```
+
+#### Verification Commands
+
+After fixing auto-learning issues, verify with:
+
+```bash
+# 1. Test gene updates work
+curl -X POST http://localhost:8000/p5f2b9323c3/genes/change \
+  -d '{"data": {"max_sequence_length": 3}}'
+
+# 2. Verify gene value changed  
+curl http://localhost:8000/p5f2b9323c3/gene/max_sequence_length
+
+# 3. Test auto-learning behavior
+python3 test_p1_processor.py
+
+# 4. Run specific auto-learning tests
+pipenv run pytest -v -k "test_max_sequence_length" tests/
+```
+
 #### Sorting Assertions Fail
 
 **Symptoms:**

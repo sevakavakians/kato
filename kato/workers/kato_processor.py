@@ -109,8 +109,8 @@ class KatoProcessor:
         model_name = self.modeler.learn() # Returns the name of the model just learned.
         if model_name:
             return f"MODEL|{model_name}"
-        # Return a consistent response even for empty/single sequences
-        return "learning-called"
+        # Return empty string for empty/single sequences (no model created)
+        return ""
 
     def delete_model(self, name):
         """Delete model with the given name from both models-kb and RAM."""
@@ -123,6 +123,7 @@ class KatoProcessor:
     def observe(self, data=None):
         "Get observations (percepts (strings, vectors), utilities, actions, commands)"
         with self.processing_lock:
+            logger.info(f'[OBSERVE START] Received observation data')
             logger.debug(f'{data}')
             self.time += 1
             if data['unique_id'] == '':
@@ -164,16 +165,31 @@ class KatoProcessor:
             self.modeler.setCurrentEvent(self.symbols)
             if vector_data or string_data:
                 self.predictions = self.modeler.processEvents(data['unique_id'])
-
-            ### Add WM length check and reduce size:
+            
+            ### Check if we've reached max_sequence_length and need to auto-learn
             auto_learned_model = None
-            if self.modeler.max_sequence_length != 0 and (len(self.modeler.WM) >= self.modeler.max_sequence_length):
-                if len(self.modeler.WM) > 1:
-                    wm_tail = self.modeler.WM[-1]  ## Keep the last event to set as first event in new sequence.
-                    auto_learned_model = self.learn()  ##  Without using the network-wide 'learn' command, this will just learn what's in this CP's WM and, clear out the WM.
-                    self.modeler.setWM([wm_tail])
-                else:
-                    auto_learned_model = self.learn()  ##  Without using the network-wide 'learn' command, this will just learn what's in this CP's WM and, clear out the WM.
+            wm_length = len(self.modeler.WM)
+            max_seq_length = self.modeler.max_sequence_length
+            
+            # Debug with print to ensure it shows up
+            print(f"[AUTO_LEARN_CHECK] WM length: {wm_length}, max_sequence_length: {max_seq_length}, type: {type(max_seq_length)}", flush=True)
+            logger.info(f"[AUTO_LEARN_CHECK] WM length: {wm_length}, max_sequence_length: {max_seq_length}, max_seq_length type: {type(max_seq_length)}")
+            
+            if max_seq_length > 0 and wm_length >= max_seq_length:
+                logger.info(f"[AUTO_LEARN] Triggered: WM length {wm_length} >= max_sequence_length {max_seq_length}")
+                logger.info(f"[AUTO_LEARN] Current WM content: {list(self.modeler.WM)}")
+                
+                # We've reached or exceeded the limit, auto-learn and keep only the last event
+                if wm_length > 1:
+                    wm_tail = self.modeler.WM[-1]  # Keep the last event
+                    logger.info(f"[AUTO_LEARN] Keeping last event for next WM: {wm_tail}")
+                    auto_learned_model = self.learn()  # Learn and clear WM
+                    self.modeler.setWM([wm_tail])  # Set WM to only the last event
+                    logger.info(f"[AUTO_LEARN] Completed. Model: {auto_learned_model}, New WM: {list(self.modeler.WM)}")
+                elif wm_length == 1:
+                    # Only one event, just learn it
+                    auto_learned_model = self.learn()
+                    logger.info(f"[AUTO_LEARN] Learned single event. Model: {auto_learned_model}")
 
             return {'unique_id': unique_id, 'auto_learned_model': auto_learned_model}
             
@@ -197,6 +213,11 @@ class KatoProcessor:
         logger.debug(f'getGene called with {gene_name} for {self.name}-{self.id}')
         return getattr(self.modeler, gene_name, None)
 
+    def get_wm(self):
+        """Get the current working memory"""
+        logger.debug(f'get_wm called in {self.name}-{self.id}')
+        return list(self.modeler.WM)
+    
     def get_percept_data(self):
         """Return percept data"""
         return self.percept_data

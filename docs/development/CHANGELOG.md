@@ -1,5 +1,36 @@
 # KATO Changelog
 
+## [2.0.2] - 2025-08-25
+
+### Fixed
+- **Auto-Learning System**: Resolved max_sequence_length functionality issues
+  - Fixed REST Gateway method name mismatch: correctly calls `change_gene` instead of `gene_change`
+  - Resolved Docker build caching issues preventing code changes from appearing in containers
+  - Fixed test isolation problems where gene values persisted between tests
+  - Added proper gene reset functionality to test fixtures with optional control
+- **ZMQ Communication**: Enhanced error handling and connection stability
+  - Fixed "Resource temporarily unavailable" errors through proper container restart procedures
+  - Improved ZMQ server reliability for gene updates and processor communication
+- **Test Suite**: Achieved 100% test success rate (105/105 tests passing)
+  - Fixed `test_max_sequence_length` auto-learning tests in both unit and integration suites
+  - Enhanced `kato_fixtures.py` with proper gene isolation controls
+  - Updated test patterns to avoid gene/memory clearing conflicts
+- **Documentation**: Comprehensive updates reflecting all fixes
+  - Added detailed troubleshooting guide for auto-learning issues  
+  - Enhanced API documentation with correct `/genes/change` endpoint
+  - Updated configuration guide with auto-learning feature explanation
+  - Added test isolation best practices to testing documentation
+
+### Added
+- **API Endpoints**: Documented missing `/genes/change` endpoint with correct request format
+- **Configuration**: Detailed auto-learning feature documentation with use cases and examples
+- **Testing**: Comprehensive test isolation patterns and auto-learning test examples
+
+### Improved
+- **System Architecture**: Updated documentation from gRPC references to ZeroMQ architecture
+- **Error Diagnostics**: Enhanced troubleshooting with specific auto-learning failure scenarios
+- **Test Reliability**: Eliminated intermittent test failures through proper state management
+
 ## [2.0.1] - 2024-08-25
 
 ### Fixed

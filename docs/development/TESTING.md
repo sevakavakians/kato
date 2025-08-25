@@ -470,6 +470,117 @@ def test_missing_and_extras(kato_fixture):
    - `extras`: Symbols observed but not expected in present
    - `present`: Can span multiple events with partial matches
 
+## Auto-Learning Tests
+
+### Overview
+
+Auto-learning tests validate the `max_sequence_length` functionality where KATO automatically learns sequences when working memory reaches a specified threshold.
+
+**Key Tests:**
+- `test_memory_management.py::test_max_sequence_length` - Core auto-learning behavior
+- `test_sequence_learning.py::test_max_sequence_length_auto_learn` - Integration testing
+
+### Test Behavior
+
+When `max_sequence_length` is set to a positive value:
+
+1. **Accumulation**: Working memory accumulates observations normally
+2. **Trigger**: At threshold, auto-learning activates
+3. **Learning**: Entire sequence is learned as a model
+4. **Reset**: Working memory cleared, keeping only last observation
+
+**Example Test Pattern:**
+```python
+def test_max_sequence_length(kato_fixture):
+    # Set up auto-learning threshold
+    kato_fixture.clear_working_memory()  # Don't reset genes
+    kato_fixture.update_genes({"max_sequence_length": 3})
+    
+    # Accumulate observations
+    kato_fixture.observe({'strings': ['a'], 'vectors': [], 'emotives': {}})
+    assert len(kato_fixture.get_working_memory()) == 1
+    
+    kato_fixture.observe({'strings': ['b'], 'vectors': [], 'emotives': {}})
+    assert len(kato_fixture.get_working_memory()) == 2
+    
+    # Trigger auto-learning
+    kato_fixture.observe({'strings': ['c'], 'vectors': [], 'emotives': {}})
+    wm = kato_fixture.get_working_memory()
+    assert wm == [['c']]  # Only last observation remains
+    
+    # Verify learning occurred
+    kato_fixture.clear_working_memory()
+    kato_fixture.observe({'strings': ['a'], 'vectors': [], 'emotives': {}})
+    predictions = kato_fixture.get_predictions()
+    assert len(predictions) > 0  # Should predict learned sequence
+```
+
+### Common Issues
+
+**Issue: Gene values persist between tests**
+```python
+# WRONG: This will reset genes after setting them
+kato_fixture.update_genes({"max_sequence_length": 3})
+kato_fixture.clear_all_memory()  # Resets genes to default!
+
+# RIGHT: Clear first, then set genes
+kato_fixture.clear_working_memory()  # Only clear memory, preserve genes
+kato_fixture.update_genes({"max_sequence_length": 3})
+```
+
+**Issue: Auto-learning not triggering**
+- Verify gene update worked: check actual gene value
+- Ensure Docker container includes latest code changes
+- Check ZMQ communication is working
+
+## Test Isolation
+
+### Gene Value Isolation
+
+The `kato_fixtures.py` provides gene isolation utilities:
+
+**Fixture Methods:**
+```python
+# Reset specific genes to defaults
+fixture.reset_genes_to_defaults()
+
+# Clear memory with optional gene reset
+fixture.clear_all_memory(reset_genes=True)  # Default: resets genes
+fixture.clear_all_memory(reset_genes=False) # Preserve gene values
+
+# Clear only working memory (preserves genes)
+fixture.clear_working_memory()
+```
+
+**Best Practices:**
+1. Use `clear_working_memory()` when preserving gene settings
+2. Use `clear_all_memory()` for complete isolation
+3. Set genes AFTER clearing, not before
+4. Verify gene values with `update_genes()` return value
+
+### Test Dependencies
+
+**Container State:**
+- Tests share the same KATO instance (module-scoped fixture)
+- Gene values persist across tests within a module
+- Working memory and models are shared
+
+**Safe Testing Pattern:**
+```python
+def test_with_custom_genes(kato_fixture):
+    # Clear state first
+    kato_fixture.clear_working_memory()
+    
+    # Set test-specific genes
+    kato_fixture.update_genes({"max_sequence_length": 5})
+    
+    # Perform test
+    # ... test logic ...
+    
+    # Optional: Reset for next test (usually not needed)
+    # kato_fixture.reset_genes_to_defaults()
+```
+
 ## Adding New Tests
 
 1. **Choose appropriate directory**:

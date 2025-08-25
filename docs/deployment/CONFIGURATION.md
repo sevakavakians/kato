@@ -41,10 +41,37 @@ All parameters can be specified directly when starting KATO:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `--max-seq-length` | integer | 0 | Maximum sequence length (0=unlimited) |
+| `--max-seq-length` | integer | 0 | **Auto-learning threshold**: When working memory reaches this length, automatically learn sequence and reset (0=disabled) |
 | `--persistence` | integer | 5 | Emotive persistence duration |
 | `--smoothness` | integer | 3 | Learning smoothness parameter |
 | `--quiescence` | integer | 3 | Quiescence period |
+
+#### Auto-Learning Feature (`max_sequence_length`)
+
+When `max_sequence_length` is set to a value greater than 0, KATO automatically learns sequences when working memory reaches the threshold:
+
+**Behavior:**
+1. **Accumulation**: Working memory accumulates observations normally
+2. **Trigger**: When length reaches `max_sequence_length`, auto-learning activates  
+3. **Learning**: The entire working memory sequence is learned as a model
+4. **Reset**: Working memory is cleared, keeping only the last observation
+5. **Continuation**: System continues processing with learned model available
+
+**Example:**
+```bash
+# Set auto-learning at 3 observations
+./kato-manager.sh start --max-seq-length 3
+
+# Or update dynamically via API
+curl -X POST http://localhost:8000/p46b6b076c/genes/change \
+  -d '{"data": {"max_sequence_length": 3}}'
+```
+
+**Use Cases:**
+- **Streaming data**: Continuous learning from data streams
+- **Memory management**: Prevent working memory overflow
+- **Pattern recognition**: Automatic detection of recurring sequences  
+- **Real-time systems**: Background learning without manual intervention
 
 ### Behavior Control Parameters
 

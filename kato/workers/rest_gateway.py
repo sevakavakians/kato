@@ -180,8 +180,15 @@ class RestGatewayHandler(BaseHTTPRequestHandler):
             pool = get_global_pool()
             wm = pool.execute('get_working_memory')
             
-            # Wrap in message for test compatibility
-            result = {"message": wm}
+            # Get processor info for timing fields
+            response = pool.execute('get_name')
+            
+            # Add timing fields for test compatibility
+            result = {
+                "message": wm,
+                "time_stamp": response.get('time_stamp', time.time()),
+                "interval": response.get('interval', 0)
+            }
             
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
@@ -453,7 +460,10 @@ class RestGatewayHandler(BaseHTTPRequestHandler):
                 # Handle multiple gene updates in data wrapper format
                 genes_to_update = data['data']
                 for gene_name, gene_value in genes_to_update.items():
+                    logger.info(f"Updating gene {gene_name} to {gene_value}")
                     response = pool.execute('change_gene', gene_name, gene_value)
+                    if response.get('status') != 'okay':
+                        logger.error(f"Failed to update gene {gene_name}: {response.get('message')}")
             else:
                 # Handle single gene update in direct format
                 gene_name = data.get('gene_name')
@@ -463,7 +473,10 @@ class RestGatewayHandler(BaseHTTPRequestHandler):
                     self.send_error(400, "gene_name and gene_value required")
                     return
                 
+                logger.info(f"Updating single gene {gene_name} to {gene_value}")
                 response = pool.execute('change_gene', gene_name, gene_value)
+                if response.get('status') != 'okay':
+                    logger.error(f"Failed to update gene {gene_name}: {response.get('message')}")
             
             result = {
                 "id": processor_id,

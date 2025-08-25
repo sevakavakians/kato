@@ -20,8 +20,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../.
 class KATOTestFixture:
     """Base fixture for KATO tests."""
     
-    def __init__(self, genome_file: Optional[str] = None, processor_name: str = "P1"):
-        self.genome_file = genome_file or "test-genomes/simple.genome"
+    def __init__(self, processor_name: str = "P1"):
         self.processor_name = processor_name
         self.processor_id = self._generate_processor_id()
         self.base_url = "http://localhost:8000"
@@ -71,10 +70,8 @@ class KATOTestFixture:
                 # Try without building if it fails
                 print(f"Warning: Build failed, attempting to use existing setup: {result.stderr}")
         
-        # Start KATO with the genome
+        # Start KATO
         start_cmd = [kato_manager, 'start', self.processor_id]
-        if self.genome_file:
-            start_cmd.extend(['-g', self.genome_file])
             
         self.process = subprocess.Popen(
             start_cmd,
@@ -153,8 +150,19 @@ class KATOTestFixture:
         result = response.json()
         return result.get('message', [])
         
-    def clear_all_memory(self) -> str:
-        """Clear all memory."""
+    def reset_genes_to_defaults(self) -> str:
+        """Reset gene values to their defaults."""
+        default_genes = {
+            'max_sequence_length': 0,  # Disable auto-learning by default
+        }
+        return self.update_genes(default_genes)
+    
+    def clear_all_memory(self, reset_genes: bool = True) -> str:
+        """Clear all memory and optionally reset genes to defaults for test isolation."""
+        # Reset genes to defaults only if requested (default: True for backward compatibility)
+        if reset_genes:
+            self.reset_genes_to_defaults()
+        
         response = requests.post(
             f"{self.base_url}/{self.processor_id}/clear-all-memory",
             json={}
@@ -203,6 +211,16 @@ class KATOTestFixture:
         response.raise_for_status()
         result = response.json()
         return result.get('message', {})
+        
+    def update_genes(self, genes: Dict[str, Any]) -> str:
+        """Update gene values."""
+        response = requests.post(
+            f"{self.base_url}/{self.processor_id}/genes/change",
+            json={"data": genes}
+        )
+        response.raise_for_status()
+        result = response.json()
+        return result.get('message', '')
 
 
 @pytest.fixture(scope="module")
@@ -216,12 +234,15 @@ def kato_fixture():
 
 @pytest.fixture(scope="module")
 def kato_with_genome():
-    """Factory fixture for creating KATO instances with specific genomes."""
+    """Factory fixture for creating KATO instances (genome files no longer used)."""
     fixtures = []
     
-    def _create_fixture(genome_file: str, processor_name: str = "P1"):
-        fixture = KATOTestFixture(genome_file, processor_name)
+    def _create_fixture(genome_file: str = None, processor_name: str = "P1"):
+        # genome_file parameter kept for compatibility but ignored
+        fixture = KATOTestFixture(processor_name)
         fixture.setup()
+        # Reset genes to defaults for test isolation
+        fixture.reset_genes_to_defaults()
         fixtures.append(fixture)
         return fixture
     
@@ -229,4 +250,9 @@ def kato_with_genome():
     
     # Cleanup all fixtures
     for fixture in fixtures:
+        # Reset genes before teardown for next test module
+        try:
+            fixture.reset_genes_to_defaults()
+        except:
+            pass  # Ignore errors if system is already shutting down
         fixture.teardown()

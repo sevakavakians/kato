@@ -58,6 +58,8 @@ def test_clear_working_memory(kato_fixture):
 
 def test_working_memory_accumulation(kato_fixture):
     """Test that working memory accumulates observations."""
+    # Ensure default gene values for this test
+    kato_fixture.reset_genes_to_defaults()
     kato_fixture.clear_all_memory()
     
     # Add observations sequentially
@@ -141,29 +143,28 @@ def test_memory_persistence(kato_fixture):
         kato_fixture.clear_working_memory()
 
 
-def test_max_sequence_length(kato_with_genome):
+def test_max_sequence_length(kato_fixture):
     """Test that max_sequence_length limit is enforced."""
-    # Use a genome with max_sequence_length = 3
-    fixture = kato_with_genome("test-genomes/max_seq_3.genome")
-    
-    fixture.clear_all_memory()
+    # Clear memory first, then set max_sequence_length
+    kato_fixture.clear_working_memory()  # Only clear working memory, not genes
+    kato_fixture.update_genes({"max_sequence_length": 3})
     
     # Observe 3 events (should trigger auto-learn at limit)
-    fixture.observe({'strings': ['a'], 'vectors': [], 'emotives': {}})
-    assert len(fixture.get_working_memory()) == 1
+    kato_fixture.observe({'strings': ['a'], 'vectors': [], 'emotives': {}})
+    assert len(kato_fixture.get_working_memory()) == 1
     
-    fixture.observe({'strings': ['b'], 'vectors': [], 'emotives': {}})
-    assert len(fixture.get_working_memory()) == 2
+    kato_fixture.observe({'strings': ['b'], 'vectors': [], 'emotives': {}})
+    assert len(kato_fixture.get_working_memory()) == 2
     
-    fixture.observe({'strings': ['c'], 'vectors': [], 'emotives': {}})
+    kato_fixture.observe({'strings': ['c'], 'vectors': [], 'emotives': {}})
     # At max_sequence_length, should auto-learn and keep last event
-    wm = fixture.get_working_memory()
+    wm = kato_fixture.get_working_memory()
     assert wm == [['c']]  # Only last event remains
     
     # Verify sequence was learned
-    fixture.clear_working_memory()
-    fixture.observe({'strings': ['a'], 'vectors': [], 'emotives': {}})
-    predictions = fixture.get_predictions()
+    kato_fixture.clear_working_memory()
+    kato_fixture.observe({'strings': ['a'], 'vectors': [], 'emotives': {}})
+    predictions = kato_fixture.get_predictions()
     assert len(predictions) > 0
 
 

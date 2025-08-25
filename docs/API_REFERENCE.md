@@ -337,8 +337,36 @@ Update a gene/parameter value.
 }
 ```
 
+#### POST /{processor_id}/genes/change
+Update multiple genes at once (primary gene update endpoint).
+
+**Parameters:**
+- `processor_id` (path): Processor identifier
+
+**Request Body:**
+```json
+{
+  "data": {
+    "max_predictions": 200,
+    "recall_threshold": 0.15, 
+    "persistence": 10,
+    "max_sequence_length": 3
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "status": "okay",
+  "message": "genes-updated",
+  "processor_id": "p46b6b076c",
+  "updated_genes": ["max_predictions", "recall_threshold", "persistence", "max_sequence_length"]
+}
+```
+
 #### POST /{processor_id}/genes/update
-Update multiple genes at once.
+Update multiple genes at once (alternative endpoint).
 
 **Parameters:**
 - `processor_id` (path): Processor identifier
@@ -520,7 +548,18 @@ curl -X POST http://localhost:8000/p46b6b076c/observe \
 # Get cognition data
 curl http://localhost:8000/p46b6b076c/cognition-data
 
-# Update multiple genes
+# Update multiple genes (primary endpoint)
+curl -X POST http://localhost:8000/p46b6b076c/genes/change \
+  -H "Content-Type: application/json" \
+  -d '{
+    "data": {
+      "max_predictions": 50,
+      "recall_threshold": 0.2,
+      "max_sequence_length": 3
+    }
+  }'
+
+# Update multiple genes (alternative endpoint)
 curl -X POST http://localhost:8000/p46b6b076c/genes/update \
   -H "Content-Type: application/json" \
   -d '{

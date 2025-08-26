@@ -10,9 +10,13 @@ import time
 from typing import Optional
 import zmq
 
-from kato.workers.zmq_client import ZMQClient
+from kato.workers.zmq_switcher import get_zmq_client, get_zmq_implementation
 
 logger = logging.getLogger('kato.zmq_pool')
+
+# Type hint compatibility - the actual type will depend on implementation
+from typing import Any
+ZMQClientType = Any
 
 
 class ZMQConnectionPool:
@@ -50,11 +54,11 @@ class ZMQConnectionPool:
         self._failed_requests = 0
         self._reconnections = 0
         
-    def get_client(self) -> ZMQClient:
+    def get_client(self) -> ZMQClientType:
         """Get or create a thread-local ZMQ client.
         
         Returns:
-            ZMQClient instance for the current thread
+            ZMQ client instance for the current thread
         """
         # Check if this thread already has a client
         if not hasattr(self._local, 'client') or self._local.client is None:
@@ -71,8 +75,8 @@ class ZMQConnectionPool:
         """Create a new ZMQ client for the current thread."""
         logger.debug(f"Creating new ZMQ client for thread {threading.current_thread().name}")
         
-        # Create the client
-        self._local.client = ZMQClient(
+        # Use the switcher to get the appropriate client implementation
+        self._local.client = get_zmq_client(
             host=self.host,
             port=self.port,
             timeout=self.timeout
@@ -87,7 +91,8 @@ class ZMQConnectionPool:
             self._total_connections += 1
             self._active_connections += 1
             
-        logger.info(f"Created ZMQ client #{self._total_connections} for thread {threading.current_thread().name}")
+        impl_type = get_zmq_implementation()
+        logger.info(f"Created ZMQ client #{self._total_connections} ({impl_type}) for thread {threading.current_thread().name}")
     
     def _health_check(self):
         """Perform a health check on the current thread's client."""

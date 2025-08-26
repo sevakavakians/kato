@@ -51,6 +51,7 @@ class KATOTestFixture:
         env = os.environ.copy()
         env['PROCESSOR_ID'] = self.processor_id
         env['PROCESSOR_NAME'] = self.processor_name
+        env['KATO_ZMQ_IMPLEMENTATION'] = 'improved'
         
         # Start KATO using the manager script
         kato_manager = os.path.join(os.path.dirname(__file__), '../../../kato-manager.sh')
@@ -103,7 +104,16 @@ class KATOTestFixture:
                 # Phase 1: Check if API gateway is responding
                 response = requests.get(f"{self.base_url}/kato-api/ping")
                 if response.status_code == 200:
-                    # Phase 2: Check if processor is responding
+                    # Get the actual processor ID from the running instance
+                    connect_response = requests.get(f"{self.base_url}/connect")
+                    if connect_response.status_code == 200:
+                        connect_data = connect_response.json()
+                        if 'genome' in connect_data and 'id' in connect_data['genome']:
+                            actual_processor_id = connect_data['genome']['id']
+                            # Update our processor_id to match the running instance
+                            self.processor_id = actual_processor_id
+                            
+                    # Phase 2: Check if processor is responding with actual ID
                     response = requests.get(f"{self.base_url}/{self.processor_id}/ping")
                     if response.status_code == 200:
                         # Phase 3: Try a simple operation

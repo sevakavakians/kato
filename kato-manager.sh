@@ -10,7 +10,7 @@ set -e
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 KATO_ROOT="$SCRIPT_DIR"
-KATO_TESTS_DIR="$KATO_ROOT/kato-tests"
+KATO_TESTS_DIR="$KATO_ROOT/tests"
 CONFIG_DIR="$KATO_TESTS_DIR/config"
 LOGS_DIR="$KATO_ROOT/logs"
 
@@ -469,6 +469,7 @@ EOF
                 -e "AS_INPUTS=[]" \
                 -e "PROCESSOR_ID=$PROCESSOR_ID" \
                 -e "PROCESSOR_NAME=$PROCESSOR_NAME" \
+                -e "KATO_ZMQ_IMPLEMENTATION=${KATO_ZMQ_IMPLEMENTATION:-improved}" \
                 "$DOCKER_IMAGE_NAME:$TAG"
             ;;
     esac
@@ -756,17 +757,30 @@ run_tests() {
         exit 1
     fi
     
+    # Ensure KATO is running for tests
+    if [[ $(container_status "$KATO_CONTAINER_NAME") != "running" ]]; then
+        log_warning "KATO is not running. Starting it for tests..."
+        ensure_network
+        start_mongodb
+        start_kato
+    else
+        log_info "KATO is already running"
+    fi
+    
     cd "$KATO_TESTS_DIR"
     
-    # Check if pipenv is available
-    if command -v pipenv &> /dev/null; then
+    # Use the optimized test runner script
+    if [[ -x "./run_tests.sh" ]]; then
+        log_info "Using optimized test runner script..."
+        ./run_tests.sh "$@" | tee "$LOGS_DIR/test-results.log"
+    elif command -v pipenv &> /dev/null; then
         log_info "Running tests with pipenv..."
         pipenv run pytest -v tests/ | tee "$LOGS_DIR/test-results.log"
     elif command -v pytest &> /dev/null; then
         log_info "Running tests with pytest..."
         pytest -v tests/ | tee "$LOGS_DIR/test-results.log"
     else
-        log_error "Neither pipenv nor pytest found"
+        log_error "Neither test runner script nor pytest found"
         log_error "Please install pytest or pipenv to run tests"
         exit 1
     fi

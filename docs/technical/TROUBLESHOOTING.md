@@ -22,6 +22,62 @@ curl http://localhost:8000/p46b6b076c/ping
 
 ## Common Issues and Solutions
 
+### ZeroMQ Communication Issues
+
+#### Timeout Errors with REQ/REP Pattern
+
+**Symptoms:**
+- "Resource temporarily unavailable" errors
+- Tests timing out after 2 minutes
+- `/connect` endpoint hanging
+
+**Solutions:**
+
+1. Switch to improved ROUTER/DEALER implementation (default):
+```bash
+export KATO_ZMQ_IMPLEMENTATION=improved
+./kato-manager.sh restart
+```
+
+2. If issues persist, check ZMQ server status:
+```bash
+docker exec kato-api-${USER}-1 ps aux | grep zmq
+docker logs kato-api-${USER}-1 --tail 20 | grep "ZMQ"
+```
+
+3. Restart container to clear connection state:
+```bash
+./kato-manager.sh restart
+```
+
+#### Test Runner Timeout
+
+**Symptoms:**
+- `./kato-manager.sh test` times out
+- Tests rebuild Docker image every time
+- Virtual environment hangs
+
+**Solutions:**
+
+1. Use optimized test runner:
+```bash
+cd tests
+./run_tests.sh  # Uses system Python3, checks for existing images
+```
+
+2. Ensure Docker image exists before testing:
+```bash
+docker images | grep kato
+# If missing, build once:
+./kato-manager.sh build
+```
+
+3. Skip virtual environment if causing issues:
+```bash
+# Tests now use system Python3 directly
+python3 -m pytest tests/
+```
+
 ### Container Issues
 
 #### Container Won't Start

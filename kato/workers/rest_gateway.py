@@ -10,7 +10,6 @@ import time
 from threading import Thread
 from urllib.parse import parse_qs
 
-from kato.workers.zmq_client import ZMQClient
 from kato.workers.zmq_pool import get_global_pool, set_global_pool, cleanup_global_pool, ZMQConnectionPool
 from kato.workers.zmq_switcher import get_zmq_client, get_zmq_implementation
 

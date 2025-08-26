@@ -20,14 +20,41 @@ KATO has migrated from gRPC to ZeroMQ (ZMQ) to address multiprocessing compatibi
 
 ## Architecture Components
 
-### 1. ZMQ Server (`zmq_server.py`)
-The core server that handles all processor communications:
-- **Pattern**: REQ/REP (Request/Reply) for RPC-style communication
+### 1. ZMQ Server Implementation
+KATO supports two ZMQ server implementations that can be selected via the `KATO_ZMQ_IMPLEMENTATION` environment variable:
+
+#### Basic Implementation (`zmq_server.py`)
+The original server using REQ/REP pattern:
+- **Pattern**: REQ/REP (Request/Reply) for synchronous RPC-style communication
 - **Port**: 5555 (configurable via ZMQ_PORT environment variable)
 - **Serialization**: MessagePack for efficient binary serialization
 - **Threading**: Runs in a separate thread within the kato-engine process
+- **Use Case**: Simple deployments with moderate request volume
 
-**Key Methods**:
+#### Improved Implementation (`improved_zmq_server.py`) [DEFAULT]
+Enhanced server using ROUTER/DEALER pattern for better performance:
+- **Pattern**: ROUTER/DEALER for asynchronous, non-blocking communication
+- **Port**: 5555 (configurable via ZMQ_PORT environment variable)
+- **Serialization**: MessagePack for efficient binary serialization
+- **Threading**: Runs in a separate thread with heartbeat mechanism
+- **Heartbeat**: 30-second intervals to maintain connection health
+- **Use Case**: Production deployments requiring high throughput and reliability
+- **Benefits**:
+  - Non-blocking request handling
+  - Better timeout management
+  - Connection state tracking
+  - Improved error recovery
+
+**Switching Implementations**:
+```bash
+# Use improved implementation (default)
+export KATO_ZMQ_IMPLEMENTATION=improved
+
+# Use basic implementation
+export KATO_ZMQ_IMPLEMENTATION=basic
+```
+
+**Key Methods** (both implementations):
 - `observe`: Process observations
 - `learn`: Trigger learning
 - `get_predictions`: Retrieve current predictions
@@ -149,6 +176,7 @@ The REST Gateway ensures backward compatibility:
 ## Configuration
 
 ### Environment Variables
+- `KATO_ZMQ_IMPLEMENTATION`: ZMQ server implementation - "improved" (default) or "basic"
 - `ZMQ_PORT`: ZMQ server port (default: 5555)
 - `REST_PORT`: REST gateway port (default: 8000)
 - `LOG_LEVEL`: Logging verbosity (default: INFO)

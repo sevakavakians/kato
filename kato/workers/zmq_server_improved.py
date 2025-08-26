@@ -450,6 +450,8 @@ class ImprovedZMQServer:
             gene_name = params.get('gene_name')
             gene_value = params.get('gene_value')
             
+            logger.info(f"Gene change request: {gene_name} = {gene_value}")
+            
             if not gene_name or gene_value is None:
                 return {
                     'status': 'error',
@@ -471,7 +473,15 @@ class ImprovedZMQServer:
             else:
                 # Try updating in modeler
                 if hasattr(self.primitive.modeler, gene_name):
+                    old_value = getattr(self.primitive.modeler, gene_name, None)
                     setattr(self.primitive.modeler, gene_name, gene_value)
+                    logger.info(f"Updated modeler.{gene_name}: {old_value} -> {gene_value}")
+                    
+                    # Also update genome_manifest for consistency
+                    if hasattr(self.primitive, 'genome_manifest'):
+                        self.primitive.genome_manifest[gene_name] = gene_value
+                        logger.info(f"Updated genome_manifest[{gene_name}] = {gene_value}")
+                        
                     return {
                         'status': 'okay',
                         'message': f'Gene {gene_name} updated to {gene_value}'

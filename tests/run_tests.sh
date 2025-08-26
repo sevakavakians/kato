@@ -11,6 +11,10 @@ NC='\033[0m' # No Color
 echo -e "${GREEN}KATO Test Runner${NC}"
 echo "=================="
 
+# Set ZMQ implementation to improved for tests
+export KATO_ZMQ_IMPLEMENTATION=improved
+echo -e "${GREEN}Using improved ZMQ implementation (ROUTER/DEALER)${NC}"
+
 # Check if we're in the right directory
 if [ ! -f "pytest.ini" ]; then
     echo -e "${RED}Error: Not in kato-tests directory${NC}"
@@ -26,30 +30,16 @@ if [ -f "venv/pyvenv.cfg" ]; then
     fi
 fi
 
-# Install dependencies if needed
-if [ "$1" == "--install" ] || [ ! -d "venv" ]; then
-    echo -e "${YELLOW}Installing test dependencies...${NC}"
-    # Remove old venv if it exists
-    if [ -d "venv" ]; then
-        rm -rf venv 2>/dev/null || mv venv venv_old_$(date +%s) 2>/dev/null
-    fi
-    python3 -m venv venv
-    source venv/bin/activate
-    pip install --upgrade pip
-    pip install -r requirements.txt
-else
-    source venv/bin/activate 2>/dev/null || {
-        echo -e "${YELLOW}Creating virtual environment...${NC}"
-        python3 -m venv venv
-        source venv/bin/activate
-        pip install --upgrade pip
-        pip install -r requirements.txt
-    }
-fi
+# Skip virtual environment complications - use system Python3
+echo -e "${GREEN}Using system Python3 and pytest${NC}"
 
-# Ensure KATO is built
-echo -e "${YELLOW}Building KATO Docker image...${NC}"
-../kato-manager.sh build
+# Ensure KATO Docker image exists
+if [[ -z $(docker images -q kato:latest 2> /dev/null) ]]; then
+    echo -e "${YELLOW}KATO Docker image not found. Building...${NC}"
+    ../kato-manager.sh build
+else
+    echo -e "${GREEN}KATO Docker image already exists${NC}"
+fi
 
 # Set Python path
 export PYTHONPATH="$(pwd):$(pwd)/tests:${PYTHONPATH}"
@@ -106,29 +96,26 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Run tests based on type
+# Run tests based on type using system Python3
 echo -e "${GREEN}Running $TEST_TYPE tests...${NC}"
 echo ""
 
 case $TEST_TYPE in
     unit)
-        pytest tests/unit/ $VERBOSE $PARALLEL
+        python3 -m pytest tests/unit/ $VERBOSE $PARALLEL
         ;;
     integration)
-        pytest tests/integration/ $VERBOSE $PARALLEL
+        python3 -m pytest tests/integration/ $VERBOSE $PARALLEL
         ;;
     api)
-        pytest tests/api/ $VERBOSE $PARALLEL
+        python3 -m pytest tests/api/ $VERBOSE $PARALLEL
         ;;
     all)
-        pytest tests/ $VERBOSE $PARALLEL
+        python3 -m pytest tests/ $VERBOSE $PARALLEL
         ;;
 esac
 
 TEST_RESULT=$?
-
-# Deactivate virtual environment
-deactivate
 
 # Report results
 echo ""

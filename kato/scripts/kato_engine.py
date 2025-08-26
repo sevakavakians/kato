@@ -15,6 +15,7 @@ from threading import Thread
 from kato.workers.kato_processor import KatoProcessor
 from kato.workers.zmq_server import ZMQServer
 from kato.workers.rest_gateway import RestGateway
+from kato.workers.zmq_switcher import get_zmq_server
 
 # Set up logging
 logging.basicConfig(
@@ -56,11 +57,12 @@ class KatoEngine:
         logger.info("Initializing KATO Processor...")
         self.processor = KatoProcessor(manifest)
         
-        # Create ZMQ server
+        # Create ZMQ server (use switcher to get appropriate implementation)
         port = int(os.environ.get('ZMQ_PORT', '5555'))
         logger.info(f"Starting ZMQ server on port {port}...")
         
-        self.zmq_server = ZMQServer(self.processor, port=port)
+        # Use the switcher to get the right implementation
+        self.zmq_server = get_zmq_server(self.processor, port=port)
         
         # Start ZMQ server in a thread
         self.zmq_thread = Thread(target=self.zmq_server.start)

@@ -1,5 +1,37 @@
 # KATO Changelog
 
+## [2.0.3] - 2025-08-26
+
+### Fixed
+- **ZeroMQ Communication**: Migrated from REQ/REP to ROUTER/DEALER pattern for improved reliability
+  - Implemented non-blocking request handling with ROUTER/DEALER sockets
+  - Added heartbeat mechanism (30-second intervals) for connection health monitoring
+  - Fixed timeout issues that occurred with REQ/REP pattern under high load
+  - Enhanced error recovery with automatic reconnection
+- **Test Runner**: Optimized test execution to prevent unnecessary Docker rebuilds
+  - Added Docker image existence check before building
+  - Removed virtual environment complications causing test hangs
+  - Tests now complete in ~25 seconds instead of timing out after 2 minutes
+- **Test Fixtures**: Fixed processor ID mismatches between tests and running containers
+  - Modified fixtures to dynamically detect actual processor ID from `/connect` endpoint
+  - Tests now adapt to whatever processor ID the container is using
+
+### Added
+- **Improved ZMQ Server** (`improved_zmq_server.py`): New default implementation with ROUTER/DEALER pattern
+  - Non-blocking asynchronous communication
+  - Built-in heartbeat mechanism for connection monitoring
+  - Better timeout management and error recovery
+  - Connection state tracking for improved reliability
+- **ZMQ Implementation Switcher**: Dynamic selection between basic and improved implementations
+  - Environment variable `KATO_ZMQ_IMPLEMENTATION` to select implementation
+  - "improved" (default) - ROUTER/DEALER pattern
+  - "basic" - Original REQ/REP pattern
+
+### Improved
+- **Performance**: 103/105 tests now passing (up from timeout failures)
+- **Reliability**: Eliminated connection timeout issues during test runs
+- **Documentation**: Updated ZeroMQ architecture docs with dual implementation details
+
 ## [2.0.2] - 2025-08-25
 
 ### Fixed

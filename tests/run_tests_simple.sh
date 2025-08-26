@@ -28,9 +28,13 @@ cd "$SCRIPT_DIR"
 # Set Python path
 export PYTHONPATH="$SCRIPT_DIR:$SCRIPT_DIR/tests:${PYTHONPATH}"
 
-# Ensure KATO is built
-echo -e "${YELLOW}Building KATO Docker image...${NC}"
-../kato-manager.sh build
+# Ensure KATO Docker image exists
+if [[ -z $(docker images -q kato:latest 2> /dev/null) ]]; then
+    echo -e "${YELLOW}KATO Docker image not found. Building...${NC}"
+    ../kato-manager.sh build
+else
+    echo -e "${GREEN}KATO Docker image already exists${NC}"
+fi
 
 echo ""
 echo -e "${GREEN}Running tests from: $SCRIPT_DIR${NC}"

@@ -1,0 +1,205 @@
+# KATO Stress Test Configuration
+# Defines load profiles and test parameters for different stress scenarios
+
+load_profiles:
+  # Light load - basic functionality testing
+  light:
+    concurrent_users: 10
+    duration_seconds: 60
+    ramp_up_seconds: 10
+    requests_per_user_per_second: 1
+    think_time_ms: 1000
+    
+  # Moderate load - normal production levels
+  moderate:
+    concurrent_users: 50
+    duration_seconds: 300
+    ramp_up_seconds: 30
+    requests_per_user_per_second: 2
+    think_time_ms: 500
+    
+  # Heavy load - peak traffic simulation
+  heavy:
+    concurrent_users: 200
+    duration_seconds: 600
+    ramp_up_seconds: 60
+    requests_per_user_per_second: 5
+    think_time_ms: 200
+    
+  # Extreme load - stress testing limits
+  extreme:
+    concurrent_users: 500
+    duration_seconds: 300
+    ramp_up_seconds: 120
+    requests_per_user_per_second: 10
+    think_time_ms: 100
+    
+  # Burst load - sudden traffic spikes
+  burst:
+    concurrent_users: 300
+    duration_seconds: 60
+    ramp_up_seconds: 5
+    requests_per_user_per_second: 20
+    think_time_ms: 50
+    
+  # Endurance - long-running stability test
+  endurance:
+    concurrent_users: 25
+    duration_seconds: 3600  # 1 hour
+    ramp_up_seconds: 60
+    requests_per_user_per_second: 1
+    think_time_ms: 2000
+
+# Test execution parameters
+test_parameters:
+  # Connection settings
+  connection_timeout_seconds: 30
+  request_timeout_seconds: 10
+  max_retries: 3
+  retry_delay_ms: 100
+  
+  # Circuit breaker settings
+  circuit_breaker_enabled: true
+  circuit_breaker_failure_threshold: 0.5  # 50% failure rate
+  circuit_breaker_timeout_seconds: 30
+  circuit_breaker_half_open_requests: 3
+  
+  # Connection pool settings
+  connection_pool_size: 100
+  connection_pool_overflow: 50
+  connection_reuse: true
+  
+  # Rate limiting
+  max_requests_per_second: 10000  # Global rate limit
+  rate_limit_burst_size: 1000
+
+# Operations mix for realistic testing
+operations_mix:
+  observe: 0.60      # 60% observe operations
+  learn: 0.10        # 10% learn operations
+  predictions: 0.20  # 20% get predictions
+  working_memory: 0.05  # 5% working memory queries
+  clear_memory: 0.05    # 5% memory clear operations
+
+# Test data generation
+test_data:
+  # String data
+  min_strings_per_observation: 1
+  max_strings_per_observation: 10
+  min_string_length: 1
+  max_string_length: 50
+  string_vocabulary_size: 1000
+  
+  # Vector data
+  vector_probability: 0.3  # 30% of observations include vectors
+  min_vector_size: 10
+  max_vector_size: 100
+  vector_dimension_range: [0.0, 1.0]
+  
+  # Emotive data
+  emotive_probability: 0.2  # 20% of observations include emotives
+  min_emotives: 1
+  max_emotives: 5
+  emotive_value_range: [0.0, 1.0]
+
+# Monitoring configuration
+monitoring:
+  # Sampling intervals
+  metrics_sample_interval_seconds: 1
+  report_interval_seconds: 10
+  
+  # Metrics to track
+  metrics_to_track:
+    - response_time_ms
+    - throughput_rps
+    - error_rate
+    - success_rate
+    - active_connections
+    - pending_requests
+    - memory_usage_mb
+    - cpu_usage_percent
+    - network_io_mbps
+    
+  # Response time percentiles to calculate
+  response_time_percentiles:
+    - 50   # Median
+    - 75   # 75th percentile
+    - 90   # 90th percentile
+    - 95   # 95th percentile
+    - 99   # 99th percentile
+    - 99.9 # 99.9th percentile
+    
+  # Container monitoring
+  container_monitoring:
+    enabled: true
+    sample_interval_seconds: 5
+    track_logs: true
+    log_error_patterns:
+      - "ERROR"
+      - "CRITICAL"
+      - "Exception"
+      - "Traceback"
+      - "Failed"
+      - "Timeout"
+
+# Performance thresholds (SLA)
+performance_thresholds:
+  # Response time thresholds (milliseconds)
+  response_time_p50_max: 20
+  response_time_p95_max: 50
+  response_time_p99_max: 100
+  response_time_p99_9_max: 500
+  
+  # Throughput thresholds
+  min_throughput_rps: 1000  # Minimum requests per second
+  
+  # Error rate thresholds
+  max_error_rate: 0.001  # 0.1% max error rate
+  
+  # Resource thresholds
+  max_memory_usage_mb: 2000
+  max_cpu_usage_percent: 80
+  max_connection_pool_usage: 0.9  # 90% of pool
+
+# Reporting configuration
+reporting:
+  # Output formats
+  formats:
+    - json
+    - html
+    - csv
+    
+  # Report location
+  output_directory: "./stress_test_results"
+  
+  # Report contents
+  include_in_report:
+    - summary_statistics
+    - response_time_distribution
+    - throughput_over_time
+    - error_analysis
+    - resource_usage_graphs
+    - bottleneck_analysis
+    - recommendations
+    
+  # Baseline comparison
+  baseline_comparison:
+    enabled: true
+    baseline_file: "./stress_test_results/baseline.json"
+    deviation_threshold: 0.2  # 20% deviation triggers warning
+
+# Test environment
+environment:
+  # KATO instance configuration
+  kato_base_url: "http://localhost:8000"
+  kato_processor_id: "stress-test-processor"
+  
+  # Docker settings
+  docker_container_name: "kato-stress-test"
+  docker_network: "kato-network"
+  
+  # Test execution
+  parallel_execution: false  # Run tests in parallel
+  cleanup_between_tests: true
+  warmup_duration_seconds: 30
+  cooldown_duration_seconds: 30

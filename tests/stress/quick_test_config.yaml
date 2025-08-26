@@ -1,0 +1,82 @@
+# Quick test configuration for validation
+load_profiles:
+  quick:
+    concurrent_users: 5
+    duration_seconds: 5
+    ramp_up_seconds: 1
+    requests_per_user_per_second: 1
+    think_time_ms: 100
+
+test_parameters:
+  connection_timeout_seconds: 10
+  request_timeout_seconds: 5
+  max_retries: 1
+  retry_delay_ms: 100
+  circuit_breaker_enabled: false
+  connection_pool_size: 10
+  connection_pool_overflow: 5
+  connection_reuse: true
+  max_requests_per_second: 100
+  rate_limit_burst_size: 50
+
+operations_mix:
+  observe: 0.60
+  learn: 0.10
+  predictions: 0.20
+  working_memory: 0.05
+  clear_memory: 0.05
+
+test_data:
+  min_strings_per_observation: 1
+  max_strings_per_observation: 3
+  min_string_length: 1
+  max_string_length: 10
+  string_vocabulary_size: 100
+  vector_probability: 0.1
+  min_vector_size: 5
+  max_vector_size: 10
+  vector_dimension_range: [0.0, 1.0]
+  emotive_probability: 0.1
+  min_emotives: 1
+  max_emotives: 2
+  emotive_value_range: [0.0, 1.0]
+
+monitoring:
+  metrics_sample_interval_seconds: 1
+  report_interval_seconds: 2
+  metrics_to_track:
+    - response_time_ms
+    - throughput_rps
+    - error_rate
+  response_time_percentiles: [50, 95, 99]
+  container_monitoring:
+    enabled: false
+
+performance_thresholds:
+  response_time_p50_max: 50
+  response_time_p95_max: 100
+  response_time_p99_max: 200
+  response_time_p99_9_max: 500
+  min_throughput_rps: 10
+  max_error_rate: 0.05
+  max_memory_usage_mb: 2000
+  max_cpu_usage_percent: 80
+  max_connection_pool_usage: 0.9
+
+reporting:
+  formats: ["json", "csv"]
+  output_directory: "./stress_test_results"
+  include_in_report:
+    - summary_statistics
+    - response_time_distribution
+  baseline_comparison:
+    enabled: false
+
+environment:
+  kato_base_url: "http://localhost:8000"
+  kato_processor_id: "stress-test-processor"
+  docker_container_name: null
+  parallel_execution: false
+  cleanup_between_tests: true
+  warmup_duration_seconds: 2
+  cooldown_duration_seconds: 2

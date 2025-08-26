@@ -384,7 +384,7 @@ class ImprovedZMQClient:
     def get_model(self, model_id: str) -> Dict:
         """Get a specific model by ID."""
         response = self.call('get_model', {'model_id': model_id})
-        return response.get('model')
+        return response
         
     def change_gene(self, gene_name: str, gene_value: Any) -> Dict[str, Any]:
         """Change a gene value."""

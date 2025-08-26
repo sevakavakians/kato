@@ -112,10 +112,12 @@ KATO includes comprehensive tests covering all functionality:
 
 ```bash
 cd tests
-./run_tests.sh              # Run all tests
+./run_tests.sh              # Run all tests (~22 seconds)
 ./run_tests.sh --unit       # Unit tests only
 ./run_tests.sh --api        # API tests only
 ```
+
+**Current Status**: ✅ All 105 tests passing (100% success rate)
 
 See [Testing Guide](docs/development/TESTING.md) for details.
 
@@ -152,7 +154,7 @@ This project is licensed under the terms in the [LICENSE](LICENSE) file.
 
 ## Heritage
 
-KATO is derived from the [GAIuS](https://github.com/cartesianfaith/gaius) framework, retaining its transparent, symbolic, and physics-informed learning process while focusing on deterministic memory and abstraction.
+KATO is derived from the [GAIuS](https://medium.com/@sevakavakians/what-is-gaius-a-responsible-alternative-to-neural-network-artificial-intelligence-part-1-of-3-1f7bbe583a32) framework, retaining its transparent, symbolic, and physics-informed learning process while focusing on deterministic memory and abstraction.
 
 Like GAIuS before it, KATO adheres to [ExCITE AI](https://medium.com/@sevakavakians/what-is-excite-ai-712afd372af4) principles.
 

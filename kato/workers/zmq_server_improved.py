@@ -362,7 +362,8 @@ class ImprovedZMQServer:
     def _handle_get_cognition_data(self, params):
         """Handle get cognition data request."""
         try:
-            data = self.primitive.get_cognition_data()
+            # cognition_data is a property, not a method
+            data = self.primitive.cognition_data
             return {
                 'status': 'okay',
                 'cognition_data': data

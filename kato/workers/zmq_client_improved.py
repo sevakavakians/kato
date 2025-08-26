@@ -131,11 +131,8 @@ class ImprovedZMQClient:
                     'type': 'heartbeat',
                     'timestamp': time.time()
                 }
-                # DEALER sends [empty, message] for REQ/REP compatibility
-                self.socket.send_multipart([
-                    b'',  # Empty frame for compatibility
-                    msgpack.packb(heartbeat_msg)
-                ])
+                # DEALER sends just the message
+                self.socket.send(msgpack.packb(heartbeat_msg))
                 self._last_heartbeat = current_time
                 logger.debug("Sent heartbeat")
             except zmq.ZMQError as e:
@@ -198,11 +195,8 @@ class ImprovedZMQClient:
                 self._send_heartbeat()
                 
                 # Send request
-                # DEALER sends [empty, message] for REQ/REP compatibility
-                self.socket.send_multipart([
-                    b'',  # Empty frame
-                    msgpack.packb(request)
-                ])
+                # DEALER sends just the message (no empty frame needed)
+                self.socket.send(msgpack.packb(request))
                 
                 self._request_count += 1
                 logger.debug(f"Sent request {request_id}: {method}")
@@ -222,15 +216,8 @@ class ImprovedZMQClient:
                     socks = dict(self.poller.poll(min(remaining, 1000)))
                     
                     if self.socket in socks:
-                        # DEALER receives [empty, message]
-                        frames = self.socket.recv_multipart()
-                        
-                        if len(frames) < 1:
-                            logger.warning(f"Invalid response format: {frames}")
-                            continue
-                            
-                        # Get the actual message (last frame)
-                        message_frame = frames[-1]
+                        # DEALER receives just the message from ROUTER
+                        message_frame = self.socket.recv()
                         
                         try:
                             response = msgpack.unpackb(message_frame, raw=False)

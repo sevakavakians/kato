@@ -141,11 +141,17 @@ See [Performance Guide](docs/technical/PERFORMANCE.md) for optimization.
 
 ## Architecture
 
-KATO uses a distributed architecture with ZeroMQ for high-performance communication:
+KATO uses a distributed architecture with ZeroMQ ROUTER/DEALER pattern for high-performance, non-blocking communication:
 
 ```
-REST Client → REST Gateway (Port 8000) → ZeroMQ Server → KATO Processor
+REST Client → REST Gateway (Port 8000) → ZeroMQ ROUTER/DEALER (Port 5555) → KATO Processor
 ```
+
+**Key Features:**
+- **ROUTER/DEALER Pattern**: Non-blocking, concurrent request handling (improved over REQ/REP)
+- **Connection Pooling**: Efficient connection reuse reduces overhead
+- **Heartbeat Mechanism**: 30-second intervals ensure connection health
+- **Automatic Recovery**: Resilient to network issues and timeouts
 
 See [Architecture Documentation](docs/deployment/ARCHITECTURE.md) for details.
 

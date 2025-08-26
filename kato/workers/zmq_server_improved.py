@@ -81,7 +81,7 @@ class ImprovedZMQServer:
                 socks = dict(poller.poll(1000))  # 1 second timeout
                 
                 if self.socket in socks:
-                    # ROUTER socket receives [identity, empty, message]
+                    # ROUTER socket receives [identity, message] from DEALER
                     frames = self.socket.recv_multipart()
                     
                     if len(frames) < 2:
@@ -89,8 +89,8 @@ class ImprovedZMQServer:
                         continue
                         
                     client_id = frames[0]
-                    # Skip empty frame if present (used by REQ/REP compatibility)
-                    message_frame = frames[-1]
+                    # DEALER doesn't send empty frame, message is in frames[1]
+                    message_frame = frames[1]
                     
                     # Track client activity
                     self.client_last_seen[client_id] = time.time()
@@ -114,11 +114,10 @@ class ImprovedZMQServer:
                         }
                     
                     # Send response back to client
-                    # ROUTER sends [identity, empty, message]
+                    # ROUTER sends [identity, message] to DEALER
                     try:
                         self.socket.send_multipart([
                             client_id,
-                            b'',  # Empty frame for REQ/REP compatibility
                             msgpack.packb(response)
                         ])
                     except zmq.error.ZMQError as e:

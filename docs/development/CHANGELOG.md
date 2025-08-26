@@ -1,5 +1,23 @@
 # KATO Changelog
 
+## [2.0.4] - 2025-08-26
+
+### Fixed
+- **ROUTER/DEALER Message Framing**: Corrected message framing protocol between DEALER clients and ROUTER server
+  - Fixed DEALER client to send messages without empty frame prefix (`[message]` instead of `[empty, message]`)
+  - Fixed ROUTER server to expect and handle DEALER format (`[identity, message]` instead of `[identity, empty, message]`)
+  - Corrected response framing: ROUTER now sends `[identity, message]` back to DEALER clients
+  - Fixed heartbeat messages to use correct framing format
+- **Connection Pool Implementation**: Fixed circular import issues in ZMQ pool management
+  - Resolved import dependencies between `zmq_switcher.py` and `zmq_pool.py`
+  - Ensured proper pool selection based on `KATO_ZMQ_IMPLEMENTATION` environment variable
+  - Fixed connection reuse in improved pool implementation
+
+### Improved
+- **Test Reliability**: All 105 tests now passing with improved ROUTER/DEALER implementation
+- **Performance**: Reduced connection overhead through proper connection pooling
+- **Documentation**: Clearly documented why ROUTER/DEALER is the preferred implementation
+
 ## [2.0.3] - 2025-08-26
 
 ### Fixed

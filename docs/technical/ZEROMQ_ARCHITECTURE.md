@@ -15,8 +15,24 @@ KATO has migrated from gRPC to ZeroMQ (ZMQ) to address multiprocessing compatibi
 - **Multiprocessing-friendly**: Full support for fork() and multiprocessing
 - **High performance**: Lower latency and higher throughput than gRPC
 - **Lightweight**: Minimal overhead and resource usage
-- **Flexible patterns**: Multiple messaging patterns (REQ/REP, PUB/SUB, etc.)
+- **Flexible patterns**: Multiple messaging patterns (REQ/REP, PUB/SUB, ROUTER/DEALER, etc.)
 - **No external dependencies**: No need for service definitions or code generation
+
+## Why ROUTER/DEALER over REQ/REP?
+
+### Limitations of REQ/REP Pattern
+- **Blocking**: REQ sockets block until they receive a response, causing timeouts under load
+- **Strict sequence**: Must follow exact request-response-request-response pattern
+- **No concurrent requests**: Cannot handle multiple requests simultaneously
+- **Connection state issues**: REQ sockets can get stuck in bad states requiring reconnection
+
+### ROUTER/DEALER Advantages (Why "Improved" is Default)
+- **Non-blocking**: DEALER sockets don't block, allowing asynchronous communication
+- **Concurrent requests**: Can handle multiple requests in flight simultaneously
+- **Better resilience**: No strict sequencing requirements, more fault-tolerant
+- **Connection persistence**: Maintains long-lived connections with proper identity management
+- **Heartbeat support**: Built-in heartbeat mechanism for connection health monitoring
+- **Production-ready**: Better suited for high-throughput production environments
 
 ## Architecture Components
 
@@ -31,19 +47,23 @@ The original server using REQ/REP pattern:
 - **Threading**: Runs in a separate thread within the kato-engine process
 - **Use Case**: Simple deployments with moderate request volume
 
-#### Improved Implementation (`improved_zmq_server.py`) [DEFAULT]
-Enhanced server using ROUTER/DEALER pattern for better performance:
+#### Improved Implementation (`improved_zmq_server.py`) [DEFAULT - RECOMMENDED]
+Enhanced server using ROUTER/DEALER pattern for production use:
 - **Pattern**: ROUTER/DEALER for asynchronous, non-blocking communication
 - **Port**: 5555 (configurable via ZMQ_PORT environment variable)
 - **Serialization**: MessagePack for efficient binary serialization
 - **Threading**: Runs in a separate thread with heartbeat mechanism
 - **Heartbeat**: 30-second intervals to maintain connection health
 - **Use Case**: Production deployments requiring high throughput and reliability
+- **Message Framing**: 
+  - Receives: `[identity, message]` from DEALER clients
+  - Sends: `[identity, message]` to DEALER clients
 - **Benefits**:
-  - Non-blocking request handling
-  - Better timeout management
-  - Connection state tracking
-  - Improved error recovery
+  - Non-blocking request handling (no request/response deadlocks)
+  - Better timeout management (can timeout without breaking socket state)
+  - Connection state tracking (monitors active clients)
+  - Improved error recovery (automatic reconnection without socket corruption)
+  - Handles concurrent requests from multiple clients efficiently
 
 **Switching Implementations**:
 ```bash

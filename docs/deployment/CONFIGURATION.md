@@ -83,6 +83,31 @@ curl -X POST http://localhost:8000/p46b6b076c/genes/change \
 | `--no-sort` | flag | false | Disable alphanumeric sorting |
 | `--no-predictions` | flag | false | Disable prediction processing |
 
+### ZeroMQ Configuration
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `KATO_ZMQ_IMPLEMENTATION` | string | "improved" | **ZMQ implementation**: "improved" (ROUTER/DEALER - recommended) or "legacy" (REQ/REP) |
+| `ZMQ_PORT` | integer | 5555 | ZeroMQ server port |
+| `REST_PORT` | integer | 8000 | REST gateway port |
+
+**Important**: The "improved" ROUTER/DEALER implementation is strongly recommended for production use as it provides:
+- Non-blocking communication (no deadlocks under load)
+- Better timeout handling (graceful timeout without socket corruption)
+- Connection health monitoring (30-second heartbeats)
+- Concurrent request support (handles multiple clients efficiently)
+
+Example:
+```bash
+# Use improved ROUTER/DEALER implementation (default and recommended)
+export KATO_ZMQ_IMPLEMENTATION=improved
+./kato-manager.sh start
+
+# Only use legacy if you have specific compatibility requirements
+export KATO_ZMQ_IMPLEMENTATION=legacy
+./kato-manager.sh start
+```
+
 ## Usage Examples
 
 ### Basic Configuration

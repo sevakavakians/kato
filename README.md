@@ -19,6 +19,15 @@ KATO is a specialized AI module that provides **deterministic memory, abstractio
 ⚡ **High Performance** - 10,000+ requests/second with ZeroMQ  
 🔄 **Stateful Processing** - Maintains context across observations  
 
+### Example Architecture
+
+![KATO Agent](assets/kato-agent.png "KATO agent")
+
+Combining KATO with black box stochastic processes such as General Purpose Transformer (GPT) models, Large Language Models (LLMs), Small Language Models (SLMs), and GPT-based reasoning models provides a layer of governance and control. These stochastic machine learning models suffer from issues like hallucinations, inconsistent outputs, hidden biases, high training and operational costs, and no assurances for guardrails or remediation attempts.
+
+KATO provides a deterministic machine learning algorithm that learns context + action + outcome sequences, effectively caching for reduced calls to expensive models. Additionally, it stores these sequences in a traceable database (typically MongoDB) allowing both real-time learning and updates. If an action taken by the agent needs to be corrected so that it isn't repeated given the same or similar context, the database can simply be edited with an alternative action.
+
+
 ## Quick Start
 
 ```bash

@@ -68,10 +68,25 @@ class SuperKnowledgeBase:
             self.predictions_kb = self.knowledge.predictions_kb
             self.metadata = self.knowledge.metadata
 
+            # Primary indexes for unique lookups
+            # Models are keyed by hash of their sequence
             self.models_kb.create_index( [("name", ASCENDING)], background=1, unique=1 )
+            # Symbols are unique string/vector identifiers
             self.symbols_kb.create_index( [("name", ASCENDING)], background=1, unique=1 )
+            # Actions associated with symbols
             self.associative_action_kb.create_index( [("symbol", ASCENDING)], background=1 )
+            # Vector representations keyed by hash
             self.vectors_kb.create_index( [("name", ASCENDING)], background=1, unique=1 )
+            
+            # Compound indexes for optimized queries
+            # For finding high-frequency models quickly
+            self.models_kb.create_index([("frequency", DESCENDING), ("name", ASCENDING)], background=1)
+            # For sequence matching operations
+            self.models_kb.create_index([("sequence", ASCENDING), ("name", ASCENDING)], background=1)
+            # For symbol frequency queries
+            self.symbols_kb.create_index([("frequency", DESCENDING), ("name", ASCENDING)], background=1)
+            # For retrieving predictions by observation ID
+            self.predictions_kb.create_index([("unique_id", ASCENDING), ("time", DESCENDING)], background=1)
 
             setattr(self.vectors_kb, "values", self.getVectors)  ## TODO: Check to see if this is used anywhere.
             setattr(self.vectors_kb, "getVector", self.getVector)
@@ -118,10 +133,17 @@ class SuperKnowledgeBase:
                             "total_model_frequencies": 0,
                             "total_symbol_frequencies": 0,
                             "total_symbols_in_models_frequencies": 0})
+        # Recreate indexes after clearing
         self.models_kb.create_index([("name", ASCENDING)], background=1, unique=1)
         self.symbols_kb.create_index([("name", ASCENDING)], background=1, unique=1)
         self.associative_action_kb.create_index([("symbol", ASCENDING)], background=1)
         self.vectors_kb.create_index([("name", ASCENDING)], background=1, unique=1)
+        
+        # Compound indexes
+        self.models_kb.create_index([("frequency", DESCENDING), ("name", ASCENDING)], background=1)
+        self.models_kb.create_index([("sequence", ASCENDING), ("name", ASCENDING)], background=1)
+        self.symbols_kb.create_index([("frequency", DESCENDING), ("name", ASCENDING)], background=1)
+        self.predictions_kb.create_index([("unique_id", ASCENDING), ("time", DESCENDING)], background=1)
 
         return
 
@@ -192,23 +214,31 @@ class SuperKnowledgeBase:
                                                         "emotives": {} }},
                                       upsert=True)
             
-            ## Learn/update symbols:
-            ## Using only emotives in this code since the plan is to completely replace utilities with emotives.
+            # Update symbol statistics for all symbols in this model
+            # Count occurrences of each symbol across the entire sequence
             symbols = Counter(list(chain(*model_object.sequence)))
+            
+            # Prepare emotive updates for MongoDB dot notation
             __s = {}
             for emotive, value in emotives.items():
                 __s["emotives.%s" %emotive] = value
             
-            ## Maybe we should be counting everything all the time?
+            # Track symbol statistics:
+            # - model_member_frequency: how many models contain this symbol
+            # - frequency: total occurrences of this symbol
             __x = {"model_member_frequency": 1}
             total_symbols_in_models_frequencies = len(symbols)
             total_model_frequencies = 1
+            
+            # Update each symbol's statistics in the database
             for symbol, c in symbols.items():
-                __x["frequency"] = c
-                __x.update(__s)
+                __x["frequency"] = c  # How many times symbol appears in this model
+                __x.update(__s)  # Add emotive values
+                
+                # Atomic upsert: increment counters or create new entry
                 self.symbols_kb.update_one({ "name": symbol},
-                                        {"$inc": {**__x},
-                                        "$setOnInsert": {"name": symbol}
+                                        {"$inc": {**__x},  # Increment all counters
+                                        "$setOnInsert": {"name": symbol}  # Set name on first insert
                                         },
                                         upsert=True)
 

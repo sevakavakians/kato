@@ -49,7 +49,6 @@ class KatoProcessor:
         return
 
     def __primitive_variables_reset__(self):
-        logger.debug(f'__primitive_variables_reset__ called in {self.name}-{self.id}')
         self.symbols = []
         self.current_emotives = {}
         self.last_command = ""
@@ -63,10 +62,8 @@ class KatoProcessor:
         return symbols
 
     def _process_emotives_(self, emotives):
-        logger.debug(emotives)
         self.modeler.emotives += [emotives]
         self.current_emotives = average_emotives(self.modeler.emotives) ## Average the emotives sourced from multiple pathways.
-        logger.debug(self.current_emotives)
         return
 
     def get_model(self, name):
@@ -84,7 +81,6 @@ class KatoProcessor:
         return m
 
     def clear_wm(self):
-        logger.debug(f'clear_wm called in {self.name}-{self.id}')
         self.__primitive_variables_reset__()
         self.symbols = []
         self.predictions = []
@@ -92,7 +88,6 @@ class KatoProcessor:
         return
 
     def clear_all_memory(self):
-        logger.debug(f'clear_all_memory called in {self.name}-{self.id}')
         self.time = 0
         self.last_command = ""
         self.current_emotives = {}
@@ -104,7 +99,6 @@ class KatoProcessor:
         return
 
     def learn(self):
-        logger.debug(f'learn called in {self.name}-{self.id}')
         self.classifier.learn()
         model_name = self.modeler.learn() # Returns the name of the model just learned.
         if model_name:
@@ -121,10 +115,16 @@ class KatoProcessor:
         return self.modeler.update_model(name, frequency, emotives)
 
     def observe(self, data=None):
-        "Get observations (percepts (strings, vectors), utilities, actions, commands)"
+        """
+        Process incoming observations and trigger sequence learning/predictions.
+        
+        This is the main entry point for new sensory data. It handles:
+        - String symbols (already in symbolic form)
+        - Vectors (converted to symbols via classifier)
+        - Emotives (emotional/utility values)
+        - Auto-learning when max_sequence_length is reached
+        """
         with self.processing_lock:
-            logger.info(f'[OBSERVE START] Received observation data')
-            logger.debug(f'{data}')
             self.time += 1
             if data['unique_id'] == '':
                 raise Exception(f'Error: no unique_id in observe call from {data["source"]}')
@@ -143,66 +143,83 @@ class KatoProcessor:
                                     'path': data['path'],
                                     'metadata': data.get('metadata', {})}
 
+            # Initialize symbol containers
             self.symbols = []
-            symbols = []
-            v_identified = []
+            symbols = []  # For string symbols
+            v_identified = []  # For vector-derived symbols
+            
+            # Process vectors through classifier to get symbolic representations
             if vector_data:
                 v_identified = self._process_vectors_(vector_data)
                 if v_identified and self.SORT:
-                    v_identified.sort()
+                    v_identified.sort()  # Sort for deterministic sequence matching
+                    
+            # Process strings (already symbolic)
             if string_data:
                 s = True
-                symbols = string_data[:]  ## Strings are symbols, already.
+                symbols = string_data[:]  # Copy to avoid modifying original
                 if symbols and self.SORT:
-                    symbols.sort()
+                    symbols.sort()  # Sort for deterministic sequence matching
+                    
+            # Process emotional/utility values
             if emotives_data:
                 self._process_emotives_(emotives_data)
             
+            # Combine vector-derived and string symbols
             self.symbols = v_identified[:] + symbols[:]
+            # Only trigger predictions if we have actual symbolic content
             if vector_data or string_data:
                 self.modeler.trigger_predictions = True
             
+            # Add current symbols to working memory
             self.modeler.setCurrentEvent(self.symbols)
+            
+            # Generate predictions based on current working memory state
             if vector_data or string_data:
                 self.predictions = self.modeler.processEvents(data['unique_id'])
             
-            ### Check if we've reached max_sequence_length and need to auto-learn
+            # Auto-learning: Create a model when working memory reaches max length
+            # This prevents unbounded memory growth and creates temporal chunks
             auto_learned_model = None
             wm_length = len(self.modeler.WM)
             max_seq_length = self.modeler.max_sequence_length
             
-            # Debug with print to ensure it shows up
-            print(f"[AUTO_LEARN_CHECK] WM length: {wm_length}, max_sequence_length: {max_seq_length}, type: {type(max_seq_length)}", flush=True)
-            logger.info(f"[AUTO_LEARN_CHECK] WM length: {wm_length}, max_sequence_length: {max_seq_length}, max_seq_length type: {type(max_seq_length)}")
-            
             if max_seq_length > 0 and wm_length >= max_seq_length:
-                logger.info(f"[AUTO_LEARN] Triggered: WM length {wm_length} >= max_sequence_length {max_seq_length}")
-                logger.info(f"[AUTO_LEARN] Current WM content: {list(self.modeler.WM)}")
-                
-                # We've reached or exceeded the limit, auto-learn and keep only the last event
+                # Working memory is full - time to consolidate into a model
                 if wm_length > 1:
-                    wm_tail = self.modeler.WM[-1]  # Keep the last event
-                    logger.info(f"[AUTO_LEARN] Keeping last event for next WM: {wm_tail}")
-                    auto_learned_model = self.learn()  # Learn and clear WM
-                    self.modeler.setWM([wm_tail])  # Set WM to only the last event
-                    logger.info(f"[AUTO_LEARN] Completed. Model: {auto_learned_model}, New WM: {list(self.modeler.WM)}")
+                    # Keep the last event as context for the next sequence
+                    # This maintains continuity between learned chunks
+                    wm_tail = self.modeler.WM[-1]
+                    auto_learned_model = self.learn()  # Creates model and clears WM
+                    self.modeler.setWM([wm_tail])  # Start new WM with last event
+                    if auto_learned_model:
+                        logger.info(f"Auto-learned model: {auto_learned_model}")
                 elif wm_length == 1:
                     # Only one event, just learn it
                     auto_learned_model = self.learn()
-                    logger.info(f"[AUTO_LEARN] Learned single event. Model: {auto_learned_model}")
+                    if auto_learned_model:
+                        logger.info(f"Auto-learned model: {auto_learned_model}")
 
             return {'unique_id': unique_id, 'auto_learned_model': auto_learned_model}
             
     def get_predictions(self, unique_id={}):
-        logger.debug(f'get_prediction with unique_id {unique_id} {self.name}-{self.id}')
+        """
+        Retrieve predictions for a specific observation ID.
+        
+        If no ID provided, returns the most recent predictions from memory.
+        Otherwise queries the database for stored predictions.
+        """
         uid = None
         predictions = []
 
         if unique_id:
             uid = unique_id['unique_id']
+            
         if not uid:
+            # Return cached predictions from last observe() call
             predictions = self.predictions
         else:
+            # Query database for specific prediction record
             prediction_record = self.predictions_kb.find_one({'unique_id': uid}, {'_id': 0})
             if prediction_record is not None:
                 predictions = prediction_record['predictions']

@@ -73,26 +73,29 @@ class ImprovedZMQServer:
         
         while self.running:
             try:
-                # Use poller for better timeout handling
+                # Use poller for non-blocking receive with timeout
+                # This allows checking self.running flag periodically for clean shutdown
                 poller = zmq.Poller()
                 poller.register(self.socket, zmq.POLLIN)
                 
-                # Poll with timeout
+                # Poll with timeout to allow shutdown checks
                 socks = dict(poller.poll(1000))  # 1 second timeout
                 
                 if self.socket in socks:
-                    # ROUTER socket receives [identity, message] from DEALER
+                    # ROUTER receives [client_identity, message_data] from DEALER
+                    # Unlike REQ/REP, DEALER doesn't send empty delimiter frame
                     frames = self.socket.recv_multipart()
                     
                     if len(frames) < 2:
                         logger.warning(f"Invalid message format: {frames}")
                         continue
                         
+                    # Extract client identity for response routing
                     client_id = frames[0]
-                    # DEALER doesn't send empty frame, message is in frames[1]
+                    # DEALER message is directly in second frame (no empty delimiter)
                     message_frame = frames[1]
                     
-                    # Track client activity
+                    # Track client for heartbeat/timeout management
                     self.client_last_seen[client_id] = time.time()
                     
                     try:
@@ -113,12 +116,12 @@ class ImprovedZMQServer:
                             'traceback': traceback.format_exc()
                         }
                     
-                    # Send response back to client
-                    # ROUTER sends [identity, message] to DEALER
+                    # Route response back to specific client
+                    # ROUTER uses identity to route: [client_id, response_data]
                     try:
                         self.socket.send_multipart([
-                            client_id,
-                            msgpack.packb(response)
+                            client_id,  # Routing identity
+                            msgpack.packb(response)  # Serialized response
                         ])
                     except zmq.error.ZMQError as e:
                         logger.error(f"Failed to send response to client {client_id}: {e}")

@@ -15,39 +15,29 @@ def get_zmq_implementation() -> str:
     """Get the configured ZMQ implementation type.
     
     Returns:
-        'improved' for DEALER/ROUTER pattern, 'legacy' for REQ/REP pattern
+        Always returns 'improved' for DEALER/ROUTER pattern
     """
-    impl = os.environ.get('KATO_ZMQ_IMPLEMENTATION', 'legacy').lower()
-    if impl not in ['legacy', 'improved']:
-        logger.warning(f"Invalid ZMQ implementation '{impl}', using 'legacy'")
-        return 'legacy'
-    return impl
+    # Always use improved implementation - legacy code removed
+    return 'improved'
 
 
 def get_zmq_server(primitive, port=5555):
-    """Get the appropriate ZMQ server implementation.
+    """Get the ZMQ server implementation.
     
     Args:
         primitive: The KatoProcessor instance
         port: Port to bind the server
         
     Returns:
-        ZMQServer or ImprovedZMQServer instance
+        ImprovedZMQServer instance
     """
-    impl = get_zmq_implementation()
-    
-    if impl == 'improved':
-        logger.info("Using improved ZMQ server (DEALER/ROUTER pattern)")
-        from kato.workers.zmq_server_improved import ImprovedZMQServer
-        return ImprovedZMQServer(primitive, port)
-    else:
-        logger.info("Using legacy ZMQ server (REQ/REP pattern)")
-        from kato.workers.zmq_server import ZMQServer
-        return ZMQServer(primitive, port)
+    logger.info("Using improved ZMQ server (DEALER/ROUTER pattern)")
+    from kato.workers.zmq_server_improved import ImprovedZMQServer
+    return ImprovedZMQServer(primitive, port)
 
 
 def get_zmq_client(host='localhost', port=5555, timeout=5000):
-    """Get the appropriate ZMQ client implementation.
+    """Get the ZMQ client implementation.
     
     Args:
         host: Server hostname
@@ -55,18 +45,11 @@ def get_zmq_client(host='localhost', port=5555, timeout=5000):
         timeout: Request timeout in milliseconds
         
     Returns:
-        ZMQClient or ImprovedZMQClient instance
+        ImprovedZMQClient instance
     """
-    impl = get_zmq_implementation()
-    
-    if impl == 'improved':
-        logger.info("Using improved ZMQ client (DEALER socket)")
-        from kato.workers.zmq_client_improved import ImprovedZMQClient
-        return ImprovedZMQClient(host, port, timeout)
-    else:
-        logger.info("Using legacy ZMQ client (REQ socket)")
-        from kato.workers.zmq_client import ZMQClient
-        return ZMQClient(host, port, timeout)
+    logger.info("Using improved ZMQ client (DEALER socket)")
+    from kato.workers.zmq_client_improved import ImprovedZMQClient
+    return ImprovedZMQClient(host, port, timeout)
 
 
 def migrate_to_improved():
@@ -82,37 +65,27 @@ def rollback_to_legacy():
 
 
 class ZMQClientFactory:
-    """Factory for creating ZMQ clients with automatic implementation selection."""
+    """Factory for creating ZMQ clients."""
     
     @staticmethod
     def create_client(host='localhost', port=5555, timeout=5000, 
                      force_implementation: Optional[str] = None):
-        """Create a ZMQ client with the appropriate implementation.
+        """Create a ZMQ client.
         
         Args:
             host: Server hostname
             port: Server port
             timeout: Request timeout
-            force_implementation: Force 'legacy' or 'improved' implementation
+            force_implementation: Deprecated parameter, kept for compatibility
             
         Returns:
-            ZMQClient or ImprovedZMQClient instance
+            ImprovedZMQClient instance
         """
-        if force_implementation:
-            if force_implementation == 'improved':
-                from kato.workers.zmq_client_improved import ImprovedZMQClient
-                return ImprovedZMQClient(host, port, timeout)
-            elif force_implementation == 'legacy':
-                from kato.workers.zmq_client import ZMQClient
-                return ZMQClient(host, port, timeout)
-            else:
-                raise ValueError(f"Invalid implementation: {force_implementation}")
-        else:
-            return get_zmq_client(host, port, timeout)
+        return get_zmq_client(host, port, timeout)
     
     @staticmethod
     def create_pooled_client(host='localhost', port=5555, timeout=5000):
-        """Create a connection-pooled client (always uses legacy for compatibility).
+        """Create a connection-pooled client.
         
         Args:
             host: Server hostname
@@ -120,11 +93,10 @@ class ZMQClientFactory:
             timeout: Request timeout
             
         Returns:
-            ZMQConnectionPool instance
+            ImprovedZMQConnectionPool instance
         """
-        # Connection pool currently only works with legacy implementation
-        from kato.workers.zmq_pool import ZMQConnectionPool
-        return ZMQConnectionPool(host, port, timeout)
+        from kato.workers.zmq_pool_improved import ImprovedZMQConnectionPool
+        return ImprovedZMQConnectionPool(host, port, timeout)
 
 
 def test_implementation(implementation: str):

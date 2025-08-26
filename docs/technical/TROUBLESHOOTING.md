@@ -22,6 +22,123 @@ curl http://localhost:8000/p46b6b076c/ping
 
 ## Common Issues and Solutions
 
+### Multi-Instance Issues
+
+#### Instance Won't Start
+
+**Symptoms:**
+- Error: "Port already in use"
+- Container name conflicts
+- Instance not appearing in list
+
+**Solutions:**
+
+1. Check existing instances:
+```bash
+./kato-manager.sh list
+docker ps | grep kato
+```
+
+2. Use automatic port allocation:
+```bash
+# Don't specify port - let KATO find available one
+./kato-manager.sh start --id my-processor
+```
+
+3. Specify unique port manually:
+```bash
+./kato-manager.sh start --id my-processor --port 8005
+```
+
+4. Clean up orphaned instances:
+```bash
+# Remove from registry if container doesn't exist
+rm ~/.kato/instances.json
+./kato-manager.sh list  # Recreates clean registry
+```
+
+#### Instance Not Found
+
+**Symptoms:**
+- Instance disappeared from list
+- API calls return 404
+
+**Solutions:**
+
+1. Check registry file:
+```bash
+cat ~/.kato/instances.json
+```
+
+2. Re-register running container:
+```bash
+# Container exists but not in registry
+docker ps | grep kato-my-processor
+# Restart to re-register
+docker restart kato-my-processor
+```
+
+3. Verify processor ID in API calls:
+```bash
+# Ensure using correct ID
+curl http://localhost:8001/{processor-id}/ping
+```
+
+#### Port Conflicts
+
+**Symptoms:**
+- "Address already in use" error
+- Can't start new instance
+
+**Solutions:**
+
+1. Find what's using the port:
+```bash
+lsof -i :8000
+# Or on Linux:
+netstat -tulpn | grep 8000
+```
+
+2. Use next available port:
+```bash
+# KATO automatically finds free port
+./kato-manager.sh start --id new-processor
+```
+
+3. Stop conflicting instance:
+```bash
+./kato-manager.sh list
+./kato-manager.sh stop conflicting-processor  # By ID or name
+```
+
+#### Stopped Containers Not Removed
+
+**Note**: This issue should not occur with the updated stop command, which automatically removes containers.
+
+**Symptoms:**
+- Containers remain after stopping
+- `docker ps -a` shows stopped KATO containers
+
+**Solutions:**
+
+1. Use the updated stop command:
+```bash
+# New stop command removes containers automatically
+./kato-manager.sh stop processor-1
+```
+
+2. Clean up old stopped containers manually:
+```bash
+# Remove all stopped KATO containers
+docker rm $(docker ps -a -q -f name=kato- -f status=exited)
+```
+
+3. Reset registry to match actual containers:
+```bash
+rm ~/.kato/instances.json
+./kato-manager.sh list  # Rebuilds registry
+```
+
 ### ZeroMQ Communication Issues
 
 #### Timeout Errors with REQ/REP Pattern

@@ -40,35 +40,83 @@ chmod +x kato-manager.sh
 KATO creates the following Docker resources:
 
 1. **Network**: `kato-network` - Isolated network for containers
-2. **MongoDB Container**: `mongo-kb-${USER}-1` - Persistent data storage
-3. **KATO API Container**: `kato-api-${USER}-1` - Main processor
+2. **MongoDB Container**: `mongo-kb-${USER}-1` - Shared persistent data storage
+3. **KATO Processor Containers**: Named by processor ID - Individual processors
 4. **Volume**: `kato-mongo-data` - MongoDB data persistence
 
 ### Container Naming
 
-Containers are named with user prefix to allow multiple users on the same system:
+#### Single Instance Mode (Default)
+When started without specifying an ID, containers use default naming:
 - KATO API: `kato-api-${USER}-1`
 - MongoDB: `mongo-kb-${USER}-1`
+
+#### Multi-Instance Mode
+When started with `--id` flag, containers are named by processor ID:
+- KATO Processor: `kato-${PROCESSOR_ID}`
+- MongoDB: `mongo-kb-${USER}-1` (shared across all instances)
+
+Examples:
+```bash
+./kato-manager.sh start --id processor-1  # Creates: kato-processor-1
+./kato-manager.sh start --id nlp-engine   # Creates: kato-nlp-engine
+```
 
 ## Management Commands
 
 ### System Management
 
 #### start
-Start KATO system with MongoDB backend.
+Start KATO processor instance(s) with MongoDB backend.
 
 ```bash
+# Start default instance
 ./kato-manager.sh start
 
-# With custom parameters
+# Start with custom parameters
 ./kato-manager.sh start --name "MyProcessor" --port 9000
+
+# Start multiple instances
+./kato-manager.sh start --id processor-1 --name "Main" --port 8001
+./kato-manager.sh start --id processor-2 --name "Secondary" --port 8002
 ```
 
 #### stop
-Stop KATO system and cleanup containers.
+Stop KATO instance(s) and automatically remove containers.
 
 ```bash
+# Stop all instances (prompts for MongoDB removal)
 ./kato-manager.sh stop
+
+# Stop specific instance by ID or name
+./kato-manager.sh stop processor-1         # By ID
+./kato-manager.sh stop "Main"              # By name
+
+# Stop with explicit options
+./kato-manager.sh stop --id processor-1    # Specific ID
+./kato-manager.sh stop --name "Main"       # Specific name
+./kato-manager.sh stop --all               # All instances
+./kato-manager.sh stop --all --with-mongo  # All + MongoDB
+./kato-manager.sh stop --all --no-mongo    # All, keep MongoDB
+```
+
+**Note**: Containers are automatically removed after stopping to prevent accumulation.
+
+#### list
+Show all registered KATO instances.
+
+```bash
+./kato-manager.sh list
+```
+
+Output:
+```
+KATO Instances:
+===============
+ID                   Name                 Status     API Port   ZMQ Port   Container
+----------------------------------------------------------------------------------------------------
+processor-1          Main                 running    8001       5556       kato-processor-1
+processor-2          Secondary            running    8002       5557       kato-processor-2
 ```
 
 #### restart
@@ -137,6 +185,35 @@ Open interactive shell in running container.
 ./kato-manager.sh shell ls -la /app
 ```
 
+## Container Lifecycle Management
+
+### Automatic Container Removal
+
+KATO now implements automatic container cleanup to prevent Docker resource accumulation:
+
+1. **On Stop**: When you stop an instance, the container is automatically removed
+2. **Registry Sync**: The instance registry is updated to reflect container removal
+3. **No Orphans**: Prevents accumulation of stopped containers
+
+### Container States
+
+```bash
+# Check all KATO containers (running and stopped)
+docker ps -a | grep kato
+
+# After using stop command - container is removed
+./kato-manager.sh stop processor-1
+docker ps -a | grep processor-1  # No results - container removed
+```
+
+### MongoDB Container
+
+MongoDB container is shared across all instances and handled separately:
+
+- **Preserved by default**: Stop commands don't remove MongoDB unless specified
+- **Explicit removal**: Use `--with-mongo` flag to also stop and remove MongoDB
+- **Manual removal**: `docker rm mongo-kb-${USER}-1`
+
 ## Docker Compose
 
 ### Basic docker-compose.yml
@@ -178,6 +255,29 @@ volumes:
 
 ### Multi-Instance Deployment
 
+#### Using kato-manager.sh (Recommended)
+
+The easiest way to deploy multiple instances:
+
+```bash
+# Start multiple instances with different configurations
+./kato-manager.sh start --id sentiment --name "Sentiment Analysis" --port 8001
+./kato-manager.sh start --id classifier --name "Text Classifier" --port 8002 --classifier DVC
+./kato-manager.sh start --id learner --name "Sequence Learner" --port 8003 --max-seq-length 10
+
+# View all instances
+./kato-manager.sh list
+
+# Each instance has its own API endpoint
+curl http://localhost:8001/sentiment/ping
+curl http://localhost:8002/classifier/ping
+curl http://localhost:8003/learner/ping
+```
+
+#### Using docker-compose-multi.yml
+
+For production deployments with predefined instances:
+
 ```yaml
 version: '3.8'
 
@@ -185,43 +285,52 @@ services:
   mongodb:
     image: mongo:4.4
     container_name: mongo-kb
+    volumes:
+      - kato-mongo-data:/data/db
     networks:
       - kato-network
 
-  kato-1:
+  kato-sentiment:
     image: kato:latest
-    container_name: kato-instance-1
-    environment:
-      - PROCESSOR_ID=p001
-      - PROCESSOR_NAME=Processor1
-      - MONGO_BASE_URL=mongodb://mongodb:27017
-    networks:
-      - kato-network
-
-  kato-2:
-    image: kato:latest
-    container_name: kato-instance-2
-    environment:
-      - PROCESSOR_ID=p002
-      - PROCESSOR_NAME=Processor2
-      - MONGO_BASE_URL=mongodb://mongodb:27017
-    networks:
-      - kato-network
-
-  gateway:
-    image: kato-gateway:latest
-    container_name: kato-gateway
+    container_name: kato-sentiment
     ports:
-      - "8000:8000"
+      - "8001:8000"
     environment:
-      - KATO_P001=kato-1:5555
-      - KATO_P002=kato-2:5555
+      - PROCESSOR_ID=sentiment
+      - PROCESSOR_NAME=Sentiment
+      - MONGO_BASE_URL=mongodb://mongodb:27017
+      - MAX_PREDICTIONS=50
     networks:
       - kato-network
+    depends_on:
+      - mongodb
+
+  kato-classifier:
+    image: kato:latest
+    container_name: kato-classifier
+    ports:
+      - "8002:8000"
+    environment:
+      - PROCESSOR_ID=classifier
+      - PROCESSOR_NAME=Classifier
+      - CLASSIFIER=DVC
+      - MONGO_BASE_URL=mongodb://mongodb:27017
+    networks:
+      - kato-network
+    depends_on:
+      - mongodb
+
+volumes:
+  kato-mongo-data:
 
 networks:
   kato-network:
     driver: bridge
+```
+
+Deploy with:
+```bash
+docker-compose -f docker-compose-multi.yml up -d
 ```
 
 ## Dockerfile

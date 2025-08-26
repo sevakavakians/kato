@@ -7,7 +7,7 @@ This guide will help you get KATO up and running in 5 minutes.
 - Docker Desktop installed and running
 - Bash shell (macOS/Linux) or WSL (Windows)
 - 4GB+ available RAM
-- Port 8000 available
+- Port 8000 available (or specify custom ports)
 
 ## Quick Start
 
@@ -30,8 +30,11 @@ chmod +x kato-manager.sh
 # Build the Docker image
 ./kato-manager.sh build
 
-# Start KATO with default settings
+# Start KATO with default settings (single instance)
 ./kato-manager.sh start
+
+# Or start with custom processor ID and port
+./kato-manager.sh start --id my-processor --name "My KATO" --port 8001
 ```
 
 ### 4. Verify Installation
@@ -149,12 +152,24 @@ KATO will predict the rest of the sequence!
 ### Stop KATO
 
 ```bash
+# Stop and remove all instances (asks about MongoDB)
 ./kato-manager.sh stop
+
+# Stop specific instance by name or ID
+./kato-manager.sh stop "My KATO"           # By name
+./kato-manager.sh stop my-processor        # By ID
+
+# Stop all instances and MongoDB
+./kato-manager.sh stop --all --with-mongo
+
+# Stop all instances but keep MongoDB
+./kato-manager.sh stop --all --no-mongo
 ```
 
 ### Clean Up Everything
 
 ```bash
+# Remove all containers, images, and volumes
 ./kato-manager.sh clean
 ```
 
@@ -256,6 +271,7 @@ cd tests
 ## Next Steps
 
 - Read [Core Concepts](CONCEPTS.md) to understand KATO's behavior
+- Learn [Multi-Instance Management](MULTI_INSTANCE_GUIDE.md) to run multiple processors
 - Explore the [API Reference](API_REFERENCE.md) for all endpoints
 - Check [System Overview](SYSTEM_OVERVIEW.md) for architecture details
 - See [Configuration Guide](deployment/CONFIGURATION.md) for all parameters

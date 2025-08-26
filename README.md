@@ -18,6 +18,8 @@ KATO is a specialized AI module that provides **deterministic memory, abstractio
 🧠 **Multi-Modal Support** - Process text, vectors, and emotional context  
 ⚡ **High Performance** - 10,000+ requests/second with ZeroMQ  
 🔄 **Stateful Processing** - Maintains context across observations  
+🚀 **Multi-Instance Support** - Run multiple processors with different configurations  
+📊 **Instance Management** - Built-in registry and management tools  
 
 ### Example Architecture
 
@@ -30,6 +32,7 @@ KATO provides a deterministic machine learning algorithm that learns context + a
 
 ## Quick Start
 
+### Single Instance
 ```bash
 # Clone repository
 git clone https://github.com/your-org/kato.git
@@ -43,7 +46,27 @@ cd kato
 curl http://localhost:8000/kato-api/ping
 ```
 
+### Multiple Instances
+```bash
+# Start multiple KATO instances with different configurations
+./kato-manager.sh start --id processor-1 --name "Main" --port 8001
+./kato-manager.sh start --id processor-2 --name "Secondary" --port 8002 --classifier DVC
+
+# List all instances
+./kato-manager.sh list
+
+# Access different instances
+curl http://localhost:8001/processor-1/ping
+curl http://localhost:8002/processor-2/ping
+
+# Stop instances (removes containers)
+./kato-manager.sh stop processor-1        # Stop by ID
+./kato-manager.sh stop "Main"              # Stop by name
+./kato-manager.sh stop --all --with-mongo  # Stop everything
+```
+
 For detailed setup instructions, see [Getting Started](docs/GETTING_STARTED.md).
+For multi-instance management, see [Multi-Instance Guide](docs/MULTI_INSTANCE_GUIDE.md).
 
 ## Core Concepts
 
@@ -73,6 +96,7 @@ Learn more in [Core Concepts](docs/CONCEPTS.md).
 
 ### 📚 Getting Started
 - [Quick Start Guide](docs/GETTING_STARTED.md) - Get running in 5 minutes
+- [Multi-Instance Guide](docs/MULTI_INSTANCE_GUIDE.md) - Run multiple KATO processors
 - [System Overview](docs/SYSTEM_OVERVIEW.md) - Understand the architecture
 - [Core Concepts](docs/CONCEPTS.md) - Learn KATO's behavior
 
@@ -98,6 +122,7 @@ Learn more in [Core Concepts](docs/CONCEPTS.md).
 docs/
 ├── CONCEPTS.md              # Core behavior reference
 ├── GETTING_STARTED.md       # Quick start guide
+├── MULTI_INSTANCE_GUIDE.md  # Multi-instance management
 ├── API_REFERENCE.md         # Complete API docs
 ├── SYSTEM_OVERVIEW.md       # End-to-end behavior
 ├── deployment/

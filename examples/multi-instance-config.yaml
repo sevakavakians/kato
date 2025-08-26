@@ -1,0 +1,40 @@
+# KATO Multi-Instance Configuration Example
+# This file demonstrates how to configure multiple KATO instances
+
+instances:
+  - id: sentiment-analyzer
+    name: "Sentiment Analysis"
+    port: 8001
+    zmq_port: 5556
+    classifier: CVC
+    max_predictions: 50
+    recall_threshold: 0.2
+    max_sequence_length: 10
+    persistence: 5
+
+  - id: pattern-matcher
+    name: "Pattern Matching" 
+    port: 8002
+    zmq_port: 5557
+    classifier: DVC
+    max_predictions: 100
+    recall_threshold: 0.1
+    max_sequence_length: 20
+    search_depth: 15
+
+  - id: sequence-learner
+    name: "Sequence Learning"
+    port: 8003
+    zmq_port: 5558
+    classifier: CVC
+    max_predictions: 75
+    recall_threshold: 0.15
+    max_sequence_length: 5
+    auto_act_method: "threshold"
+    auto_act_threshold: 0.7
+
+# Shared configuration
+shared:
+  log_level: INFO
+  mongo_url: mongodb://localhost:27017
+  docker_network: kato-network

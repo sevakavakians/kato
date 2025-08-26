@@ -14,14 +14,20 @@ KATO_TESTS_DIR="$KATO_ROOT/tests"
 CONFIG_DIR="$KATO_TESTS_DIR/config"
 LOGS_DIR="$KATO_ROOT/logs"
 
+# Instance management
+KATO_HOME="${HOME}/.kato"
+INSTANCES_FILE="${KATO_HOME}/instances.json"
+CONFIGS_DIR="${KATO_HOME}/configs"
+
 # Docker configuration
 DOCKER_IMAGE_NAME="kato"
 DOCKER_TAG="latest"
 DOCKER_NETWORK="kato-network"
 MONGO_CONTAINER_NAME="mongo-kb-${USER}-1"
-KATO_CONTAINER_NAME="kato-api-${USER}-1"
+KATO_CONTAINER_NAME=""  # Will be set dynamically based on processor ID
 MONGO_DB_PORT="27017"
 KATO_API_PORT="8000"
+KATO_ZMQ_PORT="5555"
 CONFIG_FILE="/tmp/kato-config-${USER}.json"
 
 # Default KATO configuration
@@ -29,7 +35,7 @@ DEFAULT_API_KEY="ABCD-1234"
 DEFAULT_LOG_LEVEL="INFO"
 
 # Default KATO processor parameters
-DEFAULT_PROCESSOR_ID="kato-processor-$(date +%s)"
+DEFAULT_PROCESSOR_ID="kato-$(date +%s)-$$"  # Include PID for uniqueness
 DEFAULT_PROCESSOR_NAME="KatoProcessor"
 DEFAULT_CLASSIFIER="CVC"
 DEFAULT_MAX_SEQUENCE_LENGTH=0
@@ -52,8 +58,10 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Ensure logs directory exists
+# Ensure required directories exist
 mkdir -p "$LOGS_DIR"
+mkdir -p "$KATO_HOME"
+mkdir -p "$CONFIGS_DIR"
 
 # Logging functions
 log_info() {
@@ -72,6 +80,143 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1" | tee -a "$LOGS_DIR/kato-manager.log"
 }
 
+# Instance Registry Management Functions
+init_registry() {
+    if [[ ! -f "$INSTANCES_FILE" ]]; then
+        echo '{"instances": {}}' > "$INSTANCES_FILE"
+        log_info "Initialized instance registry at $INSTANCES_FILE"
+    fi
+}
+
+# Read instance data from registry
+get_instance() {
+    local instance_id="$1"
+    init_registry
+    python3 -c "
+import json
+with open('$INSTANCES_FILE', 'r') as f:
+    data = json.load(f)
+    instance = data.get('instances', {}).get('$instance_id')
+    if instance:
+        print(json.dumps(instance))
+"
+}
+
+# Add or update instance in registry
+register_instance() {
+    local instance_id="$1"
+    local name="$2"
+    local container="$3"
+    local api_port="$4"
+    local zmq_port="$5"
+    local status="$6"
+    
+    init_registry
+    python3 -c "
+import json
+from datetime import datetime
+
+with open('$INSTANCES_FILE', 'r') as f:
+    data = json.load(f)
+
+if 'instances' not in data:
+    data['instances'] = {}
+
+data['instances']['$instance_id'] = {
+    'name': '$name',
+    'container': '$container',
+    'api_port': $api_port,
+    'zmq_port': $zmq_port,
+    'status': '$status',
+    'updated': datetime.now().isoformat()
+}
+
+with open('$INSTANCES_FILE', 'w') as f:
+    json.dump(data, f, indent=2)
+"
+    log_info "Registered instance: $instance_id ($name) on ports $api_port/$zmq_port"
+}
+
+# Remove instance from registry
+unregister_instance() {
+    local instance_id="$1"
+    init_registry
+    python3 -c "
+import json
+
+with open('$INSTANCES_FILE', 'r') as f:
+    data = json.load(f)
+
+if 'instances' in data and '$instance_id' in data['instances']:
+    del data['instances']['$instance_id']
+    
+with open('$INSTANCES_FILE', 'w') as f:
+    json.dump(data, f, indent=2)
+"
+    log_info "Unregistered instance: $instance_id"
+}
+
+# List all instances
+list_instances() {
+    init_registry
+    echo ""
+    echo "KATO Instances:"
+    echo "==============="
+    python3 -c "
+import json
+import sys
+
+with open('$INSTANCES_FILE', 'r') as f:
+    data = json.load(f)
+    instances = data.get('instances', {})
+    
+if not instances:
+    print('No instances registered.')
+    sys.exit(0)
+    
+print(f'{'ID':<20} {'Name':<20} {'Status':<10} {'API Port':<10} {'ZMQ Port':<10} {'Container':<30}')
+print('-' * 100)
+
+for instance_id, info in instances.items():
+    print(f\"{instance_id:<20} {info['name']:<20} {info['status']:<10} {info['api_port']:<10} {info['zmq_port']:<10} {info['container']:<30}\")
+"
+    echo ""
+}
+
+# Find next available port
+find_available_port() {
+    local base_port="$1"
+    local port=$base_port
+    
+    while lsof -Pi :$port -sTCP:LISTEN -t >/dev/null 2>&1; do
+        port=$((port + 1))
+    done
+    
+    echo $port
+}
+
+# Update instance status
+update_instance_status() {
+    local instance_id="$1"
+    local status="$2"
+    
+    init_registry
+    python3 -c "
+import json
+from datetime import datetime
+
+with open('$INSTANCES_FILE', 'r') as f:
+    data = json.load(f)
+
+if 'instances' in data and '$instance_id' in data['instances']:
+    data['instances']['$instance_id']['status'] = '$status'
+    data['instances']['$instance_id']['updated'] = datetime.now().isoformat()
+    
+    with open('$INSTANCES_FILE', 'w') as f:
+        json.dump(data, f, indent=2)
+"
+}
+
 # Help function
 show_help() {
     cat << EOF
@@ -80,9 +225,11 @@ KATO Manager - Management script for KATO AI System
 Usage: $0 [COMMAND] [OPTIONS]
 
 COMMANDS:
-    start       Start KATO system with MongoDB backend
-    stop        Stop KATO system and cleanup containers
-    restart     Restart KATO system
+    start       Start a KATO instance with MongoDB backend
+    stop        Stop and remove KATO instance(s) 
+    stop-all    Stop and remove all KATO instances
+    restart     Restart KATO instance(s)
+    list        List all KATO instances
     status      Show status of KATO containers and services
     logs        Show logs from KATO containers
     build       Build KATO Docker image
@@ -91,6 +238,15 @@ COMMANDS:
     config      Show current configuration
     shell       Open shell in running KATO container
     diagnose    Run Docker diagnostic to troubleshoot issues
+    
+STOP COMMAND OPTIONS:
+    stop                     Stop all instances (asks about MongoDB)
+    stop <id/name>           Stop specific instance by ID or name
+    stop --id <id>           Stop specific instance by ID
+    stop --name <name>       Stop specific instance by name
+    stop --all               Stop all instances
+    stop --all --with-mongo  Stop all instances and MongoDB
+    stop --all --no-mongo    Stop all instances, keep MongoDB
 
 BASIC OPTIONS:
     -p, --port PORT         API port (default: $KATO_API_PORT)  
@@ -120,6 +276,10 @@ EXAMPLES:
     $0 start                                    # Start with default settings
     $0 start --name MyProcessor --port 9000     # Custom name and port
     $0 start --classifier DVC --max-predictions 50  # Custom classifier
+    $0 list                                     # List all instances
+    $0 stop P1                                  # Stop instance by name
+    $0 stop p5f2b9323c3                        # Stop instance by ID
+    $0 stop --all --with-mongo                  # Stop everything
     $0 logs kato                                # Show KATO container logs
     $0 test                                     # Run test suite
     $0 clean                                    # Clean everything
@@ -418,6 +578,25 @@ start_mongodb() {
 
 # Start KATO
 start_kato() {
+    # Set container name based on processor ID
+    KATO_CONTAINER_NAME="kato-${PROCESSOR_ID//[^a-zA-Z0-9-]/_}"
+    
+    # Find available ports if not specified
+    if [[ "$API_PORT" == "$KATO_API_PORT" ]]; then
+        # Check if default port is in use
+        if lsof -Pi :$API_PORT -sTCP:LISTEN -t >/dev/null 2>&1; then
+            local new_port=$(find_available_port $API_PORT)
+            log_warning "Port $API_PORT is in use. Using port $new_port instead."
+            API_PORT=$new_port
+        fi
+    fi
+    
+    # Find available ZMQ port
+    local zmq_port=$KATO_ZMQ_PORT
+    if lsof -Pi :$zmq_port -sTCP:LISTEN -t >/dev/null 2>&1; then
+        zmq_port=$(find_available_port $KATO_ZMQ_PORT)
+    fi
+    
     local status=$(container_status "$KATO_CONTAINER_NAME")
     local need_readiness_check=1
     
@@ -458,9 +637,10 @@ EOF
                 --name "$KATO_CONTAINER_NAME" \
                 --network "$DOCKER_NETWORK" \
                 -p "$API_PORT:8000" \
-                -p "1441:1441" \
+                -p "$zmq_port:5555" \
                 -e "HOSTNAME=$KATO_CONTAINER_NAME" \
-                -e "PORT=1441" \
+                -e "ZMQ_PORT=5555" \
+                -e "REST_PORT=8000" \
                 -e "LOG_LEVEL=$LOG_LEVEL" \
                 -e "MONGO_BASE_URL=mongodb://$MONGO_CONTAINER_NAME:27017" \
                 -e "MANIFEST=$genome_content" \
@@ -471,6 +651,9 @@ EOF
                 -e "PROCESSOR_NAME=$PROCESSOR_NAME" \
                 -e "KATO_ZMQ_IMPLEMENTATION=${KATO_ZMQ_IMPLEMENTATION:-improved}" \
                 "$DOCKER_IMAGE_NAME:$TAG"
+            
+            # Register the instance
+            register_instance "$PROCESSOR_ID" "$PROCESSOR_NAME" "$KATO_CONTAINER_NAME" "$API_PORT" "$zmq_port" "starting"
             ;;
     esac
         
@@ -520,6 +703,8 @@ EOF
                 if [[ $clear_status -eq 0 ]] && [[ "$clear_response" == *"all-cleared"* ]]; then
                     fully_ready=1
                     log_success "KATO processor $PROCESSOR_ID is fully operational on port $API_PORT"
+                    # Update instance status to running
+                    update_instance_status "$PROCESSOR_ID" "running"
                 else
                     log_info "Processor not fully ready yet (clear-memory test failed)"
                 fi
@@ -545,26 +730,188 @@ EOF
     sleep 1
 }
 
-# Stop services
-stop_services() {
-    log_info "Stopping KATO services..."
+# Find instance by ID or name
+find_instance() {
+    local search_term="$1"
+    init_registry
     
-    # Stop KATO container
-    if [[ $(container_status "$KATO_CONTAINER_NAME") == "running" ]]; then
-        log_info "Stopping KATO container: $KATO_CONTAINER_NAME"
-        docker stop "$KATO_CONTAINER_NAME"
+    # First try to find by ID, then by name
+    python3 -c "
+import json
+import sys
+
+search_term = '$search_term'
+
+with open('$INSTANCES_FILE', 'r') as f:
+    data = json.load(f)
+    instances = data.get('instances', {})
+    
+# First check if it's an exact ID match
+if search_term in instances:
+    print(search_term)
+    sys.exit(0)
+
+# Then check by name
+for instance_id, info in instances.items():
+    if info.get('name', '') == search_term:
+        print(instance_id)
+        sys.exit(0)
+
+# No match found
+sys.exit(1)
+"
+}
+
+# Stop specific instance
+stop_instance() {
+    local search_term="$1"
+    local remove_container="${2:-true}"  # Default to removing container
+    
+    if [[ -z "$search_term" ]]; then
+        log_error "Instance ID or name required. Use 'list' command to see available instances."
+        return 1
     fi
     
-    # Stop MongoDB container
-    if [[ $(container_status "$MONGO_CONTAINER_NAME") == "running" ]]; then
+    # Find instance by ID or name
+    local instance_id=$(find_instance "$search_term")
+    
+    if [[ -z "$instance_id" ]]; then
+        log_error "Instance not found: $search_term"
+        return 1
+    fi
+    
+    # Get instance info from registry
+    local instance_info=$(get_instance "$instance_id")
+    
+    if [[ -z "$instance_info" ]]; then
+        log_error "Instance not found in registry: $instance_id"
+        return 1
+    fi
+    
+    local container=$(echo "$instance_info" | python3 -c "import sys, json; print(json.load(sys.stdin)['container'])")
+    local name=$(echo "$instance_info" | python3 -c "import sys, json; print(json.load(sys.stdin).get('name', 'Unknown'))")
+    
+    log_info "Stopping instance: $instance_id ($name)"
+    
+    # Stop the container if running
+    if [[ $(container_status "$container") == "running" ]]; then
+        docker stop "$container" >/dev/null 2>&1
+        log_success "Container stopped: $container"
+    fi
+    
+    # Remove the container
+    if [[ "$remove_container" == "true" ]]; then
+        if docker ps -a --format "{{.Names}}" | grep -q "^${container}$"; then
+            docker rm "$container" >/dev/null 2>&1
+            log_success "Container removed: $container"
+        fi
+        
+        # Remove from registry
+        unregister_instance "$instance_id"
+    else
+        # Just update status if not removing
+        update_instance_status "$instance_id" "stopped"
+    fi
+    
+    log_success "Instance cleaned up: $instance_id ($name)"
+}
+
+# Stop all instances
+stop_all_instances() {
+    init_registry
+    
+    local stop_mongo="${1:-ask}"  # Default to asking about MongoDB
+    
+    log_info "Stopping and removing all KATO instances..."
+    
+    # Get list of instance IDs
+    local instance_ids=$(python3 -c "
+import json
+
+with open('$INSTANCES_FILE', 'r') as f:
+    data = json.load(f)
+    instances = data.get('instances', {})
+    
+for instance_id in instances:
+    print(instance_id)
+")
+    
+    if [[ -z "$instance_ids" ]]; then
+        log_info "No instances to stop"
+    else
+        # Stop each instance
+        echo "$instance_ids" | while read instance_id; do
+            if [[ ! -z "$instance_id" ]]; then
+                stop_instance "$instance_id" "true"  # Force remove containers
+            fi
+        done
+        log_success "All instances stopped and removed"
+    fi
+    
+    # Handle MongoDB
+    if [[ "$stop_mongo" == "yes" ]]; then
+        stop_mongodb
+    elif [[ "$stop_mongo" == "ask" ]]; then
+        read -p "Stop and remove MongoDB? (y/n) " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            stop_mongodb
+        fi
+    fi
+}
+
+# Stop MongoDB
+stop_mongodb() {
+    if [[ $(container_status "$MONGO_CONTAINER_NAME") != "not_found" ]]; then
         log_info "Stopping MongoDB container: $MONGO_CONTAINER_NAME"
-        docker stop "$MONGO_CONTAINER_NAME"
+        docker stop "$MONGO_CONTAINER_NAME" >/dev/null 2>&1
+        docker rm "$MONGO_CONTAINER_NAME" >/dev/null 2>&1
+        log_success "MongoDB stopped and removed"
     fi
+}
+
+# Stop services - enhanced with better parameter handling
+stop_services() {
+    local target=""
+    local stop_mongo="ask"
     
-    # Clean up config file
-    [[ -f "$CONFIG_FILE" ]] && rm -f "$CONFIG_FILE"
+    # Parse stop command parameters
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --id|--name)
+                target="$2"
+                shift 2
+                ;;
+            --all)
+                target="all"
+                shift
+                ;;
+            --with-mongo)
+                stop_mongo="yes"
+                shift
+                ;;
+            --no-mongo)
+                stop_mongo="no"
+                shift
+                ;;
+            *)
+                # If no flag, assume it's an ID or name
+                if [[ -z "$target" ]]; then
+                    target="$1"
+                fi
+                shift
+                ;;
+        esac
+    done
     
-    log_success "KATO services stopped"
+    # Determine what to stop
+    if [[ "$target" == "all" ]] || [[ -z "$target" ]]; then
+        # Stop all instances
+        stop_all_instances "$stop_mongo"
+    else
+        # Stop specific instance by ID or name
+        stop_instance "$target" "true"
+    fi
 }
 
 # Show status
@@ -573,14 +920,16 @@ show_status() {
     log_info "KATO System Status"
     echo "===================="
     
+    # Show MongoDB status
     echo
-    echo "Containers:"
-    echo "----------"
-    local kato_status=$(container_status "$KATO_CONTAINER_NAME")
+    echo "Shared Services:"
+    echo "---------------"
     local mongo_status=$(container_status "$MONGO_CONTAINER_NAME")
-    
-    printf "%-20s %s\n" "KATO API:" "$kato_status"
     printf "%-20s %s\n" "MongoDB:" "$mongo_status"
+    
+    # Show instances
+    echo
+    list_instances
     
     echo
     echo "Network:"
@@ -816,16 +1165,22 @@ main() {
             show_status
             ;;
         "stop")
-            stop_services
+            stop_services "$@"
+            ;;
+        "stop-all")
+            stop_all_instances "ask"
             ;;
         "restart")
-            stop_services
+            stop_services "$@"
             sleep 2
             validate_parameters
             ensure_network
             start_mongodb
             start_kato
             log_success "KATO system restarted successfully"
+            ;;
+        "list")
+            list_instances
             ;;
         "status")
             show_status

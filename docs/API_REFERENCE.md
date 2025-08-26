@@ -8,6 +8,18 @@ Complete reference for all KATO REST API endpoints.
 http://localhost:8000
 ```
 
+## Multi-Instance Support
+
+When running multiple KATO instances, each has its own base URL:
+- Instance 1: `http://localhost:8001`
+- Instance 2: `http://localhost:8002`
+- etc.
+
+Each instance requires its processor ID in the API path:
+```
+http://localhost:{port}/{processor_id}/{endpoint}
+```
+
 ## Authentication
 
 Currently, KATO API does not require authentication. Future versions may support API key authentication via the `--api-key` parameter.
@@ -575,9 +587,35 @@ curl -X POST http://localhost:8000/p46b6b076c/genes/update \
 - **v2.0.0**: Migration to ZeroMQ, improved performance
 - **v1.0.0**: Initial REST API implementation
 
+## Management Commands
+
+While not part of the REST API, KATO provides CLI management commands:
+
+### Instance Management
+```bash
+# Start instances
+./kato-manager.sh start --id processor-1 --name "Main" --port 8001
+./kato-manager.sh start --id processor-2 --name "Secondary" --port 8002
+
+# List all instances
+./kato-manager.sh list
+
+# Stop instances (automatically removes containers)
+./kato-manager.sh stop processor-1         # By ID
+./kato-manager.sh stop "Main"              # By name
+./kato-manager.sh stop --all               # All instances
+./kato-manager.sh stop --all --with-mongo  # Including MongoDB
+```
+
+### Container Lifecycle
+- **Automatic Cleanup**: The `stop` command removes containers to prevent accumulation
+- **Registry Sync**: Instance registry (`~/.kato/instances.json`) stays synchronized
+- **MongoDB Persistence**: MongoDB container is preserved unless explicitly removed
+
 ## Support
 
 For issues or questions:
 - Check the [Troubleshooting Guide](technical/TROUBLESHOOTING.md)
 - Review the [System Overview](SYSTEM_OVERVIEW.md)
+- See [Multi-Instance Guide](MULTI_INSTANCE_GUIDE.md) for advanced usage
 - Open an issue on GitHub

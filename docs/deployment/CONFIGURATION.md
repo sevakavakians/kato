@@ -4,11 +4,12 @@ Complete guide to configuring KATO processors and system parameters.
 
 ## Configuration Methods
 
-KATO supports three configuration methods:
+KATO supports multiple configuration methods:
 
 1. **Command-line parameters** - Direct parameter specification
 2. **Environment variables** - System-wide defaults
 3. **JSON manifest** - Complete configuration object
+4. **Instance registry** - Automatic tracking in `~/.kato/instances.json`
 
 ## Command-Line Parameters
 
@@ -22,11 +23,17 @@ All parameters can be specified directly when starting KATO:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `--id` | string | auto-generated | Unique processor identifier |
-| `--name` | string | "KatoProcessor" | Human-readable processor name |
-| `--port` | integer | 8000 | REST API port |
+| `--id` | string | auto-generated | **Unique processor identifier** - Used for API routing and container naming |
+| `--name` | string | "KatoProcessor" | Human-readable processor name for display |
+| `--port` | integer | 8000 | REST API port (auto-finds next available if in use) |
 | `--log-level` | string | INFO | Logging level (DEBUG, INFO, WARNING, ERROR) |
 | `--api-key` | string | none | API key for authentication |
+
+**Multi-Instance Notes:**
+- Each instance must have a unique `--id` 
+- Container names are derived from the ID: `kato-${PROCESSOR_ID}`
+- Ports are automatically allocated if defaults are in use
+- All instances share the same MongoDB but maintain separate memory
 
 ### Machine Learning Parameters
 
@@ -284,11 +291,62 @@ Controls auto-learning trigger:
 - `100-500`: Moderate cycles
 - `1000+`: Rare auto-learning
 
+## Multi-Instance Configuration
+
+### Instance Registry
+
+KATO automatically maintains an instance registry at `~/.kato/instances.json`:
+
+```json
+{
+  "instances": {
+    "processor-1": {
+      "name": "Main Processor",
+      "container": "kato-processor-1",
+      "api_port": 8001,
+      "zmq_port": 5556,
+      "status": "running",
+      "updated": "2024-01-01T12:00:00"
+    },
+    "processor-2": {
+      "name": "Secondary",
+      "container": "kato-processor-2",
+      "api_port": 8002,
+      "zmq_port": 5557,
+      "status": "running",
+      "updated": "2024-01-01T12:05:00"
+    }
+  }
+}
+```
+
+### Multi-Instance Examples
+
+```bash
+# Development setup - Different classifiers
+./kato-manager.sh start --id cvc-test --name "CVC Test" --port 8001 --classifier CVC
+./kato-manager.sh start --id dvc-test --name "DVC Test" --port 8002 --classifier DVC
+
+# Production setup - Task-specific processors
+./kato-manager.sh start --id nlp --name "NLP Engine" --port 8001 \
+  --max-seq-length 20 --recall-threshold 0.2
+
+./kato-manager.sh start --id vision --name "Vision Processor" --port 8002 \
+  --classifier DVC --search-depth 20
+
+./kato-manager.sh start --id realtime --name "Real-time Stream" --port 8003 \
+  --max-seq-length 5 --max-predictions 10
+
+# View all instances
+./kato-manager.sh list
+```
+
 ## Configuration Profiles
 
 ### Speed-Optimized
 ```bash
 ./kato-manager.sh start \
+  --id speed-opt \
   --classifier CVC \
   --max-predictions 20 \
   --recall-threshold 0.3 \

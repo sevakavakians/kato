@@ -33,11 +33,22 @@ class InformationExtractorWorker(multiprocessing.Process):
         pass
 
     def InformationExtractorWorkerGo(self):
+        """
+        Extract prediction information by comparing current state to stored models.
+        
+        Uses difflib's SequenceMatcher to find similar sequences and extract:
+        - Past: what happened before the match
+        - Present: the matching portion
+        - Future: what's predicted to come next
+        - Missing/Extra: anomalies in the current observation
+        """
         try:
             if self.state and self.datasubset:
-                # logger.debug("STATE: %s" %(self.state[:5]))
+                # Create sequence matcher for comparing models to current state
                 model_matcher = difflib.SequenceMatcher()
-                model_matcher.set_seq2(self.state)
+                model_matcher.set_seq2(self.state)  # Current observation state
+                
+                # Check each model in this worker's subset
                 for model_hash, model in self.datasubset.items():
                     if self.target_class_candidates:
                         if model_hash not in self.target_class_candidates:
@@ -50,21 +61,28 @@ class InformationExtractorWorker(multiprocessing.Process):
                         logger.error("\nException in InformationExtractorWorker: Failed to create Sequence Match! %s" %e)
                         raise Exception("\nException in InformationExtractorWorker: Failed to create Sequence Match! %s" %e)
                     if similarity >= self.cutoff:
-                        ### Still here?  Let's extract more info.  First, get the present state belief:
+                        # Extract temporal structure from the match
                         try:
-                            matching_intersection = []
+                            matching_intersection = []  # Symbols that match between model and state
                             matching_blocks = model_matcher.get_matching_blocks()
 
-                            for block in matching_blocks[:-1]:
-                                (i,j,n) = tuple(block)
+                            # Collect all matching symbols
+                            for block in matching_blocks[:-1]:  # Skip terminator block
+                                (i,j,n) = tuple(block)  # (model_idx, state_idx, length)
                                 matching_intersection += self.state[j:j+n]
 
                             matching_count = sum([x[2] for x in matching_blocks])
 
-                            (i0,j0,n0) = tuple(matching_blocks[0])
-                            (i1,j1,n1) = tuple(matching_blocks[-2])
+                            # Extract temporal regions from the model
+                            (i0,j0,n0) = tuple(matching_blocks[0])  # First match
+                            (i1,j1,n1) = tuple(matching_blocks[-2])  # Last real match
+                            
+                            # Past: symbols before first match (context)
                             past = model[:i0]
+                            # Present: symbols from first to last match (current state)
                             present = model[i0:i1+n1]
+                            # Future would be: model[i1+n1:] (what comes next)
+                            
                             number_of_blocks = len(matching_blocks)-1
                             #present_in_state = self.state[j0:j1+n1] ##not used
                             #future = model[i1+n1:]
@@ -72,18 +90,22 @@ class InformationExtractorWorker(multiprocessing.Process):
                             logger.error("\nException in InformationExtractorWorker: Failed to extract PRESENT belief! %s" %e)
                             raise Exception("\nException in InformationExtractorWorker: Failed to extract PRESENT belief! %s" %e)
 
-                        ### Now, zoom into the present state belief and compare it to the current observed state:
+                        # Identify anomalies: what's missing or extra in current observation
                         try:
-                            missing = []
-                            extras = []
+                            missing = []  # Expected symbols not present
+                            extras = []   # Unexpected symbols present
+                            
+                            # Compare present portion of model to actual state
                             model_matcher.set_seq1(present)
                             model_matcher.get_matching_blocks()
                             diffs = model_matcher.compare()
                             diffs = list(diffs)
+                            
+                            # Parse diff output
                             for i in diffs:
-                                if i.startswith("- "):
+                                if i.startswith("- "):  # In model but not in state
                                     missing.append(i[2:])
-                                elif i.startswith("+ "):
+                                elif i.startswith("+ "):  # In state but not in model
                                     extras.append(i[2:])
                         except Exception as e:
                             logger.error("\nException in InformationExtractorWorker: Failed in extracting ANOMALIES belief! %s" %e)

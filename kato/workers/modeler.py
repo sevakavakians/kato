@@ -89,14 +89,30 @@ class Modeler:
         return
 
     def learn(self):
-        model = Model(self.WM)
-        self.WM.clear()
-        if len(model) > 1:
+        """
+        Convert current working memory into a persistent model.
+        
+        Creates a hash-named model from the sequence in WM, stores it in MongoDB,
+        and distributes it to search workers for future pattern matching.
+        """
+        model = Model(self.WM)  # Create model from working memory sequence
+        self.WM.clear()  # Reset working memory after learning
+        
+        if len(model) > 1:  # Only learn multi-event sequences
+            # Store model with averaged emotives from all events
             x = self.models_kb.learnModel(model, emotives=average_emotives(self.emotives))
-            if self.round_robin_index == len(self.models_searcher.extraction_workers):  ## Round robin assignments to search workers.
+            
+            # Round-robin distribution to search workers for load balancing
+            if self.round_robin_index == len(self.models_searcher.extraction_workers):
                 self.round_robin_index = 0
+                
             if x:
-                self.models_searcher.assignNewlyLearnedToWorkers(self.round_robin_index, model.name, list(chain(*model.sequence)))
+                # Assign newly learned model to a worker for future predictions
+                self.models_searcher.assignNewlyLearnedToWorkers(
+                    self.round_robin_index, 
+                    model.name, 
+                    list(chain(*model.sequence))
+                )
             self.round_robin_index += 1
             self.last_learned_model_name = model.name
             del(model)
@@ -126,15 +142,34 @@ class Modeler:
         )
 
     def processEvents(self, current_unique_id):
-        "Matches and tallies prior event objects with current event objects."
+        """
+        Generate predictions by matching working memory against learned models.
+        
+        Flattens the WM (list of events) into a single state vector,
+        then searches for similar patterns in the model database.
+        Predictions are cached in MongoDB for retrieval.
+        """
+        # Flatten working memory: [["a","b"],["c"]] -> ["a","b","c"]
         state = list(chain(*self.WM))
+        
         if self.predict and self.trigger_predictions:
             predictions = self.predictModel(state)
+            
+            # Store predictions for async retrieval
             if predictions:
-                self.predictions_kb.insert_one({'unique_id': current_unique_id, 'predictions': predictions})
+                self.predictions_kb.insert_one({
+                    'unique_id': current_unique_id, 
+                    'predictions': predictions
+                })
             return predictions
 
     def setCurrentEvent(self, symbols):
+        """
+        Add a new event (list of symbols) to working memory.
+        
+        Working memory is a deque of events, where each event is a list of symbols
+        observed at the same time. E.g., WM = [["cat","dog"], ["bird"], ["cat"]]
+        """
         if symbols:
             self.WM.append(symbols)
         return

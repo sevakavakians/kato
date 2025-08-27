@@ -4,7 +4,6 @@ from os import environ
 from numpy import array
 from pymongo import ASCENDING, DESCENDING, MongoClient
 
-from kato.representations.vector_object import VectorObject
 
 from collections import Counter
 from itertools import chain
@@ -64,7 +63,6 @@ class SuperKnowledgeBase:
             self.models_kb = self.knowledge.models_kb
             self.symbols_kb = self.knowledge.symbols_kb
             self.associative_action_kb = self.knowledge.associative_action_kb
-            self.vectors_kb = self.knowledge.vectors_kb
             self.predictions_kb = self.knowledge.predictions_kb
             self.metadata = self.knowledge.metadata
 
@@ -75,8 +73,6 @@ class SuperKnowledgeBase:
             self.symbols_kb.create_index( [("name", ASCENDING)], background=1, unique=1 )
             # Actions associated with symbols
             self.associative_action_kb.create_index( [("symbol", ASCENDING)], background=1 )
-            # Vector representations keyed by hash
-            self.vectors_kb.create_index( [("name", ASCENDING)], background=1, unique=1 )
             
             # Compound indexes for optimized queries
             # For finding high-frequency models quickly
@@ -88,16 +84,11 @@ class SuperKnowledgeBase:
             # For retrieving predictions by observation ID
             self.predictions_kb.create_index([("unique_id", ASCENDING), ("time", DESCENDING)], background=1)
 
-            setattr(self.vectors_kb, "values", self.getVectors)  ## TODO: Check to see if this is used anywhere.
-            setattr(self.vectors_kb, "getVector", self.getVector)
-
             setattr(self.models_kb, "learnModel", self.learnModel)
-            setattr(self.vectors_kb, "learnVector", self.learnVector)
             setattr(self.associative_action_kb, "learnAssociation", self.learnAssociation)
 
             setattr(self.models_kb, "__mkb_repr__", self.__mkb_repr__)
             setattr(self.associative_action_kb, "__akb_repr__", self.__akb_repr__)
-            setattr(self.vectors_kb, "__repr__", self.__vkb_repr__)
 
             self.total_utility = None
             self.emotives_available = set()
@@ -126,7 +117,6 @@ class SuperKnowledgeBase:
         self.models_kb.drop()
         self.symbols_kb.drop()
         self.associative_action_kb.drop()
-        self.vectors_kb.drop()
         self.predictions_kb.drop()
         self.metadata.drop()
         self.metadata.insert_one({"class": "totals",
@@ -137,7 +127,6 @@ class SuperKnowledgeBase:
         self.models_kb.create_index([("name", ASCENDING)], background=1, unique=1)
         self.symbols_kb.create_index([("name", ASCENDING)], background=1, unique=1)
         self.associative_action_kb.create_index([("symbol", ASCENDING)], background=1)
-        self.vectors_kb.create_index([("name", ASCENDING)], background=1, unique=1)
         
         # Compound indexes
         self.models_kb.create_index([("frequency", DESCENDING), ("name", ASCENDING)], background=1)
@@ -157,22 +146,9 @@ class SuperKnowledgeBase:
         return "{KB| objects: %s }" %(self.associative_action_kb.count_documents({}))
 
     def __vkb_repr__(self):
-        return "{KB| objects: %s }" %(self.vectors_kb.count_documents({}))
+        return "{KB| vectors: 0 }"  # Vectors now handled by modern vector store
 
-    def learnVector(self, vector):
-        """
-        Core machine learning function.
-        Used only if input data includes vectors.
-        """
-        try:
-            #x = self.vectors_kb.insert_one({ "name": vector.name, "vector": vector.vector.tolist() })
-            #return x
-            result = self.vectors_kb.update_one({ "name": vector.name},
-                                       {"$setOnInsert": {"vector": vector.vector.tolist()}},
-                                      upsert=True)
-            return result
-        except Exception as e:
-            raise Exception("\nFailed to learn vector! %s" %e)
+    # learnVector method removed - vectors now handled by modern vector store
 
     def learnAssociation(self, action, symbols):
         """
@@ -294,28 +270,9 @@ class SuperKnowledgeBase:
                                 ]) ) ]
         return r
 
-    def getVectors(self):
-        """
-        Core machine learning function if vectors are used.
-        Retrieves full learned vector set for use in vector classification algorithms.
-        """
-        try:
-            return [VectorObject(array(v["vector"])) for v in self.vectors_kb.find({}, {"_id": 0, "vector": 1})]
-#            return [v["vector"] for v in self.vectors_kb.find({}, {"_id": 0, "vector": 1})]
-        except Exception as e:
-            raise Exception("\nException in getVectors: %s" %(e))
+    # getVectors method removed - vectors now handled by modern vector store
 
-    def getVector(self, vector, by="name"):
-        """
-        Used only by external functions that require retrieval of a specific vector.
-        Retrieved by vector hash name as input parameter.
-        """
-        try:
-            vector = self.vectors_kb.find_one({by: vector}, {'_id': False, 'vector': True})
-            if vector and 'vector' in vector:
-                return vector['vector']
-        except Exception as e:
-            return None
+    # getVector method removed - vectors now handled by modern vector store
 
     def close(self):
         """

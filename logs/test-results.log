@@ -21,7 +21,7 @@ tests/api/test_rest_endpoints.py::test_observe_endpoint_empty PASSED     [  5%]
 tests/api/test_rest_endpoints.py::test_working_memory_endpoint PASSED    [  6%]
 tests/api/test_rest_endpoints.py::test_clear_working_memory_endpoint PASSED [  7%]
 tests/api/test_rest_endpoints.py::test_clear_all_memory_endpoint PASSED  [  8%]
-tests/api/test_rest_endpoints.py::test_learn_endpoint PASSED             [  9%]
+tests/api/test_rest_endpoints.py::test_learn_endpoint FAILED             [  9%]
 tests/api/test_rest_endpoints.py::test_predictions_endpoint PASSED       [ 10%]
 tests/api/test_rest_endpoints.py::test_percept_data_endpoint PASSED      [ 11%]
 tests/api/test_rest_endpoints.py::test_cognition_data_endpoint PASSED    [ 12%]
@@ -118,6 +118,15 @@ tests/unit/test_sorting_behavior.py::test_empty_strings_in_sorting PASSED [ 98%]
 tests/unit/test_sorting_behavior.py::test_unicode_sorting PASSED         [ 99%]
 tests/unit/test_sorting_behavior.py::test_sorting_consistency_across_learns PASSED [100%]
 
-============================= 105 passed in 18.72s =============================
+=================================== FAILURES ===================================
+_____________________________ test_learn_endpoint ______________________________
+/Users/sevakavakians/PROGRAMMING/kato/kato-tests/tests/api/test_rest_endpoints.py:191: in test_learn_endpoint
+    ???
+E   AssertionError: assert False
+E    +  where False = <built-in method startswith of str object at 0x1080c5728>('MODEL|')
+E    +    where <built-in method startswith of str object at 0x1080c5728> = ''.startswith
+=========================== short test summary info ============================
+FAILED tests/api/test_rest_endpoints.py::test_learn_endpoint - AssertionError...
+================== 1 failed, 104 passed in 153.56s (0:02:33) ===================
 
-[0;32m✓ Tests passed successfully![0m
+[0;31m✗ Some tests failed[0m

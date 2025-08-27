@@ -4,7 +4,6 @@ from functools import reduce
 
 from numpy import array
 
-from kato.informatics.knowledge_base import SuperKnowledgeBase  # , KnowledgeBase
 from kato.representations.vector_object import VectorObject
 from kato.searches.vector_search_engine import CVCSearcherModern
 
@@ -16,20 +15,15 @@ logger.info('logging initiated')
 class Classifier:
     """
     Processes percept VectorObjects to determine the object representations.
-    Multiple classifiers are available including:
-        Canonical Vector (via Canonical Vector Pursuit)
-        Hyperspheres/Hyperblobs  (via generalized SVM)
-        more to be added.
+    Uses modern CVC (Cognition Vector Cluster) searcher with Qdrant backend.
     """
     def __init__(self, procs_for_searches, **kwargs):
         logger.debug("Starting Classifier...")
         self.name = "Classifier"
         self.kb_id = kwargs["kb_id"]
         self.classifier = kwargs["classifier"]
-        self.search_depth = kwargs["search_depth"]
-        self.primers = []
         self.procs_for_searches = procs_for_searches
-        self.initializeVectorKBs()
+        self.initialize_vector_searcher()
         self.deferred_vectors_for_learning = []
         logger.debug("Classifier ready!")
         return
@@ -41,7 +35,7 @@ class Classifier:
             self.CVC_searcher.clearModelsFromRAM()
             self.round_robin_index = 0
             logger.debug("about to reset CVCSearcher")
-            self.CVC_searcher = CVCSearcherModern(self.procs_for_searches, self.vectors_kb)
+            self.CVC_searcher = CVCSearcherModern(self.procs_for_searches)
         return
 
     def clear_wm(self):
@@ -49,19 +43,16 @@ class Classifier:
         return
 
     def learn(self):
-        [self.vectors_kb.learnVector(vector) for vector in self.deferred_vectors_for_learning]
+        # Vector learning now handled by modern vector store
         if self.classifier == "CVC":
             self.CVC_searcher.assignNewlyLearnedToWorkers(self.deferred_vectors_for_learning)
         self.deferred_vectors_for_learning = []
         return
 
-    def initializeVectorKBs(self):
-        self.superkb = SuperKnowledgeBase(self.kb_id)
-        self.vectors_kb =  self.superkb.vectors_kb
+    def initialize_vector_searcher(self):
         if self.classifier == "CVC":
-            ### grab from mongo and populate using assignToWorkers
             self.round_robin_index = 0
-            self.CVC_searcher = CVCSearcherModern(self.procs_for_searches, self.vectors_kb)
+            self.CVC_searcher = CVCSearcherModern(self.procs_for_searches)
         return
 
     def process(self, vector_data):

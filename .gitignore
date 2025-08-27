@@ -1,0 +1,80 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+.cache
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+logs/*.log
+logs/test-results.log
+logs/kato-manager.log
+
+# Docker
+docker-compose.override.yml
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Test artifacts
+tests/stress/__pycache__/
+tests/__pycache__/
+tests/*/__pycache__/
+tests/*/*/__pycache__/
+
+# Temporary files
+*.tmp
+*.bak
+*.backup
+tmp/
+temp/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# OS specific
+Thumbs.db
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Project specific
+kato-manager.sh.backup
+test_*.py
+!tests/test_*.py
+debug_*.py
+update_container.sh

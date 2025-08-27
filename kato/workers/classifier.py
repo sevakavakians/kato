@@ -7,6 +7,7 @@ from numpy import array
 from kato.informatics.knowledge_base import SuperKnowledgeBase  # , KnowledgeBase
 from kato.representations.vector_object import VectorObject
 from kato.searches import vector_searches
+from kato.searches.vector_search_engine import CVCSearcherModern
 
 logger = logging.getLogger('kato.classifier')
 logger.setLevel(getattr(logging, environ['LOG_LEVEL']))
@@ -41,7 +42,7 @@ class Classifier:
             self.CVC_searcher.clearModelsFromRAM()
             self.round_robin_index = 0
             logger.debug("about to reset CVCSearcher")
-            self.CVC_searcher = vector_searches.CVCSearcher(self.procs_for_searches, self.vectors_kb)
+            self.CVC_searcher = CVCSearcherModern(self.procs_for_searches, self.vectors_kb)
         return
 
     def clear_wm(self):
@@ -61,7 +62,7 @@ class Classifier:
         if self.classifier == "CVC":
             ### grab from mongo and populate using assignToWorkers
             self.round_robin_index = 0
-            self.CVC_searcher = vector_searches.CVCSearcher(self.procs_for_searches, self.vectors_kb)
+            self.CVC_searcher = CVCSearcherModern(self.procs_for_searches, self.vectors_kb)
         return
 
     def process(self, vector_data):

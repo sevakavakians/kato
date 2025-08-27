@@ -1,0 +1,29 @@
+{
+  "backend": "mongodb",
+  "vector_dim": 512,
+  "similarity_metric": "euclidean",
+  "mongodb": {
+    "connection_string": "mongodb://localhost:27017",
+    "database": "kato_kb",
+    "collection": "vectors_kb"
+  },
+  "cache": {
+    "enabled": true,
+    "backend": "redis",
+    "host": "localhost",
+    "port": 6379,
+    "size": 5000,
+    "ttl": 1800
+  },
+  "quantization": {
+    "enabled": false
+  },
+  "gpu": {
+    "enabled": false
+  },
+  "batch_size": 100,
+  "search_limit": 10,
+  "search_timeout": 30.0,
+  "connection_pool_size": 10,
+  "auto_create_collection": true
+}

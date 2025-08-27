@@ -1,0 +1,73 @@
+# Qdrant Configuration for KATO Vector Database
+# This configuration is optimized for dense vector similarity search
+
+service:
+  host: 0.0.0.0
+  http_port: 6333
+  grpc_port: 6334
+  # Enable CORS for web interfaces
+  enable_cors: true
+
+storage:
+  # Storage path inside container
+  storage_path: /qdrant/storage
+  
+  # Performance optimizations
+  on_disk_payload: true
+  
+  # Optimizer settings for better performance
+  optimizers:
+    # Threshold for using memory-mapped storage
+    memmap_threshold: 20000
+    # Default segment size
+    default_segment_number: 4
+    # Maximum segment size
+    max_segment_size: 500000
+    # Index threshold
+    indexing_threshold: 10000
+    
+  # HNSW index configuration
+  hnsw_index:
+    # Higher M = better recall, more memory
+    m: 16
+    # Higher ef_construct = better index quality, slower build
+    ef_construct: 100
+    # Full scan threshold
+    full_scan_threshold: 10000
+    # Max indexing threads (0 = all cores)
+    max_indexing_threads: 0
+    
+  # Performance settings
+  performance:
+    # Maximum search threads (0 = all cores)
+    max_search_threads: 0
+    # Maximum optimization threads
+    max_optimization_threads: 1
+
+# Quantization configuration (can be overridden per collection)
+quantization:
+  # Default quantization settings
+  scalar:
+    type: "int8"
+    quantile: 0.99
+    always_ram: false
+  
+  # Product quantization for memory efficiency
+  product:
+    compression: "x16"  # 16x compression
+    always_ram: false
+
+# Collection defaults for KATO vectors
+collection:
+  # Default vector parameters
+  vectors:
+    size: 512  # Will be overridden by KATO configuration
+    distance: "Euclidean"  # Can be: Cosine, Dot, Euclidean
+  
+  # WAL (Write-Ahead Log) configuration
+  wal_config:
+    wal_capacity_mb: 32
+    wal_segments_ahead: 0
+
+# Logging configuration
+log_level: INFO

@@ -1,0 +1,57 @@
+{
+  "backend": "qdrant",
+  "vector_dim": 512,
+  "similarity_metric": "euclidean",
+  "qdrant": {
+    "host": "localhost",
+    "port": 6333,
+    "collection_name": "kato_vectors",
+    "vector_size": 512,
+    "distance": "euclidean",
+    "on_disk_payload": true,
+    "optimizers": {
+      "deleted_threshold": 0.2,
+      "vacuum_min_vector_number": 1000,
+      "default_segment_number": 8,
+      "max_segment_size": 1000000,
+      "memmap_threshold": 50000,
+      "indexing_threshold": 20000,
+      "flush_interval_sec": 5,
+      "max_optimization_threads": 4
+    }
+  },
+  "cache": {
+    "enabled": true,
+    "backend": "redis",
+    "host": "localhost",
+    "port": 6379,
+    "size": 50000,
+    "ttl": 7200
+  },
+  "quantization": {
+    "enabled": true,
+    "type": "scalar",
+    "parameters": {
+      "type": "int8",
+      "quantile": 0.99,
+      "always_ram": false
+    }
+  },
+  "index": {
+    "type": "hnsw",
+    "parameters": {
+      "m": 32,
+      "ef_construct": 200,
+      "ef_search": 150,
+      "max_elements": 10000000
+    }
+  },
+  "gpu": {
+    "enabled": false
+  },
+  "batch_size": 5000,
+  "search_limit": 100,
+  "search_timeout": 30.0,
+  "connection_pool_size": 20,
+  "auto_create_collection": true
+}

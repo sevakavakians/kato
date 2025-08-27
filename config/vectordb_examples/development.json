@@ -1,0 +1,26 @@
+{
+  "backend": "qdrant",
+  "vector_dim": 512,
+  "similarity_metric": "euclidean",
+  "qdrant": {
+    "host": "localhost",
+    "port": 6333,
+    "collection_name": "kato_vectors_dev",
+    "vector_size": 512,
+    "distance": "euclidean",
+    "on_disk_payload": false
+  },
+  "cache": {
+    "enabled": false,
+    "backend": "memory"
+  },
+  "quantization": {
+    "enabled": false
+  },
+  "gpu": {
+    "enabled": false
+  },
+  "batch_size": 100,
+  "search_limit": 10,
+  "auto_create_collection": true
+}

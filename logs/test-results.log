@@ -1,14 +1,22 @@
+[0;32mKATO Test Runner[0m
+==================
+[0;32mUsing improved ZMQ implementation (ROUTER/DEALER)[0m
+[0;32mUsing system Python3 and pytest[0m
+[0;32mKATO Docker image already exists[0m
+[0;32mRunning all tests...[0m
+
 ============================= test session starts ==============================
-platform darwin -- Python 3.9.23, pytest-7.2.1, pluggy-1.0.0 -- /Users/sevakavakians/.local/share/virtualenvs/sevakavakians-IczYcfnC/bin/python
+platform darwin -- Python 3.13.7, pytest-8.4.1, pluggy-1.6.0 -- /usr/local/opt/python@3.13/bin/python3.13
 cachedir: .pytest_cache
-rootdir: /Users/sevakavakians/PROGRAMMING/kato/kato-tests, configfile: pytest.ini
+rootdir: /Users/sevakavakians/PROGRAMMING/kato/tests
+configfile: pytest.ini
 collecting ... collected 105 items
 
 tests/api/test_rest_endpoints.py::test_ping_endpoint PASSED              [  0%]
-tests/api/test_rest_endpoints.py::test_connect_endpoint FAILED           [  1%]
+tests/api/test_rest_endpoints.py::test_connect_endpoint PASSED           [  1%]
 tests/api/test_rest_endpoints.py::test_processor_ping_endpoint PASSED    [  2%]
 tests/api/test_rest_endpoints.py::test_status_endpoint PASSED            [  3%]
-tests/api/test_rest_endpoints.py::test_observe_endpoint FAILED           [  4%]
+tests/api/test_rest_endpoints.py::test_observe_endpoint PASSED           [  4%]
 tests/api/test_rest_endpoints.py::test_observe_endpoint_empty PASSED     [  5%]
 tests/api/test_rest_endpoints.py::test_working_memory_endpoint PASSED    [  6%]
 tests/api/test_rest_endpoints.py::test_clear_working_memory_endpoint PASSED [  7%]
@@ -17,31 +25,31 @@ tests/api/test_rest_endpoints.py::test_learn_endpoint PASSED             [  9%]
 tests/api/test_rest_endpoints.py::test_predictions_endpoint PASSED       [ 10%]
 tests/api/test_rest_endpoints.py::test_percept_data_endpoint PASSED      [ 11%]
 tests/api/test_rest_endpoints.py::test_cognition_data_endpoint PASSED    [ 12%]
-tests/api/test_rest_endpoints.py::test_gene_endpoint FAILED              [ 13%]
-tests/api/test_rest_endpoints.py::test_gene_change_endpoint FAILED       [ 14%]
-tests/api/test_rest_endpoints.py::test_model_endpoint FAILED             [ 15%]
+tests/api/test_rest_endpoints.py::test_gene_endpoint PASSED              [ 13%]
+tests/api/test_rest_endpoints.py::test_gene_change_endpoint PASSED       [ 14%]
+tests/api/test_rest_endpoints.py::test_model_endpoint PASSED             [ 15%]
 tests/api/test_rest_endpoints.py::test_error_handling_404 PASSED         [ 16%]
 tests/api/test_rest_endpoints.py::test_error_handling_invalid_json PASSED [ 17%]
 tests/api/test_rest_endpoints.py::test_observe_data_wrapper_format PASSED [ 18%]
 tests/api/test_rest_endpoints.py::test_predictions_post_endpoint PASSED  [ 19%]
-tests/api/test_rest_endpoints.py::test_endpoint_response_timing FAILED   [ 20%]
+tests/api/test_rest_endpoints.py::test_endpoint_response_timing PASSED   [ 20%]
 tests/integration/test_sequence_learning.py::test_simple_sequence_learning PASSED [ 20%]
-tests/integration/test_sequence_learning.py::test_multiple_sequence_learning FAILED [ 21%]
+tests/integration/test_sequence_learning.py::test_multiple_sequence_learning PASSED [ 21%]
 tests/integration/test_sequence_learning.py::test_sequence_completion PASSED [ 22%]
 tests/integration/test_sequence_learning.py::test_cyclic_sequence_learning PASSED [ 23%]
 tests/integration/test_sequence_learning.py::test_sequence_with_repetition PASSED [ 24%]
-tests/integration/test_sequence_learning.py::test_interleaved_sequence_learning FAILED [ 25%]
+tests/integration/test_sequence_learning.py::test_interleaved_sequence_learning PASSED [ 25%]
 tests/integration/test_sequence_learning.py::test_context_switching PASSED [ 26%]
-tests/integration/test_sequence_learning.py::test_max_sequence_length_auto_learn FAILED [ 27%]
+tests/integration/test_sequence_learning.py::test_max_sequence_length_auto_learn PASSED [ 27%]
 tests/integration/test_sequence_learning.py::test_sequence_with_time_gaps PASSED [ 28%]
 tests/integration/test_sequence_learning.py::test_multimodal_sequence_learning PASSED [ 29%]
-tests/integration/test_sequence_learning.py::test_branching_sequences FAILED [ 30%]
+tests/integration/test_sequence_learning.py::test_branching_sequences PASSED [ 30%]
 tests/unit/test_memory_management.py::test_clear_all_memory PASSED       [ 31%]
 tests/unit/test_memory_management.py::test_clear_working_memory PASSED   [ 32%]
 tests/unit/test_memory_management.py::test_working_memory_accumulation PASSED [ 33%]
 tests/unit/test_memory_management.py::test_manual_learning PASSED        [ 34%]
 tests/unit/test_memory_management.py::test_memory_persistence PASSED     [ 35%]
-tests/unit/test_memory_management.py::test_max_sequence_length FAILED    [ 36%]
+tests/unit/test_memory_management.py::test_max_sequence_length PASSED    [ 36%]
 tests/unit/test_memory_management.py::test_memory_with_emotives PASSED   [ 37%]
 tests/unit/test_memory_management.py::test_memory_with_vectors PASSED    [ 38%]
 tests/unit/test_memory_management.py::test_interleaved_memory_operations PASSED [ 39%]
@@ -49,14 +57,14 @@ tests/unit/test_model_hashing.py::test_model_name_format PASSED          [ 40%]
 tests/unit/test_model_hashing.py::test_identical_sequences_same_hash PASSED [ 40%]
 tests/unit/test_model_hashing.py::test_different_sequences_different_hash PASSED [ 41%]
 tests/unit/test_model_hashing.py::test_sequence_order_affects_hash PASSED [ 42%]
-tests/unit/test_model_hashing.py::test_model_hash_in_predictions FAILED  [ 43%]
+tests/unit/test_model_hashing.py::test_model_hash_in_predictions PASSED  [ 43%]
 tests/unit/test_model_hashing.py::test_model_hash_with_emotives PASSED   [ 44%]
-tests/unit/test_model_hashing.py::test_model_hash_with_vectors FAILED    [ 45%]
-tests/unit/test_model_hashing.py::test_empty_sequence_hash FAILED        [ 46%]
-tests/unit/test_model_hashing.py::test_single_observation_hash FAILED    [ 47%]
+tests/unit/test_model_hashing.py::test_model_hash_with_vectors PASSED    [ 45%]
+tests/unit/test_model_hashing.py::test_empty_sequence_hash PASSED        [ 46%]
+tests/unit/test_model_hashing.py::test_single_observation_hash PASSED    [ 47%]
 tests/unit/test_model_hashing.py::test_hash_consistency_across_sessions PASSED [ 48%]
-tests/unit/test_model_hashing.py::test_complex_sequence_hash FAILED      [ 49%]
-tests/unit/test_observations.py::test_observe_single_string FAILED       [ 50%]
+tests/unit/test_model_hashing.py::test_complex_sequence_hash PASSED      [ 49%]
+tests/unit/test_observations.py::test_observe_single_string PASSED       [ 50%]
 tests/unit/test_observations.py::test_observe_multiple_strings PASSED    [ 51%]
 tests/unit/test_observations.py::test_observe_with_emotives PASSED       [ 52%]
 tests/unit/test_observations.py::test_observe_with_vectors PASSED        [ 53%]
@@ -71,20 +79,20 @@ tests/unit/test_prediction_edge_cases.py::test_empty_events_ignored PASSED [ 60%
 tests/unit/test_prediction_edge_cases.py::test_prediction_no_past PASSED [ 61%]
 tests/unit/test_prediction_edge_cases.py::test_prediction_no_future PASSED [ 62%]
 tests/unit/test_prediction_edge_cases.py::test_all_extras_no_matches PASSED [ 63%]
-tests/unit/test_prediction_edge_cases.py::test_partial_overlap_multiple_sequences FAILED [ 64%]
+tests/unit/test_prediction_edge_cases.py::test_partial_overlap_multiple_sequences PASSED [ 64%]
 tests/unit/test_prediction_edge_cases.py::test_very_long_sequence_middle_observation PASSED [ 65%]
 tests/unit/test_prediction_edge_cases.py::test_repeated_symbols_in_event PASSED [ 66%]
 tests/unit/test_prediction_edge_cases.py::test_case_sensitive_matching PASSED [ 67%]
 tests/unit/test_prediction_edge_cases.py::test_observation_longer_than_learned PASSED [ 68%]
 tests/unit/test_prediction_edge_cases.py::test_single_symbol_sequences PASSED [ 69%]
-tests/unit/test_prediction_fields.py::test_prediction_past_field FAILED  [ 70%]
+tests/unit/test_prediction_fields.py::test_prediction_past_field PASSED  [ 70%]
 tests/unit/test_prediction_fields.py::test_prediction_missing_symbols PASSED [ 71%]
 tests/unit/test_prediction_fields.py::test_prediction_extra_symbols PASSED [ 72%]
 tests/unit/test_prediction_fields.py::test_prediction_multi_event_present PASSED [ 73%]
 tests/unit/test_prediction_fields.py::test_prediction_contiguous_present PASSED [ 74%]
 tests/unit/test_prediction_fields.py::test_prediction_partial_match_at_start PASSED [ 75%]
 tests/unit/test_prediction_fields.py::test_prediction_partial_match_at_end PASSED [ 76%]
-tests/unit/test_prediction_fields.py::test_prediction_mixed_missing_and_extras FAILED [ 77%]
+tests/unit/test_prediction_fields.py::test_prediction_mixed_missing_and_extras PASSED [ 77%]
 tests/unit/test_prediction_fields.py::test_prediction_multiple_past_events PASSED [ 78%]
 tests/unit/test_prediction_fields.py::test_single_event_with_missing PASSED [ 79%]
 tests/unit/test_predictions.py::test_no_predictions_initially PASSED     [ 80%]
@@ -110,142 +118,6 @@ tests/unit/test_sorting_behavior.py::test_empty_strings_in_sorting PASSED [ 98%]
 tests/unit/test_sorting_behavior.py::test_unicode_sorting PASSED         [ 99%]
 tests/unit/test_sorting_behavior.py::test_sorting_consistency_across_learns PASSED [100%]
 
-=================================== FAILURES ===================================
-____________________________ test_connect_endpoint _____________________________
-tests/api/test_rest_endpoints.py:33: in test_connect_endpoint
-    assert 'elements' in data['genome']
-E   AssertionError: assert 'elements' in {'always_update_frequencies': False, 'auto_act_method': 'none', 'auto_act_threshold': 0.8, 'classifier': 'CVC', ...}
-____________________________ test_observe_endpoint _____________________________
-tests/api/test_rest_endpoints.py:95: in test_observe_endpoint
-    assert 'auto_learned_model' in message
-E   AssertionError: assert 'auto_learned_model' in {'status': 'observed'}
-______________________________ test_gene_endpoint ______________________________
-tests/api/test_rest_endpoints.py:273: in test_gene_endpoint
-    assert data['message'] is None or isinstance(data['message'], (int, float))
-E   AssertionError: assert ({'gene_name': 'recall_threshold', 'gene_value': 0.1} is None or False)
-E    +  where False = isinstance({'gene_name': 'recall_threshold', 'gene_value': 0.1}, (<class 'int'>, <class 'float'>))
-__________________________ test_gene_change_endpoint ___________________________
-tests/api/test_rest_endpoints.py:288: in test_gene_change_endpoint
-    assert response.status_code == 200
-E   assert 400 == 200
-E    +  where 400 = <Response [400]>.status_code
-_____________________________ test_model_endpoint ______________________________
-tests/api/test_rest_endpoints.py:307: in test_model_endpoint
-    assert response.status_code == 200
-E   assert 500 == 200
-E    +  where 500 = <Response [500]>.status_code
-________________________ test_endpoint_response_timing _________________________
-tests/api/test_rest_endpoints.py:382: in test_endpoint_response_timing
-    assert 'interval' in data
-E   AssertionError: assert 'interval' in {'id': 'p5f2b9323c3', 'message': {'id': 'p5f2b9323c3', 'interval': 4, 'message': 'P1', 'status': 'okay', ...}, 'processor': 'P1', 'status': 'okay', ...}
-_______________________ test_multiple_sequence_learning ________________________
-tests/integration/test_sequence_learning.py:64: in test_multiple_sequence_learning
-    assert len(start_predictions) >= 2
-E   assert 0 >= 2
-E    +  where 0 = len([])
-______________________ test_interleaved_sequence_learning ______________________
-tests/integration/test_sequence_learning.py:196: in test_interleaved_sequence_learning
-    assert len(pred1) > 0
-E   assert 0 > 0
-E    +  where 0 = len([])
-_____________________ test_max_sequence_length_auto_learn ______________________
-tests/integration/test_sequence_learning.py:257: in test_max_sequence_length_auto_learn
-    assert len(wm) == 1
-E   AssertionError: assert 3 == 1
-E    +  where 3 = len([['auto1'], ['auto2'], ['auto3']])
-___________________________ test_branching_sequences ___________________________
-tests/integration/test_sequence_learning.py:349: in test_branching_sequences
-    assert len(root_preds) >= 2
-E   assert 0 >= 2
-E    +  where 0 = len([])
-___________________________ test_max_sequence_length ___________________________
-tests/unit/test_memory_management.py:161: in test_max_sequence_length
-    assert wm == [['c']]  # Only last event remains
-E   AssertionError: assert [['a'], ['b'], ['c']] == [['c']]
-E     At index 0 diff: ['a'] != ['c']
-E     Left contains 2 more items, first extra item: ['b']
-E     Full diff:
-E     - [['c']]
-E     + [['a'], ['b'], ['c']]
-________________________ test_model_hash_in_predictions ________________________
-tests/unit/test_model_hashing.py:127: in test_model_hash_in_predictions
-    assert any(pred.get('name', '').startswith('MODEL|') for pred in predictions), \
-E   AssertionError: At least one prediction should have MODEL| prefix
-E   assert False
-E    +  where False = any(<generator object test_model_hash_in_predictions.<locals>.<genexpr> at 0x10fc03430>)
-_________________________ test_model_hash_with_vectors _________________________
-tests/unit/test_model_hashing.py:182: in test_model_hash_with_vectors
-    assert model_name.startswith('MODEL|'), "Model name should have MODEL| prefix"
-E   AssertionError: Model name should have MODEL| prefix
-E   assert False
-E    +  where False = <built-in method startswith of str object at 0x110189830>('MODEL|')
-E    +    where <built-in method startswith of str object at 0x110189830> = 'learning-called'.startswith
-___________________________ test_empty_sequence_hash ___________________________
-tests/unit/test_model_hashing.py:200: in test_empty_sequence_hash
-    assert model_name.startswith('MODEL|') or model_name == ''
-E   AssertionError: assert (False or 'learning-called' == ''
-E    +  where False = <built-in method startswith of str object at 0x10fb731f0>('MODEL|')
-E    +    where <built-in method startswith of str object at 0x10fb731f0> = 'learning-called'.startswith
-E     + learning-called)
-_________________________ test_single_observation_hash _________________________
-tests/unit/test_model_hashing.py:212: in test_single_observation_hash
-    assert model_name.startswith('MODEL|')
-E   AssertionError: assert False
-E    +  where False = <built-in method startswith of str object at 0x10faa4df0>('MODEL|')
-E    +    where <built-in method startswith of str object at 0x10faa4df0> = 'learning-called'.startswith
-__________________________ test_complex_sequence_hash __________________________
-tests/unit/test_model_hashing.py:270: in test_complex_sequence_hash
-    assert model_name == model_name2
-E   AssertionError: assert 'MODEL|7085ef967c25a2af110cb9f116275d6a373b6920' == 'MODEL|95e1e5f975309f1ef69f9fc3eddc0b2e32a8a2ca'
-E     - MODEL|95e1e5f975309f1ef69f9fc3eddc0b2e32a8a2ca
-E     + MODEL|7085ef967c25a2af110cb9f116275d6a373b6920
-__________________________ test_observe_single_string __________________________
-tests/unit/test_observations.py:27: in test_observe_single_string
-    assert 'auto_learned_model' in result
-E   AssertionError: assert 'auto_learned_model' in {'status': 'observed'}
-___________________ test_partial_overlap_multiple_sequences ____________________
-tests/unit/test_prediction_edge_cases.py:148: in test_partial_overlap_multiple_sequences
-    assert len(matching_predictions) >= 2, "Should have multiple predictions for ambiguous match"
-E   AssertionError: Should have multiple predictions for ambiguous match
-E   assert 0 >= 2
-E    +  where 0 = len([])
-__________________________ test_prediction_past_field __________________________
-tests/unit/test_prediction_fields.py:42: in test_prediction_past_field
-    assert False, "No matching prediction found for 'middle'"
-E   AssertionError: No matching prediction found for 'middle'
-E   assert False
-___________________ test_prediction_mixed_missing_and_extras ___________________
-tests/unit/test_prediction_fields.py:243: in test_prediction_mixed_missing_and_extras
-    assert len(predictions) > 0, "Should have at least one prediction"
-E   AssertionError: Should have at least one prediction
-E   assert 0 > 0
-E    +  where 0 = len([])
-=============================== warnings summary ===============================
-../../../.local/share/virtualenvs/sevakavakians-IczYcfnC/lib/python3.9/site-packages/_pytest/config/__init__.py:1294
-  /Users/sevakavakians/.local/share/virtualenvs/sevakavakians-IczYcfnC/lib/python3.9/site-packages/_pytest/config/__init__.py:1294: PytestConfigWarning: Unknown config option: timeout
-  
-    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+============================= 105 passed in 18.72s =============================
 
--- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-=========================== short test summary info ============================
-FAILED tests/api/test_rest_endpoints.py::test_connect_endpoint - AssertionErr...
-FAILED tests/api/test_rest_endpoints.py::test_observe_endpoint - AssertionErr...
-FAILED tests/api/test_rest_endpoints.py::test_gene_endpoint - AssertionError:...
-FAILED tests/api/test_rest_endpoints.py::test_gene_change_endpoint - assert 4...
-FAILED tests/api/test_rest_endpoints.py::test_model_endpoint - assert 500 == 200
-FAILED tests/api/test_rest_endpoints.py::test_endpoint_response_timing - Asse...
-FAILED tests/integration/test_sequence_learning.py::test_multiple_sequence_learning
-FAILED tests/integration/test_sequence_learning.py::test_interleaved_sequence_learning
-FAILED tests/integration/test_sequence_learning.py::test_max_sequence_length_auto_learn
-FAILED tests/integration/test_sequence_learning.py::test_branching_sequences
-FAILED tests/unit/test_memory_management.py::test_max_sequence_length - Asser...
-FAILED tests/unit/test_model_hashing.py::test_model_hash_in_predictions - Ass...
-FAILED tests/unit/test_model_hashing.py::test_model_hash_with_vectors - Asser...
-FAILED tests/unit/test_model_hashing.py::test_empty_sequence_hash - Assertion...
-FAILED tests/unit/test_model_hashing.py::test_single_observation_hash - Asser...
-FAILED tests/unit/test_model_hashing.py::test_complex_sequence_hash - Asserti...
-FAILED tests/unit/test_observations.py::test_observe_single_string - Assertio...
-FAILED tests/unit/test_prediction_edge_cases.py::test_partial_overlap_multiple_sequences
-FAILED tests/unit/test_prediction_fields.py::test_prediction_past_field - Ass...
-FAILED tests/unit/test_prediction_fields.py::test_prediction_mixed_missing_and_extras
-============= 20 failed, 85 passed, 1 warning in 140.84s (0:02:20) =============
+[0;32m✓ Tests passed successfully![0m

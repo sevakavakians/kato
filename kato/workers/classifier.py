@@ -6,7 +6,6 @@ from numpy import array
 
 from kato.informatics.knowledge_base import SuperKnowledgeBase  # , KnowledgeBase
 from kato.representations.vector_object import VectorObject
-from kato.searches import vector_searches
 from kato.searches.vector_search_engine import CVCSearcherModern
 
 logger = logging.getLogger('kato.classifier')
@@ -74,24 +73,7 @@ class Classifier:
         logger.debug(percept_vector)
         percept_vector = VectorObject(percept_vector)
         logger.debug(percept_vector)
-        if self.classifier == "DVC":
-            if not percept_vector.isNull():
-                recognized_objects, _discovered_object = vector_searches.vectorSearch(percept_vector, list(self.vectors_kb.values()), self.search_depth, self.primers)
-                recognized_symbols = []
-                if recognized_objects:
-                    for vector in recognized_objects:
-                        self.deferred_vectors_for_learning.append(vector)
-                        recognized_symbols.append(vector.name)
-                # If no objects were recognized (e.g., empty KB), use the percept vector itself
-                if not recognized_symbols:
-                    self.deferred_vectors_for_learning.append(percept_vector)
-                    recognized_symbols = [percept_vector.name]
-                return recognized_symbols
-            else:
-                self.deferred_vectors_for_learning.append(percept_vector)
-                return [percept_vector.name]
-
-        elif self.classifier == "CVC":
+        if self.classifier == "CVC":
             nearest_vectors = self.CVC_searcher.findNearestPoints(percept_vector)
             self.deferred_vectors_for_learning.append(percept_vector)
             if nearest_vectors:

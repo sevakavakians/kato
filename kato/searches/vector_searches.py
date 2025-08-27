@@ -3,7 +3,12 @@ from itertools import groupby
 from multiprocessing import Pool
 from operator import attrgetter, itemgetter
 
-from numpy.linalg import norm
+try:
+    from numpy.linalg import norm
+except ImportError:
+    # Fallback if numpy is not properly installed
+    def norm(x):
+        return sum(i**2 for i in x) ** 0.5
 
 from kato.auxiliary.decorators import *
 from kato.searches.aima.search import iterative_deepening_search, Problem

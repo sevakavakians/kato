@@ -238,6 +238,7 @@ COMMANDS:
     config      Show current configuration
     shell       Open shell in running KATO container
     diagnose    Run Docker diagnostic to troubleshoot issues
+    vectordb    Manage vector database (see: vectordb help)
     
 STOP COMMAND OPTIONS:
     stop                     Stop all instances (asks about MongoDB)
@@ -254,6 +255,11 @@ BASIC OPTIONS:
     -l, --log-level LEVEL   Log level (DEBUG, INFO, WARNING, ERROR)
     -k, --api-key KEY       API key for authentication
     -h, --help              Show this help message
+
+VECTOR DATABASE OPTIONS:
+    --no-vectordb           Disable vector database (use MongoDB only)
+    --vectordb-backend TYPE Vector DB backend: qdrant, milvus, weaviate
+                           (default: qdrant, starts automatically)
 
 KATO PROCESSOR OPTIONS:
     --id ID                 Processor ID (default: auto-generated)
@@ -273,7 +279,9 @@ KATO PROCESSOR OPTIONS:
     --no-predictions       Disable prediction processing (default: enabled)
 
 EXAMPLES:
-    $0 start                                    # Start with default settings
+    $0 start                                    # Start with defaults (includes vector DB)
+    $0 start --no-vectordb                      # Start without vector database
+    $0 start --vectordb-backend qdrant          # Explicitly use Qdrant backend
     $0 start --name MyProcessor --port 9000     # Custom name and port
     $0 start --classifier DVC --max-predictions 50  # Custom classifier
     $0 list                                     # List all instances
@@ -388,6 +396,14 @@ parse_args() {
             --no-predictions)
                 PROCESS_PREDICTIONS="false"
                 shift
+                ;;
+            --no-vectordb)
+                DISABLE_VECTORDB="true"
+                shift
+                ;;
+            --vectordb-backend)
+                VECTORDB_BACKEND="$2"
+                shift 2
                 ;;
             -h|--help)
                 show_help
@@ -574,6 +590,48 @@ start_mongodb() {
         sleep 1
     done
     log_success "MongoDB is ready"
+}
+
+# Start Vector Database
+start_vectordb() {
+    # Check if vector DB is disabled
+    if [[ "$DISABLE_VECTORDB" == "true" ]]; then
+        log_info "Vector database disabled by --no-vectordb flag"
+        return 0
+    fi
+    
+    # Check if vectordb manager script exists
+    if [[ ! -x "$SCRIPT_DIR/scripts/vectordb_manager.sh" ]]; then
+        log_warning "Vector database manager not found. Skipping vector DB startup."
+        log_warning "To enable vector database support, ensure scripts/vectordb_manager.sh exists"
+        return 0
+    fi
+    
+    log_info "Starting vector database services..."
+    
+    # Set backend if specified
+    if [[ -n "$VECTORDB_BACKEND" ]]; then
+        export KATO_VECTOR_DB_BACKEND="$VECTORDB_BACKEND"
+        log_info "Using vector database backend: $VECTORDB_BACKEND"
+    fi
+    
+    # Start vector database services
+    if "$SCRIPT_DIR/scripts/vectordb_manager.sh" start; then
+        log_success "Vector database services started"
+        
+        # Set environment variable to indicate vector DB is available
+        export KATO_VECTORDB_ENABLED="true"
+        
+        # Optionally run migration if this is first time or if requested
+        if [[ "$AUTO_MIGRATE_VECTORS" == "true" ]]; then
+            log_info "Auto-migrating vectors from MongoDB to vector database..."
+            "$SCRIPT_DIR/scripts/vectordb_manager.sh" migrate --no-verify
+        fi
+    else
+        log_warning "Failed to start vector database services"
+        log_warning "KATO will continue with MongoDB vector storage"
+        export KATO_VECTORDB_ENABLED="false"
+    fi
 }
 
 # Start KATO
@@ -851,11 +909,18 @@ for instance_id in instances:
     # Handle MongoDB
     if [[ "$stop_mongo" == "yes" ]]; then
         stop_mongodb
+        stop_vectordb  # Also stop vector database
     elif [[ "$stop_mongo" == "ask" ]]; then
         read -p "Stop and remove MongoDB? (y/n) " -n 1 -r
         echo
         if [[ $REPLY =~ ^[Yy]$ ]]; then
             stop_mongodb
+            # Ask about vector database
+            read -p "Stop and remove Vector Database services? (y/n) " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                stop_vectordb
+            fi
         fi
     fi
 }
@@ -867,6 +932,19 @@ stop_mongodb() {
         docker stop "$MONGO_CONTAINER_NAME" >/dev/null 2>&1
         docker rm "$MONGO_CONTAINER_NAME" >/dev/null 2>&1
         log_success "MongoDB stopped and removed"
+    fi
+}
+
+# Stop Vector Database
+stop_vectordb() {
+    # Check if vectordb manager script exists
+    if [[ -x "$SCRIPT_DIR/scripts/vectordb_manager.sh" ]]; then
+        log_info "Stopping vector database services..."
+        if "$SCRIPT_DIR/scripts/vectordb_manager.sh" stop; then
+            log_success "Vector database services stopped"
+        else
+            log_warning "Failed to stop vector database services"
+        fi
     fi
 }
 
@@ -926,6 +1004,12 @@ show_status() {
     echo "---------------"
     local mongo_status=$(container_status "$MONGO_CONTAINER_NAME")
     printf "%-20s %s\n" "MongoDB:" "$mongo_status"
+    
+    # Show Vector Database status
+    local qdrant_status=$(container_status "qdrant-${USER}-1")
+    local redis_status=$(container_status "redis-cache-${USER}-1")
+    printf "%-20s %s\n" "Qdrant (VectorDB):" "$qdrant_status"
+    printf "%-20s %s\n" "Redis (Cache):" "$redis_status"
     
     # Show instances
     echo
@@ -1160,6 +1244,7 @@ main() {
             validate_parameters
             ensure_network
             start_mongodb
+            start_vectordb  # Start vector database by default
             start_kato
             log_success "KATO system started successfully"
             show_status
@@ -1176,6 +1261,7 @@ main() {
             validate_parameters
             ensure_network
             start_mongodb
+            start_vectordb  # Start vector database by default
             start_kato
             log_success "KATO system restarted successfully"
             ;;
@@ -1227,6 +1313,16 @@ main() {
             else
                 log_error "docker-diagnostic.sh not found or not executable"
                 log_info "Please ensure docker-diagnostic.sh is in the current directory"
+            fi
+            ;;
+        "vectordb")
+            # Call vector database manager script
+            if [[ -x "$SCRIPT_DIR/scripts/vectordb_manager.sh" ]]; then
+                "$SCRIPT_DIR/scripts/vectordb_manager.sh" "$@"
+            else
+                log_error "Vector database manager not found or not executable"
+                log_info "Please ensure scripts/vectordb_manager.sh exists"
+                exit 1
             fi
             ;;
         "help"|"-h"|"--help"|"")

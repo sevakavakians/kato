@@ -20,6 +20,7 @@ KATO is a specialized AI module that provides **deterministic memory, abstractio
 🔄 **Stateful Processing** - Maintains context across observations  
 🚀 **Multi-Instance Support** - Run multiple processors with different configurations  
 📊 **Instance Management** - Built-in registry and management tools  
+🎪 **Vector Database** - Modern vector search with Qdrant (10-100x faster)  
 
 ### Example Architecture
 
@@ -30,6 +31,20 @@ Combining KATO with black box stochastic processes such as General Purpose Trans
 KATO provides a deterministic machine learning algorithm that learns context + action + outcome sequences, effectively caching for reduced calls to expensive models. Additionally, it stores these sequences in a traceable database (typically MongoDB) allowing both real-time learning and updates. If an action taken by the agent needs to be corrected so that it isn't repeated given the same or similar context, the database can simply be edited with an alternative action.
 
 
+## Prerequisites
+
+### System Requirements
+- Docker and Docker Compose
+- Python 3.9+ (for local development)
+- 4GB+ RAM recommended
+- MongoDB (auto-started)
+- **Qdrant Vector Database** (auto-started)
+
+### Required Python Packages
+```bash
+pip install qdrant-client>=1.7.0 redis>=4.5.0 aiofiles>=23.0.0
+```
+
 ## Quick Start
 
 ### Single Instance
@@ -38,13 +53,20 @@ KATO provides a deterministic machine learning algorithm that learns context + a
 git clone https://github.com/your-org/kato.git
 cd kato
 
-# Build and start
+# Build and start (includes vector database)
 ./kato-manager.sh build
 ./kato-manager.sh start
 
 # Verify installation
 curl http://localhost:8000/kato-api/ping
 ```
+
+### Vector Database
+KATO now uses Qdrant for high-performance vector operations:
+- **Automatic startup** with KATO
+- **10-100x faster** than previous implementation
+- **Port 6333** (Qdrant REST API)
+- **Port 6334** (Qdrant gRPC)
 
 ### Multiple Instances
 ```bash
@@ -115,6 +137,9 @@ Learn more in [Core Concepts](docs/CONCEPTS.md).
 - [Troubleshooting](docs/technical/TROUBLESHOOTING.md) - Common issues
 - [ZeroMQ Architecture](docs/technical/ZEROMQ_ARCHITECTURE.md) - Protocol details
 - [Prediction Object Reference](docs/technical/PREDICTION_OBJECT_REFERENCE.md) - Complete field documentation
+- [Vector Architecture](docs/VECTOR_ARCHITECTURE_IMPLEMENTATION.md) - Modern vector database system
+- [Breaking Changes](docs/BREAKING_CHANGES_VECTOR_ARCHITECTURE.md) - Vector migration guide
+- [Known Issues](docs/KNOWN_ISSUES_AND_BUGS.md) - Current bugs and workarounds
 
 ### 📁 Documentation Structure
 
@@ -125,6 +150,11 @@ docs/
 ├── MULTI_INSTANCE_GUIDE.md  # Multi-instance management
 ├── API_REFERENCE.md         # Complete API docs
 ├── SYSTEM_OVERVIEW.md       # End-to-end behavior
+├── VECTOR_ARCHITECTURE_IMPLEMENTATION.md  # Vector DB system
+├── VECTOR_MIGRATION_GUIDE.md              # Migration steps
+├── VECTOR_TEST_RESULTS.md                 # Performance data
+├── BREAKING_CHANGES_VECTOR_ARCHITECTURE.md # Breaking changes
+├── KNOWN_ISSUES_AND_BUGS.md               # Current issues
 ├── deployment/
 │   ├── ARCHITECTURE.md      # System design
 │   ├── CONFIGURATION.md     # All parameters

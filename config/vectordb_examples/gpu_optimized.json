@@ -1,0 +1,53 @@
+{
+  "backend": "qdrant",
+  "vector_dim": 512,
+  "similarity_metric": "cosine",
+  "qdrant": {
+    "host": "localhost",
+    "port": 6333,
+    "collection_name": "kato_vectors_gpu",
+    "vector_size": 512,
+    "distance": "cosine",
+    "on_disk_payload": true
+  },
+  "cache": {
+    "enabled": true,
+    "backend": "redis",
+    "host": "localhost",
+    "port": 6379,
+    "size": 100000,
+    "ttl": 3600
+  },
+  "quantization": {
+    "enabled": true,
+    "type": "product",
+    "parameters": {
+      "compression": "x32",
+      "always_ram": true
+    }
+  },
+  "index": {
+    "type": "hnsw",
+    "parameters": {
+      "m": 48,
+      "ef_construct": 400,
+      "ef_search": 200,
+      "max_elements": 50000000
+    }
+  },
+  "gpu": {
+    "enabled": true,
+    "device_ids": [0, 1],
+    "force_half_precision": true,
+    "indexing": true,
+    "search": true
+  },
+  "batch_size": 10000,
+  "search_limit": 200,
+  "search_timeout": 60.0,
+  "connection_pool_size": 50,
+  "enable_filtering": true,
+  "enable_payload": true,
+  "enable_async": true,
+  "auto_create_collection": true
+}

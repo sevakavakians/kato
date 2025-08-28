@@ -18,10 +18,10 @@ KATO has migrated to a modern vector database architecture using Qdrant, replaci
 - Action: Qdrant starts automatically with `./kato-manager.sh start`
 - To disable (not recommended): `./kato-manager.sh start --no-vectordb`
 
-### 3. CVCSearcher Changes
-**CHANGE**: `CVCSearcher` is now an alias for `CVCSearcherModern`
-- Previously: `kato.searches.vector_searches.CVCSearcher` (multiprocessing-based)
-- Now: `kato.searches.vector_search_engine.CVCSearcherModern` (async, cached)
+### 3. VectorIndexer Changes
+**CHANGE**: `VectorIndexer` is now an alias for `VectorIndexer`
+- Previously: `kato.searches.vector_searches.VectorIndexer` (multiprocessing-based)
+- Now: `kato.searches.vector_search_engine.VectorIndexer` (async, cached)
 - Compatibility: Old imports still work but use new implementation
 - Action: No immediate changes required, but update imports when convenient
 
@@ -35,7 +35,7 @@ KATO has migrated to a modern vector database architecture using Qdrant, replaci
 
 ### 5. API Changes
 **REMOVED**: Direct access to internal vector structures
-- Previously: `CVCSearcher.datasubset` exposed internal vectors
+- Previously: `VectorIndexer.datasubset` exposed internal vectors
 - Now: Vectors managed by database, access via API only
 - Action: Use search methods instead of direct access
 
@@ -69,10 +69,10 @@ python scripts/migrate_vectors.py
 ### Step 4: Update Code (If Needed)
 ```python
 # Old way (still works)
-from kato.searches.vector_searches import CVCSearcher
+from kato.searches.vector_searches import VectorIndexer
 
 # New way (recommended)
-from kato.searches.vector_search_engine import CVCSearcherModern
+from kato.searches.vector_search_engine import VectorIndexer
 ```
 
 ### Step 5: Remove Old Architecture (Optional)
@@ -121,7 +121,7 @@ For questions or issues:
 ## Affected Components
 
 - `kato/searches/vector_searches.py` - Simplified, legacy code removed
-- `kato/workers/classifier.py` - Uses CVCSearcherModern
+- `kato/workers/vector_processor.py` - Uses VectorIndexer
 - `kato/storage/*` - New vector store abstraction layer
 - `kato/config/vectordb_config.py` - New configuration system
 - `docker-compose.vectordb.yml` - Vector database services

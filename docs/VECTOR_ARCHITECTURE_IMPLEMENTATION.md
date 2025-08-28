@@ -18,7 +18,7 @@ Successfully modernized KATO's vector storage and search capabilities by impleme
 
 ### 3. Advanced Search Engine
 - **Modern Search**: `vector_search_engine.py` with caching and batching
-- **CVCSearcherModern**: Drop-in replacement for legacy CVCSearcher
+- **VectorIndexer**: Drop-in replacement for legacy VectorIndexer
 - **Performance Optimizations**: 
   - LRU caching for frequent searches
   - Batch processing for multiple queries

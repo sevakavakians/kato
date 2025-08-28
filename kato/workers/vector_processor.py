@@ -5,54 +5,54 @@ from functools import reduce
 from numpy import array
 
 from kato.representations.vector_object import VectorObject
-from kato.searches.vector_search_engine import CVCSearcherModern
+from kato.searches.vector_search_engine import VectorIndexer
 
-logger = logging.getLogger('kato.classifier')
+logger = logging.getLogger('kato.vector_processor')
 logger.setLevel(getattr(logging, environ['LOG_LEVEL']))
 logger.info('logging initiated')
 
 
-class Classifier:
+class VectorProcessor:
     """
     Processes percept VectorObjects to determine the object representations.
-    Uses modern CVC (Cognition Vector Cluster) searcher with Qdrant backend.
+    Uses modern Vector Indexer with Qdrant backend.
     """
     def __init__(self, procs_for_searches, **kwargs):
-        logger.debug("Starting Classifier...")
-        self.name = "Classifier"
+        logger.debug("Starting VectorProcessor...")
+        self.name = "VectorProcessor"
         self.kb_id = kwargs["kb_id"]
-        self.classifier = kwargs["classifier"]
+        self.indexer_type = kwargs["indexer_type"]
         self.procs_for_searches = procs_for_searches
         self.initialize_vector_searcher()
         self.deferred_vectors_for_learning = []
-        logger.debug("Classifier ready!")
+        logger.debug("VectorProcessor ready!")
         return
 
     def clear_all_memory(self):
-        logger.debug("In Classifier clear all memory")
+        logger.debug("In VectorProcessor clear all memory")
         self.deferred_vectors_for_learning = []
-        if self.classifier == "CVC":
-            self.CVC_searcher.clearModelsFromRAM()
+        if self.indexer_type == "VI":
+            self.vector_indexer.clearModelsFromRAM()
             self.round_robin_index = 0
-            logger.debug("about to reset CVCSearcher")
-            self.CVC_searcher = CVCSearcherModern(self.procs_for_searches)
+            logger.debug("about to reset VectorIndexer")
+            self.vector_indexer = VectorIndexer(self.procs_for_searches)
         return
 
-    def clear_wm(self):
+    def clear_stm(self):
         self.deferred_vectors_for_learning = []
         return
 
     def learn(self):
         # Vector learning now handled by modern vector store
-        if self.classifier == "CVC":
-            self.CVC_searcher.assignNewlyLearnedToWorkers(self.deferred_vectors_for_learning)
+        if self.indexer_type == "VI":
+            self.vector_indexer.assignNewlyLearnedToWorkers(self.deferred_vectors_for_learning)
         self.deferred_vectors_for_learning = []
         return
 
     def initialize_vector_searcher(self):
-        if self.classifier == "CVC":
+        if self.indexer_type == "VI":
             self.round_robin_index = 0
-            self.CVC_searcher = CVCSearcherModern(self.procs_for_searches)
+            self.vector_indexer = VectorIndexer(self.procs_for_searches)
         return
 
     def process(self, vector_data):
@@ -64,8 +64,8 @@ class Classifier:
         logger.debug(percept_vector)
         percept_vector = VectorObject(percept_vector)
         logger.debug(percept_vector)
-        if self.classifier == "CVC":
-            nearest_vectors = self.CVC_searcher.findNearestPoints(percept_vector)
+        if self.indexer_type == "VI":
+            nearest_vectors = self.vector_indexer.findNearestPoints(percept_vector)
             self.deferred_vectors_for_learning.append(percept_vector)
             if nearest_vectors:
                 if percept_vector.name not in nearest_vectors:

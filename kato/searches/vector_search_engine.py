@@ -570,16 +570,16 @@ class VectorSearchEngine:
         self._cache[key] = results
 
 
-class CVCSearcherModern:
+class VectorIndexer:
     """
-    Modern implementation of CVC (Cognition Vector Cluster) searcher.
+    Modern implementation of Vector Indexer.
     
-    Drop-in replacement for the legacy CVCSearcher that uses the modern
+    Indexes vectors and performs similarity search using the modern
     vector search engine for better performance.
     """
     
     def __init__(self, procs: int = 1, vectors_kb=None):
-        """Initialize modern CVC searcher
+        """Initialize Vector Indexer
         
         Args:
             procs: Number of processors (kept for compatibility but not used)
@@ -587,7 +587,7 @@ class CVCSearcherModern:
         """
         self.procs = procs  # Kept for compatibility but not used
         self.vectors_kb = vectors_kb  # Kept for compatibility
-        self.engine = VectorSearchEngine(collection_name="cvc_vectors")
+        self.engine = VectorSearchEngine(collection_name="vector_index")
         self.initialized = False
         
         # Compatibility attributes
@@ -598,7 +598,7 @@ class CVCSearcherModern:
         if not self.initialized:
             self.initialized = self.engine.initialize_sync()
             if not self.initialized:
-                logger.error("Failed to initialize modern CVC searcher")
+                logger.error("Failed to initialize Vector Indexer")
     
     def loadMemoryIntoRAM(self, vectors_dict: Dict[str, VectorObject]):
         """Load vectors into the search index"""
@@ -618,7 +618,7 @@ class CVCSearcherModern:
                 vector_arrays,
                 vector_ids
             )
-            logger.info(f"Loaded {success}/{len(vector_arrays)} vectors into CVC index")
+            logger.info(f"Loaded {success}/{len(vector_arrays)} vectors into vector index")
         
         # Update compatibility attribute
         self.datasubset = list(vectors_dict.values())

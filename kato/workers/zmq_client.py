@@ -186,13 +186,13 @@ class ZMQClient:
         """Clear all processor memory."""
         return self.call('clear_all_memory')
         
-    def clear_working_memory(self):
-        """Clear working memory only."""
-        return self.call('clear_working_memory')
+    def clear_short_term_memory(self):
+        """Clear short-term memory only."""
+        return self.call('clear_short_term_memory')
         
-    def get_working_memory(self):
-        """Get the current working memory contents."""
-        response = self.call('get_wm')
+    def get_short_term_memory(self):
+        """Get the current short-term memory contents."""
+        response = self.call('get_stm')
         return response.get('data', [])
         
     def get_predictions(self):

@@ -29,25 +29,40 @@ KATO (Knowledge Abstraction for Traceable Outcomes) is a deterministic memory an
 docker logs kato-api-$(whoami)-1 --tail 20
 ```
 
-### Testing
+### Testing (Container-Based - Preferred)
 ```bash
-# Run all tests (recommended)
-./run_tests.sh
+# Build test harness container (first time or after dependency changes)
+./test-harness.sh build
 
-# Run specific test categories
-./run_tests_simple.sh unit      # Unit tests only
-./run_tests_simple.sh integration # Integration tests
-./run_tests_simple.sh api       # API tests
+# Run all tests in container (recommended)
+./kato-manager.sh test
+# OR directly:
+./test-harness.sh test
 
-# Run single test file
-python3 -m pytest tests/unit/test_memory_management.py -v
+# Run specific test suites
+./test-harness.sh suite unit        # Unit tests only
+./test-harness.sh suite integration # Integration tests
+./test-harness.sh suite api        # API tests
+./test-harness.sh suite performance # Performance tests
+./test-harness.sh suite determinism # Determinism tests
 
-# Run specific test
-python3 -m pytest tests/unit/test_memory_management.py::test_working_memory_operations -v
+# Run specific test path
+./test-harness.sh test tests/tests/unit/test_memory_management.py
 
-# Run with markers
-python3 -m pytest -m "not slow" -v  # Skip slow tests
+# Run with pytest options
+./test-harness.sh test tests/ -v -x  # Verbose, stop on first failure
+
+# Generate coverage report
+./test-harness.sh report
+
+# Interactive shell in test container (for debugging)
+./test-harness.sh shell
+
+# Development mode (live code updates)
+./test-harness.sh dev tests/tests/unit/ -v
 ```
+
+Note: The container-based approach ensures consistent test environment without requiring local Python dependencies.
 
 ### Development and Debugging
 ```bash
@@ -101,7 +116,7 @@ REST Client → REST Gateway (Port 8000) → ZMQ Server (Port 5555) → KATO Pro
 
 ### Memory Architecture
 
-- **Working Memory**: Temporary storage for current observation sequences
+- **Short-Term Memory (STM)**: Temporary storage for current observation sequences (formerly Working Memory)
 - **Long-Term Memory**: Persistent storage with `MODEL|<sha1_hash>` patterns
 - **Vector Storage**: Modern Qdrant database with collection per processor
 - **Model Hashing**: SHA1-based deterministic model identification
@@ -116,13 +131,14 @@ REST Client → REST Gateway (Port 8000) → ZMQ Server (Port 5555) → KATO Pro
 
 ## Testing Strategy
 
-The codebase has 105+ tests with 100% pass rate. When adding new features:
+The codebase has 128 tests with 100% pass rate and 0 warnings. Tests are organized under `tests/tests/`:
 
-1. **Unit Tests** (`tests/unit/`): Test individual components in isolation
-2. **Integration Tests** (`tests/integration/`): Test end-to-end workflows
-3. **API Tests** (`tests/api/`): Validate REST endpoints
+1. **Unit Tests** (`tests/tests/unit/`): 83 tests for individual components
+2. **Integration Tests** (`tests/tests/integration/`): 19 tests for end-to-end workflows
+3. **API Tests** (`tests/tests/api/`): 21 tests for REST endpoints
+4. **Performance Tests** (`tests/tests/performance/`): 5 stress and performance tests
 
-Use existing fixtures from `tests/fixtures/kato_fixtures.py` for consistency.
+Use existing fixtures from `tests/tests/fixtures/kato_fixtures.py` for consistency.
 
 ## Configuration
 
@@ -151,9 +167,9 @@ PROCESSOR_ID=p123 PROCESSOR_NAME=CustomProcessor ./kato-manager.sh start
 
 1. Make changes to source files in `kato/` directory
 2. Use `./update_container.sh` for hot reload during development
-3. Run relevant tests with `./run_tests_simple.sh <category>`
+3. Run relevant tests with `./test-harness.sh suite <category>` or `./kato-manager.sh test`
 4. For production changes, rebuild with `./kato-manager.sh build`
-5. Test full system with `./run_tests.sh` before committing
+5. Test full system with `./test-harness.sh test` before committing
 
 ## Important Files and Locations
 

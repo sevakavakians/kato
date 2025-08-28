@@ -22,7 +22,13 @@ class KATOTestFixture:
     
     def __init__(self, processor_name: str = "P1"):
         self.processor_name = processor_name
-        self.processor_id = self._generate_processor_id()
+        
+        # Check if we're in container mode and have a processor ID
+        if os.environ.get('KATO_TEST_MODE') == 'container' and os.environ.get('KATO_PROCESSOR_ID'):
+            self.processor_id = os.environ.get('KATO_PROCESSOR_ID')
+        else:
+            self.processor_id = self._generate_processor_id()
+            
         self.base_url = "http://localhost:8000"
         self.process = None
         self.is_running = False
@@ -36,7 +42,34 @@ class KATOTestFixture:
         
     def setup(self):
         """Start KATO with the specified genome or use existing instance."""
-        # First check if KATO is already running
+        # Check if we're running in a test container
+        in_container = os.environ.get('KATO_TEST_MODE') == 'container'
+        
+        # If we're in a container, KATO should already be running externally
+        if in_container:
+            print(f"Running in container mode - using processor ID: {self.processor_id}")
+            # Don't try to start KATO, just verify it's accessible
+            try:
+                # Quick check that API is accessible
+                response = requests.get(f"{self.base_url}/kato-api/ping", timeout=5)
+                if response.status_code == 200:
+                    self.is_running = True
+                    # Verify processor is accessible
+                    proc_response = requests.get(f"{self.base_url}/{self.processor_id}/ping", timeout=5)
+                    if proc_response.status_code == 200:
+                        return  # Everything is ready
+                    else:
+                        print(f"Warning: Processor {self.processor_id} not responding")
+                        # Try to get actual processor ID from connect endpoint
+                        self._update_processor_id()
+                        return
+            except Exception as e:
+                print(f"Warning: Could not connect to KATO API: {e}")
+                # Continue anyway, tests will fail if API is truly inaccessible
+            self.is_running = True
+            return
+        
+        # Not in container - check if KATO is already running
         try:
             response = requests.get(f"{self.base_url}/kato-api/ping", timeout=2)
             if response.status_code == 200:
@@ -47,7 +80,7 @@ class KATOTestFixture:
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
             pass
         
-        # KATO is not running, try to start it
+        # KATO is not running and we're not in a container, try to start it
         env = os.environ.copy()
         env['PROCESSOR_ID'] = self.processor_id
         env['PROCESSOR_NAME'] = self.processor_name
@@ -55,6 +88,11 @@ class KATOTestFixture:
         
         # Start KATO using the manager script
         kato_manager = os.path.join(os.path.dirname(__file__), '../../../kato-manager.sh')
+        
+        # Check if kato-manager.sh exists
+        if not os.path.exists(kato_manager):
+            raise FileNotFoundError(f"kato-manager.sh not found at {kato_manager}. "
+                                    "Make sure KATO is running before running tests.")
         
         # Check if we need to build (only if image doesn't exist)
         check_image = subprocess.run(
@@ -88,13 +126,33 @@ class KATOTestFixture:
         
     def teardown(self):
         """Stop KATO if we started it."""
+        # Check if we're running in a test container
+        in_container = os.environ.get('KATO_TEST_MODE') == 'container'
+        
+        # Don't try to stop KATO if we're in a container (it's managed externally)
+        if in_container:
+            return
+            
         # Only stop if we started the process
         if self.is_running and hasattr(self, 'process') and self.process:
             kato_manager = os.path.join(os.path.dirname(__file__), '../../../kato-manager.sh')
-            stop_cmd = [kato_manager, 'stop']
-            subprocess.run(stop_cmd, capture_output=True, text=True)
+            if os.path.exists(kato_manager):
+                stop_cmd = [kato_manager, 'stop']
+                subprocess.run(stop_cmd, capture_output=True, text=True)
             self.is_running = False
             
+    def _update_processor_id(self):
+        """Update processor ID from connect endpoint."""
+        try:
+            connect_response = requests.get(f"{self.base_url}/connect", timeout=5)
+            if connect_response.status_code == 200:
+                connect_data = connect_response.json()
+                if 'genome' in connect_data and 'id' in connect_data['genome']:
+                    self.processor_id = connect_data['genome']['id']
+                    print(f"Updated processor ID to: {self.processor_id}")
+        except Exception as e:
+            print(f"Could not update processor ID: {e}")
+    
     def _wait_for_ready(self, timeout: int = 30):
         """Wait for KATO to be ready to accept requests."""
         start_time = time.time()
@@ -118,7 +176,7 @@ class KATOTestFixture:
                     if response.status_code == 200:
                         # Phase 3: Try a simple operation
                         response = requests.post(
-                            f"{self.base_url}/{self.processor_id}/clear-working-memory",
+                            f"{self.base_url}/{self.processor_id}/clear-short-term-memory",
                             json={}
                         )
                         if response.status_code == 200:
@@ -146,9 +204,16 @@ class KATOTestFixture:
         result = response.json()
         return result.get('message', {})
         
+    def get_short_term_memory(self) -> list:
+        """Get the current short-term memory."""
+        response = requests.get(f"{self.base_url}/{self.processor_id}/short-term-memory")
+        response.raise_for_status()
+        result = response.json()
+        return result.get('message', [])
+    
     def get_working_memory(self) -> list:
-        """Get the current working memory."""
-        response = requests.get(f"{self.base_url}/{self.processor_id}/working-memory")
+        """Get the current working memory (now called short-term memory)."""
+        response = requests.get(f"{self.base_url}/{self.processor_id}/short-term-memory")
         response.raise_for_status()
         result = response.json()
         return result.get('message', [])
@@ -181,10 +246,20 @@ class KATOTestFixture:
         result = response.json()
         return result.get('message', '')
         
-    def clear_working_memory(self) -> str:
-        """Clear working memory."""
+    def clear_short_term_memory(self) -> str:
+        """Clear short-term memory."""
         response = requests.post(
-            f"{self.base_url}/{self.processor_id}/clear-working-memory",
+            f"{self.base_url}/{self.processor_id}/clear-short-term-memory",
+            json={}
+        )
+        response.raise_for_status()
+        result = response.json()
+        return result.get('message', '')
+    
+    def clear_working_memory(self) -> str:
+        """Clear working memory (now called short-term memory)."""
+        response = requests.post(
+            f"{self.base_url}/{self.processor_id}/clear-short-term-memory",
             json={}
         )
         response.raise_for_status()

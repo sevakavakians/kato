@@ -78,7 +78,7 @@ export KATO_ZMQ_IMPLEMENTATION=basic
 - `observe`: Process observations
 - `learn`: Trigger learning
 - `get_predictions`: Retrieve current predictions
-- `clear_all_memory` / `clear_working_memory`: Memory management
+- `clear_all_memory` / `clear_short_term_memory`: Memory management
 - `get_gene` / `change_gene`: Genome manipulation
 
 ### 2. REST Gateway (`rest_gateway.py`)
@@ -91,7 +91,7 @@ HTTP-to-ZMQ translation layer for backward compatibility:
 - `/connect`: Connection verification
 - `/{processor_id}/observe`: Send observations
 - `/{processor_id}/predictions`: Get predictions
-- `/{processor_id}/working-memory`: Access working memory
+- `/{processor_id}/short-term-memory`: Access short-term memory
 - `/{processor_id}/learn`: Trigger learning
 - And more REST endpoints mapping to ZMQ operations
 

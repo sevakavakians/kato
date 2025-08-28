@@ -91,15 +91,15 @@ python tests/test_vector_stress.py
 
 ```python
 # Old code still works
-from kato.searches.vector_searches import CVCSearcher
-searcher = CVCSearcher(num_procs, vectors_kb)
+from kato.searches.vector_searches import VectorIndexer
+searcher = VectorIndexer(num_procs, vectors_kb)
 ```
 
 ### Recommended Changes (For Best Performance)
 ```python
 # New recommended approach
-from kato.searches.vector_search_engine import CVCSearcherModern
-searcher = CVCSearcherModern(num_procs, vectors_kb)
+from kato.searches.vector_search_engine import VectorIndexer
+searcher = VectorIndexer(num_procs, vectors_kb)
 ```
 
 ## Configuration Options

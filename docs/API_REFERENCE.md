@@ -101,7 +101,7 @@ Get detailed processor status.
   "status": "okay",
   "processor_id": "p46b6b076c",
   "name": "P1",
-  "working_memory_size": 3,
+  "short_term_memory_size": 3,
   "model_count": 5,
   "predictions_available": true
 }
@@ -132,7 +132,7 @@ Send an observation to the processor.
 {
   "status": "observed",
   "processor_id": "p46b6b076c",
-  "working_memory": [["hello", "world"]]
+  "short_term_memory": [["hello", "world"]]
 }
 ```
 
@@ -143,7 +143,7 @@ Send an observation to the processor.
 - Emotives are optional key-value pairs (0.0-1.0)
 
 #### POST /{processor_id}/learn
-Trigger learning from current working memory.
+Trigger learning from current short-term memory.
 
 **Parameters:**
 - `processor_id` (path): Processor identifier
@@ -157,10 +157,10 @@ Trigger learning from current working memory.
 }
 ```
 
-### Working Memory
+### Short-Term Memory
 
-#### GET /{processor_id}/working-memory
-Get current working memory contents.
+#### GET /{processor_id}/short-term-memory
+Get current short-term memory contents.
 
 **Parameters:**
 - `processor_id` (path): Processor identifier
@@ -170,7 +170,7 @@ Get current working memory contents.
 {
   "status": "okay",
   "processor_id": "p46b6b076c",
-  "working_memory": [
+  "short_term_memory": [
     ["first", "event"],
     ["second"],
     ["third", "event", "here"]
@@ -178,8 +178,8 @@ Get current working memory contents.
 }
 ```
 
-#### POST /{processor_id}/working-memory/clear
-Clear working memory (preserves learned models).
+#### POST /{processor_id}/short-term-memory/clear
+Clear short-term memory (preserves learned models).
 
 **Parameters:**
 - `processor_id` (path): Processor identifier
@@ -189,14 +189,14 @@ Clear working memory (preserves learned models).
 {
   "status": "okay",
   "processor_id": "p46b6b076c",
-  "message": "working memory cleared"
+  "message": "short-term memory cleared"
 }
 ```
 
 ### Memory Management
 
 #### POST /{processor_id}/memory/clear-all
-Clear all memory (working memory and learned models).
+Clear all memory (short-term memory and learned models).
 
 **Parameters:**
 - `processor_id` (path): Processor identifier
@@ -213,7 +213,7 @@ Clear all memory (working memory and learned models).
 ### Predictions
 
 #### GET /{processor_id}/predictions
-Get current predictions based on working memory.
+Get current predictions based on short-term memory.
 
 **Parameters:**
 - `processor_id` (path): Processor identifier
@@ -289,7 +289,7 @@ Get cognitive processing data.
 {
   "status": "okay",
   "processor_id": "p46b6b076c",
-  "working_memory": [...],
+  "short_term_memory": [...],
   "predictions": [...],
   "emotives": {...},
   "symbols": [...],
@@ -532,7 +532,7 @@ model = response.json()
 print("Learned model:", model)
 
 # 5. Clear and test recall
-requests.post(f"{BASE_URL}/{PROCESSOR_ID}/working-memory/clear")
+requests.post(f"{BASE_URL}/{PROCESSOR_ID}/short-term-memory/clear")
 
 response = requests.post(
     f"{BASE_URL}/{PROCESSOR_ID}/observe",

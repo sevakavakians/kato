@@ -39,7 +39,7 @@ All parameters can be specified directly when starting KATO:
 
 | Parameter | Type | Default | Range | Description |
 |-----------|------|---------|-------|-------------|
-| `--classifier` | string | "CVC" | CVC, DVC | Classifier type |
+| `--classifier` | string | "VI" | CVC, DVC | Classifier type |
 | `--max-predictions` | integer | 100 | 1-1000 | Maximum predictions to generate |
 | `--recall-threshold` | float | 0.1 | 0.0-1.0 | Minimum similarity for recall |
 | `--search-depth` | integer | 10 | 1-100 | Vector search depth |
@@ -48,19 +48,19 @@ All parameters can be specified directly when starting KATO:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `--max-seq-length` | integer | 0 | **Auto-learning threshold**: When working memory reaches this length, automatically learn sequence and reset (0=disabled) |
+| `--max-seq-length` | integer | 0 | **Auto-learning threshold**: When short-term memory reaches this length, automatically learn sequence and reset (0=disabled) |
 | `--persistence` | integer | 5 | Emotive persistence duration |
 | `--smoothness` | integer | 3 | Learning smoothness parameter |
 | `--quiescence` | integer | 3 | Quiescence period |
 
 #### Auto-Learning Feature (`max_sequence_length`)
 
-When `max_sequence_length` is set to a value greater than 0, KATO automatically learns sequences when working memory reaches the threshold:
+When `max_sequence_length` is set to a value greater than 0, KATO automatically learns sequences when short-term memory reaches the threshold:
 
 **Behavior:**
 1. **Accumulation**: Working memory accumulates observations normally
 2. **Trigger**: When length reaches `max_sequence_length`, auto-learning activates  
-3. **Learning**: The entire working memory sequence is learned as a model
+3. **Learning**: The entire short-term memory sequence is learned as a model
 4. **Reset**: Working memory is cleared, keeping only the last observation
 5. **Continuation**: System continues processing with learned model available
 
@@ -76,7 +76,7 @@ curl -X POST http://localhost:8000/p46b6b076c/genes/change \
 
 **Use Cases:**
 - **Streaming data**: Continuous learning from data streams
-- **Memory management**: Prevent working memory overflow
+- **Memory management**: Prevent short-term memory overflow
 - **Pattern recognition**: Automatic detection of recurring sequences  
 - **Real-time systems**: Background learning without manual intervention
 
@@ -226,7 +226,7 @@ KATO internally uses a JSON manifest for configuration:
 {
   "id": "p46b6b076c",
   "name": "KatoProcessor",
-  "classifier": "CVC",
+  "indexer_type": "VI",
   "max_sequence_length": 0,
   "persistence": 5,
   "smoothness": 3,
@@ -390,7 +390,7 @@ The manager script validates all parameters:
 
 | Parameter | Validation |
 |-----------|------------|
-| `classifier` | Must be "CVC" or "DVC" |
+| `classifier` | Must be "VI" or "DVC" |
 | `max_predictions` | Integer, 1-1000 |
 | `recall_threshold` | Float, 0.0-1.0 |
 | `auto_act_threshold` | Float, 0.0-1.0 |
@@ -460,7 +460,7 @@ Previously, KATO used genome files for configuration. To migrate:
       "data": {
         "id": "p46b6b076c",
         "name": "P1",
-        "classifier": "CVC",
+        "indexer_type": "VI",
         "max_predictions": 100
       }
     }]

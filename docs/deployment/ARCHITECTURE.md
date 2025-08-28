@@ -101,9 +101,9 @@ High-performance message handling layer:
 - `observe` - Process observations
 - `learn` - Trigger learning
 - `get_predictions` - Retrieve predictions
-- `clear_all_memory` / `clear_working_memory`
+- `clear_all_memory` / `clear_short_term_memory`
 - `get_gene` / `change_gene` - Parameter management
-- `get_working_memory` - Access current memory
+- `get_short_term_memory` - Access current memory
 
 ### 3. Connection Pool
 
@@ -127,7 +127,7 @@ Core AI engine:
 
 ### 1. Observation Flow
 ```
-Client → REST API → ZMQ Client → ZMQ Server → Processor → Working Memory
+Client → REST API → ZMQ Client → ZMQ Server → Processor → Short-Term Memory
 ```
 
 ### 2. Learning Flow
@@ -137,7 +137,7 @@ Client → REST API → ZMQ → Processor → Model Creation → MongoDB Storage
 
 ### 3. Prediction Flow
 ```
-Working Memory → Pattern Matching → Temporal Segmentation → Predictions → Client
+Short-Term Memory → Pattern Matching → Temporal Segmentation → Predictions → Client
 ```
 
 ## Deployment Configurations
@@ -200,7 +200,7 @@ services:
 {
   "status": "okay",
   "message": "observed",
-  "working_memory": [["hello", "world"]]
+  "short_term_memory": [["hello", "world"]]
 }
 ```
 
@@ -223,7 +223,7 @@ services:
 {
   "status": "okay",
   "message": "observed",
-  "working_memory": [["hello", "world"]]
+  "short_term_memory": [["hello", "world"]]
 }
 ```
 
@@ -248,7 +248,7 @@ services:
 ### Processor State
 
 Each processor maintains:
-- **Working Memory**: Current observation sequence
+- **Short-Term Memory**: Current observation sequence
 - **Long-term Memory**: Learned models
 - **Predictions Cache**: Current predictions
 - **Emotives State**: Aggregated emotional context

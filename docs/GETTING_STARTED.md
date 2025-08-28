@@ -66,16 +66,16 @@ curl -X POST http://localhost:8000/p46b6b076c/observe \
   }'
 ```
 
-### 2. Check Working Memory
+### 2. Check Short-Term Memory
 
 ```bash
-curl http://localhost:8000/p46b6b076c/working-memory
+curl http://localhost:8000/p46b6b076c/short-term-memory
 ```
 
 Response shows the sorted observation:
 ```json
 {
-  "working_memory": [["hello", "world"]]
+  "short_term_memory": [["hello", "world"]]
 }
 ```
 
@@ -96,8 +96,8 @@ curl -X POST http://localhost:8000/p46b6b076c/learn
 ### 4. Get Predictions
 
 ```bash
-# Clear working memory
-curl -X POST http://localhost:8000/p46b6b076c/working-memory/clear
+# Clear short-term memory
+curl -X POST http://localhost:8000/p46b6b076c/short-term-memory/clear
 
 # Observe the start of the learned sequence
 curl -X POST http://localhost:8000/p46b6b076c/observe \
@@ -117,7 +117,7 @@ KATO will predict the rest of the sequence!
    - Input: `["zebra", "apple"]` → Stored: `["apple", "zebra"]`
 
 2. **Sequence Learning**: KATO learns patterns from observations
-   - Builds models from working memory
+   - Builds models from short-term memory
    - Each model gets a unique hash identifier
 
 3. **Temporal Predictions**: KATO segments predictions into:
@@ -196,7 +196,7 @@ class KATOClient:
         return response.json()
     
     def learn(self):
-        """Trigger learning from working memory"""
+        """Trigger learning from short-term memory"""
         url = f"{self.base_url}/{self.processor_id}/learn"
         response = requests.post(url)
         return response.json()
@@ -207,9 +207,9 @@ class KATOClient:
         response = requests.get(url)
         return response.json()
     
-    def clear_working_memory(self):
-        """Clear working memory"""
-        url = f"{self.base_url}/{self.processor_id}/working-memory/clear"
+    def clear_short_term_memory(self):
+        """Clear short-term memory"""
+        url = f"{self.base_url}/{self.processor_id}/short-term-memory/clear"
         response = requests.post(url)
         return response.json()
 
@@ -224,7 +224,7 @@ model = kato.learn()
 print(f"Learned model: {model}")
 
 # Test recall
-kato.clear_working_memory()
+kato.clear_short_term_memory()
 kato.observe(["morning"])
 predictions = kato.get_predictions()
 print(f"KATO predicts: {predictions}")
@@ -232,18 +232,31 @@ print(f"KATO predicts: {predictions}")
 
 ## Running Tests
 
-KATO includes a comprehensive test suite:
+KATO includes a comprehensive test suite that runs in a containerized environment for consistency:
 
 ```bash
-# Run all tests
-cd tests
-./run_tests.sh
+# Build test harness container (first time only)
+./test-harness.sh build
 
-# Run specific test categories
-./run_tests.sh --unit          # Unit tests only
-./run_tests.sh --integration   # Integration tests
-./run_tests.sh --api           # API tests
+# Run all tests (recommended)
+./kato-manager.sh test
+# OR
+./test-harness.sh test
+
+# Run specific test suites
+./test-harness.sh suite unit          # Unit tests only
+./test-harness.sh suite integration   # Integration tests
+./test-harness.sh suite api           # API tests
+./test-harness.sh suite performance   # Performance tests
+
+# Generate coverage report
+./test-harness.sh report
+
+# Run tests in development mode (live code updates)
+./test-harness.sh dev tests/
 ```
+
+Note: The container-based approach ensures all dependencies are properly installed without affecting your host system.
 
 ## Troubleshooting
 

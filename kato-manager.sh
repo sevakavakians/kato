@@ -37,7 +37,7 @@ DEFAULT_LOG_LEVEL="INFO"
 # Default KATO processor parameters
 DEFAULT_PROCESSOR_ID="kato-$(date +%s)-$$"  # Include PID for uniqueness
 DEFAULT_PROCESSOR_NAME="KatoProcessor"
-DEFAULT_CLASSIFIER="CVC"
+DEFAULT_INDEXER_TYPE="VI"
 DEFAULT_MAX_SEQUENCE_LENGTH=0
 DEFAULT_PERSISTENCE=5
 DEFAULT_SMOOTHNESS=3
@@ -264,7 +264,7 @@ VECTOR DATABASE OPTIONS:
 KATO PROCESSOR OPTIONS:
     --id ID                 Processor ID (default: auto-generated)
     --name NAME             Processor name (default: $DEFAULT_PROCESSOR_NAME)
-    --classifier TYPE       Classifier type: CVC, DVC (default: $DEFAULT_CLASSIFIER)
+    --indexer-type TYPE     Indexer type: VI (default: $DEFAULT_INDEXER_TYPE)
     --max-seq-length N      Max sequence length (default: $DEFAULT_MAX_SEQUENCE_LENGTH)
     --persistence N         Persistence value (default: $DEFAULT_PERSISTENCE)
     --smoothness N          Smoothness value (default: $DEFAULT_SMOOTHNESS)
@@ -283,7 +283,7 @@ EXAMPLES:
     $0 start --no-vectordb                      # Start without vector database
     $0 start --vectordb-backend qdrant          # Explicitly use Qdrant backend
     $0 start --name MyProcessor --port 9000     # Custom name and port
-    $0 start --classifier DVC --max-predictions 50  # Custom classifier
+    $0 start --indexer-type VI --max-predictions 50  # Custom indexer
     $0 list                                     # List all instances
     $0 stop P1                                  # Stop instance by name
     $0 stop p5f2b9323c3                        # Stop instance by ID
@@ -304,7 +304,7 @@ API_KEY="$DEFAULT_API_KEY"
 # KATO processor parameters - use environment variables if set, otherwise defaults
 PROCESSOR_ID="${PROCESSOR_ID:-$DEFAULT_PROCESSOR_ID}"
 PROCESSOR_NAME="${PROCESSOR_NAME:-$DEFAULT_PROCESSOR_NAME}"
-CLASSIFIER="$DEFAULT_CLASSIFIER"
+INDEXER_TYPE="$DEFAULT_INDEXER_TYPE"
 MAX_SEQUENCE_LENGTH="$DEFAULT_MAX_SEQUENCE_LENGTH"
 PERSISTENCE="$DEFAULT_PERSISTENCE"
 SMOOTHNESS="$DEFAULT_SMOOTHNESS"
@@ -345,8 +345,8 @@ parse_args() {
                 PROCESSOR_NAME="$2"
                 shift 2
                 ;;
-            --classifier)
-                CLASSIFIER="$2"
+            --indexer-type)
+                INDEXER_TYPE="$2"
                 shift 2
                 ;;
             --max-seq-length)
@@ -475,9 +475,9 @@ check_dependencies() {
 
 # Validate parameters
 validate_parameters() {
-    # Validate classifier
-    if [[ "$CLASSIFIER" != "CVC" && "$CLASSIFIER" != "DVC" ]]; then
-        log_error "Invalid classifier: $CLASSIFIER. Must be CVC or DVC"
+    # Validate indexer type
+    if [[ "$INDEXER_TYPE" != "VI" ]]; then
+        log_error "Invalid indexer type: $INDEXER_TYPE. Must be VI"
         exit 1
     fi
     
@@ -518,7 +518,7 @@ build_genome_manifest() {
 {
   "id": "$PROCESSOR_ID",
   "name": "$PROCESSOR_NAME",
-  "classifier": "$CLASSIFIER",
+  "indexer_type": "$INDEXER_TYPE",
   "max_sequence_length": $MAX_SEQUENCE_LENGTH,
   "persistence": $PERSISTENCE,
   "smoothness": $SMOOTHNESS,
@@ -681,7 +681,7 @@ start_kato() {
 {
     "processor_id": "$PROCESSOR_ID",
     "processor_name": "$PROCESSOR_NAME",
-    "classifier": "$CLASSIFIER",
+    "indexer_type": "$INDEXER_TYPE",
     "max_predictions": $MAX_PREDICTIONS,
     "recall_threshold": $RECALL_THRESHOLD,
     "persistence": $PERSISTENCE,
@@ -1037,7 +1037,7 @@ show_status() {
     # Try to get configuration from multiple sources
     local show_processor_id=""
     local show_processor_name=""
-    local show_classifier=""
+    local show_indexer_type=""
     local show_max_predictions=""
     local show_recall_threshold=""
     
@@ -1045,7 +1045,7 @@ show_status() {
     if [[ -f "$CONFIG_FILE" ]]; then
         show_processor_id=$(grep '"processor_id"' "$CONFIG_FILE" 2>/dev/null | sed 's/.*"processor_id": *"\([^"]*\)".*/\1/')
         show_processor_name=$(grep '"processor_name"' "$CONFIG_FILE" 2>/dev/null | sed 's/.*"processor_name": *"\([^"]*\)".*/\1/')
-        show_classifier=$(grep '"classifier"' "$CONFIG_FILE" 2>/dev/null | sed 's/.*"classifier": *"\([^"]*\)".*/\1/')
+        show_indexer_type=$(grep '"indexer_type"' "$CONFIG_FILE" 2>/dev/null | sed 's/.*"indexer_type": *"\([^"]*\)".*/\1/')
         show_max_predictions=$(grep '"max_predictions"' "$CONFIG_FILE" 2>/dev/null | sed 's/.*"max_predictions": *\([0-9]*\).*/\1/')
         show_recall_threshold=$(grep '"recall_threshold"' "$CONFIG_FILE" 2>/dev/null | sed 's/.*"recall_threshold": *\([0-9.]*\).*/\1/')
     fi
@@ -1062,7 +1062,7 @@ show_status() {
             if [[ -n "$manifest" ]]; then
                 actual_processor_id=$(echo "$manifest" | sed -n 's/.*"id": *"\([^"]*\)".*/\1/p')
                 actual_processor_name=$(echo "$manifest" | sed -n 's/.*"name": *"\([^"]*\)".*/\1/p')
-                local actual_classifier=$(echo "$manifest" | sed -n 's/.*"classifier": *"\([^"]*\)".*/\1/p')
+                local actual_indexer_type=$(echo "$manifest" | sed -n 's/.*"indexer_type": *"\([^"]*\)".*/\1/p')
                 local actual_max_predictions=$(echo "$manifest" | sed -n 's/.*"max_predictions": *\([0-9]*\).*/\1/p')
                 local actual_recall_threshold=$(echo "$manifest" | sed -n 's/.*"recall_threshold": *\([0-9.]*\).*/\1/p')
             fi
@@ -1071,7 +1071,7 @@ show_status() {
         # Use actual values from container if found
         [[ -n "$actual_processor_id" ]] && show_processor_id="$actual_processor_id"
         [[ -n "$actual_processor_name" ]] && show_processor_name="$actual_processor_name"
-        [[ -n "$actual_classifier" ]] && show_classifier="$actual_classifier"
+        [[ -n "$actual_indexer_type" ]] && show_indexer_type="$actual_indexer_type"
         [[ -n "$actual_max_predictions" ]] && show_max_predictions="$actual_max_predictions"
         [[ -n "$actual_recall_threshold" ]] && show_recall_threshold="$actual_recall_threshold"
     fi
@@ -1079,7 +1079,7 @@ show_status() {
     # Display configuration with fallback to defaults
     printf "%-20s %s\n" "Processor Name:" "${show_processor_name:-$PROCESSOR_NAME}"
     printf "%-20s %s\n" "Processor ID:" "${show_processor_id:-$PROCESSOR_ID}"
-    printf "%-20s %s\n" "Classifier:" "${show_classifier:-$CLASSIFIER}"
+    printf "%-20s %s\n" "Indexer Type:" "${show_indexer_type:-$INDEXER_TYPE}"
     printf "%-20s %s\n" "Max Predictions:" "${show_max_predictions:-$MAX_PREDICTIONS}"
     printf "%-20s %s\n" "Recall Threshold:" "${show_recall_threshold:-$RECALL_THRESHOLD}"
     
@@ -1183,16 +1183,17 @@ cleanup() {
 
 # Run tests
 run_tests() {
-    log_info "Running KATO test suite..."
+    log_info "Running KATO test suite in container..."
     
-    if [[ ! -d "$KATO_TESTS_DIR" ]]; then
-        log_error "Tests directory not found: $KATO_TESTS_DIR"
+    # Check if test-harness.sh exists
+    if [[ ! -f "$PROJECT_ROOT/test-harness.sh" ]]; then
+        log_error "test-harness.sh not found in project root"
         exit 1
     fi
     
-    # Ensure KATO is running for tests
+    # Ensure KATO is running for integration/API tests
     if [[ $(container_status "$KATO_CONTAINER_NAME") != "running" ]]; then
-        log_warning "KATO is not running. Starting it for tests..."
+        log_warning "KATO is not running. Starting it for integration tests..."
         ensure_network
         start_mongodb
         start_kato
@@ -1200,22 +1201,22 @@ run_tests() {
         log_info "KATO is already running"
     fi
     
-    cd "$KATO_TESTS_DIR"
+    # Build test harness if needed
+    if ! docker images | grep -q "kato-test-harness"; then
+        log_info "Test harness container not found. Building..."
+        "$PROJECT_ROOT/test-harness.sh" build
+    fi
     
-    # Use the optimized test runner script
-    if [[ -x "./run_tests.sh" ]]; then
-        log_info "Using optimized test runner script..."
-        ./run_tests.sh "$@" | tee "$LOGS_DIR/test-results.log"
-    elif command -v pipenv &> /dev/null; then
-        log_info "Running tests with pipenv..."
-        pipenv run pytest -v tests/ | tee "$LOGS_DIR/test-results.log"
-    elif command -v pytest &> /dev/null; then
-        log_info "Running tests with pytest..."
-        pytest -v tests/ | tee "$LOGS_DIR/test-results.log"
+    # Run tests using test-harness.sh
+    log_info "Running tests in containerized environment..."
+    "$PROJECT_ROOT/test-harness.sh" test "$@" | tee "$LOGS_DIR/test-results.log"
+    
+    local test_result=${PIPESTATUS[0]}
+    if [[ $test_result -eq 0 ]]; then
+        log_success "All tests passed"
     else
-        log_error "Neither test runner script nor pytest found"
-        log_error "Please install pytest or pipenv to run tests"
-        exit 1
+        log_error "Some tests failed. Check $LOGS_DIR/test-results.log for details"
+        exit $test_result
     fi
 }
 

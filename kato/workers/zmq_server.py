@@ -101,10 +101,10 @@ class ZMQServer:
             return self._handle_learn(params)
         elif method == 'clear_all_memory':
             return self._handle_clear_all_memory()
-        elif method == 'clear_working_memory':
-            return self._handle_clear_working_memory()
-        elif method == 'get_wm':
-            return self._handle_get_working_memory()
+        elif method == 'clear_short_term_memory':
+            return self._handle_clear_short_term_memory()
+        elif method == 'get_stm':
+            return self._handle_get_short_term_memory()
         elif method == 'get_predictions':
             return self._handle_get_predictions()
         elif method == 'get_percept_data':
@@ -214,10 +214,10 @@ class ZMQServer:
                 'message': str(e)
             }
             
-    def _handle_clear_working_memory(self):
+    def _handle_clear_short_term_memory(self):
         """Handle clear working memory request."""
         try:
-            self.primitive.clear_wm()
+            self.primitive.clear_stm()
             return {
                 'status': 'okay',
                 'id': self.primitive.id,
@@ -232,11 +232,11 @@ class ZMQServer:
                 'message': str(e)
             }
             
-    def _handle_get_working_memory(self):
+    def _handle_get_short_term_memory(self):
         """Handle get working memory request."""
         try:
-            # Get working memory using the get_wm method
-            wm = self.primitive.get_wm()
+            # Get short-term memory using the get_stm method
+            stm = self.primitive.get_stm()
             return {
                 'status': 'okay',
                 'data': wm

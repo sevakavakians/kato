@@ -5,7 +5,7 @@ import traceback
 from typing import Counter
 from multiprocessing import cpu_count, Lock
 
-from kato.workers.classifier import Classifier
+from kato.workers.vector_processor import VectorProcessor
 from kato.workers.modeler import Modeler
 from kato.informatics.metrics import average_emotives
 
@@ -23,7 +23,7 @@ class KatoProcessor:
         self.genome_manifest = genome_manifest
         self.id = self.genome_manifest['id']
         self.name = self.genome_manifest["name"]
-        self.vector_classifier = self.genome_manifest["classifier"]
+        self.vector_indexer_type = self.genome_manifest["indexer_type"]
         self.agent_name = environ['HOSTNAME']
         logger.info(" Starting KatoProcessor ID: %s" %self.id)
 
@@ -34,7 +34,7 @@ class KatoProcessor:
         self.procs_for_searches = int(cpu_count())
 
         self.genome_manifest["kb_id"] = self.id
-        self.classifier = Classifier(self.procs_for_searches, **self.genome_manifest)
+        self.vector_processor = VectorProcessor(self.procs_for_searches, **self.genome_manifest)
         self.modeler = Modeler(**self.genome_manifest)
         self.knowledge = self.modeler.superkb.knowledge
         self.modeler.models_kb = self.modeler.superkb.models_kb
@@ -58,7 +58,7 @@ class KatoProcessor:
         return
 
     def _process_vectors_(self, vector_data):
-        symbols = self.classifier.process(vector_data)
+        symbols = self.vector_processor.process(vector_data)
         return symbols
 
     def _process_emotives_(self, emotives):
@@ -80,11 +80,11 @@ class KatoProcessor:
         m = self.modeler.superkb.getVector(name)
         return m
 
-    def clear_wm(self):
+    def clear_stm(self):
         self.__primitive_variables_reset__()
         self.symbols = []
         self.predictions = []
-        self.modeler.clear_wm()
+        self.modeler.clear_stm()
         return
 
     def clear_all_memory(self):
@@ -92,14 +92,14 @@ class KatoProcessor:
         self.last_command = ""
         self.current_emotives = {}
         self.predictions = []
-        self.clear_wm()
+        self.clear_stm()
         self.modeler.superkb.clear_all_memory()
         self.modeler.clear_all_memory()
-        self.classifier.clear_all_memory() # Re-initialize vector KBs
+        self.vector_processor.clear_all_memory() # Re-initialize vector KBs
         return
 
     def learn(self):
-        self.classifier.learn()
+        self.vector_processor.learn()
         model_name = self.modeler.learn() # Returns the name of the model just learned.
         if model_name:
             return f"MODEL|{model_name}"
@@ -120,7 +120,7 @@ class KatoProcessor:
         
         This is the main entry point for new sensory data. It handles:
         - String symbols (already in symbolic form)
-        - Vectors (converted to symbols via classifier)
+        - Vectors (converted to symbols via vector processor)
         - Emotives (emotional/utility values)
         - Auto-learning when max_sequence_length is reached
         """
@@ -148,7 +148,7 @@ class KatoProcessor:
             symbols = []  # For string symbols
             v_identified = []  # For vector-derived symbols
             
-            # Process vectors through classifier to get symbolic representations
+            # Process vectors through vector processor to get symbolic representations
             if vector_data:
                 v_identified = self._process_vectors_(vector_data)
                 if v_identified and self.SORT:
@@ -171,30 +171,30 @@ class KatoProcessor:
             if vector_data or string_data:
                 self.modeler.trigger_predictions = True
             
-            # Add current symbols to working memory
+            # Add current symbols to short-term memory
             self.modeler.setCurrentEvent(self.symbols)
             
-            # Generate predictions based on current working memory state
+            # Generate predictions based on short-term memory state
             if vector_data or string_data:
                 self.predictions = self.modeler.processEvents(data['unique_id'])
             
-            # Auto-learning: Create a model when working memory reaches max length
+            # Auto-learning: Create a model when short-term memory reaches max length
             # This prevents unbounded memory growth and creates temporal chunks
             auto_learned_model = None
-            wm_length = len(self.modeler.WM)
+            stm_length = len(self.modeler.STM)
             max_seq_length = self.modeler.max_sequence_length
             
-            if max_seq_length > 0 and wm_length >= max_seq_length:
-                # Working memory is full - time to consolidate into a model
-                if wm_length > 1:
+            if max_seq_length > 0 and stm_length >= max_seq_length:
+                # Short-term memory is full - time to consolidate into a model
+                if stm_length > 1:
                     # Keep the last event as context for the next sequence
                     # This maintains continuity between learned chunks
-                    wm_tail = self.modeler.WM[-1]
-                    auto_learned_model = self.learn()  # Creates model and clears WM
-                    self.modeler.setWM([wm_tail])  # Start new WM with last event
+                    stm_tail = self.modeler.STM[-1]
+                    auto_learned_model = self.learn()  # Creates model and clears STM
+                    self.modeler.setSTM([stm_tail])  # Start new STM with last event
                     if auto_learned_model:
                         logger.info(f"Auto-learned model: {auto_learned_model}")
-                elif wm_length == 1:
+                elif stm_length == 1:
                     # Only one event, just learn it
                     auto_learned_model = self.learn()
                     if auto_learned_model:
@@ -230,10 +230,10 @@ class KatoProcessor:
         logger.debug(f'getGene called with {gene_name} for {self.name}-{self.id}')
         return getattr(self.modeler, gene_name, None)
 
-    def get_wm(self):
-        """Get the current working memory"""
-        logger.debug(f'get_wm called in {self.name}-{self.id}')
-        return list(self.modeler.WM)
+    def get_stm(self):
+        """Get the current short-term memory"""
+        logger.debug(f'get_stm called in {self.name}-{self.id}')
+        return list(self.modeler.STM)
     
     def get_percept_data(self):
         """Return percept data"""
@@ -251,7 +251,7 @@ class KatoProcessor:
             'path': [],
             'strings': [],
             'vectors': [],
-            'working_memory': list(self.modeler.WM)
+            'short_term_memory': list(self.modeler.STM)
         }
 
     def update_genes(self, genes):

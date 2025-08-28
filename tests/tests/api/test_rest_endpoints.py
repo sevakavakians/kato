@@ -114,42 +114,42 @@ def test_observe_endpoint_empty(kato_fixture):
 
 
 def test_working_memory_endpoint(kato_fixture):
-    """Test getting working memory via REST."""
+    """Test getting short-term memory (formerly working memory) via REST."""
     # Clear and add some observations
     kato_fixture.clear_all_memory()
-    kato_fixture.observe({'strings': ['wm', 'test'], 'vectors': [], 'emotives': {}})
+    kato_fixture.observe({'strings': ['stm', 'test'], 'vectors': [], 'emotives': {}})
     
     response = requests.get(
-        f"{kato_fixture.base_url}/{kato_fixture.processor_id}/working-memory"
+        f"{kato_fixture.base_url}/{kato_fixture.processor_id}/short-term-memory"
     )
     assert response.status_code == 200
     
     data = response.json()
     assert 'message' in data
-    wm = data['message']
-    assert isinstance(wm, list)
-    assert len(wm) == 1
-    # KATO sorts strings alphanumerically: 'test' comes before 'wm'
-    assert wm[0] == sort_event_strings(['wm', 'test'])
+    stm = data['message']
+    assert isinstance(stm, list)
+    assert len(stm) == 1
+    # KATO sorts strings alphanumerically: 'stm' comes before 'test'
+    assert stm[0] == sort_event_strings(['stm', 'test'])
 
 
 def test_clear_working_memory_endpoint(kato_fixture):
-    """Test clearing working memory via REST."""
+    """Test clearing short-term memory (formerly working memory) via REST."""
     # Add observation first
     kato_fixture.observe({'strings': ['clear', 'me'], 'vectors': [], 'emotives': {}})
     
     response = requests.post(
-        f"{kato_fixture.base_url}/{kato_fixture.processor_id}/clear-working-memory",
+        f"{kato_fixture.base_url}/{kato_fixture.processor_id}/clear-short-term-memory",
         json={}
     )
     assert response.status_code == 200
     
     data = response.json()
-    assert data['message'] == 'wm-cleared'
+    assert data['message'] == 'stm-cleared'
     
     # Verify it's cleared
-    wm = kato_fixture.get_working_memory()
-    assert wm == []
+    stm = kato_fixture.get_short_term_memory()
+    assert stm == []
 
 
 def test_clear_all_memory_endpoint(kato_fixture):
@@ -190,9 +190,9 @@ def test_learn_endpoint(kato_fixture):
     model_name = data['message']
     assert model_name.startswith('MODEL|')
     
-    # Working memory should be cleared
-    wm = kato_fixture.get_working_memory()
-    assert wm == []
+    # Short-term memory should be cleared
+    stm = kato_fixture.get_short_term_memory()
+    assert stm == []
 
 
 def test_predictions_endpoint(kato_fixture):
@@ -254,7 +254,7 @@ def test_cognition_data_endpoint(kato_fixture):
     assert isinstance(cog_data, dict)
     
     # Should have cognition data fields based on KATO's actual implementation
-    expected_fields = ['working_memory', 'predictions', 'emotives', 'symbols', 'command']
+    expected_fields = ['short_term_memory', 'predictions', 'emotives', 'symbols', 'command']
     for field in expected_fields:
         assert field in cog_data, f"Missing field: {field}"
 
@@ -370,7 +370,7 @@ def test_endpoint_response_timing(kato_fixture):
     endpoints = [
         f"/{kato_fixture.processor_id}/ping",
         f"/{kato_fixture.processor_id}/status",
-        f"/{kato_fixture.processor_id}/working-memory"
+        f"/{kato_fixture.processor_id}/short-term-memory"
     ]
     
     for endpoint in endpoints:

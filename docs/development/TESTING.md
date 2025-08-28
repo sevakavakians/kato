@@ -4,67 +4,108 @@
 
 The KATO test suite provides comprehensive testing coverage for all aspects of the KATO system, including unit tests, integration tests, and API endpoint tests. The suite is designed to validate KATO's deterministic behavior, memory management, sequence learning, and unique features like alphanumeric sorting, deterministic hashing, and sophisticated temporal prediction segmentation.
 
-**Current Coverage**: 105 tests total (100% passing)
-- 66 unit tests
-- 11 integration tests  
+**Current Coverage**: 128 tests total (100% passing)
+- 83 unit tests
+- 19 integration tests  
 - 21 API tests
-- 7 edge case tests
-- Execution time: ~22 seconds
+- 5 performance/stress tests
+- Execution time: ~45 seconds
 
 ## Test Structure
 
 ```
-kato-tests/
+kato/tests/
 ├── tests/
 │   ├── fixtures/          # Test fixtures and helpers
 │   │   ├── hash_helpers.py    # Hash verification utilities
 │   │   ├── test_helpers.py    # Sorting and assertion helpers
 │   │   └── kato_fixtures.py   # KATO test fixtures
-│   ├── unit/              # Unit tests
+│   ├── unit/              # Unit tests (83 tests)
 │   │   ├── test_observations.py
 │   │   ├── test_memory_management.py
 │   │   ├── test_model_hashing.py
 │   │   ├── test_predictions.py
-│   │   └── test_sorting_behavior.py
-│   ├── integration/       # Integration tests
-│   │   └── test_sequence_learning.py
-│   └── api/              # API endpoint tests
-│       └── test_rest_endpoints.py
-├── run_tests.sh          # Test runner script
-├── requirements.txt      # Python dependencies
+│   │   ├── test_sorting_behavior.py
+│   │   ├── test_determinism_preservation.py
+│   │   ├── test_prediction_edge_cases.py
+│   │   └── test_prediction_fields.py
+│   ├── integration/       # Integration tests (19 tests)
+│   │   ├── test_sequence_learning.py
+│   │   ├── test_vector_e2e.py
+│   │   └── test_vector_simplified.py
+│   ├── api/              # API endpoint tests (21 tests)
+│   │   └── test_rest_endpoints.py
+│   └── performance/      # Performance tests (5 tests)
+│       └── test_vector_stress.py
+├── scripts/             # Utility scripts
+│   ├── analyze_tests.py
+│   ├── check_tests.py
+│   ├── run_simple_test.py
+│   ├── run_tests_direct.py
+│   ├── setup_venv.py
+│   └── simple_analyze.py
+├── test-harness.sh      # Container-based test runner (preferred)
+├── Dockerfile.test      # Test container definition
+├── requirements-test.txt # Python test dependencies
 ├── pytest.ini           # Pytest configuration
-└── conftest.py          # Pytest fixtures configuration
+├── conftest.py          # Pytest fixtures configuration
+└── TEST_ORGANIZATION.md # Test structure documentation
 ```
 
 ## Running Tests
 
-### Quick Start
+### Container-Based Testing (Preferred Method)
+
+KATO uses a containerized test harness to ensure consistent test environments without requiring local Python dependencies:
 
 ```bash
-cd kato-tests
-./run_tests.sh
+# Build test harness container (first time or after dependency changes)
+./test-harness.sh build
+
+# Run all tests using kato-manager
+./kato-manager.sh test
+
+# OR run directly with test-harness
+./test-harness.sh test
 ```
 
 ### Running Specific Test Categories
 
 ```bash
-# Unit tests only
-./run_tests.sh --unit
+# Run specific test suites
+./test-harness.sh suite unit          # Unit tests only
+./test-harness.sh suite integration   # Integration tests only
+./test-harness.sh suite api           # API tests only
+./test-harness.sh suite performance   # Performance tests
+./test-harness.sh suite determinism   # Determinism verification
+./test-harness.sh suite optimizations # Optimization tests
 
-# Integration tests only
-./run_tests.sh --integration
+# Run specific test path
+./test-harness.sh test tests/tests/unit/test_observations.py
 
-# API tests only
-./run_tests.sh --api
+# Run with pytest options
+./test-harness.sh test tests/ -v -x   # Verbose, stop on first failure
+./test-harness.sh test tests/ -k "pattern" # Run tests matching pattern
 
-# With verbose output
-./run_tests.sh --verbose
+# Development mode (live code updates)
+./test-harness.sh dev tests/tests/unit/ -v
 
-# Run tests in parallel
-./run_tests.sh --parallel
+# Interactive shell for debugging
+./test-harness.sh shell
+
+# Generate coverage report
+./test-harness.sh report
 ```
 
-### Using Pytest Directly
+### Benefits of Container-Based Testing
+
+- **No local dependencies**: All test dependencies are in the container
+- **Consistency**: Same environment across all developers and CI/CD
+- **Isolation**: Tests don't affect your host system
+- **Reproducibility**: Guaranteed same test results
+- **Easy cleanup**: Just remove the container
+
+### Using Pytest Directly (Legacy Method)
 
 ```bash
 # Install dependencies
@@ -104,7 +145,7 @@ For detailed behavior documentation, see [KATO_BEHAVIOR.md](KATO_BEHAVIOR.md).
 
 ## Test Categories
 
-### Unit Tests (66 tests)
+### Unit Tests (83 tests)
 
 #### test_observations.py (11 tests)
 Tests for observation processing with strings, vectors, and emotives:
@@ -117,9 +158,9 @@ Tests for observation processing with strings, vectors, and emotives:
 - Sequence observations
 
 #### test_memory_management.py (9 tests)
-Tests for working memory and long-term memory management:
+Tests for short-term memory and long-term memory management:
 - Clearing all memory
-- Clearing working memory only
+- Clearing short-term memory only
 - Working memory accumulation
 - Manual learning
 - Memory persistence
@@ -196,10 +237,26 @@ Tests specifically for KATO's alphanumeric sorting:
 - Unicode character sorting
 - Sorting consistency
 
-### Integration Tests (11 tests)
+### Integration Tests (19 tests)
 
-#### test_sequence_learning.py
-End-to-end tests for sequence learning and recall:
+#### test_sequence_learning.py (11 tests)
+End-to-end tests for sequence learning and recall
+
+#### test_vector_e2e.py (5 tests)
+End-to-end tests for vector functionality with new vector database architecture
+
+#### test_vector_simplified.py (3 tests)
+Simplified integration tests for basic vector operations
+
+### Performance Tests (5 tests)
+
+#### test_vector_stress.py
+Stress and performance tests for vector operations:
+- Vector operation performance at different dimensions
+- Scalability with large numbers of vectors
+- Accuracy of vector similarity search
+- Vector persistence across learning cycles
+- Edge cases with empty, large, and negative vectors
 - Simple sequence learning
 - Multiple sequence learning and disambiguation
 - Sequence completion
@@ -221,7 +278,7 @@ Tests for all REST API endpoints:
 - Processor ping (`/{processor_id}/ping`)
 - Status endpoint (`/{processor_id}/status`)
 - Observe endpoint (`/{processor_id}/observe`)
-- Working memory endpoints
+- Short-term memory endpoints (formerly working memory)
 - Memory clearing endpoints
 - Learn endpoint
 - Predictions endpoint
@@ -239,7 +296,7 @@ KATO's predictions contain temporal fields that segment sequences:
 
 - **`past`**: Events that came before the present state in the predicted sequence
 - **`present`**: All contiguous events identified by matching strings/symbols (not all symbols need to match)
-- **`missing`**: Symbols expected within the `present` state but not observed in working memory  
+- **`missing`**: Symbols expected within the `present` state but not observed in short-term memory  
 - **`extras`**: Additional symbols observed that aren't expected in the `present` state
 - **`future`**: Events that come after the present state in the predicted sequence
 
@@ -286,7 +343,7 @@ All models and vectors receive deterministic hash-based names:
 KATO maintains state across observations:
 - Working memory accumulates observations
 - Learning creates persistent models
-- Models survive working memory clears
+- Models survive short-term memory clears
 
 ### 4. Multi-Modal Processing
 KATO processes multiple data types simultaneously:
@@ -295,7 +352,7 @@ KATO processes multiple data types simultaneously:
 - Emotives (key-value pairs for emotional context)
 
 ### 5. Empty Events
-KATO ignores empty events - they do not change working memory or affect predictions:
+KATO ignores empty events - they do not change short-term memory or affect predictions:
 - Observing `[]` has no effect on state
 - Empty events in sequences are skipped
 KATO processes multiple data types simultaneously:
@@ -322,7 +379,7 @@ Utilities for hash verification:
 ### Test Helpers
 Utilities for KATO-specific behaviors:
 - `sort_event_strings()`: Sort strings as KATO does
-- `assert_working_memory_equals()`: Assert with automatic sorting
+- `assert_short_term_memory_equals()`: Assert with automatic sorting
 
 ## Test Configuration
 
@@ -366,7 +423,7 @@ def test_observation(kato_fixture):
     })
     
     assert result['status'] == 'observed'
-    wm = kato_fixture.get_working_memory()
+    wm = kato_fixture.get_short_term_memory()
     assert wm == [['test']]
 ```
 
@@ -391,14 +448,14 @@ def test_sequence(kato_fixture):
 ### Sorting-Aware Test
 ```python
 def test_with_sorting(kato_fixture):
-    from fixtures.test_helpers import assert_working_memory_equals
+    from fixtures.test_helpers import assert_short_term_memory_equals
     
     kato_fixture.clear_all_memory()
     kato_fixture.observe({'strings': ['z', 'a', 'm'], 'vectors': [], 'emotives': {}})
     
-    wm = kato_fixture.get_working_memory()
+    wm = kato_fixture.get_short_term_memory()
     # Automatically handles sorting: ['z', 'a', 'm'] -> ['a', 'm', 'z']
-    assert_working_memory_equals(wm, [['z', 'a', 'm']])
+    assert_short_term_memory_equals(wm, [['z', 'a', 'm']])
 ```
 
 ### Testing Prediction Fields
@@ -410,7 +467,7 @@ def test_prediction_temporal_fields(kato_fixture):
     kato_fixture.learn()
     
     # Observe middle
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': ['middle'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
     
@@ -432,7 +489,7 @@ def test_missing_and_extras(kato_fixture):
     kato_fixture.learn()
     
     # Observe with missing 'b', 'd' and extras 'x', 'y'
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': ['a', 'x'], 'vectors': [], 'emotives': {}})
     kato_fixture.observe({'strings': ['c', 'y'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
@@ -442,6 +499,16 @@ def test_missing_and_extras(kato_fixture):
             assert 'b' in pred['missing'] or 'd' in pred['missing']
             assert 'x' in pred['extras'] or 'y' in pred['extras']
 ```
+
+## Recent Updates
+
+### Test Organization (August 2025)
+- Reorganized all test files into proper subdirectories under `tests/tests/`
+- Moved vector tests to appropriate categories (integration and performance)
+- Created `scripts/` directory for utility scripts
+- Fixed all test warnings (DataGenerator class naming, test return values)
+- Updated fixture imports for new directory structure
+- All 128 tests passing with 0 warnings
 
 ## Troubleshooting
 
@@ -453,7 +520,7 @@ def test_missing_and_extras(kato_fixture):
 ### Test Failures
 - **Timeout errors**: Increase timeout in pytest.ini
 - **Import errors**: Check PYTHONPATH includes parent directories
-- **Sorting mismatches**: Use `assert_working_memory_equals()` helper
+- **Sorting mismatches**: Use `assert_short_term_memory_equals()` helper
 
 ### Common Errors
 1. **ModuleNotFoundError: fixtures**
@@ -479,7 +546,7 @@ def test_missing_and_extras(kato_fixture):
 
 ### Overview
 
-Auto-learning tests validate the `max_sequence_length` functionality where KATO automatically learns sequences when working memory reaches a specified threshold.
+Auto-learning tests validate the `max_sequence_length` functionality where KATO automatically learns sequences when short-term memory reaches a specified threshold.
 
 **Key Tests:**
 - `test_memory_management.py::test_max_sequence_length` - Core auto-learning behavior
@@ -498,23 +565,23 @@ When `max_sequence_length` is set to a positive value:
 ```python
 def test_max_sequence_length(kato_fixture):
     # Set up auto-learning threshold
-    kato_fixture.clear_working_memory()  # Don't reset genes
+    kato_fixture.clear_short_term_memory()  # Don't reset genes
     kato_fixture.update_genes({"max_sequence_length": 3})
     
     # Accumulate observations
     kato_fixture.observe({'strings': ['a'], 'vectors': [], 'emotives': {}})
-    assert len(kato_fixture.get_working_memory()) == 1
+    assert len(kato_fixture.get_short_term_memory()) == 1
     
     kato_fixture.observe({'strings': ['b'], 'vectors': [], 'emotives': {}})
-    assert len(kato_fixture.get_working_memory()) == 2
+    assert len(kato_fixture.get_short_term_memory()) == 2
     
     # Trigger auto-learning
     kato_fixture.observe({'strings': ['c'], 'vectors': [], 'emotives': {}})
-    wm = kato_fixture.get_working_memory()
+    wm = kato_fixture.get_short_term_memory()
     assert wm == [['c']]  # Only last observation remains
     
     # Verify learning occurred
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': ['a'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
     assert len(predictions) > 0  # Should predict learned sequence
@@ -529,7 +596,7 @@ kato_fixture.update_genes({"max_sequence_length": 3})
 kato_fixture.clear_all_memory()  # Resets genes to default!
 
 # RIGHT: Clear first, then set genes
-kato_fixture.clear_working_memory()  # Only clear memory, preserve genes
+kato_fixture.clear_short_term_memory()  # Only clear memory, preserve genes
 kato_fixture.update_genes({"max_sequence_length": 3})
 ```
 
@@ -553,12 +620,12 @@ fixture.reset_genes_to_defaults()
 fixture.clear_all_memory(reset_genes=True)  # Default: resets genes
 fixture.clear_all_memory(reset_genes=False) # Preserve gene values
 
-# Clear only working memory (preserves genes)
-fixture.clear_working_memory()
+# Clear only short-term memory (preserves genes)
+fixture.clear_short_term_memory()
 ```
 
 **Best Practices:**
-1. Use `clear_working_memory()` when preserving gene settings
+1. Use `clear_short_term_memory()` when preserving gene settings
 2. Use `clear_all_memory()` for complete isolation
 3. Set genes AFTER clearing, not before
 4. Verify gene values with `update_genes()` return value
@@ -574,7 +641,7 @@ fixture.clear_working_memory()
 ```python
 def test_with_custom_genes(kato_fixture):
     # Clear state first
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     
     # Set test-specific genes
     kato_fixture.update_genes({"max_sequence_length": 5})
@@ -596,7 +663,7 @@ def test_with_custom_genes(kato_fixture):
 2. **Use existing fixtures**:
    ```python
    from fixtures.kato_fixtures import kato_fixture
-   from fixtures.test_helpers import assert_working_memory_equals
+   from fixtures.test_helpers import assert_short_term_memory_equals
    ```
 
 3. **Follow naming conventions**:

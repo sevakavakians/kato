@@ -207,9 +207,9 @@ the attribute `version` is obsolete, it will be ignored
 
 ## Resolved Issues ✅
 
-### ~~CVCSearcher Constructor Arguments~~
+### ~~VectorIndexer Constructor Arguments~~
 **Status**: RESOLVED  
-**Resolution**: Updated CVCSearcherModern to accept legacy arguments
+**Resolution**: Updated VectorIndexer to accept legacy arguments
 
 ### ~~Qdrant Client Not Installed~~
 **Status**: RESOLVED  

@@ -33,8 +33,8 @@ class RestGatewayHandler(BaseHTTPRequestHandler):
                 self.handle_processor_ping()
             elif self.path.endswith('/status'):
                 self.handle_status()
-            elif self.path.endswith('/working-memory'):
-                self.handle_get_working_memory()
+            elif self.path.endswith('/short-term-memory'):
+                self.handle_get_short_term_memory()
             elif self.path.endswith('/predictions'):
                 self.handle_get_predictions()
             elif self.path.endswith('/percept-data'):
@@ -57,14 +57,14 @@ class RestGatewayHandler(BaseHTTPRequestHandler):
                 self.handle_observe()
             elif self.path.endswith('/clear-all-memory'):
                 self.handle_clear_all_memory()
-            elif self.path.endswith('/clear-working-memory'):
-                self.handle_clear_working_memory()
+            elif self.path.endswith('/clear-short-term-memory'):
+                self.handle_clear_short_term_memory()
             elif self.path.endswith('/learn'):
                 self.handle_learn()
             elif self.path.endswith('/predictions'):
                 self.handle_get_predictions()  # Support POST /predictions
-            elif self.path.endswith('/working-memory/clear'):
-                self.handle_clear_working_memory()  # Support POST /working-memory/clear
+            elif self.path.endswith('/short-term-memory/clear'):
+                self.handle_clear_short_term_memory()  # Support POST /short-term-memory/clear
             elif self.path.endswith('/genes/change'):
                 self.handle_gene_change()
             else:
@@ -173,18 +173,18 @@ class RestGatewayHandler(BaseHTTPRequestHandler):
             logger.error(f"Status error: {e}")
             self.send_error(500, str(e))
 
-    def handle_get_working_memory(self):
-        """Handle get working memory request"""
+    def handle_get_short_term_memory(self):
+        """Handle get short-term memory request"""
         try:
             pool = get_global_pool()
-            wm = pool.execute('get_working_memory')
+            stm = pool.execute('get_short_term_memory')
             
             # Get processor info for timing fields
             response = pool.execute('get_name')
             
             # Add timing fields for test compatibility
             result = {
-                "message": wm,
+                "message": stm,
                 "time_stamp": response.get('time_stamp', time.time()),
                 "interval": response.get('interval', 0)
             }
@@ -375,21 +375,21 @@ class RestGatewayHandler(BaseHTTPRequestHandler):
             logger.error(f"Clear all memory error: {e}")
             self.send_error(500, str(e))
 
-    def handle_clear_working_memory(self):
-        """Handle clear working memory request"""
+    def handle_clear_short_term_memory(self):
+        """Handle clear short-term memory request"""
         try:
             # Extract processor ID from path
             processor_id = self.path.split('/')[1]
             
             pool = get_global_pool()
-            response = pool.execute('clear_working_memory')
+            response = pool.execute('clear_short_term_memory')
             
             result = {
                 "id": processor_id,
                 "interval": response.get('interval', 0),
                 "time_stamp": response.get('time_stamp', time.time()),
                 "status": response.get('status', 'okay'),
-                "message": response.get('message', 'wm-cleared')
+                "message": response.get('message', 'stm-cleared')
             }
             
             self.send_response(200)

@@ -63,7 +63,7 @@ class LoadProfile:
     wave_period_seconds: float = 120
 
 
-class TestDataGenerator:
+class DataGenerator:
     """Generates realistic test data for KATO operations."""
     
     def __init__(self, config: Dict[str, Any]):
@@ -215,7 +215,7 @@ class VirtualUser:
     """Represents a virtual user generating load."""
     
     def __init__(self, user_id: int, request_func: Callable,
-                 data_generator: TestDataGenerator,
+                 data_generator: DataGenerator,
                  operations_mix: Dict[str, float],
                  requests_per_second: float = 1.0,
                  think_time_ms: float = 1000):
@@ -338,7 +338,7 @@ class LoadGenerator:
         """
         self.profile = profile
         self.request_func = request_func
-        self.data_generator = TestDataGenerator(data_config)
+        self.data_generator = DataGenerator(data_config)
         self.operations_mix = operations_mix
         
         self.users: List[VirtualUser] = []
@@ -488,7 +488,7 @@ class BurstLoadGenerator:
     """Specialized generator for burst traffic patterns."""
     
     def __init__(self, request_func: Callable,
-                 data_generator: TestDataGenerator,
+                 data_generator: DataGenerator,
                  burst_size: int = 1000,
                  burst_duration_ms: int = 100):
         """

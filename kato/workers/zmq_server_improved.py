@@ -178,11 +178,11 @@ class ImprovedZMQServer:
                 'observe': self._handle_observe,
                 'learn': self._handle_learn,
                 'get_predictions': self._handle_get_predictions,
-                'clear_wm': self._handle_clear_wm,
-                'clear_working_memory': self._handle_clear_wm,  # Alias
+                'clear_stm': self._handle_clear_stm,
+                'clear_short_term_memory': self._handle_clear_stm,  # Alias
                 'clear_all': self._handle_clear_all,
                 'clear_all_memory': self._handle_clear_all,  # Alias for compatibility
-                'get_wm': self._handle_get_wm,
+                'get_stm': self._handle_get_stm,
                 'get_percept_data': self._handle_get_percept_data,
                 'get_cognition_data': self._handle_get_cognition_data,
                 'get_gene': self._handle_get_gene,
@@ -301,16 +301,16 @@ class ImprovedZMQServer:
                 'message': str(e)
             }
             
-    def _handle_clear_wm(self, params):
-        """Handle clear working memory request."""
+    def _handle_clear_stm(self, params):
+        """Handle clear short-term memory request."""
         try:
-            self.primitive.clear_wm()
+            self.primitive.clear_stm()
             return {
                 'status': 'okay',
-                'message': 'wm-cleared'
+                'message': 'stm-cleared'
             }
         except Exception as e:
-            logger.error(f"Error clearing WM: {e}")
+            logger.error(f"Error clearing STM: {e}")
             return {
                 'status': 'error',
                 'message': str(e)
@@ -331,16 +331,16 @@ class ImprovedZMQServer:
                 'message': str(e)
             }
             
-    def _handle_get_wm(self, params):
-        """Handle get working memory request."""
+    def _handle_get_stm(self, params):
+        """Handle get short-term memory request."""
         try:
-            wm = self.primitive.get_wm()
+            stm = self.primitive.get_stm()
             return {
                 'status': 'okay',
-                'working_memory': wm
+                'short_term_memory': stm
             }
         except Exception as e:
-            logger.error(f"Error getting WM: {e}")
+            logger.error(f"Error getting STM: {e}")
             return {
                 'status': 'error',
                 'message': str(e)

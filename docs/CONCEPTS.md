@@ -53,7 +53,7 @@ observation = {
 # Input observation
 observe({'strings': ['zebra', 'apple', 'banana']})
 
-# Stored in working memory as
+# Stored in short-term memory as
 [['apple', 'banana', 'zebra']]  # Sorted alphanumerically
 ```
 
@@ -77,17 +77,17 @@ observe({'strings': ['m']})
 
 ### Vector Symbol Processing
 - Vectors are processed through a classifier (CVC or DVC)
-- May produce symbols like `VECTOR|<hash>` depending on classifier configuration
+- May produce symbols like `VECTOR|<hash>` depending on vector processor configuration
 - Vector symbols appear before string symbols in mixed modality events
-- Vector processing depends on classifier type and may not always produce working memory entries
+- Vector processing depends on classifier type and may not always produce short-term memory entries
 
 ### Empty Events
-KATO ignores empty events - they do not change working memory or affect predictions.
+KATO ignores empty events - they do not change short-term memory or affect predictions.
 
 ```python
 # Empty observation
 observe({'strings': [], 'vectors': [], 'emotives': {}})
-# Result: No change to working memory
+# Result: No change to short-term memory
 
 # Sequence with empty events
 observe({'strings': ['first']})
@@ -98,7 +98,7 @@ observe({'strings': ['second']})
 
 ## Memory Architecture
 
-### Working Memory
+### Short-Term Memory
 - Accumulates observations as events
 - Each observation creates one event (unless empty)
 - Maintains temporal order of events
@@ -110,7 +110,7 @@ observe({'strings': ['second']})
 - Stores learned sequences with deterministic hashes
 - Sequences identified by `MODEL|<sha1_hash>` format
 - Same sequence always produces same hash
-- Persists across working memory clears
+- Persists across short-term memory clears
 - Used for generating predictions
 - Frequency tracking for repeated patterns
 
@@ -219,9 +219,9 @@ The `present` field includes all contiguous events that are identified by matchi
 ## Learning Behavior
 
 ### Learning Process
-1. Learning creates a model from the current working memory
+1. Learning creates a model from the current short-term memory
 2. Models are named with format: `MODEL|<identifier>`
-3. Empty working memory produces no model
+3. Empty short-term memory produces no model
 4. Frequency increases when the same sequence is learned multiple times
 5. Working memory is cleared after learning (except last event)
 
@@ -295,10 +295,10 @@ Vectors are similarly hashed deterministically:
 
 ### API Response Structure
 The REST API cognition endpoint returns:
-- `working_memory`: Current sequence in memory
+- `short_term_memory`: Current sequence in memory
 - `predictions`: List of prediction objects
 - `emotives`: Aggregated emotional context
-- `symbols`: Current symbols in working memory
+- `symbols`: Current symbols in short-term memory
 - `command`: Any command to execute
 
 ### Special Behaviors
@@ -330,7 +330,7 @@ KATO supports Unicode characters:
 ### Testing Emotives
 Always follow this pattern:
 1. Learn a sequence WITH emotives
-2. Clear working memory
+2. Clear short-term memory
 3. Observe matching events
 4. Check predictions for emotives
 
@@ -341,7 +341,7 @@ for strings, emotives in sequence_with_emotives:
 kato.learn()
 
 # Clear and observe
-kato.clear_working_memory()
+kato.clear_short_term_memory()
 kato.observe({'strings': ['trigger'], 'vectors': [], 'emotives': {}})
 
 # Check predictions
@@ -351,8 +351,8 @@ predictions = kato.get_predictions()
 ### Testing Vector Processing
 Vector tests should be flexible:
 ```python
-# Don't assume vectors always create WM entries
-wm = kato.get_working_memory()
+# Don't assume vectors always create STM entries
+wm = kato.get_short_term_memory()
 assert isinstance(wm, list)  # Just check it's a list
 # Don't assert specific content - depends on classifier
 ```
@@ -360,7 +360,7 @@ assert isinstance(wm, list)  # Just check it's a list
 ## Common Pitfalls to Avoid
 
 1. **Don't expect emotives in predictions without learning them first**
-2. **Don't assume vectors always produce working memory entries**
+2. **Don't assume vectors always produce short-term memory entries**
 3. **Don't sort missing/extras fields - order is preserved**
 4. **Don't use frequency checks unnecessarily**
 5. **Don't assume specific vector symbol formats - depends on classifier**

@@ -86,15 +86,22 @@ def test_new_feature(kato_fixture):
 ### 4. Run Tests
 
 ```bash
-# Run all tests
-cd tests
-./run_tests.sh
+# Build test harness (first time)
+./test-harness.sh build
+
+# Run all tests in container
+./kato-manager.sh test
+# OR
+./test-harness.sh test
+
+# Run specific test suite
+./test-harness.sh suite unit
 
 # Run specific test file
-pytest tests/unit/test_your_feature.py
+./test-harness.sh test tests/tests/unit/test_your_feature.py
 
-# Run with coverage
-pytest --cov=kato --cov-report=html
+# Generate coverage report
+./test-harness.sh report
 ```
 
 ### 5. Update Documentation
@@ -197,7 +204,7 @@ def test_sequence_learning_and_recall(kato_fixture):
     kato_fixture.learn()
     
     # Test recall
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': ['a']})
     predictions = kato_fixture.get_predictions()
     assert len(predictions) > 0
@@ -274,7 +281,7 @@ def profile_function():
 # Add debug logging
 import logging
 logger = logging.getLogger(__name__)
-logger.debug(f"Working memory state: {working_memory}")
+logger.debug(f"Working memory state: {short_term_memory}")
 ```
 
 ### Docker Debugging
@@ -330,7 +337,7 @@ Brief description of changes
 1. Update version in setup.py
 2. Update CHANGELOG.md
 3. Create release branch
-4. Run full test suite
+4. Run full test suite with `./test-harness.sh test`
 5. Create GitHub release
 6. Tag Docker images
 

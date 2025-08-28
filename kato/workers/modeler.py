@@ -58,18 +58,18 @@ class Modeler:
         logger.info(f"Modeler {self.name} started!")
         return
 
-    def setWM(self, x):
-        self.WM = deque(x)
+    def setSTM(self, x):
+        self.STM = deque(x)
         return
 
-    def clear_wm(self):
-        self.WM = deque()
+    def clear_stm(self):
+        self.STM = deque()
         self.trigger_predictions = False
         self.emotives = []
         return
 
     def clear_all_memory(self):
-        self.clear_wm()
+        self.clear_stm()
         self.last_learned_model_name = None
         self.models_searcher.clearModelsFromRAM()
         self.superkb.models_observation_count = 0
@@ -79,7 +79,7 @@ class Modeler:
 
     def initiateDefaults(self):
         self.QUIESCENCE_COUNT = 0
-        self.WM = deque()
+        self.STM = deque()
         self.emotives = []
         self.mood = {}
         self.last_learned_model_name = None
@@ -90,13 +90,13 @@ class Modeler:
 
     def learn(self):
         """
-        Convert current working memory into a persistent model.
+        Convert current short-term memory into a persistent model.
         
-        Creates a hash-named model from the sequence in WM, stores it in MongoDB,
+        Creates a hash-named model from the sequence in STM, stores it in MongoDB,
         and distributes it to search workers for future pattern matching.
         """
-        model = Model(self.WM)  # Create model from working memory sequence
-        self.WM.clear()  # Reset working memory after learning
+        model = Model(self.STM)  # Create model from short-term memory sequence
+        self.STM.clear()  # Reset short-term memory after learning
         
         if len(model) > 1:  # Only learn multi-event sequences
             # Store model with averaged emotives from all events
@@ -143,14 +143,14 @@ class Modeler:
 
     def processEvents(self, current_unique_id):
         """
-        Generate predictions by matching working memory against learned models.
+        Generate predictions by matching short-term memory against learned models.
         
-        Flattens the WM (list of events) into a single state vector,
+        Flattens the STM (list of events) into a single state vector,
         then searches for similar patterns in the model database.
         Predictions are cached in MongoDB for retrieval.
         """
-        # Flatten working memory: [["a","b"],["c"]] -> ["a","b","c"]
-        state = list(chain(*self.WM))
+        # Flatten short-term memory: [["a","b"],["c"]] -> ["a","b","c"]
+        state = list(chain(*self.STM))
         
         if self.predict and self.trigger_predictions:
             predictions = self.predictModel(state)
@@ -165,13 +165,13 @@ class Modeler:
 
     def setCurrentEvent(self, symbols):
         """
-        Add a new event (list of symbols) to working memory.
+        Add a new event (list of symbols) to short-term memory.
         
-        Working memory is a deque of events, where each event is a list of symbols
-        observed at the same time. E.g., WM = [["cat","dog"], ["bird"], ["cat"]]
+        Short-term memory is a deque of events, where each event is a list of symbols
+        observed at the same time. E.g., STM = [["cat","dog"], ["bird"], ["cat"]]
         """
         if symbols:
-            self.WM.append(symbols)
+            self.STM.append(symbols)
         return
     
     def symbolFrequency(self, symbol):

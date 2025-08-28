@@ -189,7 +189,7 @@ All instances share:
 
 Each instance has:
 - **Unique Container**: Named after processor ID
-- **Isolated Memory**: Independent working memory and models
+- **Isolated Memory**: Independent short-term memory and models
 - **Separate Ports**: No port conflicts between instances
 
 ## Use Cases

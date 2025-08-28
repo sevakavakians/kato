@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../.
 
 from performance_monitor import PerformanceMonitor
 from load_generator import (
-    LoadPattern, LoadProfile, TestDataGenerator, 
+    LoadPattern, LoadProfile, DataGenerator, 
     VirtualUser, LoadGenerator, BurstLoadGenerator
 )
 

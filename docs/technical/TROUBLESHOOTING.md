@@ -179,7 +179,7 @@ docker logs kato-api-${USER}-1 --tail 20 | grep "ZMQ"
 1. Use optimized test runner:
 ```bash
 cd tests
-./run_tests.sh  # Uses system Python3, checks for existing images
+./test-harness.sh test  # Runs tests in container, no local dependencies needed
 ```
 
 2. Ensure Docker image exists before testing:
@@ -192,7 +192,7 @@ docker images | grep kato
 3. Skip virtual environment if causing issues:
 ```bash
 # Tests now use system Python3 directly
-python3 -m pytest tests/
+./test-harness.sh test tests/
 ```
 
 ### Container Issues
@@ -473,6 +473,8 @@ docker volume inspect kato-mongo-data
 1. Check test environment:
 ```bash
 cd tests
+./test-harness.sh shell
+# Then inside container:
 python -m pytest --version
 ```
 
@@ -483,7 +485,7 @@ pip install -r requirements.txt
 
 3. Run specific test:
 ```bash
-pytest tests/unit/test_observations.py -v
+./test-harness.sh test tests/tests/unit/test_observations.py -v
 ```
 
 4. Check KATO is running:
@@ -560,7 +562,7 @@ And updated problematic tests:
 ```python
 def test_max_sequence_length(kato_fixture):
     # Clear memory first, then set gene (don't call clear_all_memory after)
-    kato_fixture.clear_working_memory()  # Only clear WM, not genes
+    kato_fixture.clear_short_term_memory()  # Only clear STM, not genes
     kato_fixture.update_genes({"max_sequence_length": 3})
     # ... rest of test
 ```
@@ -596,7 +598,7 @@ curl http://localhost:8000/p5f2b9323c3/gene/max_sequence_length
 python3 test_p1_processor.py
 
 # 4. Run specific auto-learning tests
-pipenv run pytest -v -k "test_max_sequence_length" tests/
+./test-harness.sh test tests/ -k "test_max_sequence_length" -v
 ```
 
 #### Sorting Assertions Fail
@@ -609,10 +611,10 @@ pipenv run pytest -v -k "test_max_sequence_length" tests/
 
 Use test helpers:
 ```python
-from fixtures.test_helpers import assert_working_memory_equals
+from fixtures.test_helpers import assert_short_term_memory_equals
 
 # This handles sorting automatically
-assert_working_memory_equals(actual, expected)
+assert_short_term_memory_equals(actual, expected)
 ```
 
 ### Configuration Issues

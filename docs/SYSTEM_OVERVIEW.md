@@ -17,7 +17,7 @@ KATO serves as an intelligent memory module that:
 ### High-Level Flow
 
 ```
-Input (Observation) → Processing → Working Memory → Learning → Long-Term Memory
+Input (Observation) → Processing → Short-Term Memory → Learning → Long-Term Memory
                            ↓
                       Predictions ← Pattern Matching ← Query
 ```
@@ -38,7 +38,7 @@ REST Client → REST Gateway (Port 8000) → ZMQ Pool → ZMQ Server → KATO Pr
 - **REST Gateway**: HTTP API endpoints, translates REST calls to ZMQ messages
 - **ZMQ Pool**: Connection pooling and load balancing for ZMQ clients  
 - **ZMQ Server**: High-performance message queue server (Port 5555)
-- **KATO Processor**: Core AI processing engine with working memory and models
+- **KATO Processor**: Core AI processing engine with short-term memory and models
 
 ## End-to-End Behavior
 
@@ -69,7 +69,7 @@ observation = {
 # Input
 observe({'strings': ['zebra', 'apple', 'banana']})
 
-# Stored in Working Memory as
+# Stored in Short-Term Memory as
 [['apple', 'banana', 'zebra']]  # Sorted alphanumerically
 
 # Sequential observations
@@ -77,13 +77,13 @@ observe({'strings': ['z']})
 observe({'strings': ['a']})
 observe({'strings': ['m']})
 
-# Working Memory maintains event order
+# Short-Term Memory maintains event order
 [['z'], ['a'], ['m']]  # Order preserved between events
 ```
 
 ### 2. Memory Architecture
 
-#### Working Memory
+#### Short-Term Memory
 - **Purpose**: Temporary storage for current observation sequence
 - **Behavior**: 
   - Accumulates observations as events
@@ -97,23 +97,23 @@ observe({'strings': ['m']})
   - Models identified by `MODEL|<sha1_hash>` format
   - Deterministic hashing ensures consistency
   - Frequency tracking for repeated patterns
-- **Persistence**: Survives working memory clears
+- **Persistence**: Survives short-term memory clears
 
 ### 3. Learning Process
 
-Learning occurs when explicitly triggered or when working memory reaches capacity:
+Learning occurs when explicitly triggered or when short-term memory reaches capacity:
 
-1. **Model Creation**: Current working memory sequence becomes a model
+1. **Model Creation**: Current short-term memory sequence becomes a model
 2. **Hash Generation**: Deterministic SHA1 hash created from sequence
 3. **Storage**: Model stored with identifier `MODEL|<hash>`
 4. **Frequency Update**: Counter increases if identical sequence learned again
 5. **Memory Clear**: Working memory cleared (except last event)
 
 ```python
-# Working Memory: [['hello'], ['world']]
+# Short-Term Memory: [['hello'], ['world']]
 kato.learn()
 # Creates: MODEL|a5b9c3d7... with sequence [['hello'], ['world']]
-# Working Memory after: [['world']]  # Last event preserved
+# Short-Term Memory after: [['world']]  # Last event preserved
 ```
 
 ### 4. Prediction Generation
@@ -210,7 +210,7 @@ observe({'strings': ['happy']})
 - Processed through configurable classifiers
 - May generate VECTOR|<hash> symbols
 - Appear before string symbols in mixed events
-- Classifier-dependent working memory behavior
+- Classifier-dependent short-term memory behavior
 
 #### Deterministic Properties
 - Same inputs always produce same outputs
@@ -224,13 +224,13 @@ observe({'strings': ['happy']})
 
 **`/cognition`** - Main processing endpoint
 - Accepts observations
-- Returns working memory, predictions, emotives, symbols
+- Returns short-term memory, predictions, emotives, symbols
 - Supports observe, learn, and query operations
 
 #### Response Structure
 ```json
 {
-    "working_memory": [["current"], ["events"]],
+    "short_term_memory": [["current"], ["events"]],
     "predictions": [{
         "name": "MODEL|abc123...",
         "past": [],

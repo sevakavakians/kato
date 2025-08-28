@@ -34,7 +34,7 @@ def calculate_diff_lengths(data):
     return [vec, norm(state - vec)]
 
 
-# For backward compatibility, import CVCSearcherModern as CVCSearcher
-from kato.searches.vector_search_engine import CVCSearcherModern as CVCSearcher
+# Import VectorIndexer
+from kato.searches.vector_search_engine import VectorIndexer
 
-__all__ = ['CVCSearcher', 'calculate_diff_lengths']
+__all__ = ['VectorIndexer', 'calculate_diff_lengths']

@@ -338,14 +338,14 @@ class ImprovedZMQClient:
         """Clear all processor memory."""
         return self.call('clear_all')
         
-    def clear_working_memory(self) -> Dict[str, Any]:
-        """Clear working memory only."""
-        return self.call('clear_wm')
+    def clear_short_term_memory(self) -> Dict[str, Any]:
+        """Clear short-term memory only."""
+        return self.call('clear_stm')
         
-    def get_working_memory(self) -> list:
-        """Get the current working memory contents."""
-        response = self.call('get_wm')
-        return response.get('working_memory', [])
+    def get_short_term_memory(self) -> list:
+        """Get the current short-term memory contents."""
+        response = self.call('get_stm')
+        return response.get('short_term_memory', [])
         
     def get_predictions(self, unique_id: Optional[Dict] = None) -> list:
         """Get current predictions from the processor."""

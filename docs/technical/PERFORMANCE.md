@@ -227,11 +227,11 @@ gc.collect()
 
 ### Memory Management Tips
 
-1. **Clear Working Memory Regularly**
+1. **Clear Short-Term Memory Regularly**
 ```python
 # After learning
 kato.learn()
-kato.clear_working_memory()
+kato.clear_short_term_memory()
 ```
 
 2. **Limit Model Count**
@@ -423,7 +423,7 @@ iostat -x 1
 - [ ] Use connection pooling
 - [ ] Implement batch processing
 - [ ] Enable keep-alive connections
-- [ ] Clear working memory regularly
+- [ ] Clear short-term memory regularly
 
 ### Monitoring
 - [ ] Track response times
@@ -446,7 +446,7 @@ iostat -x 1
 4. Check for memory pressure
 
 ### High Memory Usage
-1. Clear working memory more frequently
+1. Clear short-term memory more frequently
 2. Reduce max_sequence_length
 3. Limit model count
 4. Check for memory leaks

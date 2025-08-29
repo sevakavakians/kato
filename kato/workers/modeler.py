@@ -19,7 +19,7 @@ from kato.informatics.metrics import average_emotives, \
                                             confluence, \
                                             expectation
 from kato.representations.model import Model
-from kato.searches.model_search_optimized import create_model_searcher
+from kato.searches.model_search import ModelSearcher
 
 from collections import Counter
 
@@ -46,9 +46,9 @@ class Modeler:
         self.recall_threshold = float(kwargs["recall_threshold"])
         self.QUIESCENCE = kwargs["quiescence"]
         self.superkb = SuperKnowledgeBase(self.kb_id, self.persistence)
-        self.models_searcher = create_model_searcher(kb_id=self.kb_id,
-                                                     max_predictions=self.max_predictions,
-                                                     recall_threshold=self.recall_threshold)
+        self.models_searcher = ModelSearcher(kb_id=self.kb_id,
+                                             max_predictions=self.max_predictions,
+                                             recall_threshold=self.recall_threshold)
         self.initiateDefaults()
         self.predict = True
         self.predictions_kb = self.superkb.predictions_kb

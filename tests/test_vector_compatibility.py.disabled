@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Import KATO modules
 from kato.representations.vector_object import VectorObject
-from kato.searches.vector_searches import CVCSearcher, calculate_diff_lengths
+from kato.searches.vector_search_engine import CVCSearcherModern as CVCSearcher
 from kato.config.vectordb_config import VectorDBConfig, EXAMPLE_CONFIGS
 from kato.searches.vector_search_engine import VectorSearchEngine, CVCSearcherModern
 from kato.storage import get_vector_store
@@ -27,6 +27,21 @@ from kato.storage import get_vector_store
 # Import test fixtures
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '.')))
 from fixtures.kato_fixtures import kato_fixture
+
+# Helper function for backward compatibility
+def calculate_diff_lengths(data):
+    """
+    Calculate the length of the differences between current and all known vectors.
+    
+    Args:
+        data: Tuple of (state, vec) where state and vec are vectors
+    
+    Returns:
+        List containing [vec, norm(state - vec)]
+    """
+    state, vec = data
+    from numpy.linalg import norm
+    return [vec, norm(state.vector - vec.vector)]
 
 
 class TestVectorBackwardCompatibility:
@@ -261,9 +276,9 @@ class TestVectorDatabaseIntegration:
     
     def test_vector_search_engine_basic(self):
         """Test basic vector search engine functionality"""
-        # Create engine with MongoDB backend (for testing without external services)
+        # Create engine with Qdrant backend
         config = VectorDBConfig(
-            backend="mongodb",
+            backend="qdrant",
             vector_dim=128,
             cache={"enabled": False}
         )
@@ -281,7 +296,7 @@ class TestVectorDatabaseIntegration:
         # Note: Actual operations would require running services
         # This just tests the interface
         assert engine.collection_name == "test_vectors"
-        assert engine.config.backend == "mongodb"
+        assert engine.config.backend == "qdrant"
     
     def test_vector_store_factory(self):
         """Test vector store factory pattern"""
@@ -289,7 +304,7 @@ class TestVectorDatabaseIntegration:
         
         # List available backends
         backends = VectorStoreFactory.list_backends()
-        assert "mongodb" in backends
+        assert "qdrant" in backends
         
         # Test configuration loading
         config = EXAMPLE_CONFIGS["development"]
@@ -303,9 +318,9 @@ class TestVectorDatabaseIntegration:
         assert config.backend == "qdrant"
         assert config.validate()
         
-        # Test configuration with different backend
-        config = VectorDBConfig(backend="mongodb")
-        assert config.backend == "mongodb"
+        # Test configuration with qdrant backend
+        config = VectorDBConfig(backend="qdrant")
+        assert config.backend == "qdrant"
         assert config.validate()
         
         # Test invalid configuration

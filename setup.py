@@ -53,7 +53,6 @@ setup(
     },
     package_data={
         "kato": [
-            "*.proto",
             "**/*.py",
         ],
     },

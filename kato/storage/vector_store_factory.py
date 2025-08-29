@@ -107,12 +107,7 @@ class VectorStoreFactory:
         except ImportError:
             logger.debug("Qdrant store not available")
         
-        # Try to import and register MongoDB
-        try:
-            from .mongodb_vector_store import MongoDBVectorStore
-            cls.register_store("mongodb", MongoDBVectorStore)
-        except ImportError:
-            logger.debug("MongoDB store not available")
+        # MongoDB store removed - use Qdrant for vector storage
         
         # Try to import and register FAISS (if implemented)
         try:

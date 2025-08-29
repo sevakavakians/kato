@@ -14,7 +14,7 @@ from dataclasses import dataclass, field, asdict
 logger = logging.getLogger('kato.config.vectordb')
 
 # Type definitions for configuration options
-VectorDBBackend = Literal["qdrant", "mongodb", "faiss", "milvus", "weaviate"]
+VectorDBBackend = Literal["qdrant", "faiss", "milvus", "weaviate"]
 QuantizationType = Literal["none", "scalar", "product", "binary"]
 SimilarityMetric = Literal["euclidean", "cosine", "dot", "manhattan"]
 IndexType = Literal["hnsw", "flat", "ivf", "lsh", "annoy"]
@@ -126,15 +126,6 @@ class QdrantConfig:
 
 
 @dataclass
-class MongoDBVectorConfig:
-    """MongoDB vector storage configuration (legacy)"""
-    connection_string: str = "mongodb://localhost:27017"
-    database: str = "kato_kb"
-    collection: str = "vectors_kb"
-    index_type: str = "2dsphere"  # MongoDB doesn't support true vector indexes
-
-
-@dataclass
 class VectorDBConfig:
     """Main vector database configuration"""
     backend: VectorDBBackend = "qdrant"
@@ -143,7 +134,6 @@ class VectorDBConfig:
     
     # Backend-specific configurations
     qdrant: QdrantConfig = field(default_factory=QdrantConfig)
-    mongodb: MongoDBVectorConfig = field(default_factory=MongoDBVectorConfig)
     
     # Optimization configurations
     gpu: GPUConfig = field(default_factory=GPUConfig)
@@ -173,8 +163,6 @@ class VectorDBConfig:
         # Handle nested dataclass fields
         if 'qdrant' in config_dict and isinstance(config_dict['qdrant'], dict):
             config_dict['qdrant'] = QdrantConfig(**config_dict['qdrant'])
-        if 'mongodb' in config_dict and isinstance(config_dict['mongodb'], dict):
-            config_dict['mongodb'] = MongoDBVectorConfig(**config_dict['mongodb'])
         if 'gpu' in config_dict and isinstance(config_dict['gpu'], dict):
             config_dict['gpu'] = GPUConfig(**config_dict['gpu'])
         if 'quantization' in config_dict and isinstance(config_dict['quantization'], dict):
@@ -274,7 +262,7 @@ class VectorDBConfig:
         errors = []
         
         # Validate backend
-        valid_backends = ["qdrant", "mongodb", "faiss", "milvus", "weaviate"]
+        valid_backends = ["qdrant", "faiss", "milvus", "weaviate"]
         if self.backend not in valid_backends:
             errors.append(f"Invalid backend: {self.backend}")
         
@@ -381,9 +369,4 @@ EXAMPLE_CONFIGS = {
         batch_size=500
     ),
     
-    "legacy_mongodb": VectorDBConfig(
-        backend="mongodb",
-        cache=CacheConfig(enabled=True),  # Cache helps with MongoDB's slower vector ops
-        batch_size=100  # Smaller batches for MongoDB
-    )
 }

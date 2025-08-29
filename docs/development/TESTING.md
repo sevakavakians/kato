@@ -14,7 +14,7 @@ The KATO test suite provides comprehensive testing coverage for all aspects of t
 ## Test Structure
 
 ```
-kato/tests/
+tests/
 ├── tests/
 │   ├── fixtures/          # Test fixtures and helpers
 │   │   ├── hash_helpers.py    # Hash verification utilities
@@ -524,7 +524,7 @@ def test_missing_and_extras(kato_fixture):
 
 ### Common Errors
 1. **ModuleNotFoundError: fixtures**
-   - Solution: Run from kato-tests directory
+   - Solution: Run from tests directory
    - Ensure conftest.py is present
 
 2. **Docker filesystem errors**

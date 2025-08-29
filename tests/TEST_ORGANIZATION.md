@@ -1,84 +1,79 @@
 # Test Organization
 
+This document provides a quick reference for the test suite organization. For complete testing documentation, see [docs/development/TESTING.md](../docs/development/TESTING.md).
+
+## Test Statistics
+- **Total**: 128 tests (100% passing)
+  - API: 21 tests
+  - Unit: 83 tests  
+  - Integration: 19 tests
+  - Performance: 5 tests
+
 ## Directory Structure
 
-All test files are organized under `tests/tests/` with the following subdirectories:
+```
+tests/
+├── tests/
+│   ├── api/              # REST API endpoint tests (21)
+│   ├── unit/             # Unit tests (83)
+│   ├── integration/      # Integration tests (19)
+│   ├── performance/      # Performance/stress tests (5)
+│   └── fixtures/         # Shared test fixtures and helpers
+├── scripts/              # Utility scripts
+├── test-harness.sh       # Container-based test runner
+└── Dockerfile.test       # Test container definition
+```
 
-### `/tests/tests/api/`
-- **test_rest_endpoints.py** - Tests for REST API endpoints
+## Test Files by Category
 
-### `/tests/tests/unit/`
-- **test_determinism_preservation.py** - Tests for deterministic behavior
-- **test_memory_management.py** - Tests for memory operations (short-term memory, learning)
-- **test_model_hashing.py** - Tests for model hash generation
-- **test_observations.py** - Tests for observation processing
-- **test_prediction_edge_cases.py** - Tests for prediction edge cases
-- **test_prediction_fields.py** - Tests for prediction field structure
-- **test_predictions.py** - Tests for prediction functionality
-- **test_sorting_behavior.py** - Tests for alphanumeric sorting within events
+### API Tests (`tests/api/`)
+- `test_rest_endpoints.py` - All REST API endpoint tests
 
-### `/tests/tests/integration/`
-- **test_sequence_learning.py** - Tests for sequence learning workflows
-- **test_vector_e2e.py** - End-to-end tests for vector functionality
-- **test_vector_simplified.py** - Simplified integration tests for vector operations
+### Unit Tests (`tests/unit/`)
+- `test_determinism_preservation.py` - Deterministic behavior validation
+- `test_memory_management.py` - Memory operations (working/long-term)
+- `test_model_hashing.py` - Model hash generation
+- `test_observations.py` - Observation processing
+- `test_prediction_edge_cases.py` - Edge case handling
+- `test_prediction_fields.py` - Prediction field structure
+- `test_predictions.py` - Prediction functionality
+- `test_sorting_behavior.py` - Alphanumeric sorting behavior
 
-### `/tests/tests/performance/`
-- **test_vector_stress.py** - Stress tests for vector operations (performance, scalability, accuracy)
+### Integration Tests (`tests/integration/`)
+- `test_sequence_learning.py` - Sequence learning workflows
+- `test_vector_e2e.py` - Vector functionality end-to-end
+- `test_vector_simplified.py` - Simplified vector operations
 
-### `/tests/tests/fixtures/`
-- **kato_fixtures.py** - Shared test fixtures for KATO setup/teardown
-- **test_helpers.py** - Helper functions for tests
-
-### `/tests/scripts/`
-Utility scripts (not actual tests):
-- **analyze_tests.py** - Analyze test files
-- **check_tests.py** - Check test status
-- **run_simple_test.py** - Simple test runner
-- **run_tests_direct.py** - Direct test runner
-- **setup_venv.py** - Virtual environment setup
-- **simple_analyze.py** - Simple test analysis
-
-### `/tests/`
-Root directory files:
-- **conftest.py** - Pytest configuration (must remain in root)
-- **pytest.ini** - Pytest settings
-- **Dockerfile.test** - Test container definition
-- **requirements-test.txt** - Test dependencies
-
-## Test Count Summary
-- Total: **128 tests**
-  - API tests: 21
-  - Unit tests: 83  
-  - Integration tests: 19
-  - Performance tests: 5
+### Performance Tests (`tests/performance/`)
+- `test_vector_stress.py` - Stress tests for vector operations
 
 ## Running Tests
 
-### Run all tests:
+### Quick Commands
+
 ```bash
+# Run all tests (recommended)
 ./test-harness.sh test
-```
 
-### Run specific category:
-```bash
-./test-harness.sh test tests/tests/unit/      # Unit tests only
-./test-harness.sh test tests/tests/integration/ # Integration tests only
-./test-harness.sh test tests/tests/api/        # API tests only
-./test-harness.sh test tests/tests/performance/ # Performance tests only
-```
+# Run specific category
+./test-harness.sh suite unit
+./test-harness.sh suite integration
+./test-harness.sh suite api
+./test-harness.sh suite performance
 
-### Run specific test file:
-```bash
+# Run specific file
 ./test-harness.sh test tests/tests/unit/test_memory_management.py
-```
 
-### Run specific test:
-```bash
+# Run specific test
 ./test-harness.sh test tests/tests/unit/test_memory_management.py::test_clear_all_memory
 ```
 
-## Notes
-- All test files follow the pattern `test_*.py`
-- Tests use the shared `kato_fixture` from `fixtures/kato_fixtures.py`
-- Tests run in Docker containers via `test-harness.sh` for consistency
-- The test harness automatically detects and uses running KATO instances
+## Key Testing Concepts
+
+1. **Container-Based Testing**: All tests run in Docker containers for consistency
+2. **Fixtures**: Shared fixtures in `tests/fixtures/kato_fixtures.py`
+3. **Alphanumeric Sorting**: KATO sorts strings within events
+4. **Deterministic Hashing**: Models use `MODEL|<sha1_hash>` format
+5. **Temporal Fields**: Predictions include past/present/future/missing/extras
+
+For detailed information about writing tests, debugging, and CI/CD integration, see the [main testing documentation](../docs/development/TESTING.md).

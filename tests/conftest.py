@@ -6,7 +6,7 @@ This file is automatically loaded by pytest.
 import sys
 import os
 
-# Get the absolute path to the kato-tests directory
+# Get the absolute path to the tests directory
 test_root = os.path.dirname(os.path.abspath(__file__))
 
 # Add the tests directory to Python path for imports

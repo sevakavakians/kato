@@ -17,14 +17,14 @@ echo -e "${GREEN}Using improved ZMQ implementation (ROUTER/DEALER)${NC}"
 
 # Check if we're in the right directory
 if [ ! -f "pytest.ini" ]; then
-    echo -e "${RED}Error: Not in kato-tests directory${NC}"
-    echo "Please run this script from the kato-tests directory"
+    echo -e "${RED}Error: Not in tests directory${NC}"
+    echo "Please run this script from the tests directory"
     exit 1
 fi
 
 # Check if venv needs to be recreated (if it points to old path)
 if [ -f "venv/pyvenv.cfg" ]; then
-    if grep -q "kato-tests-v2" venv/pyvenv.cfg; then
+    if grep -q "kato-tests" venv/pyvenv.cfg; then
         echo -e "${YELLOW}Virtual environment points to old path, recreating...${NC}"
         rm -rf venv 2>/dev/null || mv venv venv_old_$(date +%s) 2>/dev/null
     fi

@@ -3,7 +3,7 @@ import os
 import re
 from pathlib import Path
 
-test_dir = Path('/Users/sevakavakians/PROGRAMMING/kato/kato-tests/tests')
+test_dir = Path(__file__).parent.parent / 'tests'
 
 vector_tests = []
 emotives_tests = []

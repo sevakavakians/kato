@@ -1,210 +1,91 @@
 # KATO Test Suite
 
-Comprehensive test suite for KATO with deterministic hashing validation, stateful sequence testing, and sophisticated prediction field verification.
+This directory contains the complete test suite for KATO. For comprehensive testing documentation, please refer to the main testing documentation:
 
-## Current Status
-- **98 Total Tests**: 66 unit, 11 integration, 21 API
-- **Full Coverage**: Core behaviors, edge cases, and protocol compliance
-- **Validated Behaviors**: Alphanumeric sorting, temporal segmentation, empty event handling
+**📖 [Complete Testing Documentation](../docs/development/TESTING.md)**
 
 ## Quick Start
 
+### Using Container-Based Testing (Recommended)
+
 ```bash
-# Run all tests
-./run_tests.sh
+# Build and run all tests
+./test-harness.sh build
+./test-harness.sh test
 
-# Run specific test categories
-./run_tests.sh --unit          # Unit tests only
-./run_tests.sh --integration   # Integration tests only
-./run_tests.sh --api           # API tests only
-
-# Run with options
-./run_tests.sh --verbose       # Verbose output
-./run_tests.sh --parallel      # Run tests in parallel
+# OR use kato-manager
+../kato-manager.sh test
 ```
 
-## Manual Setup
+### Run Specific Test Categories
 
-1. **Install dependencies:**
 ```bash
-pip install -r requirements.txt
-```
-
-2. **Build KATO Docker image:**
-```bash
-../kato-manager.sh build
-```
-
-3. **Run tests with pytest:**
-```bash
-# Run all tests
-pytest
+# Run specific test suites
+./test-harness.sh suite unit          # Unit tests only
+./test-harness.sh suite integration   # Integration tests only
+./test-harness.sh suite api           # API tests only
+./test-harness.sh suite performance   # Performance tests
 
 # Run specific test file
-pytest tests/unit/test_observations.py
+./test-harness.sh test tests/tests/unit/test_observations.py
 
-# Run specific test
-pytest tests/unit/test_observations.py::test_observe_single_string
-
-# Run with verbose output
-pytest -v
-
-# Run in parallel (requires pytest-xdist)
-pytest -n auto
+# Run with pytest options
+./test-harness.sh test tests/ -v -x   # Verbose, stop on first failure
 ```
 
-## Test Structure
+## Test Statistics
+
+**Current Coverage**: 128 tests (100% passing)
+- 83 unit tests
+- 19 integration tests  
+- 21 API tests
+- 5 performance tests
+- Execution time: ~45 seconds
+
+## Directory Structure
 
 ```
-kato-tests/
+tests/
 ├── tests/
-│   ├── fixtures/          # Test fixtures and helpers
-│   │   ├── hash_helpers.py    # Hash verification utilities
-│   │   ├── test_helpers.py    # Sorting and assertion helpers
-│   │   └── kato_fixtures.py   # KATO test fixtures
-│   ├── unit/              # Unit tests
-│   │   ├── test_observations.py
-│   │   ├── test_memory_management.py
-│   │   ├── test_model_hashing.py
-│   │   ├── test_predictions.py
-│   │   └── test_sorting_behavior.py
-│   ├── integration/       # Integration tests
-│   │   └── test_sequence_learning.py
-│   └── api/              # API endpoint tests
-│       └── test_rest_endpoints.py
-```
-
-## Test Categories
-
-### Unit Tests (66 tests)
-- **Observations** (11 tests): String, vector, and emotive observation processing, empty event handling
-- **Memory Management** (9 tests): Working memory, learning, and memory limits
-- **Model Hashing** (11 tests): Deterministic MODEL| prefix and SHA1 hashing
-- **Predictions** (13 tests): Hamiltonian calculations, confidence scores, temporal fields
-- **Sorting Behavior** (10 tests): Alphanumeric sorting within events
-- **Prediction Fields** (11 tests): Past/present/future segmentation, missing/extras detection
-- **Prediction Edge Cases** (10 tests): Boundary conditions and unusual scenarios
-
-### Integration Tests (11 tests)
-- **Sequence Learning**: End-to-end sequence learning and recall
-- Context switching, branching sequences, multimodal data
-- Temporal prediction validation
-- Max sequence length auto-learning
-
-### API Tests (21 tests)
-- **REST Endpoints**: All REST API endpoints and error handling
-- Protocol compliance and response validation
-- Empty event handling via API
-
-## Common pytest Commands
-
-```bash
-# Run tests matching a pattern
-pytest -k "hash"
-
-# Run with coverage
-pytest --cov=kato
-
-# Run and stop on first failure
-pytest -x
-
-# Run previously failed tests
-pytest --lf
-
-# Show local variables on failure
-pytest -l
-
-# Quiet mode (less output)
-pytest -q
-```
-
-## Debugging Tests
-
-```bash
-# Run with Python debugger on failure
-pytest --pdb
-
-# Show print statements
-pytest -s
-
-# Maximum verbosity
-pytest -vv
-
-# Show test durations
-pytest --durations=10
-```
-
-## Test Markers
-
-Tests can be marked for selective execution:
-
-```python
-@pytest.mark.slow
-def test_slow_operation():
-    pass
-
-@pytest.mark.integration
-def test_integration():
-    pass
-```
-
-Run marked tests:
-```bash
-pytest -m "slow"           # Run only slow tests
-pytest -m "not slow"       # Skip slow tests
-pytest -m "integration"    # Run only integration tests
-```
-
-## Environment Variables
-
-Set these before running tests:
-
-```bash
-export PROCESSOR_ID=p123456789
-export PROCESSOR_NAME=P1
+│   ├── fixtures/          # Shared test fixtures and helpers
+│   ├── unit/              # Unit tests (83 tests)
+│   ├── integration/       # Integration tests (19 tests)
+│   ├── api/              # API endpoint tests (21 tests)
+│   └── performance/      # Performance tests (5 tests)
+├── scripts/              # Utility scripts for testing
+├── test-harness.sh      # Container-based test runner
+├── Dockerfile.test      # Test container definition
+├── requirements-test.txt # Test dependencies
+├── pytest.ini           # Pytest configuration
+├── conftest.py          # Pytest fixtures configuration
+└── TEST_ORGANIZATION.md # Test organization details
 ```
 
 ## Key KATO Behaviors to Remember
 
-### Alphanumeric Sorting
-- Strings are sorted within each event: `['z', 'a']` → `['a', 'z']`
-- Event order is preserved: `[['z'], ['a']]` stays `[['z'], ['a']]`
-- Use `sort_event_strings()` helper for test assertions
+When writing or debugging tests, keep these behaviors in mind:
 
-### Prediction Fields
-- **past**: Events before current state
-- **present**: Contiguous matching events (supports partial matches)
-- **future**: Events after current state
-- **missing**: Expected symbols not observed in present
-- **extras**: Observed symbols not expected in present
+1. **Alphanumeric Sorting**: Strings are sorted within events
+   - Input: `['zebra', 'apple']` → Stored: `['apple', 'zebra']`
 
-### Empty Events
-- Empty observations `{'strings': []}` are ignored
-- Don't change working memory or affect predictions
+2. **Empty Events**: Observations with empty strings are ignored
 
-## Troubleshooting
+3. **Deterministic Hashing**: All models use `MODEL|<sha1_hash>` format
 
-1. **Docker not running**: Ensure Docker Desktop is running
-2. **Port conflicts**: Check port 8000 is available
-3. **Timeout errors**: Increase timeout in pytest.ini
-4. **Import errors**: Ensure PYTHONPATH includes parent directories
-5. **Assertion failures**: Check for alphanumeric sorting
-6. **Prediction mismatches**: Verify correct field usage (future vs missing)
+4. **Temporal Fields in Predictions**:
+   - `past`: Events before present
+   - `present`: Current matching events
+   - `future`: Events after present
+   - `missing`: Expected but not observed
+   - `extras`: Observed but not expected
 
 ## Writing New Tests
 
-1. Create test file in appropriate directory (unit/integration/api)
-2. Import fixtures: `from fixtures.kato_fixtures import kato_fixture`
-3. Import helpers: `from fixtures.test_helpers import sort_event_strings`
-4. Write test functions starting with `test_`
-5. Account for KATO behaviors:
-   - Alphanumeric sorting within events
-   - Empty events are ignored
-   - Temporal segmentation in predictions
-
-Example:
 ```python
-def test_my_feature(kato_fixture):
+from fixtures.kato_fixtures import kato_fixture
+from fixtures.test_helpers import sort_event_strings
+
+def test_example(kato_fixture):
     """Test description."""
     kato_fixture.clear_all_memory()
     
@@ -215,31 +96,15 @@ def test_my_feature(kato_fixture):
         'emotives': {}
     })
     assert result['status'] == 'observed'
-    
-    # Check working memory with sorted expectation
-    wm = kato_fixture.get_working_memory()
-    assert wm == [['apple', 'zebra']]
 ```
 
-### Testing Predictions
-```python
-def test_prediction_fields(kato_fixture):
-    """Test temporal segmentation."""
-    # Learn sequence
-    for item in ['past', 'present', 'future']:
-        kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
-    kato_fixture.learn()
-    
-    # Observe middle
-    kato_fixture.clear_working_memory()
-    kato_fixture.observe({'strings': ['present'], 'vectors': [], 'emotives': {}})
-    predictions = kato_fixture.get_predictions()
-    
-    # Check temporal fields
-    for pred in predictions:
-        if 'present' in pred.get('matches', []):
-            assert pred['past'] == [['past']]
-            assert pred['present'] == [['present']]
-            assert pred['future'] == [['future']]
-            break
-```
+## More Information
+
+For detailed information about:
+- Running tests in different modes
+- Understanding test fixtures
+- Debugging test failures
+- Adding new test categories
+- CI/CD integration
+
+Please see **[docs/development/TESTING.md](../docs/development/TESTING.md)**

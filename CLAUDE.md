@@ -179,3 +179,64 @@ PROCESSOR_ID=p123 PROCESSOR_NAME=CustomProcessor ./kato-manager.sh start
 - Model representations: `kato/representations/model.py`
 - Test fixtures: `tests/fixtures/kato_fixtures.py`
 - Management script: `kato-manager.sh`
+
+## Automated Planning System Protocol
+
+### Role Separation
+**Claude Code's Responsibility**: 
+- READ planning documentation for context
+- TRIGGER planning-maintainer agent for all documentation updates
+- EXECUTE development tasks
+
+**Planning-Maintainer's Responsibility**:
+- ALL updates to planning-docs files
+- Documentation archival and organization
+- Pattern tracking and velocity calculations
+- Time estimate refinements
+
+**Important**: Claude Code should NEVER directly edit files in planning-docs/. All documentation updates must go through the planning-maintainer agent.
+
+### Every Session Start:
+1. READ `planning-docs/README.md` to understand the current system state
+2. The README will guide you to the most relevant documents for immediate context
+3. Only read additional documents when specifically needed for the current work
+
+### Trigger Planning-Maintainer When:
+Use the Task tool with subagent_type="planning-maintainer" when these events occur:
+- **Task Completion** → Agent will update SESSION_STATE, archive work, refresh backlogs
+- **New Tasks Created** → Agent will add to backlogs with time estimates
+- **Priority Changes** → Agent will reorder backlogs and update dependencies
+- **Blocker Encountered** → Agent will log blocker, suggest alternative tasks
+- **Blocker Resolved** → Agent will update estimates, clear blocker status
+- **Architectural Decision** → Agent will update DECISIONS.md and ARCHITECTURE.md
+- **New Specifications** → Agent will parse into tasks, update scope
+- **Context Switch** → Agent will create session log, update current state
+- **Milestone Reached** → Agent will archive phase, update project overview
+
+### Context Loading Strategy (Read-Only):
+1. **Immediate Context** (Always Load):
+   - `planning-docs/README.md` → Entry point and guide
+   - `planning-docs/SESSION_STATE.md` → Current task and progress
+   - `planning-docs/DAILY_BACKLOG.md` → Today's priorities
+   - Latest session log in `planning-docs/sessions/` (if exists)
+
+2. **On-Demand Context** (Load When Needed):
+   - `planning-docs/PROJECT_OVERVIEW.md` → Project scope and tech stack
+   - `planning-docs/ARCHITECTURE.md` → Technical decisions and structure
+   - `planning-docs/SPRINT_BACKLOG.md` → Weekly planning and future work
+   - `planning-docs/DECISIONS.md` → Historical architectural choices
+   - `planning-docs/completed/` → Previous work for reference
+
+### How to Trigger the Planning-Maintainer:
+```
+Example: After completing a task
+assistant: "I've finished implementing the OAuth2 authentication feature. Let me trigger the planning-maintainer to update our documentation."
+<uses Task tool with subagent_type="planning-maintainer">
+
+The planning-maintainer will automatically:
+- Update SESSION_STATE.md progress
+- Archive the completed task
+- Refresh the backlogs
+- Calculate actual vs estimated time
+- Log any patterns observed
+```

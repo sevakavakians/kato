@@ -51,7 +51,7 @@ def find_test_functions(file_path):
 
 def main():
     """Analyze all test files."""
-    test_dir = Path('/Users/sevakavakians/PROGRAMMING/kato/kato-tests/tests')
+    test_dir = Path(__file__).parent.parent / 'tests'
     
     all_tests = []
     

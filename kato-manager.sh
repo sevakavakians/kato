@@ -1186,7 +1186,7 @@ run_tests() {
     log_info "Running KATO test suite in container..."
     
     # Check if test-harness.sh exists
-    if [[ ! -f "$PROJECT_ROOT/test-harness.sh" ]]; then
+    if [[ ! -f "$KATO_ROOT/test-harness.sh" ]]; then
         log_error "test-harness.sh not found in project root"
         exit 1
     fi
@@ -1204,12 +1204,12 @@ run_tests() {
     # Build test harness if needed
     if ! docker images | grep -q "kato-test-harness"; then
         log_info "Test harness container not found. Building..."
-        "$PROJECT_ROOT/test-harness.sh" build
+        "$KATO_ROOT/test-harness.sh" build
     fi
     
     # Run tests using test-harness.sh
     log_info "Running tests in containerized environment..."
-    "$PROJECT_ROOT/test-harness.sh" test "$@" | tee "$LOGS_DIR/test-results.log"
+    "$KATO_ROOT/test-harness.sh" test "$@" | tee "$LOGS_DIR/test-results.log"
     
     local test_result=${PIPESTATUS[0]}
     if [[ $test_result -eq 0 ]]; then

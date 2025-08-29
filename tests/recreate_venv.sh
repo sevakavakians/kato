@@ -13,16 +13,16 @@ echo -e "${GREEN}KATO Virtual Environment Recreation Script${NC}"
 echo "==========================================="
 echo ""
 
-# Get the absolute path to the kato-tests directory
+# Get the absolute path to the tests directory
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 echo "Working directory: $SCRIPT_DIR"
 
-# Change to the kato-tests directory
+# Change to the tests directory
 cd "$SCRIPT_DIR"
 
 # Check if we're in the right directory
 if [ ! -f "pytest.ini" ]; then
-    echo -e "${RED}Error: Not in kato-tests directory${NC}"
+    echo -e "${RED}Error: Not in tests directory${NC}"
     exit 1
 fi
 

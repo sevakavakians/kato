@@ -156,10 +156,7 @@ class OptimizedModelSearcher:
             use_ngram_index=True
         ) if self.use_fast_matching else None
         
-        self.index_manager = IndexManager(
-            enable_inverted=True,
-            enable_partitions=True
-        ) if self.use_indexing else None
+        self.index_manager = IndexManager() if self.use_indexing else None
         
         self.extractor = OptimizedInformationExtractor(self.use_fast_matching)
         
@@ -255,10 +252,7 @@ class OptimizedModelSearcher:
         
         if self.index_manager:
             # Recreate clean index manager
-            self.index_manager = IndexManager(
-                enable_inverted=True,
-                enable_partitions=True
-            )
+            self.index_manager = IndexManager()
     
     def causalBelief(self, state: List[str], 
                     target_class_candidates: List[str] = []) -> List[Any]:

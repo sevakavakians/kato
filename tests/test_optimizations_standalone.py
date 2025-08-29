@@ -118,19 +118,19 @@ def test_inverted_index():
     # Build index
     start = time.perf_counter()
     for model_id, sequence in models:
-        index.add_model(model_id, sequence)
+        index.add_document(model_id, sequence)
     elapsed = time.perf_counter() - start
     print(f"✓ Built inverted index for 500 models in {elapsed:.4f}s")
     
     # Test AND search
     search_symbols = ['symbol_0', 'symbol_1']
     start = time.perf_counter()
-    results_and = index.search(search_symbols, mode='all')
+    results_and = index.search(search_symbols, mode='AND')
     elapsed_and = time.perf_counter() - start
     
     # Test OR search
     start = time.perf_counter()
-    results_or = index.search(search_symbols, mode='any')
+    results_or = index.search(search_symbols, mode='OR')
     elapsed_or = time.perf_counter() - start
     
     assert len(results_or) >= len(results_and), "OR should find at least as many as AND"
@@ -138,7 +138,7 @@ def test_inverted_index():
     print(f"✓ OR search found {len(results_or)} models in {elapsed_or*1000:.2f}ms")
     
     # Test IDF
-    idf = index.get_symbol_idf('symbol_0')
+    idf = index.get_idf('symbol_0')
     assert idf > 0, "Common symbol should have positive IDF"
     print(f"✓ IDF calculation working (symbol_0 IDF: {idf:.3f})")
 

@@ -72,7 +72,6 @@ MessagePack:
   --classifier CVC \
   --max-predictions 20 \
   --recall-threshold 0.3 \
-  --search-depth 5 \
   --max-seq-length 100
 ```
 
@@ -82,7 +81,6 @@ MessagePack:
   --classifier DVC \
   --max-predictions 500 \
   --recall-threshold 0.01 \
-  --search-depth 50 \
   --update-frequencies
 ```
 
@@ -91,8 +89,7 @@ MessagePack:
 ./kato-manager.sh start \
   --max-predictions 50 \
   --max-seq-length 50 \
-  --persistence 3 \
-  --search-depth 5
+  --persistence 3
 ```
 
 ### 2. Batch Operations
@@ -279,7 +276,7 @@ stats.print_stats(10)
 
 2. **Limit Search Depth**
 ```bash
---search-depth 5  # Reduce from default 10
+--max-predictions 50  # Reduce from default 100
 ```
 
 3. **Reduce Max Predictions**
@@ -522,9 +519,9 @@ Testing with 10,000 learned models, observing 10-element sequence:
 4. Check for memory leaks
 
 ### High CPU Usage
-1. Switch to CVC classifier
-2. Reduce search_depth
-3. Lower max_predictions
+1. Use VI indexer (optimized)
+2. Lower max_predictions
+3. Increase recall_threshold
 4. Check for infinite loops
 
 ## Performance Targets

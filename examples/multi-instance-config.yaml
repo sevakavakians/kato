@@ -6,7 +6,7 @@ instances:
     name: "Sentiment Analysis"
     port: 8001
     zmq_port: 5556
-    classifier: CVC
+    indexer_type: VI
     max_predictions: 50
     recall_threshold: 0.2
     max_sequence_length: 10
@@ -16,17 +16,17 @@ instances:
     name: "Pattern Matching" 
     port: 8002
     zmq_port: 5557
-    classifier: DVC
+    indexer_type: VI
     max_predictions: 100
     recall_threshold: 0.1
     max_sequence_length: 20
-    search_depth: 15
+    persistence: 10
 
   - id: sequence-learner
     name: "Sequence Learning"
     port: 8003
     zmq_port: 5558
-    classifier: CVC
+    indexer_type: VI
     max_predictions: 75
     recall_threshold: 0.15
     max_sequence_length: 5

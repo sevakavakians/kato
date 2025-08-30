@@ -139,7 +139,7 @@ Send an observation to the processor.
 **Notes:**
 - Strings are automatically sorted alphanumerically within each event
 - Empty observations are ignored
-- Vectors are optional and processed through classifiers
+- Vectors are optional and processed through vector indexer
 - Emotives are optional key-value pairs (0.0-1.0)
 
 #### POST /{processor_id}/learn
@@ -311,7 +311,7 @@ Get a specific gene/parameter value.
 - `gene_name` (path): Gene/parameter name
 
 **Available Genes:**
-- `classifier`: Classifier type (CVC/DVC)
+- `indexer_type`: Vector indexer type (VI only)
 - `max_predictions`: Maximum predictions to generate
 - `recall_threshold`: Minimum similarity score required for predictions (0.0-1.0)
   - **Purpose**: Controls the quality gate for pattern matching predictions
@@ -324,7 +324,7 @@ Get a specific gene/parameter value.
   - **How it works**: Filters predictions by comparing sequence similarity ratios against this threshold
 - `persistence`: Emotive persistence duration
 - `max_sequence_length`: Maximum sequence length
-- `search_depth`: Vector search depth
+- `quiescence`: Quiescence period
 
 **Response:**
 ```json

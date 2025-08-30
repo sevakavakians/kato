@@ -39,10 +39,9 @@ All parameters can be specified directly when starting KATO:
 
 | Parameter | Type | Default | Range | Description |
 |-----------|------|---------|-------|-------------|
-| `--classifier` | string | "VI" | CVC, DVC | Classifier type |
+| `--indexer-type` | string | "VI" | VI only | Vector indexer type (only VI supported) |
 | `--max-predictions` | integer | 100 | 1-1000 | Maximum predictions to generate |
 | `--recall-threshold` | float | 0.1 | 0.0-1.0 | Minimum similarity for recall |
-| `--search-depth` | integer | 10 | 1-100 | Vector search depth |
 
 ### Memory and Learning Parameters
 
@@ -132,7 +131,7 @@ export KATO_ZMQ_IMPLEMENTATION=legacy
 ```bash
 ./kato-manager.sh start \
   --name "DevProcessor" \
-  --classifier CVC \
+  --indexer-type VI \
   --max-predictions 50 \
   --recall-threshold 0.2 \
   --log-level DEBUG \
@@ -144,11 +143,10 @@ export KATO_ZMQ_IMPLEMENTATION=legacy
 ```bash
 ./kato-manager.sh start \
   --name "ProdProcessor" \
-  --classifier DVC \
+  --indexer-type VI \
   --max-predictions 200 \
   --recall-threshold 0.05 \
   --persistence 10 \
-  --search-depth 15 \
   --max-seq-length 1000 \
   --update-frequencies \
   --api-key "your-secret-key"
@@ -163,7 +161,6 @@ export KATO_ZMQ_IMPLEMENTATION=legacy
   --persistence 20 \
   --smoothness 5 \
   --quiescence 5 \
-  --search-depth 25 \
   --log-level DEBUG
 ```
 
@@ -209,10 +206,9 @@ EOF
 | `KATO_PROCESSOR_NAME` | `--name` |
 | `KATO_API_PORT` | `--port` |
 | `KATO_LOG_LEVEL` | `--log-level` |
-| `KATO_CLASSIFIER` | `--classifier` |
+| `KATO_INDEXER_TYPE` | `--indexer-type` |
 | `KATO_MAX_PREDICTIONS` | `--max-predictions` |
 | `KATO_RECALL_THRESHOLD` | `--recall-threshold` |
-| `KATO_SEARCH_DEPTH` | `--search-depth` |
 | `KATO_MAX_SEQ_LENGTH` | `--max-seq-length` |
 | `KATO_PERSISTENCE` | `--persistence` |
 | `KATO_SMOOTHNESS` | `--smoothness` |
@@ -236,7 +232,6 @@ KATO internally uses a JSON manifest for configuration:
   "max_predictions": 100,
   "recall_threshold": 0.1,
   "quiescence": 3,
-  "search_depth": 10,
   "sort": true,
   "process_predictions": true
 }
@@ -245,20 +240,6 @@ KATO internally uses a JSON manifest for configuration:
 This manifest is automatically generated from command-line parameters.
 
 ## Parameter Details
-
-### Classifier Types
-
-**CVC (Contiguous Vector Classifier)**
-- Best for sequential data
-- Lower memory usage
-- Faster processing
-- Suitable for most use cases
-
-**DVC (Distributed Vector Classifier)**
-- Better for complex patterns
-- Higher memory usage
-- More sophisticated matching
-- Suitable for research/advanced use
 
 ### Recall Threshold
 
@@ -323,16 +304,16 @@ KATO automatically maintains an instance registry at `~/.kato/instances.json`:
 ### Multi-Instance Examples
 
 ```bash
-# Development setup - Different classifiers
-./kato-manager.sh start --id cvc-test --name "CVC Test" --port 8001 --classifier CVC
-./kato-manager.sh start --id dvc-test --name "DVC Test" --port 8002 --classifier DVC
+# Development setup - Different configurations
+./kato-manager.sh start --id test-1 --name "Test High Recall" --port 8001 --recall-threshold 0.05
+./kato-manager.sh start --id test-2 --name "Test Low Recall" --port 8002 --recall-threshold 0.5
 
 # Production setup - Task-specific processors
 ./kato-manager.sh start --id nlp --name "NLP Engine" --port 8001 \
   --max-seq-length 20 --recall-threshold 0.2
 
-./kato-manager.sh start --id vision --name "Vision Processor" --port 8002 \
-  --classifier DVC --search-depth 20
+./kato-manager.sh start --id stream --name "Stream Processor" --port 8002 \
+  --max-predictions 50 --persistence 10
 
 ./kato-manager.sh start --id realtime --name "Real-time Stream" --port 8003 \
   --max-seq-length 5 --max-predictions 10
@@ -347,40 +328,36 @@ KATO automatically maintains an instance registry at `~/.kato/instances.json`:
 ```bash
 ./kato-manager.sh start \
   --id speed-opt \
-  --classifier CVC \
+  --indexer-type VI \
   --max-predictions 20 \
   --recall-threshold 0.3 \
-  --search-depth 5 \
   --no-predictions
 ```
 
 ### Accuracy-Optimized
 ```bash
 ./kato-manager.sh start \
-  --classifier DVC \
+  --indexer-type VI \
   --max-predictions 500 \
   --recall-threshold 0.01 \
-  --search-depth 50 \
   --update-frequencies
 ```
 
 ### Memory-Optimized
 ```bash
 ./kato-manager.sh start \
-  --classifier CVC \
+  --indexer-type VI \
   --max-predictions 50 \
   --max-seq-length 100 \
-  --persistence 3 \
-  --search-depth 5
+  --persistence 3
 ```
 
 ### Real-Time Processing
 ```bash
 ./kato-manager.sh start \
-  --classifier CVC \
+  --indexer-type VI \
   --max-predictions 10 \
   --recall-threshold 0.5 \
-  --search-depth 3 \
   --max-seq-length 50
 ```
 
@@ -390,12 +367,12 @@ The manager script validates all parameters:
 
 | Parameter | Validation | Default | Description |
 |-----------|------------|---------|-------------|
-| `classifier` | Must be "VI" or "DVC" | "VI" | Vector indexer type |
+| `indexer_type` | Must be "VI" | "VI" | Vector indexer type (only VI supported) |
 | `max_predictions` | Integer, 1-1000 | 100 | Maximum predictions to generate |
 | `recall_threshold` | Float, 0.0-1.0 | 0.1 | Minimum similarity for predictions (see tuning guide below) |
 | `auto_act_threshold` | Float, 0.0-1.0 | 0.8 | Threshold for automatic actions |
 | `persistence` | Integer, >= 1 | 5 | Emotive persistence duration |
-| `search_depth` | Integer, >= 1 | 10 | Vector search depth |
+| `quiescence` | Integer, >= 1 | 3 | Quiescence period |
 | `port` | Integer, 1024-65535 | 8000 | REST API port |
 
 ## Dynamic Reconfiguration
@@ -507,34 +484,82 @@ git add config-production.json
 git commit -m "Production configuration baseline"
 ```
 
-## Migration from Genome Files
+## Vector Database Configuration
 
-Previously, KATO used genome files for configuration. To migrate:
+KATO uses Qdrant as its vector database for high-performance similarity search.
 
-### Old Genome Format
-```json
-{
-  "elements": {
-    "nodes": [{
-      "data": {
-        "id": "p46b6b076c",
-        "name": "P1",
-        "indexer_type": "VI",
-        "max_predictions": 100
-      }
-    }]
-  }
-}
-```
+### Environment Variables
 
-### New Parameter Format
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `KATO_VECTOR_DB_BACKEND` | qdrant | Vector database backend (currently only qdrant) |
+| `KATO_SIMILARITY_METRIC` | cosine | Distance metric: cosine, euclidean, dot, manhattan |
+| `QDRANT_HOST` | localhost | Qdrant server host |
+| `QDRANT_PORT` | 6333 | Qdrant REST API port |
+| `QDRANT_COLLECTION` | kato_vectors | Collection name for vectors |
+| `KATO_VECTOR_DIM` | 768 | Vector dimension size |
+| `KATO_VECTOR_BATCH_SIZE` | 100 | Batch size for vector operations |
+| `KATO_VECTOR_SEARCH_LIMIT` | 100 | Maximum search results |
+
+### Advanced Vector Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `KATO_GPU_ENABLED` | false | Enable GPU acceleration if available |
+| `KATO_GPU_DEVICES` | 0 | Comma-separated GPU device IDs |
+| `KATO_QUANTIZATION_ENABLED` | false | Enable vector quantization |
+| `KATO_QUANTIZATION_TYPE` | scalar | Type: scalar, product, or binary |
+| `KATO_CACHE_ENABLED` | false | Enable Redis caching layer |
+| `REDIS_HOST` | localhost | Redis server host |
+| `REDIS_PORT` | 6379 | Redis server port |
+
+### HNSW Index Parameters
+
+The Hierarchical Navigable Small World (HNSW) algorithm parameters can be tuned for performance:
+
+| Parameter | Default | Description | Impact |
+|-----------|---------|-------------|---------|
+| `m` | 16 | Number of bi-directional links | Higher = better recall, more memory |
+| `ef_construct` | 128 | Size of dynamic list during construction | Higher = better index quality, slower build |
+| `ef` | 128 | Size of dynamic list during search | Higher = better recall, slower search |
+
+Example configuration:
 ```bash
-./kato-manager.sh start \
-  --id p46b6b076c \
-  --name P1 \
-  --classifier CVC \
-  --max-predictions 100
+# High performance configuration
+export KATO_SIMILARITY_METRIC=cosine
+export KATO_VECTOR_BATCH_SIZE=200
+export KATO_VECTOR_SEARCH_LIMIT=50
+
+# GPU-accelerated configuration  
+export KATO_GPU_ENABLED=true
+export KATO_GPU_DEVICES=0,1
+
+# Quantization for memory optimization
+export KATO_QUANTIZATION_ENABLED=true
+export KATO_QUANTIZATION_TYPE=scalar
 ```
+
+## Configuration Reference
+
+### Currently Used Parameters
+These parameters are actively used by KATO:
+
+| Parameter | Usage | Default |
+|-----------|-------|----------|
+| `id` | Unique processor identifier | auto-generated |
+| `name` | Processor display name | "KatoProcessor" |
+| `indexer_type` | Vector indexer (VI only) | "VI" |
+| `max_sequence_length` | Auto-learning threshold | 0 (disabled) |
+| `persistence` | Emotive persistence | 5 |
+| `smoothness` | Learning smoothness | 3 |
+| `auto_act_method` | Auto-action method | "none" |
+| `auto_act_threshold` | Auto-action threshold | 0.8 |
+| `always_update_frequencies` | Update model frequencies | false |
+| `max_predictions` | Maximum predictions | 100 |
+| `recall_threshold` | Similarity threshold | 0.1 |
+| `quiescence` | Quiescence period | 3 |
+| `sort` | Alphanumeric sorting | true |
+| `process_predictions` | Process predictions | true |
 
 ## Troubleshooting Configuration
 

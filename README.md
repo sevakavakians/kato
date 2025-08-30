@@ -72,7 +72,7 @@ KATO now uses Qdrant for high-performance vector operations:
 ```bash
 # Start multiple KATO instances with different configurations
 ./kato-manager.sh start --id processor-1 --name "Main" --port 8001
-./kato-manager.sh start --id processor-2 --name "Secondary" --port 8002 --classifier DVC
+./kato-manager.sh start --id processor-2 --name "Secondary" --port 8002 --max-predictions 200
 
 # List all instances
 ./kato-manager.sh list

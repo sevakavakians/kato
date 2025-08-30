@@ -21,7 +21,7 @@ KATO now supports running multiple independent processor instances simultaneousl
 ./kato-manager.sh start --id processor-1 --name "Main Processor" --port 8001
 
 # Start second instance with different configuration
-./kato-manager.sh start --id processor-2 --name "Secondary" --port 8002 --classifier DVC
+./kato-manager.sh start --id processor-2 --name "Secondary" --port 8002 --max-predictions 200
 
 # Start third instance with auto-learning enabled
 ./kato-manager.sh start --id processor-3 --name "Auto Learner" --port 8003 --max-seq-length 10
@@ -120,12 +120,11 @@ All standard KATO parameters can be set per instance:
   --id my-processor \
   --name "Custom Processor" \
   --port 8001 \
-  --classifier DVC \
+  --indexer-type VI \
   --max-predictions 50 \
   --recall-threshold 0.2 \
   --max-seq-length 10 \
-  --persistence 5 \
-  --search-depth 15
+  --persistence 5
 ```
 
 ### Available Parameters
@@ -135,12 +134,12 @@ All standard KATO parameters can be set per instance:
 | `--id` | Processor ID | auto-generated |
 | `--name` | Processor name | KatoProcessor |
 | `--port` | REST API port | 8000 |
-| `--classifier` | Classifier type (CVC/DVC) | CVC |
+| `--indexer-type` | Vector indexer type (VI only) | VI |
 | `--max-predictions` | Maximum predictions | 100 |
 | `--recall-threshold` | Recall threshold (0-1) | 0.1 |
 | `--max-seq-length` | Max sequence length | 0 (unlimited) |
 | `--persistence` | Persistence value | 5 |
-| `--search-depth` | Search depth | 10 |
+| `--quiescence` | Quiescence period | 3 |
 
 ## Configuration Files
 
@@ -153,13 +152,13 @@ instances:
   - id: sentiment-analyzer
     name: "Sentiment Analysis"
     port: 8001
-    classifier: CVC
+    indexer_type: VI
     max_predictions: 50
     
   - id: pattern-matcher
     name: "Pattern Matching"
     port: 8002
-    classifier: DVC
+    indexer_type: VI
     max_predictions: 100
 ```
 
@@ -194,11 +193,11 @@ Each instance has:
 
 ## Use Cases
 
-### 1. Different Classifiers
-Run instances with different vector classifiers:
+### 1. Different Recall Thresholds
+Run instances with different similarity thresholds:
 ```bash
-./kato-manager.sh start --id cvc-processor --classifier CVC --port 8001
-./kato-manager.sh start --id dvc-processor --classifier DVC --port 8002
+./kato-manager.sh start --id high-recall --recall-threshold 0.05 --port 8001
+./kato-manager.sh start --id low-recall --recall-threshold 0.5 --port 8002
 ```
 
 ### 2. Different Configurations
@@ -212,7 +211,7 @@ Test different parameter settings:
 Create task-specific processors:
 ```bash
 ./kato-manager.sh start --id nlp-processor --name "NLP" --max-seq-length 20 --port 8001
-./kato-manager.sh start --id vision-processor --name "Vision" --classifier DVC --port 8002
+./kato-manager.sh start --id stream-processor --name "Stream" --max-predictions 50 --port 8002
 ```
 
 ## Container Management
@@ -290,9 +289,9 @@ rm ~/.kato/instances.json
 # Text processor
 ./kato-manager.sh start --id text-proc --name "Text" --port 8001
 
-# Vector processor with DVC
-./kato-manager.sh start --id vector-proc --name "Vectors" \
-  --port 8002 --classifier DVC --search-depth 20
+# High-performance processor
+./kato-manager.sh start --id high-perf --name "Performance" \
+  --port 8002 --max-predictions 20 --recall-threshold 0.3
 
 # Combined processor
 ./kato-manager.sh start --id combined-proc --name "Combined" \

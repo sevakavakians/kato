@@ -95,10 +95,10 @@ observe({'strings': ['m']})
 - Numeric strings sorted as strings: `['10', '2', '1']` → `['1', '10', '2']`
 
 ### Vector Symbol Processing
-- Vectors are processed through a classifier (CVC or DVC)
+- Vectors are processed through the vector indexer (VI)
 - May produce symbols like `VECTOR|<hash>` depending on vector processor configuration
 - Vector symbols appear before string symbols in mixed modality events
-- Vector processing depends on classifier type and may not always produce short-term memory entries
+- Vector processing depends on indexer configuration and may not always produce short-term memory entries
 
 ### Empty Events
 KATO ignores empty events - they do not change short-term memory or affect predictions.
@@ -266,7 +266,7 @@ KATO processes multiple data types simultaneously within each observation:
 
 ### Vectors
 - Numeric arrays of any dimension
-- Processed by classifiers (CVC/DVC)
+- Processed by vector indexer (VI)
 - Can be used for similarity calculations
 - Deterministic hashing: `VECTOR|<sha1_hash>`
 
@@ -379,7 +379,7 @@ Vector tests should be flexible:
 # Don't assume vectors always create STM entries
 wm = kato.get_short_term_memory()
 assert isinstance(wm, list)  # Just check it's a list
-# Don't assert specific content - depends on classifier
+# Don't assert specific content - depends on indexer
 ```
 
 ## Common Pitfalls to Avoid
@@ -388,7 +388,7 @@ assert isinstance(wm, list)  # Just check it's a list
 2. **Don't assume vectors always produce short-term memory entries**
 3. **Don't sort missing/extras fields - order is preserved**
 4. **Don't use frequency checks unnecessarily**
-5. **Don't assume specific vector symbol formats - depends on classifier**
+5. **Don't assume specific vector symbol formats - depends on indexer**
 6. **Assuming String Order Preservation**: Remember strings are sorted within events
 7. **Expecting Empty Events to Matter**: They're ignored completely
 8. **Confusing `missing` with `future`**: Missing is within present events only

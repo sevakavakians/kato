@@ -338,9 +338,9 @@ docker stats kato-api-${USER}-1
 2. Optimize configuration:
 ```bash
 ./kato-manager.sh restart \
-  --classifier CVC \
+  --indexer-type VI \
   --max-predictions 50 \
-  --search-depth 5
+  --recall-threshold 0.3
 ```
 
 3. Check connection pool:

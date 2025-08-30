@@ -593,8 +593,8 @@ jobs:
       
       - name: Run Tests
         run: |
-          cd tests
-          ./run_tests.sh
+          ./test-harness.sh build
+          ./kato-manager.sh test
       
       - name: Stop KATO
         run: ./kato-manager.sh stop

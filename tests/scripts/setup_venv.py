@@ -131,7 +131,8 @@ def main():
         print(f"  source {venv_dir}/bin/activate")
     print("")
     print("To run tests, use:")
-    print("  ./run_tests.sh")
+    print("  ../test-harness.sh test")
+    print("  OR: ../kato-manager.sh test")
     print("=" * 50)
     
     return 0

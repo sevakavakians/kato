@@ -175,13 +175,21 @@ docs/
 KATO includes comprehensive tests covering all functionality:
 
 ```bash
-cd tests
-./run_tests.sh              # Run all tests (~22 seconds)
-./run_tests.sh --unit       # Unit tests only
-./run_tests.sh --api        # API tests only
+# Build test harness (first time or after dependency changes)
+./test-harness.sh build
+
+# Run all tests in container (recommended)
+./kato-manager.sh test
+# OR directly:
+./test-harness.sh test
+
+# Run specific test suites
+./test-harness.sh suite unit        # Unit tests only
+./test-harness.sh suite api         # API tests only
+./test-harness.sh suite integration # Integration tests
 ```
 
-**Current Status**: ✅ All 105 tests passing (100% success rate)
+**Current Status**: ✅ All 128 tests passing (100% success rate)
 
 See [Testing Guide](docs/development/TESTING.md) for details.
 

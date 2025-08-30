@@ -29,32 +29,37 @@ A Prediction Object is generated when KATO's pattern recognition engine identifi
 **Example**: `["hello", "world"]` when these symbols appear in both the model and current observation.
 
 ### 5. **missing** (repeated string)
-**Description**: Symbols expected in the present context based on the model but not observed.  
-**Purpose**: Identifies gaps between expected and actual observations.  
-**Example**: If model expects `["hello", "world"]` but only `"hello"` is observed, missing would be `["world"]`.
+**Description**: Symbols expected in the present events based on the model but not observed.  
+**Purpose**: Identifies gaps between expected and actual observations within the present temporal span.  
+**Order**: Preserves the sequence order across events (not necessarily within individual events).  
+**Example**: If model has `[["a"], ["b"], ["c", "d"]]` and observing `[["a"], ["c"]]`, missing would be `["b", "d"]` in that order.
 
 ### 6. **extras** (repeated string)
 **Description**: Symbols observed in the current context that are not part of the expected model.  
 **Purpose**: Identifies unexpected elements that don't fit the predicted pattern.  
-**Example**: If observing `["hello", "world", "unexpected"]` against a model of `["hello", "world"]`, extras would be `["unexpected"]`.
+**Order**: Preserves the sequence order in which extras were observed across events.  
+**Example**: If observing `[["a", "x"], ["b"], ["y"]]` against model `[["a"], ["b"]]`, extras would be `["x", "y"]` in that order.
 
 ### 7. **past** (repeated ListValue)
-**Description**: Sequence of events that occurred before the present context in the model.  
+**Description**: Sequence of events from the learned model that occur BEFORE any observed matches.  
 **Structure**: List of lists, where each inner list represents an event.  
-**Purpose**: Provides temporal context showing what should have happened before the current state.  
-**Example**: `[["start"], ["initialize"]]` representing two past events.
+**Purpose**: Provides temporal context showing what happened before the first observed event.  
+**Important**: Only contains events that were NOT observed in the current context.  
+**Example**: If model is `[["start"], ["middle"], ["end"]]` and observing `["middle", "end"]`, past would be `[["start"]]`.
 
 ### 8. **present** (repeated ListValue)
-**Description**: Current events being matched against in the prediction.  
-**Structure**: List of lists representing the current temporal window.  
-**Purpose**: Defines the active matching context for the prediction.  
-**Example**: `[["hello", "world"]]` representing the current event.
+**Description**: ALL events from the learned model that contain ANY observed symbols.  
+**Structure**: List of lists representing all matched events.  
+**Purpose**: Shows the complete span of the model that corresponds to current observations.  
+**Critical**: Contains ALL observed events, not just the "current" one. If you observe multiple events from a sequence, they ALL appear in present.  
+**Example**: If observing `["hello", "world"]` from model `[["hello"], ["world"], ["end"]]`, present would be `[["hello"], ["world"]]`.
 
 ### 9. **future** (repeated ListValue)
-**Description**: Predicted upcoming events based on the learned model.  
-**Structure**: List of lists representing expected future events.  
+**Description**: Events from the learned model that have NOT been observed yet.  
+**Structure**: List of lists representing unobserved future events.  
 **Purpose**: Provides predictive capability by showing what should happen next.  
-**Example**: `[["goodbye"], ["end"]]` representing two expected future events.
+**Important**: Only contains events that come AFTER all observed events.  
+**Example**: If model is `[["hello"], ["world"], ["end"]]` and observing `["hello", "world"]`, future would be `[["end"]]`.
 
 ### 10. **confidence** (float)
 **Description**: Ratio of matched symbols to total symbols in the present context.  

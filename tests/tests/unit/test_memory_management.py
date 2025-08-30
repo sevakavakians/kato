@@ -106,15 +106,18 @@ def test_manual_learning(kato_fixture):
     
     # Check that the prediction contains the learned sequence
     for pred in predictions:
-        # Present should be [['x']], future should be [['y'], ['z']]
-        if 'present' in pred and [['x']] == pred['present']:
+        # Since we observed 'x' and 'y', present should be [['x'], ['y']], future should be [['z']]
+        if 'x' in pred.get('matches', []) and 'y' in pred.get('matches', []):
+            present = pred.get('present', [])
             future = pred.get('future', [])
-            if [['y'], ['z']] == future or (['y'] in future and ['z'] in future):
-                assert True
-                break
+            # Both 'x' and 'y' should be in present since we observed them
+            assert [['x'], ['y']] == present, f"Present should be [['x'], ['y']], got {present}"
+            # Only 'z' should be in future
+            assert [['z']] == future, f"Future should be [['z']], got {future}"
+            break
     else:
-        # Alternative: just check that we have predictions
-        assert len(predictions) > 0, "Should have predictions after observing 'x'"
+        # If no matching prediction found, fail with informative message
+        assert False, f"No prediction found with 'x' and 'y' in matches. Got predictions: {predictions}"
 
 
 def test_memory_persistence(kato_fixture):

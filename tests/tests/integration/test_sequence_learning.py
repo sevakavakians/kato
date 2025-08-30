@@ -33,12 +33,14 @@ def test_simple_sequence_learning(kato_fixture):
     # Should predict the rest of the sequence
     assert len(predictions) > 0
     for pred in predictions:
-        if 'hello' in pred.get('matches', []):
-            # Check future field for subsequent events
+        if 'hello' in pred.get('matches', []) and 'world' in pred.get('matches', []):
+            # Since we observed 'hello' and 'world', they should be in present
+            present = pred.get('present', [])
             future = pred.get('future', [])
-            # Future should contain [['world'], ['test']]
-            assert len(future) >= 2
-            assert ['world'] in future or ['test'] in future
+            # Check that both observed strings are in present
+            assert [['hello'], ['world']] == present, f"Present should be [['hello'], ['world']], got {present}"
+            # Only 'test' should be in future
+            assert [['test']] == future, f"Future should be [['test']], got {future}"
             break
 
 

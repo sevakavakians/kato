@@ -4,6 +4,8 @@ This document provides a comprehensive reference for KATO's core concepts, behav
 
 ## Table of Contents
 1. [Core Concepts](#core-concepts)
+   - [Minimum Sequence Requirements](#minimum-sequence-requirements)
+   - [Temporal Prediction Fields](#temporal-prediction-fields)
 2. [Event Processing](#event-processing)
 3. [Memory Architecture](#memory-architecture)
 4. [Prediction System](#prediction-system)
@@ -13,6 +15,23 @@ This document provides a comprehensive reference for KATO's core concepts, behav
 8. [Implementation Details](#implementation-details)
 
 ## Core Concepts
+
+### Minimum Sequence Requirements
+
+**CRITICAL**: KATO requires at least 2 strings total in short-term memory (STM) to generate predictions. This is a fundamental architectural requirement.
+
+#### Valid Sequences for Predictions:
+- **Single event with 2+ strings**: `[['hello', 'world']]` ✅
+- **Multiple events totaling 2+ strings**: `[['hello'], ['world']]` ✅
+- **Mixed event sizes**: `[['a', 'b'], ['c']]` ✅
+
+#### Invalid Sequences (No Predictions):
+- **Single string**: `[['hello']]` ❌
+- **Single string with emotives**: `[['hello']] + emotives` ❌
+- **Single string with vectors**: `[['hello']] + vectors` ❌
+- **Empty events**: `[[], [], []]` ❌
+
+This requirement ensures sufficient context for meaningful pattern matching and prediction generation.
 
 ### Temporal Prediction Fields
 
@@ -120,8 +139,14 @@ observe({'strings': ['second']})
 
 Predictions are generated when:
 1. A model has been learned
-2. New observations match part of a learned sequence
-3. Either strings or vectors are present (not just emotives)
+2. **At least 2 strings are present in short-term memory (STM)**
+3. New observations match part of a learned sequence
+4. Either strings or vectors are present (not just emotives)
+
+**Important**: The 2+ string requirement is enforced in `modeler.py::processEvents()` at line 154:
+```python
+if len(state) >= 2 and self.predict and self.trigger_predictions:
+```
 
 ### Prediction Structure
 

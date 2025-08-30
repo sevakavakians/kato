@@ -216,6 +216,11 @@ class Modeler:
                 total_ensemble_model_frequencies += prediction['frequency']
                 for symbol in itertools.chain(prediction['matches'], prediction['missing']):
                     if symbol not in symbol_probability_cache or symbol not in symbol_frequency_cache:
+                        # Check if symbol exists in cache, skip if not (new/unknown symbol)
+                        if symbol not in symbol_cache:
+                            symbol_probability_cache[symbol] = 0
+                            symbol_frequency_cache[symbol] = 0
+                            continue
                         symbol_data = symbol_cache[symbol]
                         symbol_probability = float(symbol_data['model_member_frequency'] / total_symbols_in_models_frequencies)
                         symbol_probability_cache[symbol] = symbol_probability

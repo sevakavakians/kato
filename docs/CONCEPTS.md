@@ -147,8 +147,14 @@ observe({'strings': ['second']})
 Predictions are generated when:
 1. A model has been learned
 2. **At least 2 strings are present in short-term memory (STM)**
-3. New observations match part of a learned sequence
+3. The observed sequence matches a learned sequence with similarity >= `recall_threshold`
+   - Default recall_threshold: 0.1 (10% similarity)
+   - Higher threshold = stricter matching, fewer predictions
+   - Lower threshold = looser matching, more predictions
+   - See [Configuration Guide](deployment/CONFIGURATION.md#recall_threshold-tuning-guide) for detailed tuning
 4. Either strings or vectors are present (not just emotives)
+
+**Note**: If no sequences match above the recall_threshold, no predictions are returned even if all other conditions are met.
 
 **Important**: The 2+ string requirement is enforced in `modeler.py::processEvents()` at line 154:
 ```python

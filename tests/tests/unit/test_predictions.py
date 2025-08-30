@@ -65,12 +65,15 @@ def test_prediction_matches(kato_fixture):
     
     # Find prediction for our sequence
     for pred in predictions:
-        if 'matches' in pred and 'x' in pred.get('matches', []):
-            # 'y' and 'z' should be in future events
+        if 'x' in pred.get('matches', []) and 'y' in pred.get('matches', []):
+            # Since we observed 'x' and 'y', they should be in present
+            present = pred.get('present', [])
             future = pred.get('future', [])
-            assert len(future) >= 2  # Should have [['y'], ['z']]
-            future_items = [item for event in future for item in event if isinstance(event, list)]
-            assert 'y' in future_items or 'z' in future_items
+            
+            # Both 'x' and 'y' should be in present
+            assert [['x'], ['y']] == present, f"Present should be [['x'], ['y']], got {present}"
+            # Only 'z' should be in future
+            assert [['z']] == future, f"Future should be [['z']], got {future}"
             break
 
 

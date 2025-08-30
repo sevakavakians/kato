@@ -106,24 +106,35 @@ def test_sequence_completion(kato_fixture):
             kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
         
         # KATO requires 2+ strings for predictions
+        actually_observed = list(observed)  # Make a copy to track what we observed
         if len(observed) < 2:
             # Observe one more item from expected to get predictions
             if expected:
                 kato_fixture.observe({'strings': [expected[0]], 'vectors': [], 'emotives': {}})
+                actually_observed.append(expected[0])
         
         predictions = kato_fixture.get_predictions()
         
-        # Check if expected items are in future events
+        # Check predictions
         for pred in predictions:
             if pred.get('frequency', 0) > 0:
+                present = pred.get('present', [])
                 future = pred.get('future', [])
-                # Flatten future events to check for expected items
+                
+                # Flatten fields for checking
+                present_items = [item for sublist in present for item in sublist if isinstance(sublist, list)]
                 future_items = [item for sublist in future for item in sublist if isinstance(sublist, list)]
                 
-                # At least some expected items should be in future
-                if any(exp in future_items for exp in expected):
-                    assert True
-                    break
+                # All actually observed items should be in present
+                for obs_item in actually_observed:
+                    assert obs_item in present_items, f"{obs_item} should be in present"
+                
+                # Unobserved expected items should be in future
+                unobserved_expected = [e for e in expected if e not in actually_observed]
+                if unobserved_expected:
+                    assert any(exp in future_items for exp in unobserved_expected), \
+                        f"Some of {unobserved_expected} should be in future"
+                break
 
 
 def test_cyclic_sequence_learning(kato_fixture):

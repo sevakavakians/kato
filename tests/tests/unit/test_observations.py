@@ -107,13 +107,16 @@ def test_observe_with_vectors(kato_fixture):
     
     assert result['status'] == 'observed'
     
-    # Working memory behavior with vectors depends on classifier configuration
-    # Vectors are processed through a classifier which may or may not produce symbols
+    # Vectors ALWAYS produce at least the VECTOR|hash symbol
+    # May also include up to 3 nearest neighbors (k=3 default)
     wm = kato_fixture.get_working_memory()
-    # The test should be flexible since vector processing depends on classifier type
-    # If classifier is configured and processes vectors, wm should have entries
-    # Otherwise it might be empty
     assert isinstance(wm, list), "Working memory should be a list"
+    assert len(wm) == 1, "Should have one event for the vector observation"
+    assert len(wm[0]) >= 1, "Should have at least the VECTOR|hash symbol"
+    # Check that we have vector symbols (they start with 'VECTOR|')
+    vector_symbols = [s for s in wm[0] if s.startswith('VECTOR|')]
+    assert len(vector_symbols) >= 1, "Should have at least one VECTOR| symbol"
+    assert len(vector_symbols) <= 4, "Should have at most 4 symbols (observed + 3 nearest)"
 
 
 def test_observe_mixed_modalities(kato_fixture):
@@ -267,7 +270,11 @@ def test_observe_large_vector(kato_fixture):
     
     assert result['status'] == 'observed'
     
-    # Working memory behavior with vectors depends on classifier configuration
-    # Large vectors should be processed but may not appear in working memory
+    # Large vectors should still produce at least VECTOR|hash symbol
     wm = kato_fixture.get_working_memory()
     assert isinstance(wm, list), "Working memory should be a list"
+    assert len(wm) == 1, "Should have one event for the vector observation"
+    assert len(wm[0]) >= 1, "Should have at least the VECTOR|hash symbol"
+    # Check for vector symbols
+    vector_symbols = [s for s in wm[0] if s.startswith('VECTOR|')]
+    assert len(vector_symbols) >= 1, "Should have at least one VECTOR| symbol for large vector"

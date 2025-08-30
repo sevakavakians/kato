@@ -252,21 +252,21 @@ def test_memory_with_vectors(kato_fixture):
         })
         assert result['status'] == 'observed'
     
-    # Short-term memory behavior with vectors depends on vector indexer
-    # Vectors may be converted to symbols or may not appear
+    # Vectors ALWAYS produce at least VECTOR|hash symbols in STM
     stm = kato_fixture.get_short_term_memory()
-    
-    # If vector indexer processes vectors into symbols, we should have entries
-    # Otherwise short-term memory might be empty
-    # The key test is that observe accepts vectors without error
     assert isinstance(stm, list), "Short-term memory should be a list"
+    assert len(stm) == 2, "Should have 2 events (one for each vector observation)"
     
-    # Only try to learn if we have content in short-term memory
-    if len(stm) > 0:
-        model_name = kato_fixture.learn()
-        # If learning occurred, model name should have MODEL| prefix
-        if model_name:
-            assert 'MODEL|' in model_name, "Learned model should have MODEL| prefix"
+    # Each event should have at least one VECTOR| symbol
+    for event in stm:
+        vector_symbols = [s for s in event if s.startswith('VECTOR|')]
+        assert len(vector_symbols) >= 1, "Each vector observation should produce at least one VECTOR| symbol"
+    
+    # Learn the sequence
+    model_name = kato_fixture.learn()
+    # Should successfully learn since we have 2+ symbols
+    assert model_name is not None, "Should learn model from vector observations"
+    assert 'MODEL|' in model_name, "Learned model should have MODEL| prefix"
             # Short-term memory should be cleared after learning
             assert kato_fixture.get_short_term_memory() == []
 

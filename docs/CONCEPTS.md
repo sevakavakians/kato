@@ -100,9 +100,10 @@ observe({'strings': ['m']})
 - Numeric strings sorted as strings: `['10', '2', '1']` → `['1', '10', '2']`
 
 ### Vector Symbol Processing
-- Vectors are processed through the vector indexer (VI)
-- Vectors contribute string symbols like `VECTOR|<hash>` to the sequence
-- These vector strings count toward the minimum 2-string requirement for predictions
+- Vectors are processed through the vector indexer (VI) to produce vector names
+- **Purpose**: Generate string symbols like `VECTOR|<hash>` for short-term memory
+- These vector strings are always added to STM when vectors are processed
+- Vector strings count toward the minimum 2-string requirement for predictions
 - Vector symbols appear before string symbols in mixed modality events
 - A single user string + vectors = valid sequence (2+ strings total)
 
@@ -391,7 +392,7 @@ assert isinstance(wm, list)  # Just check it's a list
 ## Common Pitfalls to Avoid
 
 1. **Don't expect emotives in predictions without learning them first**
-2. **Don't assume vectors always produce short-term memory entries**
+2. **Vectors always produce short-term memory entries** - Their purpose is to generate vector names
 3. **Don't sort missing/extras fields - order is preserved**
 4. **Don't use frequency checks unnecessarily**
 5. **Don't assume specific vector symbol formats - depends on indexer**

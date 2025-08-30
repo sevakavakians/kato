@@ -139,7 +139,7 @@ Send an observation to the processor.
 **Notes:**
 - Strings are automatically sorted alphanumerically within each event
 - Empty observations are ignored
-- Vectors are optional and processed through vector indexer
+- Vectors are optional; when provided, they generate vector name strings for STM
 - Emotives are optional key-value pairs (0.0-1.0)
 
 #### POST /{processor_id}/learn

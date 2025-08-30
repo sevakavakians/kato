@@ -132,6 +132,7 @@ REST Client → REST Gateway (Port 8000) → ZMQ Server (Port 5555) → KATO Pro
 3. **Temporal Segmentation**: Predictions structured as past/present/future
 4. **Empty Event Handling**: Empty strings are filtered from observations
 5. **Multi-Modal Processing**: Handles strings, vectors (768-dim), and emotional context
+   - Vectors always produce name strings (e.g., 'VECTOR|<hash>') for STM
 6. **Deterministic**: Same inputs always produce same outputs
 7. **Variable Sequence Lengths**: Supports sequences of arbitrary length (2+ strings total)
    - Events can have varying numbers of symbols

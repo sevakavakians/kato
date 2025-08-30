@@ -176,18 +176,20 @@ Each prediction includes:
 
 ### Temporal Field Examples
 
+**Remember**: All examples below assume observations meet the 2+ string requirement. With fewer than 2 strings, no predictions would be generated.
+
 #### Example 1: Simple Sequential Match
 ```python
 # Learned sequence
 [['alpha'], ['beta'], ['gamma']]
 
-# Observation
-[['beta']]
+# Observation (must have 2+ strings for predictions)
+[['alpha'], ['beta']]
 
 # Prediction result
 {
-    'past': [['alpha']],
-    'present': [['beta']],
+    'past': [],
+    'present': [['alpha'], ['beta']],
     'future': [['gamma']],
     'missing': [],
     'extras': []
@@ -199,8 +201,8 @@ Each prediction includes:
 # Learned sequence  
 [['hello', 'world'], ['foo', 'bar']]
 
-# Observation (missing 'world' and 'bar')
-[['hello'], ['foo']]
+# Observation (missing 'world' and 'bar', but has 2+ strings)
+[['hello'], ['foo']]  # Valid: 2 strings total
 
 # Prediction result
 {
@@ -218,7 +220,7 @@ Each prediction includes:
 [['cat'], ['dog']]
 
 # Observation (with unexpected 'bird' and 'fish')
-[['cat', 'bird'], ['dog', 'fish']]
+[['cat', 'bird'], ['dog', 'fish']]  # Valid: 4 strings total
 
 # Prediction result
 {
@@ -230,7 +232,19 @@ Each prediction includes:
 }
 ```
 
-#### Example 4: Complex Partial Match
+#### Example 4: Invalid - Single String (No Predictions)
+```python
+# Learned sequence
+[['alpha'], ['beta'], ['gamma']]
+
+# Observation (only 1 string - invalid)
+[['beta']]
+
+# Result: NO PREDICTIONS GENERATED
+# The 2-string minimum requirement is not met
+```
+
+#### Example 5: Complex Partial Match
 ```python
 # Learned sequence
 [['a', 'b', 'c'], ['d', 'e'], ['f', 'g', 'h']]

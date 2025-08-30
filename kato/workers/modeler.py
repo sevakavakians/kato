@@ -84,7 +84,6 @@ class Modeler:
         self.mood = {}
         self.last_learned_model_name = None
         self.models_searcher.getModels()
-        self.round_robin_index = 0
         self.trigger_predictions = False
         return
 
@@ -102,18 +101,14 @@ class Modeler:
             # Store model with averaged emotives from all events
             x = self.models_kb.learnModel(model, emotives=average_emotives(self.emotives))
             
-            # Round-robin distribution to search workers for load balancing
-            if self.round_robin_index == len(self.models_searcher.extraction_workers):
-                self.round_robin_index = 0
-                
             if x:
-                # Assign newly learned model to a worker for future predictions
+                # Add newly learned model to the searcher
+                # Index parameter kept for backward compatibility but ignored by optimized version
                 self.models_searcher.assignNewlyLearnedToWorkers(
-                    self.round_robin_index, 
+                    0,  # Index parameter ignored in optimized implementation
                     model.name, 
                     list(chain(*model.sequence))
                 )
-            self.round_robin_index += 1
             self.last_learned_model_name = model.name
             del(model)
             self.emotives = []
@@ -148,11 +143,15 @@ class Modeler:
         Flattens the STM (list of events) into a single state vector,
         then searches for similar patterns in the model database.
         Predictions are cached in MongoDB for retrieval.
+        
+        Note: KATO requires at least 2 strings in STM to generate predictions.
         """
         # Flatten short-term memory: [["a","b"],["c"]] -> ["a","b","c"]
         state = list(chain(*self.STM))
         
-        if self.predict and self.trigger_predictions:
+        # Only generate predictions if we have at least 2 strings in state
+        # KATO requires minimum 2 strings for pattern matching
+        if len(state) >= 2 and self.predict and self.trigger_predictions:
             predictions = self.predictModel(state)
             
             # Store predictions for async retrieval
@@ -162,6 +161,9 @@ class Modeler:
                     'predictions': predictions
                 })
             return predictions
+        
+        # Return empty predictions if state is too short
+        return []
 
     def setCurrentEvent(self, symbols):
         """
@@ -233,11 +235,11 @@ class Modeler:
                 distance = float(spatial.distance.cosine(state_frequency_vector, model_frequency_vector))
                 itfdf_similarity = round(float(1 - (distance * prediction['frequency'] / total_ensemble_model_frequencies)), 12)
                 prediction['itfdf_similarity'] = itfdf_similarity
-                prediction['entropy'] = round(float(sum([classic_expectation(symbol_probability_cache[symbol]) for symbol in _present])), 12)
+                prediction['entropy'] = round(float(sum([classic_expectation(symbol_probability_cache.get(symbol, 0)) for symbol in _present])), 12)
                 prediction['hamiltonian'] = round(float(hamiltonian(_present, total_symbols)), 12)
                 prediction['grand_hamiltonian'] = round(float(grand_hamiltonian(_present, symbol_probability_cache, total_symbols)), 12)
                 prediction['confluence'] = round(float(_p_e_h * (1 - conditionalProbability(_present, symbol_probability_cache) ) ), 12) # = probability of sequence occurring in observations * ( 1 - probability of sequence occurring randomly)
-                prediction['potential'] = round(float( ( prediction['evidence'] + prediction['confidence'] ) * prediction["snr"] + prediction['itfdf_similarity'] + (1/ (prediction['fragmentation'] +1) ) ), 12)
+                prediction['potential'] = round(float( ( prediction['evidence'] + prediction['confidence'] ) * prediction.get("snr", 0) + prediction['itfdf_similarity'] + (1/ (prediction['fragmentation'] +1) ) ), 12)
                 prediction['emotives'] = average_emotives(prediction['emotives'])
                 prediction.pop('sequence')
 

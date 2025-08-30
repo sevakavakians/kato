@@ -309,7 +309,15 @@ Get a specific gene/parameter value.
 **Available Genes:**
 - `classifier`: Classifier type (CVC/DVC)
 - `max_predictions`: Maximum predictions to generate
-- `recall_threshold`: Recall threshold (0-1)
+- `recall_threshold`: Minimum similarity score required for predictions (0.0-1.0)
+  - **Purpose**: Controls the quality gate for pattern matching predictions
+  - **Default**: 0.1 (permissive, allows weak matches)
+  - **Impact**:
+    - `0.0-0.3`: Very permissive, generates many predictions including partial matches
+    - `0.3-0.5`: Balanced filtering, moderate quality threshold
+    - `0.5-0.7`: Restrictive, only strong pattern matches
+    - `0.7-1.0`: Very restrictive, requires near-perfect similarity
+  - **How it works**: Filters predictions by comparing sequence similarity ratios against this threshold
 - `persistence`: Emotive persistence duration
 - `max_sequence_length`: Maximum sequence length
 - `search_depth`: Vector search depth
@@ -570,6 +578,22 @@ curl -X POST http://localhost:8000/p46b6b076c/genes/change \
       "max_sequence_length": 3
     }
   }'
+
+# Set recall_threshold for different use cases
+# High precision (few, high-quality predictions)
+curl -X POST http://localhost:8000/p46b6b076c/gene/recall_threshold/change \
+  -H "Content-Type: application/json" \
+  -d '{"value": 0.7}'
+
+# Balanced (moderate filtering)
+curl -X POST http://localhost:8000/p46b6b076c/gene/recall_threshold/change \
+  -H "Content-Type: application/json" \
+  -d '{"value": 0.4}'
+
+# Pattern discovery (many predictions, including weak matches)
+curl -X POST http://localhost:8000/p46b6b076c/gene/recall_threshold/change \
+  -H "Content-Type: application/json" \
+  -d '{"value": 0.1}'
 
 # Update multiple genes (alternative endpoint)
 curl -X POST http://localhost:8000/p46b6b076c/genes/update \

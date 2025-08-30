@@ -203,8 +203,9 @@ def test_predictions_endpoint(kato_fixture):
         kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
     kato_fixture.learn()
     
-    # Observe to generate predictions
+    # Observe to generate predictions (KATO requires 2+ strings)
     kato_fixture.observe({'strings': ['pred'], 'vectors': [], 'emotives': {}})
+    kato_fixture.observe({'strings': ['test'], 'vectors': [], 'emotives': {}})
     
     response = requests.get(
         f"{kato_fixture.base_url}/{kato_fixture.processor_id}/predictions"

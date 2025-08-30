@@ -28,8 +28,9 @@ def test_predictions_after_observation(kato_fixture):
         kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
     kato_fixture.learn()
     
-    # Now observe 'a' and get predictions
+    # Now observe 'a' and 'b' to meet 2+ requirement and get predictions
     kato_fixture.observe({'strings': ['a'], 'vectors': [], 'emotives': {}})
+    kato_fixture.observe({'strings': ['b'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
     
     assert len(predictions) > 0, "Should have predictions after observation"
@@ -48,6 +49,8 @@ def test_predictions_after_observation(kato_fixture):
 def test_prediction_matches(kato_fixture):
     """Test that predictions correctly identify matches."""
     kato_fixture.clear_all_memory()
+    # Set lower threshold to ensure predictions for partial matches
+    kato_fixture.set_recall_threshold(0.2)
     
     # Learn a sequence
     sequence = ['x', 'y', 'z']
@@ -55,8 +58,9 @@ def test_prediction_matches(kato_fixture):
         kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
     kato_fixture.learn()
     
-    # Observe 'x' and check matches
+    # Observe 'x' and 'y' to meet 2+ requirement and check matches
     kato_fixture.observe({'strings': ['x'], 'vectors': [], 'emotives': {}})
+    kato_fixture.observe({'strings': ['y'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
     
     # Find prediction for our sequence
@@ -125,8 +129,9 @@ def test_prediction_partial_match(kato_fixture):
         kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
     kato_fixture.learn()
     
-    # Observe partial sequence
+    # Observe partial sequence (KATO requires 2+ strings for predictions)
     kato_fixture.observe({'strings': ['start'], 'vectors': [], 'emotives': {}})
+    kato_fixture.observe({'strings': ['middle'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
     
     # Should have predictions with partial similarity
@@ -150,8 +155,9 @@ def test_prediction_frequency(kato_fixture):
             kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
         kato_fixture.learn()
     
-    # Observe to get predictions
+    # Observe to get predictions (KATO requires 2+ strings)
     kato_fixture.observe({'strings': ['freq'], 'vectors': [], 'emotives': {}})
+    kato_fixture.observe({'strings': ['test'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
     
     # Should have frequency > 1 for repeated sequence
@@ -229,9 +235,10 @@ def test_prediction_with_emotives(kato_fixture):
     model_name = kato_fixture.learn()
     assert model_name is not None, "Should have learned a model"
     
-    # Clear working memory and observe to trigger predictions
+    # Clear working memory and observe to trigger predictions (KATO requires 2+ strings)
     kato_fixture.clear_working_memory()
     kato_fixture.observe({'strings': ['happy'], 'vectors': [], 'emotives': {'joy': 0.9, 'energy': 0.8}})
+    kato_fixture.observe({'strings': ['sad'], 'vectors': [], 'emotives': {'joy': 0.1, 'energy': 0.2}})
     predictions = kato_fixture.get_predictions()
     
     # Should have at least one prediction
@@ -266,8 +273,9 @@ def test_multiple_model_predictions(kato_fixture):
             kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
         kato_fixture.learn()
     
-    # Observe 'a' which is common to all
+    # Observe 'a' and 'b' which starts multiple sequences (KATO requires 2+ strings)
     kato_fixture.observe({'strings': ['a'], 'vectors': [], 'emotives': {}})
+    kato_fixture.observe({'strings': ['b'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
     
     # Should have multiple predictions
@@ -297,7 +305,8 @@ def test_prediction_confidence_scores(kato_fixture):
         kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
     kato_fixture.learn()
     
-    # Get predictions
+    # Get predictions (KATO requires 2+ strings)
+    kato_fixture.observe({'strings': ['strong'], 'vectors': [], 'emotives': {}})
     kato_fixture.observe({'strings': ['strong'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
     
@@ -317,8 +326,9 @@ def test_prediction_type_field(kato_fixture):
         kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
     kato_fixture.learn()
     
-    # Get predictions
+    # Get predictions (KATO requires 2+ strings)
     kato_fixture.observe({'strings': ['type'], 'vectors': [], 'emotives': {}})
+    kato_fixture.observe({'strings': ['test'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
     
     # Check for type field

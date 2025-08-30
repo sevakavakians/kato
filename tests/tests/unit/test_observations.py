@@ -72,11 +72,16 @@ def test_observe_with_emotives(kato_fixture):
     model_name = kato_fixture.learn()
     assert model_name is not None
     
-    # Now observe the first element to trigger predictions
+    # Now observe to trigger predictions (KATO requires 2+ strings)
     kato_fixture.observe({
         'strings': ['hello'],
         'vectors': [],
         'emotives': {'happiness': 0.8, 'confidence': 0.6}
+    })
+    kato_fixture.observe({
+        'strings': ['world'],
+        'vectors': [],
+        'emotives': {'happiness': 0.9, 'confidence': 0.7}
     })
     
     # Verify emotives are included in predictions

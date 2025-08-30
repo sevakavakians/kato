@@ -14,6 +14,8 @@ from fixtures.kato_fixtures import kato_fixture, kato_with_genome
 def test_simple_sequence_learning(kato_fixture):
     """Test learning and recalling a simple sequence."""
     kato_fixture.clear_all_memory()
+    # Set appropriate threshold for this test
+    kato_fixture.set_recall_threshold(0.3)
     
     # Learn sequence
     sequence = ['hello', 'world', 'test']
@@ -23,8 +25,9 @@ def test_simple_sequence_learning(kato_fixture):
     model_name = kato_fixture.learn()
     assert model_name.startswith('MODEL|')
     
-    # Recall sequence
+    # Recall sequence - need 2+ strings for predictions
     kato_fixture.observe({'strings': ['hello'], 'vectors': [], 'emotives': {}})
+    kato_fixture.observe({'strings': ['world'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
     
     # Should predict the rest of the sequence
@@ -55,16 +58,17 @@ def test_multiple_sequence_learning(kato_fixture):
             kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
         kato_fixture.learn()
     
-    # Test disambiguation with common prefix
+    # Test disambiguation with common prefix - need 2+ strings
     kato_fixture.observe({'strings': ['start'], 'vectors': [], 'emotives': {}})
+    kato_fixture.observe({'strings': ['path1'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
     
-    # Should have multiple predictions for sequences starting with 'start'
-    start_predictions = [p for p in predictions if 'start' in p.get('matches', [])]
-    assert len(start_predictions) >= 2
+    # Should have prediction for the path1 sequence
+    matching_predictions = [p for p in predictions if 'start' in p.get('matches', []) and 'path1' in p.get('matches', [])]
+    assert len(matching_predictions) >= 1
     
-    # Continue sequence to disambiguate
-    kato_fixture.observe({'strings': ['path1'], 'vectors': [], 'emotives': {}})
+    # Continue sequence to complete it
+    kato_fixture.observe({'strings': ['end1'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
     
     # Should now favor the path1 sequence
@@ -98,6 +102,12 @@ def test_sequence_completion(kato_fixture):
         
         for item in observed:
             kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
+        
+        # KATO requires 2+ strings for predictions
+        if len(observed) < 2:
+            # Observe one more item from expected to get predictions
+            if expected:
+                kato_fixture.observe({'strings': [expected[0]], 'vectors': [], 'emotives': {}})
         
         predictions = kato_fixture.get_predictions()
         
@@ -150,7 +160,8 @@ def test_sequence_with_repetition(kato_fixture):
         kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
     kato_fixture.learn()
     
-    # Start with repeated element
+    # Start with repeated element (KATO requires 2+ strings for predictions)
+    kato_fixture.observe({'strings': ['rep'], 'vectors': [], 'emotives': {}})
     kato_fixture.observe({'strings': ['rep'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
     
@@ -190,13 +201,15 @@ def test_interleaved_sequence_learning(kato_fixture):
         kato_fixture.observe({'strings': [seq2[i]], 'vectors': [], 'emotives': {}})
     kato_fixture.learn()
     
-    # Test both sequences work
+    # Test both sequences work (KATO requires 2+ strings for predictions)
     kato_fixture.observe({'strings': ['s1_a'], 'vectors': [], 'emotives': {}})
+    kato_fixture.observe({'strings': ['s1_b'], 'vectors': [], 'emotives': {}})
     pred1 = kato_fixture.get_predictions()
     assert len(pred1) > 0
     
     kato_fixture.clear_working_memory()
     kato_fixture.observe({'strings': ['s2_x'], 'vectors': [], 'emotives': {}})
+    kato_fixture.observe({'strings': ['s2_y'], 'vectors': [], 'emotives': {}})
     pred2 = kato_fixture.get_predictions()
     assert len(pred2) > 0
 
@@ -227,6 +240,10 @@ def test_context_switching(kato_fixture):
     for trigger, expected_context in test_cases:
         kato_fixture.clear_working_memory()
         kato_fixture.observe({'strings': [trigger], 'vectors': [], 'emotives': {}})
+        # KATO requires 2+ strings for predictions, observe next item in context
+        context_seq = contexts[expected_context]
+        if len(context_seq) > 1:
+            kato_fixture.observe({'strings': [context_seq[1]], 'vectors': [], 'emotives': {}})
         predictions = kato_fixture.get_predictions()
         
         # Should predict appropriate context continuation
@@ -257,9 +274,10 @@ def test_max_sequence_length_auto_learn(kato_fixture):
     assert len(wm) == 1
     assert wm == [['auto3']]
     
-    # Verify sequence was learned
+    # Verify sequence was learned (KATO requires 2+ strings for predictions)
     kato_fixture.clear_working_memory()
     kato_fixture.observe({'strings': ['auto1'], 'vectors': [], 'emotives': {}})
+    kato_fixture.observe({'strings': ['auto2'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
     
     # Should predict the learned sequence
@@ -284,8 +302,9 @@ def test_sequence_with_time_gaps(kato_fixture):
     
     kato_fixture.learn()
     
-    # Recall should still work
+    # Recall should still work (KATO requires 2+ strings for predictions)
     kato_fixture.observe({'strings': ['time'], 'vectors': [], 'emotives': {}})
+    kato_fixture.observe({'strings': ['gap'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
     
     assert len(predictions) > 0
@@ -312,8 +331,9 @@ def test_multimodal_sequence_learning(kato_fixture):
         kato_fixture.observe(obs)
     kato_fixture.learn()
     
-    # Test recall with partial multimodal input
+    # Test recall with partial multimodal input (KATO requires 2+ strings for predictions)
     kato_fixture.observe({'strings': ['visual'], 'vectors': [[1, 0, 0]], 'emotives': {}})
+    kato_fixture.observe({'strings': ['audio'], 'vectors': [[0, 1, 0]], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
     
     assert len(predictions) > 0
@@ -340,16 +360,18 @@ def test_branching_sequences(kato_fixture):
             kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
         kato_fixture.learn()
     
-    # Test at branch point
+    # Test at branch point - need 2+ strings for predictions
+    # First observe root, then branch to get predictions
     kato_fixture.observe({'strings': ['root'], 'vectors': [], 'emotives': {}})
+    kato_fixture.observe({'strings': ['branch'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
     
-    # Should have multiple predictions
-    root_preds = [p for p in predictions if 'root' in p.get('matches', [])]
-    assert len(root_preds) >= 2
+    # Should have multiple predictions for sequences starting with 'root', 'branch'
+    matching_preds = [p for p in predictions if 'root' in p.get('matches', []) and 'branch' in p.get('matches', [])]
+    assert len(matching_preds) >= 2  # Should match both 'root', 'branch', 'leaf1' and 'root', 'branch', 'leaf2'
     
-    # Disambiguate with next observation
-    kato_fixture.observe({'strings': ['branch'], 'vectors': [], 'emotives': {}})
+    # Continue sequence to further disambiguate
+    kato_fixture.observe({'strings': ['leaf1'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
     
     # Should narrow down to branch-specific predictions

@@ -28,7 +28,12 @@ class Prediction(dict):
         self['evidence'] = float(len(self['matches'])/_model["length"])
         self['similarity'] = similarity
         self['fragmentation'] = float(number_of_blocks - 1)
-        self['snr'] = float( (2.0*len(self['matches'])) - len(self['extras']) ) / ( (2.0*(len(self['matches'])) + len(self['extras'])))
+        # Calculate SNR with division by zero protection
+        denominator = 2.0 * len(self['matches']) + len(self['extras'])
+        if denominator > 0:
+            self['snr'] = float((2.0 * len(self['matches']) - len(self['extras'])) / denominator)
+        else:
+            self['snr'] = float(0)  # Default to 0 when no matches or extras
         self['entropy'] = float(0)
         self['hamiltonian'] = float(0)
         self['grand_hamiltonian'] = float(0)

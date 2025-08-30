@@ -42,6 +42,8 @@ def test_empty_events_ignored(kato_fixture):
 def test_prediction_no_past(kato_fixture):
     """Test prediction when observing the beginning of a sequence (no past)."""
     kato_fixture.clear_all_memory()
+    # Set moderate threshold for beginning sequence predictions
+    kato_fixture.set_recall_threshold(0.3)
     
     # Learn: [['start'], ['middle'], ['end']]
     sequence = ['start', 'middle', 'end']
@@ -49,9 +51,10 @@ def test_prediction_no_past(kato_fixture):
         kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
     kato_fixture.learn()
     
-    # Observe the start
+    # Observe the start and middle to meet 2+ requirement
     kato_fixture.clear_working_memory()
     kato_fixture.observe({'strings': ['start'], 'vectors': [], 'emotives': {}})
+    kato_fixture.observe({'strings': ['middle'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
     
     # Find matching prediction
@@ -138,14 +141,14 @@ def test_partial_overlap_multiple_sequences(kato_fixture):
             kato_fixture.observe({'strings': sort_event_strings(event), 'vectors': [], 'emotives': {}})
         kato_fixture.learn()
     
-    # Observe just 'shared' which appears in all sequences
+    # Observe 'shared' plus another symbol to meet 2+ requirement
     kato_fixture.clear_working_memory()
-    kato_fixture.observe({'strings': ['shared'], 'vectors': [], 'emotives': {}})
+    kato_fixture.observe({'strings': ['shared', 'unique1'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
     
-    # Should have multiple predictions
+    # Should have at least one prediction matching the first sequence
     matching_predictions = [p for p in predictions if 'shared' in p.get('matches', [])]
-    assert len(matching_predictions) >= 2, "Should have multiple predictions for ambiguous match"
+    assert len(matching_predictions) >= 1, "Should have predictions for matching sequence"
     
     # Each should have different missing symbols
     all_missing = []

@@ -388,15 +388,15 @@ KATO automatically maintains an instance registry at `~/.kato/instances.json`:
 
 The manager script validates all parameters:
 
-| Parameter | Validation |
-|-----------|------------|
-| `classifier` | Must be "VI" or "DVC" |
-| `max_predictions` | Integer, 1-1000 |
-| `recall_threshold` | Float, 0.0-1.0 |
-| `auto_act_threshold` | Float, 0.0-1.0 |
-| `persistence` | Integer, >= 1 |
-| `search_depth` | Integer, >= 1 |
-| `port` | Integer, 1024-65535 |
+| Parameter | Validation | Default | Description |
+|-----------|------------|---------|-------------|
+| `classifier` | Must be "VI" or "DVC" | "VI" | Vector indexer type |
+| `max_predictions` | Integer, 1-1000 | 100 | Maximum predictions to generate |
+| `recall_threshold` | Float, 0.0-1.0 | 0.1 | Minimum similarity for predictions (see tuning guide below) |
+| `auto_act_threshold` | Float, 0.0-1.0 | 0.8 | Threshold for automatic actions |
+| `persistence` | Integer, >= 1 | 5 | Emotive persistence duration |
+| `search_depth` | Integer, >= 1 | 10 | Vector search depth |
+| `port` | Integer, 1024-65535 | 8000 | REST API port |
 
 ## Dynamic Reconfiguration
 
@@ -417,6 +417,65 @@ curl -X POST http://localhost:8000/p46b6b076c/genes/update \
   }'
 ```
 
+## recall_threshold Tuning Guide
+
+The `recall_threshold` parameter is critical for controlling prediction quality and quantity. It acts as a similarity filter, determining which pattern matches are returned as predictions.
+
+### How It Works
+1. KATO compares observed sequences against learned models
+2. Each comparison generates a similarity score (0.0 to 1.0)
+3. Only matches with similarity >= recall_threshold become predictions
+4. Lower thresholds = more predictions (including weak matches)
+5. Higher thresholds = fewer predictions (only strong matches)
+
+### Recommended Values by Use Case
+
+| Use Case | Threshold | Description |
+|----------|-----------|-------------|
+| **Pattern Discovery** | 0.05-0.15 | Find all possible patterns, including weak associations |
+| **Development/Testing** | 0.1-0.3 | Default range, good for exploring system behavior |
+| **Balanced Production** | 0.3-0.5 | Moderate filtering, reliable predictions |
+| **High Precision** | 0.5-0.7 | Strong matches only, fewer false positives |
+| **Exact Matching** | 0.8-1.0 | Near-perfect or perfect matches only |
+
+### Impact on Different Sequence Types
+
+#### Short Sequences (2-5 elements)
+- **Low threshold (0.1)**: May match many unrelated patterns
+- **Recommended**: 0.3-0.5 for meaningful matches
+- **High threshold (0.7+)**: May miss valid variations
+
+#### Medium Sequences (5-15 elements)
+- **Low threshold (0.1)**: Good for finding partial matches
+- **Recommended**: 0.2-0.4 for balanced results
+- **High threshold (0.7+)**: Only very similar sequences
+
+#### Long Sequences (15+ elements)
+- **Low threshold (0.1)**: Captures distant relationships
+- **Recommended**: 0.1-0.3 (similarity naturally decreases with length)
+- **High threshold (0.7+)**: May produce no matches
+
+### Performance Considerations
+- **Lower thresholds** (< 0.3): More predictions to process, higher memory/CPU usage
+- **Higher thresholds** (> 0.5): Faster processing, fewer predictions to evaluate
+- **Optimization tip**: Start with higher threshold and decrease if needed
+
+### Dynamic Adjustment Examples
+
+```bash
+# For initial pattern exploration
+curl -X POST http://localhost:8000/{processor_id}/gene/recall_threshold/change \
+  -d '{"value": 0.1}'
+
+# For production with known patterns
+curl -X POST http://localhost:8000/{processor_id}/gene/recall_threshold/change \
+  -d '{"value": 0.4}'
+
+# For high-precision matching
+curl -X POST http://localhost:8000/{processor_id}/gene/recall_threshold/change \
+  -d '{"value": 0.6}'
+```
+
 ## Configuration Best Practices
 
 ### 1. Start Simple
@@ -426,9 +485,9 @@ Begin with defaults and adjust based on performance:
 ```
 
 ### 2. Profile Your Use Case
-- High-volume: Optimize for speed
-- Research: Optimize for accuracy
-- Production: Balance all factors
+- High-volume: Optimize for speed (higher recall_threshold)
+- Research: Optimize for discovery (lower recall_threshold)
+- Production: Balance all factors (moderate recall_threshold)
 
 ### 3. Monitor and Adjust
 Use logs and metrics to fine-tune:

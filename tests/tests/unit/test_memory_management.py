@@ -51,7 +51,9 @@ def test_clear_short_term_memory(kato_fixture):
     assert stm == []
     
     # But learned models should still generate predictions
+    # KATO requires 2+ strings for predictions
     kato_fixture.observe({'strings': ['a'], 'vectors': [], 'emotives': {}})
+    kato_fixture.observe({'strings': ['b'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
     assert len(predictions) > 0  # Should have predictions from learned model
 
@@ -96,8 +98,9 @@ def test_manual_learning(kato_fixture):
     stm = kato_fixture.get_short_term_memory()
     assert stm == []
     
-    # Now observe 'x' and should get predictions for 'y', 'z'
+    # Now observe 'x' and 'y' to get predictions (KATO requires 2+ strings)
     kato_fixture.observe({'strings': ['x'], 'vectors': [], 'emotives': {}})
+    kato_fixture.observe({'strings': ['y'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
     assert len(predictions) > 0
     
@@ -137,7 +140,9 @@ def test_memory_persistence(kato_fixture):
     
     # Test each sequence still generates predictions
     for seq in sequences:
+        # KATO requires 2+ strings for predictions
         kato_fixture.observe({'strings': [seq[0]], 'vectors': [], 'emotives': {}})
+        kato_fixture.observe({'strings': [seq[1]], 'vectors': [], 'emotives': {}})
         predictions = kato_fixture.get_predictions()
         assert len(predictions) > 0
         kato_fixture.clear_short_term_memory()
@@ -161,9 +166,10 @@ def test_max_sequence_length(kato_fixture):
     stm = kato_fixture.get_short_term_memory()
     assert stm == [['c']]  # Only last event remains
     
-    # Verify sequence was learned
+    # Verify sequence was learned (KATO requires 2+ strings for predictions)
     kato_fixture.clear_working_memory()
     kato_fixture.observe({'strings': ['a'], 'vectors': [], 'emotives': {}})
+    kato_fixture.observe({'strings': ['b'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
     assert len(predictions) > 0
 
@@ -193,12 +199,17 @@ def test_memory_with_emotives(kato_fixture):
     assert model_name is not None, "Should have learned a model"
     assert model_name.startswith('MODEL|'), "Model name should have MODEL| prefix"
     
-    # Clear short-term memory and observe first element to trigger predictions
+    # Clear short-term memory and observe first two elements to trigger predictions (KATO requires 2+ strings)
     kato_fixture.clear_short_term_memory()
     kato_fixture.observe({
         'strings': ['0'],
         'vectors': [],
         'emotives': {'happiness': 0.1, 'confidence': 0.2}
+    })
+    kato_fixture.observe({
+        'strings': ['1'],
+        'vectors': [],
+        'emotives': {'happiness': 0.5, 'confidence': 0.6}
     })
     
     # Get predictions - should include averaged emotives from the learned model
@@ -273,15 +284,17 @@ def test_interleaved_memory_operations(kato_fixture):
     # Clear short-term memory (not all memory)
     kato_fixture.clear_short_term_memory()
     
-    # First sequence should still work
+    # First sequence should still work (KATO requires 2+ strings for predictions)
     kato_fixture.observe({'strings': ['seq1_a'], 'vectors': [], 'emotives': {}})
+    kato_fixture.observe({'strings': ['seq1_b'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
     assert len(predictions) > 0
     
     # Clear all memory
     kato_fixture.clear_all_memory()
     
-    # No predictions should exist now
+    # No predictions should exist now (observe 2 strings but no learned models)
     kato_fixture.observe({'strings': ['seq1_a'], 'vectors': [], 'emotives': {}})
+    kato_fixture.observe({'strings': ['seq1_b'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
     assert len(predictions) == 0 or all(p.get('frequency', 0) == 0 for p in predictions)

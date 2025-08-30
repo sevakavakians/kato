@@ -74,7 +74,7 @@ def expectation(p, num_symbols):
 def grand_hamiltonian(state, symbol_probabilities, total_symbols):
     symbols = set(state)
     return sum(
-        [expectation(symbol_probabilities[symbol], total_symbols) for
+        [expectation(symbol_probabilities.get(symbol, 0), total_symbols) for
          symbol in symbols])
 
 
@@ -98,8 +98,15 @@ def confluence(state, symbols_kb, P1=None):
 
 
 def conditionalProbability(state, symbol_probabilities):
-    return 10**reduce(add, [log10(symbol_probabilities[symbol]) for symbol in
-                        state])
+    # Handle missing symbols by using a small default probability
+    probs = []
+    for symbol in state:
+        prob = symbol_probabilities.get(symbol, 1e-10)  # Small default probability
+        if prob > 0:
+            probs.append(log10(prob))
+        else:
+            probs.append(log10(1e-10))  # Avoid log(0)
+    return 10**reduce(add, probs) if probs else 0
 
 
 def filterRange(x, range_floor, range_ceil):

@@ -14,6 +14,8 @@ from fixtures.test_helpers import sort_event_strings
 def test_prediction_past_field(kato_fixture):
     """Test that the past field correctly shows events before the present."""
     kato_fixture.clear_all_memory()
+    # Set moderate threshold for temporal field predictions
+    kato_fixture.set_recall_threshold(0.3)
     
     # Learn: [['start'], ['middle'], ['end']]
     sequence = ['start', 'middle', 'end']
@@ -21,9 +23,10 @@ def test_prediction_past_field(kato_fixture):
         kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
     kato_fixture.learn()
     
-    # Observe middle event
+    # Observe middle and end events (KATO requires 2+ strings for predictions)
     kato_fixture.clear_working_memory()
     kato_fixture.observe({'strings': ['middle'], 'vectors': [], 'emotives': {}})
+    kato_fixture.observe({'strings': ['end'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
     
     # Find the prediction for our sequence
@@ -292,13 +295,16 @@ def test_prediction_multiple_past_events(kato_fixture):
 def test_single_event_with_missing(kato_fixture):
     """Test a single event observation with missing symbols."""
     kato_fixture.clear_all_memory()
+    # Set lower threshold for missing symbol detection
+    kato_fixture.set_recall_threshold(0.2)
     
     # Learn a single event with multiple symbols
     kato_fixture.observe({'strings': sort_event_strings(['alpha', 'beta', 'gamma']), 'vectors': [], 'emotives': {}})
     kato_fixture.learn()
     
-    # Observe only partial symbols
+    # Observe partial symbols plus another string (KATO requires 2+ strings)
     kato_fixture.clear_working_memory()
+    kato_fixture.observe({'strings': ['alpha'], 'vectors': [], 'emotives': {}})
     kato_fixture.observe({'strings': ['beta'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
     

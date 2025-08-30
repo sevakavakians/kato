@@ -29,9 +29,11 @@ class KATOTestFixture:
         else:
             self.processor_id = self._generate_processor_id()
             
-        self.base_url = "http://localhost:8000"
+        # Use KATO_API_URL from environment if available, otherwise default to port 8000
+        self.base_url = os.environ.get('KATO_API_URL', 'http://localhost:8000')
         self.process = None
         self.is_running = False
+        self.services_available = False
         
     def _generate_processor_id(self) -> str:
         """Generate a processor ID based on the processor name."""
@@ -39,9 +41,33 @@ class KATOTestFixture:
         import hashlib
         hash_obj = hashlib.md5(self.processor_name.encode())
         return f"p{hash_obj.hexdigest()[:10]}"
+    
+    def _check_services_available(self) -> bool:
+        """Check if KATO services are available."""
+        try:
+            # Try to connect to the API
+            response = requests.get(f"{self.base_url}/kato-api/ping", timeout=2)
+            return response.status_code == 200
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+            return False
         
     def setup(self):
         """Start KATO with the specified genome or use existing instance."""
+        # First check if services are available
+        self.services_available = self._check_services_available()
+        
+        if not self.services_available:
+            print("\n" + "="*60)
+            print("WARNING: KATO services are not running!")
+            print("Tests requiring KATO will be skipped.")
+            print("To run KATO-dependent tests, start services with:")
+            print("  ./test-harness.sh start-services")
+            print("Or run tests with automatic service management:")
+            print("  ./test-harness.sh test")
+            print("="*60 + "\n")
+            self.is_running = False
+            return
+        
         # Check if we're running in a test container
         in_container = os.environ.get('KATO_TEST_MODE') == 'container'
         
@@ -190,12 +216,16 @@ class KATOTestFixture:
         
     def connect(self) -> Dict[str, Any]:
         """Connect to KATO and return connection info."""
+        if not self.services_available:
+            pytest.skip("KATO services not available")
         response = requests.get(f"{self.base_url}/connect")
         response.raise_for_status()
         return response.json()
         
     def observe(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Send an observation to KATO."""
+        if not self.services_available:
+            pytest.skip("KATO services not available")
         response = requests.post(
             f"{self.base_url}/{self.processor_id}/observe",
             json=data
@@ -206,6 +236,8 @@ class KATOTestFixture:
         
     def get_short_term_memory(self) -> list:
         """Get the current short-term memory."""
+        if not self.services_available:
+            pytest.skip("KATO services not available")
         response = requests.get(f"{self.base_url}/{self.processor_id}/short-term-memory")
         response.raise_for_status()
         result = response.json()
@@ -213,6 +245,8 @@ class KATOTestFixture:
     
     def get_working_memory(self) -> list:
         """Get the current working memory (now called short-term memory)."""
+        if not self.services_available:
+            pytest.skip("KATO services not available")
         response = requests.get(f"{self.base_url}/{self.processor_id}/short-term-memory")
         response.raise_for_status()
         result = response.json()
@@ -220,6 +254,8 @@ class KATOTestFixture:
         
     def get_predictions(self) -> list:
         """Get current predictions."""
+        if not self.services_available:
+            pytest.skip("KATO services not available")
         response = requests.get(f"{self.base_url}/{self.processor_id}/predictions")
         response.raise_for_status()
         result = response.json()
@@ -227,6 +263,8 @@ class KATOTestFixture:
         
     def reset_genes_to_defaults(self) -> str:
         """Reset gene values to their defaults."""
+        if not self.services_available:
+            return "Services not available"
         default_genes = {
             'max_sequence_length': 0,  # Disable auto-learning by default
         }
@@ -234,6 +272,8 @@ class KATOTestFixture:
     
     def clear_all_memory(self, reset_genes: bool = True) -> str:
         """Clear all memory and optionally reset genes to defaults for test isolation."""
+        if not self.services_available:
+            pytest.skip("KATO services not available")
         # Reset genes to defaults only if requested (default: True for backward compatibility)
         if reset_genes:
             self.reset_genes_to_defaults()
@@ -248,6 +288,8 @@ class KATOTestFixture:
         
     def clear_short_term_memory(self) -> str:
         """Clear short-term memory."""
+        if not self.services_available:
+            pytest.skip("KATO services not available")
         response = requests.post(
             f"{self.base_url}/{self.processor_id}/clear-short-term-memory",
             json={}
@@ -258,6 +300,8 @@ class KATOTestFixture:
     
     def clear_working_memory(self) -> str:
         """Clear working memory (now called short-term memory)."""
+        if not self.services_available:
+            pytest.skip("KATO services not available")
         response = requests.post(
             f"{self.base_url}/{self.processor_id}/clear-short-term-memory",
             json={}
@@ -268,6 +312,8 @@ class KATOTestFixture:
         
     def learn(self) -> str:
         """Force learning of current working memory."""
+        if not self.services_available:
+            pytest.skip("KATO services not available")
         response = requests.post(
             f"{self.base_url}/{self.processor_id}/learn",
             json={}
@@ -278,6 +324,8 @@ class KATOTestFixture:
         
     def get_status(self) -> Dict[str, Any]:
         """Get processor status."""
+        if not self.services_available:
+            pytest.skip("KATO services not available")
         response = requests.get(f"{self.base_url}/{self.processor_id}/status")
         response.raise_for_status()
         result = response.json()
@@ -285,6 +333,8 @@ class KATOTestFixture:
         
     def get_cognition_data(self) -> Dict[str, Any]:
         """Get cognition data."""
+        if not self.services_available:
+            pytest.skip("KATO services not available")
         response = requests.get(f"{self.base_url}/{self.processor_id}/cognition-data")
         response.raise_for_status()
         result = response.json()
@@ -292,6 +342,8 @@ class KATOTestFixture:
         
     def get_percept_data(self) -> Dict[str, Any]:
         """Get percept data."""
+        if not self.services_available:
+            pytest.skip("KATO services not available")
         response = requests.get(f"{self.base_url}/{self.processor_id}/percept-data")
         response.raise_for_status()
         result = response.json()
@@ -299,6 +351,8 @@ class KATOTestFixture:
         
     def update_genes(self, genes: Dict[str, Any]) -> str:
         """Update gene values."""
+        if not self.services_available:
+            pytest.skip("KATO services not available")
         response = requests.post(
             f"{self.base_url}/{self.processor_id}/genes/change",
             json={"data": genes}
@@ -306,6 +360,19 @@ class KATOTestFixture:
         response.raise_for_status()
         result = response.json()
         return result.get('message', '')
+    
+    def set_recall_threshold(self, threshold: float) -> str:
+        """Set the recall_threshold parameter.
+        
+        Args:
+            threshold: Value between 0.0 and 1.0
+            
+        Returns:
+            Response message from the API
+        """
+        if not 0.0 <= threshold <= 1.0:
+            raise ValueError(f"recall_threshold must be between 0.0 and 1.0, got {threshold}")
+        return self.update_genes({"recall_threshold": threshold})
 
 
 @pytest.fixture(scope="module")

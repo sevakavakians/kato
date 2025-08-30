@@ -96,20 +96,34 @@ class InformationExtractor:
             matching_intersection += state[j:j+n]
         
         # Extract temporal regions
-        (i0, j0, n0) = tuple(matching_blocks[0]) if len(matching_blocks) > 1 else (0, 0, 0)
-        (i1, j1, n1) = tuple(matching_blocks[-2]) if len(matching_blocks) > 2 else (0, 0, 0)
+        # matching_blocks includes a terminator at the end, so actual matches = len(matching_blocks) - 1
+        num_actual_blocks = len(matching_blocks) - 1
         
-        past = model[:i0]
-        present = model[i0:i1+n1]
-        number_of_blocks = len(matching_blocks) - 1
+        if num_actual_blocks >= 2:
+            # We have at least 2 actual matching blocks
+            (i0, j0, n0) = tuple(matching_blocks[0])
+            (i1, j1, n1) = tuple(matching_blocks[-2])  # Last actual match (before terminator)
+            past = model[:i0]
+            present = model[i0:i1+n1] if i1+n1 > i0 else model[i0:]
+        elif num_actual_blocks == 1:
+            # Only one matching block
+            (i0, j0, n0) = tuple(matching_blocks[0])
+            (i1, j1, n1) = (i0, j0, n0)  # Use same values for consistency
+            past = model[:i0]
+            present = model[i0:i0+n0]  # Just the matching portion
+        else:
+            # No matches - shouldn't happen if similarity >= threshold
+            return None
         
-        # Extract anomalies (missing and extras)
+        number_of_blocks = num_actual_blocks
+        
+        # Extract anomalies (missing and extras) using original approach
         missing = []
         extras = []
         
         if present:
             matcher.set_seq1(present)
-            matcher.set_seq2(state[j0:j1+n1] if j1+n1 <= len(state) else state[j0:])
+            # seq2 already has the full state set from earlier
             diffs = list(matcher.compare())
             
             for diff in diffs:
@@ -395,23 +409,40 @@ class ModelSearcher:
                         matching_intersection += state[j:j+n]
                     
                     # Extract temporal regions (same as original)
-                    if len(matching_blocks) > 1:
-                        (i0, j0, n0) = tuple(matching_blocks[0])
-                        (i1, j1, n1) = tuple(matching_blocks[-2])
+                    # matching_blocks includes a terminator at the end, so actual matches = len(matching_blocks) - 1
+                    num_actual_blocks = len(matching_blocks) - 1
+                    
+                    if num_actual_blocks >= 1:  # Changed from >= 2 to handle single blocks
+                        if num_actual_blocks == 1:
+                            # Single matching block case
+                            (i0, j0, n0) = tuple(matching_blocks[0])
+                            
+                            past = model_seq[:i0]
+                            present = model_seq[i0:i0+n0]
+                            
+                            # For single block, use the same length as present for state_segment
+                            state_segment = state[j0:min(j0+len(present), len(state))]
+                            
+                            (i1, j1, n1) = (i0, j0, n0)  # Set for consistency
+                        else:
+                            # Multiple matching blocks (2+)
+                            (i0, j0, n0) = tuple(matching_blocks[0])
+                            (i1, j1, n1) = tuple(matching_blocks[-2])  # Last actual match (before terminator)
+                            
+                            past = model_seq[:i0]
+                            present = model_seq[i0:i1+n1] if i1+n1 > i0 else model_seq[i0:]
+                            
                         
-                        past = model_seq[:i0]
-                        present = model_seq[i0:i1+n1]
-                        number_of_blocks = len(matching_blocks) - 1
+                        number_of_blocks = num_actual_blocks
                         
-                        # Extract anomalies
+                        # Extract anomalies using original approach
+                        # The original code compared present against the full state
                         missing = []
                         extras = []
                         
                         model_matcher.set_seq1(present)
-                        if j1+n1 <= len(state):
-                            model_matcher.set_seq2(state[j0:j1+n1])
-                        else:
-                            model_matcher.set_seq2(state[j0:])
+                        # seq2 already has the full state from earlier
+                        # model_matcher.set_seq2(state) was already done above
                         
                         diffs = list(model_matcher.compare())
                         for diff in diffs:

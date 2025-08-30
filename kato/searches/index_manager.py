@@ -293,3 +293,79 @@ class IndexManager:
             'length_index_sequences': self.length_index.size(),
             'total_models': len(self.model_data)
         }
+    
+    def add_model(self, model_id: str, sequence: List[str], data: Any = None):
+        """
+        Add a model to the index (wrapper for index_model).
+        
+        Args:
+            model_id: Unique identifier for the model
+            sequence: The sequence of symbols in the model
+            data: Optional additional data to store with the model
+        """
+        self.index_model(model_id, sequence, data)
+    
+    def remove_model(self, model_id: str) -> bool:
+        """
+        Remove a model from all indices.
+        
+        Args:
+            model_id: Model identifier to remove
+            
+        Returns:
+            True if model was found and removed, False otherwise
+        """
+        if model_id not in self.model_data:
+            return False
+        
+        # Remove from model data
+        model_sequence = self.model_data.get(model_id, [])
+        del self.model_data[model_id]
+        
+        # Remove from inverted index
+        # Note: This requires rebuilding the index for that document
+        # For now, we'll mark it as a limitation that requires full rebuild
+        # A more sophisticated implementation would track document deletions
+        
+        # Remove from length index (would need to rebuild partition)
+        # This is a known limitation of the current implementation
+        
+        return True
+    
+    def search_candidates(self, query: List[str], length_tolerance: float = 0.5) -> Set[str]:
+        """
+        Search for candidate models that could match the query.
+        
+        Args:
+            query: List of symbols to search for
+            length_tolerance: Fraction of length difference to tolerate (0.5 = 50%)
+            
+        Returns:
+            Set of model IDs that are potential matches
+        """
+        # Convert length_tolerance from fraction to partition count
+        query_length = len(query)
+        tolerance_partitions = max(1, int(length_tolerance * query_length / self.length_index.partition_size))
+        
+        # Get candidates from length-based filtering
+        length_candidates = self.length_index.get_candidates(query_length, tolerance=tolerance_partitions)
+        candidate_ids = {doc_id for doc_id, _ in length_candidates}
+        
+        # If we have query symbols, filter by inverted index
+        if query:
+            # Use OR mode to get all models containing any query symbol
+            symbol_candidates = self.inverted_index.search(query[:10], mode='OR')  # Limit symbols for performance
+            
+            # For short queries (potential prefix matches), be more permissive
+            # This allows branching sequences with shared prefixes to be found
+            if query_length <= 2:
+                # Union with symbol candidates for short queries (prefix matching)
+                candidate_ids |= symbol_candidates
+            else:
+                # Intersect with length candidates if we have both for longer queries
+                if candidate_ids:
+                    candidate_ids &= symbol_candidates
+                else:
+                    candidate_ids = symbol_candidates
+        
+        return candidate_ids

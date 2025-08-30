@@ -123,11 +123,18 @@ REST Client → REST Gateway (Port 8000) → ZMQ Server (Port 5555) → KATO Pro
 
 ### Key Behavioral Properties
 
-1. **Alphanumeric Sorting**: Strings within events are sorted alphanumerically for consistency
-2. **Temporal Segmentation**: Predictions structured as past/present/future
-3. **Empty Event Handling**: Empty strings are filtered from observations
-4. **Multi-Modal Processing**: Handles strings, vectors (768-dim), and emotional context
-5. **Deterministic**: Same inputs always produce same outputs
+1. **Minimum Sequence Length**: KATO requires at least 2 strings total in STM to generate predictions
+   - Valid: `[['A', 'B']]` (2 strings in 1 event)
+   - Valid: `[['A'], ['B']]` (2 strings across 2 events)
+   - Invalid: `[['A']]` (only 1 string - no predictions generated)
+2. **Alphanumeric Sorting**: Strings within events are sorted alphanumerically for consistency
+3. **Temporal Segmentation**: Predictions structured as past/present/future
+4. **Empty Event Handling**: Empty strings are filtered from observations
+5. **Multi-Modal Processing**: Handles strings, vectors (768-dim), and emotional context
+6. **Deterministic**: Same inputs always produce same outputs
+7. **Variable Sequence Lengths**: Supports sequences of arbitrary length (2+ strings total)
+   - Events can have varying numbers of symbols
+   - Each prediction has unique missing/matches/extras fields based on partial matching
 
 ## Testing Strategy
 
@@ -182,19 +189,31 @@ PROCESSOR_ID=p123 PROCESSOR_NAME=CustomProcessor ./kato-manager.sh start
 
 ## Automated Planning System Protocol
 
+### ⚠️ CRITICAL RULE: NEVER EDIT planning-docs/ FILES DIRECTLY ⚠️
+
 ### Role Separation
 **Claude Code's Responsibility**: 
-- READ planning documentation for context
-- TRIGGER planning-maintainer agent for all documentation updates
-- EXECUTE development tasks
+- **READ-ONLY** access to planning documentation for context
+- **TRIGGER** planning-maintainer agent for ALL documentation updates
+- **EXECUTE** development tasks (code, tests, configs)
 
 **Planning-Maintainer's Responsibility**:
-- ALL updates to planning-docs files
+- **EXCLUSIVE WRITE ACCESS** to all planning-docs/ files
 - Documentation archival and organization
 - Pattern tracking and velocity calculations
 - Time estimate refinements
 
-**Important**: Claude Code should NEVER directly edit files in planning-docs/. All documentation updates must go through the planning-maintainer agent.
+### ❌ FORBIDDEN ACTIONS for Claude Code:
+- Using Edit, Write, or MultiEdit tools on ANY file in planning-docs/
+- Creating new files in planning-docs/
+- Modifying SESSION_STATE.md, DAILY_BACKLOG.md, or any other planning files
+
+### ✅ CORRECT WORKFLOW:
+1. **READ** planning docs to understand current state
+2. **EXECUTE** development tasks
+3. **TRIGGER** planning-maintainer with results for documentation updates
+
+**VIOLATION CONSEQUENCE**: Direct edits to planning-docs/ will create conflicts and break the documentation system.
 
 ### Every Session Start:
 1. READ `planning-docs/README.md` to understand the current system state
@@ -240,3 +259,64 @@ The planning-maintainer will automatically:
 - Calculate actual vs estimated time
 - Log any patterns observed
 ```
+
+## Test Execution Protocol
+
+### ⚠️ CRITICAL RULE: USE test-executor-analyzer FOR ALL TESTING ⚠️
+
+### When to Trigger test-executor-analyzer:
+Use the Task tool with subagent_type="test-executor-analyzer" when:
+- **After Code Changes** → To verify functionality and catch regressions
+- **After Bug Fixes** → To confirm fixes work and don't break other tests
+- **After Feature Implementation** → To ensure comprehensive testing
+- **When Investigating Test Failures** → To get detailed analysis
+- **For Performance Testing** → To benchmark and analyze performance
+- **When User Requests Testing** → Any test-related request
+
+### ❌ FORBIDDEN ACTIONS for Claude Code:
+- Running `./test-harness.sh` directly via Bash tool
+- Running `./kato-manager.sh test` directly via Bash tool  
+- Running pytest commands directly
+- Executing test scripts manually
+
+### ✅ CORRECT WORKFLOW:
+```
+❌ WRONG: Bash("./test-harness.sh test")
+❌ WRONG: Bash("./kato-manager.sh test")
+❌ WRONG: Bash("python -m pytest tests/")
+
+✅ RIGHT: Task tool with subagent_type="test-executor-analyzer"
+```
+
+### Example Usage:
+```
+assistant: "I've completed the bug fix. Let me use the test-executor-analyzer to verify all tests pass."
+<uses Task tool with subagent_type="test-executor-analyzer">
+
+The test-executor-analyzer will:
+- Run all appropriate tests
+- Analyze test results and failures
+- Check code quality metrics
+- Examine container logs if needed
+- Produce detailed test documentation
+```
+
+## Agent Usage Summary
+
+### Available Specialized Agents:
+1. **planning-maintainer**: ALL planning-docs/ updates and documentation
+2. **test-executor-analyzer**: ALL test execution and analysis  
+3. **general-purpose**: Complex multi-step research tasks
+4. **statusline-setup**: Configure Claude Code status line
+
+### Quick Decision Tree:
+- Updating documentation? → planning-maintainer
+- Running tests? → test-executor-analyzer
+- Complex research? → general-purpose
+- Everything else? → Do it directly
+
+### Common Mistakes to Avoid:
+1. ❌ Editing planning-docs/ directly → ✅ Use planning-maintainer
+2. ❌ Running test-harness.sh directly → ✅ Use test-executor-analyzer
+3. ❌ Running pytest directly → ✅ Use test-executor-analyzer
+4. ❌ Running kato-manager.sh test → ✅ Use test-executor-analyzer

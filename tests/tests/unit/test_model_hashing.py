@@ -111,8 +111,9 @@ def test_model_hash_in_predictions(kato_fixture):
     
     model_name = kato_fixture.learn()
     
-    # Observe first element to get predictions
+    # Observe to get predictions (KATO requires 2+ strings)
     kato_fixture.observe({'strings': ['predict'], 'vectors': [], 'emotives': {}})
+    kato_fixture.observe({'strings': ['test'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
     
     assert len(predictions) > 0, "Should have predictions"

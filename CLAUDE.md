@@ -126,7 +126,8 @@ REST Client → REST Gateway (Port 8000) → ZMQ Server (Port 5555) → KATO Pro
 1. **Minimum Sequence Length**: KATO requires at least 2 strings total in STM to generate predictions
    - Valid: `[['A', 'B']]` (2 strings in 1 event)
    - Valid: `[['A'], ['B']]` (2 strings across 2 events)
-   - Invalid: `[['A']]` (only 1 string - no predictions generated)
+   - Valid: `[['A']] + vectors` (1 user string + vector strings like 'VECTOR|<hash>')
+   - Invalid: `[['A']]` (only 1 string without vectors - no predictions generated)
 2. **Alphanumeric Sorting**: Strings within events are sorted alphanumerically for consistency
 3. **Temporal Segmentation**: Predictions structured as past/present/future
 4. **Empty Event Handling**: Empty strings are filtered from observations

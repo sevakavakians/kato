@@ -215,7 +215,7 @@ Clear all memory (short-term memory and learned models).
 #### GET /{processor_id}/predictions
 Get current predictions based on short-term memory.
 
-**Important**: KATO requires at least 2 strings total in short-term memory to generate predictions. With fewer than 2 strings, this endpoint will return an empty predictions array.
+**Important**: KATO requires at least 2 strings total in short-term memory to generate predictions. Vectors contribute their own string representations (e.g., 'VECTOR|<hash>'), so a single user string with vectors meets this requirement. With fewer than 2 strings total, this endpoint will return an empty predictions array.
 
 **Parameters:**
 - `processor_id` (path): Processor identifier
@@ -286,7 +286,7 @@ Get cognitive processing data.
 **Parameters:**
 - `processor_id` (path): Processor identifier
 
-**Note**: The predictions field will be empty unless short-term memory contains at least 2 strings total.
+**Note**: The predictions field will be empty unless short-term memory contains at least 2 strings total (including vector-contributed strings like 'VECTOR|<hash>').
 
 **Response:**
 ```json

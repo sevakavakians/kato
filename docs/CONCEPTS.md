@@ -26,10 +26,15 @@ This document provides a comprehensive reference for KATO's core concepts, behav
 - **Mixed event sizes**: `[['a', 'b'], ['c']]` ✅
 
 #### Invalid Sequences (No Predictions):
-- **Single string**: `[['hello']]` ❌
-- **Single string with emotives**: `[['hello']] + emotives` ❌
-- **Single string with vectors**: `[['hello']] + vectors` ❌
+- **Single string only**: `[['hello']]` ❌
+- **Single string with emotives**: `[['hello']] + emotives` ❌ (emotives don't contribute strings)
 - **Empty events**: `[[], [], []]` ❌
+
+#### Valid with Vectors:
+- **Single string with vectors**: `[['hello', 'VECTOR|<hash>']]` ✅
+  - Vectors contribute their own string representation (e.g., 'VECTOR|<hash>')
+  - Results in 2+ strings total, meeting the minimum requirement
+  - The vector string is automatically added when vectors are processed
 
 This requirement ensures sufficient context for meaningful pattern matching and prediction generation.
 
@@ -96,9 +101,10 @@ observe({'strings': ['m']})
 
 ### Vector Symbol Processing
 - Vectors are processed through the vector indexer (VI)
-- May produce symbols like `VECTOR|<hash>` depending on vector processor configuration
+- Vectors contribute string symbols like `VECTOR|<hash>` to the sequence
+- These vector strings count toward the minimum 2-string requirement for predictions
 - Vector symbols appear before string symbols in mixed modality events
-- Vector processing depends on indexer configuration and may not always produce short-term memory entries
+- A single user string + vectors = valid sequence (2+ strings total)
 
 ### Empty Events
 KATO ignores empty events - they do not change short-term memory or affect predictions.

@@ -404,9 +404,10 @@ predictions = kato.get_predictions()
 ### Testing Vector Processing
 Vector tests should be flexible:
 ```python
-# Don't assume vectors always create STM entries
+# Vectors always create STM entries (their name strings)
 wm = kato.get_short_term_memory()
-assert isinstance(wm, list)  # Just check it's a list
+assert isinstance(wm, list)  # Check it's a list
+assert len(wm[0]) >= 1  # Should contain at least the vector name string
 # Don't assert specific content - depends on indexer
 ```
 

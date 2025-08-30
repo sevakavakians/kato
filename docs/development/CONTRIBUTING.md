@@ -281,7 +281,7 @@ def profile_function():
 # Add debug logging
 import logging
 logger = logging.getLogger(__name__)
-logger.debug(f"Working memory state: {short_term_memory}")
+logger.debug(f"Short-term memory state: {short_term_memory}")
 ```
 
 ### Docker Debugging

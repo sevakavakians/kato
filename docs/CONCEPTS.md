@@ -271,16 +271,17 @@ The `present` field includes all contiguous events that are identified by matchi
 ## Learning Behavior
 
 ### Learning Process
-1. Learning creates a model from the current short-term memory
+1. Learning creates a model from the current short-term memory (STM)
 2. Models are named with format: `MODEL|<identifier>`
 3. Empty short-term memory produces no model
 4. Frequency increases when the same sequence is learned multiple times
-5. Working memory is cleared after learning (except last event)
+5. **Regular learning**: Short-term memory is completely cleared after learning
 
 ### Auto-Learning
 - Triggered when max_sequence_length is reached
-- The last event is preserved when auto-learning occurs
+- **Auto-learning only**: The last event is preserved in STM after learning
 - Configurable through processor parameters
+- This preserves continuity for streaming data
 
 ## Multi-Modal Processing
 

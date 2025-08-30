@@ -497,7 +497,7 @@ pip install -r requirements.txt
 
 **Symptoms:**
 - `test_max_sequence_length` tests fail
-- Working memory doesn't clear when reaching max_sequence_length
+- Short-term memory doesn't clear when reaching max_sequence_length
 - Auto-learning not triggered
 
 **Root Causes and Solutions:**

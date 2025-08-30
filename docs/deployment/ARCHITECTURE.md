@@ -118,7 +118,7 @@ Thread-safe connection management:
 
 Core AI engine:
 
-- **Memory**: Working memory + long-term storage
+- **Memory**: Short-term memory + long-term storage
 - **Learning**: Sequence pattern recognition
 - **Predictions**: Temporal segmentation (past/present/future)
 - **Multi-modal**: Strings, vectors, emotives
@@ -256,7 +256,7 @@ Each processor maintains:
 ### State Persistence
 
 - **MongoDB**: Long-term model storage
-- **In-Memory**: Working memory and caches
+- **In-Memory**: Short-term memory and caches
 - **Checkpointing**: Periodic state snapshots (planned)
 
 ## Network Architecture

@@ -11,7 +11,7 @@ Comprehensive guide to KATO's performance characteristics, optimization strategi
 | Observation | 1-5ms | <1ms | Depends on event size |
 | Prediction | 5-20ms | 2-10ms | Scales with model count |
 | Learning | 10-100ms | 5-50ms | Depends on sequence length |
-| Memory Clear | <1ms | <0.5ms | Working memory only |
+| Memory Clear | <1ms | <0.5ms | Short-term memory only |
 | API Round-trip | 5-10ms | 2-5ms | Including network overhead |
 
 ### Throughput Metrics

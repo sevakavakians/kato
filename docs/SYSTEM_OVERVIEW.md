@@ -107,7 +107,7 @@ Learning occurs when explicitly triggered or when short-term memory reaches capa
 2. **Hash Generation**: Deterministic SHA1 hash created from sequence
 3. **Storage**: Model stored with identifier `MODEL|<hash>`
 4. **Frequency Update**: Counter increases if identical sequence learned again
-5. **Memory Clear**: Working memory cleared (except last event)
+5. **Memory Clear**: Short-term memory completely cleared (regular learning) or last event kept (auto-learning)
 
 ```python
 # Short-Term Memory: [['hello'], ['world']]

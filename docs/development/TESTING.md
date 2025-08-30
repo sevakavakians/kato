@@ -161,7 +161,7 @@ Tests for observation processing with strings, vectors, and emotives:
 Tests for short-term memory and long-term memory management:
 - Clearing all memory
 - Clearing short-term memory only
-- Working memory accumulation
+- Short-term memory accumulation
 - Manual learning
 - Memory persistence
 - Max sequence length enforcement
@@ -278,7 +278,7 @@ Tests for all REST API endpoints:
 - Processor ping (`/{processor_id}/ping`)
 - Status endpoint (`/{processor_id}/status`)
 - Observe endpoint (`/{processor_id}/observe`)
-- Short-term memory endpoints (formerly working memory)
+- Short-term memory endpoints
 - Memory clearing endpoints
 - Learn endpoint
 - Predictions endpoint
@@ -341,7 +341,7 @@ All models and vectors receive deterministic hash-based names:
 
 ### 3. Stateful Learning
 KATO maintains state across observations:
-- Working memory accumulates observations
+- Short-term memory accumulates observations
 - Learning creates persistent models
 - Models survive short-term memory clears
 
@@ -556,10 +556,10 @@ Auto-learning tests validate the `max_sequence_length` functionality where KATO 
 
 When `max_sequence_length` is set to a positive value:
 
-1. **Accumulation**: Working memory accumulates observations normally
+1. **Accumulation**: Short-term memory accumulates observations normally
 2. **Trigger**: At threshold, auto-learning activates
 3. **Learning**: Entire sequence is learned as a model
-4. **Reset**: Working memory cleared, keeping only last observation
+4. **Reset**: Short-term memory cleared, keeping only last observation
 
 **Example Test Pattern:**
 ```python
@@ -635,7 +635,7 @@ fixture.clear_short_term_memory()
 **Container State:**
 - Tests share the same KATO instance (module-scoped fixture)
 - Gene values persist across tests within a module
-- Working memory and models are shared
+- Short-term memory and models are shared
 
 **Safe Testing Pattern:**
 ```python

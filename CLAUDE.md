@@ -85,7 +85,7 @@ docker exec kato-api-$(whoami)-1 python3 -c "import socket; s = socket.socket();
 ```
 REST Client → REST Gateway (Port 8000) → ZMQ Server (Port 5555) → KATO Processor
                     ↓                           ↓                        ↓
-              HTTP to ZMQ              ROUTER/DEALER Pattern      Working Memory
+              HTTP to ZMQ              ROUTER/DEALER Pattern      Short-Term Memory
                                                                          ↓
                                                               Vector DB (Qdrant)
 ```
@@ -104,7 +104,7 @@ REST Client → REST Gateway (Port 8000) → ZMQ Server (Port 5555) → KATO Pro
 
 3. **KATO Processor** (`kato/workers/kato_processor.py`)
    - Core AI engine managing observations and predictions
-   - Maintains working memory and long-term memory
+   - Maintains short-term memory and long-term memory
    - Coordinates with vector database for similarity searches
    - Implements deterministic hashing for model identification
 
@@ -116,7 +116,7 @@ REST Client → REST Gateway (Port 8000) → ZMQ Server (Port 5555) → KATO Pro
 
 ### Memory Architecture
 
-- **Short-Term Memory (STM)**: Temporary storage for current observation sequences (formerly Working Memory)
+- **Short-Term Memory (STM)**: Temporary storage for current observation sequences
 - **Long-Term Memory**: Persistent storage with `MODEL|<sha1_hash>` patterns
 - **Vector Storage**: Modern Qdrant database with collection per processor
 - **Model Hashing**: SHA1-based deterministic model identification

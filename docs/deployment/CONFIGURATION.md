@@ -57,10 +57,10 @@ All parameters can be specified directly when starting KATO:
 When `max_sequence_length` is set to a value greater than 0, KATO automatically learns sequences when short-term memory reaches the threshold:
 
 **Behavior:**
-1. **Accumulation**: Working memory accumulates observations normally
+1. **Accumulation**: Short-term memory accumulates observations normally
 2. **Trigger**: When length reaches `max_sequence_length`, auto-learning activates  
 3. **Learning**: The entire short-term memory sequence is learned as a model
-4. **Reset**: Working memory is cleared, keeping only the last observation
+4. **Reset**: Short-term memory is cleared, keeping only the last observation
 5. **Continuation**: System continues processing with learned model available
 
 **Example:**

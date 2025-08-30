@@ -194,10 +194,10 @@ PROCESSOR_ID=p123 PROCESSOR_NAME=CustomProcessor ./kato-manager.sh start
 ### Role Separation
 **Claude Code's Responsibility**: 
 - **READ-ONLY** access to planning documentation for context
-- **TRIGGER** planning-maintainer agent for ALL documentation updates
+- **TRIGGER** project-manager agent for ALL documentation updates
 - **EXECUTE** development tasks (code, tests, configs)
 
-**Planning-Maintainer's Responsibility**:
+**Project-Manager's Responsibility**:
 - **EXCLUSIVE WRITE ACCESS** to all planning-docs/ files
 - Documentation archival and organization
 - Pattern tracking and velocity calculations
@@ -211,7 +211,7 @@ PROCESSOR_ID=p123 PROCESSOR_NAME=CustomProcessor ./kato-manager.sh start
 ### ✅ CORRECT WORKFLOW:
 1. **READ** planning docs to understand current state
 2. **EXECUTE** development tasks
-3. **TRIGGER** planning-maintainer with results for documentation updates
+3. **TRIGGER** project-manager with results for documentation updates
 
 **VIOLATION CONSEQUENCE**: Direct edits to planning-docs/ will create conflicts and break the documentation system.
 
@@ -220,8 +220,8 @@ PROCESSOR_ID=p123 PROCESSOR_NAME=CustomProcessor ./kato-manager.sh start
 2. The README will guide you to the most relevant documents for immediate context
 3. Only read additional documents when specifically needed for the current work
 
-### Trigger Planning-Maintainer When:
-Use the Task tool with subagent_type="planning-maintainer" when these events occur:
+### Trigger Project-Manager When:
+Use the Task tool with subagent_type="project-manager" when these events occur:
 - **Task Completion** → Agent will update SESSION_STATE, archive work, refresh backlogs
 - **New Tasks Created** → Agent will add to backlogs with time estimates
 - **Priority Changes** → Agent will reorder backlogs and update dependencies
@@ -246,13 +246,13 @@ Use the Task tool with subagent_type="planning-maintainer" when these events occ
    - `planning-docs/DECISIONS.md` → Historical architectural choices
    - `planning-docs/completed/` → Previous work for reference
 
-### How to Trigger the Planning-Maintainer:
+### How to Trigger the Project-Manager:
 ```
 Example: After completing a task
-assistant: "I've finished implementing the OAuth2 authentication feature. Let me trigger the planning-maintainer to update our documentation."
-<uses Task tool with subagent_type="planning-maintainer">
+assistant: "I've finished implementing the OAuth2 authentication feature. Let me trigger the project-manager to update our documentation."
+<uses Task tool with subagent_type="project-manager">
 
-The planning-maintainer will automatically:
+The project-manager will automatically:
 - Update SESSION_STATE.md progress
 - Archive the completed task
 - Refresh the backlogs
@@ -262,10 +262,10 @@ The planning-maintainer will automatically:
 
 ## Test Execution Protocol
 
-### ⚠️ CRITICAL RULE: USE test-executor-analyzer FOR ALL TESTING ⚠️
+### ⚠️ CRITICAL RULE: USE test-analyst FOR ALL TESTING ⚠️
 
-### When to Trigger test-executor-analyzer:
-Use the Task tool with subagent_type="test-executor-analyzer" when:
+### When to Trigger test-analyst:
+Use the Task tool with subagent_type="test-analyst" when:
 - **After Code Changes** → To verify functionality and catch regressions
 - **After Bug Fixes** → To confirm fixes work and don't break other tests
 - **After Feature Implementation** → To ensure comprehensive testing
@@ -285,15 +285,15 @@ Use the Task tool with subagent_type="test-executor-analyzer" when:
 ❌ WRONG: Bash("./kato-manager.sh test")
 ❌ WRONG: Bash("python -m pytest tests/")
 
-✅ RIGHT: Task tool with subagent_type="test-executor-analyzer"
+✅ RIGHT: Task tool with subagent_type="test-analyst"
 ```
 
 ### Example Usage:
 ```
-assistant: "I've completed the bug fix. Let me use the test-executor-analyzer to verify all tests pass."
-<uses Task tool with subagent_type="test-executor-analyzer">
+assistant: "I've completed the bug fix. Let me use the test-analyst to verify all tests pass."
+<uses Task tool with subagent_type="test-analyst">
 
-The test-executor-analyzer will:
+The test-analyst will:
 - Run all appropriate tests
 - Analyze test results and failures
 - Check code quality metrics
@@ -304,19 +304,19 @@ The test-executor-analyzer will:
 ## Agent Usage Summary
 
 ### Available Specialized Agents:
-1. **planning-maintainer**: ALL planning-docs/ updates and documentation
-2. **test-executor-analyzer**: ALL test execution and analysis  
+1. **project-manager**: ALL planning-docs/ updates and documentation
+2. **test-analyst**: ALL test execution and analysis  
 3. **general-purpose**: Complex multi-step research tasks
 4. **statusline-setup**: Configure Claude Code status line
 
 ### Quick Decision Tree:
-- Updating documentation? → planning-maintainer
-- Running tests? → test-executor-analyzer
+- Updating documentation? → project-manager
+- Running tests? → test-analyst
 - Complex research? → general-purpose
 - Everything else? → Do it directly
 
 ### Common Mistakes to Avoid:
-1. ❌ Editing planning-docs/ directly → ✅ Use planning-maintainer
-2. ❌ Running test-harness.sh directly → ✅ Use test-executor-analyzer
-3. ❌ Running pytest directly → ✅ Use test-executor-analyzer
-4. ❌ Running kato-manager.sh test → ✅ Use test-executor-analyzer
+1. ❌ Editing planning-docs/ directly → ✅ Use project-manager
+2. ❌ Running test-harness.sh directly → ✅ Use test-analyst
+3. ❌ Running pytest directly → ✅ Use test-analyst
+4. ❌ Running kato-manager.sh test → ✅ Use test-analyst

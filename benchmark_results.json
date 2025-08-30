@@ -1,0 +1,31 @@
+{
+  "timestamp": "2025-08-30 17:18:49",
+  "observe": {
+    "endpoint": "/observe",
+    "iterations": 100,
+    "avg_time_ms": 10.350463155191392,
+    "median_time_ms": 10.312460537534207,
+    "min_time_ms": 9.265110944397748,
+    "max_time_ms": 13.2647700374946,
+    "std_dev_ms": 0.5630072794901355
+  },
+  "predict": {
+    "endpoint": "/predict",
+    "iterations": 100,
+    "avg_time_ms": 4.4698062259703875,
+    "median_time_ms": 4.317730024922639,
+    "min_time_ms": 3.915891982614994,
+    "max_time_ms": 5.800620070658624,
+    "std_dev_ms": 0.40452240090698294
+  },
+  "learn": {
+    "endpoint": "/learn",
+    "iterations": 50,
+    "avg_time_ms": 13.8335538120009,
+    "median_time_ms": 11.090667452663183,
+    "min_time_ms": 8.167577907443047,
+    "max_time_ms": 151.68479608837515,
+    "std_dev_ms": 19.96280159242064
+  },
+  "overall_avg_ms": 9.551274397720894
+}

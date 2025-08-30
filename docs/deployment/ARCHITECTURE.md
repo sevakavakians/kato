@@ -376,7 +376,7 @@ Internal health check every 30s
 ### Production Setup
 ```bash
 ./kato-manager.sh start \
-  --classifier DVC \
+  --indexer-type VI \
   --max-predictions 200 \
   --persistence 10 \
   --api-key $SECRET_KEY

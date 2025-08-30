@@ -35,11 +35,11 @@ REQ → LLM → Structured Ontology → KATO → Prediction Ensemble → Decisio
 
 2. **Multi-Modal Processing**
    - String symbol processing with alphanumeric sorting
-   - Vector processing through classifiers (CVC/DVC)
+   - Vector processing through vector indexer (VI)
    - Emotives tracking and aggregation
 
 3. **Memory Architecture**
-   - Working memory for current sequences
+   - Short-term memory (STM) for current sequences
    - Long-term memory for learned patterns
    - Auto-learning at sequence limits
 

@@ -140,12 +140,12 @@ REST Client → REST Gateway (Port 8000) → ZMQ Server (Port 5555) → KATO Pro
 
 ## Testing Strategy
 
-The codebase has 128 tests with 100% pass rate and 0 warnings. Tests are organized under `tests/tests/`:
+The codebase has comprehensive test coverage with 334 test functions across 109 test files. Tests are organized under `tests/tests/`:
 
-1. **Unit Tests** (`tests/tests/unit/`): 83 tests for individual components
-2. **Integration Tests** (`tests/tests/integration/`): 19 tests for end-to-end workflows
-3. **API Tests** (`tests/tests/api/`): 21 tests for REST endpoints
-4. **Performance Tests** (`tests/tests/performance/`): 5 stress and performance tests
+1. **Unit Tests** (`tests/tests/unit/`): Test individual components
+2. **Integration Tests** (`tests/tests/integration/`): Test end-to-end workflows
+3. **API Tests** (`tests/tests/api/`): Test REST endpoints
+4. **Performance Tests** (`tests/tests/performance/`): Stress and performance tests
 
 Use existing fixtures from `tests/tests/fixtures/kato_fixtures.py` for consistency.
 

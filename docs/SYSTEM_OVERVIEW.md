@@ -62,7 +62,7 @@ observation = {
 1. **Alphanumeric Sorting**: Strings within each event are automatically sorted
 2. **Event Preservation**: The order of events in a sequence is maintained
 3. **Empty Filtering**: Empty observations are completely ignored
-4. **Vector Processing**: Vectors are processed through classifiers (CVC/DVC)
+4. **Vector Processing**: Vectors are processed through the vector indexer (VI)
 
 #### Example Processing
 ```python

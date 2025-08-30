@@ -262,7 +262,7 @@ The easiest way to deploy multiple instances:
 ```bash
 # Start multiple instances with different configurations
 ./kato-manager.sh start --id sentiment --name "Sentiment Analysis" --port 8001
-./kato-manager.sh start --id classifier --name "Text Classifier" --port 8002 --classifier DVC
+./kato-manager.sh start --id classifier --name "Text Classifier" --port 8002 --indexer-type VI
 ./kato-manager.sh start --id learner --name "Sequence Learner" --port 8003 --max-seq-length 10
 
 # View all instances
@@ -313,7 +313,7 @@ services:
     environment:
       - PROCESSOR_ID=classifier
       - PROCESSOR_NAME=Classifier
-      - CLASSIFIER=DVC
+      - INDEXER_TYPE=VI
       - MONGO_BASE_URL=mongodb://mongodb:27017
     networks:
       - kato-network

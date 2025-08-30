@@ -69,7 +69,7 @@ MessagePack:
 #### For Speed
 ```bash
 ./kato-manager.sh start \
-  --classifier CVC \
+  --indexer-type VI \
   --max-predictions 20 \
   --recall-threshold 0.3 \
   --max-seq-length 100
@@ -78,7 +78,7 @@ MessagePack:
 #### For Accuracy
 ```bash
 ./kato-manager.sh start \
-  --classifier DVC \
+  --indexer-type VI \
   --max-predictions 500 \
   --recall-threshold 0.01 \
   --update-frequencies
@@ -269,19 +269,19 @@ stats.print_stats(10)
 
 ### CPU Optimization Strategies
 
-1. **Use CVC for Speed**
-   - Faster than DVC
-   - Lower CPU usage
-   - Suitable for most cases
+1. **Use VI Indexer (Optimized)**
+   - High performance vector indexing
+   - Efficient CPU usage
+   - Suitable for all use cases
 
-2. **Limit Search Depth**
+2. **Limit Max Predictions**
 ```bash
 --max-predictions 50  # Reduce from default 100
 ```
 
-3. **Reduce Max Predictions**
+3. **Increase Recall Threshold**
 ```bash
---max-predictions 20  # Reduce from default 100
+--recall-threshold 0.5  # Filter more aggressively
 ```
 
 ## Network Optimization
@@ -481,7 +481,7 @@ Testing with 10,000 learned models, observing 10-element sequence:
 ## Performance Tuning Checklist
 
 ### Initial Setup
-- [ ] Choose appropriate classifier (CVC vs DVC)
+- [ ] Configure VI indexer for vector processing
 - [ ] Set reasonable max_predictions limit
 - [ ] Configure appropriate recall_threshold (see Performance Impact section)
 - [ ] Set max_sequence_length if needed

@@ -4,11 +4,11 @@
 
 The KATO test suite provides comprehensive testing coverage for all aspects of the KATO system, including unit tests, integration tests, and API endpoint tests. The suite is designed to validate KATO's deterministic behavior, memory management, sequence learning, and unique features like alphanumeric sorting, deterministic hashing, and sophisticated temporal prediction segmentation.
 
-**Current Coverage**: 128 tests total (100% passing)
-- 83 unit tests
-- 19 integration tests  
-- 21 API tests
-- 5 performance/stress tests
+**Current Coverage**: 334 test functions across 109 test files
+- Unit tests: tests/tests/unit/
+- Integration tests: tests/tests/integration/
+- API tests: tests/tests/api/
+- Performance tests: tests/tests/performance/
 - Execution time: ~45 seconds
 
 ## Test Structure

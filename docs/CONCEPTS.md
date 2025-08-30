@@ -88,7 +88,7 @@ observe({'strings': ['z']})
 observe({'strings': ['a']})  
 observe({'strings': ['m']})
 
-# Working memory maintains event order
+# Short-term memory maintains event order
 [['z'], ['a'], ['m']]  # Order preserved, no sorting between events
 ```
 
@@ -119,7 +119,7 @@ observe({'strings': [], 'vectors': [], 'emotives': {}})
 observe({'strings': ['first']})
 observe({'strings': []})         # Ignored
 observe({'strings': ['second']})
-# Working memory: [['first'], ['second']]
+# Short-term memory: [['first'], ['second']]
 ```
 
 ## Memory Architecture

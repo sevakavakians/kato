@@ -54,8 +54,8 @@ KATO operates as a distributed system with the following key characteristics:
 │  │  │                     ┌──────────────────────────────────▼────────┐  │ │  │
 │  │  │                     │         KATO Processor Core              │  │ │  │
 │  │  │                     │  ┌──────────────┐  ┌──────────────┐     │  │ │  │
-│  │  │                     │  │  Classifier  │  │   Modeler    │     │  │ │  │
-│  │  │                     │  │    (CVC)     │  │              │     │  │ │  │
+│  │  │                     │  │    Vector    │  │   Modeler    │     │  │ │  │
+│  │  │                     │  │  Indexer(VI) │  │              │     │  │ │  │
 │  │  │                     │  └──────┬───────┘  └──────┬───────┘     │  │ │  │
 │  │  │                     │         │                 │              │  │ │  │
 │  │  │                     │  ┌──────▼─────────────────▼────────┐     │  │ │  │
@@ -152,7 +152,7 @@ KATO operates as a distributed system with the following key characteristics:
 │   ┌──────────────────────────────────────────┐                              │
 │   │          Processing Stage                 │                              │
 │   │  - Sort strings alphanumerically          │                              │
-│   │  - Convert vectors to symbols (CVC)       │                              │
+│   │  - Convert vectors to symbols (VI)        │                              │
 │   │  - Average emotives across pathways       │                              │
 │   └──────────────┬───────────────────────────┘                              │
 │                  │                                                            │
@@ -351,7 +351,7 @@ The system uses ZeroMQ with DEALER/ROUTER pattern for:
 
 2. **Vector Processing**:
    - 768-dimension validation
-   - CVC classification
+   - VI indexing
    - Symbol conversion
 
 3. **Emotive Processing**:
@@ -487,7 +487,7 @@ QDRANT_PORT=6333                   # Qdrant port
 # Processor Configuration
 PROCESSOR_ID=kato-123              # Unique processor ID
 PROCESSOR_NAME=KatoProcessor       # Processor name
-CLASSIFIER=CVC                     # Classification method
+INDEXER_TYPE=VI                    # Vector indexing method
 ```
 
 ### Docker Commands

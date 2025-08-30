@@ -15,7 +15,7 @@ When you complete a task:
 ```
 assistant: "I've finished implementing the OAuth2 authentication feature. Let me update the planning documentation."
 
-<uses Task tool with subagent_type="planning-maintainer">
+<uses Task tool with subagent_type="project-manager">
 prompt: "Update planning docs: OAuth2 authentication complete. Added endpoints, middleware, and tests. All tests passing."
 ```
 
@@ -24,7 +24,7 @@ When blocked:
 ```
 assistant: "I'm blocked on the database migration - schema conflicts with existing user table. Let me document this."
 
-<uses Task tool with subagent_type="planning-maintainer">
+<uses Task tool with subagent_type="project-manager">
 prompt: "Blocker encountered: Database migration blocked by schema conflicts in user table. Need to resolve before continuing."
 ```
 
@@ -33,7 +33,7 @@ When making technical decisions:
 ```
 assistant: "I've decided to use Redis for caching instead of Memcached. Let me document this decision."
 
-<uses Task tool with subagent_type="planning-maintainer">
+<uses Task tool with subagent_type="project-manager">
 prompt: "Architectural decision: Using Redis for caching. Reasons: Better data structure support, persistence options, and existing integration."
 ```
 
@@ -45,7 +45,7 @@ prompt: "Architectural decision: Using Redis for caching. Reasons: Better data s
 3. Start working on highest priority task
 
 ### During Work
-- SESSION_STATE.md auto-updates via planning-maintainer
+- SESSION_STATE.md auto-updates via project-manager
 - Check progress periodically
 - Review blockers if any appear
 
@@ -80,7 +80,7 @@ Day 3: Testing and polish
 2. Reproduce issue
 3. Implement fix
 4. Verify with tests
-5. Trigger planning-maintainer to update
+5. Trigger project-manager to update
 ```
 
 ### Scenario 3: Refactoring
@@ -109,7 +109,7 @@ vim kato/workers/new_feature.py
 ./kato-manager.sh test
 
 # 5. Update planning docs
-# Trigger planning-maintainer to document completion
+# Trigger project-manager to document completion
 ```
 
 ### Performance Optimization
@@ -142,20 +142,20 @@ vim kato/workers/kato_processor.py
 ./kato-manager.sh build
 
 # 5. Update planning docs
-# Trigger planning-maintainer
+# Trigger project-manager
 ```
 
 ## Tips and Best Practices
 
 ### DO:
-- ✅ Trigger planning-maintainer after completing tasks
+- ✅ Trigger project-manager after completing tasks
 - ✅ Read SESSION_STATE.md at start of each session
 - ✅ Document blockers immediately when encountered
 - ✅ Update estimates based on actual time taken
 - ✅ Archive completed work regularly
 
 ### DON'T:
-- ❌ Edit planning-docs files directly (use planning-maintainer)
+- ❌ Edit planning-docs files directly (use project-manager)
 - ❌ Skip documentation for "small" changes
 - ❌ Leave tasks in "in_progress" indefinitely
 - ❌ Ignore time estimates when planning
@@ -186,7 +186,7 @@ ls -la planning-docs/sessions/
 ## Troubleshooting
 
 ### Issue: Planning docs out of sync
-**Solution**: Trigger planning-maintainer with current state
+**Solution**: Trigger project-manager with current state
 
 ### Issue: Not sure what to work on
 **Solution**: Check DAILY_BACKLOG.md, then SPRINT_BACKLOG.md
@@ -198,7 +198,7 @@ ls -la planning-docs/sessions/
 **Solution**: Check DECISIONS.md for rationale
 
 ### Issue: Task taking longer than expected
-**Solution**: Update via planning-maintainer, it will adjust estimates
+**Solution**: Update via project-manager, it will adjust estimates
 
 ---
 

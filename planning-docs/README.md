@@ -52,7 +52,7 @@ git status
 
 ## Automated Maintenance
 
-The **planning-maintainer** agent automatically updates documentation when:
+The **project-manager** agent automatically updates documentation when:
 - Tasks are completed
 - New tasks are added
 - Blockers are identified
@@ -90,7 +90,7 @@ planning-docs/
 ├── DECISIONS.md          # Decision log
 ├── sessions/             # Session logs
 ├── completed/            # Archived work
-└── planning-maintainer/  # Agent workspace
+└── project-manager/  # Agent workspace
 ```
 
 ## For Humans: Using This System
@@ -105,7 +105,7 @@ planning-docs/
 
 1. **Every Session Start**: Read this README → SESSION_STATE → DAILY_BACKLOG
 2. **During Work**: Update SESSION_STATE.md every 30 minutes
-3. **Task Completion**: Trigger planning-maintainer
+3. **Task Completion**: Trigger project-manager
 4. **Context Switch**: Archive current work, update state
 5. **Decision Made**: Log in DECISIONS.md with rationale
 

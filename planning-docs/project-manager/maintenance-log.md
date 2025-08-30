@@ -1,7 +1,7 @@
 # Maintenance Log
 
 ## Purpose
-Track all automated maintenance actions performed by the planning-maintainer agent.
+Track all automated maintenance actions performed by the project-manager agent.
 
 ## Format
 ```
@@ -42,4 +42,4 @@ Track all automated maintenance actions performed by the planning-maintainer age
 
 ---
 
-*Entries will be automatically added by the planning-maintainer agent*
+*Entries will be automatically added by the project-manager agent*

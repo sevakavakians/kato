@@ -82,4 +82,4 @@ Performance improvements and efficiency gains
 
 ---
 
-*Completed items are automatically archived here by the planning-maintainer agent*
+*Completed items are automatically archived here by the project-manager agent*

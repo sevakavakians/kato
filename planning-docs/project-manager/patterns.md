@@ -65,4 +65,4 @@ Track recurring patterns in development workflow to improve estimates and effici
 
 ---
 
-*This file is automatically updated by the planning-maintainer agent as patterns emerge*
+*This file is automatically updated by the project-manager agent as patterns emerge*

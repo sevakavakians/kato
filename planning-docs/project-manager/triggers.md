@@ -1,7 +1,7 @@
 # Trigger Event Log
 
 ## Purpose
-Track all events that trigger planning-maintainer actions for debugging and optimization.
+Track all events that trigger project-manager actions for debugging and optimization.
 
 ## Format
 ```
@@ -18,7 +18,7 @@ Track all events that trigger planning-maintainer actions for debugging and opti
 
 ---
 
-*Events will be automatically logged by the planning-maintainer agent*
+*Events will be automatically logged by the project-manager agent*
 
 ## Event Type Reference
 

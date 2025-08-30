@@ -25,4 +25,4 @@ Track issues and updates that require human intervention or review.
 
 ---
 
-*This file is automatically maintained by the planning-maintainer agent*
+*This file is automatically maintained by the project-manager agent*

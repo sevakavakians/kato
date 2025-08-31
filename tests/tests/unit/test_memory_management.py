@@ -267,8 +267,8 @@ def test_memory_with_vectors(kato_fixture):
     # Should successfully learn since we have 2+ symbols
     assert model_name is not None, "Should learn model from vector observations"
     assert 'MODEL|' in model_name, "Learned model should have MODEL| prefix"
-            # Short-term memory should be cleared after learning
-            assert kato_fixture.get_short_term_memory() == []
+    # Short-term memory should be cleared after learning
+    assert kato_fixture.get_short_term_memory() == []
 
 
 def test_interleaved_memory_operations(kato_fixture):

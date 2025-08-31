@@ -13,7 +13,6 @@ import time
 from threading import Thread
 
 from kato.workers.kato_processor import KatoProcessor
-from kato.workers.zmq_server import ZMQServer
 from kato.workers.rest_gateway import RestGateway
 from kato.workers.zmq_switcher import get_zmq_server
 

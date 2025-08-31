@@ -32,7 +32,7 @@ def get_zmq_server(primitive, port=5555):
         ImprovedZMQServer instance
     """
     logger.info("Using improved ZMQ server (DEALER/ROUTER pattern)")
-    from kato.workers.zmq_server_improved import ImprovedZMQServer
+    from kato.workers.zmq_server import ImprovedZMQServer
     return ImprovedZMQServer(primitive, port)
 
 

@@ -261,7 +261,7 @@ KATO operates as a distributed system with the following key characteristics:
 - Maintains backward compatibility with tests
 - Endpoints: `/observe`, `/predict`, `/learn`, `/ping`
 
-### 3. ZMQ Server (`kato/workers/zmq_server_improved.py`)
+### 3. ZMQ Server (`kato/workers/zmq_server.py`)
 **Status: REQUIRED**
 - High-performance message queue server
 - Uses DEALER/ROUTER pattern for non-blocking communication

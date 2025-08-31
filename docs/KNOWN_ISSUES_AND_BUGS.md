@@ -1,35 +1,42 @@
 # Known Issues and Bugs
 
-Last Updated: 2025-08-27
+Last Updated: 2025-08-31
 
 ## Critical Issues 🔴
 *None at this time*
 
 ## High Priority Issues 🟠
 
-### 1. NumPy Import Conflicts on Host System
+### 1. Test Suite Failures - Recall Threshold and Sequence Handling
 **Status**: Active  
-**Severity**: High (affects local development)  
-**Location**: Various files using numpy
+**Severity**: High (blocks Phase 2 development)  
+**Location**: Unit tests
 
 **Description**: 
-- Host system has numpy import issues (namespace package conflict)
-- Affects running tests directly on macOS host
-- Docker container runs fine with proper numpy
+- 13 tests currently failing (~93% pass rate: 179/193)
+- Failures primarily in recall threshold edge cases and comprehensive sequences
+- Affects confidence in system stability
 
-**Workaround**:
-- Created fallback imports in affected files
-- Tests run successfully despite import warnings
+**Failed Tests**:
+- 7 tests in `test_comprehensive_sequences.py` (long sequences, cyclic patterns)
+- 3 tests in `test_recall_threshold_*` files (edge cases, threshold values)
+- 1 test in `test_memory_management.py` (vector handling)
+- 1 test in `test_prediction_fields.py` (past field validation)
 
-**Files Affected**:
-- `kato/representations/vector_object.py`
-- `kato/searches/vector_searches.py`
-- `kato/storage/vector_store_interface.py`
-- `kato/storage/mongodb_vector_store.py`
+**Root Causes**:
+- Recall threshold implementation edge cases
+- Long sequence handling discrepancies
+- Possible issues with recent threshold propagation changes
 
-**Permanent Fix Needed**: 
-- Investigate numpy installation on host system
-- Consider using virtual environment for local testing
+**Impact**:
+- Cannot claim 100% test coverage
+- Potential edge case bugs in production
+- Blocks Phase 2 API development
+
+**Next Steps**:
+- Investigate each failing test
+- Fix recall threshold edge cases
+- Validate comprehensive sequence handling
 
 ---
 
@@ -55,7 +62,29 @@ Last Updated: 2025-08-27
 
 ## Medium Priority Issues 🟡
 
-### 3. Redis Cache Service Port Conflict
+### 3. Recall Threshold Edge Cases
+**Status**: Active  
+**Severity**: Medium  
+**Location**: `kato/searches/model_search.py`
+
+**Description**:
+- Recent changes to threshold handling causing test failures
+- Threshold 0.0 should return all models but implementation incomplete
+- Missing symbols detection not working correctly
+
+**Symptoms**:
+- `test_threshold_zero_no_filtering` failing
+- `test_threshold_with_missing_symbols` failing
+- Inconsistent similarity scoring
+
+**Fix Needed**:
+- Review threshold propagation logic
+- Ensure 0.0 threshold returns all models
+- Validate missing/extras symbol detection
+
+---
+
+### 4. Redis Cache Service Port Conflict
 **Status**: Active  
 **Severity**: Low  
 **Location**: Docker Compose configuration
@@ -80,7 +109,7 @@ Bind for 0.0.0.0:6379 failed: port is already allocated
 
 ---
 
-### 4. Qdrant Configuration Warnings
+### 5. Qdrant Configuration Warnings
 **Status**: Resolved (workaround in place)  
 **Severity**: Low  
 **Location**: `config/qdrant_config.yaml`
@@ -97,7 +126,7 @@ Bind for 0.0.0.0:6379 failed: port is already allocated
 
 ## Low Priority Issues 🟢
 
-### 5. Docker Compose Version Warning
+### 6. Docker Compose Version Warning
 **Status**: Active  
 **Severity**: Minimal  
 **Location**: `docker-compose.vectordb.yml`
@@ -113,7 +142,7 @@ the attribute `version` is obsolete, it will be ignored
 
 ---
 
-### 6. Test Directory Structure Confusion
+### 7. Test Directory Structure Confusion
 **Status**: Active  
 **Severity**: Low  
 **Location**: Test execution
@@ -130,7 +159,7 @@ the attribute `version` is obsolete, it will be ignored
 
 ## Performance Considerations 📊
 
-### 7. Vector Accuracy in Predictions
+### 8. Vector Accuracy in Predictions
 **Status**: Monitoring  
 **Severity**: Low  
 
@@ -147,7 +176,7 @@ the attribute `version` is obsolete, it will be ignored
 
 ## Feature Requests / Enhancements 💡
 
-### 8. GPU Acceleration Not Yet Enabled
+### 9. GPU Acceleration Not Yet Enabled
 **Status**: Future Enhancement  
 **Priority**: Low  
 
@@ -162,7 +191,7 @@ the attribute `version` is obsolete, it will be ignored
 
 ---
 
-### 9. Additional Vector Database Backends
+### 10. Additional Vector Database Backends
 **Status**: Planned  
 **Priority**: Low  
 
@@ -179,7 +208,7 @@ the attribute `version` is obsolete, it will be ignored
 
 ## Testing Gaps 🧪
 
-### 10. Missing Integration Tests
+### 11. Missing Integration Tests
 **Status**: Needs Attention  
 **Priority**: Medium  
 
@@ -193,7 +222,7 @@ the attribute `version` is obsolete, it will be ignored
 
 ## Documentation Gaps 📚
 
-### 11. API Documentation for Vector Operations
+### 12. API Documentation for Vector Operations
 **Status**: Needs Update  
 **Priority**: Medium  
 
@@ -241,8 +270,9 @@ the attribute `version` is obsolete, it will be ignored
 
 ## Next Sprint Priorities
 
-1. Fix numpy import issues properly
+1. Fix remaining 13 test failures (recall threshold and sequences)
 2. Update vector accuracy test logic
-3. Resolve Redis port conflicts
-4. Add missing integration tests
-5. Complete API documentation
+3. Complete recall threshold edge case fixes
+4. Resolve Redis port conflicts
+5. Add missing integration tests
+6. Complete API documentation

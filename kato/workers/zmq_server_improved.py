@@ -480,6 +480,11 @@ class ImprovedZMQServer:
                     setattr(self.primitive.modeler, gene_name, gene_value)
                     logger.info(f"Updated modeler.{gene_name}: {old_value} -> {gene_value}")
                     
+                    # Special handling for recall_threshold - also update in models_searcher
+                    if gene_name == 'recall_threshold' and hasattr(self.primitive.modeler, 'models_searcher'):
+                        self.primitive.modeler.models_searcher.recall_threshold = gene_value
+                        logger.info(f"Also updated models_searcher.recall_threshold to {gene_value}")
+                    
                     # Also update genome_manifest for consistency
                     if hasattr(self.primitive, 'genome_manifest'):
                         self.primitive.genome_manifest[gene_name] = gene_value

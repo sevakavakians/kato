@@ -300,13 +300,15 @@ The test-analyst agent MUST:
 2. **ALWAYS run actual tests** - NEVER use cached or simulated results:
    - Must execute `./test-harness.sh test` or similar commands
    - Must wait for actual test completion
-   - Must capture real stdout/stderr output
+   - Test output is saved to `logs/test-runs/` to prevent memory issues
    - NEVER return results without actual execution
 
-3. **Provide execution evidence**:
-   - Include actual command output snippets
-   - Show real test counts and timings
-   - Include container logs if relevant
+3. **Read test results from log files** (NEW APPROACH):
+   - **Primary**: Read `logs/test-runs/latest/summary.txt` for quick overview
+   - **Errors**: Check `logs/test-runs/latest/errors.log` for failure details
+   - **Full output**: Only read `logs/test-runs/latest/output.log` if debugging
+   - Use `tail -n 1000` to read portions of large files
+   - Report file paths where full logs are saved
 
 4. **AUTOMATICALLY FIX TEST INFRASTRUCTURE ISSUES**:
    The test-analyst has FULL AUTHORITY to fix operational problems that prevent tests from running:
@@ -355,12 +357,12 @@ The test-analyst MUST:
    - Fix it automatically (edit files, fix permissions, etc.)
    - Document the fix
    - Retry test execution
-5. Once tests are running:
-   - Capture and report real results
-   - Analyze test results and failures
-   - Check code quality metrics
-   - Examine container logs if needed
-   - Produce detailed test documentation
+5. Once tests complete:
+   - Read results from `logs/test-runs/latest/summary.txt`
+   - Check errors in `logs/test-runs/latest/errors.log`
+   - Only read full output if specifically debugging issues
+   - Report summary with file paths to full logs
+   - Analyze patterns and provide recommendations
 ```
 
 ## Agent Usage Summary

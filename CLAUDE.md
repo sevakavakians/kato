@@ -290,17 +290,77 @@ Use the Task tool with subagent_type="test-analyst" when:
 ✅ RIGHT: Task tool with subagent_type="test-analyst"
 ```
 
+### ⚠️ MANDATORY test-analyst REQUIREMENTS:
+The test-analyst agent MUST:
+1. **ALWAYS rebuild the test harness** if any test files have changed:
+   - Check `git diff tests/` to detect test changes
+   - Run `./test-harness.sh rebuild` if changes detected
+   - NEVER skip rebuild when tests are modified
+
+2. **ALWAYS run actual tests** - NEVER use cached or simulated results:
+   - Must execute `./test-harness.sh test` or similar commands
+   - Must wait for actual test completion
+   - Must capture real stdout/stderr output
+   - NEVER return results without actual execution
+
+3. **Provide execution evidence**:
+   - Include actual command output snippets
+   - Show real test counts and timings
+   - Include container logs if relevant
+
+4. **AUTOMATICALLY FIX TEST INFRASTRUCTURE ISSUES**:
+   The test-analyst has FULL AUTHORITY to fix operational problems that prevent tests from running:
+   
+   **Issues to Auto-Fix:**
+   - Python syntax errors in test files (indentation, imports, etc.)
+   - Missing or broken test fixtures
+   - Test harness script errors (test-harness.sh, kato-manager.sh)
+   - Docker container build failures
+   - Missing dependencies in requirements-test.txt
+   - Pytest configuration issues (pytest.ini, conftest.py)
+   - Path or import errors in test files
+   - File permission issues on test scripts
+   
+   **Auto-Fix Protocol:**
+   1. If test execution fails before tests can run:
+      - Diagnose the root cause (syntax error, missing file, etc.)
+      - Fix the issue directly (edit files, add dependencies, fix permissions)
+      - Document what was fixed and why
+      - Retry test execution
+      - Continue until tests can actually run
+   
+   **DO NOT Auto-Fix:**
+   - Actual test logic or assertions (these are intentional)
+   - KATO source code (only test infrastructure)
+   - Test expectations that reflect actual KATO behavior
+   
+   **Example Auto-Fix Scenarios:**
+   - `IndentationError` → Fix indentation in test file
+   - `ModuleNotFoundError` → Add missing import or install dependency
+   - `Permission denied` → chmod +x on script files
+   - `Docker build failed` → Fix Dockerfile.test or dependencies
+   - `pytest collection error` → Fix syntax or import issues
+
 ### Example Usage:
 ```
 assistant: "I've completed the bug fix. Let me use the test-analyst to verify all tests pass."
 <uses Task tool with subagent_type="test-analyst">
 
-The test-analyst will:
-- Run all appropriate tests
-- Analyze test results and failures
-- Check code quality metrics
-- Examine container logs if needed
-- Produce detailed test documentation
+The test-analyst MUST:
+1. Check for test changes: git diff tests/
+2. Rebuild if needed: ./test-harness.sh rebuild
+3. Attempt to run tests: ./test-harness.sh test
+4. IF tests fail to start/collect:
+   - Diagnose the infrastructure issue
+   - Fix it automatically (edit files, fix permissions, etc.)
+   - Document the fix
+   - Retry test execution
+5. Once tests are running:
+   - Capture and report real results
+   - Analyze test results and failures
+   - Check code quality metrics
+   - Examine container logs if needed
+   - Produce detailed test documentation
 ```
 
 ## Agent Usage Summary

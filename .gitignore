@@ -25,6 +25,10 @@ venv/
 ENV/
 env/
 .venv
+kato_venv/
+tests/venv/
+tests/tests/venv/
+**/venv/
 
 # IDE
 .vscode/

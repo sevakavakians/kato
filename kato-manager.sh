@@ -1276,7 +1276,8 @@ main() {
             show_logs "$1" "$2"
             ;;
         "build")
-            build_image
+            # Force rebuild when explicitly requested
+            build_image "true"
             ;;
         "clean")
             cleanup

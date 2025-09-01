@@ -335,10 +335,15 @@ Use the Task tool with subagent_type="test-analyst" when:
 
 ### ⚠️ MANDATORY test-analyst REQUIREMENTS:
 The test-analyst agent MUST:
-1. **ALWAYS rebuild the test harness** if any test files have changed:
-   - Check `git diff tests/` to detect test changes
-   - Run `./test-harness.sh rebuild` if changes detected
-   - NEVER skip rebuild when tests are modified
+1. **ALWAYS check for code changes and rebuild containers when needed**:
+   - Check `git diff` to detect ANY code changes (*.py, *.sh, Dockerfile*, requirements*.txt, etc.)
+   - Check file modification times against container build times
+   - Run `./check-rebuild-needed.sh` to verify containers are current
+   - If ANY source files changed: rebuild BOTH containers:
+     - `./kato-manager.sh build` for KATO image
+     - `./test-harness.sh build` for test harness
+   - NEVER skip rebuild when ANY code files are modified
+   - Verify rebuild completed successfully before proceeding
 
 2. **ALWAYS run actual tests** - NEVER use cached or simulated results:
    - Must execute `./test-harness.sh test` or similar commands
@@ -392,9 +397,12 @@ assistant: "I've completed the bug fix. Let me use the test-analyst to verify al
 <uses Task tool with subagent_type="test-analyst">
 
 The test-analyst MUST:
-1. Check for test changes: git diff tests/
-2. Rebuild if needed: ./test-harness.sh rebuild
-3. Attempt to run tests: ./test-harness.sh test
+1. Check for ANY code changes: git diff
+2. Run rebuild check: ./check-rebuild-needed.sh
+3. Rebuild containers if needed:
+   - ./kato-manager.sh build (if KATO source changed)
+   - ./test-harness.sh build (if test files changed)
+4. Attempt to run tests: ./test-harness.sh test
 4. IF tests fail to start/collect:
    - Diagnose the infrastructure issue
    - Fix it automatically (edit files, fix permissions, etc.)

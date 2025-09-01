@@ -15,12 +15,15 @@ DOCKER_NETWORK="kato-network"
 KATO_MANAGER="${SCRIPT_DIR}/kato-manager.sh"
 TEST_OUTPUT_DIR="${SCRIPT_DIR}/logs/test-runs"
 MAX_OUTPUT_LINES=50000  # Maximum lines to keep in output file
+REBUILD_CHECK_SCRIPT="${SCRIPT_DIR}/check-rebuild-needed.sh"
 
 # Service management flags (can be overridden by command line)
 START_SERVICES=${START_SERVICES:-true}
 STOP_SERVICES=${STOP_SERVICES:-true}
 VERBOSE_OUTPUT=${VERBOSE_OUTPUT:-false}
 NO_REDIRECT=${NO_REDIRECT:-false}
+AUTO_REBUILD=${AUTO_REBUILD:-true}
+FORCE_REBUILD=${FORCE_REBUILD:-false}
 
 # Colors for output
 RED='\033[0;31m'
@@ -129,6 +132,62 @@ build_test_harness() {
     log_success "Test harness built successfully"
 }
 
+# Function to check and rebuild if needed
+check_and_rebuild() {
+    local force_rebuild="${1:-false}"
+    
+    if [[ "$force_rebuild" == "true" ]]; then
+        log_warning "Force rebuild requested"
+        log_info "Rebuilding KATO image..."
+        "$KATO_MANAGER" build || {
+            log_error "Failed to rebuild KATO image"
+            return 1
+        }
+        log_info "Rebuilding test harness..."
+        build_test_harness || {
+            log_error "Failed to rebuild test harness"
+            return 1
+        }
+        return 0
+    fi
+    
+    if [[ "$AUTO_REBUILD" != "true" ]]; then
+        log_info "Auto-rebuild disabled, skipping rebuild check"
+        return 0
+    fi
+    
+    # Check if rebuild check script exists
+    if [[ ! -x "$REBUILD_CHECK_SCRIPT" ]]; then
+        log_warning "Rebuild check script not found or not executable: $REBUILD_CHECK_SCRIPT"
+        log_warning "Skipping automatic rebuild check"
+        return 0
+    fi
+    
+    log_info "Checking if containers need rebuilding..."
+    
+    # Check KATO image
+    if "$REBUILD_CHECK_SCRIPT" kato; then
+        log_warning "KATO image needs rebuilding"
+        log_info "Rebuilding KATO image..."
+        "$KATO_MANAGER" build || {
+            log_error "Failed to rebuild KATO image"
+            return 1
+        }
+    fi
+    
+    # Check test harness image
+    if "$REBUILD_CHECK_SCRIPT" test-harness; then
+        log_warning "Test harness needs rebuilding"
+        log_info "Rebuilding test harness..."
+        build_test_harness || {
+            log_error "Failed to rebuild test harness"
+            return 1
+        }
+    fi
+    
+    return 0
+}
+
 # Function to generate test summary from output
 generate_test_summary() {
     local output_file="$1"
@@ -218,6 +277,12 @@ run_tests() {
     local test_path="${1:-tests/}"
     shift || true
     local extra_args="$*"
+    
+    # Check and rebuild containers if needed
+    check_and_rebuild "$FORCE_REBUILD" || {
+        log_error "Failed to ensure containers are up to date"
+        exit 1
+    }
     
     # Check if we should bypass redirection entirely
     if [[ "$NO_REDIRECT" == "true" ]]; then
@@ -389,6 +454,12 @@ run_tests_direct() {
     local test_path="${1:-tests/}"
     shift || true
     local extra_args="$*"
+    
+    # Check and rebuild containers if needed
+    check_and_rebuild "$FORCE_REBUILD" || {
+        log_error "Failed to ensure containers are up to date"
+        exit 1
+    }
     
     log_info "Running tests with direct console output..."
     log_info "Test path: $test_path"
@@ -674,6 +745,8 @@ print_usage() {
     echo "  --standalone    Run only standalone tests (no KATO required)"
     echo "  --verbose       Show full test output in terminal (while still saving to file)"
     echo "  --no-redirect   Show output directly in terminal (no file redirection)"
+    echo "  --no-rebuild    Disable automatic rebuild detection"
+    echo "  --force-rebuild Force rebuild of all containers before tests"
     echo ""
     echo "Output Control:"
     echo "  Default:        Saves to file, shows progress in terminal"
@@ -723,6 +796,14 @@ while [[ $# -gt 0 ]]; do
             NO_REDIRECT=true
             shift
             ;;
+        --no-rebuild)
+            AUTO_REBUILD=false
+            shift
+            ;;
+        --force-rebuild)
+            FORCE_REBUILD=true
+            shift
+            ;;
         --*)
             # Unknown option, break and let command handler deal with it
             break
@@ -737,7 +818,11 @@ done
 # Parse command
 case "${1:-help}" in
     build)
-        build_test_harness
+        FORCE_REBUILD=true
+        check_and_rebuild "true" || {
+            log_error "Build failed"
+            exit 1
+        }
         ;;
     test)
         shift
@@ -767,7 +852,8 @@ case "${1:-help}" in
         ;;
     rebuild)
         cleanup
-        build_test_harness
+        FORCE_REBUILD=true
+        check_and_rebuild "true"
         ;;
     start-services)
         start_kato_services

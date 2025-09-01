@@ -13,13 +13,8 @@ from operator import itemgetter
 from queue import Queue
 from typing import List, Dict, Any, Optional, Tuple
 
-# Make MongoDB optional
-try:
-    from pymongo import MongoClient
-    MONGODB_AVAILABLE = True
-except ImportError:
-    MONGODB_AVAILABLE = False
-    MongoClient = None
+# MongoDB is required for KATO
+from pymongo import MongoClient
 
 # Import original components for compatibility
 from kato.informatics import extractor as difflib
@@ -156,13 +151,13 @@ class PatternSearcher:
         
         self.kb_id = kwargs["kb_id"]
         
-        # Only initialize MongoDB if available
-        if MONGODB_AVAILABLE and 'MONGO_BASE_URL' in environ:
-            self.connection = MongoClient(environ['MONGO_BASE_URL'])
-            self.knowledgebase = self.connection[self.kb_id]
-        else:
-            self.connection = None
-            self.knowledgebase = None
+        # Initialize MongoDB connection (required)
+        if 'MONGO_BASE_URL' not in environ:
+            raise ValueError("MONGO_BASE_URL environment variable is required")
+        
+        self.connection = MongoClient(environ['MONGO_BASE_URL'])
+        self.knowledgebase = self.connection[self.kb_id]
+        logger.info(f"Connected to MongoDB for kb_id: {self.kb_id}")
             
         self.max_predictions = kwargs["max_predictions"]
         self.recall_threshold = kwargs["recall_threshold"]
@@ -200,12 +195,9 @@ class PatternSearcher:
         """Load patterns from database and build indices."""
         _patterns = {}
         
-        # Skip if no database connection
+        # MongoDB is required - fail if not available
         if self.knowledgebase is None:
-            logger.debug("No database connection - skipping pattern loading")
-            self.patterns_cache = _patterns
-            self.patterns_count = 0
-            return
+            raise RuntimeError("MongoDB connection required but not available")
         
         for p in self.knowledgebase.patterns_kb.find({}, {"name": 1, "pattern_data": 1}):
             pattern_name = p["name"]
@@ -330,21 +322,12 @@ class PatternSearcher:
             if len(result) >= 8:  # Ensure we have all required fields
                 pattern_hash, pattern, matching_intersection, past, present, missing, extras, similarity, number_of_blocks = result[:9]
                 
-                # Fetch full pattern data from database or use cached data
-                if self.knowledgebase is not None:
-                    pattern_data = self.knowledgebase.patterns_kb.find_one(
-                        {"name": pattern_hash}, {"_id": 0})
-                else:
-                    # Use cached pattern data when no database
-                    if pattern_hash in self.patterns_cache:
-                        pattern_data = {
-                            "name": pattern_hash,
-                            "pattern_data": [self.patterns_cache[pattern_hash]],  # Needs to be unflattened
-                            "frequency": 1,
-                            "emotives": {}
-                        }
-                    else:
-                        pattern_data = None
+                # Fetch full pattern data from database (MongoDB required)
+                if self.knowledgebase is None:
+                    raise RuntimeError("MongoDB connection required but not available")
+                
+                pattern_data = self.knowledgebase.patterns_kb.find_one(
+                    {"name": pattern_hash}, {"_id": 0})
                 
                 if pattern_data:
                     pred = Prediction(

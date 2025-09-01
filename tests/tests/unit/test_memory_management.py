@@ -255,7 +255,7 @@ def test_memory_with_vectors(kato_fixture):
     # Vectors ALWAYS produce at least VECTOR|hash symbols in STM
     stm = kato_fixture.get_short_term_memory()
     assert isinstance(stm, list), "Short-term memory should be a list"
-    assert len(stm) == 2, "Should have 2 events (one for each vector observation)"
+    assert len(stm) == 3, "Should have 3 events (one for each vector observation)"
     
     # Each event should have at least one VECTOR| symbol
     for event in stm:

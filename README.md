@@ -258,8 +258,8 @@ Like GAIuS before it, KATO adheres to [ExCITE AI](https://medium.com/@sevakavaki
 ## Support
 
 - 📖 [Documentation](docs/) - Complete documentation
-- 🐛 [Issue Tracker](https://github.com/your-org/kato/issues) - Report bugs
-- 💬 [Discussions](https://github.com/your-org/kato/discussions) - Ask questions
+- 🐛 [Issue Tracker](https://github.com/sevakavakians/kato/issues) - Report bugs
+- 💬 [Discussions](https://github.com/sevakavakians/kato/discussions) - Ask questions
 
 ---
 

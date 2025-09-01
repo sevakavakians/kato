@@ -178,9 +178,9 @@ class KatoProcessor:
             if vector_data or string_data:
                 self.predictions = self.pattern_processor.processEvents(data['unique_id'])
             
-            # Auto-learning: Create a model when short-term memory reaches max length
+            # Auto-learning: Create a pattern when short-term memory reaches max length
             # This prevents unbounded memory growth and creates temporal chunks
-            auto_learned_model = None
+            auto_learned_pattern = None
             stm_length = len(self.pattern_processor.STM)
             max_pattern_length = self.pattern_processor.max_pattern_length
             
@@ -190,17 +190,17 @@ class KatoProcessor:
                     # Keep the last event as context for the next sequence
                     # This maintains continuity between learned chunks
                     stm_tail = self.pattern_processor.STM[-1]
-                    auto_learned_model = self.learn()  # Creates model and clears STM
+                    auto_learned_pattern = self.learn()  # Creates model and clears STM
                     self.pattern_processor.setSTM([stm_tail])  # Start new STM with last event
-                    if auto_learned_model:
-                        logger.info(f"Auto-learned model: {auto_learned_model}")
+                    if auto_learned_pattern:
+                        logger.info(f"Auto-learned pattern: {auto_learned_pattern}")
                 elif stm_length == 1:
                     # Only one event, just learn it
-                    auto_learned_model = self.learn()
-                    if auto_learned_model:
-                        logger.info(f"Auto-learned model: {auto_learned_model}")
+                    auto_learned_pattern = self.learn()
+                    if auto_learned_pattern:
+                        logger.info(f"Auto-learned pattern: {auto_learned_pattern}")
 
-            return {'unique_id': unique_id, 'auto_learned_model': auto_learned_model}
+            return {'unique_id': unique_id, 'auto_learned_pattern': auto_learned_pattern}
             
     def get_predictions(self, unique_id={}):
         """

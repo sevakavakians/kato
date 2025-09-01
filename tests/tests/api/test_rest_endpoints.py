@@ -92,7 +92,7 @@ def test_observe_endpoint(kato_fixture):
     
     message = data['message']
     assert message['status'] == 'observed'
-    assert 'auto_learned_model' in message
+    assert 'auto_learned_pattern' in message
 
 
 def test_observe_endpoint_empty(kato_fixture):
@@ -293,25 +293,25 @@ def test_gene_change_endpoint(kato_fixture):
     assert data['message'] == 'updated-genes'
 
 
-def test_model_endpoint(kato_fixture):
-    """Test getting model information via REST."""
-    # Learn a model first
+def test_pattern_endpoint(kato_fixture):
+    """Test getting pattern information via REST."""
+    # Learn a pattern first
     kato_fixture.clear_all_memory()
-    for item in ['model', 'info', 'test']:
+    for item in ['pattern', 'info', 'test']:
         kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
-    model_name = kato_fixture.learn()
+    pattern_name = kato_fixture.learn()
     
-    # Get model info
+    # Get pattern info
     response = requests.get(
-        f"{kato_fixture.base_url}/{kato_fixture.processor_id}/model/{model_name}"
+        f"{kato_fixture.base_url}/{kato_fixture.processor_id}/pattern/{pattern_name}"
     )
     assert response.status_code == 200
     
     data = response.json()
     assert 'message' in data
-    model_info = data['message']
-    assert isinstance(model_info, dict)
-    assert 'name' in model_info
+    pattern_info = data['message']
+    assert isinstance(pattern_info, dict)
+    assert 'name' in pattern_info
 
 
 def test_error_handling_404(kato_fixture):

@@ -92,7 +92,7 @@ def test_manual_learning(kato_fixture):
     
     # Manually trigger learning
     result = kato_fixture.learn()
-    assert 'MODEL|' in result  # Should return the learned model name
+    assert 'PTRN|' in result  # Should return the learned pattern name
     
     # Short-term memory should be cleared after learning
     stm = kato_fixture.get_short_term_memory()
@@ -151,11 +151,11 @@ def test_memory_persistence(kato_fixture):
         kato_fixture.clear_short_term_memory()
 
 
-def test_max_sequence_length(kato_fixture):
-    """Test that max_sequence_length limit is enforced."""
-    # Clear memory first, then set max_sequence_length
+def test_max_pattern_length(kato_fixture):
+    """Test that max_pattern_length limit is enforced."""
+    # Clear memory first, then set max_pattern_length
     kato_fixture.clear_short_term_memory()  # Only clear short-term memory, not genes
-    kato_fixture.update_genes({"max_sequence_length": 3})
+    kato_fixture.update_genes({"max_pattern_length": 3})
     
     # Observe 3 events (should trigger auto-learn at limit)
     kato_fixture.observe({'strings': ['a'], 'vectors': [], 'emotives': {}})
@@ -165,7 +165,7 @@ def test_max_sequence_length(kato_fixture):
     assert len(kato_fixture.get_short_term_memory()) == 2
     
     kato_fixture.observe({'strings': ['c'], 'vectors': [], 'emotives': {}})
-    # At max_sequence_length, should auto-learn and keep last event
+    # At max_pattern_length, should auto-learn and keep last event
     stm = kato_fixture.get_short_term_memory()
     assert stm == [['c']]  # Only last event remains
     
@@ -200,7 +200,7 @@ def test_memory_with_emotives(kato_fixture):
     # Learn the sequence (this should store averaged emotives with the model)
     model_name = kato_fixture.learn()
     assert model_name is not None, "Should have learned a model"
-    assert model_name.startswith('MODEL|'), "Model name should have MODEL| prefix"
+    assert model_name.startswith('PTRN|'), "Pattern name should have PTRN| prefix"
     
     # Clear short-term memory and observe first two elements to trigger predictions (KATO requires 2+ strings)
     kato_fixture.clear_short_term_memory()

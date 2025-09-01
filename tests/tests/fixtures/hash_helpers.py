@@ -1,6 +1,6 @@
 """
 Hash Helper Utilities for KATO Tests
-Provides utilities for verifying deterministic hashing of models and vectors.
+Provides utilities for verifying deterministic hashing of patterns and vectors.
 """
 
 import hashlib
@@ -127,10 +127,10 @@ format_model_name = format_pattern_name
 
 def verify_hash_consistency(names: List[str], sequences: List[List[Any]]) -> Dict[str, bool]:
     """
-    Verify that a list of model names consistently hash to the same values.
+    Verify that a list of pattern names consistently hash to the same values.
     
     Args:
-        names: List of model names to verify
+        names: List of pattern names to verify
         sequences: Corresponding sequences for each name
         
     Returns:

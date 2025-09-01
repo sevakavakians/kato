@@ -235,11 +235,11 @@ class ImprovedZMQServer:
             # Handle both old and new return formats
             if isinstance(result, dict):
                 unique_id = result.get('unique_id')
-                auto_learned_model = result.get('auto_learned_model')
+                auto_learned_pattern = result.get('auto_learned_pattern')
             else:
                 # Backward compatibility
                 unique_id = result
-                auto_learned_model = None
+                auto_learned_pattern = None
             
             response = {
                 'status': 'okay',
@@ -250,8 +250,8 @@ class ImprovedZMQServer:
                 'unique_id': unique_id
             }
             
-            if auto_learned_model:
-                response['auto_learned_model'] = auto_learned_model
+            if auto_learned_pattern:
+                response['auto_learned_pattern'] = auto_learned_pattern
                 
             return response
         except Exception as e:
@@ -474,16 +474,16 @@ class ImprovedZMQServer:
                     'message': f'Gene {gene_name} updated to {gene_value}'
                 }
             else:
-                # Try updating in modeler
-                if hasattr(self.primitive.modeler, gene_name):
-                    old_value = getattr(self.primitive.modeler, gene_name, None)
-                    setattr(self.primitive.modeler, gene_name, gene_value)
-                    logger.info(f"Updated modeler.{gene_name}: {old_value} -> {gene_value}")
+                # Try updating in pattern_processor
+                if hasattr(self.primitive.pattern_processor, gene_name):
+                    old_value = getattr(self.primitive.pattern_processor, gene_name, None)
+                    setattr(self.primitive.pattern_processor, gene_name, gene_value)
+                    logger.info(f"Updated pattern_processor.{gene_name}: {old_value} -> {gene_value}")
                     
-                    # Special handling for recall_threshold - also update in models_searcher
-                    if gene_name == 'recall_threshold' and hasattr(self.primitive.modeler, 'models_searcher'):
-                        self.primitive.modeler.models_searcher.recall_threshold = gene_value
-                        logger.info(f"Also updated models_searcher.recall_threshold to {gene_value}")
+                    # Special handling for recall_threshold - also update in patterns_searcher
+                    if gene_name == 'recall_threshold' and hasattr(self.primitive.pattern_processor, 'patterns_searcher'):
+                        self.primitive.pattern_processor.patterns_searcher.recall_threshold = gene_value
+                        logger.info(f"Also updated patterns_searcher.recall_threshold to {gene_value}")
                     
                     # Also update genome_manifest for consistency
                     if hasattr(self.primitive, 'genome_manifest'):

@@ -130,11 +130,11 @@ def test_learning_with_insufficient_strings(kato_fixture):
 
 
 def test_auto_learn_with_insufficient_strings(kato_fixture):
-    """Test auto-learn behavior when max_sequence_length reached with < 2 strings."""
+    """Test auto-learn behavior when max_pattern_length reached with < 2 strings."""
     kato_fixture.clear_all_memory()
     
-    # Set a low max_sequence_length for testing
-    # Note: This assumes the fixture allows setting max_sequence_length
+    # Set a low max_pattern_length for testing
+    # Note: This assumes the fixture allows setting max_pattern_length
     # If not, this test can be skipped or modified
     
     # Observe single string (should not trigger predictions even after auto-learn)

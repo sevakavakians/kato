@@ -276,13 +276,13 @@ def test_context_switching(kato_fixture):
                     break
 
 
-def test_max_sequence_length_auto_learn(kato_fixture):
-    """Test automatic learning when max_sequence_length is reached."""
-    # Clear memory first, then set max_sequence_length
+def test_max_pattern_length_auto_learn(kato_fixture):
+    """Test automatic learning when max_pattern_length is reached."""
+    # Clear memory first, then set max_pattern_length
     kato_fixture.clear_working_memory()  # Only clear working memory, not genes
-    kato_fixture.update_genes({"max_sequence_length": 3})
+    kato_fixture.update_genes({"max_pattern_length": 3})
     
-    # Observe exactly max_sequence_length events
+    # Observe exactly max_pattern_length events
     events = ['auto1', 'auto2', 'auto3']
     for event in events:
         kato_fixture.observe({'strings': [event], 'vectors': [], 'emotives': {}})

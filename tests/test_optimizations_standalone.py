@@ -19,19 +19,19 @@ from kato.searches.fast_matcher import FastSequenceMatcher, RollingHash, NGramIn
 from kato.searches.index_manager import InvertedIndex
 
 
-def generate_test_data(num_models: int = 100) -> List[Tuple[str, List[str]]]:
-    """Generate test models."""
+def generate_test_data(num_patterns: int = 100) -> List[Tuple[str, List[str]]]:
+    """Generate test patterns."""
     random.seed(42)
-    models = []
+    patterns = []
     vocab = [f"symbol_{i}" for i in range(50)]
     
-    for i in range(num_models):
+    for i in range(num_patterns):
         length = random.randint(10, 30)
         sequence = random.choices(vocab, k=length)
-        model_id = f"model_{i:04d}"
-        models.append((model_id, sequence))
+        pattern_id = f"pattern_{i:04d}"
+        patterns.append((pattern_id, sequence))
     
-    return models
+    return patterns
 
 
 def test_rolling_hash():
@@ -53,10 +53,10 @@ def test_rolling_hash():
     print("✓ Rolling hash determinism verified")
     
     # Test performance
-    models = generate_test_data(1000)
+    patterns = generate_test_data(1000)
     start = time.perf_counter()
     hashes = []
-    for model_id, sequence in models:
+    for pattern_id, sequence in patterns:
         h = rh.compute_hash(sequence)
         hashes.append(h)
     elapsed = time.perf_counter() - start
@@ -65,7 +65,7 @@ def test_rolling_hash():
     
     # Test cache
     start = time.perf_counter()
-    for model_id, sequence in models[:100]:
+    for pattern_id, sequence in patterns[:100]:
         h = rh.compute_hash(sequence)
     cached_elapsed = time.perf_counter() - start
     print(f"✓ Cached lookups are {elapsed/cached_elapsed:.1f}x faster")
@@ -76,33 +76,33 @@ def test_ngram_index():
     print("\n=== Testing N-gram Index ===")
     index = NGramIndex(n=3)
     
-    models = generate_test_data(500)
+    patterns = generate_test_data(500)
     
     # Build index
     start = time.perf_counter()
-    for model_id, sequence in models:
-        index.index_model(model_id, sequence)
+    for pattern_id, sequence in patterns:
+        index.index_pattern(pattern_id, sequence)
     elapsed = time.perf_counter() - start
-    print(f"✓ Indexed 500 models in {elapsed:.4f}s")
+    print(f"✓ Indexed 500 patterns in {elapsed:.4f}s")
     
     # Test search
-    query = models[0][1][:10]  # First 10 symbols of first model
+    query = patterns[0][1][:10]  # First 10 symbols of first model
     start = time.perf_counter()
     results = index.search(query, threshold=0.1)  # Lower threshold for n-gram matching
     elapsed = time.perf_counter() - start
     
     if len(results) == 0:
         # If no results, it might be because the query is too short
-        query = models[0][1]  # Use full sequence
+        query = patterns[0][1]  # Use full sequence
         results = index.search(query, threshold=0.3)
     
     assert len(results) > 0, f"Should find at least one match for query of length {len(query)}"
     # The first result should be our source model with high similarity
-    found_source = any(r[0] == 'model_0000' for r in results)
+    found_source = any(r[0] == 'pattern_0000' for r in results)
     print(f"✓ Found {len(results)} matches in {elapsed*1000:.2f}ms")
     
     # Test determinism (use same threshold as the successful search)
-    threshold = 0.1 if len(models[0][1][:10]) == len(query) else 0.3
+    threshold = 0.1 if len(patterns[0][1][:10]) == len(query) else 0.3
     results2 = index.search(query, threshold=threshold)
     assert results == results2, "Search should be deterministic"
     print("✓ N-gram search is deterministic")
@@ -113,14 +113,14 @@ def test_inverted_index():
     print("\n=== Testing Inverted Index ===")
     index = InvertedIndex()
     
-    models = generate_test_data(500)
+    patterns = generate_test_data(500)
     
     # Build index
     start = time.perf_counter()
-    for model_id, sequence in models:
-        index.add_document(model_id, sequence)
+    for pattern_id, sequence in patterns:
+        index.add_document(pattern_id, sequence)
     elapsed = time.perf_counter() - start
-    print(f"✓ Built inverted index for 500 models in {elapsed:.4f}s")
+    print(f"✓ Built inverted index for 500 patterns in {elapsed:.4f}s")
     
     # Test AND search
     search_symbols = ['symbol_0', 'symbol_1']
@@ -134,8 +134,8 @@ def test_inverted_index():
     elapsed_or = time.perf_counter() - start
     
     assert len(results_or) >= len(results_and), "OR should find at least as many as AND"
-    print(f"✓ AND search found {len(results_and)} models in {elapsed_and*1000:.2f}ms")
-    print(f"✓ OR search found {len(results_or)} models in {elapsed_or*1000:.2f}ms")
+    print(f"✓ AND search found {len(results_and)} patterns in {elapsed_and*1000:.2f}ms")
+    print(f"✓ OR search found {len(results_or)} patterns in {elapsed_or*1000:.2f}ms")
     
     # Test IDF
     idf = index.get_idf('symbol_0')
@@ -152,28 +152,28 @@ def test_fast_sequence_matcher():
         use_ngram_index=True
     )
     
-    models = generate_test_data(1000)
+    patterns = generate_test_data(1000)
     
-    # Add models
+    # Add patterns
     start = time.perf_counter()
-    for model_id, sequence in models:
-        matcher.add_model(model_id, sequence)
+    for pattern_id, sequence in patterns:
+        matcher.add_pattern(pattern_id, sequence)
     elapsed = time.perf_counter() - start
-    print(f"✓ Added 1000 models to matcher in {elapsed:.4f}s")
+    print(f"✓ Added 1000 patterns to matcher in {elapsed:.4f}s")
     
     # Test exact match
-    query = models[42][1]  # Use model 42's sequence
+    query = patterns[42][1]  # Use model 42's sequence
     start = time.perf_counter()
     matches = matcher.find_matches(query, threshold=0.9)
     elapsed = time.perf_counter() - start
     
     assert len(matches) > 0, "Should find exact match"
-    assert matches[0]['model_id'] == 'model_0042', "Should find correct model"
+    assert matches[0]['pattern_id'] == 'pattern_0042', "Should find correct model"
     assert matches[0]['similarity'] > 0.99, "Exact match should have high similarity"
     print(f"✓ Found exact match in {elapsed*1000:.2f}ms")
     
     # Test partial match
-    partial_query = models[100][1][:15]  # First 15 symbols
+    partial_query = patterns[100][1][:15]  # First 15 symbols
     start = time.perf_counter()
     matches = matcher.find_matches(partial_query, threshold=0.3)
     elapsed = time.perf_counter() - start
@@ -189,7 +189,7 @@ def test_fast_sequence_matcher():
             deterministic = False
             break
         # Check first match is the same
-        if matches_test and matches_test[0]['model_id'] != matches[0]['model_id']:
+        if matches_test and matches_test[0]['pattern_id'] != matches[0]['pattern_id']:
             deterministic = False
             break
     
@@ -203,13 +203,13 @@ def test_performance_comparison():
     """Compare optimized vs naive approach."""
     print("\n=== Performance Comparison ===")
     
-    models = generate_test_data(2000)
-    queries = [models[i][1][:20] for i in range(0, 100, 10)]  # 10 queries
+    patterns = generate_test_data(2000)
+    queries = [patterns[i][1][:20] for i in range(0, 100, 10)]  # 10 queries
     
     # Optimized approach
     matcher = FastSequenceMatcher(use_rolling_hash=True, use_ngram_index=True)
-    for model_id, sequence in models:
-        matcher.add_model(model_id, sequence)
+    for pattern_id, sequence in patterns:
+        matcher.add_pattern(pattern_id, sequence)
     
     start = time.perf_counter()
     optimized_results = []
@@ -224,11 +224,11 @@ def test_performance_comparison():
     for query in queries:
         matches = []
         query_set = set(query)
-        for model_id, model_seq in models:
-            model_set = set(model_seq)
-            similarity = len(query_set & model_set) / len(query_set | model_set) if query_set | model_set else 0
+        for pattern_id, pattern_seq in patterns:
+            pattern_set = set(pattern_seq)
+            similarity = len(query_set & pattern_set) / len(query_set | pattern_set) if query_set | pattern_set else 0
             if similarity >= 0.4:
-                matches.append(model_id)
+                matches.append(pattern_id)
         naive_results.append(len(matches))
     naive_time = time.perf_counter() - start
     

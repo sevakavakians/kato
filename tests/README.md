@@ -70,7 +70,7 @@ When writing or debugging tests, keep these behaviors in mind:
 
 2. **Empty Events**: Observations with empty strings are ignored
 
-3. **Deterministic Hashing**: All models use `MODEL|<sha1_hash>` format
+3. **Deterministic Hashing**: All patterns use `PTRN|<sha1_hash>` format
 
 4. **Temporal Fields in Predictions**:
    - `past`: Events before present

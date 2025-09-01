@@ -24,7 +24,7 @@ def test_observe_single_string(kato_fixture):
     })
     
     assert result['status'] == 'observed'
-    assert 'auto_learned_model' in result
+    assert 'auto_learned_pattern' in result
     
     # Check working memory
     wm = kato_fixture.get_working_memory()

@@ -334,7 +334,7 @@ class RestGatewayHandler(BaseHTTPRequestHandler):
                 "status": response.get('status', 'okay'),
                 "message": {
                     "status": "observed",
-                    "auto_learned_model": response.get('auto_learned_model')
+                    "auto_learned_pattern": response.get('auto_learned_pattern')
                 }
             }
             

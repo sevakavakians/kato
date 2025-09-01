@@ -1586,3 +1586,155 @@
 [0;32m[SUCCESS][0m Vector database services started
 [0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
 [0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-1756744742-28643)
+[0;34m[INFO][0m Classifier: , Max Predictions: 100
+[0;34m[INFO][0m MongoDB already running: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting vector database services...
+[0;32m[SUCCESS][0m Vector database services started
+[0;34m[INFO][0m Creating and starting KATO container: kato-kato-1756744742-28643
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-1756744742-28643)
+[0;34m[INFO][0m Registered instance: kato-1756744742-28643 (KatoProcessor) on ports 8000/5555
+[0;34m[INFO][0m Waiting for KATO API to be ready...
+[0;34m[INFO][0m KATO API is responding to ping
+[0;34m[INFO][0m Verifying processor kato-1756744742-28643 is accessible...
+[0;34m[INFO][0m Processor ID verified: kato-1756744742-28643
+[0;34m[INFO][0m Testing processor operations...
+[0;32m[SUCCESS][0m KATO processor kato-1756744742-28643 is fully operational on port 8000
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Building KATO Docker image: kato:latest
+[0;32m[SUCCESS][0m KATO Docker image built successfully
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Building KATO Docker image: kato:latest
+[0;32m[SUCCESS][0m KATO Docker image built successfully
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-1756749363-33354)
+[0;34m[INFO][0m Classifier: , Max Predictions: 100
+[0;34m[INFO][0m MongoDB already running: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting vector database services...
+[0;32m[SUCCESS][0m Vector database services started
+[1;33m[WARNING][0m Port 8000 is in use. Using port 8001 instead.
+[0;34m[INFO][0m Creating and starting KATO container: kato-kato-1756749363-33354
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-1756749363-33354)
+[0;34m[INFO][0m Registered instance: kato-1756749363-33354 (KatoProcessor) on ports 8001/5556
+[0;34m[INFO][0m Waiting for KATO API to be ready...
+[0;34m[INFO][0m KATO API is responding to ping
+[0;34m[INFO][0m Verifying processor kato-1756749363-33354 is accessible...
+[0;34m[INFO][0m Processor ID verified: kato-1756749363-33354
+[0;34m[INFO][0m Testing processor operations...
+[0;32m[SUCCESS][0m KATO processor kato-1756749363-33354 is fully operational on port 8001
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Building KATO Docker image: kato:latest
+[0;32m[SUCCESS][0m KATO Docker image built successfully
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-1756751931-35786)
+[0;34m[INFO][0m Classifier: , Max Predictions: 100
+[0;34m[INFO][0m MongoDB already running: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting vector database services...
+[0;32m[SUCCESS][0m Vector database services started
+[1;33m[WARNING][0m Port 8000 is in use. Using port 8002 instead.
+[0;34m[INFO][0m Creating and starting KATO container: kato-kato-1756751931-35786
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-1756751931-35786)
+[0;34m[INFO][0m Registered instance: kato-1756751931-35786 (KatoProcessor) on ports 8002/5557
+[0;34m[INFO][0m Waiting for KATO API to be ready...
+[0;34m[INFO][0m KATO API is responding to ping
+[0;34m[INFO][0m Verifying processor kato-1756751931-35786 is accessible...
+[0;34m[INFO][0m Processor ID verified: kato-1756751931-35786
+[0;34m[INFO][0m Testing processor operations...
+[0;32m[SUCCESS][0m KATO processor kato-1756751931-35786 is fully operational on port 8002
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Stopping and removing all KATO instances...
+[0;34m[INFO][0m Stopping instance: kato-1756692271-96469 (KatoProcessor)
+[0;34m[INFO][0m Unregistered instance: kato-1756692271-96469
+[0;32m[SUCCESS][0m Instance cleaned up: kato-1756692271-96469 (KatoProcessor)
+[0;34m[INFO][0m Stopping instance: kato-1756744742-28643 (KatoProcessor)
+[0;32m[SUCCESS][0m Container stopped: kato-kato-1756744742-28643
+[0;32m[SUCCESS][0m Container removed: kato-kato-1756744742-28643
+[0;34m[INFO][0m Unregistered instance: kato-1756744742-28643
+[0;32m[SUCCESS][0m Instance cleaned up: kato-1756744742-28643 (KatoProcessor)
+[0;34m[INFO][0m Stopping instance: kato-1756749363-33354 (KatoProcessor)
+[0;32m[SUCCESS][0m Container stopped: kato-kato-1756749363-33354
+[0;32m[SUCCESS][0m Container removed: kato-kato-1756749363-33354
+[0;34m[INFO][0m Unregistered instance: kato-1756749363-33354
+[0;32m[SUCCESS][0m Instance cleaned up: kato-1756749363-33354 (KatoProcessor)
+[0;34m[INFO][0m Stopping instance: kato-1756751931-35786 (KatoProcessor)
+[0;32m[SUCCESS][0m Container stopped: kato-kato-1756751931-35786
+[0;32m[SUCCESS][0m Container removed: kato-kato-1756751931-35786
+[0;34m[INFO][0m Unregistered instance: kato-1756751931-35786
+[0;32m[SUCCESS][0m Instance cleaned up: kato-1756751931-35786 (KatoProcessor)
+[0;32m[SUCCESS][0m All instances stopped and removed
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Building KATO Docker image: kato:latest
+[0;32m[SUCCESS][0m KATO Docker image built successfully
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-1756752150-37313)
+[0;34m[INFO][0m Classifier: , Max Predictions: 100
+[0;34m[INFO][0m MongoDB already running: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting vector database services...
+[0;32m[SUCCESS][0m Vector database services started
+[0;34m[INFO][0m Creating and starting KATO container: kato-kato-1756752150-37313
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-1756752150-37313)
+[0;34m[INFO][0m Registered instance: kato-1756752150-37313 (KatoProcessor) on ports 8000/5555
+[0;34m[INFO][0m Waiting for KATO API to be ready...
+[0;34m[INFO][0m KATO API is responding to ping
+[0;34m[INFO][0m Verifying processor kato-1756752150-37313 is accessible...
+[0;34m[INFO][0m Processor ID verified: kato-1756752150-37313
+[0;34m[INFO][0m Testing processor operations...
+[0;32m[SUCCESS][0m KATO processor kato-1756752150-37313 is fully operational on port 8000
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Stopping and removing all KATO instances...
+[0;34m[INFO][0m Stopping instance: kato-1756752150-37313 (KatoProcessor)
+[0;32m[SUCCESS][0m Container stopped: kato-kato-1756752150-37313
+[0;32m[SUCCESS][0m Container removed: kato-kato-1756752150-37313
+[0;34m[INFO][0m Unregistered instance: kato-1756752150-37313
+[0;32m[SUCCESS][0m Instance cleaned up: kato-1756752150-37313 (KatoProcessor)
+[0;32m[SUCCESS][0m All instances stopped and removed
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Building KATO Docker image: kato:latest
+[0;32m[SUCCESS][0m KATO Docker image built successfully
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Building KATO Docker image: kato:latest
+[0;32m[SUCCESS][0m KATO Docker image built successfully
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-1756752781-39160)
+[0;34m[INFO][0m Classifier: , Max Predictions: 100
+[0;34m[INFO][0m MongoDB already running: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting vector database services...
+[0;32m[SUCCESS][0m Vector database services started
+[0;34m[INFO][0m Creating and starting KATO container: kato-kato-1756752781-39160
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-1756752781-39160)
+[0;34m[INFO][0m Registered instance: kato-1756752781-39160 (KatoProcessor) on ports 8000/5555
+[0;34m[INFO][0m Waiting for KATO API to be ready...
+[0;34m[INFO][0m KATO API is responding to ping
+[0;34m[INFO][0m Verifying processor kato-1756752781-39160 is accessible...
+[0;34m[INFO][0m Processor ID verified: kato-1756752781-39160
+[0;34m[INFO][0m Testing processor operations...
+[0;32m[SUCCESS][0m KATO processor kato-1756752781-39160 is fully operational on port 8000
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Stopping and removing all KATO instances...
+[0;34m[INFO][0m Stopping instance: kato-1756752781-39160 (KatoProcessor)
+[0;32m[SUCCESS][0m Container stopped: kato-kato-1756752781-39160
+[0;32m[SUCCESS][0m Container removed: kato-kato-1756752781-39160
+[0;34m[INFO][0m Unregistered instance: kato-1756752781-39160
+[0;32m[SUCCESS][0m Instance cleaned up: kato-1756752781-39160 (KatoProcessor)
+[0;32m[SUCCESS][0m All instances stopped and removed

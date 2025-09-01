@@ -121,12 +121,12 @@ def test_model_hash_in_predictions(kato_fixture):
     # Find the prediction for our learned model
     for pred in predictions:
         if pred.get('name') == model_name:
-            assert pred['name'].startswith('MODEL|')
+            assert pred['name'].startswith('PTRN|')
             break
     else:
         # If exact match not found, at least verify format
-        assert any(pred.get('name', '').startswith('MODEL|') for pred in predictions), \
-            "At least one prediction should have MODEL| prefix"
+        assert any(pred.get('name', '').startswith('PTRN|') for pred in predictions), \
+            "At least one prediction should have PTRN| prefix"
 
 
 def test_model_hash_with_emotives(kato_fixture):
@@ -180,7 +180,7 @@ def test_model_hash_with_vectors(kato_fixture):
         
         # If a model was learned, verify format
         if model_name:
-            assert model_name.startswith('MODEL|'), "Model name should have MODEL| prefix"
+            assert model_name.startswith('PTRN|'), "Model name should have PTRN| prefix"
             hash_part = extract_hash_from_name(model_name)
             assert len(hash_part) == 40, "SHA1 hash should be 40 characters"
     else:
@@ -199,7 +199,7 @@ def test_empty_sequence_hash(kato_fixture):
     # Empty sequence might not create a model or might have special handling
     if model_name:
         # Accept 'learning-called' as valid response for empty sequences (API convention)
-        assert model_name.startswith('MODEL|') or model_name == '' or model_name == 'learning-called'
+        assert model_name.startswith('PTRN|') or model_name == '' or model_name == 'learning-called'
 
 
 def test_single_observation_hash(kato_fixture):
@@ -215,7 +215,7 @@ def test_single_observation_hash(kato_fixture):
         if model_name == 'learning-called':
             pass  # Expected for single observations
         else:
-            assert model_name.startswith('MODEL|')
+            assert model_name.startswith('PTRN|')
             hash_part = extract_hash_from_name(model_name)
             assert len(hash_part) == 40
 
@@ -263,7 +263,7 @@ def test_complex_sequence_hash(kato_fixture):
     model_name = kato_fixture.learn()
     
     # Verify proper format
-    assert model_name.startswith('MODEL|')
+    assert model_name.startswith('PTRN|')
     hash_part = extract_hash_from_name(model_name)
     assert len(hash_part) == 40
     

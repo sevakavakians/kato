@@ -25,7 +25,7 @@ class Prediction(dict):
         self['missing'] = missing
         self['extras'] = extras
         self['potential'] = float(0)
-        self['evidence'] = float(len(self['matches'])/_model["length"])
+        self['evidence'] = float(len(self['matches'])/_model["length"]) if _model["length"] > 0 else 0.0
         self['similarity'] = similarity
         self['fragmentation'] = float(number_of_blocks - 1)
         # Calculate SNR with division by zero protection

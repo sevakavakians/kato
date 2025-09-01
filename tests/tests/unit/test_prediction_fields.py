@@ -12,37 +12,44 @@ from fixtures.test_helpers import sort_event_strings
 
 
 def test_prediction_past_field(kato_fixture):
-    """Test that the past field correctly shows events before the present."""
+    """Test that the past field correctly shows events before the present matching portion.
+    
+    IMPORTANT: The 'present' field includes ALL events containing matching symbols,
+    from the first match to the last match, not just explicitly "middle" events.
+    """
     kato_fixture.clear_all_memory()
-    # Set moderate threshold for temporal field predictions
     kato_fixture.set_recall_threshold(0.3)
     
-    # Learn: [['start'], ['middle'], ['end']]
-    sequence = ['start', 'middle', 'end']
-    for item in sequence:
-        kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
+    # Simple test case - observe middle and end from a beginning/middle/end sequence
+    # Learn: [['beginning'], ['middle'], ['end']]
+    kato_fixture.observe({'strings': ['beginning'], 'vectors': [], 'emotives': {}})
+    kato_fixture.observe({'strings': ['middle'], 'vectors': [], 'emotives': {}})
+    kato_fixture.observe({'strings': ['end'], 'vectors': [], 'emotives': {}})
     kato_fixture.learn()
     
-    # Observe middle and end events (KATO requires 2+ strings for predictions)
+    # Observe: [['middle'], ['end']]
     kato_fixture.clear_working_memory()
     kato_fixture.observe({'strings': ['middle'], 'vectors': [], 'emotives': {}})
     kato_fixture.observe({'strings': ['end'], 'vectors': [], 'emotives': {}})
-    predictions = kato_fixture.get_predictions()
     
-    # Find the prediction for our sequence
-    for pred in predictions:
-        if 'middle' in pred.get('matches', []):
-            # Check temporal fields
-            past = pred.get('past', [])
-            present = pred.get('present', [])
-            future = pred.get('future', [])
-            
-            assert [['start']] == past or ['start'] in past, f"Past should contain 'start', got {past}"
-            assert [['middle']] == present, f"Present should be [['middle']], got {present}"
-            assert [['end']] == future or ['end'] in future, f"Future should contain 'end', got {future}"
-            break
-    else:
-        assert False, "No matching prediction found for 'middle'"
+    predictions = kato_fixture.get_predictions()
+    assert len(predictions) > 0, "Should have predictions"
+    
+    pred = predictions[0]
+    past = pred.get('past', [])
+    present = pred.get('present', [])
+    future = pred.get('future', [])
+    
+    # Validate temporal segmentation
+    # Past should contain the beginning event (before first match)
+    assert past == [['beginning']], f"Past should be [['beginning']], got {past}"
+    
+    # Present should contain BOTH middle and end events (all matching events)
+    # This is the CORRECT behavior - present includes ALL events with matches
+    assert present == [['middle'], ['end']], f"Present should be [['middle'], ['end']], got {present}"
+    
+    # Future should be empty (no events after last match)
+    assert future == [], f"Future should be empty, got {future}"
 
 
 def test_prediction_missing_symbols(kato_fixture):
@@ -175,23 +182,28 @@ def test_prediction_partial_match_at_start(kato_fixture):
     kato_fixture.observe({'strings': ['end'], 'vectors': [], 'emotives': {}})
     kato_fixture.learn()
     
-    # Observe only partial match of first event
+    # Observe only partial match of first event plus one more to meet 2+ requirement
     kato_fixture.clear_working_memory()
     kato_fixture.observe({'strings': ['begin'], 'vectors': [], 'emotives': {}})
+    # Need to observe at least 2 strings for predictions
+    kato_fixture.observe({'strings': ['middle'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
     
     # Find matching prediction
     for pred in predictions:
-        if 'begin' in pred.get('matches', []):
+        if 'begin' in pred.get('matches', []) and 'middle' in pred.get('matches', []):
             present = pred.get('present', [])
             missing = pred.get('missing', [])
             future = pred.get('future', [])
             
-            # Present should be the first event
-            # Missing should include 'start'
+            # Present should be the first two events (both have matches)
+            # The first event should have both 'begin' and 'start', but we only observed 'begin'
+            assert len(present) == 2, f"Present should have 2 events, got {present}"
+            # Missing should include 'start' (in first event but not observed)
             assert 'start' in missing, f"Should be missing 'start', got missing={missing}"
-            # Future should have remaining events
-            assert len(future) >= 2, f"Should have future events, got {future}"
+            # Future should have the last event
+            assert len(future) == 1, f"Should have 1 future event, got {future}"
+            assert future == [['end']], f"Future should be [['end']], got {future}"
             break
 
 

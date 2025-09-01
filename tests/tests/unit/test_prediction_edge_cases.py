@@ -301,6 +301,6 @@ def test_single_symbol_sequences(kato_fixture):
             future = pred.get('future', [])
             
             # Since we observed 'x' and 'y', they should be in present
-            assert [['x'], ['y']] == present or (['x'] in present[0] and ['y'] in present[1]), f"Present should contain 'x' and 'y', got {present}"
-            assert [['z']] == future or ['z'] in future, f"Future should contain 'z', got {future}"
+            assert [['x'], ['y']] == present, f"Present should be [['x'], ['y']], got {present}"
+            assert [['z']] == future, f"Future should be [['z']], got {future}"
             break

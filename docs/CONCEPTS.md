@@ -263,10 +263,17 @@ Each prediction includes:
 ```
 
 ### Contiguous Matching
-The `present` field includes all contiguous events that are identified by matching symbols:
-- Partial matches can trigger inclusion in the present state
-- The present can span multiple events if they have matching symbols
+The `present` field includes all contiguous events that contain matching symbols:
+- Events are included in their entirety when they contain ANY matching symbols
+- The present spans from the first event with a match to the last event with a match
+- ALL symbols within those events are included, even if they weren't observed
+- The `missing` field identifies symbols in present events that weren't actually observed
 - Not all symbols need to match for an event to be part of the present
+
+Example: If observing `['a', 'c']` from model `[['a', 'b'], ['c', 'd'], ['e', 'f']]`:
+- Present: `[['a', 'b'], ['c', 'd']]` (complete events with matches)
+- Missing: `['b', 'd']` (symbols in present but not observed)
+- Future: `[['e', 'f']]` (events after last match)
 
 ## Learning Behavior
 

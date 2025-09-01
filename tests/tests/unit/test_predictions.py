@@ -190,7 +190,8 @@ def test_prediction_entropy(kato_fixture):
         kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
     kato_fixture.learn()
     
-    # Get predictions
+    # Get predictions (need 2+ strings)
+    kato_fixture.observe({'strings': ['a'], 'vectors': [], 'emotives': {}})
     kato_fixture.observe({'strings': ['a'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
     
@@ -211,8 +212,9 @@ def test_prediction_hamiltonian(kato_fixture):
         kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
     kato_fixture.learn()
     
-    # Observe to get predictions
+    # Observe to get predictions (need 2+ strings)
     kato_fixture.observe({'strings': ['ham'], 'vectors': [], 'emotives': {}})
+    kato_fixture.observe({'strings': ['test'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
     
     for pred in predictions:

@@ -73,12 +73,17 @@ def test_multiple_sequence_learning(kato_fixture):
     kato_fixture.observe({'strings': ['end1'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
     
-    # Should now favor the path1 sequence
+    # Should now have completed the path1 sequence
     for pred in predictions:
         if pred.get('similarity', 0) > 0.6:
             present = pred.get('present', [])
-            if any('path1' in p and 'end1' in p for p in present if isinstance(p, list)):
-                assert True
+            # We observed all three: 'start', 'path1', 'end1'
+            # So present should be all three events: [['start'], ['path1'], ['end1']]
+            if len(present) == 3:
+                # Check that all observed symbols are in present
+                present_flat = [item for sublist in present for item in sublist if isinstance(sublist, list)]
+                assert 'start' in present_flat and 'path1' in present_flat and 'end1' in present_flat, \
+                    f"Present should contain all observed symbols, got {present}"
                 break
 
 

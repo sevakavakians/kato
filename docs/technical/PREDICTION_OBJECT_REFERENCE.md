@@ -29,10 +29,12 @@ A Prediction Object is generated when KATO's pattern recognition engine identifi
 **Example**: `["hello", "world"]` when these symbols appear in both the model and current observation.
 
 ### 5. **missing** (repeated string)
-**Description**: Symbols expected in the present events based on the model but not observed.  
-**Purpose**: Identifies gaps between expected and actual observations within the present temporal span.  
-**Order**: Preserves the sequence order across events (not necessarily within individual events).  
-**Example**: If model has `[["a"], ["b"], ["c", "d"]]` and observing `[["a"], ["c"]]`, missing would be `["b", "d"]` in that order.
+**Description**: Symbols that appear in the `present` events but were NOT actually observed.  
+**Purpose**: Identifies incomplete or partial observations within the matched events.  
+**Critical**: The present field contains complete events; missing lists the symbols from those events that weren't in the observation.  
+**Order**: Preserves the sequence order across events.  
+**Example 1**: If model has `[["a", "b"], ["c", "d"]]` and observing `["a", "c"]`, present would be `[["a", "b"], ["c", "d"]]` (complete events) and missing would be `["b", "d"]`.  
+**Example 2**: If model has `[["hello", "world"], ["foo", "bar"]]` and observing `["hello", "foo"]`, present would be `[["hello", "world"], ["foo", "bar"]]` and missing would be `["world", "bar"]`.
 
 ### 6. **extras** (repeated string)
 **Description**: Symbols observed in the current context that are not part of the expected model.  
@@ -48,11 +50,16 @@ A Prediction Object is generated when KATO's pattern recognition engine identifi
 **Example**: If model is `[["start"], ["middle"], ["end"]]` and observing `["middle", "end"]`, past would be `[["start"]]`.
 
 ### 8. **present** (repeated ListValue)
-**Description**: ALL events from the learned model that contain ANY observed symbols.  
-**Structure**: List of lists representing all matched events.  
+**Description**: ALL events from the learned model that contain ANY observed symbols, including the complete events with all their symbols.  
+**Structure**: List of lists representing all matched events with their complete symbol sets.  
 **Purpose**: Shows the complete span of the model that corresponds to current observations.  
-**Critical**: Contains ALL observed events, not just the "current" one. If you observe multiple events from a sequence, they ALL appear in present.  
-**Example**: If observing `["hello", "world"]` from model `[["hello"], ["world"], ["end"]]`, present would be `[["hello"], ["world"]]`.
+**Critical**: 
+- Contains ALL events with matches, from first match to last match
+- Includes ALL symbols within those events, even if they weren't observed
+- The complete original events are included, not just the observed symbols
+**Relationship to missing field**: Symbols that appear in present events but weren't actually observed will be listed in the `missing` field.  
+**Example 1**: If observing `["hello", "world"]` from model `[["hello"], ["world"], ["end"]]`, present would be `[["hello"], ["world"]]`.  
+**Example 2**: If observing `["a", "c"]` from model `[["a", "b"], ["c", "d"], ["e"]]`, present would be `[["a", "b"], ["c", "d"]]` (complete events), and missing would be `["b", "d"]`.
 
 ### 9. **future** (repeated ListValue)
 **Description**: Events from the learned model that have NOT been observed yet.  

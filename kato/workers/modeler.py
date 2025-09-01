@@ -185,10 +185,10 @@ class Modeler:
         # multiple times in one sequence, or we can look at the probability of a symbol to appear in any sequence, regardless
         # of the number of times it appears within any one sequence.
         # We can also look at coming up with a formula to account for both to affect the potential.
-        return float(self.superkb.symbols_kb.find_one({"name": symbol})['model_member_frequency']/total_symbols_in_models_frequencies) ## or ['frequency']
+        return float(self.superkb.symbols_kb.find_one({"name": symbol})['model_member_frequency']/total_symbols_in_models_frequencies) if total_symbols_in_models_frequencies > 0 else 0.0 ## or ['frequency']
 
     def modelProbability(self, freq, total_model_frequencies):
-        return float(freq/total_model_frequencies)
+        return float(freq/total_model_frequencies) if total_model_frequencies > 0 else 0.0
 
     def predictModel(self, state):
         "Predict models and update active model fractional frequencies considering the inverse frequency values of the symbols."
@@ -222,7 +222,7 @@ class Modeler:
                             symbol_frequency_cache[symbol] = 0
                             continue
                         symbol_data = symbol_cache[symbol]
-                        symbol_probability = float(symbol_data['model_member_frequency'] / total_symbols_in_models_frequencies)
+                        symbol_probability = float(symbol_data['model_member_frequency'] / total_symbols_in_models_frequencies) if total_symbols_in_models_frequencies > 0 else 0.0
                         symbol_probability_cache[symbol] = symbol_probability
                         symbol_frequency_cache[symbol] += symbol_data['frequency']
             symbol_frequency_in_state = Counter(state)
@@ -238,7 +238,7 @@ class Modeler:
                 model_frequency_vector = [(symbol_probability_cache.get(symbol, 0) * symbol_frequency_in_model.get(symbol, 0)) for symbol in all_symbols]
                 _p_e_h = float(self.modelProbability(prediction['frequency'], total_model_frequencies)) # p(e|h)
                 distance = float(spatial.distance.cosine(state_frequency_vector, model_frequency_vector))
-                itfdf_similarity = round(float(1 - (distance * prediction['frequency'] / total_ensemble_model_frequencies)), 12)
+                itfdf_similarity = round(float(1 - (distance * prediction['frequency'] / total_ensemble_model_frequencies)) if total_ensemble_model_frequencies > 0 else 0.0, 12)
                 prediction['itfdf_similarity'] = itfdf_similarity
                 prediction['entropy'] = round(float(sum([classic_expectation(symbol_probability_cache.get(symbol, 0)) for symbol in _present])), 12)
                 prediction['hamiltonian'] = round(float(hamiltonian(_present, total_symbols)), 12)

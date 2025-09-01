@@ -121,6 +121,14 @@ REST Client → REST Gateway (Port 8000) → ZMQ Server (Port 5555) → KATO Pro
 - **Vector Storage**: Modern Qdrant database with collection per processor
 - **Model Hashing**: SHA1-based deterministic model identification
 
+### MongoDB Model Storage
+
+- **Unique Indexing**: Models indexed by SHA1 hash of sequence pattern
+- **Duplicate Prevention**: Uses `update_one` with `upsert=True` to prevent duplicates
+- **Frequency Tracking**: Each re-learning of same sequence increments frequency counter
+- **Model Naming**: `MODEL|<sha1_hash>` where hash uniquely identifies the sequence
+- **Storage Guarantee**: Only one record per unique sequence pattern in MongoDB
+
 ### Key Behavioral Properties
 
 1. **Minimum Sequence Length**: KATO requires at least 2 strings total in STM to generate predictions
@@ -130,13 +138,38 @@ REST Client → REST Gateway (Port 8000) → ZMQ Server (Port 5555) → KATO Pro
    - Invalid: `[['A']]` (only 1 string without vectors - no predictions generated)
 2. **Alphanumeric Sorting**: Strings within events are sorted alphanumerically for consistency
 3. **Temporal Segmentation**: Predictions structured as past/present/future
-4. **Empty Event Handling**: Empty strings are filtered from observations
+   - **Past**: Events before the first matching event
+   - **Present**: ALL events containing matching symbols from the observed state (from first to last match)
+     - Includes ALL symbols within those events, even if they weren't observed
+     - The complete events are included, not just the observed symbols
+   - **Future**: Events after the last matching event
+   - **Missing**: Symbols that are in the present events but weren't actually observed
+   - **Extras**: Symbols that were observed but aren't in the model
+   - Example 1: Observing `['B'], ['C']` from sequence `[['A'], ['B'], ['C'], ['D']]`:
+     - Past: `[['A']]`
+     - Present: `[['B'], ['C']]` (both events have matches)
+     - Future: `[['D']]`
+     - Missing: `[]` (all symbols in present were observed)
+   - Example 2: Observing `['a'], ['c']` from sequence `[['a', 'b'], ['c', 'd'], ['e', 'f']]`:
+     - Past: `[]` (no events before first match)
+     - Present: `[['a', 'b'], ['c', 'd']]` (full events, including unobserved 'b' and 'd')
+     - Future: `[['e', 'f']]`
+     - Missing: `['b', 'd']` (symbols in present events but not observed)
+4. **Empty Event Handling**: Empty events are NOT supported per spec
+   - Empty events should be filtered BEFORE observation
+   - STM only processes non-empty event sequences
 5. **Multi-Modal Processing**: Handles strings, vectors (768-dim), and emotional context
    - Vectors always produce name strings (e.g., 'VECTOR|<hash>') for STM
 6. **Deterministic**: Same inputs always produce same outputs
 7. **Variable Sequence Lengths**: Supports sequences of arbitrary length (2+ strings total)
    - Events can have varying numbers of symbols
    - Each prediction has unique missing/matches/extras fields based on partial matching
+8. **Recall Threshold Behavior**:
+   - Range: 0.0 to 1.0
+   - 0.0 = Return all models including non-matching ones
+   - 1.0 = Return only perfect matches
+   - Default: 0.1 (permissive matching)
+   - Controls filtering of predictions by similarity score
 
 ## Testing Strategy
 

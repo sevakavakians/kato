@@ -72,7 +72,10 @@ class InformationExtractor:
         """
         if self.use_fast_matcher and RAPIDFUZZ_AVAILABLE:
             # Use RapidFuzz for fast similarity calculation
-            similarity = fuzz.ratio(model, state) / 100.0
+            # Convert lists to strings for RapidFuzz
+            model_str = ' '.join(model)
+            state_str = ' '.join(state)
+            similarity = fuzz.ratio(model_str, state_str) / 100.0
         else:
             # Fall back to original SequenceMatcher
             matcher = difflib.SequenceMatcher()
@@ -112,8 +115,12 @@ class InformationExtractor:
             past = model[:i0]
             present = model[i0:i0+n0]  # Just the matching portion
         else:
-            # No matches - shouldn't happen if similarity >= threshold
-            return None
+            # No matches - only valid for threshold 0.0
+            if cutoff > 0.0:
+                return None
+            # For threshold 0.0, include even non-matching models
+            past = []
+            present = model  # Entire model is "present" when no matches
         
         number_of_blocks = num_actual_blocks
         
@@ -332,9 +339,19 @@ class ModelSearcher:
                     )
                     active_list.append(pred)
         
-        logger.debug(f"Built {len(active_list)} predictions")
+        # Final threshold validation - ensure all predictions meet threshold
+        filtered_list = []
+        for pred in active_list:
+            if 'similarity' in pred and pred['similarity'] >= self.recall_threshold:
+                filtered_list.append(pred)
+            elif 'similarity' not in pred:
+                # If no similarity key, include it (shouldn't happen)
+                logger.warning(f"Prediction without similarity score: {pred.get('name', 'unknown')}")
+                filtered_list.append(pred)
         
-        return active_list
+        logger.debug(f"Built {len(active_list)} predictions, {len(filtered_list)} after final threshold filter")
+        
+        return filtered_list
     
     def _process_with_rapidfuzz(self, state: List[str], 
                                candidates: List[str], results: List):
@@ -358,11 +375,12 @@ class ModelSearcher:
         
         # Use RapidFuzz to find best matches
         if choices:
+            # Don't limit results - let threshold do the filtering
             matches = process.extract(
                 state_str,
                 choices,
                 scorer=fuzz.ratio,
-                limit=self.max_predictions * 2  # Get extra for filtering
+                limit=None  # Get all matches, filter by threshold
             )
             
             # Process matches above threshold
@@ -450,6 +468,19 @@ class ModelSearcher:
                                 missing.append(diff[2:])
                             elif diff.startswith("+ "):
                                 extras.append(diff[2:])
+                        
+                        results.append((
+                            model_id, model_seq, matching_intersection,
+                            past, present, missing, extras,
+                            similarity, number_of_blocks
+                        ))
+                    elif self.recall_threshold == 0.0:
+                        # Special case: threshold 0.0 should include even non-matching models
+                        past = []
+                        present = model_seq
+                        missing = model_seq  # All symbols are missing
+                        extras = state  # All observed symbols are extras
+                        number_of_blocks = 0
                         
                         results.append((
                             model_id, model_seq, matching_intersection,

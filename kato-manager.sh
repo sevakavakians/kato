@@ -38,7 +38,7 @@ DEFAULT_LOG_LEVEL="INFO"
 DEFAULT_PROCESSOR_ID="kato-$(date +%s)-$$"  # Include PID for uniqueness
 DEFAULT_PROCESSOR_NAME="KatoProcessor"
 DEFAULT_INDEXER_TYPE="VI"
-DEFAULT_MAX_SEQUENCE_LENGTH=0
+DEFAULT_MAX_PATTERN_LENGTH=0
 DEFAULT_PERSISTENCE=5
 DEFAULT_SMOOTHNESS=3
 DEFAULT_AUTO_ACT_METHOD="none"
@@ -265,7 +265,7 @@ KATO PROCESSOR OPTIONS:
     --id ID                 Processor ID (default: auto-generated)
     --name NAME             Processor name (default: $DEFAULT_PROCESSOR_NAME)
     --indexer-type TYPE     Indexer type: VI (default: $DEFAULT_INDEXER_TYPE)
-    --max-seq-length N      Max sequence length (default: $DEFAULT_MAX_SEQUENCE_LENGTH)
+    --max-seq-length N      Max sequence length (default: $DEFAULT_MAX_PATTERN_LENGTH)
     --persistence N         Persistence value (default: $DEFAULT_PERSISTENCE)
     --smoothness N          Smoothness value (default: $DEFAULT_SMOOTHNESS)
     --auto-act-method M     Auto act method (default: $DEFAULT_AUTO_ACT_METHOD)
@@ -305,7 +305,7 @@ API_KEY="$DEFAULT_API_KEY"
 PROCESSOR_ID="${PROCESSOR_ID:-$DEFAULT_PROCESSOR_ID}"
 PROCESSOR_NAME="${PROCESSOR_NAME:-$DEFAULT_PROCESSOR_NAME}"
 INDEXER_TYPE="$DEFAULT_INDEXER_TYPE"
-MAX_SEQUENCE_LENGTH="$DEFAULT_MAX_SEQUENCE_LENGTH"
+MAX_PATTERN_LENGTH="$DEFAULT_MAX_PATTERN_LENGTH"
 PERSISTENCE="$DEFAULT_PERSISTENCE"
 SMOOTHNESS="$DEFAULT_SMOOTHNESS"
 AUTO_ACT_METHOD="$DEFAULT_AUTO_ACT_METHOD"
@@ -350,7 +350,7 @@ parse_args() {
                 shift 2
                 ;;
             --max-seq-length)
-                MAX_SEQUENCE_LENGTH="$2"
+                MAX_PATTERN_LENGTH="$2"
                 shift 2
                 ;;
             --persistence)
@@ -482,8 +482,8 @@ validate_parameters() {
     fi
     
     # Validate numeric parameters
-    if ! [[ "$MAX_SEQUENCE_LENGTH" =~ ^[0-9]+$ ]]; then
-        log_error "Invalid max-seq-length: $MAX_SEQUENCE_LENGTH. Must be a number"
+    if ! [[ "$MAX_PATTERN_LENGTH" =~ ^[0-9]+$ ]]; then
+        log_error "Invalid max-seq-length: $MAX_PATTERN_LENGTH. Must be a number"
         exit 1
     fi
     
@@ -519,7 +519,7 @@ build_genome_manifest() {
   "id": "$PROCESSOR_ID",
   "name": "$PROCESSOR_NAME",
   "indexer_type": "$INDEXER_TYPE",
-  "max_sequence_length": $MAX_SEQUENCE_LENGTH,
+  "max_pattern_length": $MAX_PATTERN_LENGTH,
   "persistence": $PERSISTENCE,
   "smoothness": $SMOOTHNESS,
   "auto_act_method": "$AUTO_ACT_METHOD",
@@ -1292,7 +1292,7 @@ main() {
             echo "Processor ID: $PROCESSOR_ID"
             echo "Processor Name: $PROCESSOR_NAME"
             echo "Classifier: $CLASSIFIER"
-            echo "Max Sequence Length: $MAX_SEQUENCE_LENGTH"
+            echo "Max Pattern Length: $MAX_PATTERN_LENGTH"
             echo "Persistence: $PERSISTENCE"
             echo "Smoothness: $SMOOTHNESS"
             echo "Auto Act Method: $AUTO_ACT_METHOD"

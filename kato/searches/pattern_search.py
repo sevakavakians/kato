@@ -1,5 +1,5 @@
 """
-Model search with fast pattern matching algorithms.
+Pattern search with fast pattern matching algorithms.
 Provides ~300x performance improvements using optimized algorithms.
 """
 
@@ -37,7 +37,7 @@ except ImportError:
     RAPIDFUZZ_AVAILABLE = False
     logging.info("RapidFuzz not available. Install with: pip install rapidfuzz")
 
-logger = logging.getLogger('kato.searches.model_search')
+logger = logging.getLogger('kato.searches.pattern_search')
 logger.setLevel(getattr(logging, environ.get('LOG_LEVEL', 'INFO')))
 
 
@@ -57,13 +57,13 @@ class InformationExtractor:
         self.use_fast_matcher = use_fast_matcher
         self.fast_matcher = FastSequenceMatcher() if use_fast_matcher else None
         
-    def extract_prediction_info(self, model: List[str], state: List[str], 
+    def extract_prediction_info(self, pattern: List[str], state: List[str], 
                                cutoff: float) -> Optional[Tuple]:
         """
         Extract prediction information using optimized algorithms.
         
         Args:
-            model: Model sequence
+            pattern: Pattern data
             state: Current state sequence
             cutoff: Similarity threshold
             
@@ -73,13 +73,13 @@ class InformationExtractor:
         if self.use_fast_matcher and RAPIDFUZZ_AVAILABLE:
             # Use RapidFuzz for fast similarity calculation
             # Convert lists to strings for RapidFuzz
-            model_str = ' '.join(model)
+            pattern_str = ' '.join(pattern)
             state_str = ' '.join(state)
-            similarity = fuzz.ratio(model_str, state_str) / 100.0
+            similarity = fuzz.ratio(pattern_str, state_str) / 100.0
         else:
             # Fall back to original SequenceMatcher
             matcher = difflib.SequenceMatcher()
-            matcher.set_seq1(model)
+            matcher.set_seq1(pattern)
             matcher.set_seq2(state)
             similarity = matcher.ratio()
         
@@ -88,7 +88,7 @@ class InformationExtractor:
         
         # Extract detailed match information (same as original)
         matcher = difflib.SequenceMatcher()
-        matcher.set_seq1(model)
+        matcher.set_seq1(pattern)
         matcher.set_seq2(state)
         
         matching_intersection = []
@@ -106,21 +106,21 @@ class InformationExtractor:
             # We have at least 2 actual matching blocks
             (i0, j0, n0) = tuple(matching_blocks[0])
             (i1, j1, n1) = tuple(matching_blocks[-2])  # Last actual match (before terminator)
-            past = model[:i0]
-            present = model[i0:i1+n1] if i1+n1 > i0 else model[i0:]
+            past = pattern[:i0]
+            present = pattern[i0:i1+n1] if i1+n1 > i0 else pattern[i0:]
         elif num_actual_blocks == 1:
             # Only one matching block
             (i0, j0, n0) = tuple(matching_blocks[0])
             (i1, j1, n1) = (i0, j0, n0)  # Use same values for consistency
-            past = model[:i0]
-            present = model[i0:i0+n0]  # Just the matching portion
+            past = pattern[:i0]
+            present = pattern[i0:i0+n0]  # Just the matching portion
         else:
             # No matches - only valid for threshold 0.0
             if cutoff > 0.0:
                 return None
-            # For threshold 0.0, include even non-matching models
+            # For threshold 0.0, include even non-matching patterns
             past = []
-            present = model  # Entire model is "present" when no matches
+            present = pattern  # Entire pattern is "present" when no matches
         
         number_of_blocks = num_actual_blocks
         
@@ -139,20 +139,20 @@ class InformationExtractor:
                 elif diff.startswith("+ "):
                     extras.append(diff[2:])
         
-        return (model, matching_intersection, past, present, 
+        return (pattern, matching_intersection, past, present, 
                 missing, extras, similarity, number_of_blocks)
 
 
-class ModelSearcher:
+class PatternSearcher:
     """
-    Optimized model searcher using fast matching and indexing.
-    Drop-in replacement for ModelSearcher with performance improvements.
+    Optimized pattern searcher using fast matching and indexing.
+    Drop-in replacement for PatternSearcher with performance improvements.
     """
     
     def __init__(self, **kwargs):
-        """Initialize optimized model searcher."""
+        """Initialize optimized pattern searcher."""
         self.procs = multiprocessing.cpu_count()
-        logger.info(f"ModelSearcher using {self.procs} CPUs")
+        logger.info(f"PatternSearcher using {self.procs} CPUs")
         
         self.kb_id = kwargs["kb_id"]
         
@@ -181,92 +181,92 @@ class ModelSearcher:
         
         self.extractor = InformationExtractor(self.use_fast_matching)
         
-        # Model cache
-        self.models_cache = {}
-        self.models_count = 0
+        # Pattern cache
+        self.patterns_cache = {}
+        self.patterns_count = 0
         
-        # Load existing models
-        self.getModels()
+        # Load existing patterns
+        self.getPatterns()
         
         # Initialize worker queues for parallel processing
         self.extractions_queue = Queue()
         self.predictions_queue = Queue()
         
-        logger.info(f"ModelSearcher initialized: "
+        logger.info(f"PatternSearcher initialized: "
                    f"fast_matching={self.use_fast_matching}, "
                    f"indexing={self.use_indexing}")
     
-    def getModels(self):
-        """Load models from database and build indices."""
-        _models = {}
+    def getPatterns(self):
+        """Load patterns from database and build indices."""
+        _patterns = {}
         
-        for m in self.knowledgebase.models_kb.find({}, {"name": 1, "sequence": 1}):
-            model_name = m["name"]
-            flattened = list(chain(*m["sequence"]))
-            _models[model_name] = flattened
+        for p in self.knowledgebase.patterns_kb.find({}, {"name": 1, "pattern_data": 1}):
+            pattern_name = p["name"]
+            flattened = list(chain(*p["pattern_data"]))
+            _patterns[pattern_name] = flattened
             
             # Add to fast matcher if enabled
             if self.fast_matcher:
-                self.fast_matcher.add_model(model_name, flattened)
+                self.fast_matcher.add_pattern(pattern_name, flattened)
             
             # Add to index manager if enabled
             if self.index_manager:
-                self.index_manager.add_model(model_name, flattened)
+                self.index_manager.add_pattern(pattern_name, flattened)
         
-        self.models_cache = _models
-        self.models_count = len(_models)
+        self.patterns_cache = _patterns
+        self.patterns_count = len(_patterns)
         
-        logger.debug(f"Loaded {self.models_count} models into optimized structures")
+        logger.debug(f"Loaded {self.patterns_count} patterns into optimized structures")
     
-    def assignNewlyLearnedToWorkers(self, index: int, model_name: str, 
-                                   new_model: List[str]):
+    def assignNewlyLearnedToWorkers(self, index: int, pattern_name: str, 
+                                   new_pattern: List[str]):
         """
-        Add newly learned model to indices.
+        Add newly learned pattern to indices.
         
         Args:
             index: Worker index (for compatibility)
-            model_name: Model identifier
-            new_model: Model sequence
+            pattern_name: Pattern identifier
+            new_pattern: Pattern data
         """
-        self.models_count += 1
-        self.models_cache[model_name] = new_model
+        self.patterns_count += 1
+        self.patterns_cache[pattern_name] = new_pattern
         
         if self.fast_matcher:
-            self.fast_matcher.add_model(model_name, new_model)
+            self.fast_matcher.add_pattern(pattern_name, new_pattern)
         
         if self.index_manager:
-            self.index_manager.add_model(model_name, new_model)
+            self.index_manager.add_pattern(pattern_name, new_pattern)
         
-        logger.debug(f"Added new model {model_name} to indices")
+        logger.debug(f"Added new pattern {pattern_name} to indices")
     
-    def delete_model(self, name: str) -> bool:
+    def delete_pattern(self, name: str) -> bool:
         """
-        Delete model from all indices.
+        Delete pattern from all indices.
         
         Args:
-            name: Model name to delete
+            name: Pattern name to delete
             
         Returns:
-            True if model was found and deleted
+            True if pattern was found and deleted
         """
-        if name not in self.models_cache:
+        if name not in self.patterns_cache:
             return False
         
-        del self.models_cache[name]
-        self.models_count -= 1
+        del self.patterns_cache[name]
+        self.patterns_count -= 1
         
         if self.index_manager:
-            self.index_manager.remove_model(name)
+            self.index_manager.remove_pattern(name)
         
         # Note: fast_matcher doesn't have efficient delete, would need rebuild
         
-        logger.debug(f"Deleted model {name}")
+        logger.debug(f"Deleted pattern {name}")
         return True
     
-    def clearModelsFromRAM(self):
-        """Clear all models from memory."""
-        self.models_count = 0
-        self.models_cache.clear()
+    def clearPatternsFromRAM(self):
+        """Clear all patterns from memory."""
+        self.patterns_count = 0
+        self.patterns_cache.clear()
         
         if self.fast_matcher:
             self.fast_matcher.clear()
@@ -278,22 +278,22 @@ class ModelSearcher:
     def causalBelief(self, state: List[str], 
                     target_class_candidates: List[str] = []) -> List[Any]:
         """
-        Find matching models and generate predictions.
+        Find matching patterns and generate predictions.
         Optimized version with fast filtering and matching.
         
         Args:
             state: Current state sequence
-            target_class_candidates: Optional list of specific models to check
+            target_class_candidates: Optional list of specific patterns to check
             
         Returns:
             List of Prediction objects
         """
-        if self.models_count == 0:
-            self.getModels()
+        if self.patterns_count == 0:
+            self.getPatterns()
         
         results = []
         
-        # Get candidate models using indices
+        # Get candidate patterns using indices
         if self.use_indexing and self.index_manager and not target_class_candidates:
             # Use index to find candidates
             candidates = self.index_manager.search_candidates(state, length_tolerance=0.5)
@@ -302,10 +302,10 @@ class ModelSearcher:
             if target_class_candidates:
                 candidates &= set(target_class_candidates)
             
-            logger.debug(f"Index filtering: {self.models_count} -> {len(candidates)} candidates")
+            logger.debug(f"Index filtering: {self.patterns_count} -> {len(candidates)} candidates")
         else:
-            # Use all models or specified targets
-            candidates = target_class_candidates if target_class_candidates else self.models_cache.keys()
+            # Use all patterns or specified targets
+            candidates = target_class_candidates if target_class_candidates else self.patterns_cache.keys()
         
         # Process candidates
         if self.use_fast_matching and RAPIDFUZZ_AVAILABLE:
@@ -321,15 +321,15 @@ class ModelSearcher:
         active_list = []
         for result in results:
             if len(result) >= 8:  # Ensure we have all required fields
-                model_hash, model, matching_intersection, past, present, missing, extras, similarity, number_of_blocks = result[:9]
+                pattern_hash, pattern, matching_intersection, past, present, missing, extras, similarity, number_of_blocks = result[:9]
                 
-                # Fetch full model data from database
-                model_data = self.knowledgebase.models_kb.find_one(
-                    {"name": model_hash}, {"_id": 0})
+                # Fetch full pattern data from database
+                pattern_data = self.knowledgebase.patterns_kb.find_one(
+                    {"name": pattern_hash}, {"_id": 0})
                 
-                if model_data:
+                if pattern_data:
                     pred = Prediction(
-                        model_data,
+                        pattern_data,
                         matching_intersection,
                         past, present,
                         missing,
@@ -360,7 +360,7 @@ class ModelSearcher:
         
         Args:
             state: Current state
-            candidates: Candidate model IDs
+            candidates: Candidate pattern IDs
             results: Output list for results
         """
         # Convert state to string for RapidFuzz
@@ -368,10 +368,10 @@ class ModelSearcher:
         
         # Prepare choices
         choices = {}
-        for model_id in candidates:
-            if model_id in self.models_cache:
-                model_seq = self.models_cache[model_id]
-                choices[model_id] = ' '.join(model_seq)
+        for pattern_id in candidates:
+            if pattern_id in self.patterns_cache:
+                pattern_seq = self.patterns_cache[pattern_id]
+                choices[pattern_id] = ' '.join(pattern_seq)
         
         # Use RapidFuzz to find best matches
         if choices:
@@ -384,17 +384,17 @@ class ModelSearcher:
             )
             
             # Process matches above threshold
-            for choice_str, score, model_id in matches:
+            for choice_str, score, pattern_id in matches:
                 similarity = score / 100.0
                 if similarity >= self.recall_threshold:
-                    model_seq = self.models_cache[model_id]
+                    pattern_seq = self.patterns_cache[pattern_id]
                     
                     # Extract detailed info for prediction
                     info = self.extractor.extract_prediction_info(
-                        model_seq, state, self.recall_threshold)
+                        pattern_seq, state, self.recall_threshold)
                     
                     if info:
-                        results.append((model_id,) + info)
+                        results.append((pattern_id,) + info)
     
     def _process_with_original(self, state: List[str], 
                               candidates: List[str], results: List):
@@ -403,24 +403,24 @@ class ModelSearcher:
         
         Args:
             state: Current state
-            candidates: Candidate model IDs
+            candidates: Candidate pattern IDs
             results: Output list for results
         """
-        model_matcher = difflib.SequenceMatcher()
-        model_matcher.set_seq2(state)
+        pattern_matcher = difflib.SequenceMatcher()
+        pattern_matcher.set_seq2(state)
         
-        for model_id in candidates:
-            if model_id in self.models_cache:
-                model_seq = self.models_cache[model_id]
+        for pattern_id in candidates:
+            if pattern_id in self.patterns_cache:
+                pattern_seq = self.patterns_cache[pattern_id]
                 
                 # Use original extraction logic
-                model_matcher.set_seq1(model_seq)
-                similarity = model_matcher.ratio()
+                pattern_matcher.set_seq1(pattern_seq)
+                similarity = pattern_matcher.ratio()
                 
                 if similarity >= self.recall_threshold:
                     # Extract detailed information
                     matching_intersection = []
-                    matching_blocks = model_matcher.get_matching_blocks()
+                    matching_blocks = pattern_matcher.get_matching_blocks()
                     
                     for block in matching_blocks[:-1]:
                         (i, j, n) = tuple(block)
@@ -435,8 +435,8 @@ class ModelSearcher:
                             # Single matching block case
                             (i0, j0, n0) = tuple(matching_blocks[0])
                             
-                            past = model_seq[:i0]
-                            present = model_seq[i0:i0+n0]
+                            past = pattern_seq[:i0]
+                            present = pattern_seq[i0:i0+n0]
                             
                             # For single block, use the same length as present for state_segment
                             state_segment = state[j0:min(j0+len(present), len(state))]
@@ -447,8 +447,8 @@ class ModelSearcher:
                             (i0, j0, n0) = tuple(matching_blocks[0])
                             (i1, j1, n1) = tuple(matching_blocks[-2])  # Last actual match (before terminator)
                             
-                            past = model_seq[:i0]
-                            present = model_seq[i0:i1+n1] if i1+n1 > i0 else model_seq[i0:]
+                            past = pattern_seq[:i0]
+                            present = pattern_seq[i0:i1+n1] if i1+n1 > i0 else pattern_seq[i0:]
                             
                         
                         number_of_blocks = num_actual_blocks
@@ -458,11 +458,11 @@ class ModelSearcher:
                         missing = []
                         extras = []
                         
-                        model_matcher.set_seq1(present)
+                        pattern_matcher.set_seq1(present)
                         # seq2 already has the full state from earlier
-                        # model_matcher.set_seq2(state) was already done above
+                        # pattern_matcher.set_seq2(state) was already done above
                         
-                        diffs = list(model_matcher.compare())
+                        diffs = list(pattern_matcher.compare())
                         for diff in diffs:
                             if diff.startswith("- "):
                                 missing.append(diff[2:])
@@ -470,20 +470,20 @@ class ModelSearcher:
                                 extras.append(diff[2:])
                         
                         results.append((
-                            model_id, model_seq, matching_intersection,
+                            pattern_id, pattern_seq, matching_intersection,
                             past, present, missing, extras,
                             similarity, number_of_blocks
                         ))
                     elif self.recall_threshold == 0.0:
-                        # Special case: threshold 0.0 should include even non-matching models
+                        # Special case: threshold 0.0 should include even non-matching patterns
                         past = []
-                        present = model_seq
-                        missing = model_seq  # All symbols are missing
+                        present = pattern_seq
+                        missing = pattern_seq  # All symbols are missing
                         extras = state  # All observed symbols are extras
                         number_of_blocks = 0
                         
                         results.append((
-                            model_id, model_seq, matching_intersection,
+                            pattern_id, pattern_seq, matching_intersection,
                             past, present, missing, extras,
                             similarity, number_of_blocks
                         ))

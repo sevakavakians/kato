@@ -18,25 +18,26 @@ from kato.informatics.metrics import average_emotives, \
                                             conditionalProbability, \
                                             confluence, \
                                             expectation
-from kato.representations.model import Model
-from kato.searches.model_search import ModelSearcher
+from kato.representations.pattern import Pattern
+from kato.searches.pattern_search import PatternSearcher
 
 from collections import Counter
 
-logger = logging.getLogger('kato.modeler')
+logger = logging.getLogger('kato.pattern_processor')
 logger.setLevel(getattr(logging, environ['LOG_LEVEL']))
 logger.info('logging initiated')
 
-class Modeler:
+class PatternProcessor:
     """
-    Responsible for creating new, recognizing known, discovering unknown, and predicting models.
+    Responsible for creating new, recognizing known, discovering unknown, and predicting patterns.
+    Patterns can be temporal (sequences) or non-temporal (profiles).
     """
     def __init__(self, **kwargs):
-        logger.debug("Starting Modeler...")
-        logger.debug(f"Modeler kwargs: {kwargs}")
-        self.name = f"{kwargs['name']}-Modeler"
+        logger.debug("Starting PatternProcessor...")
+        logger.debug(f"PatternProcessor kwargs: {kwargs}")
+        self.name = f"{kwargs['name']}-PatternProcessor"
         self.kb_id = kwargs["kb_id"] # Use this to connect to the KB.
-        self.max_sequence_length = kwargs["max_sequence_length"]
+        self.max_pattern_length = kwargs["max_pattern_length"]
         self.persistence = kwargs["persistence"]
         self.smoothness = kwargs["smoothness"]
         self.AUTOACT_METHOD = kwargs["auto_act_method"]
@@ -46,7 +47,7 @@ class Modeler:
         self.recall_threshold = float(kwargs["recall_threshold"])
         self.QUIESCENCE = kwargs["quiescence"]
         self.superkb = SuperKnowledgeBase(self.kb_id, self.persistence)
-        self.models_searcher = ModelSearcher(kb_id=self.kb_id,
+        self.patterns_searcher = PatternSearcher(kb_id=self.kb_id,
                                              max_predictions=self.max_predictions,
                                              recall_threshold=self.recall_threshold)
         self.initiateDefaults()
@@ -55,7 +56,7 @@ class Modeler:
         self.mood = {}
         self.target_class = None
         self.target_class_candidates = []
-        logger.info(f"Modeler {self.name} started!")
+        logger.info(f"PatternProcessor {self.name} started!")
         return
 
     def setSTM(self, x):
@@ -70,9 +71,9 @@ class Modeler:
 
     def clear_all_memory(self):
         self.clear_stm()
-        self.last_learned_model_name = None
-        self.models_searcher.clearModelsFromRAM()
-        self.superkb.models_observation_count = 0
+        self.last_learned_pattern_name = None
+        self.patterns_searcher.clearPatternsFromRAM()
+        self.superkb.patterns_observation_count = 0
         self.superkb.symbols_observation_count = 0
         self.initiateDefaults()
         return
@@ -82,54 +83,54 @@ class Modeler:
         self.STM = deque()
         self.emotives = []
         self.mood = {}
-        self.last_learned_model_name = None
-        self.models_searcher.getModels()
+        self.last_learned_pattern_name = None
+        self.patterns_searcher.getPatterns()
         self.trigger_predictions = False
         return
 
     def learn(self):
         """
-        Convert current short-term memory into a persistent model.
+        Convert current short-term memory into a persistent pattern.
         
-        Creates a hash-named model from the sequence in STM, stores it in MongoDB,
+        Creates a hash-named pattern from the data in STM, stores it in MongoDB,
         and distributes it to search workers for future pattern matching.
         """
-        model = Model(self.STM)  # Create model from short-term memory sequence
+        pattern = Pattern(self.STM)  # Create pattern from short-term memory data
         self.STM.clear()  # Reset short-term memory after learning
         
-        if len(model) > 1:  # Only learn multi-event sequences
-            # Store model with averaged emotives from all events
-            x = self.models_kb.learnModel(model, emotives=average_emotives(self.emotives))
+        if len(pattern) > 1:  # Only learn multi-event patterns
+            # Store pattern with averaged emotives from all events
+            x = self.patterns_kb.learnPattern(pattern, emotives=average_emotives(self.emotives))
             
             if x:
-                # Add newly learned model to the searcher
+                # Add newly learned pattern to the searcher
                 # Index parameter kept for backward compatibility but ignored by optimized version
-                self.models_searcher.assignNewlyLearnedToWorkers(
+                self.patterns_searcher.assignNewlyLearnedToWorkers(
                     0,  # Index parameter ignored in optimized implementation
-                    model.name, 
-                    list(chain(*model.sequence))
+                    pattern.name, 
+                    list(chain(*pattern.pattern_data))
                 )
-            self.last_learned_model_name = model.name
-            del(model)
+            self.last_learned_pattern_name = pattern.name
+            del(pattern)
             self.emotives = []
-            return self.last_learned_model_name
+            return self.last_learned_pattern_name
         self.emotives = []
         return None
 
-    def delete_model(self, name):
-        if not self.models_searcher.delete_model(name):
-            raise Exception(f'Unable to find and delete model {name} in RAM')
-        result = self.models_kb.delete_one({"name": name})
+    def delete_pattern(self, name):
+        if not self.patterns_searcher.delete_pattern(name):
+            raise Exception(f'Unable to find and delete pattern {name} in RAM')
+        result = self.patterns_kb.delete_one({"name": name})
         if result.deleted_count != 1:
-            logger.warning(f'Expected to delete 1 record for model {name} but deleted {result.deleted_count}')
+            logger.warning(f'Expected to delete 1 record for pattern {name} but deleted {result.deleted_count}')
         return 'deleted'
 
-    def update_model(self, name, frequency, emotives):
-        """Return the updated version of the model *name* with new frequency and emotives set."""
+    def update_pattern(self, name, frequency, emotives):
+        """Return the updated version of the pattern *name* with new frequency and emotives set."""
         for emotive, values_list in emotives.items():
             if len(values_list) > self.persistence:
                 raise Exception(f'{emotive} array length ({len(values_list)}) exceeds system persistence ({self.persistence})')
-        return self.models_kb.find_one_and_update(
+        return self.patterns_kb.find_one_and_update(
             {'name': name},
             {'$set': {'frequency': frequency, 'emotives': emotives}},
             {'_id': False},
@@ -138,10 +139,10 @@ class Modeler:
 
     def processEvents(self, current_unique_id):
         """
-        Generate predictions by matching short-term memory against learned models.
+        Generate predictions by matching short-term memory against learned patterns.
         
         Flattens the STM (list of events) into a single state vector,
-        then searches for similar patterns in the model database.
+        then searches for similar patterns in the pattern database.
         Predictions are cached in MongoDB for retrieval.
         
         Note: KATO requires at least 2 strings in STM to generate predictions.
@@ -152,7 +153,7 @@ class Modeler:
         # Only generate predictions if we have at least 2 strings in state
         # KATO requires minimum 2 strings for pattern matching
         if len(state) >= 2 and self.predict and self.trigger_predictions:
-            predictions = self.predictModel(state)
+            predictions = self.predictPattern(state)
             
             # Store predictions for async retrieval
             if predictions:
@@ -179,41 +180,41 @@ class Modeler:
     def symbolFrequency(self, symbol):
         return self.superkb.symbols_kb.find_one({"name": symbol})['frequency']
 
-    def symbolProbability(self, symbol, total_symbols_in_models_frequencies):
-        "Grab symbol frequency from symbols_kb. Test 'model_member_frequency' or 'frequency'."
+    def symbolProbability(self, symbol, total_symbols_in_patterns_frequencies):
+        "Grab symbol frequency from symbols_kb. Test 'pattern_member_frequency' or 'frequency'."
         # We can either look at using the probability of a symbol to appear anywhere in the KB, which means it can also appear
-        # multiple times in one sequence, or we can look at the probability of a symbol to appear in any sequence, regardless
-        # of the number of times it appears within any one sequence.
+        # multiple times in one pattern, or we can look at the probability of a symbol to appear in any pattern, regardless
+        # of the number of times it appears within any one pattern.
         # We can also look at coming up with a formula to account for both to affect the potential.
-        return float(self.superkb.symbols_kb.find_one({"name": symbol})['model_member_frequency']/total_symbols_in_models_frequencies) if total_symbols_in_models_frequencies > 0 else 0.0 ## or ['frequency']
+        return float(self.superkb.symbols_kb.find_one({"name": symbol})['pattern_member_frequency']/total_symbols_in_patterns_frequencies) if total_symbols_in_patterns_frequencies > 0 else 0.0 ## or ['frequency']
 
-    def modelProbability(self, freq, total_model_frequencies):
-        return float(freq/total_model_frequencies) if total_model_frequencies > 0 else 0.0
+    def patternProbability(self, freq, total_pattern_frequencies):
+        return float(freq/total_pattern_frequencies) if total_pattern_frequencies > 0 else 0.0
 
-    def predictModel(self, state):
-        "Predict models and update active model fractional frequencies considering the inverse frequency values of the symbols."
-        logger.debug(f" {self.name} [ Modeler predictModel called ]")
+    def predictPattern(self, state):
+        "Predict patterns and update active pattern fractional frequencies considering the inverse frequency values of the symbols."
+        logger.debug(f" {self.name} [ PatternProcessor predictPattern called ]")
         total_symbols = self.superkb.symbols_kb.count_documents({})
-        total_symbols_in_models_frequencies = self.superkb.metadata.find_one(
-            {"class": "totals"})['total_symbols_in_models_frequencies']
-        total_model_frequencies = self.superkb.metadata.find_one({"class": "totals"})['total_model_frequencies']
+        total_symbols_in_patterns_frequencies = self.superkb.metadata.find_one(
+            {"class": "totals"})['total_symbols_in_patterns_frequencies']
+        total_pattern_frequencies = self.superkb.metadata.find_one({"class": "totals"})['total_pattern_frequencies']
         try:
-            causal_models = self.models_searcher.causalBelief(state, self.target_class_candidates)
+            causal_patterns = self.patterns_searcher.causalBelief(state, self.target_class_candidates)
         except Exception as e:
-            raise Exception("\nException in Modeler.predictModel: Error in causalBelief! %s: %s" %(self.kb_id, e))
+            raise Exception("\nException in PatternProcessor.predictPattern: Error in causalBelief! %s: %s" %(self.kb_id, e))
         
         try:
             # Fetch and pre-calculate the probability (for the union of symbols in matches and missing) exactly once, to
             # be used in the calculations that follow
             symbol_probability_cache = {}
             symbol_frequency_cache = Counter()
-            total_ensemble_model_frequencies = 0
+            total_ensemble_pattern_frequencies = 0
             symbol_cache = {}
             all_symbols = self.superkb.symbols_kb.find({}, {'_id': False}, cursor_type=pymongo.CursorType.EXHAUST)
             for symbol in all_symbols:
                 symbol_cache[symbol['name']] = symbol
-            for prediction in causal_models:
-                total_ensemble_model_frequencies += prediction['frequency']
+            for prediction in causal_patterns:
+                total_ensemble_pattern_frequencies += prediction['frequency']
                 for symbol in itertools.chain(prediction['matches'], prediction['missing']):
                     if symbol not in symbol_probability_cache or symbol not in symbol_frequency_cache:
                         # Check if symbol exists in cache, skip if not (new/unknown symbol)
@@ -222,7 +223,7 @@ class Modeler:
                             symbol_frequency_cache[symbol] = 0
                             continue
                         symbol_data = symbol_cache[symbol]
-                        symbol_probability = float(symbol_data['model_member_frequency'] / total_symbols_in_models_frequencies) if total_symbols_in_models_frequencies > 0 else 0.0
+                        symbol_probability = float(symbol_data['pattern_member_frequency'] / total_symbols_in_patterns_frequencies) if total_symbols_in_patterns_frequencies > 0 else 0.0
                         symbol_probability_cache[symbol] = symbol_probability
                         symbol_frequency_cache[symbol] += symbol_data['frequency']
             symbol_frequency_in_state = Counter(state)
@@ -230,15 +231,15 @@ class Modeler:
             for symbol in symbol_frequency_in_state.keys():
                 if symbol not in symbol_frequency_cache:
                     symbol_frequency_cache[symbol] = 0
-            for prediction in causal_models:
+            for prediction in causal_patterns:
                 _present = list(chain(*prediction.present)) #list(chain(*prediction['present']))
                 all_symbols = set(_present + state)
-                symbol_frequency_in_model = Counter(_present)
+                symbol_frequency_in_pattern = Counter(_present)
                 state_frequency_vector = [(symbol_probability_cache.get(symbol, 0) * symbol_frequency_in_state.get(symbol, 0)) for symbol in all_symbols]
-                model_frequency_vector = [(symbol_probability_cache.get(symbol, 0) * symbol_frequency_in_model.get(symbol, 0)) for symbol in all_symbols]
-                _p_e_h = float(self.modelProbability(prediction['frequency'], total_model_frequencies)) # p(e|h)
-                distance = float(spatial.distance.cosine(state_frequency_vector, model_frequency_vector))
-                itfdf_similarity = round(float(1 - (distance * prediction['frequency'] / total_ensemble_model_frequencies)) if total_ensemble_model_frequencies > 0 else 0.0, 12)
+                pattern_frequency_vector = [(symbol_probability_cache.get(symbol, 0) * symbol_frequency_in_pattern.get(symbol, 0)) for symbol in all_symbols]
+                _p_e_h = float(self.patternProbability(prediction['frequency'], total_pattern_frequencies)) # p(e|h)
+                distance = float(spatial.distance.cosine(state_frequency_vector, pattern_frequency_vector))
+                itfdf_similarity = round(float(1 - (distance * prediction['frequency'] / total_ensemble_pattern_frequencies)) if total_ensemble_pattern_frequencies > 0 else 0.0, 12)
                 prediction['itfdf_similarity'] = itfdf_similarity
                 prediction['entropy'] = round(float(sum([classic_expectation(symbol_probability_cache.get(symbol, 0)) for symbol in _present])), 12)
                 prediction['hamiltonian'] = round(float(hamiltonian(_present, total_symbols)), 12)
@@ -246,13 +247,13 @@ class Modeler:
                 prediction['confluence'] = round(float(_p_e_h * (1 - conditionalProbability(_present, symbol_probability_cache) ) ), 12) # = probability of sequence occurring in observations * ( 1 - probability of sequence occurring randomly)
                 prediction['potential'] = round(float( ( prediction['evidence'] + prediction['confidence'] ) * prediction.get("snr", 0) + prediction['itfdf_similarity'] + (1/ (prediction['fragmentation'] +1) ) ), 12)
                 prediction['emotives'] = average_emotives(prediction['emotives'])
-                prediction.pop('sequence')
+                prediction.pop('pattern_data')
 
         except Exception as e:
-            raise Exception("\nException in Modeler.predictModel: Error in potential calculation! %s: %s" %(self.kb_id, e))
+            raise Exception("\nException in PatternProcessor.predictPattern: Error in potential calculation! %s: %s" %(self.kb_id, e))
         try:
-            active_causal_models = sorted([x for x in heapq.nlargest(self.max_predictions,causal_models,key=itemgetter('potential'))], reverse=True, key=itemgetter('potential'))
+            active_causal_patterns = sorted([x for x in heapq.nlargest(self.max_predictions,causal_patterns,key=itemgetter('potential'))], reverse=True, key=itemgetter('potential'))
         except Exception as e:
-            raise Exception("\nException in Modeler.predictModel: Error in sorting predictions! %s: %s" %(self.kb_id, e))
-        logger.debug(" [ Modeler predictModel ] %s active_causal_models" %(len(active_causal_models)))
-        return active_causal_models
+            raise Exception("\nException in PatternProcessor.predictPattern: Error in sorting predictions! %s: %s" %(self.kb_id, e))
+        logger.debug(" [ PatternProcessor predictPattern ] %s active_causal_patterns" %(len(active_causal_patterns)))
+        return active_causal_patterns

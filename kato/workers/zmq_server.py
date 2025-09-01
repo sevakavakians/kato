@@ -187,7 +187,7 @@ class ImprovedZMQServer:
                 'get_cognition_data': self._handle_get_cognition_data,
                 'get_gene': self._handle_get_gene,
                 'gene_change': self._handle_gene_change,
-                'get_model': self._handle_get_model,
+                'get_pattern': self._handle_get_pattern,
                 'get_genome': self._handle_get_genome,
             }
             
@@ -283,12 +283,12 @@ class ImprovedZMQServer:
             unique_id = params.get('unique_id', {})
             predictions = self.primitive.get_predictions(unique_id)
             
-            # Add MODEL| prefix to prediction names for consistency
+            # Add PTRN| prefix to prediction names for consistency
             for pred in predictions:
                 if isinstance(pred, dict):
                     name = pred.get('name', '')
-                    if name and not name.startswith('MODEL|'):
-                        pred['name'] = f'MODEL|{name}'
+                    if name and not name.startswith('PTRN|'):
+                        pred['name'] = f'PTRN|{name}'
             
             return {
                 'status': 'okay',
@@ -407,41 +407,41 @@ class ImprovedZMQServer:
                 'message': str(e)
             }
             
-    def _handle_get_model(self, params):
-        """Handle get model request."""
+    def _handle_get_pattern(self, params):
+        """Handle get pattern request."""
         try:
-            model_id = params.get('model_id')
-            if not model_id:
+            pattern_id = params.get('pattern_id')
+            if not pattern_id:
                 return {
                     'status': 'error',
-                    'message': 'model_id parameter required'
+                    'message': 'pattern_id parameter required'
                 }
                 
-            # Get model from knowledge base
-            # Strip MODEL| prefix if present
-            if model_id.startswith('MODEL|'):
-                model_name = model_id[6:]
+            # Get pattern from knowledge base
+            # Strip PTRN| prefix if present
+            if pattern_id.startswith('PTRN|'):
+                pattern_name = pattern_id[5:]
             else:
-                model_name = model_id
+                pattern_name = pattern_id
                 
-            model = self.primitive.modeler.models_kb.find_one({"name": model_name})
-            if model:
+            pattern = self.primitive.pattern_processor.patterns_kb.find_one({"name": pattern_name})
+            if pattern:
                 return {
                     'status': 'okay',
-                    'model': {
-                        'name': model.get('name'),
-                        'sequence': model.get('sequence', []),
-                        'frequency': model.get('frequency', 0),
-                        'emotives': model.get('emotives', {})
+                    'pattern': {
+                        'name': pattern.get('name'),
+                        'pattern_data': pattern.get('pattern_data', []),
+                        'frequency': pattern.get('frequency', 0),
+                        'emotives': pattern.get('emotives', {})
                     }
                 }
             else:
                 return {
                     'status': 'error',
-                    'message': f'Model {model_id} not found'
+                    'message': f'Pattern {pattern_id} not found'
                 }
         except Exception as e:
-            logger.error(f"Error getting model: {e}")
+            logger.error(f"Error getting pattern: {e}")
             return {
                 'status': 'error',
                 'message': str(e)
@@ -517,7 +517,7 @@ class ImprovedZMQServer:
                     'id': self.primitive.id,
                     'name': self.primitive.name,
                     'classifier': getattr(self.primitive, 'classifier_type', 'CVC'),
-                    'max_sequence_length': getattr(self.primitive.modeler, 'max_sequence_length', 0),
+                    'max_pattern_length': getattr(self.primitive.pattern_processor, 'max_pattern_length', 0),
                     'persistence': getattr(self.primitive.modeler, 'persistence', 5),
                     'smoothness': getattr(self.primitive.modeler, 'smoothness', 3),
                     'recall_threshold': getattr(self.primitive.modeler, 'recall_threshold', 0.1),

@@ -6,7 +6,7 @@ from typing import Counter
 from multiprocessing import cpu_count, Lock
 
 from kato.workers.vector_processor import VectorProcessor
-from kato.workers.modeler import Modeler
+from kato.workers.pattern_processor import PatternProcessor
 from kato.informatics.metrics import average_emotives
 
 
@@ -35,9 +35,9 @@ class KatoProcessor:
 
         self.genome_manifest["kb_id"] = self.id
         self.vector_processor = VectorProcessor(self.procs_for_searches, **self.genome_manifest)
-        self.modeler = Modeler(**self.genome_manifest)
-        self.knowledge = self.modeler.superkb.knowledge
-        self.modeler.models_kb = self.modeler.superkb.models_kb
+        self.pattern_processor = PatternProcessor(**self.genome_manifest)
+        self.knowledge = self.pattern_processor.superkb.knowledge
+        self.pattern_processor.patterns_kb = self.pattern_processor.superkb.patterns_kb
         self.predictions_kb = self.knowledge.predictions_kb
 
         self.processing_lock = Lock()
@@ -52,7 +52,7 @@ class KatoProcessor:
         self.symbols = []
         self.current_emotives = {}
         self.last_command = ""
-        self.modeler.v_identified = []
+        self.pattern_processor.v_identified = []
         self.percept_data = {}
         self.percept_data_vector = None
         return
@@ -62,13 +62,13 @@ class KatoProcessor:
         return symbols
 
     def _process_emotives_(self, emotives):
-        self.modeler.emotives += [emotives]
-        self.current_emotives = average_emotives(self.modeler.emotives) ## Average the emotives sourced from multiple pathways.
+        self.pattern_processor.emotives += [emotives]
+        self.current_emotives = average_emotives(self.pattern_processor.emotives) ## Average the emotives sourced from multiple pathways.
         return
 
     def get_model(self, name):
         "Retrieve model values by using the model name."
-        m = self.modeler.superkb.getModel(name)
+        m = self.pattern_processor.superkb.getPattern(name)
         if m is not None:
             m.pop('_id')
             return m
@@ -77,14 +77,14 @@ class KatoProcessor:
 
     def get_vector(self, name):
         "Retrieve vector values by using the vector name."
-        m = self.modeler.superkb.getVector(name)
+        m = self.pattern_processor.superkb.getVector(name)
         return m
 
     def clear_stm(self):
         self.__primitive_variables_reset__()
         self.symbols = []
         self.predictions = []
-        self.modeler.clear_stm()
+        self.pattern_processor.clear_stm()
         return
 
     def clear_all_memory(self):
@@ -93,26 +93,26 @@ class KatoProcessor:
         self.current_emotives = {}
         self.predictions = []
         self.clear_stm()
-        self.modeler.superkb.clear_all_memory()
-        self.modeler.clear_all_memory()
+        self.pattern_processor.superkb.clear_all_memory()
+        self.pattern_processor.clear_all_memory()
         self.vector_processor.clear_all_memory() # Re-initialize vector KBs
         return
 
     def learn(self):
         self.vector_processor.learn()
-        model_name = self.modeler.learn() # Returns the name of the model just learned.
-        if model_name:
-            return f"MODEL|{model_name}"
+        pattern_name = self.pattern_processor.learn() # Returns the name of the pattern just learned.
+        if pattern_name:
+            return f"PTRN|{pattern_name}"
         # Return empty string for empty/single sequences (no model created)
         return ""
 
-    def delete_model(self, name):
-        """Delete model with the given name from both models-kb and RAM."""
-        return self.modeler.delete_model(name)
+    def delete_pattern(self, name):
+        """Delete pattern with the given name from both patterns-kb and RAM."""
+        return self.pattern_processor.delete_pattern(name)
 
-    def update_model(self, name, frequency, emotives):
-        """Update the frequency and emotives of model with the given name from models-kb."""
-        return self.modeler.update_model(name, frequency, emotives)
+    def update_pattern(self, name, frequency, emotives):
+        """Update the frequency and emotives of pattern with the given name from patterns-kb."""
+        return self.pattern_processor.update_pattern(name, frequency, emotives)
 
     def observe(self, data=None):
         """
@@ -122,7 +122,7 @@ class KatoProcessor:
         - String symbols (already in symbolic form)
         - Vectors (converted to symbols via vector processor)
         - Emotives (emotional/utility values)
-        - Auto-learning when max_sequence_length is reached
+        - Auto-learning when max_pattern_length is reached
         """
         with self.processing_lock:
             self.time += 1
@@ -169,29 +169,29 @@ class KatoProcessor:
             self.symbols = v_identified[:] + symbols[:]
             # Only trigger predictions if we have actual symbolic content
             if vector_data or string_data:
-                self.modeler.trigger_predictions = True
+                self.pattern_processor.trigger_predictions = True
             
             # Add current symbols to short-term memory
-            self.modeler.setCurrentEvent(self.symbols)
+            self.pattern_processor.setCurrentEvent(self.symbols)
             
             # Generate predictions based on short-term memory state
             if vector_data or string_data:
-                self.predictions = self.modeler.processEvents(data['unique_id'])
+                self.predictions = self.pattern_processor.processEvents(data['unique_id'])
             
             # Auto-learning: Create a model when short-term memory reaches max length
             # This prevents unbounded memory growth and creates temporal chunks
             auto_learned_model = None
-            stm_length = len(self.modeler.STM)
-            max_seq_length = self.modeler.max_sequence_length
+            stm_length = len(self.pattern_processor.STM)
+            max_pattern_length = self.pattern_processor.max_pattern_length
             
-            if max_seq_length > 0 and stm_length >= max_seq_length:
+            if max_pattern_length > 0 and stm_length >= max_pattern_length:
                 # Short-term memory is full - time to consolidate into a model
                 if stm_length > 1:
                     # Keep the last event as context for the next sequence
                     # This maintains continuity between learned chunks
-                    stm_tail = self.modeler.STM[-1]
+                    stm_tail = self.pattern_processor.STM[-1]
                     auto_learned_model = self.learn()  # Creates model and clears STM
-                    self.modeler.setSTM([stm_tail])  # Start new STM with last event
+                    self.pattern_processor.setSTM([stm_tail])  # Start new STM with last event
                     if auto_learned_model:
                         logger.info(f"Auto-learned model: {auto_learned_model}")
                 elif stm_length == 1:
@@ -228,12 +228,12 @@ class KatoProcessor:
     def getGene(self, gene_name):
         """Return the value of a gene parameter"""
         logger.debug(f'getGene called with {gene_name} for {self.name}-{self.id}')
-        return getattr(self.modeler, gene_name, None)
+        return getattr(self.pattern_processor, gene_name, None)
 
     def get_stm(self):
         """Get the current short-term memory"""
         logger.debug(f'get_stm called in {self.name}-{self.id}')
-        return list(self.modeler.STM)
+        return list(self.pattern_processor.STM)
     
     def get_percept_data(self):
         """Return percept data"""
@@ -251,13 +251,13 @@ class KatoProcessor:
             'path': [],
             'strings': [],
             'vectors': [],
-            'short_term_memory': list(self.modeler.STM)
+            'short_term_memory': list(self.pattern_processor.STM)
         }
 
     def update_genes(self, genes):
         """Update gene values"""
         logger.debug(f'update_genes called with {genes} for {self.name}-{self.id}')
         for gene_name, value in genes.items():
-            if hasattr(self.modeler, gene_name):
-                setattr(self.modeler, gene_name, value)
+            if hasattr(self.pattern_processor, gene_name):
+                setattr(self.pattern_processor, gene_name, value)
         return "genes-updated"

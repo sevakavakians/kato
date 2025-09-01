@@ -1,7 +1,7 @@
 """
 Index Manager for KATO Search Optimization
 
-This module provides index structures for fast pattern matching and model searching.
+This module provides index structures for fast pattern matching and pattern searching.
 Part of the performance optimization suite.
 """
 
@@ -13,8 +13,8 @@ import hashlib
 
 class InvertedIndex:
     """
-    Inverted index for fast symbol-to-model lookup.
-    Maps symbols to the models that contain them.
+    Inverted index for fast symbol-to-pattern lookup.
+    Maps symbols to the patterns that contain them.
     """
     
     def __init__(self):
@@ -23,7 +23,7 @@ class InvertedIndex:
         self.term_frequencies: Dict[str, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
         
     def add_document(self, doc_id: str, terms: List[str]):
-        """Add a document (model) to the index."""
+        """Add a document (pattern) to the index."""
         self.document_count += 1
         term_counts = defaultdict(int)
         
@@ -203,34 +203,34 @@ class IndexManager:
         self.inverted_index = InvertedIndex()
         self.bloom_filter = BloomFilter()
         self.length_index = LengthPartitionedIndex()
-        self.model_data: Dict[str, Any] = {}
+        self.pattern_data: Dict[str, Any] = {}
     
-    def index_model(self, model_id: str, sequence: List[str], data: Any = None):
+    def index_pattern(self, pattern_id: str, sequence: List[str], data: Any = None):
         """
-        Index a model across all index structures.
+        Index a pattern across all index structures.
         
         Args:
-            model_id: Unique identifier for the model
-            sequence: The sequence of symbols in the model
-            data: Optional additional data to store with the model
+            pattern_id: Unique identifier for the pattern
+            sequence: The sequence of symbols in the pattern
+            data: Optional additional data to store with the pattern
         """
         # Add to inverted index
-        self.inverted_index.add_document(model_id, sequence)
+        self.inverted_index.add_document(pattern_id, sequence)
         
         # Add to bloom filter
         for symbol in sequence:
             self.bloom_filter.add(symbol)
         
         # Add to length-partitioned index
-        self.length_index.add(model_id, sequence, data)
+        self.length_index.add(pattern_id, sequence, data)
         
-        # Store model data
-        self.model_data[model_id] = data or sequence
+        # Store pattern data
+        self.pattern_data[pattern_id] = data or sequence
     
     def search(self, query: List[str], mode: str = 'AND', 
                use_bloom: bool = True, length_tolerance: int = 1) -> List[Tuple[str, float]]:
         """
-        Search for models matching the query.
+        Search for patterns matching the query.
         
         Args:
             query: List of symbols to search for
@@ -239,7 +239,7 @@ class IndexManager:
             length_tolerance: Tolerance for length-based filtering
         
         Returns:
-            List of (model_id, score) tuples sorted by relevance
+            List of (pattern_id, score) tuples sorted by relevance
         """
         # Quick bloom filter check for AND queries
         if use_bloom and mode == 'AND':
@@ -281,7 +281,7 @@ class IndexManager:
         self.inverted_index.clear()
         self.bloom_filter.clear()
         self.length_index.clear()
-        self.model_data.clear()
+        self.pattern_data.clear()
     
     def get_statistics(self) -> Dict[str, Any]:
         """Get statistics about the indices."""
@@ -291,36 +291,36 @@ class IndexManager:
             'bloom_filter_items': self.bloom_filter.count,
             'bloom_filter_fpr': self.bloom_filter.estimated_false_positive_rate(),
             'length_index_sequences': self.length_index.size(),
-            'total_models': len(self.model_data)
+            'total_patterns': len(self.pattern_data)
         }
     
-    def add_model(self, model_id: str, sequence: List[str], data: Any = None):
+    def add_pattern(self, pattern_id: str, sequence: List[str], data: Any = None):
         """
-        Add a model to the index (wrapper for index_model).
+        Add a pattern to the index (wrapper for index_pattern).
         
         Args:
-            model_id: Unique identifier for the model
-            sequence: The sequence of symbols in the model
-            data: Optional additional data to store with the model
+            pattern_id: Unique identifier for the pattern
+            sequence: The sequence of symbols in the pattern
+            data: Optional additional data to store with the pattern
         """
-        self.index_model(model_id, sequence, data)
+        self.index_pattern(pattern_id, sequence, data)
     
-    def remove_model(self, model_id: str) -> bool:
+    def remove_pattern(self, pattern_id: str) -> bool:
         """
-        Remove a model from all indices.
+        Remove a pattern from all indices.
         
         Args:
-            model_id: Model identifier to remove
+            pattern_id: Pattern identifier to remove
             
         Returns:
-            True if model was found and removed, False otherwise
+            True if pattern was found and removed, False otherwise
         """
-        if model_id not in self.model_data:
+        if pattern_id not in self.pattern_data:
             return False
         
-        # Remove from model data
-        model_sequence = self.model_data.get(model_id, [])
-        del self.model_data[model_id]
+        # Remove from pattern data
+        pattern_sequence = self.pattern_data.get(pattern_id, [])
+        del self.pattern_data[pattern_id]
         
         # Remove from inverted index
         # Note: This requires rebuilding the index for that document

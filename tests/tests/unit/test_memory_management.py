@@ -266,7 +266,7 @@ def test_memory_with_vectors(kato_fixture):
     model_name = kato_fixture.learn()
     # Should successfully learn since we have 2+ symbols
     assert model_name is not None, "Should learn model from vector observations"
-    assert 'MODEL|' in model_name, "Learned model should have MODEL| prefix"
+    assert 'PTRN|' in model_name, "Learned model should have PTRN| prefix"
     # Short-term memory should be cleared after learning
     assert kato_fixture.get_short_term_memory() == []
 

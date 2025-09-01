@@ -8,7 +8,15 @@
 
 ## What is KATO?
 
-KATO is a specialized AI module that provides **deterministic memory, abstraction, and recall** for modern agentic AI systems. It learns sequences of observations, recognizes patterns, and makes temporal predictions with complete transparency and traceability.
+KATO is a specialized AI module that provides **deterministic memory, abstraction, and recall** for modern agentic AI systems. It learns patterns from observations and makes temporal predictions with complete transparency and traceability.
+
+### Pattern-Based Learning
+
+KATO uses **patterns** as its core learning concept:
+- **Temporal Patterns**: Time-ordered sequences with temporal dependencies
+- **Profile Patterns**: Collections without temporal ordering requirements
+
+Every learned structure in KATO is identified by a unique hash: `PTRN|<sha1_hash>`
 
 ### Key Features
 
@@ -28,7 +36,7 @@ KATO is a specialized AI module that provides **deterministic memory, abstractio
 
 Combining KATO with black box stochastic processes such as General Purpose Transformer (GPT) models, Large Language Models (LLMs), Small Language Models (SLMs), and GPT-based reasoning models provides a layer of governance and control. These stochastic machine learning models suffer from issues like hallucinations, inconsistent outputs, hidden biases, high training and operational costs, and no assurances for guardrails or remediation attempts.
 
-KATO provides a deterministic machine learning algorithm that learns context + action + outcome sequences, effectively caching for reduced calls to expensive models. Additionally, it stores these sequences in a traceable database (typically MongoDB) allowing both real-time learning and updates. If an action taken by the agent needs to be corrected so that it isn't repeated given the same or similar context, the database can simply be edited with an alternative action.
+KATO provides a deterministic machine learning algorithm that learns context + action + outcome patterns, effectively caching for reduced calls to expensive models. Additionally, it stores these patterns in a traceable database (typically MongoDB) allowing both real-time learning and updates. If an action taken by the agent needs to be corrected so that it isn't repeated given the same or similar context, the database can simply be edited with an alternative action.
 
 
 ## Prerequisites

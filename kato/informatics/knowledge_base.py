@@ -60,34 +60,34 @@ class SuperKnowledgeBase:
             self.connection = MongoClient('%s' %environ['MONGO_BASE_URL'])
             self.write_concern = {"w": 0}
             self.knowledge = self.connection[self.id]
-            self.models_kb = self.knowledge.models_kb
+            self.patterns_kb = self.knowledge.patterns_kb
             self.symbols_kb = self.knowledge.symbols_kb
             self.associative_action_kb = self.knowledge.associative_action_kb
             self.predictions_kb = self.knowledge.predictions_kb
             self.metadata = self.knowledge.metadata
 
             # Primary indexes for unique lookups
-            # Models are keyed by hash of their sequence
-            self.models_kb.create_index( [("name", ASCENDING)], background=1, unique=1 )
+            # Patterns are keyed by hash of their pattern data
+            self.patterns_kb.create_index( [("name", ASCENDING)], background=1, unique=1 )
             # Symbols are unique string/vector identifiers
             self.symbols_kb.create_index( [("name", ASCENDING)], background=1, unique=1 )
             # Actions associated with symbols
             self.associative_action_kb.create_index( [("symbol", ASCENDING)], background=1 )
             
             # Compound indexes for optimized queries
-            # For finding high-frequency models quickly
-            self.models_kb.create_index([("frequency", DESCENDING), ("name", ASCENDING)], background=1)
-            # For sequence matching operations
-            self.models_kb.create_index([("sequence", ASCENDING), ("name", ASCENDING)], background=1)
+            # For finding high-frequency patterns quickly
+            self.patterns_kb.create_index([("frequency", DESCENDING), ("name", ASCENDING)], background=1)
+            # For pattern matching operations
+            self.patterns_kb.create_index([("pattern_data", ASCENDING), ("name", ASCENDING)], background=1)
             # For symbol frequency queries
             self.symbols_kb.create_index([("frequency", DESCENDING), ("name", ASCENDING)], background=1)
             # For retrieving predictions by observation ID
             self.predictions_kb.create_index([("unique_id", ASCENDING), ("time", DESCENDING)], background=1)
 
-            setattr(self.models_kb, "learnModel", self.learnModel)
+            setattr(self.patterns_kb, "learnPattern", self.learnPattern)
             setattr(self.associative_action_kb, "learnAssociation", self.learnAssociation)
 
-            setattr(self.models_kb, "__mkb_repr__", self.__mkb_repr__)
+            setattr(self.patterns_kb, "__pkb_repr__", self.__pkb_repr__)
             setattr(self.associative_action_kb, "__akb_repr__", self.__akb_repr__)
 
             self.total_utility = None
@@ -98,9 +98,9 @@ class SuperKnowledgeBase:
             
             if not self.metadata.find_one({"class": "totals"}):
                 self.metadata.insert_one({"class": "totals",
-                                    "total_model_frequencies": 0,
+                                    "total_pattern_frequencies": 0,
                                     "total_symbol_frequencies": 0,
-                                    "total_symbols_in_models_frequencies": 0})
+                                    "total_symbols_in_patterns_frequencies": 0})
             logger.info("done.")
         except Exception as e:
             logger.error("FAILED! Exception: %s" %(e))
@@ -114,33 +114,33 @@ class SuperKnowledgeBase:
         """
         self.connection.drop_database(self.id)
         
-        self.models_kb.drop()
+        self.patterns_kb.drop()
         self.symbols_kb.drop()
         self.associative_action_kb.drop()
         self.predictions_kb.drop()
         self.metadata.drop()
         self.metadata.insert_one({"class": "totals",
-                            "total_model_frequencies": 0,
+                            "total_pattern_frequencies": 0,
                             "total_symbol_frequencies": 0,
-                            "total_symbols_in_models_frequencies": 0})
+                            "total_symbols_in_patterns_frequencies": 0})
         # Recreate indexes after clearing
-        self.models_kb.create_index([("name", ASCENDING)], background=1, unique=1)
+        self.patterns_kb.create_index([("name", ASCENDING)], background=1, unique=1)
         self.symbols_kb.create_index([("name", ASCENDING)], background=1, unique=1)
         self.associative_action_kb.create_index([("symbol", ASCENDING)], background=1)
         
         # Compound indexes
-        self.models_kb.create_index([("frequency", DESCENDING), ("name", ASCENDING)], background=1)
-        self.models_kb.create_index([("sequence", ASCENDING), ("name", ASCENDING)], background=1)
+        self.patterns_kb.create_index([("frequency", DESCENDING), ("name", ASCENDING)], background=1)
+        self.patterns_kb.create_index([("pattern_data", ASCENDING), ("name", ASCENDING)], background=1)
         self.symbols_kb.create_index([("frequency", DESCENDING), ("name", ASCENDING)], background=1)
         self.predictions_kb.create_index([("unique_id", ASCENDING), ("time", DESCENDING)], background=1)
 
         return
 
     def __repr__(self):
-        return "{Models: %s, information: %s, entropy: %s}" %(self.models_kb.count_documents({}), self.total_information, self.entropy)
+        return "{Patterns: %s, information: %s, entropy: %s}" %(self.patterns_kb.count_documents({}), self.total_information, self.entropy)
 
-    def __mkb_repr__(self):
-        return "{KB| objects: %s }" %(self.models_kb.count_documents({}))
+    def __pkb_repr__(self):
+        return "{KB| objects: %s }" %(self.patterns_kb.count_documents({}))
 
     def __akb_repr__(self):
         return "{KB| objects: %s }" %(self.associative_action_kb.count_documents({}))
@@ -167,32 +167,32 @@ class SuperKnowledgeBase:
                                          upsert=True)
         return r
 
-    def learnModel(self, model_object, emotives={}):
+    def learnPattern(self, pattern_object, emotives={}):
         """
         Core machine learning function.
-        Use this to learn models by passing a Model object.  Optional keywords available.
+        Use this to learn patterns by passing a Pattern object.  Optional keywords available.
         """
         
         try:
             if emotives:
                 self.emotives_available.update(emotives.keys())
                 emotives = {k: v for k, v in emotives.items() if v != 0}
-                result = self.models_kb.update_one({ "name": model_object.name},
-                                    {"$setOnInsert": {"sequence": model_object.sequence, "length": model_object.length},
+                result = self.patterns_kb.update_one({ "name": pattern_object.name},
+                                    {"$setOnInsert": {"pattern_data": pattern_object.pattern_data, "length": pattern_object.length},
                                     "$inc": { "frequency": 1 },
                                     "$push": {"emotives": {"$each": [emotives], "$slice": -1 * self.persistence}}},
                                     upsert=True)
             else:
-                result = self.models_kb.update_one({ "name": model_object.name},
+                result = self.patterns_kb.update_one({ "name": pattern_object.name},
                                        {"$inc": { "frequency": 1 },
-                                       "$setOnInsert": {"sequence": model_object.sequence,
-                                                        "length": model_object.length,
+                                       "$setOnInsert": {"pattern_data": pattern_object.pattern_data,
+                                                        "length": pattern_object.length,
                                                         "emotives": {} }},
                                       upsert=True)
             
-            # Update symbol statistics for all symbols in this model
-            # Count occurrences of each symbol across the entire sequence
-            symbols = Counter(list(chain(*model_object.sequence)))
+            # Update symbol statistics for all symbols in this pattern
+            # Count occurrences of each symbol across the entire pattern data
+            symbols = Counter(list(chain(*pattern_object.pattern_data)))
             
             # Prepare emotive updates for MongoDB dot notation
             __s = {}
@@ -200,15 +200,15 @@ class SuperKnowledgeBase:
                 __s["emotives.%s" %emotive] = value
             
             # Track symbol statistics:
-            # - model_member_frequency: how many models contain this symbol
+            # - pattern_member_frequency: how many patterns contain this symbol
             # - frequency: total occurrences of this symbol
-            __x = {"model_member_frequency": 1}
-            total_symbols_in_models_frequencies = len(symbols)
-            total_model_frequencies = 1
+            __x = {"pattern_member_frequency": 1}
+            total_symbols_in_patterns_frequencies = len(symbols)
+            total_pattern_frequencies = 1
             
             # Update each symbol's statistics in the database
             for symbol, c in symbols.items():
-                __x["frequency"] = c  # How many times symbol appears in this model
+                __x["frequency"] = c  # How many times symbol appears in this pattern
                 __x.update(__s)  # Add emotive values
                 
                 # Atomic upsert: increment counters or create new entry
@@ -218,14 +218,14 @@ class SuperKnowledgeBase:
                                         },
                                         upsert=True)
 
-            # if result.matched_count: # then these symbols have already been counted for this model.
+            # if result.matched_count: # then these symbols have already been counted for this pattern.
             #     __x = {}
-            #     total_symbols_in_models_frequencies = 0
-            #     total_model_frequencies = 0
-            # else: # then these symbols have NOT already been counted for this model.
-            #     __x = {"model_member_frequency": 1}
-            #     total_symbols_in_models_frequencies = len(symbols)
-            #     total_model_frequencies = 1
+            #     total_symbols_in_patterns_frequencies = 0
+            #     total_pattern_frequencies = 0
+            # else: # then these symbols have NOT already been counted for this pattern.
+            #     __x = {"pattern_member_frequency": 1}
+            #     total_symbols_in_patterns_frequencies = len(symbols)
+            #     total_pattern_frequencies = 1
             # for symbol, c in symbols.items():
             #     __x["frequency"] = c
             #     __x.update(__s)
@@ -240,31 +240,31 @@ class SuperKnowledgeBase:
             total_symbol_frequencies = sum(symbols.values())
 
             self.metadata.update_one({"class": "totals"},
-                                      {"$inc": {"total_model_frequencies": total_model_frequencies,
+                                      {"$inc": {"total_pattern_frequencies": total_pattern_frequencies,
                                                 "total_symbol_frequencies": total_symbol_frequencies,
-                                                "total_symbols_in_models_frequencies": total_symbols_in_models_frequencies}})
+                                                "total_symbols_in_patterns_frequencies": total_symbols_in_patterns_frequencies}})
             
             return not result.matched_count ### If 1, then this was known, so return False to be "new"
 
         except Exception as e:
-            raise Exception("\nException in learnModel: %s, \n%s" %(model_object.name, e))
+            raise Exception("\nException in learnPattern: %s, \n%s" %(pattern_object.name, e))
 
-    def getModel(self, model, by="name"):
+    def getPattern(self, pattern, by="name"):
         """
         Core machine learning function.
-        Retrieves a specific learned model using the model's hashed name as input parameter.
+        Retrieves a specific learned pattern using the pattern's hashed name as input parameter.
         """
         try:
-            return self.models_kb.find_one({by: model})
+            return self.patterns_kb.find_one({by: pattern})
         except Exception as e:
-            raise Exception("\nException in getModel (%s): %s" %(model, e))
+            raise Exception("\nException in getPattern (%s): %s" %(pattern, e))
     
-    def getTargetedModelNames(self, target_class):
+    def getTargetedPatternNames(self, target_class):
         """
-        Returns a list of sequence names that are classified by the target_class, i.e. target_class symbol is in the last event.
-        This is needed for the model pattern search algorithm because sequences are flattened by that point and have lost event information.
+        Returns a list of pattern names that are classified by the target_class, i.e. target_class symbol is in the last event.
+        This is needed for the pattern search algorithm because patterns are flattened by that point and have lost event information.
         """
-        r = [x['name'] for x in list(self.models_kb.aggregate([{ '$addFields': { 'classification': { '$last': "$sequence" }  }},
+        r = [x['name'] for x in list(self.patterns_kb.aggregate([{ '$addFields': { 'classification': { '$last': "$pattern_data" }  }},
                                 { '$match': {'classification':  {'$all':[target_class]}    } },
                                 { '$project': {"name": 1, "classification": 1}}
                                 ]) ) ]

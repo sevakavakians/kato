@@ -1,6 +1,6 @@
 """
 Unit tests for KATO model hashing.
-Tests deterministic hashing of sequences to ensure consistent MODEL| naming.
+Tests deterministic hashing of sequences to ensure consistent PTRN| naming.
 """
 
 import pytest
@@ -16,7 +16,7 @@ from fixtures.hash_helpers import (
 
 
 def test_model_name_format(kato_fixture):
-    """Test that learned models have correct MODEL| prefix."""
+    """Test that learned models have correct PTRN| prefix."""
     kato_fixture.clear_all_memory()
     
     # Create and learn a sequence
@@ -27,7 +27,7 @@ def test_model_name_format(kato_fixture):
     model_name = kato_fixture.learn()
     
     # Verify format
-    assert model_name.startswith('MODEL|'), f"Model name should start with MODEL|, got: {model_name}"
+    assert model_name.startswith('PTRN|'), f"Model name should start with PTRN|, got: {model_name}"
     
     # Verify hash portion exists and is valid hex
     hash_part = extract_hash_from_name(model_name)

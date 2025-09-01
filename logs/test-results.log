@@ -1,7 +1,72 @@
 [0;34m[INFO][0m Running tests in containerized environment...
 [0;34m[INFO][0m Test path: tests/
+[0;34m[INFO][0m KATO services not fully running, starting them...
+[0;34m[INFO][0m Starting KATO services...
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-1756596724-28828)
+[0;34m[INFO][0m Classifier: , Max Predictions: 100
+[0;34m[INFO][0m MongoDB already running: mongo-kb-sevakavakians-1
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB is ready
+[0;34m[INFO][0m Starting vector database services...
+[0;34m[INFO][0m Starting vector database services...
+[1;33m[WARNING][0m Qdrant already running: qdrant-sevakavakians-1
+[1;33m[WARNING][0m Redis cache already running: redis-cache-sevakavakians-1
+[0;32m[SUCCESS][0m Vector database services started
+[0;32m[SUCCESS][0m Vector database services started
+[1;33m[WARNING][0m Port 8000 is in use. Using port 8001 instead.
+[0;34m[INFO][0m Creating and starting KATO container: kato-kato-1756596724-28828
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-1756596724-28828)
+dde1465d71a7c439a1eab0d29ca5e129cdb875759cabce3f18ab05423cb64092
+[0;34m[INFO][0m Registered instance: kato-1756596724-28828 (KatoProcessor) on ports 8001/5556
+[0;34m[INFO][0m Waiting for KATO API to be ready...
+[0;34m[INFO][0m KATO API is responding to ping
+[0;34m[INFO][0m Verifying processor kato-1756596724-28828 is accessible...
+[0;34m[INFO][0m Processor ID verified: kato-1756596724-28828
+[0;34m[INFO][0m Testing processor operations...
+[0;32m[SUCCESS][0m KATO processor kato-1756596724-28828 is fully operational on port 8001
+[0;32m[SUCCESS][0m KATO system started successfully
+
+[0;34m[INFO][0m KATO System Status
+====================
+
+Shared Services:
+---------------
+MongoDB:             running
+Qdrant (VectorDB):   running
+Redis (Cache):       running
+
+
+KATO Instances:
+===============
+ID                   Name                 Status     API Port   ZMQ Port   Container                     
+----------------------------------------------------------------------------------------------------
+kato-1756586138-16673 KatoProcessor        running    8000       5555       kato-kato-1756586138-16673    
+kato-1756596724-28828 KatoProcessor        running    8001       5556       kato-kato-1756596724-28828    
+
+
+Network:
+-------
+Docker network: kato-network (exists)
+
+Ports:
+-----
+KATO API:            8001
+MongoDB:             27017
+
+Configuration:
+-------------
+Processor Name:      KatoProcessor
+Processor ID:        kato-1756596724-28828
+Indexer Type:        VI
+Max Predictions:     100
+Recall Threshold:    0.1
+Log Level:           INFO
+Docker Tag:          latest
+[0;34m[INFO][0m Waiting for services to be ready...
+[0;32m[SUCCESS][0m KATO services are ready
 [0;34m[INFO][0m MongoDB detected, will connect for integration tests
-[0;34m[INFO][0m Found running KATO processor: kato-1756501177-31585 on port 8000
+[0;34m[INFO][0m Found running KATO processor: kato-1756586138-16673 on port 8000
 ================================
 KATO Test Harness
 ================================
@@ -18,200 +83,34 @@ rootdir: /kato/tests
 configfile: pytest.ini
 plugins: xdist-3.5.0, cov-4.1.0, timeout-2.2.0, asyncio-0.21.1, mock-3.12.0, anyio-4.10.0
 asyncio: mode=strict
-[1mcollecting ... [0mcollected 133 items
+[1mcollecting ... [0mcollected 185 items / 1 error
 
-tests/test_optimizations_standalone.py::test_rolling_hash [32mPASSED[0m[32m         [  0%][0m
-tests/test_optimizations_standalone.py::test_ngram_index [32mPASSED[0m[32m          [  1%][0m
-tests/test_optimizations_standalone.py::test_inverted_index [32mPASSED[0m[32m       [  2%][0m
-tests/test_optimizations_standalone.py::test_fast_sequence_matcher [32mPASSED[0m[32m [  3%][0m
-tests/test_optimizations_standalone.py::test_performance_comparison [32mPASSED[0m[32m [  3%][0m
-tests/tests/api/test_rest_endpoints.py::test_ping_endpoint [32mPASSED[0m[32m        [  4%][0m
-tests/tests/api/test_rest_endpoints.py::test_connect_endpoint [32mPASSED[0m[32m     [  5%][0m
-tests/tests/api/test_rest_endpoints.py::test_processor_ping_endpoint [32mPASSED[0m[32m [  6%][0m
-tests/tests/api/test_rest_endpoints.py::test_status_endpoint [32mPASSED[0m[32m      [  6%][0m
-tests/tests/api/test_rest_endpoints.py::test_observe_endpoint [32mPASSED[0m[32m     [  7%][0m
-tests/tests/api/test_rest_endpoints.py::test_observe_endpoint_empty [32mPASSED[0m[32m [  8%][0m
-tests/tests/api/test_rest_endpoints.py::test_working_memory_endpoint [32mPASSED[0m[32m [  9%][0m
-tests/tests/api/test_rest_endpoints.py::test_clear_working_memory_endpoint [32mPASSED[0m[32m [  9%][0m
-tests/tests/api/test_rest_endpoints.py::test_clear_all_memory_endpoint [32mPASSED[0m[32m [ 10%][0m
-tests/tests/api/test_rest_endpoints.py::test_learn_endpoint [32mPASSED[0m[32m       [ 11%][0m
-tests/tests/api/test_rest_endpoints.py::test_predictions_endpoint [32mPASSED[0m[32m [ 12%][0m
-tests/tests/api/test_rest_endpoints.py::test_percept_data_endpoint [32mPASSED[0m[32m [ 12%][0m
-tests/tests/api/test_rest_endpoints.py::test_cognition_data_endpoint [32mPASSED[0m[32m [ 13%][0m
-tests/tests/api/test_rest_endpoints.py::test_gene_endpoint [32mPASSED[0m[32m        [ 14%][0m
-tests/tests/api/test_rest_endpoints.py::test_gene_change_endpoint [32mPASSED[0m[32m [ 15%][0m
-tests/tests/api/test_rest_endpoints.py::test_model_endpoint [32mPASSED[0m[32m       [ 15%][0m
-tests/tests/api/test_rest_endpoints.py::test_error_handling_404 [32mPASSED[0m[32m   [ 16%][0m
-tests/tests/api/test_rest_endpoints.py::test_error_handling_invalid_json [32mPASSED[0m[32m [ 17%][0m
-tests/tests/api/test_rest_endpoints.py::test_observe_data_wrapper_format [32mPASSED[0m[32m [ 18%][0m
-tests/tests/api/test_rest_endpoints.py::test_predictions_post_endpoint [32mPASSED[0m[32m [ 18%][0m
-tests/tests/api/test_rest_endpoints.py::test_endpoint_response_timing [32mPASSED[0m[32m [ 19%][0m
-tests/tests/integration/test_sequence_learning.py::test_simple_sequence_learning [32mPASSED[0m[32m [ 20%][0m
-tests/tests/integration/test_sequence_learning.py::test_multiple_sequence_learning [32mPASSED[0m[32m [ 21%][0m
-tests/tests/integration/test_sequence_learning.py::test_sequence_completion [32mPASSED[0m[32m [ 21%][0m
-tests/tests/integration/test_sequence_learning.py::test_cyclic_sequence_learning [32mPASSED[0m[32m [ 22%][0m
-tests/tests/integration/test_sequence_learning.py::test_sequence_with_repetition [32mPASSED[0m[32m [ 23%][0m
-tests/tests/integration/test_sequence_learning.py::test_interleaved_sequence_learning [32mPASSED[0m[32m [ 24%][0m
-tests/tests/integration/test_sequence_learning.py::test_context_switching [32mPASSED[0m[32m [ 24%][0m
-tests/tests/integration/test_sequence_learning.py::test_max_sequence_length_auto_learn [32mPASSED[0m[32m [ 25%][0m
-tests/tests/integration/test_sequence_learning.py::test_sequence_with_time_gaps [32mPASSED[0m[32m [ 26%][0m
-tests/tests/integration/test_sequence_learning.py::test_multimodal_sequence_learning [32mPASSED[0m[32m [ 27%][0m
-tests/tests/integration/test_sequence_learning.py::test_branching_sequences [31mFAILED[0m[31m [ 27%][0m
-tests/tests/integration/test_vector_e2e.py::test_vector_observation_and_learning [32mPASSED[0m[31m [ 28%][0m
-tests/tests/integration/test_vector_e2e.py::test_mixed_modality_processing [32mPASSED[0m[31m [ 29%][0m
-tests/tests/integration/test_vector_e2e.py::test_vector_similarity_search [32mPASSED[0m[31m [ 30%][0m
-tests/tests/integration/test_vector_e2e.py::test_large_vector_handling [32mPASSED[0m[31m [ 30%][0m
-tests/tests/integration/test_vector_e2e.py::test_vector_persistence [32mPASSED[0m[31m [ 31%][0m
-tests/tests/integration/test_vector_simplified.py::test_vector_basic [32mPASSED[0m[31m [ 32%][0m
-tests/tests/integration/test_vector_simplified.py::test_mixed_modality [32mPASSED[0m[31m [ 33%][0m
-tests/tests/integration/test_vector_simplified.py::test_vector_sequence [32mPASSED[0m[31m [ 33%][0m
-tests/tests/performance/test_vector_stress.py::test_vector_performance [32mPASSED[0m[31m [ 34%][0m
-tests/tests/performance/test_vector_stress.py::test_vector_scalability [32mPASSED[0m[31m [ 35%][0m
-tests/tests/performance/test_vector_stress.py::test_vector_accuracy [32mPASSED[0m[31m [ 36%][0m
-tests/tests/performance/test_vector_stress.py::test_vector_persistence [32mPASSED[0m[31m [ 36%][0m
-tests/tests/performance/test_vector_stress.py::test_vector_edge_cases [32mPASSED[0m[31m [ 37%][0m
-tests/tests/unit/test_determinism_preservation.py::test_model_hash_determinism [32mPASSED[0m[31m [ 38%][0m
-tests/tests/unit/test_determinism_preservation.py::test_symbol_sorting_determinism [32mPASSED[0m[31m [ 39%][0m
-tests/tests/unit/test_determinism_preservation.py::test_prediction_fields_identical [32mPASSED[0m[31m [ 39%][0m
-tests/tests/unit/test_determinism_preservation.py::test_cross_session_determinism [32mPASSED[0m[31m [ 40%][0m
-tests/tests/unit/test_determinism_preservation.py::test_empty_event_handling_determinism [32mPASSED[0m[31m [ 41%][0m
-tests/tests/unit/test_determinism_preservation.py::test_prediction_traceability [32mPASSED[0m[31m [ 42%][0m
-tests/tests/unit/test_determinism_preservation.py::test_emotives_determinism [32mPASSED[0m[31m [ 42%][0m
-tests/tests/unit/test_determinism_preservation.py::test_confidence_calculation_determinism [32mPASSED[0m[31m [ 43%][0m
-tests/tests/unit/test_determinism_preservation.py::test_multiple_model_interaction_determinism [32mPASSED[0m[31m [ 44%][0m
-tests/tests/unit/test_determinism_preservation.py::test_max_predictions_determinism [32mPASSED[0m[31m [ 45%][0m
-tests/tests/unit/test_memory_management.py::test_clear_all_memory [32mPASSED[0m[31m [ 45%][0m
-tests/tests/unit/test_memory_management.py::test_clear_short_term_memory [32mPASSED[0m[31m [ 46%][0m
-tests/tests/unit/test_memory_management.py::test_short_term_memory_accumulation [32mPASSED[0m[31m [ 47%][0m
-tests/tests/unit/test_memory_management.py::test_manual_learning [32mPASSED[0m[31m  [ 48%][0m
-tests/tests/unit/test_memory_management.py::test_memory_persistence [32mPASSED[0m[31m [ 48%][0m
-tests/tests/unit/test_memory_management.py::test_max_sequence_length [32mPASSED[0m[31m [ 49%][0m
-tests/tests/unit/test_memory_management.py::test_memory_with_emotives [32mPASSED[0m[31m [ 50%][0m
-tests/tests/unit/test_memory_management.py::test_memory_with_vectors [32mPASSED[0m[31m [ 51%][0m
-tests/tests/unit/test_memory_management.py::test_interleaved_memory_operations [32mPASSED[0m[31m [ 51%][0m
-tests/tests/unit/test_model_hashing.py::test_model_name_format [32mPASSED[0m[31m    [ 52%][0m
-tests/tests/unit/test_model_hashing.py::test_identical_sequences_same_hash [32mPASSED[0m[31m [ 53%][0m
-tests/tests/unit/test_model_hashing.py::test_different_sequences_different_hash [32mPASSED[0m[31m [ 54%][0m
-tests/tests/unit/test_model_hashing.py::test_sequence_order_affects_hash [32mPASSED[0m[31m [ 54%][0m
-tests/tests/unit/test_model_hashing.py::test_model_hash_in_predictions [32mPASSED[0m[31m [ 55%][0m
-tests/tests/unit/test_model_hashing.py::test_model_hash_with_emotives [32mPASSED[0m[31m [ 56%][0m
-tests/tests/unit/test_model_hashing.py::test_model_hash_with_vectors [32mPASSED[0m[31m [ 57%][0m
-tests/tests/unit/test_model_hashing.py::test_empty_sequence_hash [32mPASSED[0m[31m  [ 57%][0m
-tests/tests/unit/test_model_hashing.py::test_single_observation_hash [32mPASSED[0m[31m [ 58%][0m
-tests/tests/unit/test_model_hashing.py::test_hash_consistency_across_sessions [32mPASSED[0m[31m [ 59%][0m
-tests/tests/unit/test_model_hashing.py::test_complex_sequence_hash [32mPASSED[0m[31m [ 60%][0m
-tests/tests/unit/test_observations.py::test_observe_single_string [32mPASSED[0m[31m [ 60%][0m
-tests/tests/unit/test_observations.py::test_observe_multiple_strings [32mPASSED[0m[31m [ 61%][0m
-tests/tests/unit/test_observations.py::test_observe_with_emotives [32mPASSED[0m[31m [ 62%][0m
-tests/tests/unit/test_observations.py::test_observe_with_vectors [32mPASSED[0m[31m  [ 63%][0m
-tests/tests/unit/test_observations.py::test_observe_mixed_modalities [32mPASSED[0m[31m [ 63%][0m
-tests/tests/unit/test_observations.py::test_observe_empty [32mPASSED[0m[31m         [ 64%][0m
-tests/tests/unit/test_observations.py::test_observe_sequence [32mPASSED[0m[31m      [ 65%][0m
-tests/tests/unit/test_observations.py::test_observe_special_characters [32mPASSED[0m[31m [ 66%][0m
-tests/tests/unit/test_observations.py::test_observe_numeric_strings [32mPASSED[0m[31m [ 66%][0m
-tests/tests/unit/test_observations.py::test_empty_events_in_sequence [32mPASSED[0m[31m [ 67%][0m
-tests/tests/unit/test_observations.py::test_observe_large_vector [32mPASSED[0m[31m  [ 68%][0m
-tests/tests/unit/test_prediction_edge_cases.py::test_empty_events_ignored [32mPASSED[0m[31m [ 69%][0m
-tests/tests/unit/test_prediction_edge_cases.py::test_prediction_no_past [32mPASSED[0m[31m [ 69%][0m
-tests/tests/unit/test_prediction_edge_cases.py::test_prediction_no_future [32mPASSED[0m[31m [ 70%][0m
-tests/tests/unit/test_prediction_edge_cases.py::test_all_extras_no_matches [32mPASSED[0m[31m [ 71%][0m
-tests/tests/unit/test_prediction_edge_cases.py::test_partial_overlap_multiple_sequences [31mFAILED[0m[31m [ 72%][0m
-tests/tests/unit/test_prediction_edge_cases.py::test_very_long_sequence_middle_observation [32mPASSED[0m[31m [ 72%][0m
-tests/tests/unit/test_prediction_edge_cases.py::test_repeated_symbols_in_event [32mPASSED[0m[31m [ 73%][0m
-tests/tests/unit/test_prediction_edge_cases.py::test_case_sensitive_matching [32mPASSED[0m[31m [ 74%][0m
-tests/tests/unit/test_prediction_edge_cases.py::test_observation_longer_than_learned [32mPASSED[0m[31m [ 75%][0m
-tests/tests/unit/test_prediction_edge_cases.py::test_single_symbol_sequences [32mPASSED[0m[31m [ 75%][0m
-tests/tests/unit/test_prediction_fields.py::test_prediction_past_field [32mPASSED[0m[31m [ 76%][0m
-tests/tests/unit/test_prediction_fields.py::test_prediction_missing_symbols [32mPASSED[0m[31m [ 77%][0m
-tests/tests/unit/test_prediction_fields.py::test_prediction_extra_symbols [32mPASSED[0m[31m [ 78%][0m
-tests/tests/unit/test_prediction_fields.py::test_prediction_multi_event_present [32mPASSED[0m[31m [ 78%][0m
-tests/tests/unit/test_prediction_fields.py::test_prediction_contiguous_present [32mPASSED[0m[31m [ 79%][0m
-tests/tests/unit/test_prediction_fields.py::test_prediction_partial_match_at_start [32mPASSED[0m[31m [ 80%][0m
-tests/tests/unit/test_prediction_fields.py::test_prediction_partial_match_at_end [32mPASSED[0m[31m [ 81%][0m
-tests/tests/unit/test_prediction_fields.py::test_prediction_mixed_missing_and_extras [31mFAILED[0m[31m [ 81%][0m
-tests/tests/unit/test_prediction_fields.py::test_prediction_multiple_past_events [32mPASSED[0m[31m [ 82%][0m
-tests/tests/unit/test_prediction_fields.py::test_single_event_with_missing [32mPASSED[0m[31m [ 83%][0m
-tests/tests/unit/test_predictions.py::test_no_predictions_initially [32mPASSED[0m[31m [ 84%][0m
-tests/tests/unit/test_predictions.py::test_predictions_after_observation [32mPASSED[0m[31m [ 84%][0m
-tests/tests/unit/test_predictions.py::test_prediction_matches [32mPASSED[0m[31m     [ 85%][0m
-tests/tests/unit/test_predictions.py::test_prediction_present_past_future [32mPASSED[0m[31m [ 86%][0m
-tests/tests/unit/test_predictions.py::test_prediction_similarity_perfect_match [32mPASSED[0m[31m [ 87%][0m
-tests/tests/unit/test_predictions.py::test_prediction_partial_match [32mPASSED[0m[31m [ 87%][0m
-tests/tests/unit/test_predictions.py::test_prediction_frequency [32mPASSED[0m[31m   [ 88%][0m
-tests/tests/unit/test_predictions.py::test_prediction_entropy [32mPASSED[0m[31m     [ 89%][0m
-tests/tests/unit/test_predictions.py::test_prediction_hamiltonian [32mPASSED[0m[31m [ 90%][0m
-tests/tests/unit/test_predictions.py::test_prediction_with_emotives [32mPASSED[0m[31m [ 90%][0m
-tests/tests/unit/test_predictions.py::test_multiple_model_predictions [32mPASSED[0m[31m [ 91%][0m
-tests/tests/unit/test_predictions.py::test_prediction_confidence_scores [32mPASSED[0m[31m [ 92%][0m
-tests/tests/unit/test_predictions.py::test_prediction_type_field [32mPASSED[0m[31m  [ 93%][0m
-tests/tests/unit/test_sorting_behavior.py::test_alphanumeric_sorting_within_event [32mPASSED[0m[31m [ 93%][0m
-tests/tests/unit/test_sorting_behavior.py::test_event_order_preserved [32mPASSED[0m[31m [ 94%][0m
-tests/tests/unit/test_sorting_behavior.py::test_single_string_unchanged [32mPASSED[0m[31m [ 95%][0m
-tests/tests/unit/test_sorting_behavior.py::test_mixed_case_sorting [32mPASSED[0m[31m [ 96%][0m
-tests/tests/unit/test_sorting_behavior.py::test_numeric_string_sorting [32mPASSED[0m[31m [ 96%][0m
-tests/tests/unit/test_sorting_behavior.py::test_special_characters_sorting [32mPASSED[0m[31m [ 97%][0m
-tests/tests/unit/test_sorting_behavior.py::test_empty_strings_in_sorting [32mPASSED[0m[31m [ 98%][0m
-tests/tests/unit/test_sorting_behavior.py::test_unicode_sorting [32mPASSED[0m[31m   [ 99%][0m
-tests/tests/unit/test_sorting_behavior.py::test_sorting_consistency_across_learns [32mPASSED[0m[31m [100%][0m
-
-=================================== FAILURES ===================================
-[31m[1m___________________________ test_branching_sequences ___________________________[0m
-[1m[31mtests/tests/integration/test_sequence_learning.py[0m:357: in test_branching_sequences
-    [0m[94massert[39;49;00m [96mlen[39;49;00m(branch_preds) >= [94m1[39;49;00m[90m[39;49;00m
-[1m[31mE   assert 0 >= 1[0m
-[1m[31mE    +  where 0 = len([])[0m
-[31m[1m___________________ test_partial_overlap_multiple_sequences ____________________[0m
-[1m[31mtests/tests/unit/test_prediction_edge_cases.py[0m:138: in test_partial_overlap_multiple_sequences
-    [0mkato_fixture.observe({[33m'[39;49;00m[33mstrings[39;49;00m[33m'[39;49;00m: sort_event_strings(event), [33m'[39;49;00m[33mvectors[39;49;00m[33m'[39;49;00m: [], [33m'[39;49;00m[33memotives[39;49;00m[33m'[39;49;00m: {}})[90m[39;49;00m
-[1m[31mtests/tests/fixtures/kato_fixtures.py[0m:204: in observe
-    [0mresponse.raise_for_status()[90m[39;49;00m
-[1m[31m/usr/local/lib/python3.9/site-packages/requests/models.py[0m:1026: in raise_for_status
-    [0m[94mraise[39;49;00m HTTPError(http_error_msg, response=[96mself[39;49;00m)[90m[39;49;00m
-[1m[31mE   requests.exceptions.HTTPError: 500 Server Error: Server error: for url: http://localhost:8000/kato-1756501177-31585/observe[0m
------------------------------- Captured log call -------------------------------
-[33mWARNING [0m urllib3.connection:connection.py:570 Failed to parse headers (url=http://localhost:8000/kato-1756501177-31585/observe): [MissingHeaderBodySeparatorDefect()], unparsed data: "Exception in Modeler.predictModel: Error in potential calculation! kato-1756501177-31585: 'different'\r\nServer: BaseHTTP/0.6 Python/3.9.2\r\nDate: Fri, 29 Aug 2025 21:36:31 GMT\r\nConnection: close\r\nContent-Type: text/html;charset=utf-8\r\nContent-Length: 553\r\n\r\n"
-Traceback (most recent call last):
-  File "/usr/local/lib/python3.9/site-packages/urllib3/connection.py", line 568, in getresponse
-    assert_header_parsing(httplib_response.msg)
-  File "/usr/local/lib/python3.9/site-packages/urllib3/util/response.py", line 88, in assert_header_parsing
-    raise HeaderParsingError(defects=defects, unparsed_data=unparsed_data)
-urllib3.exceptions.HeaderParsingError: [MissingHeaderBodySeparatorDefect()], unparsed data: "Exception in Modeler.predictModel: Error in potential calculation! kato-1756501177-31585: 'different'\r\nServer: BaseHTTP/0.6 Python/3.9.2\r\nDate: Fri, 29 Aug 2025 21:36:31 GMT\r\nConnection: close\r\nContent-Type: text/html;charset=utf-8\r\nContent-Length: 553\r\n\r\n"
-[31m[1m___________________ test_prediction_mixed_missing_and_extras ___________________[0m
-[1m[31mtests/tests/unit/test_prediction_fields.py[0m:251: in test_prediction_mixed_missing_and_extras
-    [0m[94massert[39;49;00m extras == [[33m'[39;49;00m[33mx[39;49;00m[33m'[39;49;00m, [33m'[39;49;00m[33my[39;49;00m[33m'[39;49;00m], [33mf[39;49;00m[33m"[39;49;00m[33mExtras should be [[39;49;00m[33m'[39;49;00m[33mx[39;49;00m[33m'[39;49;00m[33m, [39;49;00m[33m'[39;49;00m[33my[39;49;00m[33m'[39;49;00m[33m], got [39;49;00m[33m{[39;49;00mextras[33m}[39;49;00m[33m"[39;49;00m[90m[39;49;00m
-[1m[31mE   AssertionError: Extras should be ['x', 'y'], got ['x'][0m
-[1m[31mE   assert ['x'] == ['x', 'y'][0m
-[1m[31mE     [0m
-[1m[31mE     Right contains one more item: [0m[33m'[39;49;00m[33my[39;49;00m[33m'[39;49;00m[90m[39;49;00m[0m
-[1m[31mE     [0m
-[1m[31mE     Full diff:[0m
-[1m[31mE     [0m[90m [39;49;00m [[90m[39;49;00m[0m
-[1m[31mE     [90m [39;49;00m     'x',[90m[39;49;00m[0m
-[1m[31mE     [91m-     'y',[39;49;00m[90m[39;49;00m[0m
-[1m[31mE     [90m [39;49;00m ][90m[39;49;00m[0m
-============================= slowest 10 durations =============================
-14.53s call     tests/performance/test_vector_stress.py::test_vector_scalability
-3.16s call     tests/performance/test_vector_stress.py::test_vector_performance
-3.11s call     tests/unit/test_determinism_preservation.py::test_model_hash_determinism
-2.56s call     tests/unit/test_determinism_preservation.py::test_max_predictions_determinism
-1.00s call     tests/unit/test_determinism_preservation.py::test_empty_event_handling_determinism
-0.85s call     tests/unit/test_determinism_preservation.py::test_cross_session_determinism
-0.69s call     tests/performance/test_vector_stress.py::test_vector_persistence
-0.54s call     tests/unit/test_determinism_preservation.py::test_multiple_model_interaction_determinism
-0.53s call     tests/unit/test_determinism_preservation.py::test_prediction_fields_identical
-0.49s call     tests/unit/test_model_hashing.py::test_hash_consistency_across_sessions
+==================================== ERRORS ====================================
+[31m[1m____________ ERROR collecting tests/unit/test_memory_management.py _____________[0m
+[31m/usr/local/lib/python3.9/site-packages/_pytest/python.py:498: in importtestmodule
+    mod = import_path(
+/usr/local/lib/python3.9/site-packages/_pytest/pathlib.py:587: in import_path
+    importlib.import_module(module_name)
+/usr/local/lib/python3.9/importlib/__init__.py:127: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+<frozen importlib._bootstrap>:1030: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1007: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:986: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:680: in _load_unlocked
+    ???
+/usr/local/lib/python3.9/site-packages/_pytest/assertion/rewrite.py:177: in exec_module
+    source_stat, co = _rewrite_test(fn, self.config)
+/usr/local/lib/python3.9/site-packages/_pytest/assertion/rewrite.py:357: in _rewrite_test
+    tree = ast.parse(source, filename=strfn)
+/usr/local/lib/python3.9/ast.py:50: in parse
+    return compile(source, filename, mode, flags,
+E     File "/kato/tests/tests/unit/test_memory_management.py", line 271
+E       assert kato_fixture.get_short_term_memory() == []
+E   IndentationError: unexpected indent[0m
 [36m[1m=========================== short test summary info ============================[0m
-[31mFAILED[0m tests/tests/integration/test_sequence_learning.py::[1mtest_branching_sequences[0m - assert 0 >= 1
- +  where 0 = len([])
-[31mFAILED[0m tests/tests/unit/test_prediction_edge_cases.py::[1mtest_partial_overlap_multiple_sequences[0m - requests.exceptions.HTTPError: 500 Server Error: Server error: for url: http://localhost:8000/kato-1756501177-31585/observe
-[31mFAILED[0m tests/tests/unit/test_prediction_fields.py::[1mtest_prediction_mixed_missing_and_extras[0m - AssertionError: Extras should be ['x', 'y'], got ['x']
-assert ['x'] == ['x', 'y']
-  
-  Right contains one more item: [0m[33m'[39;49;00m[33my[39;49;00m[33m'[39;49;00m[90m[39;49;00m
-  
-  Full diff:
-  [0m[90m [39;49;00m [[90m[39;49;00m
-  [90m [39;49;00m     'x',[90m[39;49;00m
-  [91m-     'y',[39;49;00m[90m[39;49;00m
-  [90m [39;49;00m ][90m[39;49;00m
-[31m======================== [31m[1m3 failed[0m, [32m130 passed[0m[31m in 45.38s[0m[31m ========================[0m
+[31mERROR[0m tests/tests/unit/test_memory_management.py
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+[31m=============================== [31m[1m1 error[0m[31m in 1.00s[0m[31m ===============================[0m

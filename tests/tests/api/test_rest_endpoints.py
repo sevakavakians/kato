@@ -187,8 +187,8 @@ def test_learn_endpoint(kato_fixture):
     
     data = response.json()
     assert 'message' in data
-    model_name = data['message']
-    assert model_name.startswith('MODEL|')
+    pattern_name = data['message']
+    assert pattern_name.startswith('PTRN|')
     
     # Short-term memory should be cleared
     stm = kato_fixture.get_short_term_memory()

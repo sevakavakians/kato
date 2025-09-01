@@ -253,56 +253,56 @@ class NGramIndex:
         """
         self.n = n
         self.index = defaultdict(set)
-        self.model_ngrams = {}
+        self.pattern_ngrams = {}
     
-    def index_model(self, model_id: str, sequence: List[str]):
+    def index_pattern(self, pattern_id: str, sequence: List[str]):
         """
-        Index a model's sequence using n-grams.
+        Index a pattern's sequence using n-grams.
         
         Args:
-            model_id: Unique identifier for the model
+            pattern_id: Unique identifier for the pattern
             sequence: Flattened sequence of symbols
         """
         ngrams = self._extract_ngrams(sequence)
-        self.model_ngrams[model_id] = ngrams
+        self.pattern_ngrams[pattern_id] = ngrams
         
         for ngram in ngrams:
-            self.index[ngram].add(model_id)
+            self.index[ngram].add(pattern_id)
     
     def search(self, query: List[str], threshold: float = 0.5) -> List[Tuple[str, float]]:
         """
-        Search for models similar to query using n-gram overlap.
+        Search for patterns similar to query using n-gram overlap.
         
         Args:
             query: Query sequence
             threshold: Minimum similarity threshold (0-1)
             
         Returns:
-            List of (model_id, similarity) tuples
+            List of (pattern_id, similarity) tuples
         """
         query_ngrams = self._extract_ngrams(query)
         if not query_ngrams:
             return []
         
-        # Find candidate models
+        # Find candidate patterns
         candidates = defaultdict(int)
         for ngram in query_ngrams:
-            for model_id in self.index.get(ngram, []):
-                candidates[model_id] += 1
+            for pattern_id in self.index.get(ngram, []):
+                candidates[pattern_id] += 1
         
         # Calculate similarities
         results = []
-        for model_id, overlap_count in candidates.items():
-            model_ngrams = self.model_ngrams[model_id]
+        for pattern_id, overlap_count in candidates.items():
+            pattern_ngrams = self.pattern_ngrams[pattern_id]
             
             # Jaccard similarity
-            union_size = len(query_ngrams) + len(model_ngrams) - overlap_count
+            union_size = len(query_ngrams) + len(pattern_ngrams) - overlap_count
             similarity = overlap_count / union_size if union_size > 0 else 0
             
             if similarity >= threshold:
-                results.append((model_id, similarity))
+                results.append((pattern_id, similarity))
         
-        # Sort by similarity (descending) and then by model_id (for determinism)
+        # Sort by similarity (descending) and then by pattern_id (for determinism)
         results.sort(key=lambda x: (-x[1], x[0]))
         
         return results
@@ -353,78 +353,78 @@ class FastSequenceMatcher:
         
         self.rolling_hash = RollingHash() if use_rolling_hash else None
         self.ngram_index = NGramIndex(ngram_size) if use_ngram_index else None
-        self.suffix_arrays = {}  # model_id -> SuffixArray
-        self.model_hashes = {}  # model_id -> hash
-        self.models = {}  # model_id -> sequence
+        self.suffix_arrays = {}  # pattern_id -> SuffixArray
+        self.pattern_hashes = {}  # pattern_id -> hash
+        self.patterns = {}  # pattern_id -> sequence
         
         logger.info(f"FastSequenceMatcher initialized with: "
                    f"rolling_hash={use_rolling_hash}, "
                    f"suffix_array={use_suffix_array}, "
                    f"ngram_index={use_ngram_index}")
     
-    def add_model(self, model_id: str, sequence: List[str]):
+    def add_pattern(self, pattern_id: str, sequence: List[str]):
         """
-        Add a model to the matcher's index.
+        Add a pattern to the matcher's index.
         
         Args:
-            model_id: Unique identifier for the model
+            pattern_id: Unique identifier for the pattern
             sequence: Flattened sequence of symbols
         """
-        self.models[model_id] = sequence
+        self.patterns[pattern_id] = sequence
         
         if self.use_rolling_hash:
-            self.model_hashes[model_id] = self.rolling_hash.compute_hash(sequence)
+            self.pattern_hashes[pattern_id] = self.rolling_hash.compute_hash(sequence)
         
         if self.use_suffix_array:
-            self.suffix_arrays[model_id] = SuffixArray(sequence)
+            self.suffix_arrays[pattern_id] = SuffixArray(sequence)
         
         if self.use_ngram_index:
-            self.ngram_index.index_model(model_id, sequence)
+            self.ngram_index.index_pattern(pattern_id, sequence)
     
     def find_matches(self, query: List[str], 
                     threshold: float = 0.5) -> List[Dict[str, Any]]:
         """
-        Find models matching the query sequence.
+        Find patterns matching the query sequence.
         
         Args:
             query: Query sequence to match
             threshold: Minimum similarity threshold
             
         Returns:
-            List of match dictionaries with model_id, similarity, and match info
+            List of match dictionaries with pattern_id, similarity, and match info
         """
         matches = []
         
         # Use n-gram index for initial filtering
         if self.use_ngram_index:
             candidates = self.ngram_index.search(query, threshold)
-            candidate_ids = {model_id for model_id, _ in candidates}
+            candidate_ids = {pattern_id for pattern_id, _ in candidates}
         else:
-            candidate_ids = set(self.models.keys())
+            candidate_ids = set(self.patterns.keys())
         
         # Check each candidate
-        for model_id in candidate_ids:
-            model_sequence = self.models[model_id]
+        for pattern_id in candidate_ids:
+            pattern_sequence = self.patterns[pattern_id]
             
             # Quick hash-based filtering
-            if self.use_rolling_hash and len(query) == len(model_sequence):
+            if self.use_rolling_hash and len(query) == len(pattern_sequence):
                 query_hash = self.rolling_hash.compute_hash(query)
-                if query_hash != self.model_hashes[model_id]:
+                if query_hash != self.pattern_hashes[pattern_id]:
                     continue
             
             # Calculate detailed similarity
-            similarity = self._calculate_similarity(query, model_sequence)
+            similarity = self._calculate_similarity(query, pattern_sequence)
             
             if similarity >= threshold:
                 matches.append({
-                    'model_id': model_id,
+                    'pattern_id': pattern_id,
                     'similarity': similarity,
-                    'model_length': len(model_sequence),
+                    'pattern_length': len(pattern_sequence),
                     'query_length': len(query)
                 })
         
         # Sort for determinism
-        matches.sort(key=lambda x: (-x['similarity'], x['model_id']))
+        matches.sort(key=lambda x: (-x['similarity'], x['pattern_id']))
         
         return matches
     
@@ -455,10 +455,10 @@ class FastSequenceMatcher:
         return intersection / union if union > 0 else 0.0
     
     def clear(self):
-        """Clear all indexed models."""
-        self.models.clear()
-        self.model_hashes.clear()
+        """Clear all indexed patterns."""
+        self.patterns.clear()
+        self.pattern_hashes.clear()
         self.suffix_arrays.clear()
         if self.ngram_index:
             self.ngram_index.index.clear()
-            self.ngram_index.model_ngrams.clear()
+            self.ngram_index.pattern_ngrams.clear()

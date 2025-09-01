@@ -43,8 +43,8 @@ class RestGatewayHandler(BaseHTTPRequestHandler):
                 self.handle_get_cognition_data()
             elif '/gene/' in self.path:
                 self.handle_get_gene()
-            elif '/model/' in self.path:
-                self.handle_get_model()
+            elif '/pattern/' in self.path:
+                self.handle_get_pattern()
             else:
                 self.send_error(404, "Not Found")
         except Exception as e:
@@ -279,28 +279,28 @@ class RestGatewayHandler(BaseHTTPRequestHandler):
             logger.error(f"Get gene error: {e}")
             self.send_error(500, str(e))
 
-    def handle_get_model(self):
-        """Handle get model request"""
+    def handle_get_pattern(self):
+        """Handle get pattern request"""
         try:
-            # Extract model ID from path: /{processor_id}/model/{model_id}
+            # Extract pattern ID from path: /{processor_id}/pattern/{pattern_id}
             from urllib.parse import unquote
             parts = self.path.split('/')
-            model_id = unquote(parts[-1])  # URL-decode the model ID
+            pattern_id = unquote(parts[-1])  # URL-decode the pattern ID
             
             pool = get_global_pool()
-            response = pool.execute('get_model', model_id)
+            response = pool.execute('get_pattern', pattern_id)
             
             if response.get('status') == 'okay':
-                result = {"message": response.get('model')}
+                result = {"message": response.get('pattern')}
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
                 self.wfile.write(json.dumps(result).encode())
             else:
-                self.send_error(404, f"Model {model_id} not found")
+                self.send_error(404, f"Pattern {pattern_id} not found")
                     
         except Exception as e:
-            logger.error(f"Get model error: {e}")
+            logger.error(f"Get pattern error: {e}")
             self.send_error(500, str(e))
 
     def handle_observe(self):

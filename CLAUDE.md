@@ -6,6 +6,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 KATO (Knowledge Abstraction for Traceable Outcomes) is a deterministic memory and prediction system for transparent, explainable AI. It processes multi-modal observations (text, vectors, emotions) and makes temporal predictions while maintaining complete transparency and traceability.
 
+## Pattern Terminology
+
+**Pattern** is the core concept in KATO that encompasses:
+- **Temporal Patterns (Sequences)**: Patterns with temporal dependency and ordering sensitivity
+- **Profile Patterns**: Patterns without temporal dependency or ordering requirements
+
+All learned structures in KATO are patterns, whether they represent time-ordered sequences or unordered profiles.
+
 ## Common Development Commands
 
 ### Building and Running
@@ -117,17 +125,17 @@ REST Client → REST Gateway (Port 8000) → ZMQ Server (Port 5555) → KATO Pro
 ### Memory Architecture
 
 - **Short-Term Memory (STM)**: Temporary storage for current observation sequences
-- **Long-Term Memory**: Persistent storage with `MODEL|<sha1_hash>` patterns
+- **Long-Term Memory**: Persistent storage with `PTRN|<sha1_hash>` identifiers
 - **Vector Storage**: Modern Qdrant database with collection per processor
-- **Model Hashing**: SHA1-based deterministic model identification
+- **Pattern Hashing**: SHA1-based deterministic pattern identification
 
-### MongoDB Model Storage
+### MongoDB Pattern Storage
 
-- **Unique Indexing**: Models indexed by SHA1 hash of sequence pattern
+- **Unique Indexing**: Patterns indexed by SHA1 hash of pattern data
 - **Duplicate Prevention**: Uses `update_one` with `upsert=True` to prevent duplicates
-- **Frequency Tracking**: Each re-learning of same sequence increments frequency counter
-- **Model Naming**: `MODEL|<sha1_hash>` where hash uniquely identifies the sequence
-- **Storage Guarantee**: Only one record per unique sequence pattern in MongoDB
+- **Frequency Tracking**: Each re-learning of same pattern increments frequency counter
+- **Pattern Naming**: `PTRN|<sha1_hash>` where hash uniquely identifies the pattern
+- **Storage Guarantee**: Only one record per unique pattern in MongoDB
 
 ### Key Behavioral Properties
 
@@ -144,13 +152,13 @@ REST Client → REST Gateway (Port 8000) → ZMQ Server (Port 5555) → KATO Pro
      - The complete events are included, not just the observed symbols
    - **Future**: Events after the last matching event
    - **Missing**: Symbols that are in the present events but weren't actually observed
-   - **Extras**: Symbols that were observed but aren't in the model
-   - Example 1: Observing `['B'], ['C']` from sequence `[['A'], ['B'], ['C'], ['D']]`:
+   - **Extras**: Symbols that were observed but aren't in the pattern
+   - Example 1: Observing `['B'], ['C']` from pattern `[['A'], ['B'], ['C'], ['D']]`:
      - Past: `[['A']]`
      - Present: `[['B'], ['C']]` (both events have matches)
      - Future: `[['D']]`
      - Missing: `[]` (all symbols in present were observed)
-   - Example 2: Observing `['a'], ['c']` from sequence `[['a', 'b'], ['c', 'd'], ['e', 'f']]`:
+   - Example 2: Observing `['a'], ['c']` from pattern `[['a', 'b'], ['c', 'd'], ['e', 'f']]`:
      - Past: `[]` (no events before first match)
      - Present: `[['a', 'b'], ['c', 'd']]` (full events, including unobserved 'b' and 'd')
      - Future: `[['e', 'f']]`
@@ -161,12 +169,12 @@ REST Client → REST Gateway (Port 8000) → ZMQ Server (Port 5555) → KATO Pro
 5. **Multi-Modal Processing**: Handles strings, vectors (768-dim), and emotional context
    - Vectors always produce name strings (e.g., 'VECTOR|<hash>') for STM
 6. **Deterministic**: Same inputs always produce same outputs
-7. **Variable Sequence Lengths**: Supports sequences of arbitrary length (2+ strings total)
+7. **Variable Pattern Lengths**: Supports patterns of arbitrary length (2+ strings total)
    - Events can have varying numbers of symbols
    - Each prediction has unique missing/matches/extras fields based on partial matching
 8. **Recall Threshold Behavior**:
    - Range: 0.0 to 1.0
-   - 0.0 = Return all models including non-matching ones
+   - 0.0 = Return all patterns including non-matching ones
    - 1.0 = Return only perfect matches
    - Default: 0.1 (permissive matching)
    - Controls filtering of predictions by similarity score
@@ -218,7 +226,9 @@ PROCESSOR_ID=p123 PROCESSOR_NAME=CustomProcessor ./kato-manager.sh start
 - Main processing logic: `kato/workers/kato_processor.py`
 - REST API endpoints: `kato/workers/rest_gateway.py`
 - Vector operations: `kato/storage/qdrant_manager.py`
-- Model representations: `kato/representations/model.py`
+- Pattern representations: `kato/representations/pattern.py`
+- Pattern processing: `kato/workers/pattern_processor.py`
+- Pattern search: `kato/searches/pattern_search.py`
 - Test fixtures: `tests/fixtures/kato_fixtures.py`
 - Management script: `kato-manager.sh`
 

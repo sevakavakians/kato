@@ -266,7 +266,7 @@ class KATOTestFixture:
         if not self.services_available:
             return "Services not available"
         default_genes = {
-            'max_sequence_length': 0,  # Disable auto-learning by default
+            'max_pattern_length': 0,  # Disable auto-learning by default
         }
         return self.update_genes(default_genes)
     

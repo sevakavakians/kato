@@ -22,8 +22,8 @@ def test_simple_sequence_learning(kato_fixture):
     for item in sequence:
         kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
     
-    model_name = kato_fixture.learn()
-    assert model_name.startswith('MODEL|')
+    pattern_name = kato_fixture.learn()
+    assert pattern_name.startswith('PTRN|')
     
     # Recall sequence - need 2+ strings for predictions
     kato_fixture.observe({'strings': ['hello'], 'vectors': [], 'emotives': {}})

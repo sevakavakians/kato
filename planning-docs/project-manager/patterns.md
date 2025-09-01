@@ -32,6 +32,22 @@ Track recurring patterns in development workflow to improve estimates and effici
 - **First Observed**: 2025-08-29
 - **Last Observed**: 2025-08-29
 
+### Pattern: Division by Zero Edge Case Discovery
+- **Observation**: Python ternary operators can evaluate division before conditions are checked
+- **Frequency**: Rare but critical when encountered  
+- **Impact**: System crashes in edge cases, debugging time ~45 minutes
+- **Recommendation**: Always validate denominators before any division operation, even in ternary expressions
+- **First Observed**: 2025-09-01
+- **Last Observed**: 2025-09-01
+
+### Pattern: Error Handling Philosophy Evolution
+- **Observation**: KATO benefits from explicit error reporting vs masking issues with defaults
+- **Frequency**: Consistent design principle
+- **Impact**: Improved debugging efficiency and system transparency
+- **Recommendation**: Fail fast with detailed context rather than returning default values
+- **First Observed**: 2025-09-01
+- **Last Observed**: 2025-09-01
+
 ## Task Duration Patterns
 
 ### Small Tasks (< 30 minutes)
@@ -45,6 +61,7 @@ Track recurring patterns in development workflow to improve estimates and effici
 - Module refactoring
 - Integration implementations
 - Performance optimizations
+- Critical bug fixes (45 minutes average)
 
 ### Large Tasks (> 2 hours)
 - Architecture changes
@@ -61,7 +78,9 @@ Track recurring patterns in development workflow to improve estimates and effici
 - *To be identified from blocker logs*
 
 ### Estimation Accuracy
-- *To be calculated from actual vs estimated times*
+- **Division by Zero Bug Fix**: Estimated N/A (critical bug), Actual 45 minutes
+- **ModelSearcher Optimization**: Estimated 1-2 hours, Actual ~3 hours (150% of estimate)
+- **Pattern**: Critical bugs typically require 45-60 minutes for systematic resolution
 
 ---
 

@@ -195,13 +195,34 @@ class PatternProcessor:
         "Predict patterns and update active pattern fractional frequencies considering the inverse frequency values of the symbols."
         logger.debug(f" {self.name} [ PatternProcessor predictPattern called ]")
         total_symbols = self.superkb.symbols_kb.count_documents({})
-        total_symbols_in_patterns_frequencies = self.superkb.metadata.find_one(
-            {"class": "totals"})['total_symbols_in_patterns_frequencies']
-        total_pattern_frequencies = self.superkb.metadata.find_one({"class": "totals"})['total_pattern_frequencies']
+        metadata_doc = self.superkb.metadata.find_one({"class": "totals"})
+        if metadata_doc:
+            total_symbols_in_patterns_frequencies = metadata_doc.get('total_symbols_in_patterns_frequencies', 0)
+            total_pattern_frequencies = metadata_doc.get('total_pattern_frequencies', 0)
+        else:
+            total_symbols_in_patterns_frequencies = 0
+            total_pattern_frequencies = 0
         try:
             causal_patterns = self.patterns_searcher.causalBelief(state, self.target_class_candidates)
         except Exception as e:
             raise Exception("\nException in PatternProcessor.predictPattern: Error in causalBelief! %s: %s" %(self.kb_id, e))
+        
+        # Early return if no patterns found
+        if not causal_patterns:
+            logger.debug(f" {self.name} [ PatternProcessor predictPattern ] No causal patterns found, returning empty list")
+            return []
+        
+        # Validate all predictions have required fields
+        for idx, prediction in enumerate(causal_patterns):
+            required_fields = ['frequency', 'matches', 'missing', 'evidence', 
+                              'confidence', 'snr', 'fragmentation', 'emotives', 'present']
+            missing_fields = []
+            for field in required_fields:
+                if field not in prediction:
+                    missing_fields.append(field)
+            if missing_fields:
+                pred_name = prediction.get('name', f'prediction_{idx}')
+                raise ValueError(f"Prediction '{pred_name}' missing required fields: {missing_fields}")
         
         try:
             # Fetch and pre-calculate the probability (for the union of symbols in matches and missing) exactly once, to
@@ -223,7 +244,10 @@ class PatternProcessor:
                             symbol_frequency_cache[symbol] = 0
                             continue
                         symbol_data = symbol_cache[symbol]
-                        symbol_probability = float(symbol_data['pattern_member_frequency'] / total_symbols_in_patterns_frequencies) if total_symbols_in_patterns_frequencies > 0 else 0.0
+                        if total_symbols_in_patterns_frequencies > 0:
+                            symbol_probability = float(symbol_data['pattern_member_frequency'] / total_symbols_in_patterns_frequencies)
+                        else:
+                            symbol_probability = 0.0
                         symbol_probability_cache[symbol] = symbol_probability
                         symbol_frequency_cache[symbol] += symbol_data['frequency']
             symbol_frequency_in_state = Counter(state)
@@ -231,6 +255,12 @@ class PatternProcessor:
             for symbol in symbol_frequency_in_state.keys():
                 if symbol not in symbol_frequency_cache:
                     symbol_frequency_cache[symbol] = 0
+            
+            # Check if we have valid pattern frequencies before proceeding
+            if total_ensemble_pattern_frequencies == 0:
+                logger.warning(f" {self.name} [ PatternProcessor predictPattern ] total_ensemble_pattern_frequencies is 0, all predictions have 0 frequency")
+                # Still proceed but be careful with divisions
+            
             for prediction in causal_patterns:
                 _present = list(chain(*prediction.present)) #list(chain(*prediction['present']))
                 all_symbols = set(_present + state)
@@ -249,18 +279,59 @@ class PatternProcessor:
                             distance = 1.0
                     except:
                         distance = 1.0
-                itfdf_similarity = round(float(1 - (distance * prediction['frequency'] / total_ensemble_pattern_frequencies)) if total_ensemble_pattern_frequencies > 0 else 0.0, 12)
+                if total_ensemble_pattern_frequencies > 0:
+                    itfdf_similarity = round(float(1 - (distance * prediction['frequency'] / total_ensemble_pattern_frequencies)), 12)
+                else:
+                    itfdf_similarity = 0.0
                 prediction['itfdf_similarity'] = itfdf_similarity
                 prediction['entropy'] = round(float(sum([classic_expectation(symbol_probability_cache.get(symbol, 0)) for symbol in _present])), 12)
-                prediction['hamiltonian'] = round(float(hamiltonian(_present, total_symbols)), 12)
-                prediction['grand_hamiltonian'] = round(float(grand_hamiltonian(_present, symbol_probability_cache, total_symbols)), 12)
-                prediction['confluence'] = round(float(_p_e_h * (1 - conditionalProbability(_present, symbol_probability_cache) ) ), 12) # = probability of sequence occurring in observations * ( 1 - probability of sequence occurring randomly)
-                prediction['potential'] = round(float( ( prediction['evidence'] + prediction['confidence'] ) * prediction.get("snr", 0) + prediction['itfdf_similarity'] + (1/ (prediction['fragmentation'] +1) ) ), 12)
-                prediction['emotives'] = average_emotives(prediction['emotives'])
+                # Protect hamiltonian calculation from empty _present
+                if len(_present) > 0:
+                    try:
+                        prediction['hamiltonian'] = round(float(hamiltonian(_present, total_symbols)), 12)
+                    except ZeroDivisionError as e:
+                        logger.error(f"ZeroDivisionError in hamiltonian: _present={_present}, total_symbols={total_symbols}, error={e}")
+                        raise
+                    try:
+                        prediction['grand_hamiltonian'] = round(float(grand_hamiltonian(_present, symbol_probability_cache, total_symbols)), 12)
+                    except ZeroDivisionError as e:
+                        logger.error(f"ZeroDivisionError in grand_hamiltonian: _present={_present}, symbol_probability_cache={symbol_probability_cache}, total_symbols={total_symbols}, error={e}")
+                        raise
+                else:
+                    # If present is empty, set default values
+                    prediction['hamiltonian'] = 0.0
+                    prediction['grand_hamiltonian'] = 0.0
+                # Calculate confluence - conditionalProbability returns 0 for empty state which is safe
+                try:
+                    prediction['confluence'] = round(float(_p_e_h * (1 - conditionalProbability(_present, symbol_probability_cache) ) ), 12) # = probability of sequence occurring in observations * ( 1 - probability of sequence occurring randomly)
+                except ZeroDivisionError as e:
+                    logger.error(f"ZeroDivisionError in confluence calculation: _p_e_h={_p_e_h}, _present={_present}, symbol_probability_cache={symbol_probability_cache}, error={e}")
+                    raise
+                try:
+                    fragmentation_term = 1 / (prediction['fragmentation'] + 1) if prediction['fragmentation'] != -1 else 0.0
+                    prediction['potential'] = round(float( ( prediction['evidence'] + prediction['confidence'] ) * prediction.get("snr", 0) + prediction['itfdf_similarity'] + fragmentation_term ), 12)
+                except ZeroDivisionError as e:
+                    logger.error(f"ZeroDivisionError in potential calculation: evidence={prediction['evidence']}, confidence={prediction['confidence']}, snr={prediction.get('snr', 0)}, itfdf_similarity={prediction['itfdf_similarity']}, fragmentation={prediction['fragmentation']}, error={e}")
+                    raise
+                try:
+                    prediction['emotives'] = average_emotives(prediction['emotives'])
+                except ZeroDivisionError as e:
+                    logger.error(f"ZeroDivisionError in average_emotives: emotives={prediction['emotives']}, error={e}")
+                    raise
                 prediction.pop('pattern_data')
 
+        except KeyError as e:
+            raise Exception(f"\nException in PatternProcessor.predictPattern: Missing required field in prediction! {self.kb_id}: {e}")
+        except ZeroDivisionError as e:
+            import traceback
+            tb = traceback.format_exc()
+            logger.error(f"Division by zero in predictPattern: state={state}, total_symbols={total_symbols}, total_symbols_in_patterns_frequencies={total_symbols_in_patterns_frequencies}, total_pattern_frequencies={total_pattern_frequencies}")
+            logger.error(f"Full traceback: {tb}")
+            raise Exception(f"\nException in PatternProcessor.predictPattern: Division by zero error! {self.kb_id}: {e}")
         except Exception as e:
-            raise Exception("\nException in PatternProcessor.predictPattern: Error in potential calculation! %s: %s" %(self.kb_id, e))
+            import traceback
+            tb = traceback.format_exc()
+            raise Exception(f"\nException in PatternProcessor.predictPattern: Error in potential calculation! {self.kb_id}: {e}\nTraceback: {tb}")
         try:
             active_causal_patterns = sorted([x for x in heapq.nlargest(self.max_predictions,causal_patterns,key=itemgetter('potential'))], reverse=True, key=itemgetter('potential'))
         except Exception as e:

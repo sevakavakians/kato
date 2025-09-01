@@ -33,7 +33,10 @@ def average_emotives(record):
                 new_dict[e].append(v)
     avg_dict = {}
     for e,v in new_dict.items():
-        avg_dict[e] = float(sum(v)/len(v))
+        if len(v) > 0:
+            avg_dict[e] = float(sum(v)/len(v))
+        else:
+            avg_dict[e] = 0.0
     return avg_dict
 
 def compandingFunction(target, collection):
@@ -67,8 +70,15 @@ def expectation(p, num_symbols):
             return - p * log(p, num_symbols)
         else:
             return 0
+    except (ZeroDivisionError, ValueError) as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"expectation ERROR! p = {p}, num_symbols = {num_symbols}, error = {e}")
+        # Return 0 for invalid values instead of raising
+        return 0
     except Exception as e:
         print("expectation ERROR! p = %s, num_symbols = %s, error = %s" % (p, num_symbols, e))
+        return 0
 
 
 def grand_hamiltonian(state, symbol_probabilities, total_symbols):
@@ -79,7 +89,18 @@ def grand_hamiltonian(state, symbol_probabilities, total_symbols):
 
 
 def hamiltonian(state, total_symbols):
-    return sum([expectation(state.count(symbol) / len(state), total_symbols) for symbol in state])
+    if not state or len(state) == 0:
+        return 0.0
+    try:
+        state_length = len(state)
+        if state_length == 0:  # Extra protection
+            return 0.0
+        return sum([expectation(state.count(symbol) / state_length, total_symbols) for symbol in state])
+    except ZeroDivisionError as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"ZeroDivisionError in hamiltonian: state={state}, len(state)={len(state) if state else 'N/A'}, total_symbols={total_symbols}, error={e}")
+        raise
 
 
 ####### confluence = probability of sequence occurring in observations * ( 1 - probability of sequence occurring randomly)

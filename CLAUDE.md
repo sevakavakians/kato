@@ -134,6 +134,8 @@ REST Client → REST Gateway (Port 8000) → ZMQ Server (Port 5555) → KATO Pro
 - **Unique Indexing**: Patterns indexed by SHA1 hash of pattern data
 - **Duplicate Prevention**: Uses `update_one` with `upsert=True` to prevent duplicates
 - **Frequency Tracking**: Each re-learning of same pattern increments frequency counter
+  - Minimum frequency = 1 (pattern must be learned at least once to exist)
+  - Frequency increments each time the same pattern is re-learned
 - **Pattern Naming**: `PTRN|<sha1_hash>` where hash uniquely identifies the pattern
 - **Storage Guarantee**: Only one record per unique pattern in MongoDB
 
@@ -174,10 +176,22 @@ REST Client → REST Gateway (Port 8000) → ZMQ Server (Port 5555) → KATO Pro
    - Each prediction has unique missing/matches/extras fields based on partial matching
 8. **Recall Threshold Behavior**:
    - Range: 0.0 to 1.0
-   - 0.0 = Return all patterns including non-matching ones
+   - 0.0 = Return ALL patterns including non-matching ones
    - 1.0 = Return only perfect matches
    - Default: 0.1 (permissive matching)
    - Controls filtering of predictions by similarity score
+   - Note: All patterns in KB have frequency ≥ 1 (learned at least once)
+9. **Error Handling Philosophy**:
+   - **DO NOT mask errors with safe defaults** - errors must be visible for debugging
+   - Better to fail explicitly than hide issues with graceful degradation
+   - This helps identify and fix root causes rather than papering over problems
+   - All calculation errors should raise exceptions with detailed context
+10. **Edge Cases and Boundaries**:
+   - **Fragmentation**: Can be -1, causing division by zero in potential calculations
+   - **Pattern Frequencies**: All patterns have frequency ≥ 1 (no zero-frequency patterns exist)
+   - **Empty State**: Hamiltonian calculations require non-empty state
+   - **Missing Metadata**: MongoDB metadata documents may be missing, causing None values
+   - **Total Ensemble Frequencies**: Can be 0 if no patterns match (even though each pattern has frequency ≥ 1)
 
 ## Testing Strategy
 
@@ -229,8 +243,47 @@ PROCESSOR_ID=p123 PROCESSOR_NAME=CustomProcessor ./kato-manager.sh start
 - Pattern representations: `kato/representations/pattern.py`
 - Pattern processing: `kato/workers/pattern_processor.py`
 - Pattern search: `kato/searches/pattern_search.py`
+- Metrics calculations: `kato/informatics/metrics.py`
 - Test fixtures: `tests/fixtures/kato_fixtures.py`
 - Management script: `kato-manager.sh`
+
+## Prediction Metrics and Calculations
+
+### Core Metrics
+1. **Hamiltonian**: Entropy-like measure of pattern complexity
+   - Requires non-empty state
+   - Formula: `sum([expectation(state.count(symbol) / len(state), total_symbols) for symbol in state])`
+   - Protected against division by zero when state is empty
+
+2. **Grand Hamiltonian**: Extended hamiltonian using symbol probability cache
+   - Calculates entropy using global symbol probabilities
+   - Also requires non-empty state
+
+3. **ITFDF Similarity**: Inverse term frequency-document frequency similarity
+   - Measures pattern relevance based on frequency and distance
+   - Formula: `1 - (distance * prediction['frequency'] / total_ensemble_pattern_frequencies)`
+   - Protected against zero total_ensemble_pattern_frequencies
+
+4. **Potential**: Composite metric for ranking predictions
+   - Combines: evidence, confidence, SNR, similarity, and fragmentation
+   - Formula: `(evidence + confidence) * snr + itfdf_similarity + (1/(fragmentation + 1))`
+   - Protected against fragmentation = -1 edge case
+
+5. **Confluence**: Probability of pattern occurring vs random chance
+   - Formula: `p(e|h) * (1 - conditionalProbability(present, symbol_probabilities))`
+   - Returns 0 for empty state
+
+### Required Prediction Fields
+All predictions MUST contain these fields:
+- `frequency`: Pattern occurrence count
+- `matches`: Symbols that match between observation and pattern
+- `missing`: Symbols in pattern but not observed
+- `evidence`: Strength of pattern match
+- `confidence`: Ratio of matches to present length
+- `snr`: Signal-to-noise ratio
+- `fragmentation`: Pattern cohesion measure (can be -1)
+- `emotives`: Emotional context data
+- `present`: Events containing matching symbols
 
 ## Automated Planning System Protocol
 

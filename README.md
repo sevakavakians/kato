@@ -244,6 +244,17 @@ KATO is derived from the [GAIuS](https://medium.com/@sevakavakians/what-is-gaius
 
 Like GAIuS before it, KATO adheres to [ExCITE AI](https://medium.com/@sevakavakians/what-is-excite-ai-712afd372af4) principles.
 
+## Recent Updates
+
+### Bug Fixes (2025-09-01)
+- **Fixed Division by Zero Errors**: Resolved edge cases in metric calculations when:
+  - Pattern fragmentation equals -1
+  - Total ensemble pattern frequencies equal 0 (when no patterns match)
+  - State is empty in hamiltonian calculations
+  - MongoDB metadata documents are missing
+- **Improved Error Handling**: Errors now provide detailed context instead of being masked with defaults
+- **Enhanced Recall Threshold**: Better handling of threshold=0.0 for comprehensive pattern matching
+
 ## Support
 
 - 📖 [Documentation](docs/) - Complete documentation

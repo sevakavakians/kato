@@ -238,7 +238,17 @@ class PatternProcessor:
                 state_frequency_vector = [(symbol_probability_cache.get(symbol, 0) * symbol_frequency_in_state.get(symbol, 0)) for symbol in all_symbols]
                 pattern_frequency_vector = [(symbol_probability_cache.get(symbol, 0) * symbol_frequency_in_pattern.get(symbol, 0)) for symbol in all_symbols]
                 _p_e_h = float(self.patternProbability(prediction['frequency'], total_pattern_frequencies)) # p(e|h)
-                distance = float(spatial.distance.cosine(state_frequency_vector, pattern_frequency_vector))
+                # Handle zero vectors case for cosine distance
+                if all(v == 0 for v in state_frequency_vector) or all(v == 0 for v in pattern_frequency_vector):
+                    distance = 1.0  # Maximum distance for zero vectors
+                else:
+                    try:
+                        distance = float(spatial.distance.cosine(state_frequency_vector, pattern_frequency_vector))
+                        # Handle NaN case
+                        if distance != distance:  # NaN check
+                            distance = 1.0
+                    except:
+                        distance = 1.0
                 itfdf_similarity = round(float(1 - (distance * prediction['frequency'] / total_ensemble_pattern_frequencies)) if total_ensemble_pattern_frequencies > 0 else 0.0, 12)
                 prediction['itfdf_similarity'] = itfdf_similarity
                 prediction['entropy'] = round(float(sum([classic_expectation(symbol_probability_cache.get(symbol, 0)) for symbol in _present])), 12)

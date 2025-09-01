@@ -200,6 +200,13 @@ class PatternSearcher:
         """Load patterns from database and build indices."""
         _patterns = {}
         
+        # Skip if no database connection
+        if self.knowledgebase is None:
+            logger.debug("No database connection - skipping pattern loading")
+            self.patterns_cache = _patterns
+            self.patterns_count = 0
+            return
+        
         for p in self.knowledgebase.patterns_kb.find({}, {"name": 1, "pattern_data": 1}):
             pattern_name = p["name"]
             flattened = list(chain(*p["pattern_data"]))
@@ -323,9 +330,21 @@ class PatternSearcher:
             if len(result) >= 8:  # Ensure we have all required fields
                 pattern_hash, pattern, matching_intersection, past, present, missing, extras, similarity, number_of_blocks = result[:9]
                 
-                # Fetch full pattern data from database
-                pattern_data = self.knowledgebase.patterns_kb.find_one(
-                    {"name": pattern_hash}, {"_id": 0})
+                # Fetch full pattern data from database or use cached data
+                if self.knowledgebase is not None:
+                    pattern_data = self.knowledgebase.patterns_kb.find_one(
+                        {"name": pattern_hash}, {"_id": 0})
+                else:
+                    # Use cached pattern data when no database
+                    if pattern_hash in self.patterns_cache:
+                        pattern_data = {
+                            "name": pattern_hash,
+                            "pattern_data": [self.patterns_cache[pattern_hash]],  # Needs to be unflattened
+                            "frequency": 1,
+                            "emotives": {}
+                        }
+                    else:
+                        pattern_data = None
                 
                 if pattern_data:
                     pred = Prediction(

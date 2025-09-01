@@ -38,9 +38,10 @@ class Prediction(dict):
         self['hamiltonian'] = float(0)
         self['grand_hamiltonian'] = float(0)
         self['confluence'] = float(0)
-        self['sequence'] =_model['sequence']
+        self['sequence'] = _model['pattern_data']
+        self['pattern_data'] = _model['pattern_data']  # Keep for later popping in pattern_processor
         
-        sequence = _model['sequence']
+        sequence = _model['pattern_data']
 
         __c1 = len(self['past'])
         __c2 = 0
@@ -78,7 +79,7 @@ class Prediction(dict):
                 self['missing'].append(_symbol)
 
         __present_length__ = sum([len(_event) for _event in self['present']])
-        self['confidence'] = float(len(self['matches'])/__present_length__)
+        self['confidence'] = float(len(self['matches'])/__present_length__) if __present_length__ > 0 else 0.0
 
         self.present = self['present']
         # self['past'] = ListValue().add_list().extend(self['past'])

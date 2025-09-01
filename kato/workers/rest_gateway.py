@@ -288,7 +288,7 @@ class RestGatewayHandler(BaseHTTPRequestHandler):
             pattern_id = unquote(parts[-1])  # URL-decode the pattern ID
             
             pool = get_global_pool()
-            response = pool.execute('get_pattern', pattern_id)
+            response = pool.execute('get_pattern', {'pattern_id': pattern_id})
             
             if response.get('status') == 'okay':
                 result = {"message": response.get('pattern')}

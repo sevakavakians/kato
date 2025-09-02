@@ -231,9 +231,8 @@ CACHE_TTL=3600
 ```
 
 ### Feature Flags
-- `KATO_USE_OPTIMIZED`: Enable performance optimizations
-- `KATO_USE_FAST_MATCHING`: Use accelerated vector matching
-- `KATO_USE_INDEXING`: Enable advanced indexing features
+- `KATO_USE_FAST_MATCHING`: Use accelerated pattern matching algorithms (default: true)
+- `KATO_USE_INDEXING`: Enable advanced indexing features (default: true)
 
 ## Development Guidelines
 

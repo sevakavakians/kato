@@ -209,7 +209,7 @@ KATO uses a clustered test harness that provides complete isolation between test
 - **No Cross-Contamination**: Tests cannot affect each other
 - **Parallel Execution**: Clusters can run concurrently for faster testing
 
-**Current Status**: ✅ All 188 tests passing (100% success rate)
+**Current Status**: 190 tests total (177 passed, 12 failed, 1 skipped) - 93.2% pass rate
 
 See [Testing Guide](docs/development/TESTING.md) for details.
 

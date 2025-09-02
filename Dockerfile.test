@@ -68,7 +68,6 @@ TEST_PATH="${1:-tests/}"\n\
 EXTRA_ARGS="${@:2}"\n\
 \n\
 # Set optimization flags if not already set\n\
-export KATO_USE_OPTIMIZED="${KATO_USE_OPTIMIZED:-true}"\n\
 export KATO_USE_FAST_MATCHING="${KATO_USE_FAST_MATCHING:-true}"\n\
 export KATO_USE_INDEXING="${KATO_USE_INDEXING:-true}"\n\
 export LOG_LEVEL="${LOG_LEVEL:-INFO}"\n\
@@ -82,7 +81,6 @@ echo "KATO Test Harness"\n\
 echo "================================"\n\
 echo "Test Path: $TEST_PATH"\n\
 echo "Optimization Flags:"\n\
-echo "  KATO_USE_OPTIMIZED=$KATO_USE_OPTIMIZED"\n\
 echo "  KATO_USE_FAST_MATCHING=$KATO_USE_FAST_MATCHING"\n\
 echo "  KATO_USE_INDEXING=$KATO_USE_INDEXING"\n\
 echo "================================"\n\

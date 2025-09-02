@@ -409,7 +409,6 @@ run_tests() {
             --name "$TEST_CONTAINER_NAME" \
             --network "host" \
             -e MONGO_BASE_URL="$MONGO_URL" \
-            -e KATO_USE_OPTIMIZED="${KATO_USE_OPTIMIZED:-true}" \
             -e KATO_USE_FAST_MATCHING="${KATO_USE_FAST_MATCHING:-true}" \
             -e KATO_USE_INDEXING="${KATO_USE_INDEXING:-true}" \
             -e LOG_LEVEL="${LOG_LEVEL:-INFO}" \
@@ -429,7 +428,6 @@ run_tests() {
             --name "$TEST_CONTAINER_NAME" \
             --network "host" \
             -e MONGO_BASE_URL="$MONGO_URL" \
-            -e KATO_USE_OPTIMIZED="${KATO_USE_OPTIMIZED:-true}" \
             -e KATO_USE_FAST_MATCHING="${KATO_USE_FAST_MATCHING:-true}" \
             -e KATO_USE_INDEXING="${KATO_USE_INDEXING:-true}" \
             -e LOG_LEVEL="${LOG_LEVEL:-INFO}" \
@@ -599,7 +597,6 @@ run_tests_dev() {
             --name "$TEST_CONTAINER_NAME" \
             --network "$DOCKER_NETWORK" \
             -e MONGO_BASE_URL="${MONGO_BASE_URL:-mongodb://mongo-kb-$(whoami)-1:27017}" \
-            -e KATO_USE_OPTIMIZED="${KATO_USE_OPTIMIZED:-true}" \
             -e KATO_USE_FAST_MATCHING="${KATO_USE_FAST_MATCHING:-true}" \
             -e KATO_USE_INDEXING="${KATO_USE_INDEXING:-true}" \
             -e LOG_LEVEL="${LOG_LEVEL:-INFO}" \
@@ -616,7 +613,6 @@ run_tests_dev() {
             --name "$TEST_CONTAINER_NAME" \
             --network "$DOCKER_NETWORK" \
             -e MONGO_BASE_URL="${MONGO_BASE_URL:-mongodb://mongo-kb-$(whoami)-1:27017}" \
-            -e KATO_USE_OPTIMIZED="${KATO_USE_OPTIMIZED:-true}" \
             -e KATO_USE_FAST_MATCHING="${KATO_USE_FAST_MATCHING:-true}" \
             -e KATO_USE_INDEXING="${KATO_USE_INDEXING:-true}" \
             -e LOG_LEVEL="${LOG_LEVEL:-INFO}" \
@@ -804,7 +800,6 @@ print_usage() {
     echo "  $0 report                         # Generate coverage report"
     echo ""
     echo "Environment Variables:"
-    echo "  KATO_USE_OPTIMIZED      Enable optimizations (default: true)"
     echo "  KATO_USE_FAST_MATCHING  Enable fast matching (default: true)"
     echo "  KATO_USE_INDEXING       Enable indexing (default: true)"
     echo "  LOG_LEVEL               Set log level (default: INFO)"

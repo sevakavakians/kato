@@ -36,11 +36,20 @@ class KATOTestFixture:
         self.services_available = False
         
     def _generate_processor_id(self) -> str:
-        """Generate a processor ID based on the processor name."""
-        # Use a deterministic ID for testing
-        import hashlib
-        hash_obj = hashlib.md5(self.processor_name.encode())
-        return f"p{hash_obj.hexdigest()[:10]}"
+        """Generate a unique processor ID for complete test isolation.
+        
+        Each test gets a unique ID to ensure MongoDB, Qdrant, and Redis
+        databases are completely isolated, preventing cross-contamination.
+        """
+        import uuid
+        import time
+        # Generate unique ID: test_{name}_{timestamp}_{uuid}
+        # This ensures complete database isolation per test
+        timestamp = int(time.time() * 1000)  # Millisecond precision
+        unique = str(uuid.uuid4())[:8]  # Short UUID suffix
+        # Clean processor name for use in ID
+        clean_name = self.processor_name.replace(' ', '_').replace('-', '_').lower()
+        return f"test_{clean_name}_{timestamp}_{unique}"
     
     def _check_services_available(self) -> bool:
         """Check if KATO services are available."""
@@ -375,18 +384,28 @@ class KATOTestFixture:
         return self.update_genes({"recall_threshold": threshold})
 
 
-@pytest.fixture(scope="module")
-def kato_fixture():
-    """Pytest fixture for KATO tests."""
-    fixture = KATOTestFixture()
+@pytest.fixture(scope="function")
+def kato_fixture(request):
+    """Pytest fixture for KATO tests with complete isolation.
+    
+    Scope is 'function' to ensure each test gets its own KATO instance
+    with isolated MongoDB, Qdrant, and Redis databases.
+    """
+    # Get test name for better debugging
+    test_name = request.node.name if hasattr(request, 'node') else 'unknown'
+    fixture = KATOTestFixture(processor_name=test_name)
     fixture.setup()
     yield fixture
     fixture.teardown()
 
 
-@pytest.fixture(scope="module")
-def kato_with_genome():
-    """Factory fixture for creating KATO instances (genome files no longer used)."""
+@pytest.fixture(scope="function")
+def kato_with_genome(request):
+    """Factory fixture for creating KATO instances with isolation.
+    
+    Each created instance gets a unique processor_id for complete
+    database isolation (MongoDB, Qdrant, Redis).
+    """
     fixtures = []
     
     def _create_fixture(genome_file: str = None, processor_name: str = "P1"):

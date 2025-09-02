@@ -578,16 +578,20 @@ class VectorIndexer:
     vector search engine for better performance.
     """
     
-    def __init__(self, procs: int = 1, vectors_kb=None):
-        """Initialize Vector Indexer
+    def __init__(self, procs: int = 1, vectors_kb=None, processor_id: str = None):
+        """Initialize Vector Indexer with isolated collection
         
         Args:
             procs: Number of processors (kept for compatibility but not used)
             vectors_kb: Vector knowledge base (kept for compatibility)
+            processor_id: Unique processor ID for Qdrant collection isolation
         """
         self.procs = procs  # Kept for compatibility but not used
         self.vectors_kb = vectors_kb  # Kept for compatibility
-        self.engine = VectorSearchEngine(collection_name="vector_index")
+        self.processor_id = processor_id or "default"
+        # Use processor_id in collection name for complete isolation
+        collection_name = f"vectors_{self.processor_id}"
+        self.engine = VectorSearchEngine(collection_name=collection_name)
         self.initialized = False
         
         # Compatibility attributes

@@ -1,0 +1,19 @@
+TEST RUN SUMMARY
+================
+Start Time: 2025-09-01 19:23:17
+End Time: 2025-09-01 19:23:17
+Duration: 0.01s
+Exit Code: 4
+
+RESULTS
+-------
+Total: 0 tests
+Passed: 0
+Failed: 0
+Skipped: 0
+
+FAILED TESTS
+------------
+
+Full output: /Users/sevakavakians/PROGRAMMING/kato/logs/test-runs/test-output-20250901-192311.log
+Errors only: /Users/sevakavakians/PROGRAMMING/kato/logs/test-runs/test-errors-20250901-192311.log

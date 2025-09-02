@@ -35,7 +35,8 @@ class VectorProcessor:
             self.vector_indexer.clearModelsFromRAM()
             self.round_robin_index = 0
             logger.debug("about to reset VectorIndexer")
-            self.vector_indexer = VectorIndexer(self.procs_for_searches)
+            # Pass kb_id (processor_id) for Qdrant collection isolation
+            self.vector_indexer = VectorIndexer(self.procs_for_searches, processor_id=self.kb_id)
         return
 
     def clear_stm(self):
@@ -52,7 +53,8 @@ class VectorProcessor:
     def initialize_vector_searcher(self):
         if self.indexer_type == "VI":
             self.round_robin_index = 0
-            self.vector_indexer = VectorIndexer(self.procs_for_searches)
+            # Pass kb_id (processor_id) for Qdrant collection isolation
+            self.vector_indexer = VectorIndexer(self.procs_for_searches, processor_id=self.kb_id)
         return
 
     def process(self, vector_data):

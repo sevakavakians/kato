@@ -1,15 +1,15 @@
 TEST RUN SUMMARY
 ================
-Start Time: 2025-09-01 16:04:40
-End Time: 2025-09-01 16:04:41
-Duration: 65.70s
+Start Time: 2025-09-01 19:24:40
+End Time: 2025-09-01 19:24:40
+Duration: 57.11s
 Exit Code: 1
 
 RESULTS
 -------
 Total: 0 tests
-Passed: 179
-Failed: 13
+Passed: 181
+Failed: 11
 Skipped: 1
 
 FAILED TESTS
@@ -22,11 +22,9 @@ tests/tests/unit/test_comprehensive_sequences.py::test_cyclic_long_sequence [31
 tests/tests/unit/test_comprehensive_sequences.py::test_emotives_in_long_sequence [31mFAILED[0m[31m [ 29%][0m
 tests/tests/unit/test_comprehensive_sequences.py::test_sparse_observation_long_sequence [31mFAILED[0m[31m [ 30%][0m
 tests/tests/unit/test_comprehensive_sequences.py::test_sequence_with_repetitive_patterns [31mFAILED[0m[31m [ 30%][0m
-tests/tests/unit/test_memory_management.py::test_memory_with_vectors [31mFAILED[0m[31m [ 46%][0m
 tests/tests/unit/test_recall_threshold_edge_cases.py::test_threshold_with_missing_symbols [31mFAILED[0m[31m [ 80%][0m
 tests/tests/unit/test_recall_threshold_sequences.py::test_short_sequences_low_threshold [31mFAILED[0m[31m [ 86%][0m
 tests/tests/unit/test_recall_threshold_sequences.py::test_medium_sequences_varying_thresholds [31mFAILED[0m[31m [ 87%][0m
-tests/tests/unit/test_recall_threshold_values.py::test_threshold_zero_no_filtering [31mFAILED[0m[31m [ 91%][0m
 
-Full output: /Users/sevakavakians/PROGRAMMING/kato/logs/test-runs/test-output-20250901-160328.log
-Errors only: /Users/sevakavakians/PROGRAMMING/kato/logs/test-runs/test-errors-20250901-160328.log
+Full output: /Users/sevakavakians/PROGRAMMING/kato/logs/test-runs/test-output-20250901-192337.log
+Errors only: /Users/sevakavakians/PROGRAMMING/kato/logs/test-runs/test-errors-20250901-192337.log

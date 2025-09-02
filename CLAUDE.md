@@ -469,6 +469,49 @@ The test-analyst MUST:
    - Analyze patterns and provide recommendations
 ```
 
+## Test Isolation Architecture
+
+### Critical Requirement: Complete Database Isolation
+Each KATO instance MUST have complete isolation via unique processor_id to prevent cross-contamination between tests and production instances.
+
+### Database Isolation Strategy
+Each KATO instance uses its processor_id for complete database isolation:
+
+1. **MongoDB**: Database name = processor_id
+   - Patterns stored in `{processor_id}.patterns_kb`
+   - Symbols stored in `{processor_id}.symbols_kb`
+   - Predictions stored in `{processor_id}.predictions_kb`
+   - Metadata stored in `{processor_id}.metadata`
+
+2. **Qdrant**: Collection name = `vectors_{processor_id}`
+   - Vector embeddings isolated per instance
+   - No cross-contamination between tests
+   - Each instance has its own HNSW index
+
+3. **In-Memory Cache**: Per VectorSearchEngine instance
+   - Cache is automatically isolated per engine instance
+   - No shared state between processors
+
+### Test Requirements
+- **Each test MUST use a unique processor_id**
+- Format: `test_{test_name}_{timestamp}_{uuid}`
+- Example: `test_pattern_endpoint_1699123456789_a1b2c3d4`
+- **Fixture scope is 'function'** - each test gets fresh instance
+- **Cleanup is automatic** in fixture teardown
+
+### Production Requirements
+- **Each production instance MUST have unique processor_id**
+- Never share processor_ids between instances
+- Monitor for ID collisions
+- Use format: `{environment}_{service}_{timestamp}_{uuid}`
+
+### Why This Matters
+Without proper isolation:
+- Tests contaminate each other's long-term memory
+- Patterns learned in one test affect predictions in another
+- Test failures become non-deterministic
+- Parallel test execution becomes impossible
+
 ## Agent Usage Summary
 
 ### Available Specialized Agents:

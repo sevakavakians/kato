@@ -652,9 +652,107 @@ ENV PATH=/root/.local/bin:$PATH
 CMD ["python", "-m", "kato.scripts.kato_engine"]
 ```
 
+## Test Container Architecture
+
+KATO uses a sophisticated clustered test harness with containerized testing:
+
+### Test Harness Container
+
+The test harness runs tests in isolated containers with complete database separation:
+
+```dockerfile
+# Dockerfile.test
+FROM python:3.9-slim
+WORKDIR /tests
+COPY requirements-test.txt .
+RUN pip install -r requirements-test.txt
+COPY tests/ /tests/
+CMD ["python", "-m", "pytest"]
+```
+
+### Clustered Test Execution
+
+Each test cluster gets its own isolated environment:
+
+```bash
+# Build test harness container
+./test-harness.sh build
+
+# Run tests with automatic clustering
+./test-harness.sh test
+```
+
+**Architecture Overview:**
+```
+Test Harness Container
+    ↓
+Cluster Orchestrator (on host)
+    ↓
+For each cluster:
+    ├── KATO Instance (kato-cluster_<name>_<id>)
+    ├── MongoDB (mongo-cluster_<name>_<id>)
+    ├── Qdrant (qdrant-cluster_<name>_<id>)
+    └── Redis (redis-cluster_<name>_<id>)
+```
+
+### Key Features
+
+1. **Complete Isolation**: Each cluster runs with dedicated databases
+2. **Unique Processor IDs**: Format: `cluster_<name>_<timestamp>_<uuid>`
+3. **Network Isolation**: All containers on `kato-network`
+4. **Automatic Cleanup**: Containers removed after tests complete
+5. **Configuration Flexibility**: Different clusters can have different settings
+
+### Test Container Environment Variables
+
+```bash
+# Set by cluster orchestrator
+KATO_CLUSTER_MODE=true
+KATO_TEST_MODE=container
+KATO_PROCESSOR_ID=cluster_default_123456_abc
+KATO_API_URL=http://kato-cluster_default_123456_abc:8000
+MONGO_BASE_URL=mongodb://mongo-cluster_default_123456_abc:27017
+QDRANT_URL=http://qdrant-cluster_default_123456_abc:6333
+REDIS_URL=redis://redis-cluster_default_123456_abc:6379
+```
+
+### Running Tests in CI/CD
+
+```yaml
+# Example GitHub Actions
+- name: Build test harness
+  run: ./test-harness.sh build
+
+- name: Run clustered tests
+  run: ./test-harness.sh test
+
+- name: Upload results
+  uses: actions/upload-artifact@v2
+  with:
+    name: test-results
+    path: logs/test-runs/
+```
+
+### Debugging Test Containers
+
+```bash
+# Get shell in test container
+./test-harness.sh shell
+
+# View running test containers
+docker ps | grep cluster_
+
+# Check logs for specific cluster
+docker logs kato-cluster_default_<id>
+
+# Inspect test network
+docker network inspect kato-network
+```
+
 ## Support
 
 For Docker-specific issues:
 - Check [Docker documentation](https://docs.docker.com)
 - Review [Troubleshooting Guide](../technical/TROUBLESHOOTING.md)
+- See [Testing Guide](../development/TESTING.md) for test-specific help
 - Open an issue on GitHub

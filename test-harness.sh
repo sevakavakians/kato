@@ -16,6 +16,8 @@ KATO_MANAGER="${SCRIPT_DIR}/kato-manager.sh"
 TEST_OUTPUT_DIR="${SCRIPT_DIR}/logs/test-runs"
 MAX_OUTPUT_LINES=50000  # Maximum lines to keep in output file
 REBUILD_CHECK_SCRIPT="${SCRIPT_DIR}/check-rebuild-needed.sh"
+CLUSTER_RUNNER="${SCRIPT_DIR}/tests/cluster_runner.py"
+CLUSTERED_HARNESS="${SCRIPT_DIR}/test-harness-clustered.sh"
 
 # Service management flags (can be overridden by command line)
 START_SERVICES=${START_SERVICES:-true}
@@ -24,6 +26,7 @@ VERBOSE_OUTPUT=${VERBOSE_OUTPUT:-false}
 NO_REDIRECT=${NO_REDIRECT:-false}
 AUTO_REBUILD=${AUTO_REBUILD:-true}
 FORCE_REBUILD=${FORCE_REBUILD:-false}
+USE_CLUSTERING=${USE_CLUSTERING:-true}  # Default to clustering
 
 # Colors for output
 RED='\033[0;31m'
@@ -107,17 +110,27 @@ start_kato_services() {
     return 1
 }
 
-# Function to stop KATO services
+# Function to stop KATO services and all databases
 stop_kato_services() {
-    log_info "Stopping KATO services..."
+    log_info "Stopping KATO services and databases..."
     
     if [[ -f "$KATO_MANAGER" ]]; then
-        "$KATO_MANAGER" stop || {
+        # Stop all KATO instances with their databases
+        "$KATO_MANAGER" stop --all --with-mongo || {
             log_warning "Failed to stop KATO services cleanly"
+            # Fallback: manually clean up test containers
+            docker ps -a --format "{{.Names}}" | grep -E "^kato-" | while read container; do
+                docker stop "$container" 2>/dev/null || true
+                docker rm "$container" 2>/dev/null || true
+            done
+            docker ps -a --format "{{.Names}}" | grep -E "^(mongo|qdrant|redis)-" | while read container; do
+                docker stop "$container" 2>/dev/null || true
+                docker rm "$container" 2>/dev/null || true
+            done
         }
     fi
     
-    log_success "KATO services stopped"
+    log_success "KATO services and databases stopped"
 }
 
 # Function to build the test harness container
@@ -278,6 +291,25 @@ run_tests() {
     shift || true
     local extra_args="$*"
     
+    # Check if we should use clustered execution
+    if [[ "$USE_CLUSTERING" == "true" ]]; then
+        log_info "Using clustered test execution for better isolation..."
+        
+        # Delegate to clustered harness
+        if [[ -f "$CLUSTERED_HARNESS" ]]; then
+            # Build options to pass through
+            local cluster_opts=""
+            [[ "$VERBOSE_OUTPUT" == "true" ]] && cluster_opts="$cluster_opts --verbose"
+            [[ "$NO_REDIRECT" == "true" ]] && cluster_opts="$cluster_opts --no-redirect"
+            
+            "$CLUSTERED_HARNESS" $cluster_opts run "$test_path" $extra_args
+            return $?
+        else
+            log_warning "Clustered harness not found, falling back to standard execution"
+            USE_CLUSTERING=false
+        fi
+    fi
+    
     # Check and rebuild containers if needed
     check_and_rebuild "$FORCE_REBUILD" || {
         log_error "Failed to ensure containers are up to date"
@@ -385,7 +417,7 @@ run_tests() {
             -e KATO_API_URL="http://localhost:$KATO_PORT" \
             -e KATO_PROCESSOR_ID="$PROCESSOR_ID" \
             -v "$SCRIPT_DIR/kato:/kato/kato:ro" \
-            -v "$SCRIPT_DIR/tests:/kato/tests:ro" \
+            -v "$SCRIPT_DIR/tests:/tests:ro" \
             -v /var/run/docker.sock:/var/run/docker.sock:ro \
             "$TEST_IMAGE_NAME:latest" \
             run-tests "$test_path" ${extra_args:+$extra_args} 2>&1 | \
@@ -405,7 +437,7 @@ run_tests() {
             -e KATO_API_URL="http://localhost:$KATO_PORT" \
             -e KATO_PROCESSOR_ID="$PROCESSOR_ID" \
             -v "$SCRIPT_DIR/kato:/kato/kato:ro" \
-            -v "$SCRIPT_DIR/tests:/kato/tests:ro" \
+            -v "$SCRIPT_DIR/tests:/tests:ro" \
             -v /var/run/docker.sock:/var/run/docker.sock:ro \
             "$TEST_IMAGE_NAME:latest" \
             run-tests "$test_path" ${extra_args:+$extra_args} 2>&1 | \
@@ -529,6 +561,12 @@ run_tests_dev() {
     local test_path="${1:-tests/}"
     shift || true
     local extra_args="$*"
+    
+    # Dev mode doesn't support clustering yet - always use single instance
+    if [[ "$USE_CLUSTERING" == "true" ]]; then
+        log_warning "Development mode doesn't support clustering. Using single instance."
+        USE_CLUSTERING=false
+    fi
     
     # Setup output files (same as regular run_tests)
     local TEST_TIMESTAMP=$(date +"%Y%m%d-%H%M%S")
@@ -740,6 +778,7 @@ print_usage() {
     echo "  check-services  Check if KATO services are running"
     echo ""
     echo "Options:"
+    echo "  --no-cluster    Use single KATO instance (legacy mode) instead of clustering"
     echo "  --no-start      Don't start KATO services before tests"
     echo "  --no-stop       Don't stop KATO services after tests"
     echo "  --standalone    Run only standalone tests (no KATO required)"
@@ -755,7 +794,8 @@ print_usage() {
     echo ""
     echo "Examples:"
     echo "  $0 build                          # Build test harness"
-    echo "  $0 test                           # Run all tests (auto-manages services)"
+    echo "  $0 test                           # Run all tests with clustering (default)"
+    echo "  $0 --no-cluster test              # Run tests with single instance (legacy)"
     echo "  $0 --no-stop test                 # Run tests, keep services running"
     echo "  $0 --standalone test              # Run only standalone tests"
     echo "  $0 test tests/tests/unit/         # Run unit tests"
@@ -802,6 +842,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --force-rebuild)
             FORCE_REBUILD=true
+            shift
+            ;;
+        --no-cluster)
+            USE_CLUSTERING=false
             shift
             ;;
         --*)

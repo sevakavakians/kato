@@ -232,22 +232,26 @@ print(f"KATO predicts: {predictions}")
 
 ## Running Tests
 
-KATO includes a comprehensive test suite that runs in a containerized environment for consistency:
+KATO uses a sophisticated clustered test harness that provides complete isolation between test runs:
 
 ```bash
 # Build test harness container (first time only)
 ./test-harness.sh build
 
-# Run all tests (recommended)
+# Run all tests with automatic clustering (recommended)
 ./kato-manager.sh test
 # OR
 ./test-harness.sh test
 
-# Run specific test suites
+# Run specific test suites (automatically clustered)
 ./test-harness.sh suite unit          # Unit tests only
 ./test-harness.sh suite integration   # Integration tests
 ./test-harness.sh suite api           # API tests
 ./test-harness.sh suite performance   # Performance tests
+
+# Run with options
+./test-harness.sh --verbose test      # Show detailed cluster execution
+./test-harness.sh --no-redirect test  # Direct console output
 
 # Generate coverage report
 ./test-harness.sh report
@@ -256,7 +260,13 @@ KATO includes a comprehensive test suite that runs in a containerized environmen
 ./test-harness.sh dev tests/
 ```
 
-Note: The container-based approach ensures all dependencies are properly installed without affecting your host system.
+**Key Features:**
+- Each test cluster gets its own KATO instance with isolated databases
+- Tests are automatically grouped by configuration requirements
+- Complete isolation prevents test contamination
+- Deterministic execution with same results every time
+
+For detailed testing information, see the [Testing Guide](development/TESTING.md).
 
 ## Troubleshooting
 

@@ -183,13 +183,13 @@ docs/
 
 ## Testing
 
-KATO includes comprehensive tests covering all functionality:
+KATO uses a clustered test harness that provides complete isolation between test runs:
 
 ```bash
-# Build test harness (first time or after dependency changes)
+# Build test harness container (first time or after dependency changes)
 ./test-harness.sh build
 
-# Run all tests in container (recommended)
+# Run all tests with automatic clustering (recommended)
 ./kato-manager.sh test
 # OR directly:
 ./test-harness.sh test
@@ -198,9 +198,18 @@ KATO includes comprehensive tests covering all functionality:
 ./test-harness.sh suite unit        # Unit tests only
 ./test-harness.sh suite api         # API tests only
 ./test-harness.sh suite integration # Integration tests
+
+# Run specific test file
+./test-harness.sh test tests/tests/unit/test_observations.py
 ```
 
-**Current Status**: ✅ All 128 tests passing (100% success rate)
+**Key Features:**
+- **Complete Isolation**: Each test cluster gets its own KATO instance with dedicated MongoDB, Qdrant, and Redis
+- **Automatic Clustering**: Tests are grouped by configuration requirements
+- **No Cross-Contamination**: Tests cannot affect each other
+- **Parallel Execution**: Clusters can run concurrently for faster testing
+
+**Current Status**: ✅ All 188 tests passing (100% success rate)
 
 See [Testing Guide](docs/development/TESTING.md) for details.
 

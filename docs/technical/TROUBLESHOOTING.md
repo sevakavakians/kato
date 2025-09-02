@@ -460,37 +460,152 @@ docker volume ls | grep mongo
 docker volume inspect kato-mongo-data
 ```
 
-### Testing Issues
+### Testing Issues (Clustered Test Harness)
 
-#### Tests Failing
+#### Clustered Tests Not Running
 
 **Symptoms:**
-- pytest failures
-- Import errors in tests
+- "0 passed, 0 failed, 0 skipped" despite tests existing
+- Tests not being discovered by clusters
+- "No cluster definitions found" error
 
 **Solutions:**
 
-1. Check test environment:
+1. Check test cluster configuration:
 ```bash
-cd tests
-./test-harness.sh shell
-# Then inside container:
-python -m pytest --version
+# Verify test_clusters.py has correct paths
+cat tests/tests/fixtures/test_clusters.py | grep test_patterns
 ```
 
-2. Install dependencies:
+2. Rebuild test harness container:
 ```bash
-pip install -r requirements.txt
+./test-harness.sh build
 ```
 
-3. Run specific test:
+3. Run with verbose output to see cluster execution:
 ```bash
-./test-harness.sh test tests/tests/unit/test_observations.py -v
+./test-harness.sh --verbose test
+# OR for direct console output:
+./test-harness.sh --no-redirect test
 ```
 
-4. Check KATO is running:
+4. Check specific cluster is working:
 ```bash
-./kato-manager.sh status
+# Test default cluster only
+./test-harness.sh test tests/tests/unit/test_observations.py
+```
+
+#### Database Connection Issues in Tests
+
+**Symptoms:**
+- Tests timeout connecting to MongoDB/Qdrant
+- "Connection refused" errors
+- Tests hang at database operations
+
+**Solutions:**
+
+1. Ensure Docker network exists:
+```bash
+docker network create kato-network
+```
+
+2. Check containers are on same network:
+```bash
+docker inspect kato-cluster_default_<id> | grep NetworkMode
+```
+
+3. Verify database containers are running:
+```bash
+docker ps | grep -E "(mongo|qdrant|redis)-cluster"
+```
+
+4. Check environment variables in test container:
+```bash
+docker exec <test-container> env | grep -E "(MONGO|QDRANT|REDIS)"
+```
+
+#### Result Aggregation Shows Zero
+
+**Symptoms:**
+- Individual tests pass but totals show "0 passed"
+- "No tests passed. Check test configuration" warning
+
+**Solutions:**
+
+1. Update to latest test harness scripts:
+```bash
+git pull
+./test-harness.sh build
+```
+
+2. Check cluster-orchestrator.sh is using process substitution:
+```bash
+grep "while.*read.*cluster_json" cluster-orchestrator.sh
+# Should see: done < <(echo "$clusters_json" ...)
+# NOT: done | while read
+```
+
+3. Run single test to verify aggregation:
+```bash
+./test-harness.sh --no-redirect test tests/tests/unit/test_observations.py::test_observe_single_string
+```
+
+#### Tests Failing Due to Contamination
+
+**Symptoms:**
+- Tests pass individually but fail when run together
+- Unpredictable test failures
+- "Pattern already exists" errors
+
+**Solutions:**
+
+1. Verify cluster isolation is working:
+```bash
+# Each cluster should have unique processor_id
+./test-harness.sh --verbose test 2>&1 | grep "Processor ID:"
+```
+
+2. Check test fixtures are using unique processor IDs:
+```bash
+grep "processor_id" tests/tests/fixtures/kato_fixtures.py
+# Should generate unique IDs per test
+```
+
+3. Clear all test data and retry:
+```bash
+./test-harness.sh stop  # Stop all test instances
+docker rm $(docker ps -aq -f name=cluster_)  # Remove test containers
+./test-harness.sh test
+```
+
+#### Cluster Configuration Not Applied
+
+**Symptoms:**
+- Tests fail with wrong recall_threshold
+- Configuration changes not taking effect
+- Tests in wrong cluster
+
+**Solutions:**
+
+1. Verify test is in correct cluster:
+```bash
+grep -n "your_test.py" tests/tests/fixtures/test_clusters.py
+```
+
+2. Add test to appropriate cluster:
+```python
+# In test_clusters.py
+TestCluster(
+    name="custom_config",
+    config={"recall_threshold": 0.5},
+    test_patterns=["tests/unit/your_test.py"],
+    description="Tests requiring custom config"
+)
+```
+
+3. Check cluster configuration is applied:
+```bash
+./test-harness.sh --verbose test 2>&1 | grep "Configuration:"
 ```
 
 #### Auto-Learning Tests Failing

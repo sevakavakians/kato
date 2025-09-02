@@ -95,7 +95,7 @@ self.working_memory = {
 }
 
 # Long-Term Memory Pattern
-"MODEL|<sha1_hash>": {
+"PTRN|<sha1_hash>": {
     "observations": [...],
     "predictions": [...],
     "metadata": {...}

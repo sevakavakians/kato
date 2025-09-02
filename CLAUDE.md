@@ -37,28 +37,30 @@ All learned structures in KATO are patterns, whether they represent time-ordered
 docker logs kato-api-$(whoami)-1 --tail 20
 ```
 
-### Testing (Container-Based - Preferred)
+### Testing (Clustered Container-Based)
 ```bash
 # Build test harness container (first time or after dependency changes)
 ./test-harness.sh build
 
-# Run all tests in container (recommended)
+# Run all tests with automatic clustering (recommended)
 ./kato-manager.sh test
 # OR directly:
 ./test-harness.sh test
 
-# Run specific test suites
+# Run specific test suites (automatically clustered)
 ./test-harness.sh suite unit        # Unit tests only
 ./test-harness.sh suite integration # Integration tests
 ./test-harness.sh suite api        # API tests
 ./test-harness.sh suite performance # Performance tests
 ./test-harness.sh suite determinism # Determinism tests
 
-# Run specific test path
+# Run specific test path (automatically finds appropriate cluster)
 ./test-harness.sh test tests/tests/unit/test_memory_management.py
 
-# Run with pytest options
+# Run with options
 ./test-harness.sh test tests/ -v -x  # Verbose, stop on first failure
+./test-harness.sh --verbose test     # Show detailed cluster execution
+./test-harness.sh --no-redirect test # Direct console output
 
 # Generate coverage report
 ./test-harness.sh report
@@ -70,7 +72,14 @@ docker logs kato-api-$(whoami)-1 --tail 20
 ./test-harness.sh dev tests/tests/unit/ -v
 ```
 
-Note: The container-based approach ensures consistent test environment without requiring local Python dependencies.
+**Key Features of Clustered Testing:**
+- Each test cluster gets its own KATO instance with isolated databases (MongoDB, Qdrant, Redis)
+- Tests are automatically grouped by configuration requirements (e.g., recall_threshold values)
+- Processor IDs are generated uniquely per cluster: `cluster_<name>_<timestamp>_<uuid>`
+- Complete isolation prevents test contamination
+- Parallel cluster execution for faster test runs
+
+Note: The clustered approach ensures complete test isolation and deterministic execution.
 
 ### Development and Debugging
 ```bash
@@ -195,12 +204,18 @@ REST Client → REST Gateway (Port 8000) → ZMQ Server (Port 5555) → KATO Pro
 
 ## Testing Strategy
 
-The codebase has comprehensive test coverage with 334 test functions across 109 test files. Tests are organized under `tests/tests/`:
+The codebase has comprehensive test coverage with 188 test functions across 21 test files. Tests are organized under `tests/tests/` and run using a clustered test harness:
 
 1. **Unit Tests** (`tests/tests/unit/`): Test individual components
 2. **Integration Tests** (`tests/tests/integration/`): Test end-to-end workflows
 3. **API Tests** (`tests/tests/api/`): Test REST endpoints
 4. **Performance Tests** (`tests/tests/performance/`): Stress and performance tests
+
+**Clustered Test Architecture:**
+- Tests are grouped into clusters based on configuration requirements (defined in `tests/tests/fixtures/test_clusters.py`)
+- Each cluster runs with its own KATO instance and isolated databases
+- Clusters can have different configurations (e.g., `recall_threshold`, `max_pattern_length`)
+- Automatic cleanup after each cluster completes
 
 Use existing fixtures from `tests/tests/fixtures/kato_fixtures.py` for consistency.
 

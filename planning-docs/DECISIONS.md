@@ -63,14 +63,14 @@
 
 ---
 
-## 2024-11-20 - SHA1 Hashing for Model Identification
-**Decision**: Use SHA1 hashes for deterministic model identification
-**Rationale**: Ensures reproducibility and model versioning
+## 2024-11-20 - SHA1 Hashing for Pattern Identification
+**Decision**: Use SHA1 hashes for deterministic pattern identification
+**Rationale**: Ensures reproducibility and pattern versioning
 **Alternatives Considered**:
 - UUID: Not deterministic for same inputs
 - MD5: Collision concerns
 - SHA256: Unnecessarily long for our needs
-**Impact**: All models identified by MODEL|<sha1> pattern
+**Impact**: All patterns identified by PTRN|<sha1> pattern
 **Confidence**: High - Works perfectly for deterministic system
 
 ---

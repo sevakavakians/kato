@@ -23,11 +23,18 @@ class KATOTestFixture:
     def __init__(self, processor_name: str = "P1"):
         self.processor_name = processor_name
         
-        # Check if we're in container mode and have a processor ID
-        if os.environ.get('KATO_TEST_MODE') == 'container' and os.environ.get('KATO_PROCESSOR_ID'):
+        # Check if we're in clustered mode first
+        if os.environ.get('KATO_CLUSTER_MODE') == 'true':
+            # In clustered mode, use the cluster's processor ID
             self.processor_id = os.environ.get('KATO_PROCESSOR_ID')
+            self.is_clustered = True
+        # Check if we're in container mode and have a processor ID
+        elif os.environ.get('KATO_TEST_MODE') == 'container' and os.environ.get('KATO_PROCESSOR_ID'):
+            self.processor_id = os.environ.get('KATO_PROCESSOR_ID')
+            self.is_clustered = False
         else:
             self.processor_id = self._generate_processor_id()
+            self.is_clustered = False
             
         # Use KATO_API_URL from environment if available, otherwise default to port 8000
         self.base_url = os.environ.get('KATO_API_URL', 'http://localhost:8000')
@@ -293,6 +300,11 @@ class KATOTestFixture:
         )
         response.raise_for_status()
         result = response.json()
+        
+        # In clustered mode, also ensure complete database cleanup
+        if self.is_clustered and self.processor_id:
+            self._ensure_complete_isolation()
+        
         return result.get('message', '')
         
     def clear_short_term_memory(self) -> str:
@@ -382,6 +394,18 @@ class KATOTestFixture:
         if not 0.0 <= threshold <= 1.0:
             raise ValueError(f"recall_threshold must be between 0.0 and 1.0, got {threshold}")
         return self.update_genes({"recall_threshold": threshold})
+    
+    def _ensure_complete_isolation(self):
+        """Ensure complete database isolation in clustered mode."""
+        try:
+            # Import cleanup utilities
+            from .cleanup_utils import clear_all_databases_for_processor
+            clear_all_databases_for_processor(self.processor_id)
+        except ImportError:
+            # Cleanup utils not available, skip
+            pass
+        except Exception as e:
+            print(f"Warning: Could not ensure complete isolation: {e}")
 
 
 @pytest.fixture(scope="function")

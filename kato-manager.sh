@@ -23,9 +23,13 @@ CONFIGS_DIR="${KATO_HOME}/configs"
 DOCKER_IMAGE_NAME="kato"
 DOCKER_TAG="latest"
 DOCKER_NETWORK="kato-network"
-MONGO_CONTAINER_NAME="mongo-kb-${USER}-1"
+MONGO_CONTAINER_NAME=""  # Will be set dynamically based on processor ID
+QDRANT_CONTAINER_NAME=""  # Will be set dynamically based on processor ID
+REDIS_CONTAINER_NAME=""  # Will be set dynamically based on processor ID
 KATO_CONTAINER_NAME=""  # Will be set dynamically based on processor ID
 MONGO_DB_PORT="27017"
+QDRANT_PORT="6333"
+REDIS_PORT="6379"
 KATO_API_PORT="8000"
 KATO_ZMQ_PORT="5555"
 CONFIG_FILE="/tmp/kato-config-${USER}.json"
@@ -183,6 +187,57 @@ for instance_id, info in instances.items():
     echo ""
 }
 
+# List instances with their associated databases
+list_instances_with_databases() {
+    init_registry
+    echo "KATO Instances and Databases:"
+    echo "==============================="
+    
+    if [[ ! -f "$INSTANCES_FILE" ]]; then
+        echo "No instances registered."
+        return
+    fi
+    
+    python3 -c "
+import json
+import subprocess
+
+def get_container_status(container_name):
+    try:
+        result = subprocess.run(['docker', 'ps', '-a', '--format', '{{.Names}}:{{.Status}}'], 
+                              capture_output=True, text=True)
+        for line in result.stdout.strip().split('\n'):
+            if line.startswith(container_name + ':'):
+                return 'running' if 'Up' in line else 'stopped'
+        return 'not_found'
+    except:
+        return 'unknown'
+
+with open('$INSTANCES_FILE', 'r') as f:
+    data = json.load(f)
+    instances = data.get('instances', {})
+
+if not instances:
+    print('No instances registered.')
+else:
+    for proc_id, info in instances.items():
+        # Check container statuses
+        kato_status = get_container_status(info['container'])
+        mongo_status = get_container_status(f'mongo-{proc_id}')
+        qdrant_status = get_container_status(f'qdrant-{proc_id}')
+        redis_status = get_container_status(f'redis-{proc_id}')
+        
+        # Display instance info
+        print(f'\nInstance: {proc_id} ({info[\"name\"]})')
+        print(f'  KATO:      {info[\"container\"][:40]} ({kato_status})')
+        print(f'  MongoDB:   mongo-{proc_id[:35]} ({mongo_status})')
+        print(f'  Qdrant:    qdrant-{proc_id[:34]} ({qdrant_status})')
+        print(f'  Redis:     redis-{proc_id[:35]} ({redis_status})')
+        print(f'  Ports:     API={info[\"api_port\"]}, ZMQ={info[\"zmq_port\"]}')
+"
+    echo ""
+}
+
 # Find next available port
 find_available_port() {
     local base_port="$1"
@@ -225,12 +280,13 @@ KATO Manager - Management script for KATO AI System
 Usage: $0 [COMMAND] [OPTIONS]
 
 COMMANDS:
-    start       Start a KATO instance with MongoDB backend
-    stop        Stop and remove KATO instance(s) 
-    stop-all    Stop and remove all KATO instances
+    start       Start a KATO instance with dedicated databases
+    stop        Stop and remove KATO instance(s) and their databases
+    stop-all    Stop and remove all KATO instances and databases
     restart     Restart KATO instance(s)
     list        List all KATO instances
-    status      Show status of KATO containers and services
+    status      Show status of KATO instances and their databases
+    verify      Verify database connectivity for an instance
     logs        Show logs from KATO containers
     build       Build KATO Docker image
     clean       Clean up Docker containers, images, and volumes
@@ -279,15 +335,16 @@ KATO PROCESSOR OPTIONS:
     --no-predictions       Disable prediction processing (default: enabled)
 
 EXAMPLES:
-    $0 start                                    # Start with defaults (includes vector DB)
+    $0 start                                    # Start with defaults and dedicated DBs
     $0 start --no-vectordb                      # Start without vector database
     $0 start --vectordb-backend qdrant          # Explicitly use Qdrant backend
     $0 start --name MyProcessor --port 9000     # Custom name and port
     $0 start --indexer-type VI --max-predictions 50  # Custom indexer
     $0 list                                     # List all instances
+    $0 verify mytest                            # Verify databases for instance
     $0 stop P1                                  # Stop instance by name
     $0 stop p5f2b9323c3                        # Stop instance by ID
-    $0 stop --all --with-mongo                  # Stop everything
+    $0 stop-all                                 # Stop all instances and databases
     $0 logs kato                                # Show KATO container logs
     $0 test                                     # Run test suite
     $0 clean                                    # Clean everything
@@ -509,7 +566,7 @@ validate_parameters() {
     fi
     
     log_info "Using processor: $PROCESSOR_NAME (ID: $PROCESSOR_ID)"
-    log_info "Classifier: $CLASSIFIER, Max Predictions: $MAX_PREDICTIONS"
+    log_info "Max Predictions: $MAX_PREDICTIONS"
 }
 
 # Build genome manifest from parameters
@@ -555,33 +612,35 @@ container_status() {
     fi
 }
 
-# Start MongoDB
+# Start dedicated MongoDB for instance
 start_mongodb() {
-    local status=$(container_status "$MONGO_CONTAINER_NAME")
+    local processor_id="$1"
+    local container_name="mongo-${processor_id}"
+    MONGO_CONTAINER_NAME="$container_name"  # Update global variable
+    
+    local status=$(container_status "$container_name")
     
     case $status in
         "running")
-            log_info "MongoDB already running: $MONGO_CONTAINER_NAME"
+            log_info "MongoDB already running: $container_name"
             ;;
         "stopped")
-            log_info "Starting existing MongoDB container: $MONGO_CONTAINER_NAME"
-            docker start "$MONGO_CONTAINER_NAME"
+            log_info "Starting existing MongoDB container: $container_name"
+            docker start "$container_name"
             ;;
         "not_found")
-            log_info "Creating and starting MongoDB container: $MONGO_CONTAINER_NAME"
+            log_info "Creating MongoDB container for instance: $container_name"
             docker run -d \
-                --name "$MONGO_CONTAINER_NAME" \
+                --name "$container_name" \
                 --network "$DOCKER_NETWORK" \
-                -p "$MONGO_DB_PORT:27017" \
-                -v "kato-mongo-data:/data/db" \
-                mongo:4.4
+                mongo:7.0
             ;;
     esac
     
     # Wait for MongoDB to be ready
     log_info "Waiting for MongoDB to be ready..."
     local retries=30
-    while ! docker exec "$MONGO_CONTAINER_NAME" mongo --eval "db.adminCommand('ping')" &> /dev/null; do
+    while ! docker exec "$container_name" mongosh --eval "db.adminCommand('ping')" &> /dev/null; do
         retries=$((retries - 1))
         if [[ $retries -eq 0 ]]; then
             log_error "MongoDB failed to start"
@@ -589,55 +648,114 @@ start_mongodb() {
         fi
         sleep 1
     done
-    log_success "MongoDB is ready"
+    log_success "MongoDB $container_name is ready"
 }
 
-# Start Vector Database
-start_vectordb() {
-    # Check if vector DB is disabled
-    if [[ "$DISABLE_VECTORDB" == "true" ]]; then
-        log_info "Vector database disabled by --no-vectordb flag"
-        return 0
-    fi
+# Start dedicated Qdrant for instance
+start_qdrant() {
+    local processor_id="$1"
+    local container_name="qdrant-${processor_id}"
+    QDRANT_CONTAINER_NAME="$container_name"  # Update global variable
     
-    # Check if vectordb manager script exists
-    if [[ ! -x "$SCRIPT_DIR/scripts/vectordb_manager.sh" ]]; then
-        log_warning "Vector database manager not found. Skipping vector DB startup."
-        log_warning "To enable vector database support, ensure scripts/vectordb_manager.sh exists"
-        return 0
-    fi
+    local status=$(container_status "$container_name")
     
-    log_info "Starting vector database services..."
+    case $status in
+        "running")
+            log_info "Qdrant already running: $container_name"
+            ;;
+        "stopped")
+            log_info "Starting existing Qdrant container: $container_name"
+            docker start "$container_name"
+            ;;
+        "not_found")
+            log_info "Creating Qdrant container for instance: $container_name"
+            docker run -d \
+                --name "$container_name" \
+                --network "$DOCKER_NETWORK" \
+                qdrant/qdrant:latest
+            ;;
+    esac
     
-    # Set backend if specified
-    if [[ -n "$VECTORDB_BACKEND" ]]; then
-        export KATO_VECTOR_DB_BACKEND="$VECTORDB_BACKEND"
-        log_info "Using vector database backend: $VECTORDB_BACKEND"
-    fi
-    
-    # Start vector database services
-    if "$SCRIPT_DIR/scripts/vectordb_manager.sh" start; then
-        log_success "Vector database services started"
-        
-        # Set environment variable to indicate vector DB is available
-        export KATO_VECTORDB_ENABLED="true"
-        
-        # Optionally run migration if this is first time or if requested
-        if [[ "$AUTO_MIGRATE_VECTORS" == "true" ]]; then
-            log_info "Auto-migrating vectors from MongoDB to vector database..."
-            "$SCRIPT_DIR/scripts/vectordb_manager.sh" migrate --no-verify
-        fi
+    # Wait for Qdrant to be ready
+    log_info "Waiting for Qdrant to be ready..."
+    # Qdrant typically starts very quickly, just give it a few seconds
+    sleep 3
+    # Check if container is still running
+    if [[ $(container_status "$container_name") == "running" ]]; then
+        log_success "Qdrant $container_name is ready"
     else
-        log_warning "Failed to start vector database services"
-        log_warning "KATO will continue with MongoDB vector storage"
-        export KATO_VECTORDB_ENABLED="false"
+        log_error "Qdrant container failed to start"
+        return 1
     fi
 }
 
-# Start KATO
+# Start dedicated Redis for instance
+start_redis() {
+    local processor_id="$1"
+    local container_name="redis-${processor_id}"
+    REDIS_CONTAINER_NAME="$container_name"  # Update global variable
+    
+    local status=$(container_status "$container_name")
+    
+    case $status in
+        "running")
+            log_info "Redis already running: $container_name"
+            ;;
+        "stopped")
+            log_info "Starting existing Redis container: $container_name"
+            docker start "$container_name"
+            ;;
+        "not_found")
+            log_info "Creating Redis container for instance: $container_name"
+            docker run -d \
+                --name "$container_name" \
+                --network "$DOCKER_NETWORK" \
+                redis:7-alpine
+            ;;
+    esac
+    
+    # Wait for Redis to be ready
+    log_info "Waiting for Redis to be ready..."
+    local retries=30
+    while ! docker exec "$container_name" redis-cli ping &> /dev/null; do
+        retries=$((retries - 1))
+        if [[ $retries -eq 0 ]]; then
+            log_error "Redis failed to start"
+            return 1
+        fi
+        sleep 1
+    done
+    log_success "Redis $container_name is ready"
+}
+
+# Start KATO with dedicated databases
 start_kato() {
-    # Set container name based on processor ID
-    KATO_CONTAINER_NAME="kato-${PROCESSOR_ID//[^a-zA-Z0-9-]/_}"
+    # Set container names based on processor ID
+    local clean_id="${PROCESSOR_ID//[^a-zA-Z0-9-]/_}"
+    KATO_CONTAINER_NAME="kato-${clean_id}"
+    
+    # Start dedicated database instances for this KATO instance
+    log_info "Starting dedicated database instances for $PROCESSOR_ID..."
+    if ! start_mongodb "$clean_id"; then
+        log_error "Failed to start MongoDB for instance"
+        return 1
+    fi
+    if ! start_qdrant "$clean_id"; then
+        log_error "Failed to start Qdrant for instance"
+        # Clean up MongoDB since Qdrant failed
+        docker stop "mongo-${clean_id}" 2>/dev/null || true
+        docker rm "mongo-${clean_id}" 2>/dev/null || true
+        return 1
+    fi
+    if ! start_redis "$clean_id"; then
+        log_error "Failed to start Redis for instance"
+        # Clean up MongoDB and Qdrant since Redis failed
+        docker stop "mongo-${clean_id}" 2>/dev/null || true
+        docker rm "mongo-${clean_id}" 2>/dev/null || true
+        docker stop "qdrant-${clean_id}" 2>/dev/null || true
+        docker rm "qdrant-${clean_id}" 2>/dev/null || true
+        return 1
+    fi
     
     # Find available ports if not specified
     if [[ "$API_PORT" == "$KATO_API_PORT" ]]; then
@@ -700,7 +818,9 @@ EOF
                 -e "ZMQ_PORT=5555" \
                 -e "REST_PORT=8000" \
                 -e "LOG_LEVEL=$LOG_LEVEL" \
-                -e "MONGO_BASE_URL=mongodb://$MONGO_CONTAINER_NAME:27017" \
+                -e "MONGO_BASE_URL=mongodb://mongo-${clean_id}:27017" \
+                -e "QDRANT_URL=http://qdrant-${clean_id}:6333" \
+                -e "REDIS_URL=redis://redis-${clean_id}:6379" \
                 -e "MANIFEST=$genome_content" \
                 -e "SOURCES=[]" \
                 -e "TARGETS=[]" \
@@ -820,7 +940,7 @@ sys.exit(1)
 "
 }
 
-# Stop specific instance
+# Stop specific instance and all associated databases
 stop_instance() {
     local search_term="$1"
     local remove_container="${2:-true}"  # Default to removing container
@@ -849,29 +969,46 @@ stop_instance() {
     local container=$(echo "$instance_info" | python3 -c "import sys, json; print(json.load(sys.stdin)['container'])")
     local name=$(echo "$instance_info" | python3 -c "import sys, json; print(json.load(sys.stdin).get('name', 'Unknown'))")
     
-    log_info "Stopping instance: $instance_id ($name)"
+    log_info "Stopping instance and all associated databases: $instance_id ($name)"
     
-    # Stop the container if running
-    if [[ $(container_status "$container") == "running" ]]; then
+    # Extract clean ID from container name
+    local clean_id="${container#kato-}"
+    
+    # Stop and remove KATO container
+    if [[ $(container_status "$container") != "not_found" ]]; then
         docker stop "$container" >/dev/null 2>&1
-        log_success "Container stopped: $container"
+        docker rm "$container" >/dev/null 2>&1
+        log_success "KATO container removed: $container"
     fi
     
-    # Remove the container
-    if [[ "$remove_container" == "true" ]]; then
-        if docker ps -a --format "{{.Names}}" | grep -q "^${container}$"; then
-            docker rm "$container" >/dev/null 2>&1
-            log_success "Container removed: $container"
-        fi
-        
-        # Remove from registry
-        unregister_instance "$instance_id"
-    else
-        # Just update status if not removing
-        update_instance_status "$instance_id" "stopped"
+    # Stop and remove associated MongoDB
+    local mongo_container="mongo-${clean_id}"
+    if [[ $(container_status "$mongo_container") != "not_found" ]]; then
+        docker stop "$mongo_container" >/dev/null 2>&1
+        docker rm "$mongo_container" >/dev/null 2>&1
+        log_success "MongoDB removed: $mongo_container"
     fi
     
-    log_success "Instance cleaned up: $instance_id ($name)"
+    # Stop and remove associated Qdrant
+    local qdrant_container="qdrant-${clean_id}"
+    if [[ $(container_status "$qdrant_container") != "not_found" ]]; then
+        docker stop "$qdrant_container" >/dev/null 2>&1
+        docker rm "$qdrant_container" >/dev/null 2>&1
+        log_success "Qdrant removed: $qdrant_container"
+    fi
+    
+    # Stop and remove associated Redis
+    local redis_container="redis-${clean_id}"
+    if [[ $(container_status "$redis_container") != "not_found" ]]; then
+        docker stop "$redis_container" >/dev/null 2>&1
+        docker rm "$redis_container" >/dev/null 2>&1
+        log_success "Redis removed: $redis_container"
+    fi
+    
+    # Remove from registry
+    unregister_instance "$instance_id"
+    
+    log_success "Instance and all databases cleaned up: $instance_id ($name)"
 }
 
 # Stop all instances
@@ -906,46 +1043,42 @@ for instance_id in instances:
         log_success "All instances stopped and removed"
     fi
     
-    # Handle MongoDB
+    # Handle shared databases (legacy cleanup)
     if [[ "$stop_mongo" == "yes" ]]; then
-        stop_mongodb
-        stop_vectordb  # Also stop vector database
+        stop_shared_databases
     elif [[ "$stop_mongo" == "ask" ]]; then
-        read -p "Stop and remove MongoDB? (y/n) " -n 1 -r
+        read -p "Stop and remove any shared database containers? (y/n) " -n 1 -r
         echo
         if [[ $REPLY =~ ^[Yy]$ ]]; then
-            stop_mongodb
-            # Ask about vector database
-            read -p "Stop and remove Vector Database services? (y/n) " -n 1 -r
-            echo
-            if [[ $REPLY =~ ^[Yy]$ ]]; then
-                stop_vectordb
-            fi
+            stop_shared_databases
         fi
     fi
 }
 
-# Stop MongoDB
-stop_mongodb() {
-    if [[ $(container_status "$MONGO_CONTAINER_NAME") != "not_found" ]]; then
-        log_info "Stopping MongoDB container: $MONGO_CONTAINER_NAME"
-        docker stop "$MONGO_CONTAINER_NAME" >/dev/null 2>&1
-        docker rm "$MONGO_CONTAINER_NAME" >/dev/null 2>&1
-        log_success "MongoDB stopped and removed"
-    fi
-}
-
-# Stop Vector Database
-stop_vectordb() {
-    # Check if vectordb manager script exists
-    if [[ -x "$SCRIPT_DIR/scripts/vectordb_manager.sh" ]]; then
-        log_info "Stopping vector database services..."
-        if "$SCRIPT_DIR/scripts/vectordb_manager.sh" stop; then
-            log_success "Vector database services stopped"
-        else
-            log_warning "Failed to stop vector database services"
-        fi
-    fi
+# Stop all shared database instances (legacy cleanup)
+stop_shared_databases() {
+    log_info "Stopping any shared database containers..."
+    
+    # Stop shared MongoDB instances
+    docker ps --format "{{.Names}}" | grep -E "^mongo-kb-" | while read container; do
+        docker stop "$container" >/dev/null 2>&1
+        docker rm "$container" >/dev/null 2>&1
+        log_success "Removed shared MongoDB: $container"
+    done
+    
+    # Stop shared Qdrant instances
+    docker ps --format "{{.Names}}" | grep -E "^qdrant-.*-1$" | while read container; do
+        docker stop "$container" >/dev/null 2>&1
+        docker rm "$container" >/dev/null 2>&1
+        log_success "Removed shared Qdrant: $container"
+    done
+    
+    # Stop shared Redis instances
+    docker ps --format "{{.Names}}" | grep -E "^redis-cache-" | while read container; do
+        docker stop "$container" >/dev/null 2>&1
+        docker rm "$container" >/dev/null 2>&1
+        log_success "Removed shared Redis: $container"
+    done
 }
 
 # Stop services - enhanced with better parameter handling
@@ -998,22 +1131,9 @@ show_status() {
     log_info "KATO System Status"
     echo "===================="
     
-    # Show MongoDB status
+    # Show instances with their dedicated databases
     echo
-    echo "Shared Services:"
-    echo "---------------"
-    local mongo_status=$(container_status "$MONGO_CONTAINER_NAME")
-    printf "%-20s %s\n" "MongoDB:" "$mongo_status"
-    
-    # Show Vector Database status
-    local qdrant_status=$(container_status "qdrant-${USER}-1")
-    local redis_status=$(container_status "redis-cache-${USER}-1")
-    printf "%-20s %s\n" "Qdrant (VectorDB):" "$qdrant_status"
-    printf "%-20s %s\n" "Redis (Cache):" "$redis_status"
-    
-    # Show instances
-    echo
-    list_instances
+    list_instances_with_databases
     
     echo
     echo "Network:"
@@ -1131,6 +1251,130 @@ show_logs() {
     esac
 }
 
+# Verify instance connectivity
+verify_instance() {
+    local instance_id="${1:-$PROCESSOR_ID}"
+    
+    if [[ -z "$instance_id" ]]; then
+        log_error "Instance ID required for verification"
+        echo "Usage: $0 verify <instance_id>"
+        return 1
+    fi
+    
+    log_info "Verifying instance: $instance_id"
+    
+    # Check if instance is registered
+    if [[ ! -f "$INSTANCES_FILE" ]]; then
+        log_error "No instances registered"
+        return 1
+    fi
+    
+    # Get instance info
+    local instance_info=$(python3 -c "
+import json
+with open('$INSTANCES_FILE', 'r') as f:
+    data = json.load(f)
+    instances = data.get('instances', {})
+    if '$instance_id' in instances:
+        info = instances['$instance_id']
+        print(f\"{info['api_port']}|{info['container']}|{info['name']}\")
+" 2>/dev/null)
+    
+    if [[ -z "$instance_info" ]]; then
+        log_error "Instance not found: $instance_id"
+        return 1
+    fi
+    
+    local api_port=$(echo "$instance_info" | cut -d'|' -f1)
+    local container=$(echo "$instance_info" | cut -d'|' -f2)
+    local name=$(echo "$instance_info" | cut -d'|' -f3)
+    
+    echo ""
+    echo "Testing Instance: $instance_id ($name)"
+    echo "========================================"
+    
+    # Test KATO container
+    echo -n "  KATO Container (${container}): "
+    if docker ps --format "{{.Names}}" | grep -q "^${container}$"; then
+        echo "✓ running"
+    else
+        echo "✗ not running"
+        return 1
+    fi
+    
+    # Test MongoDB
+    echo -n "  MongoDB (mongo-${instance_id}): "
+    if docker ps --format "{{.Names}}" | grep -q "^mongo-${instance_id}$"; then
+        # Test actual connectivity
+        if docker exec "mongo-${instance_id}" mongo --eval "db.adminCommand('ping')" >/dev/null 2>&1; then
+            echo "✓ running and responsive"
+        else
+            echo "⚠ running but not responsive"
+        fi
+    else
+        echo "✗ not running"
+    fi
+    
+    # Test Qdrant
+    echo -n "  Qdrant (qdrant-${instance_id}): "
+    if docker ps --format "{{.Names}}" | grep -q "^qdrant-${instance_id}$"; then
+        # Test actual connectivity from KATO container
+        if docker exec "$container" curl -s "http://qdrant-${instance_id}:6333/health" >/dev/null 2>&1; then
+            echo "✓ running and responsive"
+        else
+            echo "⚠ running but not responsive"
+        fi
+    else
+        echo "✗ not running"
+    fi
+    
+    # Test Redis
+    echo -n "  Redis (redis-${instance_id}): "
+    if docker ps --format "{{.Names}}" | grep -q "^redis-${instance_id}$"; then
+        # Test actual connectivity
+        if docker exec "redis-${instance_id}" redis-cli ping >/dev/null 2>&1; then
+            echo "✓ running and responsive"
+        else
+            echo "⚠ running but not responsive"
+        fi
+    else
+        echo "✗ not running"
+    fi
+    
+    # Test KATO API
+    echo -n "  KATO API (port ${api_port}): "
+    if curl -s "http://localhost:${api_port}/kato-api/ping" >/dev/null 2>&1; then
+        echo "✓ responsive"
+        
+        # Test observe endpoint
+        echo -n "  Observe endpoint: "
+        local observe_response=$(curl -s -X POST "http://localhost:${api_port}/${instance_id}/observe" \
+            -H "Content-Type: application/json" \
+            -d '{"observations": [["test_verify"]]}' 2>/dev/null)
+        if [[ -n "$observe_response" ]] && [[ "$observe_response" != *"error"* ]]; then
+            echo "✓ working"
+        else
+            echo "✗ failed"
+        fi
+        
+        # Test predict endpoint
+        echo -n "  Predict endpoint: "
+        local predict_response=$(curl -s -X POST "http://localhost:${api_port}/${instance_id}/predict" \
+            -H "Content-Type: application/json" \
+            -d '{"observations": [["test_verify"]]}' 2>/dev/null)
+        if [[ -n "$predict_response" ]] && [[ "$predict_response" != *"error"* ]]; then
+            echo "✓ working"
+        else
+            echo "✗ failed"
+        fi
+    else
+        echo "✗ not responsive"
+    fi
+    
+    echo ""
+    log_success "Verification complete for instance: $instance_id"
+}
+
 # Build Docker image
 build_image() {
     log_info "Building KATO Docker image: $DOCKER_IMAGE_NAME:$TAG"
@@ -1244,8 +1488,7 @@ main() {
         "start")
             validate_parameters
             ensure_network
-            start_mongodb
-            start_vectordb  # Start vector database by default
+            # Databases are now started automatically by start_kato
             start_kato
             log_success "KATO system started successfully"
             show_status
@@ -1261,8 +1504,7 @@ main() {
             sleep 2
             validate_parameters
             ensure_network
-            start_mongodb
-            start_vectordb  # Start vector database by default
+            # Databases are now started automatically by start_kato
             start_kato
             log_success "KATO system restarted successfully"
             ;;
@@ -1271,6 +1513,9 @@ main() {
             ;;
         "status")
             show_status
+            ;;
+        "verify")
+            verify_instance "$1"
             ;;
         "logs")
             show_logs "$1" "$2"
@@ -1292,7 +1537,6 @@ main() {
             echo "=================="
             echo "Processor ID: $PROCESSOR_ID"
             echo "Processor Name: $PROCESSOR_NAME"
-            echo "Classifier: $CLASSIFIER"
             echo "Max Pattern Length: $MAX_PATTERN_LENGTH"
             echo "Persistence: $PERSISTENCE"
             echo "Smoothness: $SMOOTHNESS"

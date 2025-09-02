@@ -1,92 +1,111 @@
-# KATO Test Documentation
+# KATO Clustered Test Documentation
 
 ## Overview
 
-The KATO test suite provides comprehensive testing coverage for all aspects of the KATO system, including unit tests, integration tests, and API endpoint tests. The suite is designed to validate KATO's deterministic behavior, memory management, pattern learning, and unique features like alphanumeric sorting, deterministic hashing, and sophisticated temporal prediction segmentation.
+KATO uses a sophisticated clustered test harness that provides complete isolation between test runs. Each test cluster gets its own KATO instance with dedicated databases (MongoDB, Qdrant, Redis), ensuring deterministic execution and preventing cross-contamination between tests.
 
-**Current Coverage**: 334 test functions across 109 test files
+**Current Coverage**: 188 test functions across 21 test files
 - Unit tests: tests/tests/unit/
 - Integration tests: tests/tests/integration/
 - API tests: tests/tests/api/
 - Performance tests: tests/tests/performance/
-- Execution time: ~45 seconds
+- Execution time: ~30-60 seconds (depending on cluster configuration)
 
-## Test Structure
+## Clustered Test Architecture
 
-```
-tests/
-├── tests/
-│   ├── fixtures/          # Test fixtures and helpers
-│   │   ├── hash_helpers.py    # Hash verification utilities
-│   │   ├── test_helpers.py    # Sorting and assertion helpers
-│   │   └── kato_fixtures.py   # KATO test fixtures
-│   ├── unit/              # Unit tests (83 tests)
-│   │   ├── test_observations.py
-│   │   ├── test_memory_management.py
-│   │   ├── test_pattern_hashing.py
-│   │   ├── test_predictions.py
-│   │   ├── test_sorting_behavior.py
-│   │   ├── test_determinism_preservation.py
-│   │   ├── test_prediction_edge_cases.py
-│   │   └── test_prediction_fields.py
-│   ├── integration/       # Integration tests (19 tests)
-│   │   ├── test_pattern_learning.py
-│   │   ├── test_vector_e2e.py
-│   │   └── test_vector_simplified.py
-│   ├── api/              # API endpoint tests (21 tests)
-│   │   └── test_rest_endpoints.py
-│   └── performance/      # Performance tests (5 tests)
-│       └── test_vector_stress.py
-├── scripts/             # Utility scripts
-│   ├── analyze_tests.py
-│   ├── check_tests.py
-│   ├── run_simple_test.py
-│   ├── run_tests_direct.py
-│   ├── setup_venv.py
-│   └── simple_analyze.py
-├── test-harness.sh      # Container-based test runner (preferred)
-├── Dockerfile.test      # Test container definition
-├── requirements-test.txt # Python test dependencies
-├── pytest.ini           # Pytest configuration
-├── conftest.py          # Pytest fixtures configuration
-└── TEST_ORGANIZATION.md # Test structure documentation
+### Key Concepts
+
+**Test Clustering**: Tests are automatically grouped based on their configuration requirements. Each cluster runs with its own isolated KATO instance and databases.
+
+**Complete Isolation**: Every test cluster gets:
+- Unique processor ID: `cluster_<name>_<timestamp>_<uuid>`
+- Dedicated MongoDB database
+- Dedicated Qdrant vector collection
+- Dedicated Redis cache namespace
+- Isolated network environment
+
+**Benefits**:
+- **No Cross-Contamination**: Tests cannot affect each other
+- **Deterministic Execution**: Same results every time
+- **Parallel Capability**: Clusters can run concurrently
+- **Configuration Flexibility**: Different clusters can have different settings
+- **Automatic Cleanup**: Resources are cleaned up after each cluster
+
+### Test Cluster Configuration
+
+Test clusters are defined in `tests/tests/fixtures/test_clusters.py`:
+
+```python
+TEST_CLUSTERS = [
+    TestCluster(
+        name="default",
+        config={
+            "recall_threshold": 0.1,
+            "max_pattern_length": 0
+        },
+        test_patterns=[
+            "tests/unit/test_observations.py",
+            "tests/unit/test_predictions.py",
+            # ... more tests
+        ],
+        description="Tests using default KATO configuration"
+    ),
+    
+    TestCluster(
+        name="recall_high",
+        config={
+            "recall_threshold": 0.7,
+            "max_pattern_length": 0
+        },
+        test_patterns=[
+            "tests/unit/test_recall_threshold_values.py::test_threshold_point_seven_high",
+            # ... specific tests requiring high recall
+        ],
+        description="Tests requiring high recall threshold"
+    ),
+    # ... more clusters
+]
 ```
 
 ## Running Tests
 
-### Container-Based Testing (Preferred Method)
-
-KATO uses a containerized test harness to ensure consistent test environments without requiring local Python dependencies:
+### Quick Start
 
 ```bash
 # Build test harness container (first time or after dependency changes)
 ./test-harness.sh build
 
-# Run all tests using kato-manager
+# Run all tests with automatic clustering
 ./kato-manager.sh test
 
-# OR run directly with test-harness
+# OR run directly
 ./test-harness.sh test
 ```
 
-### Running Specific Test Categories
+### Running Specific Tests
 
 ```bash
-# Run specific test suites
+# Run specific test suites (automatically clustered)
 ./test-harness.sh suite unit          # Unit tests only
 ./test-harness.sh suite integration   # Integration tests only
 ./test-harness.sh suite api           # API tests only
 ./test-harness.sh suite performance   # Performance tests
-./test-harness.sh suite determinism   # Determinism verification
-./test-harness.sh suite optimizations # Optimization tests
 
-# Run specific test path
+# Run specific test file (finds appropriate cluster)
 ./test-harness.sh test tests/tests/unit/test_observations.py
 
-# Run with pytest options
-./test-harness.sh test tests/ -v -x   # Verbose, stop on first failure
-./test-harness.sh test tests/ -k "pattern" # Run tests matching pattern
+# Run specific test function
+./test-harness.sh test tests/tests/unit/test_observations.py::test_observe_single_string
 
+# Run with options
+./test-harness.sh --verbose test      # Show detailed cluster execution
+./test-harness.sh --no-redirect test  # Direct console output
+./test-harness.sh test tests/ -v -x   # Verbose, stop on first failure
+```
+
+### Advanced Options
+
+```bash
 # Development mode (live code updates)
 ./test-harness.sh dev tests/tests/unit/ -v
 
@@ -95,325 +114,123 @@ KATO uses a containerized test harness to ensure consistent test environments wi
 
 # Generate coverage report
 ./test-harness.sh report
+
+# Stop all test instances
+./test-harness.sh stop
 ```
 
-### Benefits of Container-Based Testing
+## Test Execution Flow
 
-- **No local dependencies**: All test dependencies are in the container
-- **Consistency**: Same environment across all developers and CI/CD
-- **Isolation**: Tests don't affect your host system
-- **Reproducibility**: Guaranteed same test results
-- **Easy cleanup**: Just remove the container
+### 1. Test Discovery
+When you run tests, the harness:
+- Analyzes which tests to run based on your command
+- Identifies which cluster each test belongs to
+- Groups tests by their cluster configuration
 
-### Using Pytest Directly (Legacy Method)
+### 2. Cluster Execution
+For each cluster:
+1. **Generate unique processor ID**: `cluster_<name>_<timestamp>_<uuid>`
+2. **Start KATO instance**: Launch with processor-specific configuration
+3. **Start databases**: MongoDB, Qdrant, and Redis with processor-specific namespaces
+4. **Apply configuration**: Set recall_threshold, max_pattern_length, etc.
+5. **Run tests**: Execute all tests in the cluster
+6. **Cleanup**: Stop instance and remove all containers
 
-```bash
-# Install dependencies
-pip install -r requirements.txt
+### 3. Result Aggregation
+After all clusters complete:
+- Results are aggregated across clusters
+- Total passed/failed/skipped counts are displayed
+- Detailed logs are saved to `logs/test-runs/`
 
-# Run all tests
-pytest
+## Test Organization
 
-# Run specific test file
-pytest tests/unit/test_observations.py
-
-# Run specific test
-pytest tests/unit/test_observations.py::test_observe_single_string
-
-# Run with verbose output
-pytest -v
-
-# Run in parallel (requires pytest-xdist)
-pytest -n auto
+### Directory Structure
+```
+tests/
+├── tests/
+│   ├── fixtures/          # Test fixtures and cluster configuration
+│   │   ├── test_clusters.py   # Cluster definitions
+│   │   ├── kato_fixtures.py   # KATO test fixtures
+│   │   ├── hash_helpers.py    # Hash verification utilities
+│   │   └── test_helpers.py    # Sorting and assertion helpers
+│   ├── unit/              # Unit tests
+│   │   ├── test_observations.py
+│   │   ├── test_memory_management.py
+│   │   ├── test_pattern_hashing.py
+│   │   ├── test_predictions.py
+│   │   └── ...
+│   ├── integration/       # Integration tests
+│   │   ├── test_pattern_learning.py
+│   │   └── test_vector_e2e.py
+│   ├── api/              # API endpoint tests
+│   │   └── test_rest_endpoints.py
+│   └── performance/      # Performance tests
+│       └── test_vector_stress.py
+├── test-harness.sh           # Main test runner script
+├── test-harness-clustered.sh # Clustered execution logic
+├── cluster-orchestrator.sh   # Cluster management
+├── run_cluster_tests.py      # Container test runner
+├── Dockerfile.test           # Test container definition
+├── requirements-test.txt     # Test dependencies
+└── pytest.ini               # Pytest configuration
 ```
 
-## Understanding KATO's Core Behaviors
+### Test Categories
 
-Before writing or modifying tests, it's essential to understand these key behaviors:
+#### Unit Tests (tests/unit/)
+Test individual KATO components in isolation:
+- **test_observations.py**: Observation processing with strings, vectors, emotives
+- **test_memory_management.py**: Short-term and long-term memory operations
+- **test_pattern_hashing.py**: Deterministic pattern hashing (PTRN|<hash>)
+- **test_predictions.py**: Prediction generation and scoring
+- **test_sorting_behavior.py**: Alphanumeric sorting within events
+- **test_prediction_fields.py**: Temporal segmentation (past/present/future)
+- **test_recall_threshold_values.py**: Recall threshold behavior
 
-1. **Alphanumeric Sorting**: Strings are sorted within events, but event order is preserved
-2. **Empty Events**: Observations with empty strings are ignored completely
-3. **Prediction Temporal Fields**: 
-   - `past`: Events before the present state
-   - `present`: All contiguous matching events (partial matches supported)
-   - `future`: Events after the present state
-   - `missing`: Expected symbols not observed within present events
-   - `extras`: Observed symbols not expected in present events
-4. **Deterministic Hashing**: PTRN| and VECTOR| prefixes with SHA1 hashes
+#### Integration Tests (tests/integration/)
+Test end-to-end workflows:
+- **test_pattern_learning.py**: Complete learning and recall cycles
+- **test_vector_e2e.py**: Vector functionality with Qdrant
+- **test_sequence_learning.py**: Temporal pattern learning
 
-For detailed behavior documentation, see [KATO_BEHAVIOR.md](KATO_BEHAVIOR.md).
+#### API Tests (tests/api/)
+Test REST endpoints:
+- **test_rest_endpoints.py**: All REST API endpoints including observe, predict, learn
 
-## Test Categories
+#### Performance Tests (tests/performance/)
+Stress and benchmark tests:
+- **test_vector_stress.py**: Vector operation performance and scalability
 
-### Unit Tests (83 tests)
+## Database Isolation
 
-#### test_observations.py (11 tests)
-Tests for observation processing with strings, vectors, and emotives:
-- Single and multiple string observations
-- Vector observations
-- Emotive observations
-- Mixed modality observations
-- Special characters and numeric strings
-- Empty observations
-- Pattern observations
+### MongoDB Isolation
+Each cluster uses its processor_id as the database name:
+- Patterns: `{processor_id}.patterns_kb`
+- Symbols: `{processor_id}.symbols_kb`
+- Predictions: `{processor_id}.predictions_kb`
+- Metadata: `{processor_id}.metadata`
 
-#### test_memory_management.py (9 tests)
-Tests for short-term memory and long-term memory management:
-- Clearing all memory
-- Clearing short-term memory only
-- Short-term memory accumulation
-- Manual learning
-- Memory persistence
-- Max pattern length enforcement
-- Memory with emotives and vectors
-- Interleaved memory operations
+### Qdrant Isolation
+Each cluster has its own vector collection:
+- Collection name: `vectors_{processor_id}`
+- Complete HNSW index per cluster
+- No shared embeddings
 
-#### test_pattern_hashing.py (11 tests)
-Tests for deterministic PTRN| prefix and SHA1 hashing:
-- Pattern name format verification
-- Identical patterns producing same hash
-- Different patterns producing different hashes
-- Pattern order affecting hash
-- Hash consistency across sessions
-- Complex multi-modal pattern hashing
+### Redis Isolation
+Each cluster uses namespaced keys:
+- Key pattern: `{processor_id}:*`
+- Isolated cache per instance
 
-#### test_predictions.py (13 tests)
-Tests for prediction generation and scoring:
-- No predictions initially
-- Predictions after observations
-- Prediction matches and misses
-- Temporal components (past, present, future)
-- Similarity scores
-- Frequency tracking
-- Entropy calculations
-- Hamiltonian calculations
-- Confidence scores
-- Multiple pattern predictions
+## Writing Tests
 
-#### test_sorting_behavior.py (10 tests)
-Tests specifically for KATO's alphanumeric sorting:
-- Alphanumeric sorting within events
-- Event order preservation
-- Single string handling
-- Mixed case sorting
-- Numeric string sorting (as strings, not numbers)
-- Special character sorting
-- Empty string handling
-- Unicode character sorting
-- Sorting consistency
-
-#### test_prediction_fields.py (11 tests)
-Comprehensive tests for prediction field semantics:
-- Past field with events before present
-- Missing symbols within present events
-- Extra symbols not in learned pattern
-- Multi-event present states
-- Contiguous event matching
-- Partial matches at pattern start/end
-- Mixed missing and extras
-- Multiple past events
-- Single event with missing symbols
-
-#### test_prediction_edge_cases.py (10 tests)
-Edge cases and boundary conditions:
-- Empty events ignored
-- No past at pattern start
-- No future at pattern end
-- All extras with no matches
-- Partial overlap with multiple patterns
-- Very long patterns
-- Repeated symbols
-- Case sensitivity
-- Observation longer than learned
-- Single symbol patterns
-Tests specifically for KATO's alphanumeric sorting:
-- Alphanumeric sorting within events
-- Event order preservation
-- Single string handling
-- Mixed case sorting
-- Numeric string sorting (as strings, not numbers)
-- Special character sorting
-- Empty string handling
-- Unicode character sorting
-- Sorting consistency
-
-### Integration Tests (19 tests)
-
-#### test_pattern_learning.py (11 tests)
-End-to-end tests for pattern learning and recall
-
-#### test_vector_e2e.py (5 tests)
-End-to-end tests for vector functionality with new vector database architecture
-
-#### test_vector_simplified.py (3 tests)
-Simplified integration tests for basic vector operations
-
-### Performance Tests (5 tests)
-
-#### test_vector_stress.py
-Stress and performance tests for vector operations:
-- Vector operation performance at different dimensions
-- Scalability with large numbers of vectors
-- Accuracy of vector similarity search
-- Vector persistence across learning cycles
-- Edge cases with empty, large, and negative vectors
-- Simple pattern learning
-- Multiple pattern learning and disambiguation
-- Pattern completion
-- Cyclic pattern learning
-- Patterns with repetition
-- Interleaved pattern learning
-- Context switching
-- Max pattern length auto-learning
-- Patterns with time gaps
-- Multi-modal pattern learning
-- Branching patterns
-
-### API Tests (21 tests)
-
-#### test_rest_endpoints.py
-Tests for all REST API endpoints:
-- Health check (`/kato-api/ping`)
-- Connect endpoint (`/connect`)
-- Processor ping (`/{processor_id}/ping`)
-- Status endpoint (`/{processor_id}/status`)
-- Observe endpoint (`/{processor_id}/observe`)
-- Short-term memory endpoints
-- Memory clearing endpoints
-- Learn endpoint
-- Predictions endpoint
-- Percept and cognition data endpoints
-- Gene manipulation endpoints
-- Pattern information endpoint
-- Error handling (404, invalid JSON)
-- Response timing verification
-
-## Key KATO Behaviors Tested
-
-### Prediction Field Structure
-
-KATO's predictions contain temporal fields that segment patterns:
-
-- **`past`**: Events that came before the present state in the predicted pattern
-- **`present`**: All contiguous events identified by matching strings/symbols (not all symbols need to match)
-- **`missing`**: Symbols expected within the `present` state but not observed in short-term memory  
-- **`extras`**: Additional symbols observed that aren't expected in the `present` state
-- **`future`**: Events that come after the present state in the predicted pattern
-
-#### Example 1: Simple Pattern
-Learned: [['a'], ['b'], ['c']]  
-Observed: [['b']]  
-Result:
-- `past`: [['a']]
-- `present`: [['b']]
-- `future`: [['c']]
-- `missing`: []
-- `extras`: []
-
-#### Example 2: Missing Symbols Within Present
-Learned: [['hello', 'world'], ['test']]  
-Observed: [['hello']]  
-Result:
-- `present`: [['hello', 'world']]  (the full learned event)
-- `missing`: ['world']  (expected but not observed)
-- `future`: [['test']]
-
-#### Example 3: Extra Symbols
-Learned: [['alpha'], ['beta']]  
-Observed: [['alpha', 'gamma']]  
-Result:
-- `present`: [['alpha']]
-- `extras`: ['gamma']  (observed but not expected)
-- `future`: [['beta']]
-
-## Key KATO Behaviors Tested
-
-### 1. Alphanumeric Sorting
-KATO sorts strings alphanumerically within each event but preserves the order of events:
-- Input: `['hello', 'world', 'apple']`
-- Stored: `['apple', 'hello', 'world']`
-
-### 2. Deterministic Hashing
-All patterns and vectors receive deterministic hash-based names:
-- Patterns: `PTRN|<sha1_hash>`
-- Vectors: `VECTOR|<sha1_hash>`
-- Same pattern always produces same hash
-
-### 3. Stateful Learning
-KATO maintains state across observations:
-- Short-term memory accumulates observations
-- Learning creates persistent patterns
-- Patterns survive short-term memory clears
-
-### 4. Multi-Modal Processing
-KATO processes multiple data types simultaneously:
-- Strings (symbolic data)
-- Vectors (numeric arrays)
-- Emotives (key-value pairs for emotional context)
-
-### 5. Empty Events
-KATO ignores empty events - they do not change short-term memory or affect predictions:
-- Observing `[]` has no effect on state
-- Empty events in patterns are skipped
-KATO processes multiple data types simultaneously:
-- Strings (symbolic data)
-- Vectors (numeric arrays)
-- Emotives (key-value pairs for emotional context)
-
-## Test Fixtures and Helpers
-
-### KATOTestFixture
-Main fixture for test setup and teardown:
-- Starts/stops KATO instances
-- Handles Docker container management
-- Provides common operations (observe, learn, clear memory)
-- Manages processor IDs and base URLs
-
-### Hash Helpers
-Utilities for hash verification:
-- `calculate_pattern_hash()`: Generate expected hash for pattern
-- `verify_pattern_name()`: Verify PTRN| prefix and hash
-- `extract_hash_from_name()`: Extract hash from prefixed name
-- `verify_hash_consistency()`: Check hash consistency across names
-
-### Test Helpers
-Utilities for KATO-specific behaviors:
-- `sort_event_strings()`: Sort strings as KATO does
-- `assert_short_term_memory_equals()`: Assert with automatic sorting
-
-## Test Configuration
-
-### pytest.ini
-```ini
-[pytest]
-testpaths = tests
-python_files = test_*.py
-addopts = -v --tb=short --strict-markers
-timeout = 60
-```
-
-### Environment Variables
-```bash
-PROCESSOR_ID=p123456789  # Processor identifier
-PROCESSOR_NAME=P1        # Processor name
-```
-
-## Common Test Patterns
-
-### Important: Account for Alphanumeric Sorting
-Always remember that KATO sorts strings within events:
+### Using Test Fixtures
 
 ```python
-# Input
-observe({'strings': ['zebra', 'apple', 'monkey']})
+from fixtures.kato_fixtures import kato_fixture
+from fixtures.test_helpers import assert_short_term_memory_equals
 
-# Stored as
-[['apple', 'monkey', 'zebra']]  # Sorted alphanumerically
-```
-
-### Basic Observation Test
-```python
 def test_observation(kato_fixture):
+    """Test basic observation."""
     kato_fixture.clear_all_memory()
     
     result = kato_fixture.observe({
@@ -427,273 +244,186 @@ def test_observation(kato_fixture):
     assert wm == [['test']]
 ```
 
-### Pattern Learning Test
-```python
-def test_pattern(kato_fixture):
-    kato_fixture.clear_all_memory()
-    
-    # Learn pattern
-    for item in ['a', 'b', 'c']:
-        kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
-    
-    pattern_name = kato_fixture.learn()
-    assert pattern_name.startswith('PTRN|')
-    
-    # Test recall
-    kato_fixture.observe({'strings': ['a'], 'vectors': [], 'emotives': {}})
-    predictions = kato_fixture.get_predictions()
-    assert len(predictions) > 0
-```
+### Important: Alphanumeric Sorting
 
-### Sorting-Aware Test
+KATO automatically sorts strings within events alphanumerically:
+
 ```python
-def test_with_sorting(kato_fixture):
-    from fixtures.test_helpers import assert_short_term_memory_equals
-    
+def test_sorting(kato_fixture):
     kato_fixture.clear_all_memory()
-    kato_fixture.observe({'strings': ['z', 'a', 'm'], 'vectors': [], 'emotives': {}})
     
+    # Input: unsorted
+    kato_fixture.observe({'strings': ['zebra', 'apple', 'monkey']})
+    
+    # Stored: sorted
     wm = kato_fixture.get_short_term_memory()
-    # Automatically handles sorting: ['z', 'a', 'm'] -> ['a', 'm', 'z']
-    assert_short_term_memory_equals(wm, [['z', 'a', 'm']])
+    assert wm == [['apple', 'monkey', 'zebra']]
 ```
 
 ### Testing Prediction Fields
+
 ```python
-def test_prediction_temporal_fields(kato_fixture):
-    # Learn: [['start'], ['middle'], ['end']]
+def test_temporal_segmentation(kato_fixture):
+    # Learn pattern
     for item in ['start', 'middle', 'end']:
-        kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
+        kato_fixture.observe({'strings': [item]})
     kato_fixture.learn()
     
-    # Observe middle
+    # Test prediction
     kato_fixture.clear_short_term_memory()
-    kato_fixture.observe({'strings': ['middle'], 'vectors': [], 'emotives': {}})
+    kato_fixture.observe({'strings': ['middle']})
     predictions = kato_fixture.get_predictions()
     
-    for pred in predictions:
-        if 'middle' in pred.get('matches', []):
-            assert pred['past'] == [['start']]     # Before present
-            assert pred['present'] == [['middle']]  # Current state
-            assert pred['future'] == [['end']]      # After present
-            assert pred['missing'] == []            # Nothing missing
-            assert pred['extras'] == []             # No extras
+    pred = predictions[0]
+    assert pred['past'] == [['start']]
+    assert pred['present'] == [['middle']]
+    assert pred['future'] == [['end']]
 ```
 
-### Testing Missing and Extras
+### Cluster-Specific Tests
+
+If your test requires specific configuration, add it to the appropriate cluster in `test_clusters.py`:
+
 ```python
-def test_missing_and_extras(kato_fixture):
-    # Learn: [['a', 'b'], ['c', 'd']]
-    kato_fixture.observe({'strings': ['a', 'b'], 'vectors': [], 'emotives': {}})
-    kato_fixture.observe({'strings': ['c', 'd'], 'vectors': [], 'emotives': {}})
-    kato_fixture.learn()
-    
-    # Observe with missing 'b', 'd' and extras 'x', 'y'
-    kato_fixture.clear_short_term_memory()
-    kato_fixture.observe({'strings': ['a', 'x'], 'vectors': [], 'emotives': {}})
-    kato_fixture.observe({'strings': ['c', 'y'], 'vectors': [], 'emotives': {}})
-    predictions = kato_fixture.get_predictions()
-    
-    for pred in predictions:
-        if pred.get('frequency', 0) > 0:
-            assert 'b' in pred['missing'] or 'd' in pred['missing']
-            assert 'x' in pred['extras'] or 'y' in pred['extras']
+TestCluster(
+    name="custom_config",
+    config={
+        "recall_threshold": 0.5,
+        "max_pattern_length": 10
+    },
+    test_patterns=[
+        "tests/unit/test_your_new_test.py"
+    ],
+    description="Tests requiring custom configuration"
+)
 ```
-
-## Recent Updates
-
-### Test Organization (August 2025)
-- Reorganized all test files into proper subdirectories under `tests/tests/`
-- Moved vector tests to appropriate categories (integration and performance)
-- Created `scripts/` directory for utility scripts
-- Fixed all test warnings (DataGenerator class naming, test return values)
-- Updated fixture imports for new directory structure
-- All 128 tests passing with 0 warnings
 
 ## Troubleshooting
 
-### Docker Issues
-- **Container not starting**: Check Docker Desktop is running
-- **Port conflicts**: Ensure port 8000 is available
-- **Build failures**: Try `docker system prune -a` and rebuild
-
-### Test Failures
-- **Timeout errors**: Increase timeout in pytest.ini
-- **Import errors**: Check PYTHONPATH includes parent directories
-- **Sorting mismatches**: Use `assert_short_term_memory_equals()` helper
-
-### Common Errors
-1. **ModuleNotFoundError: fixtures**
-   - Solution: Run from tests directory
-   - Ensure conftest.py is present
-
-2. **Docker filesystem errors**
-   - Solution: Restart Docker Desktop
-   - Clear Docker cache: `docker system prune -a`
-
-3. **Assertion failures on string order**
-   - Remember KATO sorts strings alphanumerically within events
-   - Use test helpers for automatic sorting
-   - Event order in patterns is preserved
-
-4. **Prediction field confusion**
-   - `future`: Events that come after present (not individual symbols)
-   - `missing`: Symbols expected in present events but not observed
-   - `extras`: Symbols observed but not expected in present
-   - `present`: Can span multiple events with partial matches
-
-## Auto-Learning Tests
-
-### Overview
-
-Auto-learning tests validate the `max_pattern_length` functionality where KATO automatically learns patterns when short-term memory reaches a specified threshold.
-
-**Key Tests:**
-- `test_memory_management.py::test_max_pattern_length` - Core auto-learning behavior
-- `test_pattern_learning.py::test_max_pattern_length_auto_learn` - Integration testing
-
-### Test Behavior
-
-When `max_pattern_length` is set to a positive value:
-
-1. **Accumulation**: Short-term memory accumulates observations normally
-2. **Trigger**: At threshold, auto-learning activates
-3. **Learning**: Entire pattern is learned as a pattern
-4. **Reset**: Short-term memory cleared, keeping only last observation
-
-**Example Test Pattern:**
-```python
-def test_max_pattern_length(kato_fixture):
-    # Set up auto-learning threshold
-    kato_fixture.clear_short_term_memory()  # Don't reset genes
-    kato_fixture.update_genes({"max_pattern_length": 3})
-    
-    # Accumulate observations
-    kato_fixture.observe({'strings': ['a'], 'vectors': [], 'emotives': {}})
-    assert len(kato_fixture.get_short_term_memory()) == 1
-    
-    kato_fixture.observe({'strings': ['b'], 'vectors': [], 'emotives': {}})
-    assert len(kato_fixture.get_short_term_memory()) == 2
-    
-    # Trigger auto-learning
-    kato_fixture.observe({'strings': ['c'], 'vectors': [], 'emotives': {}})
-    wm = kato_fixture.get_short_term_memory()
-    assert wm == [['c']]  # Only last observation remains
-    
-    # Verify learning occurred
-    kato_fixture.clear_short_term_memory()
-    kato_fixture.observe({'strings': ['a'], 'vectors': [], 'emotives': {}})
-    predictions = kato_fixture.get_predictions()
-    assert len(predictions) > 0  # Should predict learned pattern
-```
-
 ### Common Issues
 
-**Issue: Gene values persist between tests**
-```python
-# WRONG: This will reset genes after setting them
-kato_fixture.update_genes({"max_pattern_length": 3})
-kato_fixture.clear_all_memory()  # Resets genes to default!
+#### Tests Not Running
+- **Issue**: "0 passed, 0 failed, 0 skipped"
+- **Solution**: Check test paths in test_clusters.py are correct
+- **Solution**: Verify test files exist and have test functions
 
-# RIGHT: Clear first, then set genes
-kato_fixture.clear_short_term_memory()  # Only clear memory, preserve genes
-kato_fixture.update_genes({"max_pattern_length": 3})
+#### Container Build Failures
+- **Issue**: Docker build errors
+- **Solution**: Run `docker system prune -a` to clean up
+- **Solution**: Check Dockerfile.test for syntax errors
+
+#### Database Connection Issues
+- **Issue**: Tests timeout connecting to MongoDB/Qdrant
+- **Solution**: Ensure Docker network exists: `docker network create kato-network`
+- **Solution**: Check containers are on same network
+
+#### Result Aggregation Issues
+- **Issue**: Individual tests pass but totals show 0
+- **Solution**: Update test-harness scripts to latest version
+- **Solution**: Check cluster-orchestrator.sh parsing logic
+
+### Debugging Tests
+
+```bash
+# Run with verbose output
+./test-harness.sh --verbose test
+
+# Get interactive shell in test container
+./test-harness.sh shell
+
+# Check running containers
+docker ps | grep kato
+
+# View logs for specific cluster
+docker logs kato-cluster_default_<id>
+
+# Check test output logs
+ls -la logs/test-runs/
+cat logs/test-runs/latest/summary.txt
 ```
-
-**Issue: Auto-learning not triggering**
-- Verify gene update worked: check actual gene value
-- Ensure Docker container includes latest code changes
-- Check ZMQ communication is working
-
-## Test Isolation
-
-### Gene Value Isolation
-
-The `kato_fixtures.py` provides gene isolation utilities:
-
-**Fixture Methods:**
-```python
-# Reset specific genes to defaults
-fixture.reset_genes_to_defaults()
-
-# Clear memory with optional gene reset
-fixture.clear_all_memory(reset_genes=True)  # Default: resets genes
-fixture.clear_all_memory(reset_genes=False) # Preserve gene values
-
-# Clear only short-term memory (preserves genes)
-fixture.clear_short_term_memory()
-```
-
-**Best Practices:**
-1. Use `clear_short_term_memory()` when preserving gene settings
-2. Use `clear_all_memory()` for complete isolation
-3. Set genes AFTER clearing, not before
-4. Verify gene values with `update_genes()` return value
-
-### Test Dependencies
-
-**Container State:**
-- Tests share the same KATO instance (module-scoped fixture)
-- Gene values persist across tests within a module
-- Short-term memory and patterns are shared
-
-**Safe Testing Pattern:**
-```python
-def test_with_custom_genes(kato_fixture):
-    # Clear state first
-    kato_fixture.clear_short_term_memory()
-    
-    # Set test-specific genes
-    kato_fixture.update_genes({"max_pattern_length": 5})
-    
-    # Perform test
-    # ... test logic ...
-    
-    # Optional: Reset for next test (usually not needed)
-    # kato_fixture.reset_genes_to_defaults()
-```
-
-## Adding New Tests
-
-1. **Choose appropriate directory**:
-   - `unit/` for isolated component tests
-   - `integration/` for multi-component tests
-   - `api/` for endpoint tests
-
-2. **Use existing fixtures**:
-   ```python
-   from fixtures.kato_fixtures import kato_fixture
-   from fixtures.test_helpers import assert_short_term_memory_equals
-   ```
-
-3. **Follow naming conventions**:
-   - Files: `test_*.py`
-   - Functions: `test_*`
-   - Descriptive names: `test_observe_with_emotives`
-
-4. **Account for KATO behaviors**:
-   - Alphanumeric sorting within events
-   - Deterministic hashing
-   - Stateful operations
 
 ## Performance Considerations
 
-- Tests use Docker containers (startup overhead)
-- Parallel execution with `pytest-xdist` reduces total time
-- Module-scoped fixtures minimize container restarts
-- Timeout of 60 seconds per test (configurable)
+### Cluster Overhead
+- Each cluster requires ~2-3 seconds to start/stop
+- Tests within a cluster run at normal speed
+- Total overhead depends on number of clusters
+
+### Optimization Tips
+1. **Group related tests**: Keep tests with same config in same cluster
+2. **Use default cluster**: Most tests can use default configuration
+3. **Minimize clusters**: Fewer clusters = less overhead
+4. **Parallel execution**: Future enhancement for concurrent clusters
 
 ## Continuous Integration
 
-The test suite is designed for CI/CD integration:
-- Exit codes: 0 for success, non-zero for failures
-- JSON output: `pytest --json-report`
-- Coverage reports: `pytest --cov=kato`
-- Parallel execution for faster CI runs
+The clustered test harness is CI/CD ready:
 
-## Version Compatibility
+```yaml
+# Example GitHub Actions workflow
+- name: Build test harness
+  run: ./test-harness.sh build
 
-- Python: 3.8+ required
-- Docker: 20.10+ recommended
-- pytest: 7.0+ required
-- Dependencies: See requirements.txt
+- name: Run tests
+  run: ./test-harness.sh test
+
+- name: Upload test results
+  if: always()
+  uses: actions/upload-artifact@v2
+  with:
+    name: test-results
+    path: logs/test-runs/
+```
+
+## Key KATO Behaviors to Test
+
+### 1. Alphanumeric Sorting
+- Strings sorted within events
+- Event order preserved
+- Case-sensitive sorting
+
+### 2. Pattern Hashing
+- Deterministic PTRN|<sha1_hash> format
+- Same pattern → same hash
+- Different patterns → different hashes
+
+### 3. Temporal Segmentation
+- **past**: Events before present
+- **present**: Events with matching symbols
+- **future**: Events after present
+- **missing**: Expected but not observed
+- **extras**: Observed but not expected
+
+### 4. Minimum Requirements
+- At least 2 strings total for predictions
+- Empty events are ignored
+- Vectors contribute string names
+
+### 5. Database Isolation
+- Each test gets fresh database state
+- No contamination between tests
+- Automatic cleanup
+
+## Migration from Non-Clustered Testing
+
+If you have old test commands or scripts:
+
+### Old Approach (Deprecated)
+```bash
+# Direct pytest - NO LONGER SUPPORTED
+pytest tests/unit/test_observations.py
+
+# Shared instance testing - NO LONGER SUPPORTED
+python -m pytest tests/
+```
+
+### New Clustered Approach
+```bash
+# All tests now use clustered execution
+./test-harness.sh test tests/unit/test_observations.py
+
+# Automatic clustering based on configuration
+./test-harness.sh test
+```
+
+The clustered approach is now the ONLY supported way to run tests, ensuring complete isolation and deterministic results.

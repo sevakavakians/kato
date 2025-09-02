@@ -49,10 +49,11 @@ RUN pip install --no-cache-dir \
 
 # Copy the KATO source code
 COPY kato/ ./kato/
-COPY tests/ ./tests/
 COPY scripts/ ./scripts/
 COPY setup.py ./
 COPY README.md ./
+# Copy tests to /tests directory (not /kato/tests)
+COPY tests/ /tests/
 # pytest.ini is already in tests directory
 
 # Install KATO in development mode
@@ -74,7 +75,7 @@ export LOG_LEVEL="${LOG_LEVEL:-INFO}"\n\
 \n\
 # Set test environment variables\n\
 export MONGO_BASE_URL="${MONGO_BASE_URL:-mongodb://mongo-kb:27017}"\n\
-export PYTHONPATH="/kato:$PYTHONPATH"\n\
+export PYTHONPATH="/kato:/tests:$PYTHONPATH"\n\
 \n\
 echo "================================"\n\
 echo "KATO Test Harness"\n\
@@ -90,7 +91,7 @@ echo ""\n\
 # Run pytest with coverage and nice output\n\
 # Use -p no:cacheprovider to disable cache and avoid warnings\n\
 if [ -n "$EXTRA_ARGS" ]; then\n\
-    cd /kato && python -m pytest "$TEST_PATH" \\\n\
+    cd /tests && python -m pytest "$TEST_PATH" \\\n\
         -v \\\n\
         --tb=short \\\n\
         --color=yes \\\n\
@@ -98,7 +99,7 @@ if [ -n "$EXTRA_ARGS" ]; then\n\
         -p no:cacheprovider \\\n\
         $EXTRA_ARGS\n\
 else\n\
-    cd /kato && python -m pytest "$TEST_PATH" \\\n\
+    cd /tests && python -m pytest "$TEST_PATH" \\\n\
         -v \\\n\
         --tb=short \\\n\
         --color=yes \\\n\
@@ -106,6 +107,9 @@ else\n\
         -p no:cacheprovider\n\
 fi\n\
 ' > /usr/local/bin/run-tests && chmod +x /usr/local/bin/run-tests
+
+# Change to tests directory for test execution
+WORKDIR /tests
 
 # Set default command
 CMD ["run-tests"]

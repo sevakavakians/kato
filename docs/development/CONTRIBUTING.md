@@ -26,8 +26,8 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 pip install -e .  # Install KATO in development mode
 
-# Install test dependencies
-pip install -r tests/requirements.txt
+# Build test harness container (includes all dependencies)
+./test-harness.sh build
 ```
 
 ## Code Structure
@@ -85,24 +85,32 @@ def test_new_feature(kato_fixture):
 
 ### 4. Run Tests
 
+KATO uses clustered testing for complete isolation:
+
 ```bash
 # Build test harness (first time)
 ./test-harness.sh build
 
-# Run all tests in container
+# Run all tests with automatic clustering
 ./kato-manager.sh test
 # OR
 ./test-harness.sh test
 
-# Run specific test suite
+# Run specific test suite (automatically clustered)
 ./test-harness.sh suite unit
 
-# Run specific test file
+# Run specific test file (finds appropriate cluster)
 ./test-harness.sh test tests/tests/unit/test_your_feature.py
+
+# Run with detailed output
+./test-harness.sh --verbose test      # Show cluster execution
+./test-harness.sh --no-redirect test  # Direct console output
 
 # Generate coverage report
 ./test-harness.sh report
 ```
+
+**Important**: Tests are automatically grouped into clusters based on configuration requirements. Each cluster runs with its own KATO instance and isolated databases to prevent contamination.
 
 ### 5. Update Documentation
 
@@ -337,7 +345,7 @@ Brief description of changes
 1. Update version in setup.py
 2. Update CHANGELOG.md
 3. Create release branch
-4. Run full test suite with `./test-harness.sh test`
+4. Run full clustered test suite with `./test-harness.sh test`
 5. Create GitHub release
 6. Tag Docker images
 

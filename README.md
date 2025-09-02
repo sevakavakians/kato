@@ -13,7 +13,7 @@ KATO is a specialized AI module that provides **deterministic memory, abstractio
 ### Pattern-Based Learning
 
 KATO uses **patterns** as its core learning concept:
-- **Temporal Patterns**: Time-ordered sequences with temporal dependencies
+- **Temporal Patterns**: Time-ordered patterns with temporal dependencies
 - **Profile Patterns**: Collections without temporal ordering requirements
 
 Every learned structure in KATO is identified by a unique hash: `PTRN|<sha1_hash>`
@@ -107,7 +107,7 @@ KATO processes observations as **events** containing strings, vectors, and emoti
 curl -X POST http://localhost:8000/p46b6b076c/observe \
   -d '{"strings": ["hello", "world"], "vectors": [], "emotives": {"joy": 0.8}}'
 
-# Learn sequence
+# Learn pattern
 curl -X POST http://localhost:8000/p46b6b076c/learn
 
 # Get predictions
@@ -116,7 +116,7 @@ curl http://localhost:8000/p46b6b076c/predictions
 
 Key behaviors:
 - **Alphanumeric sorting** within events
-- **Deterministic hashing** for models (MODEL|hash)
+- **Deterministic hashing** for patterns (PTRN|hash)
 - **Temporal segmentation** in predictions
 - **Empty event filtering**
 

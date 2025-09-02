@@ -216,11 +216,11 @@ curl http://localhost:6333/collections
 
 ## FAQ
 
-### Q: Will my existing models still work?
-**A:** Yes! All existing models remain compatible. The vector storage backend change is transparent to the model structure.
+### Q: Will my existing patterns still work?
+**A:** Yes! All existing patterns remain compatible. The vector storage backend change is transparent to the pattern structure.
 
-### Q: Do I need to retrain my models?
-**A:** No. Models don't need retraining. However, you may want to rebuild indexes for optimal performance.
+### Q: Do I need to retrain my patterns?
+**A:** No. Patterns don't need retraining. However, you may want to rebuild indexes for optimal performance.
 
 ### Q: Can I run without Qdrant?
 **A:** Yes, but not recommended. Use `./kato-manager.sh start --no-vectordb` to run with MongoDB vectors (legacy mode).

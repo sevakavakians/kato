@@ -22,7 +22,7 @@ KATO has migrated from gRPC to ZeroMQ (ZMQ) to address multiprocessing compatibi
 
 ### Limitations of REQ/REP Pattern
 - **Blocking**: REQ sockets block until they receive a response, causing timeouts under load
-- **Strict sequence**: Must follow exact request-response-request-response pattern
+- **Strict order**: Must follow exact request-response-request-response pattern
 - **No concurrent requests**: Cannot handle multiple requests simultaneously
 - **Connection state issues**: REQ sockets can get stuck in bad states requiring reconnection
 

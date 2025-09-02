@@ -9,8 +9,8 @@ Comprehensive guide to KATO's performance characteristics, optimization strategi
 | Operation | Typical Latency | Optimized | Notes |
 |-----------|----------------|-----------|-------|
 | Observation | 1-5ms | <1ms | Depends on event size |
-| Prediction | 5-20ms | 2-10ms | Scales with model count |
-| Learning | 10-100ms | 5-50ms | Depends on sequence length |
+| Prediction | 5-20ms | 2-10ms | Scales with pattern count |
+| Learning | 10-100ms | 5-50ms | Depends on pattern length |
 | Memory Clear | <1ms | <0.5ms | Short-term memory only |
 | API Round-trip | 5-10ms | 2-5ms | Including network overhead |
 
@@ -231,11 +231,11 @@ kato.learn()
 kato.clear_short_term_memory()
 ```
 
-2. **Limit Model Count**
+2. **Limit Pattern Count**
 ```python
-# Periodically clean old models
-if model_count > MAX_MODELS:
-    cleanup_old_models()
+# Periodically clean old patterns
+if pattern_count > MAX_PATTERNS:
+    cleanup_old_patterns()
 ```
 
 3. **Optimize Data Structures**
@@ -324,9 +324,9 @@ session.mount('http://', adapter)
 
 ```javascript
 // Create indexes for faster queries
-db.models.createIndex({"processor_id": 1, "name": 1})
-db.models.createIndex({"frequency": -1})
-db.models.createIndex({"created_at": -1})
+db.patterns.createIndex({"processor_id": 1, "name": 1})
+db.patterns.createIndex({"frequency": -1})
+db.patterns.createIndex({"created_at": -1})
 ```
 
 ### Connection Pooling
@@ -416,7 +416,7 @@ The `recall_threshold` parameter significantly affects KATO's performance charac
 
 | Threshold | Candidates Processed | Processing Time | Memory Usage |
 |-----------|---------------------|-----------------|--------------|
-| 0.0-0.1 | 100% (all models) | Highest | Maximum |
+| 0.0-0.1 | 100% (all patterns) | Highest | Maximum |
 | 0.2-0.3 | 60-80% | High | High |
 | 0.4-0.5 | 30-50% | Moderate | Moderate |
 | 0.6-0.7 | 10-25% | Low | Low |
@@ -457,10 +457,10 @@ The `recall_threshold` parameter significantly affects KATO's performance charac
        new_threshold = max(0.1, current_threshold - 0.1)
    ```
 
-2. **Sequence Length Adaptive Thresholds**
-   - Short sequences (2-5): Use 0.4-0.6
-   - Medium sequences (5-15): Use 0.3-0.5
-   - Long sequences (15+): Use 0.1-0.3
+2. **Pattern Length Adaptive Thresholds**
+   - Short patterns (2-5): Use 0.4-0.6
+   - Medium patterns (5-15): Use 0.3-0.5
+   - Long patterns (15+): Use 0.1-0.3
 
 3. **Load-Based Tuning**
    - High load: Increase threshold to 0.5+
@@ -468,7 +468,7 @@ The `recall_threshold` parameter significantly affects KATO's performance charac
 
 ### Benchmarks
 
-Testing with 10,000 learned models, observing 10-element sequence:
+Testing with 10,000 learned patterns, observing 10-element pattern:
 
 | Threshold | Predictions Generated | Time (ms) | Memory (MB) |
 |-----------|----------------------|-----------|-------------|
@@ -484,7 +484,7 @@ Testing with 10,000 learned models, observing 10-element sequence:
 - [ ] Configure VI indexer for vector processing
 - [ ] Set reasonable max_predictions limit
 - [ ] Configure appropriate recall_threshold (see Performance Impact section)
-- [ ] Set max_sequence_length if needed
+- [ ] Set max_pattern_length if needed
 
 ### Runtime Optimization
 - [ ] Use connection pooling
@@ -514,8 +514,8 @@ Testing with 10,000 learned models, observing 10-element sequence:
 
 ### High Memory Usage
 1. Clear short-term memory more frequently
-2. Reduce max_sequence_length
-3. Limit model count
+2. Reduce max_pattern_length
+3. Limit pattern count
 4. Check for memory leaks
 
 ### High CPU Usage

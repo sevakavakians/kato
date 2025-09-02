@@ -368,15 +368,15 @@ docker logs kato-api-${USER}-1 | grep -i pool
 curl -X POST http://localhost:8000/p46b6b076c/memory/clear-all
 ```
 
-2. Limit sequence length:
+2. Limit pattern length:
 ```bash
 ./kato-manager.sh restart --max-seq-length 100
 ```
 
-3. Reduce model count:
+3. Reduce pattern count:
 ```python
-# Periodically clear old models
-# Implement model rotation
+# Periodically clear old patterns
+# Implement pattern rotation
 ```
 
 ### ZeroMQ Issues
@@ -496,8 +496,8 @@ pip install -r requirements.txt
 #### Auto-Learning Tests Failing
 
 **Symptoms:**
-- `test_max_sequence_length` tests fail
-- Short-term memory doesn't clear when reaching max_sequence_length
+- `test_max_pattern_length` tests fail
+- Short-term memory doesn't clear when reaching max_pattern_length
 - Auto-learning not triggered
 
 **Root Causes and Solutions:**
@@ -510,7 +510,7 @@ pip install -r requirements.txt
 ```bash
 # Gene updates fail silently
 curl -X POST http://localhost:8000/p5f2b9323c3/genes/change \
-  -d '{"data": {"max_sequence_length": 3}}'
+  -d '{"data": {"max_pattern_length": 3}}'
 # Returns success but gene value unchanged
 ```
 
@@ -560,10 +560,10 @@ def clear_all_memory(self, reset_genes: bool = True) -> str:
 
 And updated problematic tests:
 ```python
-def test_max_sequence_length(kato_fixture):
+def test_max_pattern_length(kato_fixture):
     # Clear memory first, then set gene (don't call clear_all_memory after)
     kato_fixture.clear_short_term_memory()  # Only clear STM, not genes
-    kato_fixture.update_genes({"max_sequence_length": 3})
+    kato_fixture.update_genes({"max_pattern_length": 3})
     # ... rest of test
 ```
 
@@ -589,16 +589,16 @@ After fixing auto-learning issues, verify with:
 ```bash
 # 1. Test gene updates work
 curl -X POST http://localhost:8000/p5f2b9323c3/genes/change \
-  -d '{"data": {"max_sequence_length": 3}}'
+  -d '{"data": {"max_pattern_length": 3}}'
 
 # 2. Verify gene value changed  
-curl http://localhost:8000/p5f2b9323c3/gene/max_sequence_length
+curl http://localhost:8000/p5f2b9323c3/gene/max_pattern_length
 
 # 3. Test auto-learning behavior
 python3 test_p1_processor.py
 
 # 4. Run specific auto-learning tests
-./test-harness.sh test tests/ -k "test_max_sequence_length" -v
+./test-harness.sh test tests/ -k "test_max_pattern_length" -v
 ```
 
 #### Sorting Assertions Fail

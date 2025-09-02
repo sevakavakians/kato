@@ -7,25 +7,25 @@ Last Updated: 2025-08-31
 
 ## High Priority Issues 🟠
 
-### 1. Test Suite Failures - Recall Threshold and Sequence Handling
+### 1. Test Suite Failures - Recall Threshold and Pattern Handling
 **Status**: Active  
 **Severity**: High (blocks Phase 2 development)  
 **Location**: Unit tests
 
 **Description**: 
 - 13 tests currently failing (~93% pass rate: 179/193)
-- Failures primarily in recall threshold edge cases and comprehensive sequences
+- Failures primarily in recall threshold edge cases and comprehensive patterns
 - Affects confidence in system stability
 
 **Failed Tests**:
-- 7 tests in `test_comprehensive_sequences.py` (long sequences, cyclic patterns)
+- 7 tests in `test_comprehensive_patterns.py` (long patterns, cyclic patterns)
 - 3 tests in `test_recall_threshold_*` files (edge cases, threshold values)
 - 1 test in `test_memory_management.py` (vector handling)
 - 1 test in `test_prediction_fields.py` (past field validation)
 
 **Root Causes**:
 - Recall threshold implementation edge cases
-- Long sequence handling discrepancies
+- Long pattern handling discrepancies
 - Possible issues with recent threshold propagation changes
 
 **Impact**:
@@ -36,7 +36,7 @@ Last Updated: 2025-08-31
 **Next Steps**:
 - Investigate each failing test
 - Fix recall threshold edge cases
-- Validate comprehensive sequence handling
+- Validate comprehensive pattern handling
 
 ---
 
@@ -65,11 +65,11 @@ Last Updated: 2025-08-31
 ### 3. Recall Threshold Edge Cases
 **Status**: Active  
 **Severity**: Medium  
-**Location**: `kato/searches/model_search.py`
+**Location**: `kato/searches/pattern_search.py`
 
 **Description**:
 - Recent changes to threshold handling causing test failures
-- Threshold 0.0 should return all models but implementation incomplete
+- Threshold 0.0 should return all patterns but implementation incomplete
 - Missing symbols detection not working correctly
 
 **Symptoms**:
@@ -79,7 +79,7 @@ Last Updated: 2025-08-31
 
 **Fix Needed**:
 - Review threshold propagation logic
-- Ensure 0.0 threshold returns all models
+- Ensure 0.0 threshold returns all patterns
 - Validate missing/extras symbol detection
 
 ---
@@ -270,7 +270,7 @@ the attribute `version` is obsolete, it will be ignored
 
 ## Next Sprint Priorities
 
-1. Fix remaining 13 test failures (recall threshold and sequences)
+1. Fix remaining 13 test failures (recall threshold and patterns)
 2. Update vector accuracy test logic
 3. Complete recall threshold edge case fixes
 4. Resolve Redis port conflicts

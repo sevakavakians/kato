@@ -28,9 +28,9 @@ REQ → LLM → Structured Ontology → KATO → Prediction Ensemble → Decisio
 
 #### Strengths
 1. **Deterministic Learning Engine**
-   - Sequence learning with temporal predictions (past, present, future)
+   - Pattern learning with temporal predictions (past, present, future)
    - Pattern matching with confidence scores
-   - Deterministic hashing (MODEL|hash format)
+   - Deterministic hashing (PTRN|hash format)
    - Frequency tracking for patterns
 
 2. **Multi-Modal Processing**
@@ -39,9 +39,9 @@ REQ → LLM → Structured Ontology → KATO → Prediction Ensemble → Decisio
    - Emotives tracking and aggregation
 
 3. **Memory Architecture**
-   - Short-term memory (STM) for current sequences
+   - Short-term memory (STM) for current patterns
    - Long-term memory for learned patterns
-   - Auto-learning at sequence limits
+   - Auto-learning at pattern limits
 
 4. **Prediction System**
    - Comprehensive prediction objects with multiple metrics
@@ -151,12 +151,12 @@ def make_decision(predictions, action_costs):
 
 **Current State:**
 - No cost tracking for actions
-- No cost aggregation in sequences
+- No cost aggregation in patterns
 - No cost-benefit analysis
 
 **Required Implementation:**
 - Action cost definition and storage
-- Cost calculation for future sequences
+- Cost calculation for future patterns
 - Cost integration in decision scoring
 - Dynamic cost adjustment based on outcomes
 
@@ -222,12 +222,12 @@ def should_use_reasoning(predictions):
 
 **Current State:**
 - No ACTION|x symbol format
-- Actions not tracked in sequences
+- Actions not tracked in patterns
 - No action outcome learning
 
 **Required Implementation:**
 - ACTION|x symbol standardization
-- Action tracking in sequences
+- Action tracking in patterns
 - Action outcome association
 - Action pattern learning
 

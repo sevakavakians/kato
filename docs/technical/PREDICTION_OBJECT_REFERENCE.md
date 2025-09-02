@@ -2,16 +2,16 @@
 
 ## Overview
 
-The Prediction Object is the core output structure of the KATO cognitive processor, derived from the GAIuS (General Autonomous Intelligence using Symbols) architecture developed by Intelligent Artifacts. It represents a comprehensive analysis of how well observed patterns match learned models, providing both matching metrics and temporal context.
+The Prediction Object is the core output structure of the KATO cognitive processor, derived from the GAIuS (General Autonomous Intelligence using Symbols) architecture developed by Intelligent Artifacts. It represents a comprehensive analysis of how well observed patterns match learned patterns, providing both matching metrics and temporal context.
 
-A Prediction Object is generated when KATO's pattern recognition engine identifies potential matches between current observations and previously learned sequences. Each prediction contains detailed information about the quality of the match, temporal relationships, and various information-theoretic metrics that quantify the prediction's reliability and significance.
+A Prediction Object is generated when KATO's pattern recognition engine identifies potential matches between current observations and previously learned patterns. Each prediction contains detailed information about the quality of the match, temporal relationships, and various information-theoretic metrics that quantify the prediction's reliability and significance.
 
 ## Complete Field Reference
 
 ### 1. **name** (string)
-**Description**: Unique identifier hash of the learned model/sequence that generated this prediction.  
+**Description**: Unique identifier hash of the learned pattern that generated this prediction.  
 **Purpose**: Links the prediction back to a specific learned pattern in the knowledge base.  
-**Example**: `"model_abc123def456"`
+**Example**: `"PTRN|abc123def456"`
 
 ### 2. **type** (string)
 **Description**: Classification of the prediction type.  
@@ -19,54 +19,54 @@ A Prediction Object is generated when KATO's pattern recognition engine identifi
 **Purpose**: Indicates the nature of the prediction mechanism used. Currently, KATO uses prototypical predictions based on learned exemplars.
 
 ### 3. **frequency** (int32)
-**Description**: Number of times this model/pattern has been observed during learning.  
+**Description**: Number of times this pattern has been observed during learning.  
 **Purpose**: Indicates how common this pattern is in the training data. Higher frequency suggests a more reliable pattern.  
 **Range**: 1 to n (where n is the total number of observations)
 
 ### 4. **matches** (repeated string)
 **Description**: List of symbols from the current observation that match the expected pattern.  
 **Purpose**: Shows which elements of the prediction were correctly identified in the current context.  
-**Example**: `["hello", "world"]` when these symbols appear in both the model and current observation.
+**Example**: `["hello", "world"]` when these symbols appear in both the pattern and current observation.
 
 ### 5. **missing** (repeated string)
 **Description**: Symbols that appear in the `present` events but were NOT actually observed.  
 **Purpose**: Identifies incomplete or partial observations within the matched events.  
 **Critical**: The present field contains complete events; missing lists the symbols from those events that weren't in the observation.  
-**Order**: Preserves the sequence order across events.  
-**Example 1**: If model has `[["a", "b"], ["c", "d"]]` and observing `["a", "c"]`, present would be `[["a", "b"], ["c", "d"]]` (complete events) and missing would be `["b", "d"]`.  
-**Example 2**: If model has `[["hello", "world"], ["foo", "bar"]]` and observing `["hello", "foo"]`, present would be `[["hello", "world"], ["foo", "bar"]]` and missing would be `["world", "bar"]`.
+**Order**: Preserves the pattern order across events.  
+**Example 1**: If pattern has `[["a", "b"], ["c", "d"]]` and observing `["a", "c"]`, present would be `[["a", "b"], ["c", "d"]]` (complete events) and missing would be `["b", "d"]`.  
+**Example 2**: If pattern has `[["hello", "world"], ["foo", "bar"]]` and observing `["hello", "foo"]`, present would be `[["hello", "world"], ["foo", "bar"]]` and missing would be `["world", "bar"]`.
 
 ### 6. **extras** (repeated string)
-**Description**: Symbols observed in the current context that are not part of the expected model.  
+**Description**: Symbols observed in the current context that are not part of the expected pattern.  
 **Purpose**: Identifies unexpected elements that don't fit the predicted pattern.  
-**Order**: Preserves the sequence order in which extras were observed across events.  
-**Example**: If observing `[["a", "x"], ["b"], ["y"]]` against model `[["a"], ["b"]]`, extras would be `["x", "y"]` in that order.
+**Order**: Preserves the pattern order in which extras were observed across events.  
+**Example**: If observing `[["a", "x"], ["b"], ["y"]]` against pattern `[["a"], ["b"]]`, extras would be `["x", "y"]` in that order.
 
 ### 7. **past** (repeated ListValue)
-**Description**: Sequence of events from the learned model that occur BEFORE any observed matches.  
+**Description**: Pattern of events from the learned pattern that occur BEFORE any observed matches.  
 **Structure**: List of lists, where each inner list represents an event.  
 **Purpose**: Provides temporal context showing what happened before the first observed event.  
 **Important**: Only contains events that were NOT observed in the current context.  
-**Example**: If model is `[["start"], ["middle"], ["end"]]` and observing `["middle", "end"]`, past would be `[["start"]]`.
+**Example**: If pattern is `[["start"], ["middle"], ["end"]]` and observing `["middle", "end"]`, past would be `[["start"]]`.
 
 ### 8. **present** (repeated ListValue)
-**Description**: ALL events from the learned model that contain ANY observed symbols, including the complete events with all their symbols.  
+**Description**: ALL events from the learned pattern that contain ANY observed symbols, including the complete events with all their symbols.  
 **Structure**: List of lists representing all matched events with their complete symbol sets.  
-**Purpose**: Shows the complete span of the model that corresponds to current observations.  
+**Purpose**: Shows the complete span of the pattern that corresponds to current observations.  
 **Critical**: 
 - Contains ALL events with matches, from first match to last match
 - Includes ALL symbols within those events, even if they weren't observed
 - The complete original events are included, not just the observed symbols
 **Relationship to missing field**: Symbols that appear in present events but weren't actually observed will be listed in the `missing` field.  
-**Example 1**: If observing `["hello", "world"]` from model `[["hello"], ["world"], ["end"]]`, present would be `[["hello"], ["world"]]`.  
-**Example 2**: If observing `["a", "c"]` from model `[["a", "b"], ["c", "d"], ["e"]]`, present would be `[["a", "b"], ["c", "d"]]` (complete events), and missing would be `["b", "d"]`.
+**Example 1**: If observing `["hello", "world"]` from pattern `[["hello"], ["world"], ["end"]]`, present would be `[["hello"], ["world"]]`.  
+**Example 2**: If observing `["a", "c"]` from pattern `[["a", "b"], ["c", "d"], ["e"]]`, present would be `[["a", "b"], ["c", "d"]]` (complete events), and missing would be `["b", "d"]`.
 
 ### 9. **future** (repeated ListValue)
-**Description**: Events from the learned model that have NOT been observed yet.  
+**Description**: Events from the learned pattern that have NOT been observed yet.  
 **Structure**: List of lists representing unobserved future events.  
 **Purpose**: Provides predictive capability by showing what should happen next.  
 **Important**: Only contains events that come AFTER all observed events.  
-**Example**: If model is `[["hello"], ["world"], ["end"]]` and observing `["hello", "world"]`, future would be `[["end"]]`.
+**Example**: If pattern is `[["hello"], ["world"], ["end"]]` and observing `["hello", "world"]`, future would be `[["end"]]`.
 
 ### 10. **confidence** (float)
 **Description**: Ratio of matched symbols to total symbols in the present context.  
@@ -75,13 +75,13 @@ A Prediction Object is generated when KATO's pattern recognition engine identifi
 **Purpose**: Measures how completely the current observation matches the expected pattern.
 
 ### 11. **evidence** (float)
-**Description**: Proportion of the model that has been observed.  
-**Formula**: `evidence = len(matches) / model_length`  
+**Description**: Proportion of the pattern that has been observed.  
+**Formula**: `evidence = len(matches) / pattern_length`  
 **Range**: 0.0 to 1.0  
-**Purpose**: Indicates how much of the total model has been confirmed by observations.
+**Purpose**: Indicates how much of the total pattern has been confirmed by observations.
 
 ### 12. **similarity** (float)
-**Description**: Base similarity score between observation and model.  
+**Description**: Base similarity score between observation and pattern.  
 **Range**: 0.0 to 1.0  
 **Purpose**: General measure of pattern resemblance before other metrics are applied.
 
@@ -116,10 +116,10 @@ A Prediction Object is generated when KATO's pattern recognition engine identifi
 **Purpose**: Measures information content relative to global symbol distributions.
 
 ### 18. **confluence** (float)
-**Description**: Probability of the sequence occurring naturally versus randomly.  
-**Formula**: `confluence = P(sequence in observations) * (1 - P(sequence occurring randomly))`  
+**Description**: Probability of the pattern occurring naturally versus randomly.  
+**Formula**: `confluence = P(pattern in observations) * (1 - P(pattern occurring randomly))`  
 **Range**: 0.0 to 1.0  
-**Purpose**: Identifies patterns that are both frequent and non-random, indicating meaningful sequences.
+**Purpose**: Identifies patterns that are both frequent and non-random, indicating meaningful patterns.
 
 ### 19. **itfdf_similarity** (float)
 **Description**: Inverse Term Frequency-Document Frequency similarity (adapted from information retrieval).  
@@ -139,9 +139,9 @@ A Prediction Object is generated when KATO's pattern recognition engine identifi
 **Purpose**: Allows patterns to carry emotional salience or utility information for decision-making.  
 **Example**: `{"utility": 50.0, "danger": -10.0}`
 
-### 22. **sequence** (internal, not in protobuf)
-**Description**: Full sequence structure from the model (used internally during prediction construction).  
-**Purpose**: Internal reference to complete model sequence for temporal field extraction.
+### 22. **pattern** (internal, not in protobuf)
+**Description**: Full pattern structure from the pattern (used internally during prediction construction).  
+**Purpose**: Internal reference to complete pattern for temporal field extraction.
 
 ## Metric Categories
 
@@ -169,7 +169,7 @@ A Prediction Object is generated when KATO's pattern recognition engine identifi
 
 2. **Confidence vs Evidence**: 
    - `confidence` measures match quality in the current context
-   - `evidence` measures how much of the total model is confirmed
+   - `evidence` measures how much of the total pattern is confirmed
 
 3. **Temporal Fields**: The past/present/future fields maintain the sequential structure of events, preserving the learned temporal relationships.
 
@@ -183,7 +183,7 @@ The Prediction Object incorporates several mathematical concepts:
 
 - **Information Theory**: Entropy calculations based on Shannon's information theory
 - **Statistical Mechanics**: Hamiltonian as an energy function
-- **Information Retrieval**: TF-IDF adapted for sequence prediction
+- **Information Retrieval**: TF-IDF adapted for pattern prediction
 - **Signal Processing**: Signal-to-Noise Ratio for match quality
 - **Probability Theory**: Confluence as conditional probability
 

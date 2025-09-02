@@ -79,7 +79,7 @@ Response shows the sorted observation:
 }
 ```
 
-### 3. Learn a Sequence
+### 3. Learn a Pattern
 
 ```bash
 # Add more observations
@@ -99,7 +99,7 @@ curl -X POST http://localhost:8000/p46b6b076c/learn
 # Clear short-term memory
 curl -X POST http://localhost:8000/p46b6b076c/short-term-memory/clear
 
-# Observe the start of the learned sequence
+# Observe the start of the learned pattern
 curl -X POST http://localhost:8000/p46b6b076c/observe \
   -d '{"strings": ["hello"], "vectors": [], "emotives": {}}'
 
@@ -107,7 +107,7 @@ curl -X POST http://localhost:8000/p46b6b076c/observe \
 curl http://localhost:8000/p46b6b076c/predictions
 ```
 
-KATO will predict the rest of the sequence!
+KATO will predict the rest of the pattern!
 
 ## Understanding KATO's Behavior
 
@@ -116,9 +116,9 @@ KATO will predict the rest of the sequence!
 1. **Alphanumeric Sorting**: Strings within events are automatically sorted
    - Input: `["zebra", "apple"]` → Stored: `["apple", "zebra"]`
 
-2. **Sequence Learning**: KATO learns patterns from observations
-   - Builds models from short-term memory
-   - Each model gets a unique hash identifier
+2. **Pattern Learning**: KATO learns patterns from observations
+   - Builds patterns from short-term memory
+   - Each pattern gets a unique hash identifier
 
 3. **Temporal Predictions**: KATO segments predictions into:
    - `past`: What came before
@@ -220,8 +220,8 @@ kato = KATOClient()
 kato.observe(["morning"])
 kato.observe(["coffee"])
 kato.observe(["work"])
-model = kato.learn()
-print(f"Learned model: {model}")
+pattern = kato.learn()
+print(f"Learned pattern: {pattern}")
 
 # Test recall
 kato.clear_short_term_memory()

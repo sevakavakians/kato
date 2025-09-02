@@ -99,11 +99,11 @@ Get detailed processor status.
 ```json
 {
   "status": "okay",
-  "processor_id": "p46b6b076c",
-  "name": "P1",
-  "short_term_memory_size": 3,
-  "model_count": 5,
-  "predictions_available": true
+  "id": "p46b6b076c",  // The processor's unique identifier
+  "processor": "P1",
+  "time_stamp": 1234567890.123,
+  "interval": 0,
+  "message": {...}  // Full processor information
 }
 ```
 
@@ -153,7 +153,7 @@ Trigger learning from current short-term memory.
 {
   "status": "learned",
   "processor_id": "p46b6b076c",
-  "model_name": "MODEL|a5b9c3d7e1f2..."
+  "pattern_name": "PTRN|a5b9c3d7e1f2..."
 }
 ```
 
@@ -168,18 +168,18 @@ Get current short-term memory contents.
 **Response:**
 ```json
 {
-  "status": "okay",
-  "processor_id": "p46b6b076c",
-  "short_term_memory": [
+  "message": [
     ["first", "event"],
     ["second"],
     ["third", "event", "here"]
-  ]
+  ],
+  "time_stamp": 1234567890.123,
+  "interval": 0
 }
 ```
 
 #### POST /{processor_id}/short-term-memory/clear
-Clear short-term memory (preserves learned models).
+Clear short-term memory (preserves learned patterns).
 
 **Parameters:**
 - `processor_id` (path): Processor identifier
@@ -196,7 +196,7 @@ Clear short-term memory (preserves learned models).
 ### Memory Management
 
 #### POST /{processor_id}/memory/clear-all
-Clear all memory (short-term memory and learned models).
+Clear all memory (short-term memory and learned patterns).
 
 **Parameters:**
 - `processor_id` (path): Processor identifier
@@ -230,7 +230,7 @@ Get current predictions based on short-term memory.
   "processor_id": "p46b6b076c",
   "predictions": [
     {
-      "name": "MODEL|abc123...",
+      "name": "PTRN|abc123...",
       "past": [["previous", "events"]],
       "present": [["current", "matching"]],
       "future": [["expected", "next"]],
@@ -258,7 +258,7 @@ Get current predictions based on short-term memory.
 - `confidence`: Prediction confidence (0-1)
 - `similarity`: Match quality measure
 - `frequency`: Times this pattern was learned
-- `emotives`: Emotional context if learned with model
+- `emotives`: Emotional context if learned with pattern
 
 ### Data Retrieval
 
@@ -321,18 +321,17 @@ Get a specific gene/parameter value.
     - `0.3-0.5`: Balanced filtering, moderate quality threshold
     - `0.5-0.7`: Restrictive, only strong pattern matches
     - `0.7-1.0`: Very restrictive, requires near-perfect similarity
-  - **How it works**: Filters predictions by comparing sequence similarity ratios against this threshold
+  - **How it works**: Filters predictions by comparing pattern similarity ratios against this threshold
 - `persistence`: Emotive persistence duration
-- `max_sequence_length`: Maximum sequence length
+- `max_pattern_length`: Maximum pattern length
 - `quiescence`: Quiescence period
 
 **Response:**
 ```json
 {
-  "status": "okay",
-  "processor_id": "p46b6b076c",
-  "gene": "max_predictions",
-  "value": 100
+  "gene_name": "max_predictions",
+  "gene_value": 100,
+  "message": 100  // The gene value for backward compatibility
 }
 ```
 
@@ -353,11 +352,9 @@ Update a gene/parameter value.
 **Response:**
 ```json
 {
+  "id": "p46b6b076c",  // The processor's unique identifier
   "status": "okay",
-  "processor_id": "p46b6b076c",
-  "gene": "max_predictions",
-  "old_value": 100,
-  "new_value": 150
+  "message": "updated-genes"
 }
 ```
 
@@ -374,7 +371,7 @@ Update multiple genes at once (primary gene update endpoint).
     "max_predictions": 200,
     "recall_threshold": 0.15, 
     "persistence": 10,
-    "max_sequence_length": 3
+    "max_pattern_length": 3
   }
 }
 ```
@@ -382,10 +379,9 @@ Update multiple genes at once (primary gene update endpoint).
 **Response:**
 ```json
 {
+  "id": "p46b6b076c",  // The processor's unique identifier
   "status": "okay",
-  "message": "genes-updated",
-  "processor_id": "p46b6b076c",
-  "updated_genes": ["max_predictions", "recall_threshold", "persistence", "max_sequence_length"]
+  "message": "updated-genes"
 }
 ```
 
@@ -435,32 +431,6 @@ Increment the recall threshold.
   "processor_id": "p46b6b076c",
   "old_value": 0.1,
   "new_value": 0.15
-}
-```
-
-### Model Information
-
-#### GET /{processor_id}/models
-Get information about learned models.
-
-**Parameters:**
-- `processor_id` (path): Processor identifier
-
-**Response:**
-```json
-{
-  "status": "okay",
-  "processor_id": "p46b6b076c",
-  "models": [
-    {
-      "name": "MODEL|abc123...",
-      "frequency": 3,
-      "sequence_length": 5,
-      "contains_emotives": true,
-      "contains_vectors": false
-    }
-  ],
-  "total_models": 10
 }
 ```
 
@@ -538,10 +508,10 @@ for obs in observations:
     )
     print(f"Observed {obs}:", response.status_code)
 
-# 4. Learn the sequence
+# 4. Learn the pattern
 response = requests.post(f"{BASE_URL}/{PROCESSOR_ID}/learn")
-model = response.json()
-print("Learned model:", model)
+pattern = response.json()
+print("Learned pattern:", pattern)
 
 # 5. Clear and test recall
 requests.post(f"{BASE_URL}/{PROCESSOR_ID}/short-term-memory/clear")
@@ -579,7 +549,7 @@ curl -X POST http://localhost:8000/p46b6b076c/genes/change \
     "data": {
       "max_predictions": 50,
       "recall_threshold": 0.2,
-      "max_sequence_length": 3
+      "max_pattern_length": 3
     }
   }'
 

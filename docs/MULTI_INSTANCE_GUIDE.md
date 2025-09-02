@@ -137,7 +137,7 @@ All standard KATO parameters can be set per instance:
 | `--indexer-type` | Vector indexer type (VI only) | VI |
 | `--max-predictions` | Maximum predictions | 100 |
 | `--recall-threshold` | Recall threshold (0-1) | 0.1 |
-| `--max-seq-length` | Max sequence length | 0 (unlimited) |
+| `--max-seq-length` | Max pattern length | 0 (unlimited) |
 | `--persistence` | Persistence value | 5 |
 | `--quiescence` | Quiescence period | 3 |
 

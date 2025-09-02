@@ -2,7 +2,7 @@
 
 ## Overview
 
-KATO uses a distributed architecture with centralized REST gateway that maintains sticky routing to ensure requests for specific processors always go to the same KATO instance, preserving stateful sequence processing.
+KATO uses a distributed architecture with centralized REST gateway that maintains sticky routing to ensure requests for specific processors always go to the same KATO instance, preserving stateful pattern processing.
 
 ## Current Architecture (ZeroMQ-based)
 
@@ -35,7 +35,7 @@ KATO uses a distributed architecture with centralized REST gateway that maintain
                 ┌────────────────────────────────┐
                 │     KATO Processor             │
                 │                                │
-                │ • Sequence Learning            │
+                │ • Pattern Learning             │
                 │ • Prediction Generation        │
                 │ • Memory Management            │
                 │ • Multi-Modal Processing       │
@@ -119,7 +119,7 @@ Thread-safe connection management:
 Core AI engine:
 
 - **Memory**: Short-term memory + long-term storage
-- **Learning**: Sequence pattern recognition
+- **Learning**: Pattern recognition
 - **Predictions**: Temporal segmentation (past/present/future)
 - **Multi-modal**: Strings, vectors, emotives
 
@@ -132,7 +132,7 @@ Client → REST API → ZMQ Client → ZMQ Server → Processor → Short-Term M
 
 ### 2. Learning Flow
 ```
-Client → REST API → ZMQ → Processor → Model Creation → MongoDB Storage
+Client → REST API → ZMQ → Processor → Pattern Creation → MongoDB Storage
 ```
 
 ### 3. Prediction Flow
@@ -232,7 +232,7 @@ services:
 ### Horizontal Scaling
 
 1. **Multiple Processors**: Each with unique ID
-2. **Sticky Sessions**: Processor affinity for sequences
+2. **Sticky Sessions**: Processor affinity for patterns
 3. **Shared Storage**: MongoDB for persistence
 4. **Load Balancing**: Round-robin or least-connections
 
@@ -248,14 +248,14 @@ services:
 ### Processor State
 
 Each processor maintains:
-- **Short-Term Memory**: Current observation sequence
-- **Long-term Memory**: Learned models
+- **Short-Term Memory**: Current observation pattern
+- **Long-term Memory**: Learned patterns
 - **Predictions Cache**: Current predictions
 - **Emotives State**: Aggregated emotional context
 
 ### State Persistence
 
-- **MongoDB**: Long-term model storage
+- **MongoDB**: Long-term pattern storage
 - **In-Memory**: Short-term memory and caches
 - **Checkpointing**: Periodic state snapshots (planned)
 

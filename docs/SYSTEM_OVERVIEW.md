@@ -7,7 +7,7 @@ KATO (Knowledge Abstraction for Traceable Outcomes) is a deterministic memory an
 ## Core Purpose
 
 KATO serves as an intelligent memory module that:
-- Learns sequences of multi-modal events
+- Learns patterns of multi-modal events
 - Makes temporal predictions based on learned patterns
 - Maintains complete transparency and traceability
 - Operates deterministically without randomness
@@ -38,7 +38,7 @@ REST Client → REST Gateway (Port 8000) → ZMQ Pool → ZMQ Server → KATO Pr
 - **REST Gateway**: HTTP API endpoints, translates REST calls to ZMQ messages
 - **ZMQ Pool**: Connection pooling and load balancing for ZMQ clients  
 - **ZMQ Server**: High-performance message queue server (Port 5555)
-- **KATO Processor**: Core AI processing engine with short-term memory and models
+- **KATO Processor**: Core AI processing engine with short-term memory and patterns
 
 ## End-to-End Behavior
 
@@ -60,7 +60,7 @@ observation = {
 
 #### Processing Rules
 1. **Alphanumeric Sorting**: Strings within each event are automatically sorted
-2. **Event Preservation**: The order of events in a sequence is maintained
+2. **Event Preservation**: The order of events in a pattern is maintained
 3. **Empty Filtering**: Empty observations are completely ignored
 4. **Vector Processing**: Vectors are processed through the vector indexer (VI)
 
@@ -84,7 +84,7 @@ observe({'strings': ['m']})
 ### 2. Memory Architecture
 
 #### Short-Term Memory
-- **Purpose**: Temporary storage for current observation sequence
+- **Purpose**: Temporary storage for current observation pattern
 - **Behavior**: 
   - Accumulates observations as events
   - Has configurable maximum length
@@ -94,7 +94,7 @@ observe({'strings': ['m']})
 #### Long-Term Memory
 - **Purpose**: Persistent storage of learned patterns
 - **Structure**:
-  - Models identified by `MODEL|<sha1_hash>` format
+  - Patterns identified by `PTRN|<sha1_hash>` format
   - Deterministic hashing ensures consistency
   - Frequency tracking for repeated patterns
 - **Persistence**: Survives short-term memory clears
@@ -103,22 +103,22 @@ observe({'strings': ['m']})
 
 Learning occurs when explicitly triggered or when short-term memory reaches capacity:
 
-1. **Model Creation**: Current short-term memory sequence becomes a model
-2. **Hash Generation**: Deterministic SHA1 hash created from sequence
-3. **Storage**: Model stored with identifier `MODEL|<hash>`
-4. **Frequency Update**: Counter increases if identical sequence learned again
+1. **Pattern Creation**: Current short-term memory pattern becomes a pattern
+2. **Hash Generation**: Deterministic SHA1 hash created from pattern
+3. **Storage**: Pattern stored with identifier `PTRN|<hash>`
+4. **Frequency Update**: Counter increases if identical pattern learned again
 5. **Memory Clear**: Short-term memory completely cleared (regular learning) or last event kept (auto-learning)
 
 ```python
 # Short-Term Memory: [['hello'], ['world']]
 kato.learn()
-# Creates: MODEL|a5b9c3d7... with sequence [['hello'], ['world']]
+# Creates: PTRN|a5b9c3d7... with pattern [['hello'], ['world']]
 # Short-Term Memory after: [['world']]  # Last event preserved
 ```
 
 ### 4. Prediction Generation
 
-KATO generates predictions when observations match learned sequences:
+KATO generates predictions when observations match learned patterns:
 
 #### Temporal Segmentation
 
@@ -134,7 +134,7 @@ Predictions are organized into temporal fields:
 
 ##### Simple Sequential Match
 ```python
-# Learned sequence: [['A'], ['B'], ['C']]
+# Learned pattern: [['A'], ['B'], ['C']]
 # Observation: [['B']]
 
 # Prediction:
@@ -180,7 +180,7 @@ Predictions are organized into temporal fields:
 #### Prediction Metadata
 
 Each prediction includes:
-- **name**: Model identifier (MODEL|hash)
+- **name**: Pattern identifier (PTRN|hash)
 - **confidence**: Confidence score (0-1)
 - **similarity**: Match quality measure
 - **frequency**: Times this pattern was learned
@@ -190,8 +190,8 @@ Each prediction includes:
 ### 5. Special Behaviors
 
 #### Emotives Processing
-- Must be learned as part of a sequence
-- Only appear in predictions from previously learned models
+- Must be learned as part of a pattern
+- Only appear in predictions from previously learned patterns
 - Values are averaged across multiple pathways
 - Don't immediately appear from current observations
 
@@ -203,7 +203,7 @@ kato.learn()
 
 # Later observation triggers emotive prediction
 observe({'strings': ['happy']})
-# Prediction includes averaged emotives from learned sequence
+# Prediction includes averaged emotives from learned pattern
 ```
 
 #### Vector Processing
@@ -232,7 +232,7 @@ observe({'strings': ['happy']})
 {
     "short_term_memory": [["current"], ["events"]],
     "predictions": [{
-        "name": "MODEL|abc123...",
+        "name": "PTRN|abc123...",
         "past": [],
         "present": [["matching", "events"]],
         "future": [["expected", "next"]],
@@ -264,7 +264,7 @@ observe({'strings': ['happy']})
 ### Deterministic Operation
 - Identical inputs produce identical outputs
 - No random elements in processing
-- Consistent model and vector hashing
+- Consistent pattern and vector hashing
 - Reproducible across sessions
 
 ### Full Transparency
@@ -274,7 +274,7 @@ observe({'strings': ['happy']})
 - No "black box" operations
 
 ### Stateful Processing
-- Maintains sequence context
+- Maintains pattern context
 - Preserves temporal relationships
 - Accumulates learning over time
 - Persistent pattern recognition
@@ -282,7 +282,7 @@ observe({'strings': ['happy']})
 ## Use Cases
 
 KATO excels in scenarios requiring:
-- **Sequence Learning**: Learning and recognizing temporal patterns
+- **Pattern Learning**: Learning and recognizing temporal patterns
 - **Predictive Analytics**: Anticipating future events from partial observations
 - **Explainable AI**: Full traceability of decisions
 - **Multi-Modal Processing**: Combining text, numeric, and emotional data
@@ -294,9 +294,9 @@ When integrating KATO:
 1. **Sort Expected Strings**: Account for alphanumeric sorting in tests
 2. **Handle Empty Responses**: Empty observations produce no changes
 3. **Parse Temporal Fields**: Correctly interpret past/present/future
-4. **Track Model Hashes**: Use MODEL| prefixes for identification
-5. **Preserve State**: Maintain processor affinity for sequences
+4. **Track Pattern Hashes**: Use PTRN| prefixes for identification
+5. **Preserve State**: Maintain processor affinity for patterns
 
 ## Summary
 
-KATO provides a transparent, deterministic memory and prediction system that learns from sequences of multi-modal observations. Its temporal segmentation model, combined with full explainability, makes it ideal for applications requiring traceable AI decision-making. The system's stateful nature, distributed architecture, and consistent processing ensure reliable pattern recognition and prediction across diverse use cases.
+KATO provides a transparent, deterministic memory and prediction system that learns from patterns of multi-modal observations. Its temporal segmentation pattern, combined with full explainability, makes it ideal for applications requiring traceable AI decision-making. The system's stateful nature, distributed architecture, and consistent processing ensure reliable pattern recognition and prediction across diverse use cases.

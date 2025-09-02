@@ -4,7 +4,7 @@ This document provides a comprehensive reference for KATO's core concepts, behav
 
 ## Table of Contents
 1. [Core Concepts](#core-concepts)
-   - [Minimum Sequence Requirements](#minimum-sequence-requirements)
+   - [Minimum Pattern Requirements](#minimum-pattern-requirements)
    - [Temporal Prediction Fields](#temporal-prediction-fields)
 2. [Event Processing](#event-processing)
 3. [Memory Architecture](#memory-architecture)
@@ -16,16 +16,16 @@ This document provides a comprehensive reference for KATO's core concepts, behav
 
 ## Core Concepts
 
-### Minimum Sequence Requirements
+### Minimum Pattern Requirements
 
 **CRITICAL**: KATO requires at least 2 strings total in short-term memory (STM) to generate predictions. This is a fundamental architectural requirement.
 
-#### Valid Sequences for Predictions:
+#### Valid Patterns for Predictions:
 - **Single event with 2+ strings**: `[['hello', 'world']]` ✅
 - **Multiple events totaling 2+ strings**: `[['hello'], ['world']]` ✅
 - **Mixed event sizes**: `[['a', 'b'], ['c']]` ✅
 
-#### Invalid Sequences (No Predictions):
+#### Invalid Patterns (No Predictions):
 - **Single string only**: `[['hello']]` ❌
 - **Single string with emotives**: `[['hello']] + emotives` ❌ (emotives don't contribute strings)
 - **Empty events**: `[[], [], []]` ❌
@@ -40,13 +40,13 @@ This requirement ensures sufficient context for meaningful pattern matching and 
 
 ### Temporal Prediction Fields
 
-KATO organizes predictions into temporal segments that provide sophisticated sequence understanding:
+KATO organizes predictions into temporal segments that provide sophisticated pattern understanding:
 
-- **`past`**: Events that occurred before the current matching position in a learned sequence
+- **`past`**: Events that occurred before the current matching position in a learned pattern
 - **`present`**: The current matching events (can span multiple events if partially matching)
 - **`future`**: Events expected to occur after the current position
 - **`missing`**: Symbols that were expected in the present events but were not observed
-  - Order is preserved from the original sequence
+  - Order is preserved from the original pattern
   - No sorting is applied
 - **`extras`**: Symbols that were observed but not expected in the present events
   - Order is preserved as observed
@@ -69,7 +69,7 @@ observation = {
 
 ### Alphanumeric Sorting Within Events
 
-**Important**: KATO sorts strings alphanumerically within each event while preserving the order of events in a sequence.
+**Important**: KATO sorts strings alphanumerically within each event while preserving the order of events in a pattern.
 
 #### Examples:
 
@@ -81,7 +81,7 @@ observe({'strings': ['zebra', 'apple', 'banana']})
 [['apple', 'banana', 'zebra']]  # Sorted alphanumerically
 ```
 
-#### Sequence Preservation:
+#### Pattern Preservation:
 ```python
 # Three separate observations
 observe({'strings': ['z']})
@@ -105,7 +105,7 @@ observe({'strings': ['m']})
 - These vector strings are always added to STM when vectors are processed
 - Vector strings count toward the minimum 2-string requirement for predictions
 - Vector symbols appear before string symbols in mixed modality events
-- A single user string + vectors = valid sequence (2+ strings total)
+- A single user string + vectors = valid pattern (2+ strings total)
 
 ### Empty Events
 KATO ignores empty events - they do not change short-term memory or affect predictions.
@@ -115,7 +115,7 @@ KATO ignores empty events - they do not change short-term memory or affect predi
 observe({'strings': [], 'vectors': [], 'emotives': {}})
 # Result: No change to short-term memory
 
-# Sequence with empty events
+# Pattern with empty events
 observe({'strings': ['first']})
 observe({'strings': []})         # Ignored
 observe({'strings': ['second']})
@@ -128,14 +128,14 @@ observe({'strings': ['second']})
 - Accumulates observations as events
 - Each observation creates one event (unless empty)
 - Maintains temporal order of events
-- Has configurable maximum sequence length
+- Has configurable maximum pattern length
 - Auto-learns when limit reached
 - Cleared when learning is triggered (last event preserved)
 
 ### Long-Term Memory
-- Stores learned sequences with deterministic hashes
-- Sequences identified by `MODEL|<sha1_hash>` format
-- Same sequence always produces same hash
+- Stores learned patterns with deterministic hashes
+- Patterns identified by `PTRN|<sha1_hash>` format
+- Same pattern always produces same hash
 - Persists across short-term memory clears
 - Used for generating predictions
 - Frequency tracking for repeated patterns
@@ -145,18 +145,18 @@ observe({'strings': ['second']})
 ### Prediction Generation
 
 Predictions are generated when:
-1. A model has been learned
+1. A pattern has been learned
 2. **At least 2 strings are present in short-term memory (STM)**
-3. The observed sequence matches a learned sequence with similarity >= `recall_threshold`
+3. The observed pattern matches a learned pattern with similarity >= `recall_threshold`
    - Default recall_threshold: 0.1 (10% similarity)
    - Higher threshold = stricter matching, fewer predictions
    - Lower threshold = looser matching, more predictions
    - See [Configuration Guide](deployment/CONFIGURATION.md#recall_threshold-tuning-guide) for detailed tuning
 4. Either strings or vectors are present (not just emotives)
 
-**Note**: If no sequences match above the recall_threshold, no predictions are returned even if all other conditions are met.
+**Note**: If no patterns match above the recall_threshold, no predictions are returned even if all other conditions are met.
 
-**Important**: The 2+ string requirement is enforced in `modeler.py::processEvents()` at line 154:
+**Important**: The 2+ string requirement is enforced in `pattern_processor.py::processEvents()` at line 154:
 ```python
 if len(state) >= 2 and self.predict and self.trigger_predictions:
 ```
@@ -164,15 +164,15 @@ if len(state) >= 2 and self.predict and self.trigger_predictions:
 ### Prediction Structure
 
 Each prediction includes:
-- `name`: Model identifier (`MODEL|<hash>`)
+- `name`: Pattern identifier (`PTRN|<hash>`)
 - `confidence`: Confidence score (0-1)
-- `similarity`: How closely the observation matches the model
-- `frequency`: How many times this model has been learned
+- `similarity`: How closely the observation matches the pattern
+- `frequency`: How many times this pattern has been learned
 - `hamiltonian`: Energy measure
 - `grand_hamiltonian`: Combined energy measure
 - `entropy`: Uncertainty measure
 - `matches`: Symbols that matched
-- `emotives`: Dictionary of emotive values (if learned with the model)
+- `emotives`: Dictionary of emotive values (if learned with the pattern)
 
 ### Temporal Field Examples
 
@@ -180,7 +180,7 @@ Each prediction includes:
 
 #### Example 1: Simple Sequential Match
 ```python
-# Learned sequence
+# Learned pattern
 [['alpha'], ['beta'], ['gamma']]
 
 # Observation (must have 2+ strings for predictions)
@@ -198,7 +198,7 @@ Each prediction includes:
 
 #### Example 2: Partial Event Match with Missing Symbols
 ```python
-# Learned sequence  
+# Learned pattern  
 [['hello', 'world'], ['foo', 'bar']]
 
 # Observation (missing 'world' and 'bar', but has 2+ strings)
@@ -216,7 +216,7 @@ Each prediction includes:
 
 #### Example 3: Observation with Extra Symbols
 ```python
-# Learned sequence
+# Learned pattern
 [['cat'], ['dog']]
 
 # Observation (with unexpected 'bird' and 'fish')
@@ -234,7 +234,7 @@ Each prediction includes:
 
 #### Example 4: Invalid - Single String (No Predictions)
 ```python
-# Learned sequence
+# Learned pattern
 [['alpha'], ['beta'], ['gamma']]
 
 # Observation (only 1 string - invalid)
@@ -246,7 +246,7 @@ Each prediction includes:
 
 #### Example 5: Complex Partial Match
 ```python
-# Learned sequence
+# Learned pattern
 [['a', 'b', 'c'], ['d', 'e'], ['f', 'g', 'h']]
 
 # Observation (partial matches with extras)
@@ -270,7 +270,7 @@ The `present` field includes all contiguous events that contain matching symbols
 - The `missing` field identifies symbols in present events that weren't actually observed
 - Not all symbols need to match for an event to be part of the present
 
-Example: If observing `['a', 'c']` from model `[['a', 'b'], ['c', 'd'], ['e', 'f']]`:
+Example: If observing `['a', 'c']` from pattern `[['a', 'b'], ['c', 'd'], ['e', 'f']]`:
 - Present: `[['a', 'b'], ['c', 'd']]` (complete events with matches)
 - Missing: `['b', 'd']` (symbols in present but not observed)
 - Future: `[['e', 'f']]` (events after last match)
@@ -278,14 +278,14 @@ Example: If observing `['a', 'c']` from model `[['a', 'b'], ['c', 'd'], ['e', 'f
 ## Learning Behavior
 
 ### Learning Process
-1. Learning creates a model from the current short-term memory (STM)
-2. Models are named with format: `MODEL|<identifier>`
-3. Empty short-term memory produces no model
-4. Frequency increases when the same sequence is learned multiple times
+1. Learning creates a pattern from the current short-term memory (STM)
+2. Patterns are named with format: `PTRN|<identifier>`
+3. Empty short-term memory produces no pattern
+4. Frequency increases when the same pattern is learned multiple times
 5. **Regular learning**: Short-term memory is completely cleared after learning
 
 ### Auto-Learning
-- Triggered when max_sequence_length is reached
+- Triggered when max_pattern_length is reached
 - **Auto-learning only**: The last event is preserved in STM after learning
 - Configurable through processor parameters
 - This preserves continuity for streaming data
@@ -309,9 +309,9 @@ KATO processes multiple data types simultaneously within each observation:
 - Key-value pairs representing emotional context
 - Values are floating-point numbers (0.0 to 1.0)
 - Aggregated across observations (averaging)
-- Preserved in learned sequences
+- Preserved in learned patterns
 
-**Critical Insight**: Emotives only appear in predictions from previously learned models, not from current observations.
+**Critical Insight**: Emotives only appear in predictions from previously learned patterns, not from current observations.
 
 ### Example Multi-Modal Observation
 ```python
@@ -328,10 +328,10 @@ observation = {
 
 ## Deterministic Properties
 
-### Model Hashing
-Every learned sequence receives a deterministic hash-based identifier:
-- Format: `MODEL|<sha1_hash>`
-- Same sequence always produces same hash
+### Pattern Hashing
+Every learned pattern receives a deterministic hash-based identifier:
+- Format: `PTRN|<sha1_hash>`
+- Same pattern always produces same hash
 - Hash includes all event data (strings, vectors, emotives)
 
 ### Vector Hashing
@@ -350,12 +350,12 @@ Vectors are similarly hashed deterministically:
 ### File Locations
 - **Core Processor**: `/kato/workers/kato_processor.py`
 - **Vector Handling**: `/kato/representations/vector_object.py`
-- **Model Representation**: `/kato/representations/model.py`
+- **Pattern Representation**: `/kato/representations/pattern.py`
 - **Prediction Generation**: `/kato/representations/prediction.py`
 
 ### API Response Structure
 The REST API cognition endpoint returns:
-- `short_term_memory`: Current sequence in memory
+- `short_term_memory`: Current pattern in memory
 - `predictions`: List of prediction objects
 - `emotives`: Aggregated emotional context
 - `symbols`: Current symbols in short-term memory
@@ -375,11 +375,11 @@ KATO supports Unicode characters:
 
 ## Common Patterns and Best Practices
 
-### For Sequence Learning
-1. Build sequences with consistent event structures
+### For Pattern Learning
+1. Build patterns with consistent event structures
 2. Remember that strings will be sorted within events
 3. Use empty observations sparingly (they're ignored)
-4. Consider max_sequence_length for auto-learning
+4. Consider max_pattern_length for auto-learning
 
 ### For Predictions
 1. Check `future` field for upcoming events
@@ -389,14 +389,14 @@ KATO supports Unicode characters:
 
 ### Testing Emotives
 Always follow this pattern:
-1. Learn a sequence WITH emotives
+1. Learn a pattern WITH emotives
 2. Clear short-term memory
 3. Observe matching events
 4. Check predictions for emotives
 
 ```python
 # Learn with emotives
-for strings, emotives in sequence_with_emotives:
+for strings, emotives in pattern_with_emotives:
     kato.observe({'strings': strings, 'vectors': [], 'emotives': emotives})
 kato.learn()
 

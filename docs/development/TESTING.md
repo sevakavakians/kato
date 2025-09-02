@@ -2,7 +2,7 @@
 
 ## Overview
 
-The KATO test suite provides comprehensive testing coverage for all aspects of the KATO system, including unit tests, integration tests, and API endpoint tests. The suite is designed to validate KATO's deterministic behavior, memory management, sequence learning, and unique features like alphanumeric sorting, deterministic hashing, and sophisticated temporal prediction segmentation.
+The KATO test suite provides comprehensive testing coverage for all aspects of the KATO system, including unit tests, integration tests, and API endpoint tests. The suite is designed to validate KATO's deterministic behavior, memory management, pattern learning, and unique features like alphanumeric sorting, deterministic hashing, and sophisticated temporal prediction segmentation.
 
 **Current Coverage**: 334 test functions across 109 test files
 - Unit tests: tests/tests/unit/
@@ -23,14 +23,14 @@ tests/
 │   ├── unit/              # Unit tests (83 tests)
 │   │   ├── test_observations.py
 │   │   ├── test_memory_management.py
-│   │   ├── test_model_hashing.py
+│   │   ├── test_pattern_hashing.py
 │   │   ├── test_predictions.py
 │   │   ├── test_sorting_behavior.py
 │   │   ├── test_determinism_preservation.py
 │   │   ├── test_prediction_edge_cases.py
 │   │   └── test_prediction_fields.py
 │   ├── integration/       # Integration tests (19 tests)
-│   │   ├── test_sequence_learning.py
+│   │   ├── test_pattern_learning.py
 │   │   ├── test_vector_e2e.py
 │   │   └── test_vector_simplified.py
 │   ├── api/              # API endpoint tests (21 tests)
@@ -139,7 +139,7 @@ Before writing or modifying tests, it's essential to understand these key behavi
    - `future`: Events after the present state
    - `missing`: Expected symbols not observed within present events
    - `extras`: Observed symbols not expected in present events
-4. **Deterministic Hashing**: MODEL| and VECTOR| prefixes with SHA1 hashes
+4. **Deterministic Hashing**: PTRN| and VECTOR| prefixes with SHA1 hashes
 
 For detailed behavior documentation, see [KATO_BEHAVIOR.md](KATO_BEHAVIOR.md).
 
@@ -155,7 +155,7 @@ Tests for observation processing with strings, vectors, and emotives:
 - Mixed modality observations
 - Special characters and numeric strings
 - Empty observations
-- Sequence observations
+- Pattern observations
 
 #### test_memory_management.py (9 tests)
 Tests for short-term memory and long-term memory management:
@@ -164,18 +164,18 @@ Tests for short-term memory and long-term memory management:
 - Short-term memory accumulation
 - Manual learning
 - Memory persistence
-- Max sequence length enforcement
+- Max pattern length enforcement
 - Memory with emotives and vectors
 - Interleaved memory operations
 
-#### test_model_hashing.py (11 tests)
-Tests for deterministic MODEL| prefix and SHA1 hashing:
-- Model name format verification
-- Identical sequences producing same hash
-- Different sequences producing different hashes
-- Sequence order affecting hash
+#### test_pattern_hashing.py (11 tests)
+Tests for deterministic PTRN| prefix and SHA1 hashing:
+- Pattern name format verification
+- Identical patterns producing same hash
+- Different patterns producing different hashes
+- Pattern order affecting hash
 - Hash consistency across sessions
-- Complex multi-modal sequence hashing
+- Complex multi-modal pattern hashing
 
 #### test_predictions.py (13 tests)
 Tests for prediction generation and scoring:
@@ -188,7 +188,7 @@ Tests for prediction generation and scoring:
 - Entropy calculations
 - Hamiltonian calculations
 - Confidence scores
-- Multiple model predictions
+- Multiple pattern predictions
 
 #### test_sorting_behavior.py (10 tests)
 Tests specifically for KATO's alphanumeric sorting:
@@ -206,10 +206,10 @@ Tests specifically for KATO's alphanumeric sorting:
 Comprehensive tests for prediction field semantics:
 - Past field with events before present
 - Missing symbols within present events
-- Extra symbols not in learned sequence
+- Extra symbols not in learned pattern
 - Multi-event present states
 - Contiguous event matching
-- Partial matches at sequence start/end
+- Partial matches at pattern start/end
 - Mixed missing and extras
 - Multiple past events
 - Single event with missing symbols
@@ -217,15 +217,15 @@ Comprehensive tests for prediction field semantics:
 #### test_prediction_edge_cases.py (10 tests)
 Edge cases and boundary conditions:
 - Empty events ignored
-- No past at sequence start
-- No future at sequence end
+- No past at pattern start
+- No future at pattern end
 - All extras with no matches
-- Partial overlap with multiple sequences
-- Very long sequences
+- Partial overlap with multiple patterns
+- Very long patterns
 - Repeated symbols
 - Case sensitivity
 - Observation longer than learned
-- Single symbol sequences
+- Single symbol patterns
 Tests specifically for KATO's alphanumeric sorting:
 - Alphanumeric sorting within events
 - Event order preservation
@@ -239,8 +239,8 @@ Tests specifically for KATO's alphanumeric sorting:
 
 ### Integration Tests (19 tests)
 
-#### test_sequence_learning.py (11 tests)
-End-to-end tests for sequence learning and recall
+#### test_pattern_learning.py (11 tests)
+End-to-end tests for pattern learning and recall
 
 #### test_vector_e2e.py (5 tests)
 End-to-end tests for vector functionality with new vector database architecture
@@ -257,17 +257,17 @@ Stress and performance tests for vector operations:
 - Accuracy of vector similarity search
 - Vector persistence across learning cycles
 - Edge cases with empty, large, and negative vectors
-- Simple sequence learning
-- Multiple sequence learning and disambiguation
-- Sequence completion
-- Cyclic sequence learning
-- Sequences with repetition
-- Interleaved sequence learning
+- Simple pattern learning
+- Multiple pattern learning and disambiguation
+- Pattern completion
+- Cyclic pattern learning
+- Patterns with repetition
+- Interleaved pattern learning
 - Context switching
-- Max sequence length auto-learning
-- Sequences with time gaps
-- Multi-modal sequence learning
-- Branching sequences
+- Max pattern length auto-learning
+- Patterns with time gaps
+- Multi-modal pattern learning
+- Branching patterns
 
 ### API Tests (21 tests)
 
@@ -284,7 +284,7 @@ Tests for all REST API endpoints:
 - Predictions endpoint
 - Percept and cognition data endpoints
 - Gene manipulation endpoints
-- Model information endpoint
+- Pattern information endpoint
 - Error handling (404, invalid JSON)
 - Response timing verification
 
@@ -292,15 +292,15 @@ Tests for all REST API endpoints:
 
 ### Prediction Field Structure
 
-KATO's predictions contain temporal fields that segment sequences:
+KATO's predictions contain temporal fields that segment patterns:
 
-- **`past`**: Events that came before the present state in the predicted sequence
+- **`past`**: Events that came before the present state in the predicted pattern
 - **`present`**: All contiguous events identified by matching strings/symbols (not all symbols need to match)
 - **`missing`**: Symbols expected within the `present` state but not observed in short-term memory  
 - **`extras`**: Additional symbols observed that aren't expected in the `present` state
-- **`future`**: Events that come after the present state in the predicted sequence
+- **`future`**: Events that come after the present state in the predicted pattern
 
-#### Example 1: Simple Sequence
+#### Example 1: Simple Pattern
 Learned: [['a'], ['b'], ['c']]  
 Observed: [['b']]  
 Result:
@@ -334,16 +334,16 @@ KATO sorts strings alphanumerically within each event but preserves the order of
 - Stored: `['apple', 'hello', 'world']`
 
 ### 2. Deterministic Hashing
-All models and vectors receive deterministic hash-based names:
-- Models: `MODEL|<sha1_hash>`
+All patterns and vectors receive deterministic hash-based names:
+- Patterns: `PTRN|<sha1_hash>`
 - Vectors: `VECTOR|<sha1_hash>`
-- Same sequence always produces same hash
+- Same pattern always produces same hash
 
 ### 3. Stateful Learning
 KATO maintains state across observations:
 - Short-term memory accumulates observations
-- Learning creates persistent models
-- Models survive short-term memory clears
+- Learning creates persistent patterns
+- Patterns survive short-term memory clears
 
 ### 4. Multi-Modal Processing
 KATO processes multiple data types simultaneously:
@@ -354,7 +354,7 @@ KATO processes multiple data types simultaneously:
 ### 5. Empty Events
 KATO ignores empty events - they do not change short-term memory or affect predictions:
 - Observing `[]` has no effect on state
-- Empty events in sequences are skipped
+- Empty events in patterns are skipped
 KATO processes multiple data types simultaneously:
 - Strings (symbolic data)
 - Vectors (numeric arrays)
@@ -371,8 +371,8 @@ Main fixture for test setup and teardown:
 
 ### Hash Helpers
 Utilities for hash verification:
-- `calculate_model_hash()`: Generate expected hash for sequence
-- `verify_model_name()`: Verify MODEL| prefix and hash
+- `calculate_pattern_hash()`: Generate expected hash for pattern
+- `verify_pattern_name()`: Verify PTRN| prefix and hash
 - `extract_hash_from_name()`: Extract hash from prefixed name
 - `verify_hash_consistency()`: Check hash consistency across names
 
@@ -427,17 +427,17 @@ def test_observation(kato_fixture):
     assert wm == [['test']]
 ```
 
-### Sequence Learning Test
+### Pattern Learning Test
 ```python
-def test_sequence(kato_fixture):
+def test_pattern(kato_fixture):
     kato_fixture.clear_all_memory()
     
-    # Learn sequence
+    # Learn pattern
     for item in ['a', 'b', 'c']:
         kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
     
-    model_name = kato_fixture.learn()
-    assert model_name.startswith('MODEL|')
+    pattern_name = kato_fixture.learn()
+    assert pattern_name.startswith('PTRN|')
     
     # Test recall
     kato_fixture.observe({'strings': ['a'], 'vectors': [], 'emotives': {}})
@@ -534,7 +534,7 @@ def test_missing_and_extras(kato_fixture):
 3. **Assertion failures on string order**
    - Remember KATO sorts strings alphanumerically within events
    - Use test helpers for automatic sorting
-   - Event order in sequences is preserved
+   - Event order in patterns is preserved
 
 4. **Prediction field confusion**
    - `future`: Events that come after present (not individual symbols)
@@ -546,27 +546,27 @@ def test_missing_and_extras(kato_fixture):
 
 ### Overview
 
-Auto-learning tests validate the `max_sequence_length` functionality where KATO automatically learns sequences when short-term memory reaches a specified threshold.
+Auto-learning tests validate the `max_pattern_length` functionality where KATO automatically learns patterns when short-term memory reaches a specified threshold.
 
 **Key Tests:**
-- `test_memory_management.py::test_max_sequence_length` - Core auto-learning behavior
-- `test_sequence_learning.py::test_max_sequence_length_auto_learn` - Integration testing
+- `test_memory_management.py::test_max_pattern_length` - Core auto-learning behavior
+- `test_pattern_learning.py::test_max_pattern_length_auto_learn` - Integration testing
 
 ### Test Behavior
 
-When `max_sequence_length` is set to a positive value:
+When `max_pattern_length` is set to a positive value:
 
 1. **Accumulation**: Short-term memory accumulates observations normally
 2. **Trigger**: At threshold, auto-learning activates
-3. **Learning**: Entire sequence is learned as a model
+3. **Learning**: Entire pattern is learned as a pattern
 4. **Reset**: Short-term memory cleared, keeping only last observation
 
 **Example Test Pattern:**
 ```python
-def test_max_sequence_length(kato_fixture):
+def test_max_pattern_length(kato_fixture):
     # Set up auto-learning threshold
     kato_fixture.clear_short_term_memory()  # Don't reset genes
-    kato_fixture.update_genes({"max_sequence_length": 3})
+    kato_fixture.update_genes({"max_pattern_length": 3})
     
     # Accumulate observations
     kato_fixture.observe({'strings': ['a'], 'vectors': [], 'emotives': {}})
@@ -584,7 +584,7 @@ def test_max_sequence_length(kato_fixture):
     kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': ['a'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
-    assert len(predictions) > 0  # Should predict learned sequence
+    assert len(predictions) > 0  # Should predict learned pattern
 ```
 
 ### Common Issues
@@ -592,12 +592,12 @@ def test_max_sequence_length(kato_fixture):
 **Issue: Gene values persist between tests**
 ```python
 # WRONG: This will reset genes after setting them
-kato_fixture.update_genes({"max_sequence_length": 3})
+kato_fixture.update_genes({"max_pattern_length": 3})
 kato_fixture.clear_all_memory()  # Resets genes to default!
 
 # RIGHT: Clear first, then set genes
 kato_fixture.clear_short_term_memory()  # Only clear memory, preserve genes
-kato_fixture.update_genes({"max_sequence_length": 3})
+kato_fixture.update_genes({"max_pattern_length": 3})
 ```
 
 **Issue: Auto-learning not triggering**
@@ -635,7 +635,7 @@ fixture.clear_short_term_memory()
 **Container State:**
 - Tests share the same KATO instance (module-scoped fixture)
 - Gene values persist across tests within a module
-- Short-term memory and models are shared
+- Short-term memory and patterns are shared
 
 **Safe Testing Pattern:**
 ```python
@@ -644,7 +644,7 @@ def test_with_custom_genes(kato_fixture):
     kato_fixture.clear_short_term_memory()
     
     # Set test-specific genes
-    kato_fixture.update_genes({"max_sequence_length": 5})
+    kato_fixture.update_genes({"max_pattern_length": 5})
     
     # Perform test
     # ... test logic ...

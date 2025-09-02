@@ -162,7 +162,7 @@ def calculate_similarity(self, vector_a: np.ndarray, vector_b: np.ndarray) -> fl
 1. **Maintain Determinism**: Same inputs must always produce same outputs
 2. **Preserve Sorting**: Strings are sorted alphanumerically within events
 3. **Handle Empty Events**: Empty observations should be ignored
-4. **Use MODEL| Prefix**: All model names must start with MODEL|
+4. **Use PTRN| Prefix**: All pattern names must start with PTRN|
 5. **Test Helpers**: Use provided test helpers for assertions
 
 ### Error Handling
@@ -196,9 +196,9 @@ def test_alphanumeric_sorting():
 Test component interactions:
 
 ```python
-def test_sequence_learning_and_recall(kato_fixture):
-    """Test end-to-end sequence learning"""
-    # Learn sequence
+def test_pattern_learning_and_recall(kato_fixture):
+    """Test end-to-end pattern learning"""
+    # Learn pattern
     for item in ['a', 'b', 'c']:
         kato_fixture.observe({'strings': [item]})
     kato_fixture.learn()

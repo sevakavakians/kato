@@ -54,7 +54,7 @@ KATO operates as a distributed system with the following key characteristics:
 │  │  │                     ┌──────────────────────────────────▼────────┐  │ │  │
 │  │  │                     │         KATO Processor Core              │  │ │  │
 │  │  │                     │  ┌──────────────┐  ┌──────────────┐     │  │ │  │
-│  │  │                     │  │    Vector    │  │   Modeler    │     │  │ │  │
+│  │  │                     │  │    Vector    │  │Pattern Processor│  │  │ │  │
 │  │  │                     │  │  Indexer(VI) │  │              │     │  │ │  │
 │  │  │                     │  └──────┬───────┘  └──────┬───────┘     │  │ │  │
 │  │  │                     │         │                 │              │  │ │  │
@@ -159,15 +159,15 @@ KATO operates as a distributed system with the following key characteristics:
 │                  ▼                                                            │
 │   ┌──────────────────────────────────────────┐                              │
 │   │        Short-Term Memory Update              │                              │
-│   │  - Add to observation sequence            │                              │
-│   │  - Check max_sequence_length              │                              │
+│   │  - Add to observation pattern             │                              │
+│   │  - Check max_pattern_length               │                              │
 │   │  - Trigger auto-learn if needed           │                              │
 │   └──────────────┬───────────────────────────┘                              │
 │                  │                                                            │
 │                  ▼                                                            │
 │   ┌──────────────────────────────────────────┐                              │
 │   │        Pattern Matching                   │                              │
-│   │  - Search for matching models             │                              │
+│   │  - Search for matching patterns           │                              │
 │   │  - Use vector similarity (Qdrant)         │                              │
 │   │  - Apply recall threshold                 │                              │
 │   └──────────────┬───────────────────────────┘                              │
@@ -177,7 +177,7 @@ KATO operates as a distributed system with the following key characteristics:
 │   │        Prediction Generation              │                              │
 │   │  - Temporal segmentation                  │                              │
 │   │  - Calculate confidence scores            │                              │
-│   │  - Include emotives from models           │                              │
+│   │  - Include emotives from patterns         │                              │
 │   └──────────────┬───────────────────────────┘                              │
 │                  │                                                            │
 │                  ▼                                                            │
@@ -221,7 +221,7 @@ KATO operates as a distributed system with the following key characteristics:
 │   │  │  │  Image: mongo:4.4                                       │  │  │   │
 │   │  │  │  Port: 27017:27017                                      │  │  │   │
 │   │  │  │  Volume: kato-mongo-data:/data/db                      │  │  │   │
-│   │  │  │  Purpose: Long-term memory, model storage              │  │  │   │
+│   │  │  │  Purpose: Long-term memory, pattern storage            │  │  │   │
 │   │  │  └──────────────────────────────────────────────────────────┘  │  │   │
 │   │  │                                                                 │  │   │
 │   │  │  ┌──────────────────────────────────────────────────────────┐  │  │   │
@@ -251,7 +251,7 @@ KATO operates as a distributed system with the following key characteristics:
 **Status: REQUIRED**
 - Core AI engine managing observations and predictions
 - Maintains short-term memory and coordinates with storage
-- Implements deterministic hashing for model identification
+- Implements deterministic hashing for pattern identification
 - Handles multi-modal input processing
 
 ### 2. REST Gateway (`kato/workers/rest_gateway.py`)
@@ -281,18 +281,18 @@ KATO operates as a distributed system with the following key characteristics:
 - VI (Vector Indexer) implementation
 - Integrates with vector search engine
 
-### 6. Modeler (`kato/workers/modeler.py`)
+### 6. Pattern Processor (`kato/workers/pattern_processor.py`)
 **Status: REQUIRED**
-- Creates and manages sequence models
+- Creates and manages patterns
 - Deterministic SHA1 hashing
 - Frequency tracking and updates
-- Model search and retrieval
+- Pattern search and retrieval
 
 ### 7. MongoDB Storage
 **Status: REQUIRED**
-- Persistent storage for models
+- Persistent storage for patterns
 - Long-term memory persistence
-- Model metadata storage
+- Pattern metadata storage
 
 ### 8. Qdrant Vector Database
 **Status: OPTIONAL (Highly Recommended)**
@@ -336,7 +336,7 @@ The system uses ZeroMQ with DEALER/ROUTER pattern for:
     "status": "okay",
     "message": "Success",
     "predictions": [...],
-    "model_name": "MODEL|sha1_hash"
+    "pattern_name": "PTRN|sha1_hash"
 }
 ```
 
@@ -356,21 +356,21 @@ The system uses ZeroMQ with DEALER/ROUTER pattern for:
 
 3. **Emotive Processing**:
    - Averaging across pathways
-   - Storage with models
+   - Storage with patterns
    - Prediction inclusion
 
 ## Memory Architecture
 
 ### Short-Term Memory
 - **Type**: Temporary RAM storage
-- **Purpose**: Current observation sequence
-- **Behavior**: Auto-learn on max_sequence_length
+- **Purpose**: Current observation pattern
+- **Behavior**: Auto-learn on max_pattern_length
 - **Clearing**: After learning (preserves last event)
 
 ### Long-Term Memory
 - **Type**: Persistent MongoDB/Qdrant storage
-- **Purpose**: Learned model patterns
-- **Structure**: MODEL|<sha1_hash> identifiers
+- **Purpose**: Learned patterns
+- **Structure**: PTRN|<sha1_hash> identifiers
 - **Persistence**: Survives container restarts
 
 ## Required vs Optional Components
@@ -382,7 +382,7 @@ The system uses ZeroMQ with DEALER/ROUTER pattern for:
 4. **ZMQ Server/Client**: Internal messaging
 5. **REST Gateway**: API interface
 6. **KATO Processor**: Core AI logic
-7. **Classifier/Modeler**: Pattern processing
+7. **Classifier/Pattern Processor**: Pattern processing
 
 ### Optional Components
 1. **Qdrant**: High-performance vector search (RECOMMENDED)

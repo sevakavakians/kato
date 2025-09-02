@@ -67,7 +67,7 @@ class KatoProcessor:
         return
 
     def get_model(self, name):
-        "Retrieve model values by using the model name."
+        "Retrieve pattern values by using the pattern name."
         m = self.pattern_processor.superkb.getPattern(name)
         if m is not None:
             m.pop('_id')
@@ -103,7 +103,7 @@ class KatoProcessor:
         pattern_name = self.pattern_processor.learn() # Returns the name of the pattern just learned.
         if pattern_name:
             return f"PTRN|{pattern_name}"
-        # Return empty string for empty/single sequences (no model created)
+        # Return empty string for empty/single patterns (no pattern created)
         return ""
 
     def delete_pattern(self, name):
@@ -152,14 +152,14 @@ class KatoProcessor:
             if vector_data:
                 v_identified = self._process_vectors_(vector_data)
                 if v_identified and self.SORT:
-                    v_identified.sort()  # Sort for deterministic sequence matching
+                    v_identified.sort()  # Sort for deterministic pattern matching
                     
             # Process strings (already symbolic)
             if string_data:
                 s = True
                 symbols = string_data[:]  # Copy to avoid modifying original
                 if symbols and self.SORT:
-                    symbols.sort()  # Sort for deterministic sequence matching
+                    symbols.sort()  # Sort for deterministic pattern matching
                     
             # Process emotional/utility values
             if emotives_data:
@@ -185,12 +185,12 @@ class KatoProcessor:
             max_pattern_length = self.pattern_processor.max_pattern_length
             
             if max_pattern_length > 0 and stm_length >= max_pattern_length:
-                # Short-term memory is full - time to consolidate into a model
+                # Short-term memory is full - time to consolidate into a pattern
                 if stm_length > 1:
-                    # Keep the last event as context for the next sequence
+                    # Keep the last event as context for the next pattern
                     # This maintains continuity between learned chunks
                     stm_tail = self.pattern_processor.STM[-1]
-                    auto_learned_pattern = self.learn()  # Creates model and clears STM
+                    auto_learned_pattern = self.learn()  # Creates pattern and clears STM
                     self.pattern_processor.setSTM([stm_tail])  # Start new STM with last event
                     if auto_learned_pattern:
                         logger.info(f"Auto-learned pattern: {auto_learned_pattern}")

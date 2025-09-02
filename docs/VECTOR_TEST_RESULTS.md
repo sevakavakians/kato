@@ -22,8 +22,8 @@
 - ✅ Learning with vectors works  
 - ✅ Vector basic functionality works
 - ✅ Mixed modality observation works
-- ✅ Vector sequence learning works
-- ✅ Predictions return correct sequences
+- ✅ Vector pattern learning works
+- ✅ Predictions return correct patterns
 
 **Key Finding**: Complete backward compatibility with existing API
 

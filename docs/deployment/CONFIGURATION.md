@@ -47,21 +47,21 @@ All parameters can be specified directly when starting KATO:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `--max-seq-length` | integer | 0 | **Auto-learning threshold**: When short-term memory reaches this length, automatically learn sequence and reset (0=disabled) |
+| `--max-seq-length` | integer | 0 | **Auto-learning threshold**: When short-term memory reaches this length, automatically learn pattern and reset (0=disabled) |
 | `--persistence` | integer | 5 | Emotive persistence duration |
 | `--smoothness` | integer | 3 | Learning smoothness parameter |
 | `--quiescence` | integer | 3 | Quiescence period |
 
-#### Auto-Learning Feature (`max_sequence_length`)
+#### Auto-Learning Feature (`max_pattern_length`)
 
-When `max_sequence_length` is set to a value greater than 0, KATO automatically learns sequences when short-term memory reaches the threshold:
+When `max_pattern_length` is set to a value greater than 0, KATO automatically learns patterns when short-term memory reaches the threshold:
 
 **Behavior:**
 1. **Accumulation**: Short-term memory accumulates observations normally
-2. **Trigger**: When length reaches `max_sequence_length`, auto-learning activates  
-3. **Learning**: The entire short-term memory sequence is learned as a model
+2. **Trigger**: When length reaches `max_pattern_length`, auto-learning activates  
+3. **Learning**: The entire short-term memory pattern is learned as a pattern
 4. **Reset**: Short-term memory is cleared, keeping only the last observation
-5. **Continuation**: System continues processing with learned model available
+5. **Continuation**: System continues processing with learned pattern available
 
 **Example:**
 ```bash
@@ -70,13 +70,13 @@ When `max_sequence_length` is set to a value greater than 0, KATO automatically 
 
 # Or update dynamically via API
 curl -X POST http://localhost:8000/p46b6b076c/genes/change \
-  -d '{"data": {"max_sequence_length": 3}}'
+  -d '{"data": {"max_pattern_length": 3}}'
 ```
 
 **Use Cases:**
 - **Streaming data**: Continuous learning from data streams
 - **Memory management**: Prevent short-term memory overflow
-- **Pattern recognition**: Automatic detection of recurring sequences  
+- **Pattern recognition**: Automatic detection of recurring patterns  
 - **Real-time systems**: Background learning without manual intervention
 
 ### Behavior Control Parameters
@@ -85,7 +85,7 @@ curl -X POST http://localhost:8000/p46b6b076c/genes/change \
 |-----------|------|---------|-------------|
 | `--auto-act-method` | string | "none" | Auto-action method |
 | `--auto-act-threshold` | float | 0.8 | Auto-action threshold (0.0-1.0) |
-| `--update-frequencies` | flag | false | Always update model frequencies |
+| `--update-frequencies` | flag | false | Always update pattern frequencies |
 | `--no-sort` | flag | false | Disable alphanumeric sorting |
 | `--no-predictions` | flag | false | Disable prediction processing |
 
@@ -223,7 +223,7 @@ KATO internally uses a JSON manifest for configuration:
   "id": "p46b6b076c",
   "name": "KatoProcessor",
   "indexer_type": "VI",
-  "max_sequence_length": 0,
+  "max_pattern_length": 0,
   "persistence": 5,
   "smoothness": 3,
   "auto_act_method": "none",
@@ -264,7 +264,7 @@ How long emotives are retained:
 - `10-20`: Extended emotional memory
 - `20+`: Long-term emotional tracking
 
-### Max Sequence Length
+### Max Pattern Length
 
 Controls auto-learning trigger:
 - `0`: No limit (manual learning only)
@@ -399,7 +399,7 @@ curl -X POST http://localhost:8000/p46b6b076c/genes/update \
 The `recall_threshold` parameter is critical for controlling prediction quality and quantity. It acts as a similarity filter, determining which pattern matches are returned as predictions.
 
 ### How It Works
-1. KATO compares observed sequences against learned models
+1. KATO compares observed patterns against learned patterns
 2. Each comparison generates a similarity score (0.0 to 1.0)
 3. Only matches with similarity >= recall_threshold become predictions
 4. Lower thresholds = more predictions (including weak matches)
@@ -415,19 +415,19 @@ The `recall_threshold` parameter is critical for controlling prediction quality 
 | **High Precision** | 0.5-0.7 | Strong matches only, fewer false positives |
 | **Exact Matching** | 0.8-1.0 | Near-perfect or perfect matches only |
 
-### Impact on Different Sequence Types
+### Impact on Different Pattern Types
 
-#### Short Sequences (2-5 elements)
+#### Short Patterns (2-5 elements)
 - **Low threshold (0.1)**: May match many unrelated patterns
 - **Recommended**: 0.3-0.5 for meaningful matches
 - **High threshold (0.7+)**: May miss valid variations
 
-#### Medium Sequences (5-15 elements)
+#### Medium Patterns (5-15 elements)
 - **Low threshold (0.1)**: Good for finding partial matches
 - **Recommended**: 0.2-0.4 for balanced results
-- **High threshold (0.7+)**: Only very similar sequences
+- **High threshold (0.7+)**: Only very similar patterns
 
-#### Long Sequences (15+ elements)
+#### Long Patterns (15+ elements)
 - **Low threshold (0.1)**: Captures distant relationships
 - **Recommended**: 0.1-0.3 (similarity naturally decreases with length)
 - **High threshold (0.7+)**: May produce no matches
@@ -549,12 +549,12 @@ These parameters are actively used by KATO:
 | `id` | Unique processor identifier | auto-generated |
 | `name` | Processor display name | "KatoProcessor" |
 | `indexer_type` | Vector indexer (VI only) | "VI" |
-| `max_sequence_length` | Auto-learning threshold | 0 (disabled) |
+| `max_pattern_length` | Auto-learning threshold | 0 (disabled) |
 | `persistence` | Emotive persistence | 5 |
 | `smoothness` | Learning smoothness | 3 |
 | `auto_act_method` | Auto-action method | "none" |
 | `auto_act_threshold` | Auto-action threshold | 0.8 |
-| `always_update_frequencies` | Update model frequencies | false |
+| `always_update_frequencies` | Update pattern frequencies | false |
 | `max_predictions` | Maximum predictions | 100 |
 | `recall_threshold` | Similarity threshold | 0.1 |
 | `quiescence` | Quiescence period | 3 |

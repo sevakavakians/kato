@@ -157,6 +157,18 @@ Trigger learning from current short-term memory.
 }
 ```
 
+**Behavior:**
+- Creates pattern from current STM content
+- Pattern identified by SHA1 hash: `PTRN|<sha1_hash>`
+- Frequency tracking:
+  - New patterns start with frequency = 1
+  - Re-learning identical pattern increments frequency
+  - No patterns exist with frequency = 0
+- STM clearing:
+  - Regular learn(): STM completely cleared
+  - Auto-learn (max_pattern_length reached): Last event preserved
+- Returns empty string if STM has < 2 strings (no pattern created)
+
 ### Short-Term Memory
 
 #### GET /{processor_id}/short-term-memory

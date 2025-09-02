@@ -365,7 +365,9 @@ The system uses ZeroMQ with DEALER/ROUTER pattern for:
 - **Type**: Temporary RAM storage
 - **Purpose**: Current observation pattern
 - **Behavior**: Auto-learn on max_pattern_length
-- **Clearing**: After learning (preserves last event)
+- **Clearing**: 
+  - Regular learn(): Completely cleared
+  - Auto-learn: Preserves last event as first event of new STM
 
 ### Long-Term Memory
 - **Type**: Persistent MongoDB/Qdrant storage

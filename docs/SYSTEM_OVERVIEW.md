@@ -87,9 +87,11 @@ observe({'strings': ['m']})
 - **Purpose**: Temporary storage for current observation pattern
 - **Behavior**: 
   - Accumulates observations as events
-  - Has configurable maximum length
+  - Has configurable maximum length (max_pattern_length)
   - Triggers auto-learning when limit reached
-  - Cleared after learning (last event preserved)
+  - Cleared after learning:
+    - Regular learn(): Completely cleared
+    - Auto-learn: Last event preserved as first event of new STM
 
 #### Long-Term Memory
 - **Purpose**: Persistent storage of learned patterns
@@ -104,21 +106,43 @@ observe({'strings': ['m']})
 Learning occurs when explicitly triggered or when short-term memory reaches capacity:
 
 1. **Pattern Creation**: Current short-term memory pattern becomes a pattern
-2. **Hash Generation**: Deterministic SHA1 hash created from pattern
-3. **Storage**: Pattern stored with identifier `PTRN|<hash>`
-4. **Frequency Update**: Counter increases if identical pattern learned again
-5. **Memory Clear**: Short-term memory completely cleared (regular learning) or last event kept (auto-learning)
+2. **Hash Generation**: Deterministic SHA1 hash created from pattern data
+3. **Storage**: Pattern stored with identifier `PTRN|<sha1_hash>`
+4. **Frequency Update**: Frequency starts at 1 for new patterns, increments if identical pattern learned again
+5. **Memory Clear**: 
+   - **Regular learning (explicit learn() call)**: Short-term memory COMPLETELY cleared
+   - **Auto-learning (max_pattern_length reached)**: Last event preserved as first event of new STM
 
 ```python
+# Regular Learning Example
 # Short-Term Memory: [['hello'], ['world']]
 kato.learn()
-# Creates: PTRN|a5b9c3d7... with pattern [['hello'], ['world']]
-# Short-Term Memory after: [['world']]  # Last event preserved
+# Creates: PTRN|a5b9c3d7... with pattern [['hello'], ['world']] (frequency=1)
+# Short-Term Memory after: []  # Completely cleared
+
+# Auto-Learning Example (max_pattern_length=3)
+# Short-Term Memory: [['a'], ['b'], ['c']]  # Reaches max
+# Auto-learn triggers
+# Creates: PTRN|xyz123... with pattern [['a'], ['b'], ['c']]
+# Short-Term Memory after: [['c']]  # Last event preserved for continuity
 ```
 
 ### 4. Prediction Generation
 
-KATO generates predictions when observations match learned patterns:
+KATO generates predictions when observations match learned patterns.
+
+**CRITICAL REQUIREMENT**: KATO requires at least 2 strings total in short-term memory (STM) to generate predictions. This ensures sufficient context for meaningful pattern matching.
+
+Valid for predictions:
+- Single event with 2+ strings: `[['hello', 'world']]` ✅
+- Multiple events totaling 2+ strings: `[['hello'], ['world']]` ✅
+- Single string with vectors: `[['hello', 'VECTOR|<hash>']]` ✅ (vectors generate string representations)
+
+Invalid (no predictions):
+- Single string only: `[['hello']]` ❌
+- Empty events: `[[], []]` ❌
+
+When predictions are generated:
 
 #### Temporal Segmentation
 

@@ -130,7 +130,9 @@ observe({'strings': ['second']})
 - Maintains temporal order of events
 - Has configurable maximum pattern length
 - Auto-learns when limit reached
-- Cleared when learning is triggered (last event preserved)
+- Cleared when learning is triggered:
+  - Regular learn(): Completely cleared
+  - Auto-learn: Last event preserved as first event of new STM
 
 ### Long-Term Memory
 - Stores learned patterns with deterministic hashes
@@ -279,16 +281,23 @@ Example: If observing `['a', 'c']` from pattern `[['a', 'b'], ['c', 'd'], ['e', 
 
 ### Learning Process
 1. Learning creates a pattern from the current short-term memory (STM)
-2. Patterns are named with format: `PTRN|<identifier>`
+2. Patterns are named with format: `PTRN|<sha1_hash>` where hash is SHA1 of pattern data
 3. Empty short-term memory produces no pattern
-4. Frequency increases when the same pattern is learned multiple times
-5. **Regular learning**: Short-term memory is completely cleared after learning
+4. Frequency behavior:
+   - New patterns start with frequency = 1
+   - Frequency increments by 1 each time identical pattern is learned again
+   - No patterns exist with frequency = 0 (minimum is 1)
+5. **Memory clearing behavior**:
+   - **Regular learning (explicit learn() call)**: Short-term memory is COMPLETELY cleared
+   - **Auto-learning (max_pattern_length reached)**: Last event is preserved as first event of new STM
 
 ### Auto-Learning
-- Triggered when max_pattern_length is reached
-- **Auto-learning only**: The last event is preserved in STM after learning
+- Triggered ONLY when short-term memory length reaches max_pattern_length
+- Creates pattern from full STM before clearing
+- **Key difference from regular learning**: The last event is preserved in STM after learning
 - Configurable through processor parameters
 - This preserves continuity for streaming data
+- If max_pattern_length not set or is very high, auto-learning won't trigger
 
 ## Multi-Modal Processing
 

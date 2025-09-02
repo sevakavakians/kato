@@ -47,7 +47,7 @@ All parameters can be specified directly when starting KATO:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `--max-seq-length` | integer | 0 | **Auto-learning threshold**: When short-term memory reaches this length, automatically learn pattern and reset (0=disabled) |
+| `--max-seq-length` | integer | 0 | **Auto-learning threshold**: When short-term memory reaches this length, automatically learn pattern. Regular learn() completely clears STM, auto-learn preserves last event (0=disabled) |
 | `--persistence` | integer | 5 | Emotive persistence duration |
 | `--smoothness` | integer | 3 | Learning smoothness parameter |
 | `--quiescence` | integer | 3 | Quiescence period |
@@ -60,7 +60,9 @@ When `max_pattern_length` is set to a value greater than 0, KATO automatically l
 1. **Accumulation**: Short-term memory accumulates observations normally
 2. **Trigger**: When length reaches `max_pattern_length`, auto-learning activates  
 3. **Learning**: The entire short-term memory pattern is learned as a pattern
-4. **Reset**: Short-term memory is cleared, keeping only the last observation
+4. **Reset**: 
+   - **Regular learn() call**: STM completely cleared
+   - **Auto-learn trigger**: STM cleared but last event preserved as first event of new STM
 5. **Continuation**: System continues processing with learned pattern available
 
 **Example:**
@@ -268,9 +270,11 @@ How long emotives are retained:
 
 Controls auto-learning trigger:
 - `0`: No limit (manual learning only)
-- `10-50`: Frequent learning cycles
+- `10-50`: Frequent learning cycles (last event preserved between patterns)
 - `100-500`: Moderate cycles
 - `1000+`: Rare auto-learning
+
+Note: Auto-learning preserves the last event for continuity, while manual learn() completely clears STM.
 
 ## Multi-Instance Configuration
 
@@ -549,7 +553,7 @@ These parameters are actively used by KATO:
 | `id` | Unique processor identifier | auto-generated |
 | `name` | Processor display name | "KatoProcessor" |
 | `indexer_type` | Vector indexer (VI only) | "VI" |
-| `max_pattern_length` | Auto-learning threshold | 0 (disabled) |
+| `max_pattern_length` | Auto-learning threshold (preserves last event) | 0 (disabled) |
 | `persistence` | Emotive persistence | 5 |
 | `smoothness` | Learning smoothness | 3 |
 | `auto_act_method` | Auto-action method | "none" |

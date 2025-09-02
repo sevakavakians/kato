@@ -18,6 +18,8 @@ KATO uses **patterns** as its core learning concept:
 
 Every learned structure in KATO is identified by a unique hash: `PTRN|<sha1_hash>`
 
+**Important**: Patterns require at least 2 strings total to generate predictions. When learning patterns, frequency starts at 1 and increments with each re-learning of the same pattern.
+
 ### Key Features
 
 ✨ **Deterministic Learning** - Same inputs always yield same outputs  
@@ -116,9 +118,10 @@ curl http://localhost:8000/p46b6b076c/predictions
 
 Key behaviors:
 - **Alphanumeric sorting** within events
-- **Deterministic hashing** for patterns (PTRN|hash)
+- **Deterministic hashing** for patterns (PTRN|<sha1_hash>)
 - **Temporal segmentation** in predictions
 - **Empty event filtering**
+- **Minimum requirement**: 2+ strings in STM for predictions (vectors contribute strings)
 
 Learn more in [Core Concepts](docs/CONCEPTS.md).
 

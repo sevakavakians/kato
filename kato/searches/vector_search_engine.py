@@ -138,9 +138,26 @@ class VectorSearchEngine:
             logger.error(f"Failed to initialize search engine: {e}")
             return False
     
+    def _run_async_in_sync(self, coro):
+        """Helper to run async code in sync context, handling event loop issues"""
+        import asyncio
+        import concurrent.futures
+        import threading
+        
+        # Check if we're in an async context
+        try:
+            loop = asyncio.get_running_loop()
+            # We're already in an event loop, need to run in thread
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(asyncio.run, coro)
+                return future.result()
+        except RuntimeError:
+            # No event loop running, can run directly
+            return asyncio.run(coro)
+    
     def initialize_sync(self) -> bool:
         """Synchronous wrapper for initialize"""
-        return self._loop.run_until_complete(self.initialize())
+        return self._run_async_in_sync(self.initialize())
     
     async def add_vector(
         self,
@@ -367,8 +384,29 @@ class VectorSearchEngine:
         use_cache: bool = True
     ) -> List[VectorSearchResult]:
         """Synchronous wrapper for search"""
-        return self._loop.run_until_complete(
-            self.search(query_vector, k, filter, include_vectors, use_cache)
+        import asyncio
+        try:
+            # Try to get current running loop
+            loop = asyncio.get_running_loop()
+            if loop == self._loop:
+                # We're in the same loop, need to handle differently
+                # Create a future and run the coroutine in a thread
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(
+                        asyncio.run,
+                        self.search(query_vector, k, filter, include_vectors, use_cache)
+                    )
+                    return future.result()
+            else:
+                # Different loop, can use run_until_complete
+                return self._loop.run_until_complete(
+                    self.search(query_vector, k, filter, include_vectors, use_cache)
+                )
+        except RuntimeError:
+            # No loop running, safe to use run_until_complete
+            return self._loop.run_until_complete(
+                self.search(query_vector, k, filter, include_vectors, use_cache)
         )
     
     async def batch_search(
@@ -422,7 +460,7 @@ class VectorSearchEngine:
         include_vectors: bool = False
     ) -> List[List[VectorSearchResult]]:
         """Synchronous wrapper for batch_search"""
-        return self._loop.run_until_complete(
+        return self._run_async_in_sync(
             self.batch_search(query_vectors, k, filter, include_vectors)
         )
     
@@ -464,7 +502,7 @@ class VectorSearchEngine:
         exclude_self: bool = True
     ) -> List[Tuple[str, float]]:
         """Synchronous wrapper for find_nearest_neighbors"""
-        return self._loop.run_until_complete(
+        return self._run_async_in_sync(
             self.find_nearest_neighbors(vector, k, exclude_self)
         )
     
@@ -522,7 +560,7 @@ class VectorSearchEngine:
     
     def get_stats_sync(self) -> Dict[str, Any]:
         """Synchronous wrapper for get_stats"""
-        return self._loop.run_until_complete(self.get_stats())
+        return self._run_async_in_sync(self.get_stats())
     
     async def optimize(self) -> bool:
         """Optimize the vector index for better performance"""
@@ -543,7 +581,7 @@ class VectorSearchEngine:
     
     def close_sync(self):
         """Synchronous wrapper for close"""
-        self._loop.run_until_complete(self.close())
+        return self._run_async_in_sync(self.close())
     
     # Helper methods
     def _make_cache_key(
@@ -658,5 +696,6 @@ class VectorIndexer:
     
     def __del__(self):
         """Cleanup on deletion"""
-        if hasattr(self, 'engine'):
-            self.engine.close_sync()
+        # Don't try to close in destructor - causes issues with async event loops
+        # The engine should be explicitly closed when needed
+        pass

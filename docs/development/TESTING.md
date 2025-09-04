@@ -4,12 +4,14 @@
 
 KATO uses a simple local Python testing approach with pytest. Tests run directly on your local machine using a virtual environment, making debugging straightforward and eliminating Docker complexity.
 
-**Current Coverage**: 188 test functions across 21 test files
-- Unit tests: tests/tests/unit/
-- Integration tests: tests/tests/integration/
-- API tests: tests/tests/api/
-- Performance tests: tests/tests/performance/
-- Execution time: ~30-60 seconds
+**Current Coverage**: 185 test functions across 19 test files
+- Unit tests: tests/tests/unit/ (143 tests)
+- Integration tests: tests/tests/integration/ (19 tests)
+- API tests: tests/tests/api/ (18 tests)
+- Performance tests: tests/tests/performance/ (5 tests)
+- **Pass Rate**: 184/185 passing (99.5%)
+- **Skipped**: 1 test (cyclic pattern test - feature out of scope)
+- Execution time: ~100 seconds (full suite)
 
 ## Test Architecture
 

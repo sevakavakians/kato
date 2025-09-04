@@ -135,14 +135,36 @@ tests/tests/
 │   ├── test_pattern_learning.py
 │   ├── test_vector_e2e.py
 │   └── ...
-├── api/                  # REST API endpoint tests
-│   └── test_rest_endpoints.py
+├── api/                  # FastAPI endpoint tests
+│   └── test_fastapi_endpoints.py
 ├── performance/          # Performance and stress tests
 │   └── test_high_load.py
 └── fixtures/            # Test fixtures and helpers
     ├── kato_fixtures.py
     └── test_helpers.py
 ```
+
+## Current Test Status
+
+### Test Suite Statistics (as of 2025-09-04)
+- **Total Tests**: 185
+- **Passing**: 184 (99.5%)
+- **Skipped**: 1 (cyclic pattern test - feature out of scope)
+- **Failed**: 0
+
+### Test Categories
+- **Unit Tests**: 143 tests - Core component functionality
+- **Integration Tests**: 19 tests - End-to-end workflows including vector processing
+- **API Tests**: 18 tests - FastAPI endpoint validation (including WebSocket)
+- **Performance Tests**: 5 tests - Stress testing and scalability
+
+### Recent Migration to FastAPI
+The test suite was successfully updated following the architectural migration from REST/ZMQ to FastAPI:
+- All endpoint URLs updated (removed processor_id prefixes)
+- Response format changes handled (e.g., 'observed' → 'okay')
+- Field name updates (e.g., 'stm_size' → 'stm_length')
+- Async/sync boundary issues resolved
+- WebSocket testing added with websocket-client dependency
 
 ## Writing Tests
 
@@ -237,6 +259,8 @@ lsof -i :8003
 # Then run tests
 ./run_simple_tests.sh --no-start --no-stop
 ```
+
+For systematic troubleshooting of test failures, see the [Test Troubleshooting Guide](../TEST_TROUBLESHOOTING_GUIDE.md) which provides a step-by-step process for identifying and fixing test issues.
 
 #### Database Issues
 ```bash

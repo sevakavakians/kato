@@ -17,7 +17,8 @@ try:
     from qdrant_client.models import (
         Distance, VectorParams, PointStruct, Filter, FieldCondition,
         SearchRequest, ScoredPoint, UpdateStatus, CollectionInfo,
-        OptimizersConfig, HnswConfig, QuantizationConfig,
+        OptimizersConfig, OptimizersConfigDiff, HnswConfig, HnswConfigDiff,
+        QuantizationConfig,
         ScalarQuantization, ProductQuantization, BinaryQuantization,
         ScalarQuantizationConfig, ProductQuantizationConfig,
         BinaryQuantizationConfig, ScalarType, CompressionRatio
@@ -121,20 +122,21 @@ class QdrantStore(VectorStore):
             )
             
             # Configure HNSW index
-            hnsw_config = HnswConfig(
+            hnsw_config = HnswConfigDiff(
                 m=kwargs.get('hnsw_m', 16),
                 ef_construct=kwargs.get('hnsw_ef_construct', 128),
                 full_scan_threshold=kwargs.get('full_scan_threshold', 10000)
             )
             
             # Configure optimizers
-            optimizers_config = OptimizersConfig(
+            optimizers_config = OptimizersConfigDiff(
                 deleted_threshold=self.qdrant_config.optimizers.get('deleted_threshold', 0.2),
                 vacuum_min_vector_number=self.qdrant_config.optimizers.get('vacuum_min_vector_number', 1000),
                 default_segment_number=self.qdrant_config.optimizers.get('default_segment_number', 4),
                 max_segment_size=self.qdrant_config.optimizers.get('max_segment_size', 500000),
                 memmap_threshold=self.qdrant_config.optimizers.get('memmap_threshold', 20000),
                 indexing_threshold=self.qdrant_config.optimizers.get('indexing_threshold', 10000),
+                flush_interval_sec=self.qdrant_config.optimizers.get('flush_interval_sec', 5),
             )
             
             # Configure quantization if enabled
@@ -627,7 +629,7 @@ class QdrantStore(VectorStore):
                 await self._async_wrapper(
                     self.client.update_collection,
                     collection_name=collection_name,
-                    optimizer_config=OptimizersConfig(**kwargs)
+                    optimizer_config=OptimizersConfigDiff(**kwargs)
                 )
             
             # Trigger optimization
@@ -697,5 +699,9 @@ class QdrantStore(VectorStore):
     # Helper methods
     async def _async_wrapper(self, func, *args, **kwargs):
         """Wrap synchronous Qdrant client calls for async compatibility"""
+        import functools
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, func, *args, **kwargs)
+        # run_in_executor doesn't support kwargs, so we use partial
+        if kwargs:
+            func = functools.partial(func, **kwargs)
+        return await loop.run_in_executor(None, func, *args)

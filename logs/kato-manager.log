@@ -13692,3 +13692,57 @@
 [0;32m[SUCCESS][0m KATO processor kato-1757006540-84802 is fully operational on port 8000
 [0;32m[SUCCESS][0m KATO system started successfully
 [0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Starting KATO FastAPI services...
+[0;32m[SUCCESS][0m KATO services started
+[0;34m[INFO][0m Waiting for services to be ready...
+[0;34m[INFO][0m KATO FastAPI Services Status:
+[0;34m[INFO][0m Service URLs:
+[0;34m[INFO][0m Health Check:
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-1757007452-86463)
+[0;34m[INFO][0m Max Predictions: 100
+[0;34m[INFO][0m Starting dedicated database instances for kato-1757007452-86463...
+[0;34m[INFO][0m Creating MongoDB container for instance: mongo-kato-1757007452-86463
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB mongo-kato-1757007452-86463 is ready
+[0;34m[INFO][0m Creating Qdrant container for instance: qdrant-kato-1757007452-86463
+[0;34m[INFO][0m Waiting for Qdrant to be ready...
+[0;32m[SUCCESS][0m Qdrant qdrant-kato-1757007452-86463 is ready
+[0;34m[INFO][0m Creating Redis container for instance: redis-kato-1757007452-86463
+[0;34m[INFO][0m Waiting for Redis to be ready...
+[0;32m[SUCCESS][0m Redis redis-kato-1757007452-86463 is ready
+[0;34m[INFO][0m Creating and starting KATO container: kato-kato-1757007452-86463
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-1757007452-86463)
+[0;34m[INFO][0m Registered instance: kato-1757007452-86463 (KatoProcessor) on ports 8000/5555
+[0;34m[INFO][0m Waiting for KATO API to be ready...
+[0;34m[INFO][0m KATO API is responding to ping
+[0;34m[INFO][0m Verifying processor kato-1757007452-86463 is accessible...
+[0;34m[INFO][0m Processor ID verified: kato-1757007452-86463
+[0;34m[INFO][0m Testing processor operations...
+[0;32m[SUCCESS][0m KATO processor kato-1757007452-86463 is fully operational on port 8000
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status
+[0;34m[INFO][0m Docker found via command -v: /usr/local/bin/docker
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-1757007570-86760)
+[0;34m[INFO][0m Max Predictions: 100
+[0;34m[INFO][0m Starting dedicated database instances for kato-1757007570-86760...
+[0;34m[INFO][0m Creating MongoDB container for instance: mongo-kato-1757007570-86760
+[0;34m[INFO][0m Waiting for MongoDB to be ready...
+[0;32m[SUCCESS][0m MongoDB mongo-kato-1757007570-86760 is ready
+[0;34m[INFO][0m Creating Qdrant container for instance: qdrant-kato-1757007570-86760
+[0;34m[INFO][0m Waiting for Qdrant to be ready...
+[0;32m[SUCCESS][0m Qdrant qdrant-kato-1757007570-86760 is ready
+[0;34m[INFO][0m Creating Redis container for instance: redis-kato-1757007570-86760
+[0;34m[INFO][0m Waiting for Redis to be ready...
+[0;32m[SUCCESS][0m Redis redis-kato-1757007570-86760 is ready
+[0;34m[INFO][0m Creating and starting KATO container: kato-kato-1757007570-86760
+[0;34m[INFO][0m Using processor: KatoProcessor (ID: kato-1757007570-86760)
+[0;34m[INFO][0m Registered instance: kato-1757007570-86760 (KatoProcessor) on ports 8000/5555
+[0;34m[INFO][0m Waiting for KATO API to be ready...
+[0;34m[INFO][0m KATO API is responding to ping
+[0;34m[INFO][0m Verifying processor kato-1757007570-86760 is accessible...
+[0;34m[INFO][0m Processor ID verified: kato-1757007570-86760
+[0;34m[INFO][0m Testing processor operations...
+[0;32m[SUCCESS][0m KATO processor kato-1757007570-86760 is fully operational on port 8000
+[0;32m[SUCCESS][0m KATO system started successfully
+[0;34m[INFO][0m KATO System Status

@@ -30,7 +30,7 @@ class KatoProcessor:
         self.SORT = self.genome_manifest["sort"]
         self.time = 0
 
-        # Use all available processors now that we're using ZMQ instead of gRPC
+        # Use all available processors for parallel searches
         self.procs_for_searches = int(cpu_count())
 
         self.genome_manifest["kb_id"] = self.id

@@ -9,11 +9,7 @@ import sys
 import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-# Use FastAPI fixture if available, otherwise fall back to old fixture
-if os.environ.get('USE_FASTAPI', 'false').lower() == 'true':
-    from fixtures.kato_fastapi_fixtures import kato_fastapi_existing as kato_fixture
-else:
-    from fixtures.kato_fixtures import kato_fixture, kato_with_genome
+from fixtures.kato_fixtures import kato_fixture as kato_fixture, kato_with_genome
 
 
 def test_simple_sequence_learning(kato_fixture):

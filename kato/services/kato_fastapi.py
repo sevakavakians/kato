@@ -2,7 +2,7 @@
 """
 KATO FastAPI Service
 Direct FastAPI implementation embedding a single KatoProcessor instance.
-Replaces the REST/ZMQ gateway architecture with simplified direct access.
+Provides simplified direct access to KATO functionality.
 """
 
 import asyncio

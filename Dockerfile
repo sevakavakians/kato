@@ -1,38 +1,38 @@
-FROM docker.io/library/debian:bullseye-slim
+FROM python:3.9-slim
 
-# set noninteractive installation
-ENV DEBIAN_FRONTEND=noninteractive
+# Set working directory
+WORKDIR /app
 
-RUN apt-get update && apt-get -y dist-upgrade && apt-get -y autoremove
-RUN apt-get install -y git wget python3 python3-pip python3-dev libopenjp2-7-dev \
-    && apt-get autoremove -y \
-    && ln -s /usr/bin/python3 /usr/local/bin/python
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
 
-RUN pip3 install --upgrade pip setuptools wheel
+# Copy requirements first for better caching
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-ENV LOG_LEVEL DEBUG
-ENV KATO_VERSION 11.0.0
-ENV ARCH 'x86_64'
-ENV MONGO_BASE_URL mongodb://mongo-kb:27017
-ENV MANIFEST "primitive-manifest-to-be-overwritten"
-ENV HOSTNAME 'change-via-run-cmd'
-ENV SOURCES 'change-via-run-cmd'
-ENV TARGETS 'change-via-run-cmd'
-ENV AS_INPUTS 'change-via-run-cmd'
-ENV ZMQ_PORT 5555
-ENV REST_PORT 8000
-ENV KATO_ZMQ_IMPLEMENTATION improved
-EXPOSE 5555
+# Install FastAPI and Uvicorn
+RUN pip install --no-cache-dir \
+    fastapi==0.104.1 \
+    uvicorn[standard]==0.24.0 \
+    python-multipart==0.0.6 \
+    websockets==12.0
+
+# Copy the KATO package
+COPY kato/ ./kato/
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV PORT=8000
+
+# Expose the port
 EXPOSE 8000
 
-RUN apt-get update && apt-get install -y apt-utils make automake gcc g++ subversion python3-dev gfortran libfreetype6-dev libpng-dev libopenblas-dev linux-headers-generic
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import requests; requests.get('http://localhost:8000/health').raise_for_status()" || exit 1
 
-COPY ./ /kato
-WORKDIR /kato
-# RUN pip3 install Cython
-RUN pip install --trusted-host pypi.python.org -r requirements.txt
-RUN pip install -v .
-WORKDIR /
-RUN rm -fr /kato
-
-CMD python3 /usr/local/bin/kato-engine
+# Run the FastAPI application
+CMD ["uvicorn", "kato.services.kato_fastapi:app", "--host", "0.0.0.0", "--port", "8000"]

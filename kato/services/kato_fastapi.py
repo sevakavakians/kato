@@ -1,0 +1,640 @@
+#!/usr/bin/env python3
+"""
+KATO FastAPI Service
+Direct FastAPI implementation embedding a single KatoProcessor instance.
+Replaces the REST/ZMQ gateway architecture with simplified direct access.
+"""
+
+import asyncio
+import json
+import logging
+import os
+import sys
+import time
+import uuid
+from contextlib import asynccontextmanager
+from typing import Dict, List, Optional, Any
+
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
+
+# Add parent directories to path for imports
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+
+from kato.workers.kato_processor import KatoProcessor
+
+# Configure logging
+logging.basicConfig(
+    level=getattr(logging, os.environ.get('LOG_LEVEL', 'INFO')),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger('kato.fastapi')
+
+# Global processor instance and lock
+processor: Optional[KatoProcessor] = None
+processor_lock = asyncio.Lock()
+startup_time = time.time()
+
+
+# Pydantic Models for Request/Response validation
+class ObservationData(BaseModel):
+    """Input data for observations"""
+    strings: List[str] = Field(default_factory=list, description="String symbols to observe")
+    vectors: List[List[float]] = Field(default_factory=list, description="Vector embeddings")
+    emotives: Dict[str, float] = Field(default_factory=dict, description="Emotional values")
+    unique_id: Optional[str] = Field(None, description="Optional unique identifier")
+
+
+class ObservationResult(BaseModel):
+    """Result of an observation"""
+    status: str = Field(..., description="Status of the operation")
+    processor_id: str = Field(..., description="ID of the processor")
+    auto_learned_pattern: Optional[str] = Field(None, description="Pattern learned if auto-learning triggered")
+    time: int = Field(..., description="Processor time counter")
+    unique_id: str = Field(..., description="Unique ID of the observation")
+
+
+class STMResponse(BaseModel):
+    """Short-term memory response"""
+    stm: List[List[str]] = Field(..., description="Current short-term memory state")
+    processor_id: str = Field(..., description="ID of the processor")
+
+
+class LearnResult(BaseModel):
+    """Result of learning operation"""
+    pattern_name: str = Field(..., description="Name of the learned pattern")
+    processor_id: str = Field(..., description="ID of the processor")
+    message: str = Field(..., description="Human-readable message")
+
+
+class PredictionsResponse(BaseModel):
+    """Predictions response"""
+    predictions: List[Dict] = Field(default_factory=list, description="List of predictions")
+    processor_id: str = Field(..., description="ID of the processor")
+
+
+class StatusResponse(BaseModel):
+    """Generic status response"""
+    status: str = Field(..., description="Status of the operation")
+    message: str = Field(..., description="Human-readable message")
+    processor_id: str = Field(..., description="ID of the processor")
+
+
+class ProcessorStatus(BaseModel):
+    """Processor status information"""
+    status: str = Field(..., description="Health status")
+    processor_id: str = Field(..., description="ID of the processor")
+    processor_name: str = Field(..., description="Name of the processor")
+    uptime: float = Field(..., description="Uptime in seconds")
+    stm_length: int = Field(..., description="Current STM length")
+    time: int = Field(..., description="Processor time counter")
+
+
+class GeneUpdate(BaseModel):
+    """Gene update request"""
+    gene_name: str = Field(..., description="Name of the gene to update")
+    gene_value: Any = Field(..., description="New value for the gene")
+
+
+class GeneUpdates(BaseModel):
+    """Multiple gene updates"""
+    genes: Dict[str, Any] = Field(..., description="Dictionary of gene names and values")
+
+
+class PatternResponse(BaseModel):
+    """Pattern data response"""
+    pattern: Dict = Field(..., description="Pattern data")
+    processor_id: str = Field(..., description="ID of the processor")
+
+
+class ErrorResponse(BaseModel):
+    """Error response format"""
+    error: Dict[str, Any] = Field(..., description="Error details")
+    status: int = Field(..., description="HTTP status code")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage processor lifecycle"""
+    global processor
+    
+    # Startup: Initialize processor
+    processor_id = os.environ.get('PROCESSOR_ID')
+    if not processor_id:
+        # Generate unique processor ID if not provided
+        processor_id = f"kato-{uuid.uuid4().hex[:8]}-{int(time.time())}"
+        logger.warning(f"No PROCESSOR_ID provided, using generated: {processor_id}")
+    
+    processor_name = os.environ.get('PROCESSOR_NAME', 'KatoProcessor')
+    
+    # Build manifest from environment
+    manifest = {
+        'id': processor_id,
+        'name': processor_name,
+        'indexer_type': os.environ.get('INDEXER_TYPE', 'VI'),
+        'max_pattern_length': int(os.environ.get('MAX_PATTERN_LENGTH', '0')),
+        'persistence': int(os.environ.get('PERSISTENCE', '5')),
+        'smoothness': int(os.environ.get('SMOOTHNESS', '3')),
+        'auto_act_method': os.environ.get('AUTO_ACT_METHOD', 'none'),
+        'auto_act_threshold': float(os.environ.get('AUTO_ACT_THRESHOLD', '0.8')),
+        'always_update_frequencies': os.environ.get('ALWAYS_UPDATE_FREQUENCIES', 'false').lower() == 'true',
+        'max_predictions': int(os.environ.get('MAX_PREDICTIONS', '100')),
+        'recall_threshold': float(os.environ.get('RECALL_THRESHOLD', '0.1')),
+        'quiescence': int(os.environ.get('QUIESCENCE', '3')),
+        'search_depth': int(os.environ.get('SEARCH_DEPTH', '10')),
+        'sort': os.environ.get('SORT', 'true').lower() == 'true',
+        'process_predictions': os.environ.get('PROCESS_PREDICTIONS', 'true').lower() == 'true'
+    }
+    
+    logger.info(f"Initializing processor: {processor_id} ({processor_name})")
+    
+    try:
+        processor = KatoProcessor(manifest)
+        logger.info(f"Processor {processor_id} initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize processor: {e}")
+        raise
+    
+    yield
+    
+    # Shutdown: Cleanup
+    logger.info(f"Shutting down processor: {processor_id}")
+    # Add any cleanup code here if needed
+
+
+# Create FastAPI app with lifespan management
+app = FastAPI(
+    title="KATO FastAPI Service",
+    description="Direct FastAPI implementation of KATO processor",
+    version="1.0.0",
+    lifespan=lifespan
+)
+
+
+# Health and Status Endpoints
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return {
+        "status": "healthy",
+        "processor_id": processor.id if processor else None,
+        "uptime": time.time() - startup_time
+    }
+
+
+@app.get("/status", response_model=ProcessorStatus)
+async def get_status():
+    """Get processor status"""
+    if not processor:
+        raise HTTPException(status_code=503, detail="Processor not initialized")
+    
+    async with processor_lock:
+        stm_length = len(processor.get_stm())
+        
+    return ProcessorStatus(
+        status="okay",
+        processor_id=processor.id,
+        processor_name=processor.name,
+        uptime=time.time() - startup_time,
+        stm_length=stm_length,
+        time=processor.time
+    )
+
+
+# Core KATO Operations
+@app.post("/observe", response_model=ObservationResult)
+async def observe(data: ObservationData):
+    """Process an observation"""
+    if not processor:
+        raise HTTPException(status_code=503, detail="Processor not initialized")
+    
+    # Generate unique ID if not provided
+    if not data.unique_id:
+        data.unique_id = f"obs-{uuid.uuid4().hex}-{int(time.time() * 1000000)}"
+    
+    # Prepare observation data
+    observation = {
+        'strings': data.strings,
+        'vectors': data.vectors,
+        'emotives': data.emotives,
+        'unique_id': data.unique_id,
+        'source': 'fastapi'
+    }
+    
+    # Process observation with lock to ensure sequential processing
+    async with processor_lock:
+        try:
+            result = processor.observe(observation)
+            
+            return ObservationResult(
+                status="okay",
+                processor_id=processor.id,
+                auto_learned_pattern=result.get('auto_learned_pattern'),
+                time=processor.time,
+                unique_id=result.get('unique_id', data.unique_id)
+            )
+        except Exception as e:
+            logger.error(f"Error processing observation: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/stm", response_model=STMResponse)
+@app.get("/short-term-memory", response_model=STMResponse)
+async def get_stm():
+    """Get current short-term memory"""
+    if not processor:
+        raise HTTPException(status_code=503, detail="Processor not initialized")
+    
+    async with processor_lock:
+        stm = processor.get_stm()
+    
+    return STMResponse(
+        stm=stm,
+        processor_id=processor.id
+    )
+
+
+@app.post("/learn", response_model=LearnResult)
+async def learn():
+    """Learn from current STM"""
+    if not processor:
+        raise HTTPException(status_code=503, detail="Processor not initialized")
+    
+    async with processor_lock:
+        try:
+            pattern_name = processor.learn()
+            
+            if pattern_name:
+                message = f"Learned pattern: {pattern_name}"
+            else:
+                message = "Insufficient data for learning"
+            
+            return LearnResult(
+                pattern_name=pattern_name or "",
+                processor_id=processor.id,
+                message=message
+            )
+        except Exception as e:
+            logger.error(f"Error during learning: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/clear-stm", response_model=StatusResponse)
+@app.post("/clear-short-term-memory", response_model=StatusResponse)
+async def clear_stm():
+    """Clear short-term memory"""
+    if not processor:
+        raise HTTPException(status_code=503, detail="Processor not initialized")
+    
+    async with processor_lock:
+        processor.clear_stm()
+    
+    return StatusResponse(
+        status="okay",
+        message="stm-cleared",
+        processor_id=processor.id
+    )
+
+
+@app.post("/clear-all", response_model=StatusResponse)
+@app.post("/clear-all-memory", response_model=StatusResponse)
+async def clear_all_memory():
+    """Clear all memory"""
+    if not processor:
+        raise HTTPException(status_code=503, detail="Processor not initialized")
+    
+    async with processor_lock:
+        processor.clear_all_memory()
+    
+    return StatusResponse(
+        status="okay",
+        message="all-cleared",
+        processor_id=processor.id
+    )
+
+
+@app.get("/predictions", response_model=PredictionsResponse)
+@app.post("/predictions", response_model=PredictionsResponse)
+async def get_predictions(unique_id: Optional[str] = None):
+    """Get predictions"""
+    if not processor:
+        raise HTTPException(status_code=503, detail="Processor not initialized")
+    
+    async with processor_lock:
+        if unique_id:
+            predictions = processor.get_predictions({'unique_id': unique_id})
+        else:
+            predictions = processor.get_predictions()
+    
+    # Add PTRN| prefix to pattern names for consistency
+    for pred in predictions:
+        if isinstance(pred, dict):
+            name = pred.get('name', '')
+            if name and not name.startswith('PTRN|'):
+                pred['name'] = f'PTRN|{name}'
+    
+    return PredictionsResponse(
+        predictions=predictions,
+        processor_id=processor.id
+    )
+
+
+# Advanced Operations
+@app.get("/pattern/{pattern_id}", response_model=PatternResponse)
+async def get_pattern(pattern_id: str):
+    """Get pattern by ID"""
+    if not processor:
+        raise HTTPException(status_code=503, detail="Processor not initialized")
+    
+    async with processor_lock:
+        result = processor.get_pattern(pattern_id)
+    
+    if result.get('status') == 'error':
+        raise HTTPException(status_code=404, detail=result.get('message'))
+    
+    return PatternResponse(
+        pattern=result.get('pattern', {}),
+        processor_id=processor.id
+    )
+
+
+@app.post("/genes/update", response_model=StatusResponse)
+async def update_genes(updates: GeneUpdates):
+    """Update multiple gene values"""
+    if not processor:
+        raise HTTPException(status_code=503, detail="Processor not initialized")
+    
+    async with processor_lock:
+        try:
+            for gene_name, gene_value in updates.genes.items():
+                # Try updating processor directly
+                if hasattr(processor, gene_name):
+                    setattr(processor, gene_name, gene_value)
+                # Also try pattern_processor
+                elif hasattr(processor.pattern_processor, gene_name):
+                    setattr(processor.pattern_processor, gene_name, gene_value)
+                    # Special handling for recall_threshold
+                    if gene_name == 'recall_threshold' and hasattr(processor.pattern_processor, 'patterns_searcher'):
+                        processor.pattern_processor.patterns_searcher.recall_threshold = gene_value
+                else:
+                    raise ValueError(f"Unknown gene: {gene_name}")
+                
+                # Update genome_manifest for consistency
+                if hasattr(processor, 'genome_manifest'):
+                    processor.genome_manifest[gene_name] = gene_value
+            
+            return StatusResponse(
+                status="okay",
+                message="genes-updated",
+                processor_id=processor.id
+            )
+        except Exception as e:
+            logger.error(f"Error updating genes: {e}")
+            raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/gene/{gene_name}")
+async def get_gene(gene_name: str):
+    """Get gene value"""
+    if not processor:
+        raise HTTPException(status_code=503, detail="Processor not initialized")
+    
+    async with processor_lock:
+        # Check processor first
+        if hasattr(processor, gene_name):
+            value = getattr(processor, gene_name)
+        # Then check pattern_processor
+        elif hasattr(processor.pattern_processor, gene_name):
+            value = getattr(processor.pattern_processor, gene_name)
+        # Finally check genome_manifest
+        elif hasattr(processor, 'genome_manifest') and gene_name in processor.genome_manifest:
+            value = processor.genome_manifest[gene_name]
+        else:
+            raise HTTPException(status_code=404, detail=f"Gene {gene_name} not found")
+    
+    return {
+        "gene_name": gene_name,
+        "gene_value": value,
+        "processor_id": processor.id
+    }
+
+
+@app.get("/percept-data")
+async def get_percept_data():
+    """Get percept data"""
+    if not processor:
+        raise HTTPException(status_code=503, detail="Processor not initialized")
+    
+    async with processor_lock:
+        data = processor.get_percept_data()
+    
+    return {
+        "percept_data": data,
+        "processor_id": processor.id
+    }
+
+
+@app.get("/cognition-data")
+async def get_cognition_data():
+    """Get cognition data"""
+    if not processor:
+        raise HTTPException(status_code=503, detail="Processor not initialized")
+    
+    async with processor_lock:
+        data = processor.cognition_data
+    
+    return {
+        "cognition_data": data,
+        "processor_id": processor.id
+    }
+
+
+# WebSocket endpoint for real-time communication
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    """WebSocket for bidirectional real-time communication"""
+    if not processor:
+        await websocket.close(code=1011, reason="Processor not initialized")
+        return
+    
+    await websocket.accept()
+    logger.info(f"WebSocket connected for processor {processor.id}")
+    
+    try:
+        while True:
+            # Receive message from client
+            data = await websocket.receive_json()
+            
+            message_type = data.get('type')
+            payload = data.get('payload', {})
+            
+            async with processor_lock:
+                try:
+                    if message_type == 'observe':
+                        # Process observation
+                        if 'unique_id' not in payload:
+                            payload['unique_id'] = f"ws-{uuid.uuid4().hex}-{int(time.time() * 1000000)}"
+                        payload['source'] = 'websocket'
+                        
+                        result = processor.observe(payload)
+                        await websocket.send_json({
+                            'type': 'observation_result',
+                            'data': {
+                                'status': 'okay',
+                                'processor_id': processor.id,
+                                'auto_learned_pattern': result.get('auto_learned_pattern'),
+                                'time': processor.time,
+                                'unique_id': result.get('unique_id')
+                            }
+                        })
+                    
+                    elif message_type == 'get_stm':
+                        stm = processor.get_stm()
+                        await websocket.send_json({
+                            'type': 'stm',
+                            'data': {
+                                'stm': stm,
+                                'processor_id': processor.id
+                            }
+                        })
+                    
+                    elif message_type == 'get_predictions':
+                        predictions = processor.get_predictions(payload)
+                        await websocket.send_json({
+                            'type': 'predictions',
+                            'data': {
+                                'predictions': predictions,
+                                'processor_id': processor.id
+                            }
+                        })
+                    
+                    elif message_type == 'learn':
+                        pattern_name = processor.learn()
+                        await websocket.send_json({
+                            'type': 'learn_result',
+                            'data': {
+                                'pattern_name': pattern_name or "",
+                                'processor_id': processor.id
+                            }
+                        })
+                    
+                    elif message_type == 'clear_stm':
+                        processor.clear_stm()
+                        await websocket.send_json({
+                            'type': 'status',
+                            'data': {
+                                'status': 'okay',
+                                'message': 'stm-cleared',
+                                'processor_id': processor.id
+                            }
+                        })
+                    
+                    elif message_type == 'clear_all':
+                        processor.clear_all_memory()
+                        await websocket.send_json({
+                            'type': 'status',
+                            'data': {
+                                'status': 'okay',
+                                'message': 'all-cleared',
+                                'processor_id': processor.id
+                            }
+                        })
+                    
+                    elif message_type == 'ping':
+                        await websocket.send_json({
+                            'type': 'pong',
+                            'data': {
+                                'processor_id': processor.id,
+                                'timestamp': time.time()
+                            }
+                        })
+                    
+                    else:
+                        await websocket.send_json({
+                            'type': 'error',
+                            'data': {
+                                'message': f'Unknown message type: {message_type}'
+                            }
+                        })
+                
+                except Exception as e:
+                    logger.error(f"Error processing WebSocket message: {e}")
+                    await websocket.send_json({
+                        'type': 'error',
+                        'data': {
+                            'message': str(e)
+                        }
+                    })
+    
+    except WebSocketDisconnect:
+        logger.info(f"WebSocket disconnected for processor {processor.id}")
+    except Exception as e:
+        logger.error(f"WebSocket error: {e}")
+        await websocket.close(code=1011, reason=str(e))
+
+
+# Error handling
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request, exc):
+    """Handle HTTP exceptions with consistent format"""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": {
+                "code": f"HTTP_{exc.status_code}",
+                "message": exc.detail,
+                "details": {}
+            },
+            "status": exc.status_code
+        }
+    )
+
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request, exc):
+    """Handle unexpected exceptions"""
+    logger.error(f"Unexpected error: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": {
+                "code": "INTERNAL_ERROR",
+                "message": "An unexpected error occurred",
+                "details": {
+                    "error": str(exc)
+                }
+            },
+            "status": 500
+        }
+    )
+
+
+# Metrics endpoint
+@app.get("/metrics")
+async def get_metrics():
+    """Get processor metrics"""
+    if not processor:
+        raise HTTPException(status_code=503, detail="Processor not initialized")
+    
+    async with processor_lock:
+        stm_length = len(processor.get_stm())
+        # Get pattern count from MongoDB
+        try:
+            pattern_count = processor.pattern_processor.superkb.patterns_kb.count_documents({})
+        except:
+            pattern_count = 0
+    
+    return {
+        "processor_id": processor.id,
+        "observations_processed": processor.time,
+        "patterns_learned": pattern_count,
+        "stm_size": stm_length,
+        "uptime_seconds": time.time() - startup_time
+    }
+
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get('PORT', '8000'))
+    uvicorn.run(app, host="0.0.0.0", port=port)

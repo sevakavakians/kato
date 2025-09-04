@@ -1,0 +1,8 @@
+CLUSTERED TEST RUN SUMMARY
+=========================
+Timestamp: Tue Sep  2 19:01:32 EDT 2025
+Exit Code: 1
+
+  ✓ Passed:  177
+  ✗ Failed:  12
+  ⚠ Skipped: 1

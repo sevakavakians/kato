@@ -119,10 +119,7 @@ def extract_hash_from_name(name: str) -> str:
     return ""
 
 
-# Compatibility aliases for old function names
-verify_model_name = verify_pattern_name
-calculate_model_hash = calculate_pattern_hash
-format_model_name = format_pattern_name
+# All model_name references have been renamed to pattern_name
 
 
 def verify_hash_consistency(names: List[str], sequences: List[List[Any]]) -> Dict[str, bool]:

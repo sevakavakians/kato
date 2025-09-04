@@ -254,14 +254,13 @@ class ImprovedConnectionPool:
             else:
                 logger.warning(f"Attempted to release unknown connection {conn_id}")
                 
-    def execute(self, method: str, params: Optional[Dict] = None, 
-                timeout: Optional[int] = None) -> Dict[str, Any]:
+    def execute(self, method: str, *args, **kwargs) -> Dict[str, Any]:
         """Execute a method using a pooled connection.
         
         Args:
             method: Method name to call
-            params: Optional parameters
-            timeout: Optional timeout override
+            *args: Positional arguments (will be converted to params dict)
+            **kwargs: Keyword arguments (timeout can be specified here)
             
         Returns:
             Response from the server
@@ -273,6 +272,27 @@ class ImprovedConnectionPool:
         
         with self._stats_lock:
             self._total_requests += 1
+            
+        # Extract timeout if provided
+        timeout = kwargs.pop('timeout', None)
+        
+        # Convert args to params dict for compatibility
+        params = None
+        if args or kwargs:
+            params = {}
+            if len(args) == 1 and isinstance(args[0], dict):
+                # If single dict argument, use it as params
+                params = args[0]
+            elif method == 'gene_change' and len(args) == 2:
+                # Special handling for gene_change method
+                params['gene_name'] = args[0]
+                params['gene_value'] = args[1]
+            elif args:
+                # Convert positional args to numbered params
+                for i, arg in enumerate(args):
+                    params[f'arg{i}'] = arg
+            # Add any remaining kwargs to params
+            params.update(kwargs)
             
         try:
             # Acquire a connection

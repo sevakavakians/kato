@@ -28,7 +28,7 @@ KATO processes multi-modal observations (text, vectors, emotions) and makes temp
 ## Core Architecture (3-Sentence Overview)
 1. REST clients communicate with a FastAPI gateway that translates HTTP requests to ZeroMQ messages
 2. The ZMQ server distributes work to KATO processors which maintain working memory and coordinate with Qdrant for vector similarity searches
-3. All processing is deterministic with SHA1-based model identification, ensuring reproducible predictions and complete traceability
+3. All processing is deterministic with SHA1-based pattern identification, ensuring reproducible predictions and complete traceability
 
 ## Success Metrics
 - **Determinism**: 100% reproducible outputs for identical inputs ✅
@@ -61,7 +61,7 @@ KATO processes multi-modal observations (text, vectors, emotions) and makes temp
 
 ### Reliability
 - **Uptime Target**: 99.9% availability
-- **Data Integrity**: SHA1 hashing for model verification
+- **Data Integrity**: SHA1 hashing for pattern verification
 - **Error Recovery**: Automatic reconnection and retry logic
 
 ## Recent Achievements

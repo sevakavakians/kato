@@ -66,7 +66,11 @@ def clear_qdrant_for_processor(processor_id: str, qdrant_host: str = "localhost"
             print(f"  Qdrant collection {collection_name} does not exist")
             
     except Exception as e:
-        print(f"  Warning: Failed to clear Qdrant for {processor_id}: {e}")
+        # Qdrant might not be running for some tests, which is okay
+        if "Connection refused" in str(e):
+            print(f"  Info: Qdrant not available for {processor_id} (not required for all tests)")
+        else:
+            print(f"  Warning: Failed to clear Qdrant for {processor_id}: {e}")
 
 
 def clear_redis_for_processor(processor_id: str, redis_host: str = "localhost", redis_port: int = 6379):
@@ -95,7 +99,11 @@ def clear_redis_for_processor(processor_id: str, redis_host: str = "localhost", 
             print(f"  No Redis keys found with pattern: {pattern}")
             
     except Exception as e:
-        print(f"  Warning: Failed to clear Redis for {processor_id}: {e}")
+        # Redis might not be running for some tests, which is okay
+        if "Connection refused" in str(e):
+            print(f"  Info: Redis not available for {processor_id} (not required for all tests)")
+        else:
+            print(f"  Warning: Failed to clear Redis for {processor_id}: {e}")
 
 
 def clear_all_databases_for_processor(processor_id: str):

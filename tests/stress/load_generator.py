@@ -94,7 +94,7 @@ class DataGenerator:
         common_words = [
             "the", "and", "a", "to", "of", "in", "is", "that", "it", "was",
             "for", "on", "with", "as", "at", "by", "from", "be", "have", "had",
-            "data", "test", "kato", "observe", "learn", "predict", "model",
+            "data", "test", "kato", "observe", "learn", "predict", "pattern",
             "sequence", "pattern", "memory", "processor", "system", "analyze"
         ]
         vocab.extend(common_words)
@@ -243,8 +243,8 @@ class VirtualUser:
         self.error_count = 0
         
         # User state for realistic behavior
-        self.working_memory_size = 0
-        self.has_learned_model = False
+        self.short_term_memory_size = 0
+        self.has_learned_pattern = False
         
     def start(self):
         """Start generating load."""
@@ -298,26 +298,26 @@ class VirtualUser:
         if operation == "observe":
             data = self.data_generator.generate_observation_data()
             self.request_func("observe", data)
-            self.working_memory_size += 1
+            self.short_term_memory_size += 1
             
         elif operation == "learn":
             # Only learn if we have observations
-            if self.working_memory_size > 0:
+            if self.short_term_memory_size > 0:
                 self.request_func("learn", {})
-                self.has_learned_model = True
-                self.working_memory_size = 0
+                self.has_learned_pattern = True
+                self.short_term_memory_size = 0
                 
         elif operation == "predictions":
-            # Get predictions if we have models
-            if self.has_learned_model:
+            # Get predictions if we have patterns
+            if self.has_learned_pattern:
                 self.request_func("predictions", {})
                 
-        elif operation == "working_memory":
-            self.request_func("working_memory", {})
+        elif operation == "short_term_memory":
+            self.request_func("short_term_memory", {})
             
         elif operation == "clear_memory":
-            self.request_func("clear_working_memory", {})
-            self.working_memory_size = 0
+            self.request_func("clear_short_term_memory", {})
+            self.short_term_memory_size = 0
 
 
 class LoadGenerator:

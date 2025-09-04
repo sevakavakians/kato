@@ -37,63 +37,55 @@ All learned structures in KATO are patterns, whether they represent time-ordered
 docker logs kato-api-$(whoami)-1 --tail 20
 ```
 
-### Testing (Clustered Container-Based)
+### Testing (Local Python)
 ```bash
-# Build test harness container (first time or after dependency changes)
-./test-harness.sh build
+# Set up virtual environment (first time only)
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+pip install -r tests/requirements.txt
 
-# Run all tests with automatic clustering (recommended)
-./kato-manager.sh test
-# OR directly:
-./test-harness.sh test
+# Run all tests
+./run_simple_tests.sh
 
-# Run specific test suites (automatically clustered)
-./test-harness.sh suite unit        # Unit tests only
-./test-harness.sh suite integration # Integration tests
-./test-harness.sh suite api        # API tests
-./test-harness.sh suite performance # Performance tests
-./test-harness.sh suite determinism # Determinism tests
+# Run specific test categories
+./run_simple_tests.sh tests/tests/unit/        # Unit tests only
+./run_simple_tests.sh tests/tests/integration/ # Integration tests
+./run_simple_tests.sh tests/tests/api/        # API tests
 
-# Run specific test path (automatically finds appropriate cluster)
-./test-harness.sh test tests/tests/unit/test_memory_management.py
+# Run specific test file
+./run_simple_tests.sh tests/tests/unit/test_observations.py
 
 # Run with options
-./test-harness.sh test tests/ -v -x  # Verbose, stop on first failure
-./test-harness.sh --verbose test     # Show detailed cluster execution
-./test-harness.sh --no-redirect test # Direct console output
+./run_simple_tests.sh -v                      # Verbose output
+./run_simple_tests.sh --no-start              # Use existing KATO instance
+./run_simple_tests.sh --no-stop               # Keep KATO running after tests
 
-# Generate coverage report
-./test-harness.sh report
-
-# Interactive shell in test container (for debugging)
-./test-harness.sh shell
-
-# Development mode (live code updates)
-./test-harness.sh dev tests/tests/unit/ -v
+# Run tests directly with pytest
+source venv/bin/activate
+python -m pytest tests/tests/unit/ -v --tb=short
 ```
 
-**Key Features of Clustered Testing:**
-- Each test cluster gets its own KATO instance with isolated databases (MongoDB, Qdrant, Redis)
-- Tests are automatically grouped by configuration requirements (e.g., recall_threshold values)
-- Processor IDs are generated uniquely per cluster: `cluster_<name>_<timestamp>_<uuid>`
-- Complete isolation prevents test contamination
-- Parallel cluster execution for faster test runs
-
-Note: The clustered approach ensures complete test isolation and deterministic execution.
+**Key Features:**
+- Simple local Python testing without containers
+- Direct debugging with print statements and breakpoints
+- Fast iteration - no container builds
+- Each test gets a unique processor_id for isolation
+- Clear error messages and stack traces
 
 ### Development and Debugging
 ```bash
-# Update container without rebuild (hot reload)
-./update_container.sh
-
 # Check linting (if available)
 # Note: No standard linting command found - ask user if needed
 
 # Type checking (if available)  
 # Note: No standard type checking command found - ask user if needed
 
-# Debug ZMQ communication
-docker exec kato-api-$(whoami)-1 python3 -c "import socket; s = socket.socket(); s.settimeout(1); result = s.connect_ex(('localhost', 5555)); print('ZMQ port 5555 is', 'open' if result == 0 else 'closed')"
+# Debug KATO API
+curl http://localhost:8000/kato-api/ping
+
+# Check ZMQ communication
+python3 -c "import socket; s = socket.socket(); s.settimeout(1); result = s.connect_ex(('localhost', 5555)); print('ZMQ port 5555 is', 'open' if result == 0 else 'closed')"
 ```
 
 ## High-Level Architecture
@@ -185,10 +177,22 @@ REST Client → REST Gateway (Port 8000) → ZMQ Server (Port 5555) → KATO Pro
    - Each prediction has unique missing/matches/extras fields based on partial matching
 8. **Recall Threshold Behavior**:
    - Range: 0.0 to 1.0
-   - 0.0 = Return ALL patterns including non-matching ones
-   - 1.0 = Return only perfect matches
    - Default: 0.1 (permissive matching)
-   - Controls filtering of predictions by similarity score
+   - **PURPOSE**: Rough filter for pattern matching, NOT exact decimal precision
+   - **CRITICAL**: Patterns with NO matches are NEVER returned regardless of threshold
+   - **Key Behaviors**:
+     - Low values (0.1-0.3): Include more predictions with partial matches
+     - Medium values (0.4-0.6): Moderate filtering
+     - High values (0.7-0.9): Filter to only high-similarity matches
+   - **Implementation Notes**:
+     - Uses heuristic calculations for speed - NOT exact to decimal places
+     - Threshold comparison uses >= with tolerance (roughly similarity >= recall_threshold)
+     - Don't test exact boundary cases where similarity ≈ threshold
+     - Similarity calculation may use approximations, not exact ratios
+   - **Examples** (approximate behavior):
+     - threshold=0.1: Most patterns with any match returned
+     - threshold=0.5: Patterns with ~50% or more matches returned
+     - threshold=0.9: Only near-perfect matches returned
    - Note: All patterns in KB have frequency ≥ 1 (learned at least once)
 9. **Error Handling Philosophy**:
    - **DO NOT mask errors with safe defaults** - errors must be visible for debugging
@@ -204,20 +208,18 @@ REST Client → REST Gateway (Port 8000) → ZMQ Server (Port 5555) → KATO Pro
 
 ## Testing Strategy
 
-The codebase has comprehensive test coverage with 188 test functions across 21 test files. Tests are organized under `tests/tests/` and run using a clustered test harness:
+The codebase has comprehensive test coverage with 188 test functions across 21 test files. Tests are organized under `tests/tests/`:
 
 1. **Unit Tests** (`tests/tests/unit/`): Test individual components
 2. **Integration Tests** (`tests/tests/integration/`): Test end-to-end workflows
 3. **API Tests** (`tests/tests/api/`): Test REST endpoints
 4. **Performance Tests** (`tests/tests/performance/`): Stress and performance tests
 
-**Clustered Test Architecture:**
-- Tests are grouped into clusters based on configuration requirements (defined in `tests/tests/fixtures/test_clusters.py`)
-- Each cluster runs with its own KATO instance and isolated databases
-- Clusters can have different configurations (e.g., `recall_threshold`, `max_pattern_length`)
-- Automatic cleanup after each cluster completes
-
-Use existing fixtures from `tests/tests/fixtures/kato_fixtures.py` for consistency.
+**Test Isolation:**
+- Each test gets a unique processor_id for database isolation
+- Tests use the fixture from `tests/tests/fixtures/kato_fixtures.py`
+- KATO is started once and reused across tests for speed
+- Databases are isolated by processor_id to prevent contamination
 
 ## Configuration
 
@@ -245,10 +247,10 @@ PROCESSOR_ID=p123 PROCESSOR_NAME=CustomProcessor ./kato-manager.sh start
 ## Development Workflow
 
 1. Make changes to source files in `kato/` directory
-2. Use `./update_container.sh` for hot reload during development
-3. Run relevant tests with `./test-harness.sh suite <category>` or `./kato-manager.sh test`
-4. For production changes, rebuild with `./kato-manager.sh build`
-5. Test full system with `./test-harness.sh test` before committing
+2. Run tests with `./run_simple_tests.sh` to verify changes
+3. Debug failures directly with print statements or debugger
+4. For production deployment, rebuild with `./kato-manager.sh build`
+5. Test full system with `./run_simple_tests.sh` before committing
 
 ## Important Files and Locations
 

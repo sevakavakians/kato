@@ -183,6 +183,7 @@ class ImprovedZMQServer:
                 'clear_all': self._handle_clear_all,
                 'clear_all_memory': self._handle_clear_all,  # Alias for compatibility
                 'get_stm': self._handle_get_stm,
+                'get_short_term_memory': self._handle_get_stm,  # Alias
                 'get_percept_data': self._handle_get_percept_data,
                 'get_cognition_data': self._handle_get_cognition_data,
                 'get_gene': self._handle_get_gene,
@@ -264,11 +265,11 @@ class ImprovedZMQServer:
     def _handle_learn(self, params):
         """Handle learn request."""
         try:
-            model_name = self.primitive.learn()
+            pattern_name = self.primitive.learn()
             return {
                 'status': 'okay',
-                'model_name': model_name,
-                'message': model_name
+                'pattern_name': pattern_name,
+                'message': pattern_name
             }
         except Exception as e:
             logger.error(f"Error in learn: {e}")
@@ -417,29 +418,8 @@ class ImprovedZMQServer:
                     'message': 'pattern_id parameter required'
                 }
                 
-            # Get pattern from knowledge base
-            # Strip PTRN| prefix if present
-            if pattern_id.startswith('PTRN|'):
-                pattern_name = pattern_id[5:]
-            else:
-                pattern_name = pattern_id
-                
-            pattern = self.primitive.pattern_processor.patterns_kb.find_one({"name": pattern_name})
-            if pattern:
-                return {
-                    'status': 'okay',
-                    'pattern': {
-                        'name': pattern.get('name'),
-                        'pattern_data': pattern.get('pattern_data', []),
-                        'frequency': pattern.get('frequency', 0),
-                        'emotives': pattern.get('emotives', {})
-                    }
-                }
-            else:
-                return {
-                    'status': 'error',
-                    'message': f'Pattern {pattern_id} not found'
-                }
+            # Pass pattern_id directly - get_pattern handles prefix stripping
+            return self.primitive.get_pattern(pattern_id)
         except Exception as e:
             logger.error(f"Error getting pattern: {e}")
             return {
@@ -518,9 +498,9 @@ class ImprovedZMQServer:
                     'name': self.primitive.name,
                     'classifier': getattr(self.primitive, 'classifier_type', 'CVC'),
                     'max_pattern_length': getattr(self.primitive.pattern_processor, 'max_pattern_length', 0),
-                    'persistence': getattr(self.primitive.modeler, 'persistence', 5),
-                    'smoothness': getattr(self.primitive.modeler, 'smoothness', 3),
-                    'recall_threshold': getattr(self.primitive.modeler, 'recall_threshold', 0.1),
+                    'persistence': getattr(self.primitive.patterner, 'persistence', 5),
+                    'smoothness': getattr(self.primitive.patterner, 'smoothness', 3),
+                    'recall_threshold': getattr(self.primitive.patterner, 'recall_threshold', 0.1),
                 }
                 return genome
         except Exception as e:

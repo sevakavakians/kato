@@ -8,7 +8,7 @@ import sys
 import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from fixtures.kato_fixtures import kato_fixture
-from fixtures.test_helpers import sort_event_strings, assert_working_memory_equals
+from fixtures.test_helpers import sort_event_strings, assert_short_term_memory_equals
 
 
 def test_observe_single_string(kato_fixture):
@@ -26,9 +26,9 @@ def test_observe_single_string(kato_fixture):
     assert result['status'] == 'observed'
     assert 'auto_learned_pattern' in result
     
-    # Check working memory
-    wm = kato_fixture.get_working_memory()
-    assert wm == [['hello']]
+    # Check short-term memory
+    stm = kato_fixture.get_short_term_memory()
+    assert stm == [['hello']]
 
 
 def test_observe_multiple_strings(kato_fixture):
@@ -44,9 +44,9 @@ def test_observe_multiple_strings(kato_fixture):
     
     assert result['status'] == 'observed'
     
-    # Check working memory - should be a single event with multiple symbols
-    wm = kato_fixture.get_working_memory()
-    assert wm == [['a', 'b', 'c']]
+    # Check short-term memory - should be a single event with multiple symbols
+    stm = kato_fixture.get_short_term_memory()
+    assert stm == [['a', 'b', 'c']]
 
 
 def test_observe_with_emotives(kato_fixture):
@@ -69,8 +69,8 @@ def test_observe_with_emotives(kato_fixture):
         assert result['status'] == 'observed'
     
     # Learn the sequence
-    model_name = kato_fixture.learn()
-    assert model_name is not None
+    pattern_name = kato_fixture.learn()
+    assert pattern_name is not None
     
     # Now observe to trigger predictions (KATO requires 2+ strings)
     kato_fixture.observe({
@@ -109,12 +109,12 @@ def test_observe_with_vectors(kato_fixture):
     
     # Vectors ALWAYS produce at least the VECTOR|hash symbol
     # May also include up to 3 nearest neighbors (k=3 default)
-    wm = kato_fixture.get_working_memory()
-    assert isinstance(wm, list), "Working memory should be a list"
-    assert len(wm) == 1, "Should have one event for the vector observation"
-    assert len(wm[0]) >= 1, "Should have at least the VECTOR|hash symbol"
+    stm = kato_fixture.get_short_term_memory()
+    assert isinstance(stm, list), "short-term memory should be a list"
+    assert len(stm) == 1, "Should have one event for the vector observation"
+    assert len(stm[0]) >= 1, "Should have at least the VECTOR|hash symbol"
     # Check that we have vector symbols (they start with 'VECTOR|')
-    vector_symbols = [s for s in wm[0] if s.startswith('VECTOR|')]
+    vector_symbols = [s for s in stm[0] if s.startswith('VECTOR|')]
     assert len(vector_symbols) >= 1, "Should have at least one VECTOR| symbol"
     assert len(vector_symbols) <= 4, "Should have at most 4 symbols (observed + 3 nearest)"
 
@@ -136,13 +136,13 @@ def test_observe_mixed_modalities(kato_fixture):
     
     assert result['status'] == 'observed'
     
-    # Check that working memory has the observation
-    wm = kato_fixture.get_working_memory()
-    assert len(wm) >= 1, "Should have at least one event in working memory"
+    # Check that short-term memory has the observation
+    stm = kato_fixture.get_short_term_memory()
+    assert len(stm) >= 1, "Should have at least one event in short-term memory"
     
     # The first event should contain at least the strings (sorted)
     # Vectors may or may not be represented depending on classifier
-    first_event = wm[0]
+    first_event = stm[0]
     
     # Check if strings are in the event (they should be sorted)
     if 'modal' in first_event or 'multi' in first_event:
@@ -160,7 +160,7 @@ def test_observe_empty(kato_fixture):
     assert kato_fixture.clear_all_memory() == 'all-cleared'
     
     # Get initial state
-    initial_wm = kato_fixture.get_working_memory()
+    initial_stm = kato_fixture.get_short_term_memory()
     
     # Observe empty data
     result = kato_fixture.observe({
@@ -172,9 +172,9 @@ def test_observe_empty(kato_fixture):
     # Empty observations are processed but ignored
     assert result['status'] == 'observed'
     
-    # Working memory should not change (empty events are ignored)
-    wm = kato_fixture.get_working_memory()
-    assert wm == initial_wm, "Empty events should be ignored"
+    # short-term memory should not change (empty events are ignored)
+    stm = kato_fixture.get_short_term_memory()
+    assert stm == initial_stm, "Empty events should be ignored"
 
 
 def test_observe_sequence(kato_fixture):
@@ -192,10 +192,10 @@ def test_observe_sequence(kato_fixture):
         })
         assert result['status'] == 'observed'
     
-    # Working memory should contain all events
-    wm = kato_fixture.get_working_memory()
-    assert len(wm) == 3
-    assert wm == [['first'], ['second'], ['third']]
+    # short-term memory should contain all events
+    stm = kato_fixture.get_short_term_memory()
+    assert len(stm) == 3
+    assert stm == [['first'], ['second'], ['third']]
 
 
 def test_observe_special_characters(kato_fixture):
@@ -213,9 +213,9 @@ def test_observe_special_characters(kato_fixture):
     
     assert result['status'] == 'observed'
     
-    # Check working memory - KATO sorts strings alphanumerically within each event
-    wm = kato_fixture.get_working_memory()
-    assert_working_memory_equals(wm, [special_strings])
+    # Check short-term memory - KATO sorts strings alphanumerically within each event
+    stm = kato_fixture.get_short_term_memory()
+    assert_short_term_memory_equals(stm, [special_strings])
 
 
 def test_observe_numeric_strings(kato_fixture):
@@ -232,10 +232,10 @@ def test_observe_numeric_strings(kato_fixture):
     
     assert result['status'] == 'observed'
     
-    # Check working memory - KATO sorts strings alphanumerically
+    # Check short-term memory - KATO sorts strings alphanumerically
     # Note: '-1' comes before other numbers in alphanumeric sort
-    wm = kato_fixture.get_working_memory()
-    assert_working_memory_equals(wm, [numeric_strings])
+    stm = kato_fixture.get_short_term_memory()
+    assert_short_term_memory_equals(stm, [numeric_strings])
 
 
 def test_empty_events_in_sequence(kato_fixture):
@@ -249,10 +249,10 @@ def test_empty_events_in_sequence(kato_fixture):
     kato_fixture.observe({'strings': [], 'vectors': [], 'emotives': {}})  # Should be ignored
     kato_fixture.observe({'strings': ['third'], 'vectors': [], 'emotives': {}})
     
-    # Working memory should only contain non-empty events
-    wm = kato_fixture.get_working_memory()
-    assert wm == [['first'], ['second'], ['third']], \
-        f"Empty events should be ignored, expected [['first'], ['second'], ['third']], got {wm}"
+    # short-term memory should only contain non-empty events
+    stm = kato_fixture.get_short_term_memory()
+    assert stm == [['first'], ['second'], ['third']], \
+        f"Empty events should be ignored, expected [['first'], ['second'], ['third']], got {stm}"
 
 
 def test_observe_large_vector(kato_fixture):
@@ -271,10 +271,10 @@ def test_observe_large_vector(kato_fixture):
     assert result['status'] == 'observed'
     
     # Large vectors should still produce at least VECTOR|hash symbol
-    wm = kato_fixture.get_working_memory()
-    assert isinstance(wm, list), "Working memory should be a list"
-    assert len(wm) == 1, "Should have one event for the vector observation"
-    assert len(wm[0]) >= 1, "Should have at least the VECTOR|hash symbol"
+    stm = kato_fixture.get_short_term_memory()
+    assert isinstance(stm, list), "short-term memory should be a list"
+    assert len(stm) == 1, "Should have one event for the vector observation"
+    assert len(stm[0]) >= 1, "Should have at least the VECTOR|hash symbol"
     # Check for vector symbols
-    vector_symbols = [s for s in wm[0] if s.startswith('VECTOR|')]
+    vector_symbols = [s for s in stm[0] if s.startswith('VECTOR|')]
     assert len(vector_symbols) >= 1, "Should have at least one VECTOR| symbol for large vector"

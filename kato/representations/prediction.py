@@ -6,16 +6,16 @@ from math import log
 from kato.informatics.metrics import expectation, classic_expectation, confluence, hamiltonian, grand_hamiltonian
 
 class Prediction(dict):
-    "Model prediction."
-    def __init__(self, _model, matching_intersection, past, present, missing, extras, similarity, number_of_blocks):
+    "Pattern prediction."
+    def __init__(self, _pattern, matching_intersection, past, present, missing, extras, similarity, number_of_blocks):
         super(Prediction, self).__init__(self)
         self['type'] = 'prototypical'
-        self['name'] = _model['name']
-        self['frequency'] = _model['frequency']
-        #self["length"] = _model["length"]
+        self['name'] = _pattern['name']
+        self['frequency'] = _pattern['frequency']
+        #self["length"] = _pattern["length"]
 
-        if 'emotives' in _model:
-            self['emotives'] = _model['emotives']
+        if 'emotives' in _pattern:
+            self['emotives'] = _pattern['emotives']
         else:
             self['emotives'] = {}
 
@@ -25,7 +25,7 @@ class Prediction(dict):
         self['missing'] = missing
         self['extras'] = extras
         self['potential'] = float(0)
-        self['evidence'] = float(len(self['matches'])/_model["length"]) if _model["length"] > 0 else 0.0
+        self['evidence'] = float(len(self['matches'])/_pattern["length"]) if _pattern["length"] > 0 else 0.0
         self['similarity'] = similarity
         self['fragmentation'] = float(number_of_blocks - 1)
         # Calculate SNR with division by zero protection
@@ -38,10 +38,10 @@ class Prediction(dict):
         self['hamiltonian'] = float(0)
         self['grand_hamiltonian'] = float(0)
         self['confluence'] = float(0)
-        self['sequence'] = _model['pattern_data']
-        self['pattern_data'] = _model['pattern_data']  # Keep for later popping in pattern_processor
+        self['sequence'] = _pattern['pattern_data']
+        self['pattern_data'] = _pattern['pattern_data']  # Keep for later popping in pattern_processor
         
-        sequence = _model['pattern_data']
+        sequence = _pattern['pattern_data']
 
         __c1 = len(self['past'])
         __c2 = 0

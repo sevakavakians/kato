@@ -232,39 +232,38 @@ print(f"KATO predicts: {predictions}")
 
 ## Running Tests
 
-KATO uses a sophisticated clustered test harness that provides complete isolation between test runs:
+KATO uses a simple local Python testing approach with pytest:
 
 ```bash
-# Build test harness container (first time only)
-./test-harness.sh build
+# Set up virtual environment (first time only)
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+pip install -r tests/requirements.txt
 
-# Run all tests with automatic clustering (recommended)
-./kato-manager.sh test
-# OR
-./test-harness.sh test
+# Run all tests
+./tests/run_simple_tests.sh
 
-# Run specific test suites (automatically clustered)
-./test-harness.sh suite unit          # Unit tests only
-./test-harness.sh suite integration   # Integration tests
-./test-harness.sh suite api           # API tests
-./test-harness.sh suite performance   # Performance tests
+# Run specific test suites
+./tests/run_simple_tests.sh tests/tests/unit/          # Unit tests only
+./tests/run_simple_tests.sh tests/tests/integration/   # Integration tests
+./tests/run_simple_tests.sh tests/tests/api/          # API tests
+./tests/run_simple_tests.sh tests/tests/performance/  # Performance tests
 
-# Run with options
-./test-harness.sh --verbose test      # Show detailed cluster execution
-./test-harness.sh --no-redirect test  # Direct console output
+# Run with pytest directly
+python -m pytest tests/tests/ -v       # Verbose output
+python -m pytest tests/tests/ -s       # Show print statements
+python -m pytest tests/tests/ --pdb    # Drop into debugger on failure
 
-# Generate coverage report
-./test-harness.sh report
-
-# Run tests in development mode (live code updates)
-./test-harness.sh dev tests/
+# Run tests without starting/stopping KATO
+./tests/run_simple_tests.sh --no-start --no-stop tests/
 ```
 
 **Key Features:**
-- Each test cluster gets its own KATO instance with isolated databases
-- Tests are automatically grouped by configuration requirements
-- Complete isolation prevents test contamination
-- Deterministic execution with same results every time
+- Each test gets a unique processor ID for database isolation
+- Simple debugging with standard Python tools
+- Fast iteration without container rebuilds
+- Full IDE and debugger support
 
 For detailed testing information, see the [Testing Guide](development/TESTING.md).
 

@@ -50,12 +50,12 @@ def test_clear_short_term_memory(kato_fixture):
     stm = kato_fixture.get_short_term_memory()
     assert stm == []
     
-    # But learned models should still generate predictions
+    # But learned patterns should still generate predictions
     # KATO requires 2+ strings for predictions
     kato_fixture.observe({'strings': ['a'], 'vectors': [], 'emotives': {}})
     kato_fixture.observe({'strings': ['b'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
-    assert len(predictions) > 0  # Should have predictions from learned model
+    assert len(predictions) > 0  # Should have predictions from learned pattern
 
 
 def test_short_term_memory_accumulation(kato_fixture):
@@ -121,7 +121,7 @@ def test_manual_learning(kato_fixture):
 
 
 def test_memory_persistence(kato_fixture):
-    """Test that learned models persist across short-term memory clears."""
+    """Test that learned patterns persist across short-term memory clears."""
     kato_fixture.clear_all_memory()
     
     # Learn multiple sequences
@@ -131,12 +131,12 @@ def test_memory_persistence(kato_fixture):
         ['x', 'y', 'z']
     ]
     
-    model_names = []
+    pattern_names = []
     for seq in sequences:
         for symbol in seq:
             kato_fixture.observe({'strings': [symbol], 'vectors': [], 'emotives': {}})
-        model_name = kato_fixture.learn()
-        model_names.append(model_name)
+        pattern_name = kato_fixture.learn()
+        pattern_names.append(pattern_name)
     
     # Clear short-term memory
     kato_fixture.clear_short_term_memory()
@@ -170,7 +170,7 @@ def test_max_pattern_length(kato_fixture):
     assert stm == [['c']]  # Only last event remains
     
     # Verify sequence was learned (KATO requires 2+ strings for predictions)
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': ['a'], 'vectors': [], 'emotives': {}})
     kato_fixture.observe({'strings': ['b'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
@@ -197,10 +197,10 @@ def test_memory_with_emotives(kato_fixture):
         })
         assert result['status'] == 'observed'
     
-    # Learn the sequence (this should store averaged emotives with the model)
-    model_name = kato_fixture.learn()
-    assert model_name is not None, "Should have learned a model"
-    assert model_name.startswith('PTRN|'), "Pattern name should have PTRN| prefix"
+    # Learn the sequence (this should store averaged emotives with the pattern)
+    pattern_name = kato_fixture.learn()
+    assert pattern_name is not None, "Should have learned a model"
+    assert pattern_name.startswith('PTRN|'), "Pattern name should have PTRN| prefix"
     
     # Clear short-term memory and observe first two elements to trigger predictions (KATO requires 2+ strings)
     kato_fixture.clear_short_term_memory()
@@ -215,7 +215,7 @@ def test_memory_with_emotives(kato_fixture):
         'emotives': {'happiness': 0.5, 'confidence': 0.6}
     })
     
-    # Get predictions - should include averaged emotives from the learned model
+    # Get predictions - should include averaged emotives from the learned pattern
     predictions = kato_fixture.get_predictions()
     assert len(predictions) > 0, "Should have predictions after learning and observing"
     
@@ -263,10 +263,10 @@ def test_memory_with_vectors(kato_fixture):
         assert len(vector_symbols) >= 1, "Each vector observation should produce at least one VECTOR| symbol"
     
     # Learn the sequence
-    model_name = kato_fixture.learn()
+    pattern_name = kato_fixture.learn()
     # Should successfully learn since we have 2+ symbols
-    assert model_name is not None, "Should learn model from vector observations"
-    assert 'PTRN|' in model_name, "Learned model should have PTRN| prefix"
+    assert pattern_name is not None, "Should learn pattern from vector observations"
+    assert 'PTRN|' in pattern_name, "Learned pattern should have PTRN| prefix"
     # Short-term memory should be cleared after learning
     assert kato_fixture.get_short_term_memory() == []
 
@@ -296,7 +296,7 @@ def test_interleaved_memory_operations(kato_fixture):
     # Clear all memory
     kato_fixture.clear_all_memory()
     
-    # No predictions should exist now (observe 2 strings but no learned models)
+    # No predictions should exist now (observe 2 strings but no learned patterns)
     kato_fixture.observe({'strings': ['seq1_a'], 'vectors': [], 'emotives': {}})
     kato_fixture.observe({'strings': ['seq1_b'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()

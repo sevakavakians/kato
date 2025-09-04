@@ -10,7 +10,7 @@ import time
 from threading import Thread
 from urllib.parse import parse_qs
 
-from kato.workers.zmq_pool import get_global_pool, set_global_pool, cleanup_global_pool, ZMQConnectionPool
+from kato.workers.zmq_pool_improved import get_improved_pool as get_global_pool, set_improved_pool as set_global_pool, cleanup_improved_pool as cleanup_global_pool, ImprovedConnectionPool as ZMQConnectionPool
 from kato.workers.zmq_switcher import get_zmq_client, get_zmq_implementation
 
 # Simple HTTP server implementation
@@ -34,6 +34,8 @@ class RestGatewayHandler(BaseHTTPRequestHandler):
             elif self.path.endswith('/status'):
                 self.handle_status()
             elif self.path.endswith('/short-term-memory'):
+                self.handle_get_short_term_memory()
+            elif self.path.endswith('/stm'): # Alias
                 self.handle_get_short_term_memory()
             elif self.path.endswith('/predictions'):
                 self.handle_get_predictions()
@@ -59,11 +61,15 @@ class RestGatewayHandler(BaseHTTPRequestHandler):
                 self.handle_clear_all_memory()
             elif self.path.endswith('/clear-short-term-memory'):
                 self.handle_clear_short_term_memory()
+            elif self.path.endswith('/clear-stm'): # Alias
+                self.handle_clear_short_term_memory()
             elif self.path.endswith('/learn'):
                 self.handle_learn()
             elif self.path.endswith('/predictions'):
                 self.handle_get_predictions()  # Support POST /predictions
             elif self.path.endswith('/short-term-memory/clear'):
+                self.handle_clear_short_term_memory()  # Support POST /short-term-memory/clear
+            elif self.path.endswith('/stm/clear'): # Alias
                 self.handle_clear_short_term_memory()  # Support POST /short-term-memory/clear
             elif self.path.endswith('/genes/change'):
                 self.handle_gene_change()
@@ -108,6 +114,7 @@ class RestGatewayHandler(BaseHTTPRequestHandler):
             logger.error(f"Processor ping error: {e}")
             self.send_error(500, str(e))
 
+    ## TODO: Deprecated? Get rid of this function?
     def handle_connect(self):
         """Handle connect endpoint for compatibility"""
         # Get genome info if available
@@ -122,7 +129,6 @@ class RestGatewayHandler(BaseHTTPRequestHandler):
                         'data': {
                             'id': genome_info.get('id', 'unknown'),
                             'name': genome_info.get('name', 'unknown'),
-                            'classifier': genome_info.get('classifier', 'CVC')
                         }
                     }]
                 }
@@ -133,7 +139,6 @@ class RestGatewayHandler(BaseHTTPRequestHandler):
                         'data': {
                             'id': 'unknown',
                             'name': 'unknown',
-                            'classifier': 'CVC'
                         }
                     }]
                 }
@@ -177,7 +182,10 @@ class RestGatewayHandler(BaseHTTPRequestHandler):
         """Handle get short-term memory request"""
         try:
             pool = get_global_pool()
-            stm = pool.execute('get_short_term_memory')
+            stm_response = pool.execute('get_stm')
+            
+            # Extract the actual STM data from the response
+            stm = stm_response.get('short_term_memory', [])
             
             # Get processor info for timing fields
             response = pool.execute('get_name')
@@ -195,14 +203,17 @@ class RestGatewayHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps(result).encode())
                 
         except Exception as e:
-            logger.error(f"Get working memory error: {e}")
+            logger.error(f"Get short-term memory error: {e}")
             self.send_error(500, str(e))
 
     def handle_get_predictions(self):
         """Handle get predictions request"""
         try:
             pool = get_global_pool()
-            predictions = pool.execute('get_predictions')
+            response = pool.execute('get_predictions')
+            
+            # Extract predictions from response
+            predictions = response.get('predictions', [])
             
             # Wrap in message for test compatibility
             result = {"message": predictions}
@@ -220,7 +231,10 @@ class RestGatewayHandler(BaseHTTPRequestHandler):
         """Handle get percept data request"""
         try:
             pool = get_global_pool()
-            percept_data = pool.execute('get_percept_data')
+            response = pool.execute('get_percept_data')
+            
+            # Extract percept_data from response
+            percept_data = response.get('percept_data', {})
             
             # Wrap in message for test compatibility
             result = {"message": percept_data}
@@ -238,7 +252,10 @@ class RestGatewayHandler(BaseHTTPRequestHandler):
         """Handle get cognition data request"""
         try:
             pool = get_global_pool()
-            cognition_data = pool.execute('get_cognition_data')
+            response = pool.execute('get_cognition_data')
+            
+            # Extract cognition_data from response
+            cognition_data = response.get('cognition_data', {})
             
             # Wrap in message for test compatibility
             result = {"message": cognition_data}
@@ -261,7 +278,10 @@ class RestGatewayHandler(BaseHTTPRequestHandler):
             gene_name = unquote(parts[-1])  # URL-decode the gene name
             
             pool = get_global_pool()
-            gene_value = pool.execute('get_gene', gene_name)
+            response = pool.execute('get_gene', {'gene_name': gene_name})
+            
+            # Extract gene_value from response
+            gene_value = response.get('gene_value')
             
             # Return just the gene value in message for test compatibility
             result = {
@@ -398,7 +418,7 @@ class RestGatewayHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps(result).encode())
                 
         except Exception as e:
-            logger.error(f"Clear working memory error: {e}")
+            logger.error(f"Clear short-term memory error: {e}")
             self.send_error(500, str(e))
 
     def handle_learn(self):
@@ -423,12 +443,22 @@ class RestGatewayHandler(BaseHTTPRequestHandler):
             pool = get_global_pool()
             response = pool.execute('learn')
             
+            # Preserve the pattern_name from the response  
+            # Pattern name is returned in 'pattern_name' field from ZMQ server
+            # Should be either 'PTRN|<hash>' or empty string for insufficient data
+            pattern_name = response.get('pattern_name', '')
+            
+            # Don't use fallback messages - return actual response
+            if pattern_name is None:
+                pattern_name = ''
+            
             result = {
                 "id": processor_id,
                 "interval": response.get('interval', 0),
                 "time_stamp": response.get('time_stamp', time.time()),
                 "status": response.get('status', 'okay'),
-                "message": response.get('message', 'learning-called')
+                "message": pattern_name,
+                "pattern_name": pattern_name
             }
             
             self.send_response(200)
@@ -460,7 +490,7 @@ class RestGatewayHandler(BaseHTTPRequestHandler):
                 genes_to_update = data['data']
                 for gene_name, gene_value in genes_to_update.items():
                     logger.info(f"Updating gene {gene_name} to {gene_value}")
-                    response = pool.execute('change_gene', gene_name, gene_value)
+                    response = pool.execute('gene_change', gene_name, gene_value)
                     if response.get('status') != 'okay':
                         logger.error(f"Failed to update gene {gene_name}: {response.get('message')}")
             else:
@@ -473,7 +503,7 @@ class RestGatewayHandler(BaseHTTPRequestHandler):
                     return
                 
                 logger.info(f"Updating single gene {gene_name} to {gene_value}")
-                response = pool.execute('change_gene', gene_name, gene_value)
+                response = pool.execute('gene_change', gene_name, gene_value)
                 if response.get('status') != 'okay':
                     logger.error(f"Failed to update gene {gene_name}: {response.get('message')}")
             
@@ -517,8 +547,7 @@ class RestGateway:
             host=self.zmq_host,
             port=self.zmq_port,
             timeout=5000,
-            health_check_interval=30,
-            reconnect_interval=1000
+            heartbeat_interval=10000  # 10 seconds heartbeat
         )
         set_global_pool(self.connection_pool)
         logger.info(f"Initialized ZMQ connection pool to {self.zmq_host}:{self.zmq_port}")

@@ -150,9 +150,12 @@ Predictions are generated when:
 1. A pattern has been learned
 2. **At least 2 strings are present in short-term memory (STM)**
 3. The observed pattern matches a learned pattern with similarity >= `recall_threshold`
-   - Default recall_threshold: 0.1 (10% similarity)
-   - Higher threshold = stricter matching, fewer predictions
-   - Lower threshold = looser matching, more predictions
+   - Default recall_threshold: 0.1 (permissive matching)
+   - **CRITICAL**: Patterns with NO matching symbols are NEVER returned regardless of threshold
+   - **Purpose**: Rough filter for pattern matching, NOT exact decimal precision
+   - Uses heuristic calculations for speed - similarity values are approximate
+   - Higher threshold = stricter filtering, fewer predictions
+   - Lower threshold = looser filtering, more predictions
    - See [Configuration Guide](deployment/CONFIGURATION.md#recall_threshold-tuning-guide) for detailed tuning
 4. Either strings or vectors are present (not just emotives)
 
@@ -421,9 +424,9 @@ predictions = kato.get_predictions()
 Vector tests should be flexible:
 ```python
 # Vectors always create STM entries (their name strings)
-wm = kato.get_short_term_memory()
-assert isinstance(wm, list)  # Check it's a list
-assert len(wm[0]) >= 1  # Should contain at least the vector name string
+stm = kato.get_short_term_memory()
+assert isinstance(stm, list)  # Check it's a list
+assert len(stm[0]) >= 1  # Should contain at least the vector name string
 # Don't assert specific content - depends on indexer
 ```
 

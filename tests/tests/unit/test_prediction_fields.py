@@ -28,7 +28,7 @@ def test_prediction_past_field(kato_fixture):
     kato_fixture.learn()
     
     # Observe: [['middle'], ['end']]
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': ['middle'], 'vectors': [], 'emotives': {}})
     kato_fixture.observe({'strings': ['end'], 'vectors': [], 'emotives': {}})
     
@@ -62,7 +62,7 @@ def test_prediction_missing_symbols(kato_fixture):
     kato_fixture.learn()
     
     # Observe only partial symbols from each event
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': ['hello'], 'vectors': [], 'emotives': {}})
     kato_fixture.observe({'strings': ['foo'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
@@ -89,7 +89,7 @@ def test_prediction_extra_symbols(kato_fixture):
     kato_fixture.learn()
     
     # Observe with unexpected additional symbols
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': sort_event_strings(['alpha', 'unexpected']), 'vectors': [], 'emotives': {}})
     kato_fixture.observe({'strings': sort_event_strings(['beta', 'extra']), 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
@@ -119,7 +119,7 @@ def test_prediction_multi_event_present(kato_fixture):
     kato_fixture.learn()
     
     # Observe partial matches across two events
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': ['a'], 'vectors': [], 'emotives': {}})
     kato_fixture.observe({'strings': ['c'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
@@ -151,7 +151,7 @@ def test_prediction_contiguous_present(kato_fixture):
     kato_fixture.learn()
     
     # Observe middle contiguous events
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': ['two'], 'vectors': [], 'emotives': {}})
     kato_fixture.observe({'strings': ['three'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
@@ -183,7 +183,7 @@ def test_prediction_partial_match_at_start(kato_fixture):
     kato_fixture.learn()
     
     # Observe only partial match of first event plus one more to meet 2+ requirement
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': ['begin'], 'vectors': [], 'emotives': {}})
     # Need to observe at least 2 strings for predictions
     kato_fixture.observe({'strings': ['middle'], 'vectors': [], 'emotives': {}})
@@ -218,7 +218,7 @@ def test_prediction_partial_match_at_end(kato_fixture):
     kato_fixture.learn()
     
     # Observe partial match including last event
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': ['middle'], 'vectors': [], 'emotives': {}})
     kato_fixture.observe({'strings': ['end'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
@@ -249,7 +249,7 @@ def test_prediction_mixed_missing_and_extras(kato_fixture):
     kato_fixture.learn()
     
     # Observe with missing 'b' and 'd', but with extras 'x' and 'y'
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': sort_event_strings(['a', 'x']), 'vectors': [], 'emotives': {}})
     kato_fixture.observe({'strings': sort_event_strings(['c', 'y']), 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
@@ -277,7 +277,7 @@ def test_prediction_multiple_past_events(kato_fixture):
     kato_fixture.learn()
     
     # Observe events in the middle
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': ['third'], 'vectors': [], 'emotives': {}})
     kato_fixture.observe({'strings': ['fourth'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
@@ -315,7 +315,7 @@ def test_single_event_with_missing(kato_fixture):
     kato_fixture.learn()
     
     # Observe partial symbols from the learned event (KATO requires 2+ strings)
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     # Observe as a single event with only some symbols to match the learned structure
     kato_fixture.observe({'strings': sort_event_strings(['alpha', 'gamma']), 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()

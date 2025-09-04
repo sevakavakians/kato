@@ -627,7 +627,7 @@ class VectorIndexer:
         # Update compatibility attribute
         self.datasubset = list(vectors_dict.values())
     
-    def clearModelsFromRAM(self):
+    def clearPatternsFromRAM(self):
         """Clear the search index"""
         self.engine.clear_cache()
         self.datasubset = []

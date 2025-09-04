@@ -21,7 +21,7 @@
 - [x] KATO_API_URL environment variable integration
 - [x] test-harness.sh port auto-detection
 - [x] Root cause analysis completed
-- [x] ModelSearcher optimization fixed (extraction_workers removed as unnecessary)
+- [x] PatternSearcher optimization fixed (extraction_workers removed as unnecessary)
 - [x] Optimized code merged into main implementation
 - [x] Legacy code successfully removed
 - [x] Test pass rate achieved (128/128 tests passing - 100% success rate) ✅
@@ -58,7 +58,7 @@
    - ~291x speedup in pattern matching operations
    - ~10ms average response time benchmarked
    - Legacy code removal and optimization integration
-   - ModelSearcher fixes and improvements
+   - PatternSearcher fixes and improvements
 
 3. **COMPLETED**: Documentation & Repository Health ✅
    - Performance benchmarks committed

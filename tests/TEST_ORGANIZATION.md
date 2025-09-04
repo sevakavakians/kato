@@ -21,7 +21,7 @@ These tests require KATO services (MongoDB, Redis, Qdrant, KATO API):
 - test_prediction_fields.py
 - test_sorting_behavior.py
 - test_determinism_preservation.py
-- test_model_hashing.py
+- test_pattern_hashing.py
 - test_recall_threshold_values.py
 - test_recall_threshold_sequences.py
 - test_recall_threshold_edge_cases.py
@@ -30,7 +30,7 @@ These tests require KATO services (MongoDB, Redis, Qdrant, KATO API):
 - test_sequence_learning.py
 - test_multimodal_processing.py
 - test_learning_patterns.py
-- test_model_transitions.py
+- test_pattern_transitions.py
 - test_vector_processing.py
 
 ### API Tests (tests/tests/api/)

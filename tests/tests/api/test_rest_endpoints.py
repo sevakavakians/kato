@@ -110,11 +110,11 @@ def test_observe_endpoint_empty(kato_fixture):
     assert response.status_code == 200
     
     data = response.json()
-    assert data['message']['status'] == 'observed'
+    assert data['message']['status'] == 'observed' #TODO: Let's change this so the message provides something more useful like, "no-data-provided"
 
 
-def test_working_memory_endpoint(kato_fixture):
-    """Test getting short-term memory (formerly working memory) via REST."""
+def test_short_term_memory_endpoint(kato_fixture):
+    """Test getting short-term memory (formerly short-term memory) via REST."""
     # Clear and add some observations
     kato_fixture.clear_all_memory()
     kato_fixture.observe({'strings': ['stm', 'test'], 'vectors': [], 'emotives': {}})
@@ -133,8 +133,8 @@ def test_working_memory_endpoint(kato_fixture):
     assert stm[0] == sort_event_strings(['stm', 'test'])
 
 
-def test_clear_working_memory_endpoint(kato_fixture):
-    """Test clearing short-term memory (formerly working memory) via REST."""
+def test_clear_short_term_memory_endpoint(kato_fixture):
+    """Test clearing short-term memory (formerly short-term memory) via REST."""
     # Add observation first
     kato_fixture.observe({'strings': ['clear', 'me'], 'vectors': [], 'emotives': {}})
     

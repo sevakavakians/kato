@@ -69,7 +69,14 @@ TEST_CLUSTERS = [
         },
         test_patterns=[
             # All memory management tests except test_max_pattern_length
-            "tests/unit/test_memory_management.py",
+            "tests/unit/test_memory_management.py::test_clear_all_memory",
+            "tests/unit/test_memory_management.py::test_clear_short_term_memory",
+            "tests/unit/test_memory_management.py::test_short_term_memory_accumulation",
+            "tests/unit/test_memory_management.py::test_manual_learning",
+            "tests/unit/test_memory_management.py::test_memory_persistence",
+            "tests/unit/test_memory_management.py::test_memory_with_emotives",
+            "tests/unit/test_memory_management.py::test_memory_with_vectors",
+            "tests/unit/test_memory_management.py::test_interleaved_memory_operations",
         ],
         description="General memory management tests"
     ),

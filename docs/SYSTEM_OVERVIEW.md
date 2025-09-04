@@ -208,7 +208,7 @@ Each prediction includes:
 - **confidence**: Confidence score (0-1)
 - **similarity**: Match quality measure
 - **frequency**: Times this pattern was learned
-- **emotives**: Emotional context if learned with model
+- **emotives**: Emotional context if learned with pattern
 - **hamiltonian/entropy**: Energy and uncertainty measures
 
 ### 5. Special Behaviors

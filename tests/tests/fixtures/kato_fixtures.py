@@ -23,18 +23,8 @@ class KATOTestFixture:
     def __init__(self, processor_name: str = "P1"):
         self.processor_name = processor_name
         
-        # Check if we're in clustered mode first
-        if os.environ.get('KATO_CLUSTER_MODE') == 'true':
-            # In clustered mode, use the cluster's processor ID
-            self.processor_id = os.environ.get('KATO_PROCESSOR_ID')
-            self.is_clustered = True
-        # Check if we're in container mode and have a processor ID
-        elif os.environ.get('KATO_TEST_MODE') == 'container' and os.environ.get('KATO_PROCESSOR_ID'):
-            self.processor_id = os.environ.get('KATO_PROCESSOR_ID')
-            self.is_clustered = False
-        else:
-            self.processor_id = self._generate_processor_id()
-            self.is_clustered = False
+        # Always generate a unique processor ID for test isolation
+        self.processor_id = self._generate_processor_id()
             
         # Use KATO_API_URL from environment if available, otherwise default to port 8000
         self.base_url = os.environ.get('KATO_API_URL', 'http://localhost:8000')
@@ -68,7 +58,7 @@ class KATOTestFixture:
             return False
         
     def setup(self):
-        """Start KATO with the specified genome or use existing instance."""
+        """Use existing KATO instance or start one if needed."""
         # First check if services are available
         self.services_available = self._check_services_available()
         
@@ -77,41 +67,14 @@ class KATOTestFixture:
             print("WARNING: KATO services are not running!")
             print("Tests requiring KATO will be skipped.")
             print("To run KATO-dependent tests, start services with:")
-            print("  ./test-harness.sh start-services")
+            print("  ./kato-manager.sh start")
             print("Or run tests with automatic service management:")
-            print("  ./test-harness.sh test")
+            print("  ./run_simple_tests.sh")
             print("="*60 + "\n")
             self.is_running = False
             return
         
-        # Check if we're running in a test container
-        in_container = os.environ.get('KATO_TEST_MODE') == 'container'
-        
-        # If we're in a container, KATO should already be running externally
-        if in_container:
-            print(f"Running in container mode - using processor ID: {self.processor_id}")
-            # Don't try to start KATO, just verify it's accessible
-            try:
-                # Quick check that API is accessible
-                response = requests.get(f"{self.base_url}/kato-api/ping", timeout=5)
-                if response.status_code == 200:
-                    self.is_running = True
-                    # Verify processor is accessible
-                    proc_response = requests.get(f"{self.base_url}/{self.processor_id}/ping", timeout=5)
-                    if proc_response.status_code == 200:
-                        return  # Everything is ready
-                    else:
-                        print(f"Warning: Processor {self.processor_id} not responding")
-                        # Try to get actual processor ID from connect endpoint
-                        self._update_processor_id()
-                        return
-            except Exception as e:
-                print(f"Warning: Could not connect to KATO API: {e}")
-                # Continue anyway, tests will fail if API is truly inaccessible
-            self.is_running = True
-            return
-        
-        # Not in container - check if KATO is already running
+        # Check if KATO is already running
         try:
             response = requests.get(f"{self.base_url}/kato-api/ping", timeout=2)
             if response.status_code == 200:
@@ -168,13 +131,6 @@ class KATOTestFixture:
         
     def teardown(self):
         """Stop KATO if we started it."""
-        # Check if we're running in a test container
-        in_container = os.environ.get('KATO_TEST_MODE') == 'container'
-        
-        # Don't try to stop KATO if we're in a container (it's managed externally)
-        if in_container:
-            return
-            
         # Only stop if we started the process
         if self.is_running and hasattr(self, 'process') and self.process:
             kato_manager = os.path.join(os.path.dirname(__file__), '../../../kato-manager.sh')
@@ -259,8 +215,8 @@ class KATOTestFixture:
         result = response.json()
         return result.get('message', [])
     
-    def get_working_memory(self) -> list:
-        """Get the current working memory (now called short-term memory)."""
+    def get_short_term_memory(self) -> list:
+        """Get the current short-term memory (now called short-term memory)."""
         if not self.services_available:
             pytest.skip("KATO services not available")
         response = requests.get(f"{self.base_url}/{self.processor_id}/short-term-memory")
@@ -301,10 +257,6 @@ class KATOTestFixture:
         response.raise_for_status()
         result = response.json()
         
-        # In clustered mode, also ensure complete database cleanup
-        if self.is_clustered and self.processor_id:
-            self._ensure_complete_isolation()
-        
         return result.get('message', '')
         
     def clear_short_term_memory(self) -> str:
@@ -319,8 +271,8 @@ class KATOTestFixture:
         result = response.json()
         return result.get('message', '')
     
-    def clear_working_memory(self) -> str:
-        """Clear working memory (now called short-term memory)."""
+    def clear_short_term_memory(self) -> str:
+        """Clear short-term memory (now called short-term memory)."""
         if not self.services_available:
             pytest.skip("KATO services not available")
         response = requests.post(
@@ -332,7 +284,7 @@ class KATOTestFixture:
         return result.get('message', '')
         
     def learn(self) -> str:
-        """Force learning of current working memory."""
+        """Force learning of current short-term memory."""
         if not self.services_available:
             pytest.skip("KATO services not available")
         response = requests.post(
@@ -341,7 +293,8 @@ class KATOTestFixture:
         )
         response.raise_for_status()
         result = response.json()
-        return result.get('message', '')
+        # API returns pattern_name field with the pattern ID
+        return result.get('pattern_name', result.get('message', ''))
         
     def get_status(self) -> Dict[str, Any]:
         """Get processor status."""
@@ -395,17 +348,6 @@ class KATOTestFixture:
             raise ValueError(f"recall_threshold must be between 0.0 and 1.0, got {threshold}")
         return self.update_genes({"recall_threshold": threshold})
     
-    def _ensure_complete_isolation(self):
-        """Ensure complete database isolation in clustered mode."""
-        try:
-            # Import cleanup utilities
-            from .cleanup_utils import clear_all_databases_for_processor
-            clear_all_databases_for_processor(self.processor_id)
-        except ImportError:
-            # Cleanup utils not available, skip
-            pass
-        except Exception as e:
-            print(f"Warning: Could not ensure complete isolation: {e}")
 
 
 @pytest.fixture(scope="function")

@@ -131,12 +131,12 @@ class StressTestRunner:
                 response = requests.get(url, 
                                        timeout=self.config['test_parameters']['request_timeout_seconds'])
                                        
-            elif operation == "working_memory":
+            elif operation == "short_term_memory":
                 url = f"{self.base_url}/{self.processor_id}/working-memory"
                 response = requests.get(url, 
                                        timeout=self.config['test_parameters']['request_timeout_seconds'])
                                        
-            elif operation == "clear_working_memory":
+            elif operation == "clear_short_term_memory":
                 url = f"{self.base_url}/{self.processor_id}/clear-working-memory"
                 response = requests.post(url, json={}, 
                                         timeout=self.config['test_parameters']['request_timeout_seconds'])
@@ -560,7 +560,7 @@ class StressTestRunner:
                     time.sleep(cooldown)
                     
                     # Clear memory for next test
-                    self.kato_fixture.clear_working_memory()
+                    self.kato_fixture.clear_short_term_memory()
                     
                 except Exception as e:
                     logger.error(f"Test {test_name} failed: {e}")

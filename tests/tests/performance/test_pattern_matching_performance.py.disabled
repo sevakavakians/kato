@@ -24,7 +24,7 @@ from fixtures.kato_fixtures import kato_fixture
 from kato.searches.fast_matcher import FastSequenceMatcher, RollingHash, NGramIndex
 from kato.searches.index_manager import IndexManager, InvertedIndex
 
-# Note: We don't import model_search_optimized because it has MongoDB dependencies
+# Note: We don't import pattern_search_optimized because it has MongoDB dependencies
 # The fast_matcher and index_manager modules are standalone and don't need MongoDB
 
 
@@ -44,48 +44,48 @@ class PerformanceTimer:
         print(f"{self.name}: {self.elapsed:.4f} seconds")
 
 
-def generate_test_models(num_models: int, 
+def generate_test_patterns(num_patterns: int, 
                         avg_length: int = 20) -> List[Tuple[str, List[str]]]:
     """
-    Generate test models for benchmarking.
+    Generate test patterns for benchmarking.
     
     Args:
-        num_models: Number of models to generate
+        num_patterns: Number of patterns to generate
         avg_length: Average length of sequences
         
     Returns:
-        List of (model_id, sequence) tuples
+        List of (pattern_id, sequence) tuples
     """
     random.seed(42)  # Fixed seed for reproducibility
-    models = []
+    patterns = []
     
     # Generate vocabulary
     vocab = [f"sym_{i}" for i in range(100)]
     
-    for i in range(num_models):
+    for i in range(num_patterns):
         # Vary length around average using stdlib random
         # Using Python's random.gauss instead of numpy.random.normal
         length = max(5, int(random.gauss(avg_length, avg_length/4)))
         sequence = random.choices(vocab, k=length)
         
-        # Create deterministic hash as model ID
-        model_id = hashlib.sha1(
+        # Create deterministic hash as pattern ID
+        pattern_id = hashlib.sha1(
             '|'.join(sequence).encode()
         ).hexdigest()
         
-        models.append((model_id, sequence))
+        patterns.append((pattern_id, sequence))
     
-    return models
+    return patterns
 
 
-def generate_test_queries(num_queries: int, models: List[Tuple[str, List[str]]],
+def generate_test_queries(num_queries: int, patterns: List[Tuple[str, List[str]]],
                          partial_match_ratio: float = 0.7) -> List[List[str]]:
     """
-    Generate test queries based on existing models.
+    Generate test queries based on existing patterns.
     
     Args:
         num_queries: Number of queries to generate
-        models: List of models to base queries on
+        patterns: List of patterns to base queries on
         partial_match_ratio: Ratio of partial vs full matches
         
     Returns:
@@ -96,14 +96,14 @@ def generate_test_queries(num_queries: int, models: List[Tuple[str, List[str]]],
     
     for _ in range(num_queries):
         if random.random() < partial_match_ratio:
-            # Create partial match from existing model
-            model_id, sequence = random.choice(models)
+            # Create partial match from existing pattern
+            pattern_id, sequence = random.choice(patterns)
             start = random.randint(0, max(0, len(sequence) - 5))
             end = min(len(sequence), start + random.randint(3, 10))
             query = sequence[start:end]
         else:
             # Create full or near-full match
-            model_id, sequence = random.choice(models)
+            pattern_id, sequence = random.choice(patterns)
             query = sequence.copy()
             # Optionally modify slightly
             if random.random() < 0.3 and len(query) > 1:
@@ -117,7 +117,7 @@ def generate_test_queries(num_queries: int, models: List[Tuple[str, List[str]]],
 @pytest.mark.performance
 def test_rolling_hash_performance():
     """Benchmark rolling hash performance."""
-    sequences = generate_test_models(1000, avg_length=50)
+    sequences = generate_test_patterns(1000, avg_length=50)
     rolling_hash = RollingHash()
     
     # Test hash computation speed
@@ -144,16 +144,16 @@ def test_rolling_hash_performance():
 @pytest.mark.performance
 def test_ngram_index_performance():
     """Benchmark n-gram index performance."""
-    models = generate_test_models(1000, avg_length=30)
+    patterns = generate_test_patterns(1000, avg_length=30)
     ngram_index = NGramIndex(n=3)
     
     # Test indexing speed
-    with PerformanceTimer("N-gram indexing (1000 models)"):
-        for model_id, sequence in models:
-            ngram_index.index_model(model_id, sequence)
+    with PerformanceTimer("N-gram indexing (1000 patterns)"):
+        for pattern_id, sequence in patterns:
+            ngram_index.index_pattern(pattern_id, sequence)
     
     # Test search speed
-    queries = generate_test_queries(100, models)
+    queries = generate_test_queries(100, patterns)
     
     with PerformanceTimer("N-gram search (100 queries)"):
         results = []
@@ -171,13 +171,13 @@ def test_ngram_index_performance():
 @pytest.mark.performance
 def test_inverted_index_performance():
     """Benchmark inverted index performance."""
-    models = generate_test_models(1000, avg_length=25)
+    patterns = generate_test_patterns(1000, avg_length=25)
     inverted_index = InvertedIndex()
     
     # Test indexing speed
-    with PerformanceTimer("Inverted index build (1000 models)"):
-        for model_id, sequence in models:
-            inverted_index.add_model(model_id, sequence)
+    with PerformanceTimer("Inverted index build (1000 patterns)"):
+        for pattern_id, sequence in patterns:
+            inverted_index.add_pattern(pattern_id, sequence)
     
     # Test search speed
     test_symbols = ['sym_10', 'sym_20', 'sym_30']
@@ -203,8 +203,8 @@ def test_inverted_index_performance():
 @pytest.mark.performance
 def test_fast_matcher_vs_original():
     """Compare FastSequenceMatcher with original approach."""
-    models = generate_test_models(500, avg_length=20)
-    queries = generate_test_queries(50, models)
+    patterns = generate_test_patterns(500, avg_length=20)
+    queries = generate_test_queries(50, patterns)
     
     # Setup fast matcher
     fast_matcher = FastSequenceMatcher(
@@ -212,10 +212,10 @@ def test_fast_matcher_vs_original():
         use_ngram_index=True
     )
     
-    # Add models to fast matcher
+    # Add patterns to fast matcher
     with PerformanceTimer("Fast matcher indexing"):
-        for model_id, sequence in models:
-            fast_matcher.add_model(model_id, sequence)
+        for pattern_id, sequence in patterns:
+            fast_matcher.add_pattern(pattern_id, sequence)
     
     # Test fast matching
     fast_results = []
@@ -229,14 +229,14 @@ def test_fast_matcher_vs_original():
     with PerformanceTimer("Original linear search (50 queries)") as orig_timer:
         for query in queries:
             matches = []
-            for model_id, model_seq in models:
+            for pattern_id, pattern_seq in patterns:
                 # Simple similarity calculation
                 set1 = set(query)
-                set2 = set(model_seq)
+                set2 = set(pattern_seq)
                 similarity = len(set1 & set2) / len(set1 | set2) if set1 | set2 else 0
                 if similarity >= 0.5:
                     matches.append({
-                        'model_id': model_id,
+                        'pattern_id': pattern_id,
                         'similarity': similarity
                     })
             original_results.append(matches)
@@ -250,7 +250,7 @@ def test_fast_matcher_vs_original():
 @pytest.mark.performance
 def test_index_manager_comprehensive():
     """Test comprehensive IndexManager performance."""
-    models = generate_test_models(2000, avg_length=30)
+    patterns = generate_test_patterns(2000, avg_length=30)
     index_manager = IndexManager(
         enable_inverted=True,
         enable_bloom=True,
@@ -258,13 +258,13 @@ def test_index_manager_comprehensive():
     )
     
     # Test indexing
-    with PerformanceTimer("IndexManager indexing (2000 models)"):
-        for model_id, sequence in models:
-            index_manager.add_model(model_id, sequence, 
+    with PerformanceTimer("IndexManager indexing (2000 patterns)"):
+        for pattern_id, sequence in patterns:
+            index_manager.add_pattern(pattern_id, sequence, 
                                    metadata={'length': len(sequence)})
     
     # Test candidate search
-    queries = generate_test_queries(100, models)
+    queries = generate_test_queries(100, patterns)
     
     with PerformanceTimer("IndexManager candidate search (100 queries)"):
         all_candidates = []
@@ -279,26 +279,26 @@ def test_index_manager_comprehensive():
         avg_candidates = sum(candidate_lengths) / len(candidate_lengths) if candidate_lengths else 0
     else:
         avg_candidates = sum(len(c) for c in all_candidates) / len(all_candidates)
-    print(f"Average candidates: {avg_candidates:.1f} / {len(models)}")
-    assert avg_candidates < len(models) * 0.5  # Should filter >50%
+    print(f"Average candidates: {avg_candidates:.1f} / {len(patterns)}")
+    assert avg_candidates < len(patterns) * 0.5  # Should filter >50%
     
     # Test statistics
     stats = index_manager.get_statistics()
-    assert stats['total_models'] == 2000
+    assert stats['total_patterns'] == 2000
 
 
 @pytest.mark.performance
 @pytest.mark.slow
 def test_large_scale_performance():
-    """Test performance with large number of models."""
+    """Test performance with large number of patterns."""
     # Generate large dataset
-    num_models = 10000
+    num_patterns = 10000
     num_queries = 100
     
-    print(f"\nLarge scale test: {num_models} models, {num_queries} queries")
+    print(f"\nLarge scale test: {num_patterns} patterns, {num_queries} queries")
     
-    models = generate_test_models(num_models, avg_length=25)
-    queries = generate_test_queries(num_queries, models)
+    patterns = generate_test_patterns(num_patterns, avg_length=25)
+    queries = generate_test_queries(num_queries, patterns)
     
     # Test fast matcher
     fast_matcher = FastSequenceMatcher(
@@ -306,9 +306,9 @@ def test_large_scale_performance():
         use_ngram_index=True
     )
     
-    with PerformanceTimer(f"Indexing {num_models} models"):
-        for model_id, sequence in models:
-            fast_matcher.add_model(model_id, sequence)
+    with PerformanceTimer(f"Indexing {num_patterns} patterns"):
+        for pattern_id, sequence in patterns:
+            fast_matcher.add_pattern(pattern_id, sequence)
     
     with PerformanceTimer(f"Searching {num_queries} queries") as timer:
         results = []
@@ -326,20 +326,20 @@ def test_large_scale_performance():
 @pytest.mark.performance
 def test_determinism_with_performance():
     """Verify that optimizations maintain determinism."""
-    models = generate_test_models(100, avg_length=20)
+    patterns = generate_test_patterns(100, avg_length=20)
     query = ['sym_10', 'sym_20', 'sym_30']
     
     # Run multiple times and verify same results
     fast_matcher = FastSequenceMatcher()
     
-    for model_id, sequence in models:
-        fast_matcher.add_model(model_id, sequence)
+    for pattern_id, sequence in patterns:
+        fast_matcher.add_pattern(pattern_id, sequence)
     
     results_runs = []
     for run in range(3):
         matches = fast_matcher.find_matches(query, threshold=0.3)
         # Sort for comparison
-        sorted_matches = sorted(matches, key=lambda x: x['model_id'])
+        sorted_matches = sorted(matches, key=lambda x: x['pattern_id'])
         results_runs.append(sorted_matches)
     
     # All runs should produce identical results
@@ -357,10 +357,10 @@ def test_memory_efficiency():
     
     # Test original approach memory
     tracemalloc.start()
-    models_dict = {}
-    models = generate_test_models(1000, avg_length=30)
-    for model_id, sequence in models:
-        models_dict[model_id] = sequence
+    patterns_dict = {}
+    patterns = generate_test_patterns(1000, avg_length=30)
+    for pattern_id, sequence in patterns:
+        patterns_dict[pattern_id] = sequence
     original_memory = tracemalloc.get_traced_memory()[0]
     tracemalloc.stop()
     
@@ -369,9 +369,9 @@ def test_memory_efficiency():
     fast_matcher = FastSequenceMatcher()
     index_manager = IndexManager()
     
-    for model_id, sequence in models:
-        fast_matcher.add_model(model_id, sequence)
-        index_manager.add_model(model_id, sequence)
+    for pattern_id, sequence in patterns:
+        fast_matcher.add_pattern(pattern_id, sequence)
+        index_manager.add_pattern(pattern_id, sequence)
     
     optimized_memory = tracemalloc.get_traced_memory()[0]
     tracemalloc.stop()

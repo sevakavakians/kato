@@ -36,7 +36,7 @@ Every learned structure in KATO is identified by a unique hash: `PTRN|<sha1_hash
 
 ![KATO Agent](assets/kato-agent.png "KATO agent")
 
-Combining KATO with black box stochastic processes such as General Purpose Transformer (GPT) models, Large Language Models (LLMs), Small Language Models (SLMs), and GPT-based reasoning models provides a layer of governance and control. These stochastic machine learning models suffer from issues like hallucinations, inconsistent outputs, hidden biases, high training and operational costs, and no assurances for guardrails or remediation attempts.
+Combining KATO with black box stochastic processes such as General Purpose Transformer (GPT) models, Large Language Patterns (LLMs), Small Language Patterns (SLMs), and GPT-based reasoning models provides a layer of governance and control. These stochastic machine learning models suffer from issues like hallucinations, inconsistent outputs, hidden biases, high training and operational costs, and no assurances for guardrails or remediation attempts.
 
 KATO provides a deterministic machine learning algorithm that learns context + action + outcome patterns, effectively caching for reduced calls to expensive models. Additionally, it stores these patterns in a traceable database (typically MongoDB) allowing both real-time learning and updates. If an action taken by the agent needs to be corrected so that it isn't repeated given the same or similar context, the database can simply be edited with an alternative action.
 

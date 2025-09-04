@@ -11,7 +11,7 @@ from os import environ
 import logging
 
 logger = logging.getLogger('kato.informatics.metrics')
-logger.setLevel(getattr(logging, environ['LOG_LEVEL']))
+logger.setLevel(getattr(logging, environ.get('LOG_LEVEL', 'INFO')))
 logger.info('logging initiated')
 
 
@@ -106,8 +106,8 @@ def hamiltonian(state, total_symbols):
 ####### confluence = probability of sequence occurring in observations * ( 1 - probability of sequence occurring randomly)
 def confluence(state, symbols_kb, P1=None):
     '''
-    Confluence of a Model is the probability of that model occurring randomly taking into
-    consideration the probabilities of each symbol within the model appearing.
+    Confluence of a Pattern is the probability of that pattern occurring randomly taking into
+    consideration the probabilities of each symbol within the pattern appearing.
     P1 = probability of sequence occurring in observations
     i.e.:
         confluence = probability of sequence occurring in observations * ( 1 - probability of sequence occurring randomly)

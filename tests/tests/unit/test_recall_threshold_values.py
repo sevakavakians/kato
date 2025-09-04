@@ -134,9 +134,9 @@ def test_threshold_point_five_balanced(kato_fixture):
         assert similarity >= 0.5, f"All predictions should have similarity >= 0.5, got {similarity}"
     
     # Check that low-overlap sequences are filtered out
-    model_names = [p.get('name', '') for p in predictions]
+    pattern_names = [p.get('name', '') for p in predictions]
     # The third sequence with no overlap should not appear
-    assert all('seven' not in name and 'eight' not in name for name in str(model_names))
+    assert all('seven' not in name and 'eight' not in name for name in str(pattern_names))
 
 
 def test_threshold_point_seven_restrictive(kato_fixture):
@@ -201,7 +201,7 @@ def test_threshold_one_perfect_match_only(kato_fixture):
     assert predictions[0].get('similarity', 0) == 1.0, "Perfect match should have similarity=1.0"
     
     # Test partial match gets no predictions
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': ['perfect'], 'vectors': [], 'emotives': {}})
     kato_fixture.observe({'strings': ['match'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
@@ -233,7 +233,7 @@ def test_threshold_updates_runtime(kato_fixture):
     predictions_low = kato_fixture.get_predictions()
     
     # Clear and test with high threshold
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     kato_fixture.set_recall_threshold(0.7)
     kato_fixture.observe({'strings': ['runtime'], 'vectors': [], 'emotives': {}})
     kato_fixture.observe({'strings': ['test'], 'vectors': [], 'emotives': {}})
@@ -272,7 +272,7 @@ def test_threshold_boundary_values(kato_fixture):
         threshold = max(0.1, expected_min_similarity - 0.1)
         kato_fixture.set_recall_threshold(threshold)
         
-        kato_fixture.clear_working_memory()
+        kato_fixture.clear_short_term_memory()
         for item in obs_items:
             kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
         
@@ -291,7 +291,7 @@ def test_threshold_boundary_values(kato_fixture):
         threshold = min(0.9, expected_min_similarity + 0.1)
         kato_fixture.set_recall_threshold(threshold)
         
-        kato_fixture.clear_working_memory()
+        kato_fixture.clear_short_term_memory()
         for item in obs_items:
             kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
         

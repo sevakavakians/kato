@@ -34,11 +34,11 @@ def test_long_sequence_basic(kato_fixture):
     # Learn the sequence
     for event in sequence:
         kato_fixture.observe({'strings': sort_event_strings(event), 'vectors': [], 'emotives': {}})
-    model_name = kato_fixture.learn()
-    assert model_name.startswith('PTRN|')
+    pattern_name = kato_fixture.learn()
+    assert pattern_name.startswith('PTRN|')
     
     # Test prediction at beginning (observe first 2 events for 2+ strings)
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': sort_event_strings(['alpha', 'beta', 'gamma']), 'vectors': [], 'emotives': {}})
     kato_fixture.observe({'strings': sort_event_strings(['delta', 'epsilon']), 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
@@ -68,7 +68,7 @@ def test_long_sequence_middle_observation(kato_fixture):
     kato_fixture.learn()
     
     # Observe middle events (7th and 8th)
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': sort_event_strings(events[6]), 'vectors': [], 'emotives': {}})
     kato_fixture.observe({'strings': sort_event_strings(events[7]), 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
@@ -112,7 +112,7 @@ def test_partial_observation_long_sequence(kato_fixture):
     kato_fixture.learn()
     
     # Observe with missing and extra symbols
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     # Missing 'pattern_b' and 'pattern_c', adding 'extra_1'
     kato_fixture.observe({'strings': sort_event_strings(['pattern_a', 'extra_1']), 'vectors': [], 'emotives': {}})
     # Missing 'pattern_e', adding 'extra_2'
@@ -155,7 +155,7 @@ def test_cyclic_long_sequence(kato_fixture):
     kato_fixture.learn()
     
     # Observe at cycle boundary
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': sort_event_strings(['cycle_end', 'cycle_reset']), 'vectors': [], 'emotives': {}})
     kato_fixture.observe({'strings': sort_event_strings(['cycle_start', 'cycle_a']), 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
@@ -217,7 +217,7 @@ def test_branching_long_sequence(kato_fixture):
     kato_fixture.learn()
     
     # Observe at branch point
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': sort_event_strings(['common_3', 'common_4', 'common_5']), 'vectors': [], 'emotives': {}})
     kato_fixture.observe({'strings': sort_event_strings(['common_6']), 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
@@ -261,11 +261,11 @@ def test_emotives_in_long_sequence(kato_fixture):
     # Learn the sequence with emotives
     for event, emotives in sequence:
         kato_fixture.observe({'strings': sort_event_strings(event), 'vectors': [], 'emotives': emotives})
-    model_name = kato_fixture.learn()
-    assert model_name.startswith('PTRN|')
+    pattern_name = kato_fixture.learn()
+    assert pattern_name.startswith('PTRN|')
     
     # Observe peak emotives area
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': sort_event_strings(sequence[5][0]), 'vectors': [], 'emotives': sequence[5][1]})
     kato_fixture.observe({'strings': sort_event_strings(sequence[6][0]), 'vectors': [], 'emotives': sequence[6][1]})
     predictions = kato_fixture.get_predictions()
@@ -301,11 +301,11 @@ def test_complex_multimodal_sequence(kato_fixture):
     # Learn the multimodal sequence
     for obs in sequence:
         kato_fixture.observe(obs)
-    model_name = kato_fixture.learn()
-    assert model_name.startswith('PTRN|')
+    pattern_name = kato_fixture.learn()
+    assert pattern_name.startswith('PTRN|')
     
     # Observe partial sequence
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     kato_fixture.observe(sequence[3])
     kato_fixture.observe(sequence[4])
     predictions = kato_fixture.get_predictions()
@@ -337,7 +337,7 @@ def test_sparse_observation_long_sequence(kato_fixture):
     kato_fixture.learn()
     
     # Observe sparse elements (every 5th event)
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': sort_event_strings(full_sequence[5]), 'vectors': [], 'emotives': {}})
     kato_fixture.observe({'strings': sort_event_strings(full_sequence[10]), 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
@@ -377,7 +377,7 @@ def test_sequence_with_repetitive_patterns(kato_fixture):
     kato_fixture.learn()
     
     # Observe at pattern boundary
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': sort_event_strings(pattern_c), 'vectors': [], 'emotives': {}})
     kato_fixture.observe({'strings': sort_event_strings(pattern_a), 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
@@ -414,11 +414,11 @@ def test_extreme_length_sequence(kato_fixture):
     # Learn the mega sequence
     for event in mega_sequence:
         kato_fixture.observe({'strings': sort_event_strings(event), 'vectors': [], 'emotives': {}})
-    model_name = kato_fixture.learn()
-    assert model_name.startswith('PTRN|')
+    pattern_name = kato_fixture.learn()
+    assert pattern_name.startswith('PTRN|')
     
     # Observe somewhere in the middle
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': sort_event_strings(mega_sequence[24]), 'vectors': [], 'emotives': {}})
     kato_fixture.observe({'strings': sort_event_strings(mega_sequence[25]), 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()

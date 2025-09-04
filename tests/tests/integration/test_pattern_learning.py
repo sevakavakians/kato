@@ -105,7 +105,7 @@ def test_sequence_completion(kato_fixture):
     ]
     
     for observed, expected in test_points:
-        kato_fixture.clear_working_memory()
+        kato_fixture.clear_short_term_memory()
         
         for item in observed:
             kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
@@ -225,7 +225,7 @@ def test_interleaved_sequence_learning(kato_fixture):
     pred1 = kato_fixture.get_predictions()
     assert len(pred1) > 0
     
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': ['s2_x'], 'vectors': [], 'emotives': {}})
     kato_fixture.observe({'strings': ['s2_y'], 'vectors': [], 'emotives': {}})
     pred2 = kato_fixture.get_predictions()
@@ -256,7 +256,7 @@ def test_context_switching(kato_fixture):
     ]
     
     for trigger, expected_context in test_cases:
-        kato_fixture.clear_working_memory()
+        kato_fixture.clear_short_term_memory()
         kato_fixture.observe({'strings': [trigger], 'vectors': [], 'emotives': {}})
         # KATO requires 2+ strings for predictions, observe next item in context
         context_seq = contexts[expected_context]
@@ -279,7 +279,7 @@ def test_context_switching(kato_fixture):
 def test_max_pattern_length_auto_learn(kato_fixture):
     """Test automatic learning when max_pattern_length is reached."""
     # Clear memory first, then set max_pattern_length
-    kato_fixture.clear_working_memory()  # Only clear working memory, not genes
+    kato_fixture.clear_short_term_memory()  # Only clear short-term memory, not genes
     kato_fixture.update_genes({"max_pattern_length": 3})
     
     # Observe exactly max_pattern_length events
@@ -287,13 +287,13 @@ def test_max_pattern_length_auto_learn(kato_fixture):
     for event in events:
         kato_fixture.observe({'strings': [event], 'vectors': [], 'emotives': {}})
     
-    # Should auto-learn and clear working memory except last
-    wm = kato_fixture.get_working_memory()
-    assert len(wm) == 1
-    assert wm == [['auto3']]
+    # Should auto-learn and clear short-term memory except last
+    stm = kato_fixture.get_short_term_memory()
+    assert len(stm) == 1
+    assert stm == [['auto3']]
     
     # Verify sequence was learned (KATO requires 2+ strings for predictions)
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': ['auto1'], 'vectors': [], 'emotives': {}})
     kato_fixture.observe({'strings': ['auto2'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()

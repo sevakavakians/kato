@@ -96,7 +96,7 @@
 - **ZMQ Server**: Improved response handling
   - Updated observe handler to track and return auto-learning information
   - Fixed get_model method to correctly query MongoDB using models_kb
-  - Added proper handling of MODEL| prefix in model lookups
+  - Added proper handling of PTRN| prefix in model lookups
 - **Core Logic**: Enhanced auto-learning behavior
   - Modified KatoProcessor.observe to return auto_learned_model information
   - Updated learn method to return consistent response even for empty sequences
@@ -190,7 +190,7 @@
 - **Unit Tests (44 tests)**:
   - Observations processing
   - Memory management
-  - Model hashing with MODEL| prefix
+  - Pattern hashing with PTRN| prefix
   - Predictions and scoring
   - Sorting behavior verification
 
@@ -213,7 +213,7 @@
 
 ### Key Improvements
 - Tests now properly handle KATO's alphanumeric sorting of strings within events
-- Added deterministic hash verification for MODEL| and VECTOR| prefixes
+- Added deterministic hash verification for PTRN| and VECTOR| prefixes
 - Comprehensive documentation of KATO's unique behaviors
 - Test helpers for automatic sorting in assertions
 
@@ -221,7 +221,7 @@
 
 #### Core Behaviors
 - **Alphanumeric Sorting**: Strings sorted within events, event order preserved
-- **Deterministic Hashing**: All models receive MODEL|<sha1_hash> names
+- **Deterministic Hashing**: All models receive PTRN|<sha1_hash> names
 - **Empty Event Handling**: Empty observations ignored, don't change state
 - **Temporal Segmentation**: Sophisticated past/present/future prediction structure
 

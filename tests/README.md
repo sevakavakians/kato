@@ -6,41 +6,48 @@ This directory contains the complete test suite for KATO. For comprehensive test
 
 ## Quick Start
 
-### Using Container-Based Testing (Recommended)
+### Using Local Python Testing
 
 ```bash
-# Build and run all tests
-./test-harness.sh build
-./test-harness.sh test
+# Set up virtual environment (first time only)
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+pip install -r tests/requirements.txt
 
-# OR use kato-manager
-../kato-manager.sh test
+# Run all tests
+./run_simple_tests.sh
+
+# OR use pytest directly
+python -m pytest tests/ -v
 ```
 
 ### Run Specific Test Categories
 
 ```bash
 # Run specific test suites
-./test-harness.sh suite unit          # Unit tests only
-./test-harness.sh suite integration   # Integration tests only
-./test-harness.sh suite api           # API tests only
-./test-harness.sh suite performance   # Performance tests
+./run_simple_tests.sh tests/tests/unit/          # Unit tests only
+./run_simple_tests.sh tests/tests/integration/   # Integration tests only
+./run_simple_tests.sh tests/tests/api/          # API tests only
+./run_simple_tests.sh tests/tests/performance/  # Performance tests
 
 # Run specific test file
-./test-harness.sh test tests/tests/unit/test_observations.py
+python -m pytest tests/tests/unit/test_observations.py -v
 
 # Run with pytest options
-./test-harness.sh test tests/ -v -x   # Verbose, stop on first failure
+python -m pytest tests/ -v -x   # Verbose, stop on first failure
+python -m pytest tests/ -s       # Show print output
+python -m pytest tests/ --pdb    # Drop into debugger on failure
 ```
 
 ## Test Statistics
 
-**Current Coverage**: 128 tests (100% passing)
-- 83 unit tests
-- 19 integration tests  
-- 21 API tests
-- 5 performance tests
-- Execution time: ~45 seconds
+**Current Coverage**: 188 test functions across 21 test files
+- Unit tests: tests/tests/unit/
+- Integration tests: tests/tests/integration/
+- API tests: tests/tests/api/
+- Performance tests: tests/tests/performance/
+- Execution time: ~30-60 seconds
 
 ## Directory Structure
 
@@ -48,15 +55,18 @@ This directory contains the complete test suite for KATO. For comprehensive test
 tests/
 ├── tests/
 │   ├── fixtures/          # Shared test fixtures and helpers
-│   ├── unit/              # Unit tests (83 tests)
-│   ├── integration/       # Integration tests (19 tests)
-│   ├── api/              # API endpoint tests (21 tests)
-│   └── performance/      # Performance tests (5 tests)
+│   │   ├── kato_fixtures.py   # KATO test fixtures
+│   │   ├── hash_helpers.py    # Hash verification utilities
+│   │   └── test_helpers.py    # Sorting and assertion helpers
+│   ├── unit/              # Unit tests
+│   ├── integration/       # Integration tests
+│   ├── api/              # API endpoint tests
+│   └── performance/      # Performance tests
 ├── scripts/              # Utility scripts for testing
-├── test-harness.sh      # Container-based test runner
-├── Dockerfile.test      # Test container definition
-├── requirements-test.txt # Test dependencies
-├── pytest.ini           # Pytest configuration
+│   └── run_tests_direct.py   # Direct Python test runner
+├── run_simple_tests.sh      # Simple test runner script
+├── requirements-test.txt     # Test dependencies
+├── pytest.ini               # Pytest configuration
 ├── conftest.py          # Pytest fixtures configuration
 └── TEST_ORGANIZATION.md # Test organization details
 ```
@@ -68,16 +78,21 @@ When writing or debugging tests, keep these behaviors in mind:
 1. **Alphanumeric Sorting**: Strings are sorted within events
    - Input: `['zebra', 'apple']` → Stored: `['apple', 'zebra']`
 
-2. **Empty Events**: Observations with empty strings are ignored
+2. **Minimum Pattern Length**: At least 2 strings total required for predictions
 
 3. **Deterministic Hashing**: All patterns use `PTRN|<sha1_hash>` format
 
 4. **Temporal Fields in Predictions**:
-   - `past`: Events before present
-   - `present`: Current matching events
-   - `future`: Events after present
-   - `missing`: Expected but not observed
-   - `extras`: Observed but not expected
+   - `past`: Events before first match
+   - `present`: ALL events containing matching symbols (complete events included)
+   - `future`: Events after last match
+   - `missing`: Symbols in present events but not observed
+   - `extras`: Observed symbols not in pattern
+
+5. **Recall Threshold**: Heuristic filter (0.0-1.0)
+   - 0.0 = Return all patterns
+   - 1.0 = Perfect matches only
+   - Default: 0.1 (permissive)
 
 ## Writing New Tests
 
@@ -96,12 +111,35 @@ def test_example(kato_fixture):
         'emotives': {}
     })
     assert result['status'] == 'observed'
+    
+    # Test gets unique processor_id for isolation
+    # MongoDB: test_example_<timestamp>_<uuid>
+    # Qdrant: vectors_test_example_<timestamp>_<uuid>
+```
+
+## Debugging Tips
+
+```bash
+# Run single test with verbose output
+python -m pytest tests/tests/unit/test_observations.py::test_observe_single_string -vv
+
+# Drop into debugger on failure
+python -m pytest tests/tests/unit/ --pdb
+
+# Show all print statements
+python -m pytest tests/tests/unit/ -s
+
+# Check KATO logs during test
+docker logs kato-api-$(whoami)-1 --tail 20
+
+# Run tests without starting/stopping KATO
+./run_simple_tests.sh --no-start --no-stop tests/
 ```
 
 ## More Information
 
 For detailed information about:
-- Running tests in different modes
+- Setting up your environment
 - Understanding test fixtures
 - Debugging test failures
 - Adding new test categories

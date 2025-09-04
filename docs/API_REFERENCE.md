@@ -326,14 +326,15 @@ Get a specific gene/parameter value.
 - `indexer_type`: Vector indexer type (VI only)
 - `max_predictions`: Maximum predictions to generate
 - `recall_threshold`: Minimum similarity score required for predictions (0.0-1.0)
-  - **Purpose**: Controls the quality gate for pattern matching predictions
+  - **Purpose**: Rough filter for pattern matching, NOT exact decimal precision
   - **Default**: 0.1 (permissive, allows weak matches)
-  - **Impact**:
-    - `0.0-0.3`: Very permissive, generates many predictions including partial matches
+  - **CRITICAL**: Patterns with NO matching symbols are NEVER returned regardless of threshold
+  - **Impact** (approximate behavior):
+    - `0.0-0.3`: Very permissive, includes many predictions with partial matches
     - `0.3-0.5`: Balanced filtering, moderate quality threshold
-    - `0.5-0.7`: Restrictive, only strong pattern matches
-    - `0.7-1.0`: Very restrictive, requires near-perfect similarity
-  - **How it works**: Filters predictions by comparing pattern similarity ratios against this threshold
+    - `0.5-0.7`: Restrictive, only stronger pattern matches
+    - `0.7-1.0`: Very restrictive, requires high similarity
+  - **How it works**: Uses heuristic similarity calculations for speed - values are approximate, not exact ratios
 - `persistence`: Emotive persistence duration
 - `max_pattern_length`: Maximum pattern length
 - `quiescence`: Quiescence period

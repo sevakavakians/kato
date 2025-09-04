@@ -237,11 +237,11 @@ def test_prediction_with_emotives(kato_fixture):
     
     for string, emotives in sequence:
         kato_fixture.observe({'strings': [string], 'vectors': [], 'emotives': emotives})
-    model_name = kato_fixture.learn()
-    assert model_name is not None, "Should have learned a model"
+    pattern_name = kato_fixture.learn()
+    assert pattern_name is not None, "Should have learned a pattern"
     
-    # Clear working memory and observe to trigger predictions (KATO requires 2+ strings)
-    kato_fixture.clear_working_memory()
+    # Clear short-term memory and observe to trigger predictions (KATO requires 2+ strings)
+    kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': ['happy'], 'vectors': [], 'emotives': {'joy': 0.9, 'energy': 0.8}})
     kato_fixture.observe({'strings': ['sad'], 'vectors': [], 'emotives': {'joy': 0.1, 'energy': 0.2}})
     predictions = kato_fixture.get_predictions()
@@ -262,8 +262,8 @@ def test_prediction_with_emotives(kato_fixture):
         assert 'energy' in pred['emotives'], "Should have 'energy' emotive"
 
 
-def test_multiple_model_predictions(kato_fixture):
-    """Test predictions when multiple models are learned."""
+def test_multiple_pattern_predictions(kato_fixture):
+    """Test predictions when multiple patterns are learned."""
     kato_fixture.clear_all_memory()
     
     # Learn multiple different sequences
@@ -286,10 +286,10 @@ def test_multiple_model_predictions(kato_fixture):
     # Should have multiple predictions
     assert len(predictions) >= 3, f"Should have at least 3 predictions, got {len(predictions)}"
     
-    # Each should have different model name
-    model_names = [pred.get('name', '') for pred in predictions]
-    unique_names = set(model_names)
-    assert len(unique_names) >= 3, "Should have different model names"
+    # Each should have different pattern name
+    pattern_names = [pred.get('name', '') for pred in predictions]
+    unique_names = set(pattern_names)
+    assert len(unique_names) >= 3, "Should have different pattern names"
 
 
 def test_prediction_confidence_scores(kato_fixture):

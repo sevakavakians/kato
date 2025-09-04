@@ -171,8 +171,8 @@ class KATOTestFixture:
         response.raise_for_status()
         return response.json()
         
-    def clear_working_memory(self) -> Dict[str, Any]:
-        """Clear working memory."""
+    def clear_short_term_memory(self) -> Dict[str, Any]:
+        """Clear short-term memory."""
         response = requests.post(f"{self.base_url}/kato-api/clear-working-memory", json={})
         response.raise_for_status()
         return response.json()

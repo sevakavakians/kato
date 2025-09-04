@@ -27,7 +27,7 @@ def find_test_functions(file_path):
             potential_issues = []
             
             # Check for assertions that might fail
-            if 'assert len(wm) == 1' in test_block and 'vectors' in test_block:
+            if 'assert len(stm) == 1' in test_block and 'vectors' in test_block:
                 potential_issues.append("Vector observation assertion")
             
             if 'emotives' in test_block and 'assert' in test_block:

@@ -36,14 +36,14 @@ def sort_events_strings(events):
     return events
 
 
-def assert_working_memory_equals(actual_wm, expected_events):
+def assert_short_term_memory_equals(actual_stm, expected_events):
     """
-    Assert that working memory matches expected events, accounting for KATO's sorting.
+    Assert that short-term memory matches expected events, accounting for KATO's sorting.
     
     Args:
-        actual_wm: The actual working memory from KATO
+        actual_stm: The actual short-term memory from KATO
         expected_events: The expected events (will be sorted for comparison)
     """
     sorted_expected = sort_events_strings(expected_events)
-    assert actual_wm == sorted_expected, \
-        f"Working memory mismatch:\nActual:   {actual_wm}\nExpected: {sorted_expected}"
+    assert actual_stm == sorted_expected, \
+        f"short-term memory mismatch:\nActual:   {actual_stm}\nExpected: {sorted_expected}"

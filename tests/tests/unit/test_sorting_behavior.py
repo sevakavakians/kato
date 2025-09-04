@@ -26,7 +26,7 @@ def test_alphanumeric_sorting_within_event(kato_fixture):
     ]
     
     for input_strings, expected_sorted in test_cases:
-        kato_fixture.clear_working_memory()
+        kato_fixture.clear_short_term_memory()
         
         # Observe the unsorted strings
         kato_fixture.observe({
@@ -35,13 +35,13 @@ def test_alphanumeric_sorting_within_event(kato_fixture):
             'emotives': {}
         })
         
-        # Get working memory
-        wm = kato_fixture.get_working_memory()
+        # Get short-term memory
+        stm = kato_fixture.get_short_term_memory()
         
         # Verify sorting
-        assert len(wm) == 1, f"Expected single event in working memory"
-        assert wm[0] == expected_sorted, \
-            f"Sorting mismatch for {input_strings}: got {wm[0]}, expected {expected_sorted}"
+        assert len(stm) == 1, f"Expected single event in short-term memory"
+        assert stm[0] == expected_sorted, \
+            f"Sorting mismatch for {input_strings}: got {stm[0]}, expected {expected_sorted}"
 
 
 def test_event_order_preserved(kato_fixture):
@@ -62,17 +62,17 @@ def test_event_order_preserved(kato_fixture):
             'emotives': {}
         })
     
-    # Get working memory
-    wm = kato_fixture.get_working_memory()
+    # Get short-term memory
+    stm = kato_fixture.get_short_term_memory()
     
     # Verify event order is preserved
-    assert len(wm) == 3, "Should have 3 events"
-    assert wm[0] == sort_event_strings(events[0]), "First event strings should be sorted"
-    assert wm[1] == sort_event_strings(events[1]), "Second event strings should be sorted"
-    assert wm[2] == sort_event_strings(events[2]), "Third event strings should be sorted"
+    assert len(stm) == 3, "Should have 3 events"
+    assert stm[0] == sort_event_strings(events[0]), "First event strings should be sorted"
+    assert stm[1] == sort_event_strings(events[1]), "Second event strings should be sorted"
+    assert stm[2] == sort_event_strings(events[2]), "Third event strings should be sorted"
     
     # Verify the order: first event, then second, then third
-    assert wm == [
+    assert stm == [
         ['x', 'y', 'z'],
         ['a', 'b', 'c'],
         ['1', '2', '3']
@@ -93,11 +93,11 @@ def test_single_string_unchanged(kato_fixture):
             'emotives': {}
         })
     
-    # Get working memory
-    wm = kato_fixture.get_working_memory()
+    # Get short-term memory
+    stm = kato_fixture.get_short_term_memory()
     
     # Single strings should be unchanged
-    assert wm == [['first'], ['second'], ['third']]
+    assert stm == [['first'], ['second'], ['third']]
 
 
 def test_mixed_case_sorting(kato_fixture):
@@ -113,11 +113,11 @@ def test_mixed_case_sorting(kato_fixture):
         'emotives': {}
     })
     
-    wm = kato_fixture.get_working_memory()
+    stm = kato_fixture.get_short_term_memory()
     
     # Verify that capitals come before lowercase in alphanumeric sort
-    assert len(wm) == 1
-    sorted_result = wm[0]
+    assert len(stm) == 1
+    sorted_result = stm[0]
     
     # The exact order depends on Python's sort, but generally:
     # APPLE, Apple, ZEBRA, Zebra, apple, zebra
@@ -137,10 +137,10 @@ def test_numeric_string_sorting(kato_fixture):
         'emotives': {}
     })
     
-    wm = kato_fixture.get_working_memory()
+    stm = kato_fixture.get_short_term_memory()
     
     # Alphanumeric sort: '1', '10', '100', '2', '20', '3'
-    assert wm == [['1', '10', '100', '2', '20', '3']]
+    assert stm == [['1', '10', '100', '2', '20', '3']]
 
 
 def test_special_characters_sorting(kato_fixture):
@@ -156,10 +156,10 @@ def test_special_characters_sorting(kato_fixture):
         'emotives': {}
     })
     
-    wm = kato_fixture.get_working_memory()
+    stm = kato_fixture.get_short_term_memory()
     
     # Verify they're sorted according to Python's default sort
-    assert wm == [sorted(special_strings)]
+    assert stm == [sorted(special_strings)]
 
 
 def test_empty_strings_in_sorting(kato_fixture):
@@ -175,10 +175,10 @@ def test_empty_strings_in_sorting(kato_fixture):
         'emotives': {}
     })
     
-    wm = kato_fixture.get_working_memory()
+    stm = kato_fixture.get_short_term_memory()
     
     # Empty string should come first in alphanumeric sort
-    assert wm == [['', 'a', 'middle', 'z']]
+    assert stm == [['', 'a', 'middle', 'z']]
 
 
 def test_unicode_sorting(kato_fixture):
@@ -194,10 +194,10 @@ def test_unicode_sorting(kato_fixture):
         'emotives': {}
     })
     
-    wm = kato_fixture.get_working_memory()
+    stm = kato_fixture.get_short_term_memory()
     
     # Should be sorted according to Python's default unicode handling
-    assert wm == [sorted(unicode_strings)]
+    assert stm == [sorted(unicode_strings)]
 
 
 def test_sorting_consistency_across_learns(kato_fixture):
@@ -211,14 +211,14 @@ def test_sorting_consistency_across_learns(kato_fixture):
     
     # Observe and learn each version
     for strings in [strings_v1, strings_v2, strings_v3]:
-        kato_fixture.clear_working_memory()
+        kato_fixture.clear_short_term_memory()
         kato_fixture.observe({
             'strings': strings,
             'vectors': [],
             'emotives': {}
         })
-        wm = kato_fixture.get_working_memory()
+        stm = kato_fixture.get_short_term_memory()
         
         # All should result in the same sorted order
-        assert wm == [['alpha', 'beta', 'gamma']], \
+        assert stm == [['alpha', 'beta', 'gamma']], \
             f"Inconsistent sorting for {strings}"

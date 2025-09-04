@@ -23,7 +23,7 @@ operations_mix:
   observe: 0.60
   learn: 0.10
   predictions: 0.20
-  working_memory: 0.05
+  short_term_memory: 0.05
   clear_memory: 0.05
 
 test_data:

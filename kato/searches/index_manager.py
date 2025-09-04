@@ -334,14 +334,14 @@ class IndexManager:
     
     def search_candidates(self, query: List[str], length_tolerance: float = 0.5) -> Set[str]:
         """
-        Search for candidate models that could match the query.
+        Search for candidate patterns that could match the query.
         
         Args:
             query: List of symbols to search for
             length_tolerance: Fraction of length difference to tolerate (0.5 = 50%)
             
         Returns:
-            Set of model IDs that are potential matches
+            Set of pattern IDs that are potential matches
         """
         # Convert length_tolerance from fraction to partition count
         query_length = len(query)
@@ -353,7 +353,7 @@ class IndexManager:
         
         # If we have query symbols, filter by inverted index
         if query:
-            # Use OR mode to get all models containing any query symbol
+            # Use OR mode to get all patterns containing any query symbol
             symbol_candidates = self.inverted_index.search(query[:10], mode='OR')  # Limit symbols for performance
             
             # For short queries (potential prefix matches), be more permissive

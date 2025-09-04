@@ -1,0 +1,9 @@
+CLUSTERED TEST RUN SUMMARY
+=========================
+Timestamp: Wed Sep  3 15:39:08 EDT 2025
+Exit Code: 1
+
+FAILED tests/unit/test_minimum_pattern_requirement.py::test_mixed_event_sizes - AssertionError: Failed: 1 string - no predictions
+  ✓ Passed:  56
+  ✗ Failed:  133
+  ⚠ Skipped: 1

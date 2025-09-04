@@ -222,16 +222,16 @@ class ZMQClient:
         response = self.call('get_gene', {'gene_name': gene_name})
         return response.get('gene_value')
         
-    def get_model(self, model_id):
-        """Get a specific model by ID.
+    def get_pattern(self, pattern_id):
+        """Get a specific pattern by ID.
         
         Args:
-            model_id: Model ID to retrieve
+            pattern_id: Pattern ID to retrieve
             
         Returns:
-            Full response with status and model information
+            Full response with status and pattern information
         """
-        response = self.call('get_model', {'model_id': model_id})
+        response = self.call('get_pattern', {'pattern_id': pattern_id})
         return response
         
     def change_gene(self, gene_name, gene_value):

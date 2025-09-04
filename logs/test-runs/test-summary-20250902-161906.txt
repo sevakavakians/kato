@@ -1,0 +1,63 @@
+KATO Test Results Summary
+========================
+Test Run: 2025-09-04
+Total Tests: 188
+Passed: 84
+Failed: 103
+Skipped: 1
+Execution Time: 65.26 seconds
+
+Test Breakdown by Category:
+- API Tests: 21 tests (9 passed, 12 failed)
+- Integration Tests: 14 tests (14 passed, 0 failed) 
+- Performance Tests: 5 tests (5 passed, 0 failed)
+- Unit Tests: 148 tests (56 passed, 91 failed, 1 skipped)
+
+Major Categories of Failures:
+
+1. COMPREHENSIVE PATTERNS (10/10 failed):
+   - Long sequence processing failures
+   - Complex multimodal sequence issues
+   - Partial observation errors
+   - Memory segmentation problems
+
+2. MEMORY MANAGEMENT (3/3 failed):
+   - Short-term memory retrieval issues
+   - Memory clearing functionality broken
+   - Learning mechanism failures
+
+3. OBSERVATION HANDLING (7/7 failed):  
+   - Basic observation processing broken
+   - Multimodal observation issues
+   - Empty observation handling problems
+   - Vector observation failures
+
+4. PATTERN HASHING (1/1 failed):
+   - Hash consistency issues
+
+5. PREDICTION ENGINE (27/27 failed):
+   - Core prediction logic completely broken
+   - Edge case handling failures
+   - Field validation issues
+   - Temporal segmentation errors
+
+6. RECALL THRESHOLD (20/20 failed):
+   - Threshold filtering not working
+   - Pattern matching broken
+   - Value validation issues
+
+7. SORTING BEHAVIOR (9/9 failed):
+   - Event ordering broken
+   - Alphanumeric sorting issues
+   - Unicode handling problems
+
+8. API ENDPOINTS (12/21 failed):
+   - Connect endpoint failures  
+   - Memory management endpoints broken
+   - Pattern endpoints not working
+   - Cognition data issues
+
+All Integration and Performance tests passed, indicating the high-level workflow works but core unit-level functionality is broken.
+
+This represents a significant regression from the previous run (82 passed, 105 failed).
+Current status shows fewer total failures (103 vs 105) but also fewer passes (84 vs 82).

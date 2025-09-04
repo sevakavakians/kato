@@ -9,7 +9,7 @@ from collections import Counter
 from itertools import chain
 
 logger = logging.getLogger('kato.informatics.knowledge-base')
-logger.setLevel(getattr(logging, environ['LOG_LEVEL']))
+logger.setLevel(getattr(logging, environ.get('LOG_LEVEL', 'INFO')))
 logger.info('logging initiated')
 
 

@@ -77,18 +77,18 @@ ZMQ_ENDPOINT = "tcp://localhost:5555"
 - Observation processing and storage
 - Prediction generation
 - Memory management (STM/LTM)
-- Model identification via SHA1 hashing
+- Pattern identification via SHA1 hashing
 
 **Key Methods**:
 - `observe()`: Process and store observations
 - `predict()`: Generate temporal predictions
-- `get_model_hash()`: Deterministic model identification
+- `get_pattern_hash()`: Deterministic pattern identification
 - `manage_memory()`: Handle memory transitions
 
 **Memory Architecture**:
 ```python
 # Short-Term Memory (Working Memory)
-self.working_memory = {
+self.short_term_memory = {
     "observations": [],
     "timestamps": [],
     "context": {}
@@ -246,7 +246,7 @@ CACHE_TTL=3600
 ### Modifying Core Logic
 1. Preserve deterministic behavior
 2. Maintain backwards compatibility
-3. Update model hash if behavior changes
+3. Update pattern hash if behavior changes
 4. Test with multi-instance scenarios
 5. Benchmark performance impact
 

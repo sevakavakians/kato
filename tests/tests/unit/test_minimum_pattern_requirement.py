@@ -28,7 +28,7 @@ def test_single_string_no_predictions(kato_fixture):
     kato_fixture.learn()
     
     # Clear STM and observe only ONE string
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': ['alpha'], 'vectors': [], 'emotives': {}})
     
     # Should have NO predictions with only 1 string
@@ -36,7 +36,7 @@ def test_single_string_no_predictions(kato_fixture):
     assert predictions == [], f"Expected no predictions with 1 string, got {len(predictions)} predictions"
     
     # Verify STM has the single string
-    stm = kato_fixture.get_working_memory()
+    stm = kato_fixture.get_short_term_memory()
     assert stm == [['alpha']], "STM should contain the single observed string"
 
 
@@ -51,7 +51,7 @@ def test_exactly_two_strings_generates_predictions(kato_fixture):
     kato_fixture.learn()
     
     # Test Case 1: Two separate events with one string each
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': ['one'], 'vectors': [], 'emotives': {}})
     kato_fixture.observe({'strings': ['two'], 'vectors': [], 'emotives': {}})
     
@@ -60,7 +60,7 @@ def test_exactly_two_strings_generates_predictions(kato_fixture):
     assert len(predictions) > 0, "Should have predictions with exactly 2 strings"
     
     # Test Case 2: Single event with two strings
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': ['one', 'two'], 'vectors': [], 'emotives': {}})
     
     # Should also have predictions
@@ -79,7 +79,7 @@ def test_empty_events_dont_count(kato_fixture):
     kato_fixture.learn()
     
     # Observe one string and multiple empty events
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': ['x'], 'vectors': [], 'emotives': {}})
     kato_fixture.observe({'strings': [], 'vectors': [], 'emotives': {}})  # Empty - ignored
     kato_fixture.observe({'strings': [], 'vectors': [], 'emotives': {}})  # Empty - ignored
@@ -106,7 +106,7 @@ def test_vector_only_observations(kato_fixture):
     kato_fixture.learn()
     
     # Clear and observe only vectors
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': [], 'vectors': [[1.0, 2.0]], 'emotives': {}})
     kato_fixture.observe({'strings': [], 'vectors': [[3.0, 4.0]], 'emotives': {}})
     
@@ -122,11 +122,11 @@ def test_learning_with_insufficient_strings(kato_fixture):
     
     # Try to learn with only 1 string
     kato_fixture.observe({'strings': ['lonely'], 'vectors': [], 'emotives': {}})
-    model_name = kato_fixture.learn()
+    pattern_name = kato_fixture.learn()
     
-    # Should not create a model with only 1 string
-    # Model creation requires at least 2 events/strings
-    assert model_name == "" or model_name is None, f"Should not create model with 1 string, got {model_name}"
+    # Should not create a pattern with only 1 string
+    # Pattern creation requires at least 2 events/strings
+    assert pattern_name == "" or pattern_name is None, f"Should not create model with 1 string, got {pattern_name}"
 
 
 def test_auto_learn_with_insufficient_strings(kato_fixture):
@@ -155,7 +155,7 @@ def test_transition_from_one_to_two_strings(kato_fixture):
     kato_fixture.learn()
     
     # Start fresh
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     
     # First string - no predictions
     kato_fixture.observe({'strings': ['a'], 'vectors': [], 'emotives': {}})
@@ -194,7 +194,7 @@ def test_mixed_event_sizes(kato_fixture):
     ]
     
     for observations, should_predict, description in test_cases:
-        kato_fixture.clear_working_memory()
+        kato_fixture.clear_short_term_memory()
         
         for obs in observations:
             if obs:  # Skip empty observations as they're ignored
@@ -224,7 +224,7 @@ def test_emotives_dont_affect_requirement(kato_fixture):
     kato_fixture.learn()
     
     # Observe single string with emotives
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     kato_fixture.observe({
         'strings': ['happy'],
         'vectors': [],
@@ -261,7 +261,7 @@ def test_clear_stm_resets_requirement(kato_fixture):
     assert len(predictions) > 0, "Should have predictions with 2 strings"
     
     # Clear STM
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     
     # Now observe single string again
     kato_fixture.observe({'strings': ['blue'], 'vectors': [], 'emotives': {}})

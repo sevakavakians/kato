@@ -8,7 +8,7 @@ from kato.representations.vector_object import VectorObject
 from kato.searches.vector_search_engine import VectorIndexer
 
 logger = logging.getLogger('kato.vector_processor')
-logger.setLevel(getattr(logging, environ['LOG_LEVEL']))
+logger.setLevel(getattr(logging, environ.get('LOG_LEVEL', 'INFO')))
 logger.info('logging initiated')
 
 
@@ -32,7 +32,7 @@ class VectorProcessor:
         logger.debug("In VectorProcessor clear all memory")
         self.deferred_vectors_for_learning = []
         if self.indexer_type == "VI":
-            self.vector_indexer.clearModelsFromRAM()
+            self.vector_indexer.clearPatternsFromRAM()
             self.round_robin_index = 0
             logger.debug("about to reset VectorIndexer")
             # Pass kb_id (processor_id) for Qdrant collection isolation

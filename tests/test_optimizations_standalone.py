@@ -86,7 +86,7 @@ def test_ngram_index():
     print(f"✓ Indexed 500 patterns in {elapsed:.4f}s")
     
     # Test search
-    query = patterns[0][1][:10]  # First 10 symbols of first model
+    query = patterns[0][1][:10]  # First 10 symbols of first pattern
     start = time.perf_counter()
     results = index.search(query, threshold=0.1)  # Lower threshold for n-gram matching
     elapsed = time.perf_counter() - start
@@ -97,7 +97,7 @@ def test_ngram_index():
         results = index.search(query, threshold=0.3)
     
     assert len(results) > 0, f"Should find at least one match for query of length {len(query)}"
-    # The first result should be our source model with high similarity
+    # The first result should be our source pattern with high similarity
     found_source = any(r[0] == 'pattern_0000' for r in results)
     print(f"✓ Found {len(results)} matches in {elapsed*1000:.2f}ms")
     
@@ -162,13 +162,13 @@ def test_fast_sequence_matcher():
     print(f"✓ Added 1000 patterns to matcher in {elapsed:.4f}s")
     
     # Test exact match
-    query = patterns[42][1]  # Use model 42's sequence
+    query = patterns[42][1]  # Use pattern 42's sequence
     start = time.perf_counter()
     matches = matcher.find_matches(query, threshold=0.9)
     elapsed = time.perf_counter() - start
     
     assert len(matches) > 0, "Should find exact match"
-    assert matches[0]['pattern_id'] == 'pattern_0042', "Should find correct model"
+    assert matches[0]['pattern_id'] == 'pattern_0042', "Should find correct pattern"
     assert matches[0]['similarity'] > 0.99, "Exact match should have high similarity"
     print(f"✓ Found exact match in {elapsed*1000:.2f}ms")
     

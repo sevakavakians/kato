@@ -147,7 +147,7 @@ operations_mix:
   observe: 0.60      # 60% observe operations
   learn: 0.10        # 10% learn operations
   predictions: 0.20  # 20% get predictions
-  working_memory: 0.05  # 5% working memory queries
+  short_term_memory: 0.05  # 5% short-term memory queries
   clear_memory: 0.05    # 5% memory clear operations
 ```
 

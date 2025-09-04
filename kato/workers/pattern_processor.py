@@ -24,7 +24,7 @@ from kato.searches.pattern_search import PatternSearcher
 from collections import Counter
 
 logger = logging.getLogger('kato.pattern_processor')
-logger.setLevel(getattr(logging, environ['LOG_LEVEL']))
+logger.setLevel(getattr(logging, environ.get('LOG_LEVEL', 'INFO')))
 logger.info('logging initiated')
 
 class PatternProcessor:
@@ -64,12 +64,18 @@ class PatternProcessor:
         return
 
     def clear_stm(self):
+        logger.warning("DEBUG clear_stm called! Stack trace:")
+        import traceback
+        logger.warning(''.join(traceback.format_stack()))
         self.STM = deque()
         self.trigger_predictions = False
         self.emotives = []
         return
 
     def clear_all_memory(self):
+        logger.warning("DEBUG clear_all_memory called! Stack trace:")
+        import traceback
+        logger.warning(''.join(traceback.format_stack()))
         self.clear_stm()
         self.last_learned_pattern_name = None
         self.patterns_searcher.clearPatternsFromRAM()
@@ -173,8 +179,12 @@ class PatternProcessor:
         Short-term memory is a deque of events, where each event is a list of symbols
         observed at the same time. E.g., STM = [["cat","dog"], ["bird"], ["cat"]]
         """
+        logger.info(f"DEBUG setCurrentEvent called with symbols: {symbols}")
         if symbols:
             self.STM.append(symbols)
+            logger.info(f"DEBUG STM after append: {list(self.STM)}")
+        else:
+            logger.info(f"DEBUG No symbols to add, STM unchanged: {list(self.STM)}")
         return
     
     def symbolFrequency(self, symbol):
@@ -308,7 +318,11 @@ class PatternProcessor:
                     logger.error(f"ZeroDivisionError in confluence calculation: _p_e_h={_p_e_h}, _present={_present}, symbol_probability_cache={symbol_probability_cache}, error={e}")
                     raise
                 try:
-                    fragmentation_term = 1 / (prediction['fragmentation'] + 1) if prediction['fragmentation'] != -1 else 0.0
+                    # Handle fragmentation = -1 case to avoid division by zero
+                    if prediction['fragmentation'] == -1:
+                        fragmentation_term = 0.0
+                    else:
+                        fragmentation_term = 1 / (prediction['fragmentation'] + 1)
                     prediction['potential'] = round(float( ( prediction['evidence'] + prediction['confidence'] ) * prediction.get("snr", 0) + prediction['itfdf_similarity'] + fragmentation_term ), 12)
                 except ZeroDivisionError as e:
                     logger.error(f"ZeroDivisionError in potential calculation: evidence={prediction['evidence']}, confidence={prediction['confidence']}, snr={prediction.get('snr', 0)}, itfdf_similarity={prediction['itfdf_similarity']}, fragmentation={prediction['fragmentation']}, error={e}")

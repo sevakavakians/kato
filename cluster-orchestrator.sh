@@ -35,6 +35,10 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 CURRENT_PROCESSOR_ID=""
 CURRENT_PORT=""
 
+# Fixed processor ID for single instance
+TEST_PROCESSOR_ID="test-runner"
+TEST_PROCESSOR_NAME="TestRunner"
+
 # Results tracking
 TOTAL_PASSED=0
 TOTAL_FAILED=0
@@ -62,44 +66,23 @@ find_available_port() {
     echo $port
 }
 
-# Function to start KATO instance
-start_kato_instance() {
-    local cluster_name="$1"
-    local processor_id="$2"
-    
-    log_info "Starting KATO instance for cluster: $cluster_name"
-    log_info "Processor ID: $processor_id"
+# Function to start single KATO instance for all tests
+start_single_kato_instance() {
+    log_info "Starting single KATO instance for all tests"
+    log_info "Processor ID: $TEST_PROCESSOR_ID"
     
     # Set environment variables for the kato-manager
-    export PROCESSOR_ID="$processor_id"
-    export PROCESSOR_NAME="ClusterProcessor_${cluster_name}"
+    export PROCESSOR_ID="$TEST_PROCESSOR_ID"
+    export PROCESSOR_NAME="$TEST_PROCESSOR_NAME"
     
     # Start KATO with explicit processor info
-    PROCESSOR_ID="$processor_id" PROCESSOR_NAME="ClusterProcessor_${cluster_name}" "${KATO_MANAGER}" start >/dev/null 2>&1 || {
+    PROCESSOR_ID="$TEST_PROCESSOR_ID" PROCESSOR_NAME="$TEST_PROCESSOR_NAME" "${KATO_MANAGER}" start >/dev/null 2>&1 || {
         log_error "Failed to start KATO instance"
         return 1
     }
     
-    # Default port is 8000 but might be different if already in use
-    # Check which port was actually allocated by checking the registered instance
+    # Default port is 8000
     CURRENT_PORT=8000
-    
-    # Check if KATO started on a different port
-    if [[ -f "$HOME/.kato/instances.json" ]]; then
-        local actual_port=$(python3 -c "
-import json
-try:
-    with open('$HOME/.kato/instances.json', 'r') as f:
-        data = json.load(f)
-        if '$processor_id' in data.get('instances', {}):
-            print(data['instances']['$processor_id']['api_port'])
-except:
-    pass
-" 2>/dev/null)
-        if [[ -n "$actual_port" ]]; then
-            CURRENT_PORT="$actual_port"
-        fi
-    fi
     
     # Wait for KATO to be ready
     local max_wait=30
@@ -107,7 +90,7 @@ except:
     while [[ $waited -lt $max_wait ]]; do
         if curl -s "http://localhost:${CURRENT_PORT}/kato-api/ping" >/dev/null 2>&1; then
             log_success "KATO instance ready on port $CURRENT_PORT"
-            CURRENT_PROCESSOR_ID="$processor_id"
+            CURRENT_PROCESSOR_ID="$TEST_PROCESSOR_ID"
             return 0
         fi
         sleep 1
@@ -116,29 +99,27 @@ except:
     
     log_error "KATO instance did not become ready"
     # Try to get diagnostic info
-    docker ps --format "table {{.Names}}\t{{.Status}}" | grep "kato-${processor_id}" || true
+    docker ps --format "table {{.Names}}\t{{.Status}}" | grep "kato-${TEST_PROCESSOR_ID}" || true
     return 1
 }
 
-# Function to stop KATO instance and all associated databases
-stop_kato_instance() {
-    local processor_id="$1"
-    
-    if [[ -n "$processor_id" ]]; then
-        log_info "Stopping KATO instance and databases: $processor_id"
+# Function to stop the single KATO instance
+stop_single_kato_instance() {
+    if [[ -n "$TEST_PROCESSOR_ID" ]]; then
+        log_info "Stopping KATO instance and databases: $TEST_PROCESSOR_ID"
         
         # Use kato-manager.sh to properly stop instance and all databases
-        export PROCESSOR_ID="$processor_id"
-        "${KATO_MANAGER}" stop "$processor_id" >/dev/null 2>&1 || {
+        export PROCESSOR_ID="$TEST_PROCESSOR_ID"
+        "${KATO_MANAGER}" stop "$TEST_PROCESSOR_ID" >/dev/null 2>&1 || {
             # Fallback: manually stop all containers if manager fails
-            docker stop "kato-${processor_id}" >/dev/null 2>&1 || true
-            docker rm "kato-${processor_id}" >/dev/null 2>&1 || true
-            docker stop "mongo-${processor_id}" >/dev/null 2>&1 || true
-            docker rm "mongo-${processor_id}" >/dev/null 2>&1 || true
-            docker stop "qdrant-${processor_id}" >/dev/null 2>&1 || true
-            docker rm "qdrant-${processor_id}" >/dev/null 2>&1 || true
-            docker stop "redis-${processor_id}" >/dev/null 2>&1 || true
-            docker rm "redis-${processor_id}" >/dev/null 2>&1 || true
+            docker stop "kato-${TEST_PROCESSOR_ID}" >/dev/null 2>&1 || true
+            docker rm "kato-${TEST_PROCESSOR_ID}" >/dev/null 2>&1 || true
+            docker stop "mongo-${TEST_PROCESSOR_ID}" >/dev/null 2>&1 || true
+            docker rm "mongo-${TEST_PROCESSOR_ID}" >/dev/null 2>&1 || true
+            docker stop "qdrant-${TEST_PROCESSOR_ID}" >/dev/null 2>&1 || true
+            docker rm "qdrant-${TEST_PROCESSOR_ID}" >/dev/null 2>&1 || true
+            docker stop "redis-${TEST_PROCESSOR_ID}" >/dev/null 2>&1 || true
+            docker rm "redis-${TEST_PROCESSOR_ID}" >/dev/null 2>&1 || true
         }
         
         CURRENT_PROCESSOR_ID=""
@@ -148,13 +129,12 @@ stop_kato_instance() {
 
 # Function to apply cluster configuration
 apply_cluster_config() {
-    local processor_id="$1"
-    local recall_threshold="$2"
-    local max_pattern_length="$3"
+    local recall_threshold="$1"
+    local max_pattern_length="$2"
     
     if [[ -n "$recall_threshold" ]]; then
         curl -s -X POST \
-            "http://localhost:${CURRENT_PORT}/${processor_id}/genes/change" \
+            "http://localhost:${CURRENT_PORT}/${TEST_PROCESSOR_ID}/genes/change" \
             -H "Content-Type: application/json" \
             -d "{\"data\": {\"recall_threshold\": $recall_threshold}}" \
             >/dev/null || log_warning "Failed to set recall_threshold"
@@ -162,7 +142,7 @@ apply_cluster_config() {
     
     if [[ -n "$max_pattern_length" ]]; then
         curl -s -X POST \
-            "http://localhost:${CURRENT_PORT}/${processor_id}/genes/change" \
+            "http://localhost:${CURRENT_PORT}/${TEST_PROCESSOR_ID}/genes/change" \
             -H "Content-Type: application/json" \
             -d "{\"data\": {\"max_pattern_length\": $max_pattern_length}}" \
             >/dev/null || log_warning "Failed to set max_pattern_length"
@@ -171,11 +151,10 @@ apply_cluster_config() {
 
 # Function to clear memory
 clear_memory() {
-    local processor_id="$1"
-    
+    # Clear all memory on the single instance
     # Try to clear memory, but don't warn on failure (might not be implemented)
     curl -s -X POST \
-        "http://localhost:${CURRENT_PORT}/${processor_id}/clear-all-memory" \
+        "http://localhost:${CURRENT_PORT}/${TEST_PROCESSOR_ID}/clear-all-memory" \
         -H "Content-Type: application/json" \
         -d "{}" \
         >/dev/null 2>&1 || true
@@ -188,18 +167,18 @@ run_tests_in_container() {
     local test_paths="$3"
     
     # Get the KATO container name for network access
-    local kato_container="kato-${processor_id}"
+    local kato_container="kato-${TEST_PROCESSOR_ID}"
     
     # Build docker command - use kato-network instead of host network
     local docker_cmd="docker run --rm --network kato-network"
     docker_cmd="$docker_cmd -e KATO_CLUSTER_MODE=true"
     docker_cmd="$docker_cmd -e KATO_TEST_MODE=container"
-    docker_cmd="$docker_cmd -e KATO_PROCESSOR_ID=$processor_id"
+    docker_cmd="$docker_cmd -e KATO_PROCESSOR_ID=$TEST_PROCESSOR_ID"
     # Use container name for API URL since we're on the same network
     docker_cmd="$docker_cmd -e KATO_API_URL=http://${kato_container}:8000"
-    docker_cmd="$docker_cmd -e MONGO_BASE_URL=mongodb://mongo-${processor_id}:27017"
-    docker_cmd="$docker_cmd -e QDRANT_URL=http://qdrant-${processor_id}:6333"
-    docker_cmd="$docker_cmd -e REDIS_URL=redis://redis-${processor_id}:6379"
+    docker_cmd="$docker_cmd -e MONGO_BASE_URL=mongodb://mongo-${TEST_PROCESSOR_ID}:27017"
+    docker_cmd="$docker_cmd -e QDRANT_URL=http://qdrant-${TEST_PROCESSOR_ID}:6333"
+    docker_cmd="$docker_cmd -e REDIS_URL=redis://redis-${TEST_PROCESSOR_ID}:6379"
     docker_cmd="$docker_cmd -e VERBOSE_OUTPUT=$VERBOSE"
     docker_cmd="$docker_cmd -v ${TEST_DIR}:/tests:ro"
     docker_cmd="$docker_cmd ${TEST_IMAGE}:latest"
@@ -336,18 +315,11 @@ run_cluster() {
         echo -n "[$name] Starting (${test_count} tests)..."
     fi
     
-    # Generate processor ID
-    local processor_id=$(generate_processor_id "$name")
+    # Clear all databases before running cluster tests
+    clear_memory
     
-    # Start KATO instance
-    if ! start_kato_instance "$name" "$processor_id"; then
-        log_error "Failed to start KATO for cluster $name"
-        CLUSTER_RESULTS+=("$name: FAILED TO START")
-        return 1
-    fi
-    
-    # Apply configuration
-    apply_cluster_config "$processor_id" "$recall" "$max_len"
+    # Apply configuration for this cluster
+    apply_cluster_config "$recall" "$max_len"
     
     # Run tests with memory clearing between each
     local test_count=0
@@ -357,7 +329,7 @@ run_cluster() {
         test_count=$((test_count + 1))
         
         # Clear memory before each test
-        clear_memory "$processor_id"
+        clear_memory
         
         # Run the test
         if [[ "$VERBOSE" == "true" ]]; then
@@ -366,11 +338,10 @@ run_cluster() {
             echo -n "."
         fi
         
-        run_tests_in_container "$name" "$processor_id" "$test"
+        run_tests_in_container "$name" "$TEST_PROCESSOR_ID" "$test"
     done
     
-    # Stop KATO instance and all databases
-    stop_kato_instance "$processor_id"
+    # Note: We don't stop KATO here - it stays running for all clusters
     
     # Show cluster completion
     if [[ "$VERBOSE" != "true" ]]; then
@@ -421,6 +392,12 @@ main() {
     local num_clusters=$(echo "$clusters_json" | python3 -c "import sys, json; print(len(json.load(sys.stdin)))")
     log_info "Found $num_clusters test clusters"
     
+    # Start the single KATO instance for all tests
+    if ! start_single_kato_instance; then
+        log_error "Failed to start KATO instance"
+        exit 1
+    fi
+    
     if [[ "$VERBOSE" != "true" ]]; then
         echo -n "Progress: "
     fi
@@ -462,6 +439,9 @@ for cluster in clusters:
         echo "  ⚠ Skipped: $TOTAL_SKIPPED"
     fi
     echo ""
+    
+    # Stop the single KATO instance
+    stop_single_kato_instance
     
     # Show success/failure message
     if [[ $TOTAL_FAILED -gt 0 ]]; then

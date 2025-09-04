@@ -13,7 +13,7 @@ from kato.informatics.metrics import average_emotives
 
 
 logger = logging.getLogger('kato.workers.kato-processor')
-logger.setLevel(getattr(logging, environ['LOG_LEVEL']))
+logger.setLevel(getattr(logging, environ.get('LOG_LEVEL', 'INFO')))
 logger.info('logging initiated')
 
 
@@ -66,14 +66,34 @@ class KatoProcessor:
         self.current_emotives = average_emotives(self.pattern_processor.emotives) ## Average the emotives sourced from multiple pathways.
         return
 
-    def get_model(self, name):
-        "Retrieve pattern values by using the pattern name."
-        m = self.pattern_processor.superkb.getPattern(name)
-        if m is not None:
-            m.pop('_id')
-            return m
-        else:
-            return {}
+    def get_pattern(self, pattern_id):
+        """Retrieve pattern information by pattern ID for REST API.
+        
+        Pattern IDs can be provided with or without the PTRN| prefix.
+        MongoDB stores just the hash, so we strip the prefix before querying.
+        """
+        try:
+            # Strip PTRN| prefix if present for MongoDB query
+            if pattern_id.startswith('PTRN|'):
+                clean_name = pattern_id[5:]  # Remove 'PTRN|'
+            else:
+                clean_name = pattern_id
+            
+            # Query MongoDB with clean hash
+            pattern = self.pattern_processor.superkb.getPattern(clean_name)
+            if pattern is not None:
+                # Remove MongoDB _id for JSON serialization
+                if '_id' in pattern:
+                    pattern.pop('_id')
+                # Add PTRN| prefix to name field for consistency
+                if 'name' in pattern and not pattern['name'].startswith('PTRN|'):
+                    pattern['name'] = f"PTRN|{pattern['name']}"
+                return {'status': 'okay', 'pattern': pattern}
+            else:
+                return {'status': 'error', 'message': f'Pattern {pattern_id} not found'}
+        except Exception as e:
+            logger.error(f"Error retrieving pattern {pattern_id}: {e}")
+            return {'status': 'error', 'message': str(e)}
 
     def get_vector(self, name):
         "Retrieve vector values by using the vector name."
@@ -185,7 +205,7 @@ class KatoProcessor:
             max_pattern_length = self.pattern_processor.max_pattern_length
             
             if max_pattern_length > 0 and stm_length >= max_pattern_length:
-                # Short-term memory is full - time to consolidate into a pattern
+                # Short-term memory is full - time to consolidate into a memorized pattern
                 if stm_length > 1:
                     # Keep the last event as context for the next pattern
                     # This maintains continuity between learned chunks
@@ -233,7 +253,9 @@ class KatoProcessor:
     def get_stm(self):
         """Get the current short-term memory"""
         logger.debug(f'get_stm called in {self.name}-{self.id}')
-        return list(self.pattern_processor.STM)
+        stm_data = list(self.pattern_processor.STM)
+        logger.info(f"DEBUG get_stm returning: {stm_data}")
+        return stm_data
     
     def get_percept_data(self):
         """Return percept data"""

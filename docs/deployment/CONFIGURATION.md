@@ -400,14 +400,16 @@ curl -X POST http://localhost:8000/p46b6b076c/genes/update \
 
 ## recall_threshold Tuning Guide
 
-The `recall_threshold` parameter is critical for controlling prediction quality and quantity. It acts as a similarity filter, determining which pattern matches are returned as predictions.
+The `recall_threshold` parameter is critical for controlling prediction quality and quantity. It acts as a rough similarity filter, determining which pattern matches are returned as predictions.
 
 ### How It Works
 1. KATO compares observed patterns against learned patterns
-2. Each comparison generates a similarity score (0.0 to 1.0)
-3. Only matches with similarity >= recall_threshold become predictions
-4. Lower thresholds = more predictions (including weak matches)
-5. Higher thresholds = fewer predictions (only strong matches)
+2. Each comparison generates an approximate similarity score (0.0 to 1.0)
+3. **CRITICAL**: Patterns with NO matching symbols are NEVER returned regardless of threshold
+4. Only matches with similarity >= recall_threshold (approximately) become predictions
+5. Uses heuristic calculations for speed - NOT exact decimal precision
+6. Lower thresholds = more predictions (including weak matches)
+7. Higher thresholds = fewer predictions (only strong matches)
 
 ### Recommended Values by Use Case
 
@@ -417,12 +419,14 @@ The `recall_threshold` parameter is critical for controlling prediction quality 
 | **Development/Testing** | 0.1-0.3 | Default range, good for exploring system behavior |
 | **Balanced Production** | 0.3-0.5 | Moderate filtering, reliable predictions |
 | **High Precision** | 0.5-0.7 | Strong matches only, fewer false positives |
-| **Exact Matching** | 0.8-1.0 | Near-perfect or perfect matches only |
+| **Near-Perfect Matching** | 0.8-1.0 | Very high similarity matches only |
 
 ### Impact on Different Pattern Types
 
+**Note**: All recommendations are approximate due to heuristic similarity calculations.
+
 #### Short Patterns (2-5 elements)
-- **Low threshold (0.1)**: May match many unrelated patterns
+- **Low threshold (0.1)**: May match many patterns with any overlap
 - **Recommended**: 0.3-0.5 for meaningful matches
 - **High threshold (0.7+)**: May miss valid variations
 
@@ -440,6 +444,7 @@ The `recall_threshold` parameter is critical for controlling prediction quality 
 - **Lower thresholds** (< 0.3): More predictions to process, higher memory/CPU usage
 - **Higher thresholds** (> 0.5): Faster processing, fewer predictions to evaluate
 - **Optimization tip**: Start with higher threshold and decrease if needed
+- **Important**: Similarity calculations use heuristics for speed, not exact ratios
 
 ### Dynamic Adjustment Examples
 

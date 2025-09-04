@@ -1,146 +1,111 @@
-# KATO Clustered Test Documentation
+# KATO Test Documentation
 
 ## Overview
 
-KATO uses a sophisticated clustered test harness that provides complete isolation between test runs. Each test cluster gets its own KATO instance with dedicated databases (MongoDB, Qdrant, Redis), ensuring deterministic execution and preventing cross-contamination between tests.
+KATO uses a simple local Python testing approach with pytest. Tests run directly on your local machine using a virtual environment, making debugging straightforward and eliminating Docker complexity.
 
 **Current Coverage**: 188 test functions across 21 test files
 - Unit tests: tests/tests/unit/
 - Integration tests: tests/tests/integration/
 - API tests: tests/tests/api/
 - Performance tests: tests/tests/performance/
-- Execution time: ~30-60 seconds (depending on cluster configuration)
+- Execution time: ~30-60 seconds
 
-## Clustered Test Architecture
+## Test Architecture
 
 ### Key Concepts
 
-**Test Clustering**: Tests are automatically grouped based on their configuration requirements. Each cluster runs with its own isolated KATO instance and databases.
+**Local Execution**: Tests run directly using Python and pytest, no containers needed.
 
-**Complete Isolation**: Every test cluster gets:
-- Unique processor ID: `cluster_<name>_<timestamp>_<uuid>`
-- Dedicated MongoDB database
+**Test Isolation**: Each test gets:
+- Unique processor ID: `test_<name>_<timestamp>_<uuid>`
+- Dedicated MongoDB database namespace
 - Dedicated Qdrant vector collection
-- Dedicated Redis cache namespace
-- Isolated network environment
+- Clean state via fixture setup/teardown
 
 **Benefits**:
-- **No Cross-Contamination**: Tests cannot affect each other
-- **Deterministic Execution**: Same results every time
-- **Parallel Capability**: Clusters can run concurrently
-- **Configuration Flexibility**: Different clusters can have different settings
-- **Automatic Cleanup**: Resources are cleaned up after each cluster
-
-### Test Cluster Configuration
-
-Test clusters are defined in `tests/tests/fixtures/test_clusters.py`:
-
-```python
-TEST_CLUSTERS = [
-    TestCluster(
-        name="default",
-        config={
-            "recall_threshold": 0.1,
-            "max_pattern_length": 0
-        },
-        test_patterns=[
-            "tests/unit/test_observations.py",
-            "tests/unit/test_predictions.py",
-            # ... more tests
-        ],
-        description="Tests using default KATO configuration"
-    ),
-    
-    TestCluster(
-        name="recall_high",
-        config={
-            "recall_threshold": 0.7,
-            "max_pattern_length": 0
-        },
-        test_patterns=[
-            "tests/unit/test_recall_threshold_values.py::test_threshold_point_seven_high",
-            # ... specific tests requiring high recall
-        ],
-        description="Tests requiring high recall threshold"
-    ),
-    # ... more clusters
-]
-```
+- **Simple Debugging**: Use standard Python debugging tools
+- **Fast Iteration**: No container rebuild delays
+- **Easy Setup**: Just Python virtual environment
+- **Direct Access**: Inspect databases and logs directly
+- **IDE Integration**: Full debugger support
 
 ## Running Tests
 
 ### Quick Start
 
 ```bash
-# Build test harness container (first time or after dependency changes)
-./test-harness.sh build
+# Set up virtual environment (first time only)
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+pip install -r tests/requirements.txt
 
-# Run all tests with automatic clustering
-./kato-manager.sh test
+# Run all tests
+./run_simple_tests.sh
 
-# OR run directly
-./test-harness.sh test
+# OR run directly with pytest
+python -m pytest tests/tests/ -v
 ```
 
 ### Running Specific Tests
 
 ```bash
-# Run specific test suites (automatically clustered)
-./test-harness.sh suite unit          # Unit tests only
-./test-harness.sh suite integration   # Integration tests only
-./test-harness.sh suite api           # API tests only
-./test-harness.sh suite performance   # Performance tests
+# Run specific test suites
+./run_simple_tests.sh tests/tests/unit/          # Unit tests only
+./run_simple_tests.sh tests/tests/integration/   # Integration tests only
+./run_simple_tests.sh tests/tests/api/          # API tests only
+./run_simple_tests.sh tests/tests/performance/  # Performance tests
 
-# Run specific test file (finds appropriate cluster)
-./test-harness.sh test tests/tests/unit/test_observations.py
+# Run specific test file
+python -m pytest tests/tests/unit/test_observations.py -v
 
 # Run specific test function
-./test-harness.sh test tests/tests/unit/test_observations.py::test_observe_single_string
+python -m pytest tests/tests/unit/test_observations.py::test_observe_single_string -v
 
 # Run with options
-./test-harness.sh --verbose test      # Show detailed cluster execution
-./test-harness.sh --no-redirect test  # Direct console output
-./test-harness.sh test tests/ -v -x   # Verbose, stop on first failure
+python -m pytest tests/tests/ -v -x    # Verbose, stop on first failure
+python -m pytest tests/tests/ -vv      # Extra verbose output
+python -m pytest tests/tests/ --tb=short  # Short traceback format
 ```
 
 ### Advanced Options
 
 ```bash
-# Development mode (live code updates)
-./test-harness.sh dev tests/tests/unit/ -v
+# Run tests without starting/stopping KATO
+./run_simple_tests.sh --no-start --no-stop tests/tests/
 
-# Interactive shell for debugging
-./test-harness.sh shell
+# Run tests with verbose output
+./run_simple_tests.sh -v tests/tests/
 
 # Generate coverage report
-./test-harness.sh report
+python -m pytest tests/tests/ --cov=kato --cov-report=html
 
-# Stop all test instances
-./test-harness.sh stop
+# Run tests in parallel (if pytest-xdist installed)
+python -m pytest tests/tests/ -n auto
 ```
 
 ## Test Execution Flow
 
-### 1. Test Discovery
-When you run tests, the harness:
-- Analyzes which tests to run based on your command
-- Identifies which cluster each test belongs to
-- Groups tests by their cluster configuration
+### 1. Setup Phase
+When you run tests:
+- Virtual environment is activated
+- KATO services are started (if not already running)
+- Test discovery finds all test files
 
-### 2. Cluster Execution
-For each cluster:
-1. **Generate unique processor ID**: `cluster_<name>_<timestamp>_<uuid>`
-2. **Start KATO instance**: Launch with processor-specific configuration
-3. **Start databases**: MongoDB, Qdrant, and Redis with processor-specific namespaces
-4. **Apply configuration**: Set recall_threshold, max_pattern_length, etc.
-5. **Run tests**: Execute all tests in the cluster
-6. **Cleanup**: Stop instance and remove all containers
+### 2. Test Execution
+For each test:
+1. **Generate unique processor ID**: `test_<name>_<timestamp>_<uuid>`
+2. **Clear all memory**: Reset to clean state
+3. **Run test**: Execute test function
+4. **Verify results**: Check assertions
+5. **Cleanup**: Clear memory for next test
 
-### 3. Result Aggregation
-After all clusters complete:
-- Results are aggregated across clusters
-- Total passed/failed/skipped counts are displayed
-- Detailed logs are saved to `logs/test-runs/`
+### 3. Result Reporting
+After all tests complete:
+- Total passed/failed/skipped counts displayed
+- Detailed pytest output with tracebacks
+- KATO services stopped (if requested)
 
 ## Test Organization
 
@@ -148,8 +113,7 @@ After all clusters complete:
 ```
 tests/
 ├── tests/
-│   ├── fixtures/          # Test fixtures and cluster configuration
-│   │   ├── test_clusters.py   # Cluster definitions
+│   ├── fixtures/          # Test fixtures and helpers
 │   │   ├── kato_fixtures.py   # KATO test fixtures
 │   │   ├── hash_helpers.py    # Hash verification utilities
 │   │   └── test_helpers.py    # Sorting and assertion helpers
@@ -166,12 +130,10 @@ tests/
 │   │   └── test_rest_endpoints.py
 │   └── performance/      # Performance tests
 │       └── test_vector_stress.py
-├── test-harness.sh           # Main test runner script
-├── test-harness-clustered.sh # Clustered execution logic
-├── cluster-orchestrator.sh   # Cluster management
-├── run_cluster_tests.py      # Container test runner
-├── Dockerfile.test           # Test container definition
 ├── requirements-test.txt     # Test dependencies
+├── run_simple_tests.sh      # Simple test runner script
+├── scripts/
+│   └── run_tests_direct.py  # Direct Python test runner
 └── pytest.ini               # Pytest configuration
 ```
 
@@ -240,8 +202,8 @@ def test_observation(kato_fixture):
     })
     
     assert result['status'] == 'observed'
-    wm = kato_fixture.get_short_term_memory()
-    assert wm == [['test']]
+    stm = kato_fixture.get_short_term_memory()
+    assert stm == [['test']]
 ```
 
 ### Important: Alphanumeric Sorting
@@ -256,8 +218,8 @@ def test_sorting(kato_fixture):
     kato_fixture.observe({'strings': ['zebra', 'apple', 'monkey']})
     
     # Stored: sorted
-    wm = kato_fixture.get_short_term_memory()
-    assert wm == [['apple', 'monkey', 'zebra']]
+    stm = kato_fixture.get_short_term_memory()
+    assert stm == [['apple', 'monkey', 'zebra']]
 ```
 
 ### Testing Prediction Fields
@@ -280,99 +242,109 @@ def test_temporal_segmentation(kato_fixture):
     assert pred['future'] == [['end']]
 ```
 
-### Cluster-Specific Tests
+### Test Configuration
 
-If your test requires specific configuration, add it to the appropriate cluster in `test_clusters.py`:
+Tests can configure KATO settings using the fixture's `update_genes` method:
 
 ```python
-TestCluster(
-    name="custom_config",
-    config={
-        "recall_threshold": 0.5,
-        "max_pattern_length": 10
-    },
-    test_patterns=[
-        "tests/unit/test_your_new_test.py"
-    ],
-    description="Tests requiring custom configuration"
-)
+def test_with_custom_config(kato_fixture):
+    """Test with specific recall threshold."""
+    kato_fixture.clear_all_memory()
+    
+    # Set custom configuration
+    kato_fixture.set_recall_threshold(0.7)
+    kato_fixture.update_genes({"max_pattern_length": 10})
+    
+    # Run test with custom settings
+    result = kato_fixture.observe({'strings': ['test']})
+    assert result['status'] == 'observed'
 ```
 
 ## Troubleshooting
 
 ### Common Issues
 
-#### Tests Not Running
-- **Issue**: "0 passed, 0 failed, 0 skipped"
-- **Solution**: Check test paths in test_clusters.py are correct
-- **Solution**: Verify test files exist and have test functions
+#### KATO Not Running
+- **Issue**: Connection refused on port 8000
+- **Solution**: Start KATO with `./kato-manager.sh start`
+- **Solution**: Check if KATO is running: `docker ps | grep kato`
 
-#### Container Build Failures
-- **Issue**: Docker build errors
-- **Solution**: Run `docker system prune -a` to clean up
-- **Solution**: Check Dockerfile.test for syntax errors
+#### Import Errors
+- **Issue**: ModuleNotFoundError for test modules
+- **Solution**: Activate virtual environment: `source venv/bin/activate`
+- **Solution**: Install dependencies: `pip install -r tests/requirements.txt`
 
 #### Database Connection Issues
 - **Issue**: Tests timeout connecting to MongoDB/Qdrant
-- **Solution**: Ensure Docker network exists: `docker network create kato-network`
-- **Solution**: Check containers are on same network
+- **Solution**: Check KATO logs: `docker logs kato-api-$(whoami)-1`
+- **Solution**: Restart KATO: `./kato-manager.sh restart`
 
-#### Result Aggregation Issues
-- **Issue**: Individual tests pass but totals show 0
-- **Solution**: Update test-harness scripts to latest version
-- **Solution**: Check cluster-orchestrator.sh parsing logic
+#### Test Isolation Issues
+- **Issue**: Tests affect each other
+- **Solution**: Ensure each test calls `kato_fixture.clear_all_memory()`
+- **Solution**: Check that fixtures use scope="function"
 
 ### Debugging Tests
 
 ```bash
-# Run with verbose output
-./test-harness.sh --verbose test
+# Run single test with verbose output
+python -m pytest tests/tests/unit/test_observations.py::test_observe_single_string -vv
 
-# Get interactive shell in test container
-./test-harness.sh shell
+# Run with Python debugger
+python -m pytest tests/tests/unit/test_observations.py --pdb
 
-# Check running containers
-docker ps | grep kato
+# Check KATO logs during test
+docker logs kato-api-$(whoami)-1 --tail 20
 
-# View logs for specific cluster
-docker logs kato-cluster_default_<id>
+# Run tests with print output visible
+python -m pytest tests/tests/ -s
 
-# Check test output logs
-ls -la logs/test-runs/
-cat logs/test-runs/latest/summary.txt
+# Run specific test with full traceback
+python -m pytest tests/tests/unit/test_observations.py --tb=long
 ```
 
 ## Performance Considerations
 
-### Cluster Overhead
-- Each cluster requires ~2-3 seconds to start/stop
-- Tests within a cluster run at normal speed
-- Total overhead depends on number of clusters
+### Test Speed
+- Virtual environment setup: One-time ~30 seconds
+- KATO startup: ~5-10 seconds
+- Individual test: ~0.1-1 second
+- Full suite: ~30-60 seconds
 
 ### Optimization Tips
-1. **Group related tests**: Keep tests with same config in same cluster
-2. **Use default cluster**: Most tests can use default configuration
-3. **Minimize clusters**: Fewer clusters = less overhead
-4. **Parallel execution**: Future enhancement for concurrent clusters
+1. **Keep KATO running**: Use `--no-start --no-stop` to avoid restart overhead
+2. **Run specific tests**: Target only tests you're working on
+3. **Use pytest markers**: Group and run related tests
+4. **Parallel execution**: Use `pytest-xdist` with `-n auto` for parallel runs
 
 ## Continuous Integration
 
-The clustered test harness is CI/CD ready:
+The test suite is CI/CD ready:
 
 ```yaml
 # Example GitHub Actions workflow
-- name: Build test harness
-  run: ./test-harness.sh build
+- name: Set up Python
+  uses: actions/setup-python@v4
+  with:
+    python-version: '3.9'
+
+- name: Install dependencies
+  run: |
+    pip install -r requirements.txt
+    pip install -r tests/requirements.txt
+
+- name: Start KATO
+  run: ./kato-manager.sh start
 
 - name: Run tests
-  run: ./test-harness.sh test
+  run: python -m pytest tests/tests/ -v --junit-xml=test-results.xml
 
 - name: Upload test results
   if: always()
   uses: actions/upload-artifact@v2
   with:
     name: test-results
-    path: logs/test-runs/
+    path: test-results.xml
 ```
 
 ## Key KATO Behaviors to Test
@@ -404,26 +376,30 @@ The clustered test harness is CI/CD ready:
 - No contamination between tests
 - Automatic cleanup
 
-## Migration from Non-Clustered Testing
+## Setting Up Your Environment
 
-If you have old test commands or scripts:
+### Prerequisites
+- Python 3.8 or later
+- Running KATO instance (via `./kato-manager.sh start`)
+- Virtual environment with dependencies
 
-### Old Approach (Deprecated)
+### Initial Setup
 ```bash
-# Direct pytest - NO LONGER SUPPORTED
-pytest tests/unit/test_observations.py
+# Create and activate virtual environment
+python3 -m venv venv
+source venv/bin/activate
 
-# Shared instance testing - NO LONGER SUPPORTED
-python -m pytest tests/
+# Install dependencies
+pip install -r requirements.txt
+pip install -r tests/requirements.txt
 ```
 
-### New Clustered Approach
+### Environment Variables
 ```bash
-# All tests now use clustered execution
-./test-harness.sh test tests/unit/test_observations.py
+# Disable any container mode (set automatically by run_simple_tests.sh)
+export KATO_TEST_MODE=local
+export KATO_CLUSTER_MODE=false
 
-# Automatic clustering based on configuration
-./test-harness.sh test
+# Optional: Set custom API URL if not using default port 8000
+export KATO_API_URL=http://localhost:8000
 ```
-
-The clustered approach is now the ONLY supported way to run tests, ensuring complete isolation and deterministic results.

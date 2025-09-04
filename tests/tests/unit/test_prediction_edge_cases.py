@@ -16,15 +16,15 @@ def test_empty_events_ignored(kato_fixture):
     kato_fixture.clear_all_memory()
     
     # Get initial state
-    initial_wm = kato_fixture.get_working_memory()
+    initial_stm = kato_fixture.get_short_term_memory()
     initial_predictions = kato_fixture.get_predictions()
     
     # Observe empty event
     result = kato_fixture.observe({'strings': [], 'vectors': [], 'emotives': {}})
     
-    # Working memory should not change
-    wm_after_empty = kato_fixture.get_working_memory()
-    assert wm_after_empty == initial_wm, "Empty event should not change working memory"
+    # short-term memory should not change
+    stm_after_empty = kato_fixture.get_short_term_memory()
+    assert stm_after_empty == initial_stm, "Empty event should not change short-term memory"
     
     # Now test that empty events in a sequence are ignored
     kato_fixture.clear_all_memory()
@@ -34,9 +34,9 @@ def test_empty_events_ignored(kato_fixture):
     kato_fixture.observe({'strings': [], 'vectors': [], 'emotives': {}})  # Should be ignored
     kato_fixture.observe({'strings': ['b'], 'vectors': [], 'emotives': {}})
     
-    wm = kato_fixture.get_working_memory()
+    stm = kato_fixture.get_short_term_memory()
     # Should only have the non-empty events
-    assert wm == [['a'], ['b']], f"Empty events should be ignored, got {wm}"
+    assert stm == [['a'], ['b']], f"Empty events should be ignored, got {stm}"
 
 
 def test_prediction_no_past(kato_fixture):
@@ -52,7 +52,7 @@ def test_prediction_no_past(kato_fixture):
     kato_fixture.learn()
     
     # Observe the start and middle to meet 2+ requirement
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': ['start'], 'vectors': [], 'emotives': {}})
     kato_fixture.observe({'strings': ['middle'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
@@ -84,7 +84,7 @@ def test_prediction_no_future(kato_fixture):
     kato_fixture.learn()
     
     # Observe all events (complete sequence)
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     for item in sequence:
         kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
@@ -109,7 +109,7 @@ def test_all_extras_no_matches(kato_fixture):
     kato_fixture.learn()
     
     # Observe completely different symbols
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': ['unknown1'], 'vectors': [], 'emotives': {}})
     kato_fixture.observe({'strings': ['unknown2'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
@@ -143,7 +143,7 @@ def test_partial_overlap_multiple_sequences(kato_fixture):
         kato_fixture.learn()
     
     # Observe 'shared' plus another symbol to meet 2+ requirement
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': ['shared', 'unique1'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
     
@@ -172,7 +172,7 @@ def test_very_long_sequence_middle_observation(kato_fixture):
     kato_fixture.learn()
     
     # Observe events in the middle
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': ['item4'], 'vectors': [], 'emotives': {}})
     kato_fixture.observe({'strings': ['item5'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
@@ -204,7 +204,7 @@ def test_repeated_symbols_in_event(kato_fixture):
     kato_fixture.learn()
     
     # Observe partial match
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': ['a', 'b'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
     
@@ -226,7 +226,7 @@ def test_case_sensitive_matching(kato_fixture):
     kato_fixture.learn()
     
     # Observe with different casing
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': sort_event_strings(['hello', 'world']), 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
     
@@ -256,7 +256,7 @@ def test_observation_longer_than_learned(kato_fixture):
     kato_fixture.learn()
     
     # Observe longer sequence
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     long_obs = ['a', 'b', 'c', 'd', 'e']
     for item in long_obs:
         kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
@@ -288,7 +288,7 @@ def test_single_symbol_sequences(kato_fixture):
     kato_fixture.learn()
     
     # Observe middle symbols (KATO requires 2+ strings for predictions)
-    kato_fixture.clear_working_memory()
+    kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': ['x'], 'vectors': [], 'emotives': {}})
     kato_fixture.observe({'strings': ['y'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()

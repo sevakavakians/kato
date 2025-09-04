@@ -14,7 +14,7 @@ sys.path.insert(0, test_root)
 sys.path.insert(0, os.path.join(test_root, 'tests'))
 
 # Import all fixtures to make them available to all tests
-from tests.fixtures.kato_fixtures import kato_fixture, kato_with_genome
+from tests.fixtures.kato_fixtures import kato_fixture
 
 # Make fixtures available
-__all__ = ['kato_fixture', 'kato_with_genome']
+__all__ = ['kato_fixture']

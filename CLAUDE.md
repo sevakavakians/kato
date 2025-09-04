@@ -18,48 +18,60 @@ All learned structures in KATO are patterns, whether they represent time-ordered
 
 ### Building and Running
 ```bash
-# Start KATO with vector database (recommended)
-./kato-manager.sh start
-
 # Build Docker image
 ./kato-manager.sh build
 
-# Restart services
-./kato-manager.sh restart
+# Start all services (MongoDB, Qdrant, 3 KATO instances)
+./kato-manager.sh start
 
 # Stop services
 ./kato-manager.sh stop
+
+# Restart services
+./kato-manager.sh restart
 
 # Check status
 ./kato-manager.sh status
 
 # View logs
-docker logs kato-api-$(whoami)-1 --tail 20
+./kato-manager.sh logs                    # All services
+./kato-manager.sh logs primary           # Specific service
+docker logs kato-primary --tail 50       # Direct Docker logs
 ```
 
-### Testing (Local Python)
+### Service URLs
+After running `./kato-manager.sh start`:
+- **Primary KATO**: http://localhost:8001
+- **Testing KATO**: http://localhost:8002  
+- **Analytics KATO**: http://localhost:8003
+- **MongoDB**: mongodb://localhost:27017
+- **Qdrant**: http://localhost:6333
+- **API Docs**: http://localhost:8001/docs
+
+### Testing
 ```bash
+# IMPORTANT: Services must be running first!
+./kato-manager.sh start
+
 # Set up virtual environment (first time only)
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 pip install -r tests/requirements.txt
 
-# Run all tests
-./run_simple_tests.sh
+# Run all tests (with running services)
+./run_simple_tests.sh --no-start --no-stop
 
 # Run specific test categories
-./run_simple_tests.sh tests/tests/unit/        # Unit tests only
-./run_simple_tests.sh tests/tests/integration/ # Integration tests
-./run_simple_tests.sh tests/tests/api/        # API tests
+./run_simple_tests.sh --no-start --no-stop tests/tests/unit/
+./run_simple_tests.sh --no-start --no-stop tests/tests/integration/
+./run_simple_tests.sh --no-start --no-stop tests/tests/api/
 
 # Run specific test file
-./run_simple_tests.sh tests/tests/unit/test_observations.py
+./run_simple_tests.sh --no-start --no-stop tests/tests/unit/test_observations.py
 
 # Run with options
-./run_simple_tests.sh -v                      # Verbose output
-./run_simple_tests.sh --no-start              # Use existing KATO instance
-./run_simple_tests.sh --no-stop               # Keep KATO running after tests
+./run_simple_tests.sh --no-start --no-stop -v    # Verbose output
 
 # Run tests directly with pytest
 source venv/bin/activate
@@ -67,57 +79,59 @@ python -m pytest tests/tests/unit/ -v --tb=short
 ```
 
 **Key Features:**
-- Simple local Python testing without containers
+- Tests run in local Python, connect to running KATO service
+- Each test gets unique processor_id for complete isolation
 - Direct debugging with print statements and breakpoints
-- Fast iteration - no container builds
-- Each test gets a unique processor_id for isolation
-- Clear error messages and stack traces
+- Fast iteration - no container builds for tests
+- Tests can run in parallel safely
 
-### Development and Debugging
+### Health Checks and Debugging
 ```bash
-# Check linting (if available)
-# Note: No standard linting command found - ask user if needed
+# Check service health
+curl http://localhost:8001/health   # Primary
+curl http://localhost:8002/health   # Testing
+curl http://localhost:8003/health   # Analytics
 
-# Type checking (if available)  
-# Note: No standard type checking command found - ask user if needed
+# Test basic operations
+curl -X POST http://localhost:8001/observe \
+  -H "Content-Type: application/json" \
+  -d '{"processor_id": "test", "strings": ["hello"], "vectors": [], "emotives": {}}'
 
-# Debug KATO API
-curl http://localhost:8000/kato-api/ping
+# View API documentation
+open http://localhost:8001/docs     # macOS
+xdg-open http://localhost:8001/docs # Linux
 
-# Check ZMQ communication
-python3 -c "import socket; s = socket.socket(); s.settimeout(1); result = s.connect_ex(('localhost', 5555)); print('ZMQ port 5555 is', 'open' if result == 0 else 'closed')"
+# Check database connections
+docker exec kato-mongodb mongo --eval "db.adminCommand('ping')"
+curl http://localhost:6333/health   # Qdrant
 ```
 
 ## High-Level Architecture
 
-### Distributed Processing Architecture
+### FastAPI Architecture (Current)
 ```
-REST Client → REST Gateway (Port 8000) → ZMQ Server (Port 5555) → KATO Processor
-                    ↓                           ↓                        ↓
-              HTTP to ZMQ              ROUTER/DEALER Pattern      Short-Term Memory
-                                                                         ↓
-                                                              Vector DB (Qdrant)
+Client Request → FastAPI Service (Port 8001-8003) → Embedded KATO Processor
+                           ↓                                    ↓
+                    Async Processing                    MongoDB & Qdrant
+                           ↓                            (Isolated by processor_id)
+                    JSON Response
 ```
 
 ### Core Components
 
-1. **REST Gateway** (`kato/workers/rest_gateway.py`)
-   - FastAPI-based HTTP server on port 8000
-   - Translates REST requests to ZMQ messages
-   - Handles `/observe`, `/predict`, `/ping` endpoints
+1. **FastAPI Service** (`kato/services/kato_fastapi.py`)
+   - Direct embedding of KATO processor
+   - Async request handling with FastAPI
+   - Handles `/observe`, `/learn`, `/predict`, `/health` endpoints
+   - WebSocket support for real-time communication
 
-2. **ZMQ Server** (`kato/workers/zmq_server.py`, `zmq_pool_improved.py`)
-   - High-performance message queue using ROUTER/DEALER pattern
-   - Manages connection pooling and load balancing
-   - Switchable implementations via `KATO_ZMQ_IMPLEMENTATION` env var
-
-3. **KATO Processor** (`kato/workers/kato_processor.py`)
+2. **KATO Processor** (`kato/workers/kato_processor.py`)
    - Core AI engine managing observations and predictions
    - Maintains short-term memory and long-term memory
    - Coordinates with vector database for similarity searches
-   - Implements deterministic hashing for model identification
+   - Implements deterministic hashing for pattern identification
 
-4. **Vector Database Layer** (`kato/storage/`)
+3. **Vector Database Layer** (`kato/storage/`)
    - Primary: Qdrant with HNSW indexing for 10-100x performance
    - Abstraction layer supports multiple backends
    - Redis caching for frequently accessed vectors
@@ -208,7 +222,7 @@ REST Client → REST Gateway (Port 8000) → ZMQ Server (Port 5555) → KATO Pro
 
 ## Testing Strategy
 
-The codebase has comprehensive test coverage with 188 test functions across 21 test files. Tests are organized under `tests/tests/`:
+The codebase has comprehensive test coverage with 143+ test functions across multiple test files. Tests are organized under `tests/tests/`:
 
 1. **Unit Tests** (`tests/tests/unit/`): Test individual components
 2. **Integration Tests** (`tests/tests/integration/`): Test end-to-end workflows
@@ -218,50 +232,55 @@ The codebase has comprehensive test coverage with 188 test functions across 21 t
 **Test Isolation:**
 - Each test gets a unique processor_id for database isolation
 - Tests use the fixture from `tests/tests/fixtures/kato_fixtures.py`
-- KATO is started once and reused across tests for speed
+- KATO services must be running before tests
 - Databases are isolated by processor_id to prevent contamination
+- Tests run in local Python environment for fast debugging
 
 ## Configuration
 
 ### Environment Variables
-- `MANIFEST`: JSON string for processor configuration
+- `PROCESSOR_ID`: Unique identifier for processor instance
+- `PROCESSOR_NAME`: Display name for the processor
 - `LOG_LEVEL`: DEBUG, INFO, WARNING, ERROR (default: INFO)
-- `KATO_ZMQ_IMPLEMENTATION`: "simple" or "improved" (default: improved)
 - `MONGO_BASE_URL`: MongoDB connection string
-- `ZMQ_PORT`: ZeroMQ port (default: 5555)
-- `REST_PORT`: REST API port (default: 8000)
+- `QDRANT_HOST`: Qdrant host (default: localhost)
+- `QDRANT_PORT`: Qdrant port (default: 6333)
+- `MAX_PATTERN_LENGTH`: Auto-learn after N observations (0 = manual only)
+- `PERSISTENCE`: STM persistence length
+- `RECALL_THRESHOLD`: Pattern matching threshold (0.0-1.0, default: 0.1)
 
-### Multi-Instance Support
-Use processor ID and name for multiple instances:
-```bash
-PROCESSOR_ID=p123 PROCESSOR_NAME=CustomProcessor ./kato-manager.sh start
-```
+### Multi-Instance Configuration
+The `docker-compose.yml` includes three pre-configured instances:
+- **Primary** (port 8001): General use, manual learning
+- **Testing** (port 8002): Debug logging, for development  
+- **Analytics** (port 8003): Auto-learn after 50 observations, higher recall threshold
 
 ## Recent Modernizations
 
+- **FastAPI Migration**: Replaced REST/ZMQ with direct FastAPI embedding (2025-09)
 - **Vector Database**: Migrated from linear search to Qdrant (10-100x faster)
-- **ZMQ Architecture**: Migrated from gRPC for better multiprocessing support
-- **Communication Pattern**: ROUTER/DEALER instead of REQ/REP for non-blocking ops
-- **Technical Debt**: Major cleanup completed with comprehensive documentation
+- **Simplified Architecture**: Removed connection pooling complexity
+- **Better Testing**: Local Python tests with automatic isolation
 
 ## Development Workflow
 
 1. Make changes to source files in `kato/` directory
-2. Run tests with `./run_simple_tests.sh` to verify changes
-3. Debug failures directly with print statements or debugger
-4. For production deployment, rebuild with `./kato-manager.sh build`
-5. Test full system with `./run_simple_tests.sh` before committing
+2. Rebuild Docker image: `./kato-manager.sh build`
+3. Restart services: `./kato-manager.sh restart`
+4. Run tests: `./run_simple_tests.sh --no-start --no-stop`
+5. Debug failures directly with print statements or debugger
+6. Commit changes when tests pass
 
 ## Important Files and Locations
 
-- Main processing logic: `kato/workers/kato_processor.py`
-- REST API endpoints: `kato/workers/rest_gateway.py`
+- Main service: `kato/services/kato_fastapi.py`
+- Processing logic: `kato/workers/kato_processor.py`
 - Vector operations: `kato/storage/qdrant_manager.py`
 - Pattern representations: `kato/representations/pattern.py`
 - Pattern processing: `kato/workers/pattern_processor.py`
 - Pattern search: `kato/searches/pattern_search.py`
 - Metrics calculations: `kato/informatics/metrics.py`
-- Test fixtures: `tests/fixtures/kato_fixtures.py`
+- Test fixtures: `tests/tests/fixtures/kato_fixtures.py`
 - Management script: `kato-manager.sh`
 
 ## Prediction Metrics and Calculations
@@ -377,114 +396,29 @@ The project-manager will automatically:
 
 ## Test Execution Protocol
 
-### ⚠️ CRITICAL RULE: USE test-analyst FOR ALL TESTING ⚠️
+### ⚠️ CRITICAL: Use test-analyst Agent ONLY for Docker-based Testing ⚠️
 
-### When to Trigger test-analyst:
-Use the Task tool with subagent_type="test-analyst" when:
-- **After Code Changes** → To verify functionality and catch regressions
-- **After Bug Fixes** → To confirm fixes work and don't break other tests
-- **After Feature Implementation** → To ensure comprehensive testing
-- **When Investigating Test Failures** → To get detailed analysis
-- **For Performance Testing** → To benchmark and analyze performance
-- **When User Requests Testing** → Any test-related request
+With the new FastAPI architecture, most testing is done locally with Python:
 
-### ❌ FORBIDDEN ACTIONS for Claude Code:
-- Running `./test-harness.sh` directly via Bash tool
-- Running `./kato-manager.sh test` directly via Bash tool  
-- Running pytest commands directly
-- Executing test scripts manually
+### Local Testing (Recommended)
+```bash
+# Ensure services are running
+./kato-manager.sh start
 
-### ✅ CORRECT WORKFLOW:
-```
-❌ WRONG: Bash("./test-harness.sh test")
-❌ WRONG: Bash("./kato-manager.sh test")
-❌ WRONG: Bash("python -m pytest tests/")
+# Run tests locally
+./run_simple_tests.sh --no-start --no-stop
 
-✅ RIGHT: Task tool with subagent_type="test-analyst"
+# Direct pytest execution
+python -m pytest tests/tests/unit/ -v
 ```
 
-### ⚠️ MANDATORY test-analyst REQUIREMENTS:
-The test-analyst agent MUST:
-1. **ALWAYS check for code changes and rebuild containers when needed**:
-   - Check `git diff` to detect ANY code changes (*.py, *.sh, Dockerfile*, requirements*.txt, etc.)
-   - Check file modification times against container build times
-   - Run `./check-rebuild-needed.sh` to verify containers are current
-   - If ANY source files changed: rebuild BOTH containers:
-     - `./kato-manager.sh build` for KATO image
-     - `./test-harness.sh build` for test harness
-   - NEVER skip rebuild when ANY code files are modified
-   - Verify rebuild completed successfully before proceeding
+### When to Use test-analyst Agent:
+The test-analyst agent should ONLY be used for:
+- Running tests that require Docker container rebuilds
+- Complex test orchestration across multiple containers
+- Performance benchmarking with isolated environments
 
-2. **ALWAYS run actual tests** - NEVER use cached or simulated results:
-   - Must execute `./test-harness.sh test` or similar commands
-   - Must wait for actual test completion
-   - Test output is saved to `logs/test-runs/` to prevent memory issues
-   - NEVER return results without actual execution
-
-3. **Read test results from log files** (NEW APPROACH):
-   - **Primary**: Read `logs/test-runs/latest/summary.txt` for quick overview
-   - **Errors**: Check `logs/test-runs/latest/errors.log` for failure details
-   - **Full output**: Only read `logs/test-runs/latest/output.log` if debugging
-   - Use `tail -n 1000` to read portions of large files
-   - Report file paths where full logs are saved
-
-4. **AUTOMATICALLY FIX TEST INFRASTRUCTURE ISSUES**:
-   The test-analyst has FULL AUTHORITY to fix operational problems that prevent tests from running:
-   
-   **Issues to Auto-Fix:**
-   - Python syntax errors in test files (indentation, imports, etc.)
-   - Missing or broken test fixtures
-   - Test harness script errors (test-harness.sh, kato-manager.sh)
-   - Docker container build failures
-   - Missing dependencies in requirements-test.txt
-   - Pytest configuration issues (pytest.ini, conftest.py)
-   - Path or import errors in test files
-   - File permission issues on test scripts
-   
-   **Auto-Fix Protocol:**
-   1. If test execution fails before tests can run:
-      - Diagnose the root cause (syntax error, missing file, etc.)
-      - Fix the issue directly (edit files, add dependencies, fix permissions)
-      - Document what was fixed and why
-      - Retry test execution
-      - Continue until tests can actually run
-   
-   **DO NOT Auto-Fix:**
-   - Actual test logic or assertions (these are intentional)
-   - KATO source code (only test infrastructure)
-   - Test expectations that reflect actual KATO behavior
-   
-   **Example Auto-Fix Scenarios:**
-   - `IndentationError` → Fix indentation in test file
-   - `ModuleNotFoundError` → Add missing import or install dependency
-   - `Permission denied` → chmod +x on script files
-   - `Docker build failed` → Fix Dockerfile.test or dependencies
-   - `pytest collection error` → Fix syntax or import issues
-
-### Example Usage:
-```
-assistant: "I've completed the bug fix. Let me use the test-analyst to verify all tests pass."
-<uses Task tool with subagent_type="test-analyst">
-
-The test-analyst MUST:
-1. Check for ANY code changes: git diff
-2. Run rebuild check: ./check-rebuild-needed.sh
-3. Rebuild containers if needed:
-   - ./kato-manager.sh build (if KATO source changed)
-   - ./test-harness.sh build (if test files changed)
-4. Attempt to run tests: ./test-harness.sh test
-4. IF tests fail to start/collect:
-   - Diagnose the infrastructure issue
-   - Fix it automatically (edit files, fix permissions, etc.)
-   - Document the fix
-   - Retry test execution
-5. Once tests complete:
-   - Read results from `logs/test-runs/latest/summary.txt`
-   - Check errors in `logs/test-runs/latest/errors.log`
-   - Only read full output if specifically debugging issues
-   - Report summary with file paths to full logs
-   - Analyze patterns and provide recommendations
-```
+For regular development testing, use the local Python approach described above.
 
 ## Test Isolation Architecture
 
@@ -505,16 +439,16 @@ Each KATO instance uses its processor_id for complete database isolation:
    - No cross-contamination between tests
    - Each instance has its own HNSW index
 
-3. **In-Memory Cache**: Per VectorSearchEngine instance
-   - Cache is automatically isolated per engine instance
+3. **In-Memory Cache**: Per processor instance
+   - Cache is automatically isolated per processor
    - No shared state between processors
 
 ### Test Requirements
 - **Each test MUST use a unique processor_id**
 - Format: `test_{test_name}_{timestamp}_{uuid}`
 - Example: `test_pattern_endpoint_1699123456789_a1b2c3d4`
-- **Fixture scope is 'function'** - each test gets fresh instance
-- **Cleanup is automatic** in fixture teardown
+- **Fixture scope is 'function'** - each test gets fresh isolation
+- **Services must be running** before tests execute
 
 ### Production Requirements
 - **Each production instance MUST have unique processor_id**
@@ -533,18 +467,19 @@ Without proper isolation:
 
 ### Available Specialized Agents:
 1. **project-manager**: ALL planning-docs/ updates and documentation
-2. **test-analyst**: ALL test execution and analysis  
+2. **test-analyst**: Docker-based testing and complex test orchestration ONLY
 3. **general-purpose**: Complex multi-step research tasks
 4. **statusline-setup**: Configure Claude Code status line
 
 ### Quick Decision Tree:
 - Updating documentation? → project-manager
-- Running tests? → test-analyst
+- Running Docker tests? → test-analyst
+- Running local tests? → Do it directly with `./run_simple_tests.sh`
 - Complex research? → general-purpose
 - Everything else? → Do it directly
 
 ### Common Mistakes to Avoid:
 1. ❌ Editing planning-docs/ directly → ✅ Use project-manager
-2. ❌ Running test-harness.sh directly → ✅ Use test-analyst
-3. ❌ Running pytest directly → ✅ Use test-analyst
-4. ❌ Running kato-manager.sh test → ✅ Use test-analyst
+2. ❌ Using test-analyst for local tests → ✅ Use `./run_simple_tests.sh`
+3. ❌ Forgetting to start services before tests → ✅ Run `./kato-manager.sh start` first
+4. ❌ Sharing processor_ids between tests → ✅ Each test gets unique processor_id

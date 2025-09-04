@@ -8,7 +8,7 @@ import sys
 import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from fixtures.kato_fixtures import kato_fixture as kato_fixture, kato_with_genome
+from fixtures.kato_fixtures import kato_fixture
 
 
 def test_clear_all_memory(kato_fixture):

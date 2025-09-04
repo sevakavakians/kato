@@ -116,6 +116,17 @@ curl -X POST http://localhost:8001/predict \
   -d '{"processor_id": "my-processor"}'
 ```
 
+## Core Concepts
+
+KATO processes observations as **events** containing strings, vectors, and emotives. Each event is processed through:
+- **Alphanumeric sorting** within events
+- **Deterministic hashing** for patterns (PTRN|<sha1_hash>)
+- **Temporal segmentation** in predictions
+- **Empty event filtering**
+- **Minimum requirement**: 2+ strings in STM for predictions (vectors contribute strings)
+
+Learn more in [Core Concepts](docs/CONCEPTS.md).
+
 ## Service Management
 
 ### Starting and Stopping
@@ -147,6 +158,8 @@ docker logs kato-primary --tail 50  # Direct Docker logs
 ```
 
 ## Testing
+
+KATO uses a simplified test architecture where tests run in local Python and connect to running services:
 
 ### Prerequisites for Testing
 ```bash
@@ -185,6 +198,64 @@ pip install -r tests/requirements.txt
 - **Automatic Isolation**: Each test gets unique processor_id for complete isolation
 - **Fast Iteration**: Direct Python execution allows debugging with print/breakpoints
 - **Parallel Safe**: Tests can run in parallel thanks to processor_id isolation
+
+**Current Status**: 143+ tests across unit, integration, API, and performance suites
+
+See [Testing Guide](docs/TESTING.md) for complete details.
+
+## Documentation
+
+### 📚 Getting Started
+- [Quick Start Guide](docs/GETTING_STARTED.md) - Get running in 5 minutes
+- [Multi-Instance Guide](docs/MULTI_INSTANCE_GUIDE.md) - Run multiple KATO processors
+- [System Overview](docs/SYSTEM_OVERVIEW.md) - Understand the architecture
+- [Core Concepts](docs/CONCEPTS.md) - Learn KATO's behavior
+
+### 🚀 Deployment
+- [Docker Guide](docs/deployment/DOCKER.md) - Container deployment
+- [Configuration](docs/deployment/CONFIGURATION.md) - All parameters explained
+- [Architecture](docs/deployment/ARCHITECTURE.md) - System design
+
+### 🔧 Development
+- [API Reference](docs/API_REFERENCE.md) - Complete endpoint documentation
+- [Testing Guide](docs/TESTING.md) - Write and run tests
+- [Contributing](docs/development/CONTRIBUTING.md) - Development guidelines
+
+### 📊 Technical
+- [Performance Guide](docs/technical/PERFORMANCE.md) - Optimization strategies
+- [Troubleshooting](docs/technical/TROUBLESHOOTING.md) - Common issues
+- [Prediction Object Reference](docs/technical/PREDICTION_OBJECT_REFERENCE.md) - Complete field documentation
+- [Vector Architecture](docs/VECTOR_ARCHITECTURE_IMPLEMENTATION.md) - Modern vector database system
+- [Breaking Changes](docs/BREAKING_CHANGES_VECTOR_ARCHITECTURE.md) - Vector migration guide
+- [Known Issues](docs/KNOWN_ISSUES_AND_BUGS.md) - Current bugs and workarounds
+
+### 📁 Documentation Structure
+
+```
+docs/
+├── CONCEPTS.md              # Core behavior reference
+├── GETTING_STARTED.md       # Quick start guide
+├── MULTI_INSTANCE_GUIDE.md  # Multi-instance management
+├── API_REFERENCE.md         # Complete API docs
+├── SYSTEM_OVERVIEW.md       # End-to-end behavior
+├── TESTING.md               # Complete testing guide
+├── VECTOR_ARCHITECTURE_IMPLEMENTATION.md  # Vector DB system
+├── VECTOR_MIGRATION_GUIDE.md              # Migration steps
+├── VECTOR_TEST_RESULTS.md                 # Performance data
+├── BREAKING_CHANGES_VECTOR_ARCHITECTURE.md # Breaking changes
+├── KNOWN_ISSUES_AND_BUGS.md               # Current issues
+├── deployment/
+│   ├── ARCHITECTURE.md      # System design
+│   ├── CONFIGURATION.md     # All parameters
+│   └── DOCKER.md            # Container guide
+├── development/
+│   ├── CONTRIBUTING.md      # Dev guidelines
+│   └── CHANGELOG.md         # Version history
+└── technical/
+    ├── PERFORMANCE.md       # Optimization guide
+    ├── TROUBLESHOOTING.md   # Issue resolution
+    └── PREDICTION_OBJECT_REFERENCE.md # Field documentation
+```
 
 ## Architecture Overview
 
@@ -305,6 +376,8 @@ Clears specified memory type.
 - **Horizontal**: Run multiple KATO instances on different ports
 - **Load Balancing**: Use nginx or similar for distributing requests
 
+See [Performance Guide](docs/technical/PERFORMANCE.md) for optimization.
+
 ## Troubleshooting
 
 ### Common Issues
@@ -347,31 +420,42 @@ docker volume prune -f
 ./kato-manager.sh start
 ```
 
-## Documentation
+See [Troubleshooting Guide](docs/technical/TROUBLESHOOTING.md) for more solutions.
 
-### 📚 Guides
-- [API Reference](docs/API_REFERENCE.md) - Complete endpoint documentation
-- [Core Concepts](docs/CONCEPTS.md) - KATO's behavior and patterns
-- [Testing Guide](docs/TESTING.md) - Comprehensive testing documentation
-- [Configuration Guide](docs/CONFIGURATION.md) - All parameters explained
+## Contributing
 
-### 🔧 Development
-- [Contributing](docs/CONTRIBUTING.md) - Development guidelines
-- [Architecture](docs/ARCHITECTURE.md) - System design details
+We welcome contributions! Please see our [Contributing Guide](docs/development/CONTRIBUTING.md) for:
+- Development setup
+- Code guidelines
+- Testing requirements
+- Pull request process
 
-## Recent Updates (2025-09)
+## License
 
-### Major Architecture Migration
+This project is licensed under the terms in the [LICENSE](LICENSE) file.
+
+## Heritage
+
+KATO is derived from the [GAIuS](https://medium.com/@sevakavakians/what-is-gaius-a-responsible-alternative-to-neural-network-artificial-intelligence-part-1-of-3-1f7bbe583a32) framework, retaining its transparent, symbolic, and physics-informed learning process while focusing on deterministic memory and abstraction.
+
+Like GAIuS before it, KATO adheres to [ExCITE AI](https://medium.com/@sevakavakians/what-is-excite-ai-712afd372af4) principles.
+
+## Recent Updates
+
+### Major Architecture Migration (2025-09)
 - **NEW: FastAPI Architecture** - Replaced REST/ZMQ with direct FastAPI embedding
-- **Removed ZeroMQ Layer** - Eliminated connection pooling issues
 - **Fixed STM State Persistence** - Resolved state management problems
 - **Simplified Testing** - Local Python tests with automatic isolation
 - **Better Performance** - Reduced latency by removing inter-process communication
 
-### Bug Fixes
-- Fixed empty STM issue where state was lost between requests
-- Resolved processor isolation in tests
-- Fixed MongoDB health check compatibility
+### Bug Fixes (2025-09-01)
+- **Fixed Division by Zero Errors**: Resolved edge cases in metric calculations when:
+  - Pattern fragmentation equals -1
+  - Total ensemble pattern frequencies equal 0 (when no patterns match)
+  - State is empty in hamiltonian calculations
+  - MongoDB metadata documents are missing
+- **Improved Error Handling**: Errors now provide detailed context instead of being masked with defaults
+- **Enhanced Recall Threshold**: Better handling of threshold=0.0 for comprehensive pattern matching
 
 ## Support
 

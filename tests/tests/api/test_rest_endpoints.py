@@ -9,7 +9,12 @@ import json
 import sys
 import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from fixtures.kato_fixtures import kato_fixture
+
+# Use FastAPI fixture if available, otherwise fall back to old fixture
+if os.environ.get('USE_FASTAPI', 'false').lower() == 'true':
+    from fixtures.kato_fastapi_fixtures import kato_fastapi_existing as kato_fixture
+else:
+    from fixtures.kato_fixtures import kato_fixture
 from fixtures.test_helpers import sort_event_strings
 
 

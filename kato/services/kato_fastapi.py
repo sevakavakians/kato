@@ -15,21 +15,35 @@ import uuid
 from contextlib import asynccontextmanager
 from typing import Dict, List, Optional, Any
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 # Add parent directories to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 from kato.workers.kato_processor import KatoProcessor
-
-# Configure logging
-logging.basicConfig(
-    level=getattr(logging, os.environ.get('LOG_LEVEL', 'INFO')),
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+from kato.config.logging_config import (
+    configure_logging, get_logger, set_trace_id, get_trace_id,
+    start_request_timer, get_request_duration, PerformanceTimer
 )
-logger = logging.getLogger('kato.fastapi')
+from kato.exceptions import (
+    KatoBaseException, ObservationError, PredictionError, 
+    LearningError, ValidationError, ConfigurationError,
+    DatabaseConnectionError, ResourceNotFoundError
+)
+
+# Configure structured logging
+configure_logging(
+    level=os.environ.get('LOG_LEVEL', 'INFO'),
+    format_type=os.environ.get('LOG_FORMAT', 'human'),
+    output=os.environ.get('LOG_OUTPUT', 'stdout')
+)
+
+# Get logger with processor_id if available
+processor_id = os.environ.get('PROCESSOR_ID')
+logger = get_logger('kato.fastapi', processor_id)
 
 # Global processor instance and lock
 processor: Optional[KatoProcessor] = None
@@ -190,6 +204,98 @@ app = FastAPI(
 )
 
 
+# Add request/response logging middleware
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """
+    Middleware to log all requests and responses with trace IDs.
+    """
+    # Generate or extract trace ID
+    trace_id = request.headers.get('X-Trace-ID') or set_trace_id()
+    
+    # Start request timer
+    start_request_timer()
+    start_time = time.time()
+    
+    # Log request
+    logger.info(
+        f"Request started: {request.method} {request.url.path}",
+        extra={'extra_fields': {
+            'method': request.method,
+            'path': request.url.path,
+            'client': request.client.host if request.client else None,
+            'trace_id': trace_id
+        }}
+    )
+    
+    try:
+        # Process request
+        response = await call_next(request)
+        
+        # Calculate duration
+        duration_ms = (time.time() - start_time) * 1000
+        
+        # Log response
+        logger.info(
+            f"Request completed: {request.method} {request.url.path} - {response.status_code} in {duration_ms:.2f}ms",
+            extra={'extra_fields': {
+                'method': request.method,
+                'path': request.url.path,
+                'status_code': response.status_code,
+                'duration_ms': round(duration_ms, 2),
+                'trace_id': trace_id
+            }}
+        )
+        
+        # Add trace ID to response headers
+        response.headers['X-Trace-ID'] = trace_id
+        
+        return response
+        
+    except Exception as e:
+        # Calculate duration even for errors
+        duration_ms = (time.time() - start_time) * 1000
+        
+        # Log error
+        logger.error(
+            f"Request failed: {request.method} {request.url.path} - {str(e)} after {duration_ms:.2f}ms",
+            extra={'extra_fields': {
+                'method': request.method,
+                'path': request.url.path,
+                'error': str(e),
+                'duration_ms': round(duration_ms, 2),
+                'trace_id': trace_id
+            }}
+        )
+        
+        # Re-raise the exception
+        raise
+
+
+# Custom exception handler for KatoBaseException
+@app.exception_handler(KatoBaseException)
+async def kato_exception_handler(request: Request, exc: KatoBaseException):
+    """
+    Handle KATO-specific exceptions with proper logging and response formatting.
+    """
+    # Add trace ID if not present
+    if not exc.trace_id:
+        exc.trace_id = get_trace_id()
+    
+    # Log the exception
+    logger.error(
+        f"KATO exception: {exc.error_code} - {exc.message}",
+        extra={'extra_fields': exc.to_dict()}
+    )
+    
+    # Return structured error response
+    return JSONResponse(
+        status_code=400,
+        content=exc.to_dict(),
+        headers={'X-Trace-ID': exc.trace_id} if exc.trace_id else {}
+    )
+
+
 # Health and Status Endpoints
 @app.get("/health")
 async def health_check():
@@ -205,10 +311,15 @@ async def health_check():
 async def get_status():
     """Get processor status"""
     if not processor:
-        raise HTTPException(status_code=503, detail="Processor not initialized")
+        raise ConfigurationError(
+            "Processor not initialized",
+            config_key="processor",
+            trace_id=get_trace_id()
+        )
     
     async with processor_lock:
-        stm_length = len(processor.get_stm())
+        with PerformanceTimer(logger, 'get_status'):
+            stm_length = len(processor.get_stm())
         
     return ProcessorStatus(
         status="okay",
@@ -225,11 +336,26 @@ async def get_status():
 async def observe(data: ObservationData):
     """Process an observation"""
     if not processor:
-        raise HTTPException(status_code=503, detail="Processor not initialized")
+        raise ConfigurationError(
+            "Processor not initialized",
+            config_key="processor",
+            trace_id=get_trace_id()
+        )
     
     # Generate unique ID if not provided
     if not data.unique_id:
         data.unique_id = f"obs-{uuid.uuid4().hex}-{int(time.time() * 1000000)}"
+    
+    # Validate vectors if provided
+    if data.vectors:
+        for i, vector in enumerate(data.vectors):
+            if not isinstance(vector, list) or not all(isinstance(v, (int, float)) for v in vector):
+                raise ValidationError(
+                    f"Invalid vector at index {i}: vectors must be lists of numbers",
+                    field_name=f"vectors[{i}]",
+                    field_value=str(vector)[:100],
+                    trace_id=get_trace_id()
+                )
     
     # Prepare observation data
     observation = {
@@ -243,7 +369,8 @@ async def observe(data: ObservationData):
     # Process observation with lock to ensure sequential processing
     async with processor_lock:
         try:
-            result = processor.observe(observation)
+            with PerformanceTimer(logger, 'observe', {'observation_id': data.unique_id}):
+                result = processor.observe(observation)
             
             return ObservationResult(
                 status="okay",
@@ -253,8 +380,13 @@ async def observe(data: ObservationData):
                 unique_id=result.get('unique_id', data.unique_id)
             )
         except Exception as e:
-            logger.error(f"Error processing observation: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
+            # Wrap unknown exceptions in ObservationError
+            raise ObservationError(
+                f"Failed to process observation: {str(e)}",
+                observation_id=data.unique_id,
+                observation_data={'strings': data.strings[:5] if data.strings else []},  # Limited preview
+                trace_id=get_trace_id()
+            )
 
 
 @app.get("/stm", response_model=STMResponse)

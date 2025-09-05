@@ -1,0 +1,479 @@
+"""
+KATO Exception Hierarchy
+Provides specific exception types for better error handling and debugging.
+"""
+
+from typing import Any, Dict, Optional
+
+
+class KatoBaseException(Exception):
+    """
+    Base exception class for all KATO-specific exceptions.
+    Provides context and trace ID tracking.
+    """
+    
+    def __init__(
+        self, 
+        message: str, 
+        error_code: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None,
+        trace_id: Optional[str] = None
+    ):
+        """
+        Initialize a KATO exception with context.
+        
+        Args:
+            message: Human-readable error message
+            error_code: Machine-readable error code for categorization
+            context: Additional context about the error
+            trace_id: Request trace ID for correlation
+        """
+        super().__init__(message)
+        self.message = message
+        self.error_code = error_code or self.__class__.__name__
+        self.context = context or {}
+        self.trace_id = trace_id
+        
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Convert exception to dictionary for API responses.
+        
+        Returns:
+            Dictionary representation of the exception
+        """
+        result = {
+            'error': self.error_code,
+            'message': self.message,
+            'type': self.__class__.__name__
+        }
+        
+        if self.context:
+            result['context'] = self.context
+            
+        if self.trace_id:
+            result['trace_id'] = self.trace_id
+            
+        return result
+        
+    def __str__(self) -> str:
+        """String representation of the exception."""
+        parts = [f"{self.error_code}: {self.message}"]
+        
+        if self.context:
+            parts.append(f"Context: {self.context}")
+            
+        if self.trace_id:
+            parts.append(f"Trace ID: {self.trace_id}")
+            
+        return " | ".join(parts)
+
+
+class PatternProcessingError(KatoBaseException):
+    """
+    Raised when pattern processing fails.
+    """
+    
+    def __init__(
+        self, 
+        message: str,
+        pattern_name: Optional[str] = None,
+        pattern_data: Optional[Any] = None,
+        **kwargs
+    ):
+        """
+        Initialize pattern processing error.
+        
+        Args:
+            message: Error message
+            pattern_name: Name of the pattern that failed
+            pattern_data: Pattern data that caused the error
+            **kwargs: Additional arguments for base exception
+        """
+        context = kwargs.pop('context', {})
+        
+        if pattern_name:
+            context['pattern_name'] = pattern_name
+        if pattern_data is not None:
+            context['pattern_data'] = str(pattern_data)[:500]  # Limit size
+            
+        super().__init__(
+            message=message,
+            error_code='PATTERN_PROCESSING_ERROR',
+            context=context,
+            **kwargs
+        )
+
+
+class VectorDimensionError(KatoBaseException):
+    """
+    Raised when vector dimensions are incorrect or mismatched.
+    """
+    
+    def __init__(
+        self,
+        message: str,
+        expected_dim: Optional[int] = None,
+        actual_dim: Optional[int] = None,
+        vector_name: Optional[str] = None,
+        **kwargs
+    ):
+        """
+        Initialize vector dimension error.
+        
+        Args:
+            message: Error message
+            expected_dim: Expected vector dimension
+            actual_dim: Actual vector dimension received
+            vector_name: Name or ID of the vector
+            **kwargs: Additional arguments for base exception
+        """
+        context = kwargs.pop('context', {})
+        
+        if expected_dim is not None:
+            context['expected_dimension'] = expected_dim
+        if actual_dim is not None:
+            context['actual_dimension'] = actual_dim
+        if vector_name:
+            context['vector_name'] = vector_name
+            
+        super().__init__(
+            message=message,
+            error_code='VECTOR_DIMENSION_ERROR',
+            context=context,
+            **kwargs
+        )
+
+
+class DatabaseConnectionError(KatoBaseException):
+    """
+    Raised when database connection or operation fails.
+    """
+    
+    def __init__(
+        self,
+        message: str,
+        database_type: Optional[str] = None,
+        operation: Optional[str] = None,
+        retry_possible: bool = True,
+        **kwargs
+    ):
+        """
+        Initialize database connection error.
+        
+        Args:
+            message: Error message
+            database_type: Type of database (mongodb, qdrant, etc.)
+            operation: Operation that failed
+            retry_possible: Whether the operation can be retried
+            **kwargs: Additional arguments for base exception
+        """
+        context = kwargs.pop('context', {})
+        
+        if database_type:
+            context['database_type'] = database_type
+        if operation:
+            context['operation'] = operation
+        context['retry_possible'] = retry_possible
+            
+        super().__init__(
+            message=message,
+            error_code='DATABASE_CONNECTION_ERROR',
+            context=context,
+            **kwargs
+        )
+
+
+class ConfigurationError(KatoBaseException):
+    """
+    Raised when configuration is invalid or missing.
+    """
+    
+    def __init__(
+        self,
+        message: str,
+        config_key: Optional[str] = None,
+        config_value: Optional[Any] = None,
+        valid_values: Optional[list] = None,
+        **kwargs
+    ):
+        """
+        Initialize configuration error.
+        
+        Args:
+            message: Error message
+            config_key: Configuration key that has the error
+            config_value: Invalid configuration value
+            valid_values: List of valid values if applicable
+            **kwargs: Additional arguments for base exception
+        """
+        context = kwargs.pop('context', {})
+        
+        if config_key:
+            context['config_key'] = config_key
+        if config_value is not None:
+            context['config_value'] = str(config_value)
+        if valid_values:
+            context['valid_values'] = valid_values
+            
+        super().__init__(
+            message=message,
+            error_code='CONFIGURATION_ERROR',
+            context=context,
+            **kwargs
+        )
+
+
+class ObservationError(KatoBaseException):
+    """
+    Raised when observation processing fails.
+    """
+    
+    def __init__(
+        self,
+        message: str,
+        observation_id: Optional[str] = None,
+        observation_data: Optional[Dict[str, Any]] = None,
+        **kwargs
+    ):
+        """
+        Initialize observation error.
+        
+        Args:
+            message: Error message
+            observation_id: ID of the observation
+            observation_data: Observation data that caused the error
+            **kwargs: Additional arguments for base exception
+        """
+        context = kwargs.pop('context', {})
+        
+        if observation_id:
+            context['observation_id'] = observation_id
+        if observation_data:
+            # Limit the size of observation data in context
+            context['observation_data'] = {
+                k: str(v)[:100] if isinstance(v, (list, dict)) else v
+                for k, v in observation_data.items()
+            }
+            
+        super().__init__(
+            message=message,
+            error_code='OBSERVATION_ERROR',
+            context=context,
+            **kwargs
+        )
+
+
+class PredictionError(KatoBaseException):
+    """
+    Raised when prediction generation fails.
+    """
+    
+    def __init__(
+        self,
+        message: str,
+        stm_state: Optional[list] = None,
+        recall_threshold: Optional[float] = None,
+        **kwargs
+    ):
+        """
+        Initialize prediction error.
+        
+        Args:
+            message: Error message
+            stm_state: Current STM state
+            recall_threshold: Recall threshold used
+            **kwargs: Additional arguments for base exception
+        """
+        context = kwargs.pop('context', {})
+        
+        if stm_state is not None:
+            context['stm_length'] = len(stm_state)
+            # Include limited STM preview
+            if stm_state:
+                context['stm_preview'] = str(stm_state[:2])[:200]
+        if recall_threshold is not None:
+            context['recall_threshold'] = recall_threshold
+            
+        super().__init__(
+            message=message,
+            error_code='PREDICTION_ERROR',
+            context=context,
+            **kwargs
+        )
+
+
+class LearningError(KatoBaseException):
+    """
+    Raised when pattern learning fails.
+    """
+    
+    def __init__(
+        self,
+        message: str,
+        stm_state: Optional[list] = None,
+        auto_learn: bool = False,
+        **kwargs
+    ):
+        """
+        Initialize learning error.
+        
+        Args:
+            message: Error message
+            stm_state: Current STM state when learning failed
+            auto_learn: Whether this was an auto-learn attempt
+            **kwargs: Additional arguments for base exception
+        """
+        context = kwargs.pop('context', {})
+        
+        if stm_state is not None:
+            context['stm_length'] = len(stm_state)
+        context['auto_learn'] = auto_learn
+            
+        super().__init__(
+            message=message,
+            error_code='LEARNING_ERROR',
+            context=context,
+            **kwargs
+        )
+
+
+class ValidationError(KatoBaseException):
+    """
+    Raised when input validation fails.
+    """
+    
+    def __init__(
+        self,
+        message: str,
+        field_name: Optional[str] = None,
+        field_value: Optional[Any] = None,
+        validation_rule: Optional[str] = None,
+        **kwargs
+    ):
+        """
+        Initialize validation error.
+        
+        Args:
+            message: Error message
+            field_name: Name of the field that failed validation
+            field_value: Value that failed validation
+            validation_rule: Description of the validation rule
+            **kwargs: Additional arguments for base exception
+        """
+        context = kwargs.pop('context', {})
+        
+        if field_name:
+            context['field_name'] = field_name
+        if field_value is not None:
+            context['field_value'] = str(field_value)[:100]
+        if validation_rule:
+            context['validation_rule'] = validation_rule
+            
+        super().__init__(
+            message=message,
+            error_code='VALIDATION_ERROR',
+            context=context,
+            **kwargs
+        )
+
+
+class ResourceNotFoundError(KatoBaseException):
+    """
+    Raised when a requested resource cannot be found.
+    """
+    
+    def __init__(
+        self,
+        message: str,
+        resource_type: Optional[str] = None,
+        resource_id: Optional[str] = None,
+        **kwargs
+    ):
+        """
+        Initialize resource not found error.
+        
+        Args:
+            message: Error message
+            resource_type: Type of resource (pattern, vector, etc.)
+            resource_id: ID of the resource
+            **kwargs: Additional arguments for base exception
+        """
+        context = kwargs.pop('context', {})
+        
+        if resource_type:
+            context['resource_type'] = resource_type
+        if resource_id:
+            context['resource_id'] = resource_id
+            
+        super().__init__(
+            message=message,
+            error_code='RESOURCE_NOT_FOUND',
+            context=context,
+            **kwargs
+        )
+
+
+class MemoryError(KatoBaseException):
+    """
+    Raised when memory operations fail (STM/LTM).
+    """
+    
+    def __init__(
+        self,
+        message: str,
+        memory_type: Optional[str] = None,
+        operation: Optional[str] = None,
+        **kwargs
+    ):
+        """
+        Initialize memory error.
+        
+        Args:
+            message: Error message
+            memory_type: Type of memory (STM or LTM)
+            operation: Operation that failed
+            **kwargs: Additional arguments for base exception
+        """
+        context = kwargs.pop('context', {})
+        
+        if memory_type:
+            context['memory_type'] = memory_type
+        if operation:
+            context['operation'] = operation
+            
+        super().__init__(
+            message=message,
+            error_code='MEMORY_ERROR',
+            context=context,
+            **kwargs
+        )
+
+
+# Convenience function for getting trace ID from logging context
+def get_current_trace_id() -> Optional[str]:
+    """
+    Get the current trace ID from logging context.
+    
+    Returns:
+        Current trace ID or None
+    """
+    try:
+        from kato.config.logging_config import get_trace_id
+        return get_trace_id()
+    except ImportError:
+        return None
+
+
+def raise_with_trace(exception_class: type, *args, **kwargs) -> None:
+    """
+    Raise an exception with the current trace ID automatically included.
+    
+    Args:
+        exception_class: The exception class to raise
+        *args: Arguments for the exception
+        **kwargs: Keyword arguments for the exception
+    """
+    trace_id = get_current_trace_id()
+    if trace_id and 'trace_id' not in kwargs:
+        kwargs['trace_id'] = trace_id
+    raise exception_class(*args, **kwargs)

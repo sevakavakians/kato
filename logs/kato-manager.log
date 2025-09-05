@@ -14039,3 +14039,16 @@
 [0;34m[INFO][0m KATO FastAPI Services Status:
 [0;34m[INFO][0m Service URLs:
 [0;34m[INFO][0m Health Check:
+[0;34m[INFO][0m Stopping KATO services...
+[0;32m[SUCCESS][0m KATO services stopped
+[0;34m[INFO][0m KATO FastAPI Services Status:
+[0;34m[INFO][0m Service URLs:
+[0;34m[INFO][0m Health Check:
+[0;34m[INFO][0m Building KATO Docker image...
+[0;32m[SUCCESS][0m Docker image built successfully
+[0;34m[INFO][0m Starting KATO services...
+[0;32m[SUCCESS][0m KATO services started
+[0;34m[INFO][0m Waiting for services to be ready...
+[0;34m[INFO][0m KATO FastAPI Services Status:
+[0;34m[INFO][0m Service URLs:
+[0;34m[INFO][0m Health Check:

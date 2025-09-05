@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-KATO (Knowledge Abstraction for Traceable Outcomes) is a deterministic AI system designed for transparent, explainable memory and prediction. It processes multi-modal observations (text, vectors, emotions) through a distributed architecture using Docker containers, ZeroMQ messaging, and modern vector databases to deliver temporal predictions with complete traceability.
+KATO (Knowledge Abstraction for Traceable Outcomes) is a deterministic AI system designed for transparent, explainable memory and prediction. It processes multi-modal observations (text, vectors, emotions) through a distributed architecture using Docker containers, FastAPI services, and modern vector databases to deliver temporal predictions with complete traceability.
 
 ## Table of Contents
 1. [System Overview](#system-overview)
@@ -24,7 +24,7 @@ KATO operates as a distributed system with the following key characteristics:
 - **Multi-Modal Input**: Handles strings, vectors (768-dim), and emotional context
 - **Temporal Predictions**: Structures predictions as past/present/future segments
 - **Complete Transparency**: Full traceability of decisions and predictions
-- **Distributed Architecture**: Scalable through Docker containers and ZeroMQ
+- **Distributed Architecture**: Scalable through Docker containers and FastAPI
 
 ## Architecture Diagrams
 
@@ -44,14 +44,15 @@ KATO operates as a distributed system with the following key characteristics:
 │  │                        Docker Network: kato-network                       │  │
 │  │                                                                          │  │
 │  │  ┌────────────────────────────────────────────────────────────────────┐ │  │
-│  │  │                     kato-api Container (REQUIRED)                   │ │  │
+│  │  │                   kato-fastapi Container (REQUIRED)                │ │  │
 │  │  │                                                                     │ │  │
-│  │  │  ┌─────────────────┐      ┌──────────────┐     ┌──────────────┐  │ │  │
-│  │  │  │  REST Gateway   │◄────►│  ZMQ Pool    │◄───►│  ZMQ Server  │  │ │  │
-│  │  │  │   Port: 8000    │      │  (Improved)  │     │  Port: 5555  │  │ │  │
-│  │  │  └─────────────────┘      └──────────────┘     └──────┬───────┘  │ │  │
-│  │  │                                                        │           │ │  │
-│  │  │                     ┌──────────────────────────────────▼────────┐  │ │  │
+│  │  │  ┌─────────────────────────────────────────────────────────────┐  │ │  │
+│  │  │  │              FastAPI Service (uvicorn)                       │  │ │  │
+│  │  │  │                  Port: 8000                                  │  │ │  │
+│  │  │  │         (Direct embedding of KATO Processor)                 │  │ │  │
+│  │  │  └─────────────────────────────┬───────────────────────────────┘  │ │  │
+│  │  │                                 │                                  │ │  │
+│  │  │                     ┌───────────▼────────────────────────────┐  │ │  │
 │  │  │                     │         KATO Processor Core              │  │ │  │
 │  │  │                     │  ┌──────────────┐  ┌──────────────┐     │  │ │  │
 │  │  │                     │  │    Vector    │  │Pattern Processor│  │  │ │  │
@@ -88,24 +89,16 @@ KATO operates as a distributed system with the following key characteristics:
 │   Client Request                                                              │
 │        │                                                                       │
 │        ▼                                                                       │
-│   HTTP Request ──► REST Gateway (FastAPI/HTTPServer)                         │
+│   HTTP Request ──► FastAPI Service (uvicorn)                                 │
 │                         │                                                      │
 │                         ▼                                                      │
-│                    Translate to ZMQ Message                                   │
+│                    Async Request Handler                                       │
 │                         │                                                      │
 │                         ▼                                                      │
-│                    ZMQ Pool Manager                                           │
-│                         │                                                      │
-│                    Thread-Local Client                                        │
+│                    Direct Processor Call                                       │
 │                         │                                                      │
 │                         ▼                                                      │
-│   ZMQ Message ────► ZMQ Server (DEALER/ROUTER Pattern)                       │
-│                         │                                                      │
-│                         ▼                                                      │
-│                    Route to Handler                                           │
-│                         │                                                      │
-│                         ▼                                                      │
-│                    KATO Processor                                             │
+│                    KATO Processor (Embedded)                                  │
 │                         │                                                      │
 │                    ┌────┴────┬──────┬──────┐                                 │
 │                    ▼         ▼      ▼      ▼                                 │
@@ -116,10 +109,7 @@ KATO operates as a distributed system with the following key characteristics:
 │                    Response Data                                              │
 │                         │                                                      │
 │                         ▼                                                      │
-│   ZMQ Response ◄─── Serialize (MessagePack)                                  │
-│                         │                                                      │
-│                         ▼                                                      │
-│   HTTP Response ◄── Translate to HTTP/JSON                                   │
+│   JSON Response ◄── Serialize to JSON                                       │
 │                         │                                                      │
 │                         ▼                                                      │
 │                    Client Response                                            │
@@ -208,10 +198,10 @@ KATO operates as a distributed system with the following key characteristics:
 │   │  │  │           kato-api-${USER}-1 (REQUIRED)                 │  │  │   │
 │   │  │  │  Image: kato:latest                                     │  │  │   │
 │   │  │  │  Base: debian:bullseye-slim                             │  │  │   │
-│   │  │  │  Ports: 8000:8000, 5555:5555                           │  │  │   │
-│   │  │  │  CMD: python3 /usr/local/bin/kato-engine               │  │  │   │
+│   │  │  │  Ports: 8000:8000                                      │  │  │   │
+│   │  │  │  CMD: uvicorn kato.services.kato_fastapi:app         │  │  │   │
 │   │  │  │  Environment:                                           │  │  │   │
-│   │  │  │    - KATO_ZMQ_IMPLEMENTATION=improved                  │  │  │   │
+│   │  │  │    - PROCESSOR_ID=<unique_id>                          │  │  │   │
 │   │  │  │    - LOG_LEVEL=INFO                                    │  │  │   │
 │   │  │  │    - MANIFEST={...processor config...}                 │  │  │   │
 │   │  │  └──────────────────────────────────────────────────────────┘  │  │   │
@@ -254,26 +244,28 @@ KATO operates as a distributed system with the following key characteristics:
 - Implements deterministic hashing for pattern identification
 - Handles multi-modal input processing
 
-### 2. REST Gateway (`kato/workers/rest_gateway.py`)
+### 2. FastAPI Service (`kato/services/kato_fastapi.py`)
 **Status: REQUIRED**
-- HTTP server providing REST API endpoints
-- Translates HTTP requests to ZMQ messages
-- Maintains backward compatibility with tests
-- Endpoints: `/observe`, `/predict`, `/learn`, `/ping`
+- HTTP server with FastAPI framework
+- Direct embedding of KATO processor
+- Async request handling for performance
+- Core endpoints: `/observe`, `/learn`, `/predictions`, `/health`
+- Advanced endpoints: `/pattern/{id}`, `/cognition-data`, `/metrics`
+- Bulk endpoints: `/observe-sequence`
 
-### 3. ZMQ Server (`kato/workers/zmq_server.py`)
+### 3. Pattern Search (`kato/searches/pattern_search.py`)
 **Status: REQUIRED**
-- High-performance message queue server
-- Uses DEALER/ROUTER pattern for non-blocking communication
-- Handles concurrent requests efficiently
-- Includes heartbeat mechanism for connection health
+- High-performance pattern matching
+- Efficient similarity calculations
+- Temporal segmentation logic
+- Pattern ranking algorithms
 
-### 4. ZMQ Pool (`kato/workers/zmq_pool_improved.py`)
+### 4. Fast Matcher (`kato/searches/fast_matcher.py`)
 **Status: REQUIRED**
-- Thread-local connection pooling
-- Automatic reconnection on failures
-- Load balancing across connections
-- Connection reuse statistics
+- Optimized pattern matching for performance
+- Caching of frequently accessed patterns
+- Parallel search capabilities
+- Batch matching support
 
 ### 5. Vector Processor (`kato/workers/vector_processor.py`)
 **Status: REQUIRED**
@@ -309,34 +301,31 @@ KATO operates as a distributed system with the following key characteristics:
 
 ## Communication Layers
 
-### ZeroMQ Architecture
+### FastAPI Architecture
 
-The system uses ZeroMQ with DEALER/ROUTER pattern for:
-- **Non-blocking Communication**: No request/response deadlocks
-- **Concurrent Requests**: Multiple requests in flight
-- **Connection Persistence**: Long-lived connections with identity management
-- **Heartbeat Support**: 30-second intervals for health monitoring
+The system uses FastAPI with embedded processor for:
+- **Async Request Handling**: Native async/await support
+- **Concurrent Processing**: Multiple requests handled efficiently
+- **WebSocket Support**: Real-time bidirectional communication
+- **Health Monitoring**: Built-in health endpoints at `/health`
 
-### Message Protocol
+### API Protocol
 
 ```python
-# Request Format
+# HTTP POST Request to /observe
 {
-    "method": "observe",
-    "params": {
-        "unique_id": "req-123",
-        "strings": ["hello", "world"],
-        "vectors": [[0.1, 0.2, ...]],
-        "emotives": {"joy": 0.8}
-    }
+    "processor_id": "unique_id",
+    "strings": ["hello", "world"],
+    "vectors": [[0.1, 0.2, ...]],
+    "emotives": {"joy": 0.8}
 }
 
-# Response Format
+# JSON Response
 {
-    "status": "okay",
-    "message": "Success",
+    "status": "success",
+    "pattern_name": "PTRN|sha1_hash",
     "predictions": [...],
-    "pattern_name": "PTRN|sha1_hash"
+    "message": "Observation processed"
 }
 ```
 
@@ -378,13 +367,13 @@ The system uses ZeroMQ with DEALER/ROUTER pattern for:
 ## Required vs Optional Components
 
 ### Required Components
-1. **kato-api container**: Core processing engine
+1. **kato-fastapi container**: Core processing engine
 2. **MongoDB**: Long-term memory storage
 3. **Docker Network**: Container communication
-4. **ZMQ Server/Client**: Internal messaging
-5. **REST Gateway**: API interface
-6. **KATO Processor**: Core AI logic
-7. **Classifier/Pattern Processor**: Pattern processing
+4. **FastAPI Service**: HTTP/WebSocket interface
+5. **KATO Processor**: Core AI logic (embedded)
+6. **Pattern Processor**: Pattern management
+7. **Vector Operations**: Similarity search
 
 ### Optional Components
 1. **Qdrant**: High-performance vector search (RECOMMENDED)
@@ -421,7 +410,7 @@ docker-compose -f docker-compose.yml \
 
 ### Single Instance
 ```
-Client → REST Gateway → ZMQ → KATO Processor → Storage
+Client → FastAPI Service → KATO Processor (Embedded) → Storage
 ```
 
 ### Multi-Instance Architecture
@@ -476,10 +465,10 @@ PROCESSOR_ID=custom1 PROCESSOR_NAME=MyProcessor ./kato-manager.sh start
 ### Environment Variables
 ```bash
 # Core Configuration
-KATO_ZMQ_IMPLEMENTATION=improved  # ZMQ pattern (always improved)
+PROCESSOR_ID=unique_id            # Unique processor identifier
+PROCESSOR_NAME=Primary             # Display name
 LOG_LEVEL=INFO                     # Logging level
-ZMQ_PORT=5555                      # ZMQ server port
-REST_PORT=8000                     # REST API port
+API_PORT=8000                      # FastAPI service port
 
 # Vector Database
 KATO_VECTOR_DB_BACKEND=qdrant     # Vector DB backend
@@ -495,7 +484,7 @@ INDEXER_TYPE=VI                    # Vector indexing method
 ### Docker Commands
 ```bash
 # View logs
-docker logs kato-api-${USER}-1 --tail 50
+docker logs kato-primary --tail 50
 
 # Enter container
 docker exec -it kato-api-${USER}-1 bash
@@ -523,23 +512,23 @@ docker system prune -f
 ./test-harness.sh suite integration
 ./test-harness.sh suite api
 
-# Run with specific implementation
-KATO_ZMQ_IMPLEMENTATION=improved ./test-harness.sh test
+# Run tests with services running
+./run_tests.sh --no-start --no-stop
 ```
 
 ## Architecture Decision Records
 
-### Why ZeroMQ over gRPC?
-- **Multiprocessing Support**: Full fork() compatibility
-- **Performance**: Lower latency, higher throughput
-- **Simplicity**: No service definitions needed
-- **Docker Friendly**: Works seamlessly in containers
+### Why FastAPI Direct Embedding?
+- **Lower Latency**: No inter-process communication overhead
+- **Simpler Architecture**: Single process per instance
+- **Better Performance**: ~50% faster than message-based architectures
+- **Easier Debugging**: Direct function calls with stack traces
 
-### Why DEALER/ROUTER over REQ/REP?
-- **Non-blocking**: No request/response deadlocks
-- **Concurrent**: Multiple requests simultaneously
-- **Resilient**: Better error recovery
-- **Production Ready**: Handles high load
+### Why Async/Await over Threading?
+- **Better Concurrency**: More efficient resource usage
+- **No GIL Issues**: True parallelism for I/O operations
+- **Modern Python**: Native language support
+- **WebSocket Ready**: Built-in support for real-time
 
 ### Why Qdrant for Vectors?
 - **Performance**: 10-100x faster than MongoDB vectors
@@ -559,21 +548,18 @@ KATO_ZMQ_IMPLEMENTATION=improved ./test-harness.sh test
 1. **Port Conflicts**: Use `--port` flag or check `lsof -i :8000`
 2. **MongoDB Connection**: Ensure MongoDB container is running
 3. **Vector DB Issues**: Check Qdrant health at `http://localhost:6333/health`
-4. **ZMQ Timeouts**: Check `KATO_ZMQ_IMPLEMENTATION=improved`
+4. **API Timeouts**: Check service health at `/health` endpoint
 
 ### Health Checks
 ```bash
 # Check all services
 ./kato-manager.sh status
 
-# Test API endpoint
-curl http://localhost:8000/kato-api/ping
+# Test API health
+curl http://localhost:8001/health
 
-# Check ZMQ connection
-docker exec kato-api-${USER}-1 python3 -c \
-  "import socket; s = socket.socket(); \
-   result = s.connect_ex(('localhost', 5555)); \
-   print('ZMQ port is', 'open' if result == 0 else 'closed')"
+# Check specific service
+docker exec kato-primary curl http://localhost:8000/health
 ```
 
 ---

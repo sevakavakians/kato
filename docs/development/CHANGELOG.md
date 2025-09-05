@@ -1,5 +1,43 @@
 # KATO Changelog
 
+## [3.0.0] - 2025-09-05
+
+### Changed - BREAKING
+- **Complete FastAPI Migration**: Replaced REST/ZMQ architecture with FastAPI direct embedding
+  - Removed all ZeroMQ components (`zmq_server.py`, `zmq_pool.py`, `zmq_switcher.py`)
+  - Removed REST gateway translation layer (`rest_gateway.py`)
+  - Removed ZMQ entry point script (`kato-engine.py`)
+  - Direct processor embedding in FastAPI service for reduced latency
+  - Simplified deployment with single service architecture
+  - WebSocket support added for real-time communication
+
+### Removed
+- **Legacy Components**: Complete removal of deprecated architecture
+  - Deleted `kato/workers/rest_gateway.py` - REST to ZMQ translation
+  - Deleted `kato/workers/zmq_server.py` - ZeroMQ server implementation
+  - Deleted `kato/workers/zmq_pool_improved.py` - Connection pooling
+  - Deleted `kato/workers/zmq_switcher.py` - Implementation switcher
+  - Deleted `kato/workers/modeler.py` - Old model worker
+  - Deleted `kato/representations/model.py` - Legacy model representation
+  - Deleted `kato/searches/model_search.py` - Model search implementation
+  - Deleted `kato/scripts/kato_engine.py` - ZMQ entry point
+  - Removed `pyzmq` and `msgpack` from requirements.txt
+  - Removed `kato-engine` console script from setup.py
+
+### Added
+- **FastAPI Service** (`kato/services/kato_fastapi.py`): Modern async API
+  - Direct KATO processor embedding
+  - WebSocket endpoint at `/ws`
+  - Bulk processing endpoint `/observe-sequence`
+  - Automatic OpenAPI documentation
+  - Health check endpoint at `/health`
+
+### Improved
+- **Performance**: ~10ms response time maintained with simpler architecture
+- **Testing**: 183/185 tests passing (98.9% pass rate)
+- **Debugging**: Direct processor access without IPC complexity
+- **Documentation**: Updated all docs to reflect FastAPI architecture
+
 ## [2.0.4] - 2025-08-26
 
 ### Fixed

@@ -65,7 +65,9 @@ tests/
 │   ├── api/              # API endpoint tests
 │   └── performance/      # Performance tests
 ├── scripts/              # Utility scripts for testing
-│   └── run_tests_direct.py   # Direct Python test runner
+│   ├── analyze_tests.py     # Test analysis utilities
+│   ├── check_tests.py       # Test validation
+│   └── simple_analyze.py    # Simple test analyzer
 ├── run_tests.sh      # Simple test runner script
 ├── requirements-test.txt     # Test dependencies
 ├── pytest.ini               # Pytest configuration

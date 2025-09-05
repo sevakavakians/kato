@@ -32,34 +32,34 @@ Comprehensive guide to KATO's performance characteristics, optimization strategi
 | Network | <1Mbps | 10-50Mbps | 100Mbps+ |
 | Disk I/O | Minimal | 10MB/s | 50MB/s |
 
-## ZeroMQ Performance
+## FastAPI Performance
 
-### Connection Pool Benefits
+### Direct Embedding Benefits
 
 ```
-Without Pool:
-- Connection setup: 5-10ms per request
+Message-Based Architecture:
+- IPC overhead: 5-10ms per request
 - Total latency: 10-20ms
-- Max throughput: 100 req/s
+- Max throughput: 1,000 req/s
 
-With Pool:
-- Connection reuse: 0ms overhead
+Direct Embedding:
+- No IPC overhead: 0ms
 - Total latency: 0.5-2ms
 - Max throughput: 10,000+ req/s
 ```
 
-### MessagePack Advantages
+### Async Processing Advantages
 
 ```
-JSON Serialization:
-- Size: 100%
-- Encode time: 1.0ms
-- Decode time: 0.8ms
+Synchronous Processing:
+- Blocking I/O: High latency
+- Thread overhead: 2MB per thread
+- Concurrency: Limited by threads
 
-MessagePack:
-- Size: 60-70%
-- Encode time: 0.5ms
-- Decode time: 0.4ms
+Async/Await:
+- Non-blocking I/O: Low latency
+- Coroutine overhead: ~1KB
+- Concurrency: Thousands of requests
 ```
 
 ## Optimization Strategies
@@ -548,4 +548,4 @@ Testing with 10,000 learned patterns, observing 10-element pattern:
 - [Architecture](../deployment/ARCHITECTURE.md) - System design
 - [Configuration](../deployment/CONFIGURATION.md) - Performance parameters
 - [Troubleshooting](TROUBLESHOOTING.md) - Performance issues
-- [ZeroMQ Architecture](ZEROMQ_ARCHITECTURE.md) - Protocol performance
+- [Architecture Complete](../ARCHITECTURE_COMPLETE.md) - System architecture

@@ -39,6 +39,18 @@
 
 ---
 
+## 2025-09-04 - Complete Migration to FastAPI Direct Embedding
+**Decision**: Migrate from REST/ZMQ architecture to FastAPI with direct processor embedding
+**Rationale**: Eliminate inter-process communication overhead, simplify deployment, improve debugging
+**Alternatives Considered**:
+- Keep ZMQ layer: Unnecessary complexity with no performance benefit
+- Microservices: Over-engineered for current scale
+- gRPC revival: Same multiprocessing issues as before
+**Impact**: Complete removal of zmq_server.py, zmq_pool.py, rest_gateway.py, kato-engine.py
+**Confidence**: Very High - 98.9% test pass rate achieved, ~10ms response time maintained
+
+---
+
 ## 2024-12-10 - Switch from gRPC to ZeroMQ
 **Decision**: Replace gRPC with ZeroMQ for inter-process communication
 **Rationale**: Better multiprocessing support, simpler deployment

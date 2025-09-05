@@ -7,7 +7,7 @@ from itertools import chain
 from operator import itemgetter
 
 import pymongo
-from scipy import spatial
+import numpy as np
 from pymongo import ReturnDocument
 
 from kato.informatics.knowledge_base import SuperKnowledgeBase
@@ -278,12 +278,28 @@ class PatternProcessor:
                 state_frequency_vector = [(symbol_probability_cache.get(symbol, 0) * symbol_frequency_in_state.get(symbol, 0)) for symbol in all_symbols]
                 pattern_frequency_vector = [(symbol_probability_cache.get(symbol, 0) * symbol_frequency_in_pattern.get(symbol, 0)) for symbol in all_symbols]
                 _p_e_h = float(self.patternProbability(prediction['frequency'], total_pattern_frequencies)) # p(e|h)
-                # Handle zero vectors case for cosine distance
+                # Calculate cosine distance using numpy
+                # Cosine distance = 1 - cosine similarity
+                # Cosine similarity = dot(a, b) / (norm(a) * norm(b))
                 if all(v == 0 for v in state_frequency_vector) or all(v == 0 for v in pattern_frequency_vector):
                     distance = 1.0  # Maximum distance for zero vectors
                 else:
                     try:
-                        distance = float(spatial.distance.cosine(state_frequency_vector, pattern_frequency_vector))
+                        # Convert to numpy arrays
+                        a = np.array(state_frequency_vector)
+                        b = np.array(pattern_frequency_vector)
+                        
+                        # Calculate cosine similarity
+                        dot_product = np.dot(a, b)
+                        norm_a = np.linalg.norm(a)
+                        norm_b = np.linalg.norm(b)
+                        
+                        if norm_a == 0 or norm_b == 0:
+                            distance = 1.0
+                        else:
+                            cosine_similarity = dot_product / (norm_a * norm_b)
+                            distance = float(1 - cosine_similarity)
+                            
                         # Handle NaN case
                         if distance != distance:  # NaN check
                             distance = 1.0

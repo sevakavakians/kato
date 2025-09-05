@@ -48,7 +48,7 @@ setup(
     },
     entry_points={
         "console_scripts": [
-            "kato-engine=kato.scripts.kato_engine:main",
+            # FastAPI service runs via uvicorn, no console scripts needed
         ],
     },
     package_data={

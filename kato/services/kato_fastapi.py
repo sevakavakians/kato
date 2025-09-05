@@ -329,12 +329,14 @@ async def observe_sequence(data: ObservationSequence):
                 individual_results.append(individual_result)
                 
                 # Learn after each observation if requested
+                # Note: Learning always clears STM
                 if data.learn_after_each:
                     pattern_name = processor.learn()
                     if pattern_name:
                         patterns_learned.append(pattern_name)
             
             # Learn at end if requested
+            # Note: Learning always clears STM, regardless of the learning mode
             if data.learn_at_end and not data.clear_stm_between:
                 pattern_name = processor.learn()
                 if pattern_name:
@@ -345,6 +347,11 @@ async def observe_sequence(data: ObservationSequence):
             if not data.clear_stm_between or not data.learn_after_each:
                 # predictions is an attribute, not a method
                 final_predictions = processor.predictions
+                # Rename 'name' to 'pattern_name' for consistency with API conventions
+                if final_predictions:
+                    for pred in final_predictions:
+                        if isinstance(pred, dict) and 'name' in pred:
+                            pred['pattern_name'] = pred.pop('name')
             
             return ObservationSequenceResult(
                 status="okay",

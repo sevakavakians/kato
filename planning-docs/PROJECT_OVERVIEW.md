@@ -13,21 +13,21 @@ KATO processes multi-modal observations (text, vectors, emotions) and makes temp
 ### Core Technologies
 - **Language**: Python 3.9+
 - **Container**: Docker (required for deployment)
-- **Message Queue**: ZeroMQ (ROUTER/DEALER pattern)
+- **API Framework**: FastAPI with uvicorn
 - **Vector Database**: Qdrant with HNSW indexing
 - **Cache**: Redis (for vector caching)
-- **API Framework**: FastAPI
+- **Database**: MongoDB for pattern storage
 - **Testing**: pytest with fixtures
 
 ### Infrastructure
-- **REST Gateway**: Port 8000 (FastAPI)
-- **ZMQ Server**: Port 5555 (Internal communication)
+- **FastAPI Service**: Ports 8001-8003 (Primary/Testing/Analytics)
 - **Vector DB**: Qdrant (Docker container)
+- **MongoDB**: Pattern and metadata storage
 - **Deployment**: Docker Compose orchestration
 
 ## Core Architecture (3-Sentence Overview)
-1. REST clients communicate with a FastAPI gateway that translates HTTP requests to ZeroMQ messages
-2. The ZMQ server distributes work to KATO processors which maintain working memory and coordinate with Qdrant for vector similarity searches
+1. HTTP clients communicate with FastAPI services that have embedded KATO processors for direct processing
+2. Each processor maintains working memory and coordinates with MongoDB for patterns and Qdrant for vector similarity searches
 3. All processing is deterministic with SHA1-based pattern identification, ensuring reproducible predictions and complete traceability
 
 ## Success Metrics
@@ -44,8 +44,8 @@ KATO processes multi-modal observations (text, vectors, emotions) and makes temp
 - **Docker**: Container orchestration and deployment
 
 ### Internal Interfaces
-- **REST API**: `/observe`, `/predict`, `/ping` endpoints
-- **ZMQ Protocol**: Request/Reply pattern with JSON payloads
+- **FastAPI Endpoints**: `/observe`, `/predictions`, `/learn`, `/health`, `/observe-sequence`
+- **WebSocket**: Real-time communication at `/ws`
 - **Vector Operations**: 768-dimensional embeddings support
 
 ## Performance Targets
@@ -65,11 +65,11 @@ KATO processes multi-modal observations (text, vectors, emotions) and makes temp
 - **Error Recovery**: Automatic reconnection and retry logic
 
 ## Recent Achievements
+- **FastAPI Migration**: Complete migration from REST/ZMQ to FastAPI direct embedding
 - **Vector DB Migration**: Successfully migrated from MongoDB to Qdrant
-- **Architecture Modernization**: Replaced gRPC with ZeroMQ for better multiprocessing
 - **Performance Optimization**: Achieved ~291x speedup in pattern matching operations
-- **Technical Debt Reduction**: Removed legacy code, merged optimizations into main
-- **Code Cleanup**: Removed unnecessary extraction_workers, legacy test scripts
+- **Technical Debt Reduction**: Removed all legacy ZMQ/REST gateway components
+- **Code Cleanup**: Removed model.py, modeler.py, extraction_workers, legacy test scripts
 
 ## Development Phases
 

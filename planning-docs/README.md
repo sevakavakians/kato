@@ -72,10 +72,10 @@ The **project-manager** agent automatically updates documentation when:
 ./update_container.sh
 
 # View logs
-docker logs kato-api-$(whoami)-1 --tail 20
+docker logs kato-primary --tail 20
 
-# Check ZMQ status
-docker exec kato-api-$(whoami)-1 python3 -c "import socket; s = socket.socket(); s.settimeout(1); result = s.connect_ex(('localhost', 5555)); print('ZMQ port 5555 is', 'open' if result == 0 else 'closed')"
+# Check API health
+curl http://localhost:8001/health
 ```
 
 ## Folder Structure

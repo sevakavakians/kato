@@ -65,9 +65,8 @@ Each KATO instance has:
 
 ## Port Management
 
-Each instance requires two ports:
-- **REST API Port**: For HTTP API access (default: 8000)
-- **ZMQ Port**: For internal communication (default: 5555)
+Each instance requires one port:
+- **API Port**: For HTTP/WebSocket access (default: 8000)
 
 ### Automatic Port Allocation
 If the requested port is in use, KATO automatically finds the next available port:
@@ -93,7 +92,6 @@ All instances are tracked in `~/.kato/instances.json`:
       "name": "Main Processor",
       "container": "kato-processor-1",
       "api_port": 8001,
-      "zmq_port": 5556,
       "status": "running",
       "updated": "2024-01-01T12:00:00"
     },
@@ -101,7 +99,6 @@ All instances are tracked in `~/.kato/instances.json`:
       "name": "Secondary",
       "container": "kato-processor-2",
       "api_port": 8002,
-      "zmq_port": 5557,
       "status": "running",
       "updated": "2024-01-01T12:05:00"
     }

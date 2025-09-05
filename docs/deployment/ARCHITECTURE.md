@@ -2,38 +2,29 @@
 
 ## Overview
 
-KATO uses a distributed architecture with centralized REST gateway that maintains sticky routing to ensure requests for specific processors always go to the same KATO instance, preserving stateful pattern processing.
+KATO uses a distributed architecture with FastAPI services that provide direct access to embedded processors. Each instance maintains its own state, isolated by processor_id.
 
-## Current Architecture (ZeroMQ-based)
+## Current Architecture (FastAPI Direct Embedding)
 
 ```
                     ┌─────────────────┐
-                    │   REST Client   │
+                    │   HTTP Client   │
                     └────────┬────────┘
-                             │ HTTP/REST
+                             │ HTTP/WebSocket
                              ▼ Port 8000
                 ┌────────────────────────────────┐
-                │    REST API Gateway            │
-                │   (Embedded in KATO)           │
+                │    FastAPI Service             │
+                │      (uvicorn)                 │
                 │                                │
-                │ • HTTP to ZMQ Translation      │
-                │ • Connection Pool Management   │
-                │ • Thread-Local Connections     │
+                │ • Async Request Handling       │
+                │ • WebSocket Support            │
+                │ • JSON Serialization           │
                 │ • Health Monitoring            │
                 └────────────┬───────────────────┘
-                             │
-                             ▼ ZMQ Port 5555
-                ┌────────────────────────────────┐
-                │      ZeroMQ Server             │
-                │                                │
-                │ • REQ/REP Pattern              │
-                │ • MessagePack Serialization    │
-                │ • Method Dispatch              │
-                └────────────┬───────────────────┘
-                             │
+                             │ Direct Call
                              ▼
                 ┌────────────────────────────────┐
-                │     KATO Processor             │
+                │  KATO Processor (Embedded)     │
                 │                                │
                 │ • Pattern Learning             │
                 │ • Prediction Generation        │
@@ -42,371 +33,265 @@ KATO uses a distributed architecture with centralized REST gateway that maintain
                 └────────────────────────────────┘
 ```
 
-## Multi-Instance Architecture (Planned)
+## Multi-Instance Architecture
 
 ```
                     ┌─────────────────┐
                     │   REST Client   │
                     └────────┬────────┘
-                             │ HTTP/REST
-                             ▼ Port 8000
-                ┌────────────────────────────────┐
-                │    REST API Gateway            │
-                │   (Separate Container)         │
-                │                                │
-                │ • Processor Registry           │
-                │ • Sticky Routing (by ID)       │
-                │ • Connection Pool Management   │
-                │ • Health Monitoring            │
-                └───┬────────┬───────────────┬───┘
-                    │        │               │
-              processor_id   processor_id    processor_id
-              "p46b6b076c"   "pd5d9e6c4c"   "p847675347"
-                    │        │               │
-                    ▼        ▼               ▼
-            ┌──────────┐ ┌──────────┐ ┌──────────┐
-            │  KATO    │ │  KATO    │ │  KATO    │
-            │Instance 1│ │Instance 2│ │Instance 3│
-            │ZMQ:5555  │ │ZMQ:5556  │ │ZMQ:5557  │
-            └──────────┘ └──────────┘ └──────────┘
+                             │
+        ┌────────────────────┼────────────────────┐
+        ▼                    ▼                    ▼
+ ┌──────────────┐    ┌──────────────┐    ┌──────────────┐
+ │ KATO Instance│    │ KATO Instance│    │ KATO Instance│
+ │  Primary     │    │  Testing     │    │  Analytics   │
+ │              │    │              │    │              │
+ │ FastAPI:8001 │    │ FastAPI:8002 │    │ FastAPI:8003 │
+ │              │    │              │    │              │
+ │ Processor ID:│    │ Processor ID:│    │ Processor ID:│
+ │   primary    │    │   testing    │    │   analytics  │
+ └──────┬───────┘    └──────┬───────┘    └──────┬───────┘
+        │                    │                    │
+        └────────────────────┼────────────────────┘
+                             ▼
+                 ┌──────────────────────┐
+                 │   MongoDB (Shared)   │
+                 │   Qdrant (Shared)    │
+                 └──────────────────────┘
 ```
 
 ## Component Details
 
-### 1. REST API Gateway
+### 1. FastAPI Service
 
-The gateway provides HTTP/REST interface for clients:
+**Purpose**: HTTP/WebSocket API interface
+**Implementation**: `kato/services/kato_fastapi.py`
+**Responsibilities**:
+- Async request handling with native async/await
+- WebSocket support for real-time communication
+- Direct embedding of KATO processor
+- JSON request/response serialization
+- Health monitoring and status endpoints
 
-- **Location**: Currently embedded in KATO, planned as separate service
-- **Port**: 8000 (configurable)
-- **Protocol**: HTTP/REST with JSON payloads
-- **Threading**: ThreadedHTTPServer for concurrent requests
+### 2. KATO Processor
 
-#### Key Features:
-- HTTP to ZeroMQ translation
-- Connection pooling with thread-local storage
-- Automatic health checks and reconnection
-- Request routing based on processor ID
+**Purpose**: Core AI processing engine  
+**Implementation**: `kato/workers/kato_processor.py`
+**Responsibilities**:
+- Pattern learning and recognition
+- Prediction generation  
+- Short-term memory management
+- Multi-modal observation processing
+- Deterministic hashing
 
-### 2. ZeroMQ Server
+### 3. Pattern Processor
 
-High-performance message handling layer:
+**Purpose**: Pattern data structure management
+**Implementation**: `kato/workers/pattern_processor.py`
+**Responsibilities**:
+- Pattern creation and validation
+- Temporal segmentation
+- Frequency tracking
+- Pattern retrieval
 
-- **Port**: 5555 (configurable via ZMQ_PORT)
-- **Pattern**: REQ/REP (Request/Reply)
-- **Serialization**: MessagePack binary format
-- **Threading**: Runs in separate thread
+### 4. Storage Layer
 
-#### Supported Methods:
-- `observe` - Process observations
-- `learn` - Trigger learning
-- `get_predictions` - Retrieve predictions
-- `clear_all_memory` / `clear_short_term_memory`
-- `get_gene` / `change_gene` - Parameter management
-- `get_short_term_memory` - Access current memory
+**MongoDB** (Required):
+- Pattern storage with SHA1 hash indexing
+- Long-term memory persistence
+- Metadata storage
+- Database isolation by processor_id
 
-### 3. Connection Pool
-
-Thread-safe connection management:
-
-- **Pattern**: One ZMQ client per thread
-- **Health Checks**: Every 30 seconds
-- **Auto-reconnection**: On connection failure
-- **Statistics**: Tracks requests, failures, reconnections
-
-### 4. KATO Processor
-
-Core AI engine:
-
-- **Memory**: Short-term memory + long-term storage
-- **Learning**: Pattern recognition
-- **Predictions**: Temporal segmentation (past/present/future)
-- **Multi-modal**: Strings, vectors, emotives
+**Qdrant** (Optional but Recommended):
+- Vector similarity search
+- HNSW indexing for performance
+- Collection isolation by processor_id
 
 ## Data Flow
 
-### 1. Observation Flow
+### Observation Flow
 ```
-Client → REST API → ZMQ Client → ZMQ Server → Processor → Short-Term Memory
-```
-
-### 2. Learning Flow
-```
-Client → REST API → ZMQ → Processor → Pattern Creation → MongoDB Storage
+Client → FastAPI → KATO Processor → Short-Term Memory
+                           ↓
+                    Vector Processing → Qdrant
 ```
 
-### 3. Prediction Flow
+### Learning Flow
 ```
-Short-Term Memory → Pattern Matching → Temporal Segmentation → Predictions → Client
+Client → FastAPI → Processor → Pattern Creation → MongoDB Storage
+                        ↓
+                 Frequency Updates
 ```
 
-## Deployment Configurations
+### Prediction Flow
+```
+Client → FastAPI → Processor → Pattern Search → MongoDB/Qdrant
+                        ↓
+                 Temporal Segmentation
+                        ↓
+                 Ranked Predictions
+```
 
-### Single Instance (Current)
+## Container Configuration
+
+### Docker Compose Structure
 
 ```yaml
-version: '3.8'
 services:
-  kato:
+  # Primary KATO instance
+  kato-primary:
     image: kato:latest
     ports:
-      - "8000:8000"  # REST API
-      - "5555:5555"  # ZMQ (internal)
+      - "8001:8000"  # API
     environment:
-      - PROCESSOR_ID=p46b6b076c
-      - PROCESSOR_NAME=MainProcessor
-```
-
-### Multi-Instance with Gateway (Planned)
-
-```yaml
-version: '3.8'
-services:
-  gateway:
-    image: kato-gateway:latest
+      - PROCESSOR_ID=primary
+      - PROCESSOR_NAME=Primary
+      - MONGO_BASE_URL=mongodb://mongodb:27017
+      - QDRANT_HOST=qdrant
+      - LOG_LEVEL=INFO
+    
+  # Testing instance  
+  kato-testing:
+    image: kato:latest
     ports:
-      - "8000:8000"
+      - "8002:8000"  # API
     environment:
-      - PROCESSORS=p001:kato-1:5555,p002:kato-2:5555
+      - PROCESSOR_ID=testing
+      - PROCESSOR_NAME=Testing
+      - LOG_LEVEL=DEBUG
   
-  kato-1:
+  # Analytics instance
+  kato-analytics:
     image: kato:latest
+    ports:
+      - "8003:8000"  # API
     environment:
-      - PROCESSOR_ID=p001
-      - ZMQ_PORT=5555
-  
-  kato-2:
-    image: kato:latest
-    environment:
-      - PROCESSOR_ID=p002
-      - ZMQ_PORT=5555
+      - PROCESSOR_ID=analytics
+      - PROCESSOR_NAME=Analytics
+      - MAX_PATTERN_LENGTH=50
 ```
 
-## Communication Protocols
+## API Endpoints
 
-### REST API Protocol
+Core endpoints:
+- `POST /observe` - Process observation
+- `POST /learn` - Trigger learning
+- `GET /predictions` - Get predictions
+- `GET /health` - Service health
+- `GET /status` - Detailed status
 
-**Request Format:**
-```json
-{
-  "strings": ["hello", "world"],
-  "vectors": [[1.0, 2.0]],
-  "emotives": {"joy": 0.8}
-}
-```
+Advanced endpoints:
+- `GET /pattern/{id}` - Get specific pattern
+- `GET /cognition-data` - Cognitive metrics
+- `GET /metrics` - Performance metrics
+- `POST /observe-sequence` - Bulk observations
+- `GET /stm` - Short-term memory state
 
-**Response Format:**
-```json
-{
-  "status": "okay",
-  "message": "observed",
-  "short_term_memory": [["hello", "world"]]
-}
-```
+## Port Configuration
 
-### ZeroMQ Protocol
-
-**Request Format (MessagePack):**
-```python
-{
-  "method": "observe",
-  "params": {
-    "strings": ["hello", "world"],
-    "vectors": [],
-    "emotives": {}
-  }
-}
-```
-
-**Response Format (MessagePack):**
-```python
-{
-  "status": "okay",
-  "message": "observed",
-  "short_term_memory": [["hello", "world"]]
-}
-```
-
-## Scaling Strategies
-
-### Horizontal Scaling
-
-1. **Multiple Processors**: Each with unique ID
-2. **Sticky Sessions**: Processor affinity for patterns
-3. **Shared Storage**: MongoDB for persistence
-4. **Load Balancing**: Round-robin or least-connections
-
-### Vertical Scaling
-
-1. **Increase Resources**: More CPU/RAM per instance
-2. **Optimize Parameters**: Tune for performance
-3. **Cache Optimization**: Memory-based caching
-4. **Connection Pooling**: Reuse connections
-
-## State Management
-
-### Processor State
-
-Each processor maintains:
-- **Short-Term Memory**: Current observation pattern
-- **Long-term Memory**: Learned patterns
-- **Predictions Cache**: Current predictions
-- **Emotives State**: Aggregated emotional context
-
-### State Persistence
-
-- **MongoDB**: Long-term pattern storage
-- **In-Memory**: Short-term memory and caches
-- **Checkpointing**: Periodic state snapshots (planned)
+Standard port allocations:
+- **8001**: Primary instance
+- **8002**: Testing instance  
+- **8003**: Analytics instance
+- **27017**: MongoDB
+- **6333**: Qdrant
 
 ## Network Architecture
 
-### Docker Network
-
 ```
-kato-network (bridge)
-├── REST Gateway (port 8000 exposed)
-├── KATO Instances (internal)
-├── MongoDB (internal)
-└── ZeroMQ Communication (internal)
+┌────────────────────────────────────────┐
+│         Docker Network: kato-network   │
+│                                        │
+├── FastAPI Services (HTTP/WebSocket)    │
+│   └── Direct processor embedding       │
+│                                        │
+├── MongoDB Container                    │
+│   └── Database isolation by ID         │
+│                                        │
+└── Qdrant Container (Optional)          │
+    └── Collection isolation by ID       │
 ```
-
-### Port Mappings
-
-| Service | External Port | Internal Port | Protocol |
-|---------|--------------|---------------|----------|
-| REST API | 8000 | 8000 | HTTP |
-| ZeroMQ | - | 5555 | TCP |
-| MongoDB | - | 27017 | TCP |
 
 ## Security Considerations
 
-### Network Security
-
-1. **Internal Communication**: ZMQ on private network
-2. **External Access**: Only REST API exposed
-3. **TLS Support**: Planned for production
-4. **API Authentication**: Optional API key
-
-### Data Security
-
-1. **No Encryption**: Currently plain text
-2. **Access Control**: Network-level isolation
-3. **Audit Logging**: All operations logged
-4. **Data Validation**: Input sanitization
+| Layer | Protection |
+|-------|------------|
+| API | Rate limiting, input validation |
+| Processor | Isolated by processor_id |
+| MongoDB | Database-level isolation |
+| Qdrant | Collection-level isolation |
+| Network | Docker network isolation |
 
 ## Performance Characteristics
 
-### Latency
+| Metric | Value | Notes |
+|--------|-------|-------|
+| Request Latency | 1-5ms | Direct embedding advantage |
+| Throughput | 5000+ req/s | Async processing |
+| Memory per Instance | 200-500MB | Depends on patterns |
+| Startup Time | 2-5s | FastAPI initialization |
 
-- **REST to ZMQ**: ~0.1ms overhead
-- **ZMQ Round-trip**: ~0.5ms
-- **Prediction Generation**: 1-10ms
-- **Learning Operation**: 10-100ms
+## Scaling Strategy
 
-### Throughput
+### Vertical Scaling
+- Increase container resources
+- Optimize processor configuration
+- Enable GPU acceleration
 
-- **Requests/second**: 10,000+ per processor
-- **Concurrent Connections**: 1000+
-- **Message Size**: Up to 16MB
-- **Batch Operations**: Supported
+### Horizontal Scaling
+- Multiple KATO instances
+- Load balancer distribution
+- Processor_id based routing
 
-### Resource Usage
+## Monitoring
 
-- **Memory**: 500MB-2GB per processor
-- **CPU**: 0.5-2 cores per processor
-- **Network**: 10-100 Mbps typical
-- **Storage**: 100MB-10GB MongoDB
-
-## Monitoring Points
-
-### Health Checks
-
+### Health Endpoints
 ```bash
-# REST API Health
-GET /kato-api/ping
+# Check instance health
+curl http://localhost:8001/health
 
-# Processor Health
-GET /{processor_id}/ping
-
-# ZMQ Server Status
-Internal health check every 30s
+# Get detailed status
+curl http://localhost:8001/status
 ```
 
-### Metrics Collection
-
-- Request count and latency
-- Memory usage and GC stats
-- Prediction accuracy metrics
-- Connection pool statistics
-
-## Future Enhancements
-
-### Planned Features
-
-1. **Separate Gateway Service**: Decoupled architecture
-2. **Service Discovery**: Dynamic processor registration
-3. **WebSocket Support**: Real-time predictions
-4. **GraphQL API**: Alternative query interface
-5. **Kubernetes Support**: Cloud-native deployment
-
-### Performance Improvements
-
-1. **Caching Layer**: Redis for predictions
-2. **Async Processing**: Non-blocking operations
-3. **GPU Acceleration**: Vector operations
-4. **Compression**: Message compression
-
-## Migration Path
-
-### From Current to Multi-Instance
-
-1. **Phase 1**: Current embedded gateway
-2. **Phase 2**: External gateway with single instance
-3. **Phase 3**: Multiple instances with routing
-4. **Phase 4**: Full distributed system
-
-## Development vs Production
-
-### Development Setup
+### Logs
 ```bash
-./kato-manager.sh start --log-level DEBUG
+# View container logs
+docker logs kato-primary --tail 50
+
+# Monitor in real-time
+docker logs -f kato-primary
 ```
 
-### Production Setup
+### Metrics
 ```bash
-./kato-manager.sh start \
-  --indexer-type VI \
-  --max-predictions 200 \
-  --persistence 10 \
-  --api-key $SECRET_KEY
+# Get performance metrics
+curl http://localhost:8001/metrics
 ```
 
-## Troubleshooting Architecture
+## Troubleshooting
 
 ### Common Issues
 
-1. **Connection Refused**: Check ZMQ server status
-2. **Timeout Errors**: Verify network connectivity
-3. **State Inconsistency**: Check processor affinity
-4. **Performance Degradation**: Monitor connection pool
+1. **Connection Refused**: Check service status
+   ```bash
+   docker ps
+   ./kato-manager.sh status
+   ```
 
-### Debug Tools
+2. **Database Connection**: Verify MongoDB is running
+   ```bash
+   docker exec kato-mongodb mongo --eval "db.adminCommand('ping')"
+   ```
 
-```bash
-# Check connectivity
-docker exec kato-api netstat -an | grep 5555
-
-# Monitor ZMQ traffic
-docker exec kato-api tcpdump -i lo port 5555
-
-# Connection pool stats
-curl http://localhost:8000/stats
-```
+3. **Port Conflicts**: Check port usage
+   ```bash
+   lsof -i :8001
+   ```
 
 ## Related Documentation
 
-- [ZeroMQ Architecture](../technical/ZEROMQ_ARCHITECTURE.md) - Detailed ZMQ implementation
-- [Docker Deployment](DOCKER.md) - Container configuration
-- [Configuration Guide](CONFIGURATION.md) - System parameters
-- [API Reference](../API_REFERENCE.md) - REST endpoints
+- [Configuration Guide](CONFIGURATION.md) - Environment variables
+- [Docker Setup](DOCKER.md) - Container management
+- [Architecture Complete](../ARCHITECTURE_COMPLETE.md) - Detailed architecture
+- [Troubleshooting](../technical/TROUBLESHOOTING.md) - Problem resolution

@@ -75,9 +75,12 @@ MAX_PATTERN_LENGTH = 0  # Manual learning (primary), 50 (analytics)
 - Reduced operational complexity
 
 **Legacy Components Removed**:
-- `zmq_server.py`, `zmq_pool_improved.py`, `zmq_switcher.py`
-- Connection pooling and ZMQ message routing
-- Complex inter-process communication
+- `zmq_server.py`, `zmq_pool_improved.py`, `zmq_switcher.py` - ZeroMQ messaging layer
+- `rest_gateway.py` - REST to ZMQ translation layer
+- `model.py`, `modeler.py`, `model_search.py` - Old model components
+- `kato-engine.py` - ZMQ entry point script
+- Connection pooling and message routing complexity
+- Complex inter-process communication overhead
 
 ### 3. KATO Processor (`kato/workers/kato_processor.py`)
 **Integration**: Directly embedded in FastAPI service (no ZMQ)
@@ -240,28 +243,28 @@ services:
 ## Security Considerations
 
 ### Current Measures
-- Input validation at REST layer
-- No direct database access from clients
-- Processor isolation via Docker
+- Input validation at FastAPI layer
+- Processor isolation via Docker containers
+- Database isolation by processor_id
 - Deterministic hashing for integrity
 
 ### Future Enhancements
 - Authentication/Authorization layer
 - Rate limiting per client
-- Encrypted ZMQ communication
+- TLS/SSL for API endpoints
 - Audit logging for compliance
 
 ## Monitoring Points
 
 ### Key Metrics
-- Request latency (REST, ZMQ, Processing)
+- Request latency (API endpoint response times)
 - Vector search performance
 - Memory usage (Working, Qdrant, Redis)
 - Error rates by component
 
 ### Health Checks
-- REST: `/ping` endpoint
-- ZMQ: Connection status monitoring
+- FastAPI: `/health` endpoint
+- Database: MongoDB connection status
 - Qdrant: Collection statistics
 - Redis: Connection pool health
 
@@ -270,18 +273,20 @@ services:
 ### Environment Variables
 ```bash
 # Core Configuration
-MANIFEST='{"processor_id": "...", "name": "..."}'
+PROCESSOR_ID=unique_instance_id
+PROCESSOR_NAME=display_name
 LOG_LEVEL=INFO
-KATO_ZMQ_IMPLEMENTATION=improved
 
 # Service Endpoints
-REST_PORT=8000
-ZMQ_PORT=5555
-QDRANT_URL=http://localhost:6333
+API_PORT=8000
+MONGO_BASE_URL=mongodb://mongodb:27017
+QDRANT_HOST=qdrant
+QDRANT_PORT=6333
 REDIS_URL=redis://localhost:6379
 
 # Performance Tuning
-CONNECTION_POOL_SIZE=10
+MAX_PATTERN_LENGTH=0  # 0 for manual, >0 for auto-learn
+RECALL_THRESHOLD=0.1
 VECTOR_BATCH_SIZE=100
 CACHE_TTL=3600
 ```

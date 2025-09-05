@@ -67,7 +67,7 @@
    - All edge cases resolved with proper error context
 
 ## Phase 2 Target Files (Starting)
-- `/Users/sevakavakians/PROGRAMMING/kato/kato/workers/rest_gateway.py` (add observe-sequence endpoint)
+- `/Users/sevakavakians/PROGRAMMING/kato/kato/services/kato_fastapi.py` (add observe-sequence endpoint)
 - `/Users/sevakavakians/PROGRAMMING/kato/kato/workers/kato_processor.py` (bulk sequence processing logic)
 - `/Users/sevakavakians/PROGRAMMING/kato/tests/tests/api/` (new test suite for bulk endpoint)
 - API documentation and schema files
@@ -75,7 +75,7 @@
 ## Phase 2 Action Plan
 1. **Priority 1**: Design observe-sequence endpoint API specification
 2. **Priority 2**: Implement bulk sequence processing in kato_processor.py  
-3. **Priority 3**: Add REST endpoint in rest_gateway.py
+3. **Priority 3**: Add endpoint in kato_fastapi.py
 4. **Priority 4**: Create comprehensive test suite
 5. **Priority 5**: Update API documentation
 

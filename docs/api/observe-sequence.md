@@ -69,12 +69,13 @@ observations = [
   {"strings": ["user", "purchase"]}   # Event at T=2
 ]
 
-# STM Evolution
+# STM Evolution (without learning)
 After Event 1: [["login", "user"]]
 After Event 2: [["login", "user"], ["browse", "user"]]
 After Event 3: [["login", "user"], ["browse", "user"], ["purchase", "user"]]
 
 # Result: A 3-event sequence representing user behavior over time
+# Note: If learning is triggered, STM will be empty after learning
 ```
 
 ### 2. Isolated Processing Mode
@@ -90,12 +91,13 @@ observations = [
   {"strings": ["sensor3", "warning"]}
 ]
 
-# STM Evolution
+# STM Evolution (without learning)
 Process Event 1: [["alert", "sensor1"]] → Clear
 Process Event 2: [["normal", "sensor2"]] → Clear
 Process Event 3: [["sensor3", "warning"]]
 
 # Result: Each sensor reading processed independently
+# Note: Final STM contains only the last event (unless learning is triggered)
 ```
 
 ## Learning Options
@@ -104,12 +106,14 @@ Process Event 3: [["sensor3", "warning"]]
 When `true`, a pattern is learned after processing each individual event:
 - 3 events → 3 separate patterns
 - Each pattern represents a single event
+- STM is cleared after each learning operation
 - Useful for: Learning individual behaviors or states
 
 ### learn_at_end
 When `true`, a single pattern is learned from all accumulated events:
 - 3 events → 1 combined pattern
 - Pattern represents the entire sequence
+- STM is cleared after learning (empty at the end)
 - Useful for: Learning temporal sequences or workflows
 
 ### Combined Options
@@ -120,7 +124,7 @@ You can combine options for complex scenarios:
   "learn_after_each": true
 }
 ```
-Result: Each event is isolated AND learned as its own pattern.
+Result: Each event is isolated AND learned as its own pattern. STM will be empty after processing.
 
 ## Use Cases
 
@@ -184,6 +188,7 @@ observations = [
 3. **Persistence Limits**: Default STM persistence is 5 events (configurable)
 4. **Pattern Naming**: Learned patterns follow the format PTRN|<sha1_hash>
 5. **Deterministic**: Same inputs always produce same outputs
+6. **Learning Clears STM**: Any learning operation (learn_after_each or learn_at_end) always clears STM
 
 ## Error Handling
 

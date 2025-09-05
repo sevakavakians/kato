@@ -16,7 +16,7 @@ pip install -r requirements.txt
 pip install -r tests/requirements.txt
 
 # Run all tests
-./run_simple_tests.sh
+./run_tests.sh
 
 # OR use pytest directly
 python -m pytest tests/ -v
@@ -26,10 +26,10 @@ python -m pytest tests/ -v
 
 ```bash
 # Run specific test suites
-./run_simple_tests.sh tests/tests/unit/          # Unit tests only
-./run_simple_tests.sh tests/tests/integration/   # Integration tests only
-./run_simple_tests.sh tests/tests/api/          # API tests only
-./run_simple_tests.sh tests/tests/performance/  # Performance tests
+./run_tests.sh tests/tests/unit/          # Unit tests only
+./run_tests.sh tests/tests/integration/   # Integration tests only
+./run_tests.sh tests/tests/api/          # API tests only
+./run_tests.sh tests/tests/performance/  # Performance tests
 
 # Run specific test file
 python -m pytest tests/tests/unit/test_observations.py -v
@@ -66,7 +66,7 @@ tests/
 │   └── performance/      # Performance tests
 ├── scripts/              # Utility scripts for testing
 │   └── run_tests_direct.py   # Direct Python test runner
-├── run_simple_tests.sh      # Simple test runner script
+├── run_tests.sh      # Simple test runner script
 ├── requirements-test.txt     # Test dependencies
 ├── pytest.ini               # Pytest configuration
 ├── conftest.py          # Pytest fixtures configuration
@@ -135,7 +135,7 @@ python -m pytest tests/tests/unit/ -s
 docker logs kato-api-$(whoami)-1 --tail 20
 
 # Run tests without starting/stopping KATO
-./run_simple_tests.sh --no-start --no-stop tests/
+./run_tests.sh --no-start --no-stop tests/
 ```
 
 ## More Information

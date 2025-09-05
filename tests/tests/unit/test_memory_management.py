@@ -253,15 +253,15 @@ def test_memory_with_vectors(kato_fixture):
         })
         assert result['status'] == 'observed'
     
-    # Vectors ALWAYS produce at least VECTOR|hash symbols in STM
+    # Vectors ALWAYS produce at least VCTR|hash symbols in STM
     stm = kato_fixture.get_short_term_memory()
     assert isinstance(stm, list), "Short-term memory should be a list"
     assert len(stm) == 3, "Should have 3 events (one for each vector observation)"
     
-    # Each event should have at least one VECTOR| symbol
+    # Each event should have at least one VCTR| symbol
     for event in stm:
-        vector_symbols = [s for s in event if s.startswith('VECTOR|')]
-        assert len(vector_symbols) >= 1, "Each vector observation should produce at least one VECTOR| symbol"
+        vector_symbols = [s for s in event if s.startswith('VCTR|')]
+        assert len(vector_symbols) >= 1, "Each vector observation should produce at least one VCTR| symbol"
     
     # Learn the sequence
     pattern_name = kato_fixture.learn()

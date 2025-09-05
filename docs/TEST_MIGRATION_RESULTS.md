@@ -116,7 +116,7 @@ websocket-client>=1.8.0  # For WebSocket endpoint testing
 
 Run the full test suite to verify:
 ```bash
-./run_simple_tests.sh --no-start --no-stop
+./run_tests.sh --no-start --no-stop
 ```
 
 Expected output:

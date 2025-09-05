@@ -31,8 +31,8 @@ This document provides a comprehensive reference for KATO's core concepts, behav
 - **Empty events**: `[[], [], []]` ❌
 
 #### Valid with Vectors:
-- **Single string with vectors**: `[['hello', 'VECTOR|<hash>']]` ✅
-  - Vectors contribute their own string representation (e.g., 'VECTOR|<hash>')
+- **Single string with vectors**: `[['hello', 'VCTR|<hash>']]` ✅
+  - Vectors contribute their own string representation (e.g., 'VCTR|<hash>')
   - Results in 2+ strings total, meeting the minimum requirement
   - The vector string is automatically added when vectors are processed
 
@@ -101,7 +101,7 @@ observe({'strings': ['m']})
 
 ### Vector Symbol Processing
 - Vectors are processed through the vector indexer (VI) to produce vector names
-- **Purpose**: Generate string symbols like `VECTOR|<hash>` for short-term memory
+- **Purpose**: Generate string symbols like `VCTR|<hash>` for short-term memory
 - These vector strings are always added to STM when vectors are processed
 - Vector strings count toward the minimum 2-string requirement for predictions
 - Vector symbols appear before string symbols in mixed modality events
@@ -315,7 +315,7 @@ KATO processes multiple data types simultaneously within each observation:
 - Numeric arrays of any dimension
 - Processed by vector indexer (VI)
 - Can be used for similarity calculations
-- Deterministic hashing: `VECTOR|<sha1_hash>`
+- Deterministic hashing: `VCTR|<sha1_hash>`
 
 ### Emotives
 - Key-value pairs representing emotional context
@@ -348,7 +348,7 @@ Every learned pattern receives a deterministic hash-based identifier:
 
 ### Vector Hashing
 Vectors are similarly hashed deterministically:
-- Format: `VECTOR|<sha1_hash>`
+- Format: `VCTR|<sha1_hash>`
 - Consistent across sessions
 
 ### Sorting Consistency

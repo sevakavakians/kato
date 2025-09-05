@@ -108,15 +108,15 @@ def test_observe_with_vectors(kato_fixture):
     
     assert result['status'] == 'observed'
     
-    # Vectors ALWAYS produce at least the VECTOR|hash symbol
+    # Vectors ALWAYS produce at least the VCTR|hash symbol
     # May also include up to 3 nearest neighbors (k=3 default)
     stm = kato_fixture.get_short_term_memory()
     assert isinstance(stm, list), "short-term memory should be a list"
     assert len(stm) == 1, "Should have one event for the vector observation"
-    assert len(stm[0]) >= 1, "Should have at least the VECTOR|hash symbol"
-    # Check that we have vector symbols (they start with 'VECTOR|')
-    vector_symbols = [s for s in stm[0] if s.startswith('VECTOR|')]
-    assert len(vector_symbols) >= 1, "Should have at least one VECTOR| symbol"
+    assert len(stm[0]) >= 1, "Should have at least the VCTR|hash symbol"
+    # Check that we have vector symbols (they start with 'VCTR|')
+    vector_symbols = [s for s in stm[0] if s.startswith('VCTR|')]
+    assert len(vector_symbols) >= 1, "Should have at least one VCTR| symbol"
     assert len(vector_symbols) <= 4, "Should have at most 4 symbols (observed + 3 nearest)"
 
 
@@ -271,11 +271,11 @@ def test_observe_large_vector(kato_fixture):
     
     assert result['status'] == 'observed'
     
-    # Large vectors should still produce at least VECTOR|hash symbol
+    # Large vectors should still produce at least VCTR|hash symbol
     stm = kato_fixture.get_short_term_memory()
     assert isinstance(stm, list), "short-term memory should be a list"
     assert len(stm) == 1, "Should have one event for the vector observation"
-    assert len(stm[0]) >= 1, "Should have at least the VECTOR|hash symbol"
+    assert len(stm[0]) >= 1, "Should have at least the VCTR|hash symbol"
     # Check for vector symbols
-    vector_symbols = [s for s in stm[0] if s.startswith('VECTOR|')]
-    assert len(vector_symbols) >= 1, "Should have at least one VECTOR| symbol for large vector"
+    vector_symbols = [s for s in stm[0] if s.startswith('VCTR|')]
+    assert len(vector_symbols) >= 1, "Should have at least one VCTR| symbol for large vector"

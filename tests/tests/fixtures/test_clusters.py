@@ -9,7 +9,7 @@ import os
 
 
 @dataclass
-class TestCluster:
+class KatoTestCluster:
     """Represents a cluster of tests with shared configuration."""
     name: str
     config: Dict[str, Any]
@@ -19,7 +19,7 @@ class TestCluster:
 
 # Define test clusters based on configuration requirements
 TEST_CLUSTERS = [
-    TestCluster(
+    KatoTestCluster(
         name="default",
         config={
             "recall_threshold": 0.1,
@@ -46,7 +46,7 @@ TEST_CLUSTERS = [
         description="Tests using default KATO configuration"
     ),
     
-    TestCluster(
+    KatoTestCluster(
         name="recall_dynamic",
         config={
             "recall_threshold": 0.1,  # Tests will change this as needed
@@ -61,7 +61,7 @@ TEST_CLUSTERS = [
         description="Tests that dynamically change recall threshold during execution"
     ),
     
-    TestCluster(
+    KatoTestCluster(
         name="memory_general",
         config={
             "recall_threshold": 0.1,
@@ -81,7 +81,7 @@ TEST_CLUSTERS = [
         description="General memory management tests"
     ),
     
-    TestCluster(
+    KatoTestCluster(
         name="pattern_learning_general",
         config={
             "recall_threshold": 0.1,
@@ -94,7 +94,7 @@ TEST_CLUSTERS = [
         description="General pattern learning integration tests"
     ),
     
-    TestCluster(
+    KatoTestCluster(
         name="auto_learning",
         config={
             "recall_threshold": 0.1,
@@ -110,7 +110,7 @@ TEST_CLUSTERS = [
 ]
 
 
-def get_cluster_for_test(test_path: str) -> TestCluster:
+def get_cluster_for_test(test_path: str) -> KatoTestCluster:
     """
     Determine which cluster a test belongs to.
     
@@ -137,7 +137,7 @@ def get_cluster_for_test(test_path: str) -> TestCluster:
     return TEST_CLUSTERS[0]
 
 
-def get_tests_for_cluster(cluster: TestCluster, test_dir: str) -> List[str]:
+def get_tests_for_cluster(cluster: KatoTestCluster, test_dir: str) -> List[str]:
     """
     Get all test files that belong to a cluster.
     

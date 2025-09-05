@@ -33,7 +33,7 @@ def find_test_functions(file_path):
             if 'emotives' in test_block and 'assert' in test_block:
                 potential_issues.append("Emotives assertion")
                 
-            if 'VECTOR|' in test_block:
+            if 'VCTR|' in test_block:
                 potential_issues.append("Vector hash assertion")
                 
             if 'get_predictions()' in test_block and ('emotives' in test_block or 'vectors' in test_block):

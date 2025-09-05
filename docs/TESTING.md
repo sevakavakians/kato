@@ -35,7 +35,7 @@ pip install -r tests/requirements.txt
 ### Quick Start
 ```bash
 # Run all tests (services must be running)
-./run_simple_tests.sh --no-start --no-stop
+./run_tests.sh --no-start --no-stop
 
 # The --no-start flag skips starting KATO (already running)
 # The --no-stop flag keeps KATO running after tests
@@ -44,19 +44,19 @@ pip install -r tests/requirements.txt
 ### Running Specific Tests
 ```bash
 # Run unit tests only
-./run_simple_tests.sh --no-start --no-stop tests/tests/unit/
+./run_tests.sh --no-start --no-stop tests/tests/unit/
 
 # Run integration tests only
-./run_simple_tests.sh --no-start --no-stop tests/tests/integration/
+./run_tests.sh --no-start --no-stop tests/tests/integration/
 
 # Run API tests only
-./run_simple_tests.sh --no-start --no-stop tests/tests/api/
+./run_tests.sh --no-start --no-stop tests/tests/api/
 
 # Run a specific test file
-./run_simple_tests.sh --no-start --no-stop tests/tests/unit/test_sorting_behavior.py
+./run_tests.sh --no-start --no-stop tests/tests/unit/test_sorting_behavior.py
 
 # Run with verbose output
-./run_simple_tests.sh --no-start --no-stop -v tests/tests/unit/
+./run_tests.sh --no-start --no-stop -v tests/tests/unit/
 ```
 
 ### Direct pytest Usage
@@ -257,7 +257,7 @@ lsof -i :8003
 ./kato-manager.sh restart
 
 # Then run tests
-./run_simple_tests.sh --no-start --no-stop
+./run_tests.sh --no-start --no-stop
 ```
 
 For systematic troubleshooting of test failures, see the [Test Troubleshooting Guide](../TEST_TROUBLESHOOTING_GUIDE.md) which provides a step-by-step process for identifying and fixing test issues.
@@ -275,7 +275,7 @@ docker volume prune -f  # WARNING: Removes all unused volumes
 ### Running Performance Tests
 ```bash
 # Run performance test suite
-./run_simple_tests.sh --no-start --no-stop tests/tests/performance/
+./run_tests.sh --no-start --no-stop tests/tests/performance/
 
 # Monitor resource usage during tests
 docker stats
@@ -332,7 +332,7 @@ jobs:
           
       - name: Run tests
         run: |
-          ./run_simple_tests.sh --no-start --no-stop
+          ./run_tests.sh --no-start --no-stop
           
       - name: Stop services
         if: always()

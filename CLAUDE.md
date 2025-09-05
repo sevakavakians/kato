@@ -60,18 +60,18 @@ pip install -r requirements.txt
 pip install -r tests/requirements.txt
 
 # Run all tests (with running services)
-./run_simple_tests.sh --no-start --no-stop
+./run_tests.sh --no-start --no-stop
 
 # Run specific test categories
-./run_simple_tests.sh --no-start --no-stop tests/tests/unit/
-./run_simple_tests.sh --no-start --no-stop tests/tests/integration/
-./run_simple_tests.sh --no-start --no-stop tests/tests/api/
+./run_tests.sh --no-start --no-stop tests/tests/unit/
+./run_tests.sh --no-start --no-stop tests/tests/integration/
+./run_tests.sh --no-start --no-stop tests/tests/api/
 
 # Run specific test file
-./run_simple_tests.sh --no-start --no-stop tests/tests/unit/test_observations.py
+./run_tests.sh --no-start --no-stop tests/tests/unit/test_observations.py
 
 # Run with options
-./run_simple_tests.sh --no-start --no-stop -v    # Verbose output
+./run_tests.sh --no-start --no-stop -v    # Verbose output
 
 # Run tests directly with pytest
 source venv/bin/activate
@@ -162,7 +162,7 @@ Client Request → FastAPI Service (Port 8001-8003) → Embedded KATO Processor
 1. **Minimum Sequence Length**: KATO requires at least 2 strings total in STM to generate predictions
    - Valid: `[['A', 'B']]` (2 strings in 1 event)
    - Valid: `[['A'], ['B']]` (2 strings across 2 events)
-   - Valid: `[['A']] + vectors` (1 user string + vector strings like 'VECTOR|<hash>')
+   - Valid: `[['A']] + vectors` (1 user string + vector strings like 'VCTR|<hash>')
    - Invalid: `[['A']]` (only 1 string without vectors - no predictions generated)
 2. **Alphanumeric Sorting**: Strings within events are sorted alphanumerically for consistency
 3. **Temporal Segmentation**: Predictions structured as past/present/future
@@ -187,7 +187,7 @@ Client Request → FastAPI Service (Port 8001-8003) → Embedded KATO Processor
    - Empty events should be filtered BEFORE observation
    - STM only processes non-empty event sequences
 5. **Multi-Modal Processing**: Handles strings, vectors (768-dim), and emotional context
-   - Vectors always produce name strings (e.g., 'VECTOR|<hash>') for STM
+   - Vectors always produce name strings (e.g., 'VCTR|<hash>') for STM
 6. **Deterministic**: Same inputs always produce same outputs
 7. **Variable Pattern Lengths**: Supports patterns of arbitrary length (2+ strings total)
    - Events can have varying numbers of symbols
@@ -288,7 +288,7 @@ The `docker-compose.yml` includes three pre-configured instances:
 1. Make changes to source files in `kato/` directory
 2. Rebuild Docker image: `./kato-manager.sh build`
 3. Restart services: `./kato-manager.sh restart`
-4. Run tests: `./run_simple_tests.sh --no-start --no-stop`
+4. Run tests: `./run_tests.sh --no-start --no-stop`
 5. Debug failures directly with print statements or debugger
 6. Commit changes when tests pass
 
@@ -427,7 +427,7 @@ With the new FastAPI architecture, most testing is done locally with Python:
 ./kato-manager.sh start
 
 # Run tests locally
-./run_simple_tests.sh --no-start --no-stop
+./run_tests.sh --no-start --no-stop
 
 # Direct pytest execution
 python -m pytest tests/tests/unit/ -v
@@ -495,12 +495,12 @@ Without proper isolation:
 ### Quick Decision Tree:
 - Updating documentation? → project-manager
 - Running Docker tests? → test-analyst
-- Running local tests? → Do it directly with `./run_simple_tests.sh`
+- Running local tests? → Do it directly with `./run_tests.sh`
 - Complex research? → general-purpose
 - Everything else? → Do it directly
 
 ### Common Mistakes to Avoid:
 1. ❌ Editing planning-docs/ directly → ✅ Use project-manager
-2. ❌ Using test-analyst for local tests → ✅ Use `./run_simple_tests.sh`
+2. ❌ Using test-analyst for local tests → ✅ Use `./run_tests.sh`
 3. ❌ Forgetting to start services before tests → ✅ Run `./kato-manager.sh start` first
 4. ❌ Sharing processor_ids between tests → ✅ Each test gets unique processor_id

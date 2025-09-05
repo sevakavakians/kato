@@ -31,7 +31,7 @@ def calculate_vector_hash(vector: List[float]) -> str:
         vector: List of float values
         
     Returns:
-        The SHA1 hash of the vector (without VECTOR| prefix)
+        The SHA1 hash of the vector (without VCTR| prefix)
     """
     # Convert vector to a canonical string representation
     vector_str = json.dumps(vector)
@@ -54,16 +54,16 @@ def format_pattern_name(sequence: List[Any]) -> str:
 
 def format_vector_name(vector: List[float]) -> str:
     """
-    Format a vector name with the VECTOR| prefix and hash.
+    Format a vector name with the VCTR| prefix and hash.
     
     Args:
         vector: The vector to hash
         
     Returns:
-        Formatted vector name like 'VECTOR|abc123...'
+        Formatted vector name like 'VCTR|abc123...'
     """
     hash_value = calculate_vector_hash(vector)
-    return f"VECTOR|{hash_value}"
+    return f"VCTR|{hash_value}"
 
 
 def verify_pattern_name(name: str, expected_sequence: List[Any]) -> bool:
@@ -95,7 +95,7 @@ def verify_vector_name(name: str, expected_vector: List[float]) -> bool:
     Returns:
         True if the name is correctly formatted and matches the expected hash
     """
-    if not name.startswith("VECTOR|"):
+    if not name.startswith("VCTR|"):
         return False
     
     expected_name = format_vector_name(expected_vector)
@@ -104,7 +104,7 @@ def verify_vector_name(name: str, expected_vector: List[float]) -> bool:
 
 def extract_hash_from_name(name: str) -> str:
     """
-    Extract the hash portion from a PTRN| or VECTOR| prefixed name.
+    Extract the hash portion from a PTRN| or VCTR| prefixed name.
     
     Args:
         name: The prefixed name
@@ -114,7 +114,7 @@ def extract_hash_from_name(name: str) -> str:
     """
     if name.startswith("PTRN|"):
         return name[5:]
-    elif name.startswith("VECTOR|"):
+    elif name.startswith("VCTR|"):
         return name[7:]
     return ""
 

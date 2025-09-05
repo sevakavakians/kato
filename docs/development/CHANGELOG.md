@@ -213,7 +213,7 @@
 
 ### Key Improvements
 - Tests now properly handle KATO's alphanumeric sorting of strings within events
-- Added deterministic hash verification for PTRN| and VECTOR| prefixes
+- Added deterministic hash verification for PTRN| and VCTR| prefixes
 - Comprehensive documentation of KATO's unique behaviors
 - Test helpers for automatic sorting in assertions
 

@@ -95,7 +95,7 @@ Despite test failures, significant accomplishments include:
 
 3. **Resolve Vector Memory Issues**
    - Check vector-to-STM conversion
-   - Validate VECTOR|hash generation
+   - Validate VCTR|hash generation
 
 ### Testing Strategy
 - Use `test-harness.sh` for consistent environment

@@ -175,21 +175,21 @@ pip install -r tests/requirements.txt
 ### Running Tests
 ```bash
 # Run all tests (services must be running)
-./run_simple_tests.sh --no-start --no-stop
+./run_tests.sh --no-start --no-stop
 
 # Run specific test suite
-./run_simple_tests.sh --no-start --no-stop tests/tests/unit/
-./run_simple_tests.sh --no-start --no-stop tests/tests/integration/
-./run_simple_tests.sh --no-start --no-stop tests/tests/api/
+./run_tests.sh --no-start --no-stop tests/tests/unit/
+./run_tests.sh --no-start --no-stop tests/tests/integration/
+./run_tests.sh --no-start --no-stop tests/tests/api/
 
 # Run specific test file
-./run_simple_tests.sh --no-start --no-stop tests/tests/unit/test_sorting_behavior.py
+./run_tests.sh --no-start --no-stop tests/tests/unit/test_sorting_behavior.py
 
 # Run with verbose output
-./run_simple_tests.sh --no-start --no-stop -v tests/tests/unit/
+./run_tests.sh --no-start --no-stop -v tests/tests/unit/
 
 # Run tests with fresh KATO (slower but cleaner)
-./run_simple_tests.sh  # Will start/stop KATO automatically
+./run_tests.sh  # Will start/stop KATO automatically
 ```
 
 ### Test Architecture

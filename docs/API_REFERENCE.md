@@ -82,7 +82,7 @@ Processes an observation and adds it to short-term memory.
 ```
 
 **Notes:**
-- Vectors are converted to symbolic representations (e.g., `VECTOR|<hash>`)
+- Vectors are converted to symbolic representations (e.g., `VCTR|<hash>`)
 - Symbols within events are sorted alphabetically if SORT=true
 - Auto-learning triggers when STM length reaches MAX_PATTERN_LENGTH
 

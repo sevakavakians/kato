@@ -20,7 +20,7 @@ Persistent storage of learned patterns in MongoDB. Each pattern is stored with i
 ### Event
 A single observation unit containing one or more symbols. Events are represented as lists of strings, e.g., `["hello", "world"]`. Events can contain:
 - String symbols (direct observations)
-- Vector-derived symbols (e.g., `VECTOR|<hash>`)
+- Vector-derived symbols (e.g., `VCTR|<hash>`)
 - Both types mixed
 
 ### Symbol
@@ -145,7 +145,7 @@ Explicit pattern learning triggered by API call. Learns current STM contents reg
 Conversion of numerical vectors to symbolic representations:
 1. Vector is hashed to create unique identifier
 2. Stored in Qdrant vector database
-3. Represented symbolically as `VECTOR|<hash>`
+3. Represented symbolically as `VCTR|<hash>`
 
 ### Sorting Mode
 When `SORT=true` (default), symbols within events are sorted alphabetically for deterministic pattern matching.
@@ -224,8 +224,8 @@ Threshold value for triggering automatic actions (0.0 to 1.0).
 ### PTRN| Prefix
 Identifier prefix for patterns. Format: `PTRN|<sha1_hash>`
 
-### VECTOR| Prefix
-Identifier prefix for vector-derived symbols. Format: `VECTOR|<hash>`
+### VCTR| Prefix
+Identifier prefix for vector-derived symbols. Format: `VCTR|<hash>`
 
 ## Edge Cases and Boundaries
 

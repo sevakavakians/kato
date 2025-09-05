@@ -242,13 +242,13 @@ pip install -r requirements.txt
 pip install -r tests/requirements.txt
 
 # Run all tests
-./tests/run_simple_tests.sh
+./tests/run_tests.sh
 
 # Run specific test suites
-./tests/run_simple_tests.sh tests/tests/unit/          # Unit tests only
-./tests/run_simple_tests.sh tests/tests/integration/   # Integration tests
-./tests/run_simple_tests.sh tests/tests/api/          # API tests
-./tests/run_simple_tests.sh tests/tests/performance/  # Performance tests
+./tests/run_tests.sh tests/tests/unit/          # Unit tests only
+./tests/run_tests.sh tests/tests/integration/   # Integration tests
+./tests/run_tests.sh tests/tests/api/          # API tests
+./tests/run_tests.sh tests/tests/performance/  # Performance tests
 
 # Run with pytest directly
 python -m pytest tests/tests/ -v       # Verbose output
@@ -256,7 +256,7 @@ python -m pytest tests/tests/ -s       # Show print statements
 python -m pytest tests/tests/ --pdb    # Drop into debugger on failure
 
 # Run tests without starting/stopping KATO
-./tests/run_simple_tests.sh --no-start --no-stop tests/
+./tests/run_tests.sh --no-start --no-stop tests/
 ```
 
 **Key Features:**

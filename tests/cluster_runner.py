@@ -17,7 +17,7 @@ import requests
 
 # Add fixtures to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'tests'))
-from fixtures.test_clusters import TEST_CLUSTERS, TestCluster, get_tests_for_cluster
+from fixtures.test_clusters import TEST_CLUSTERS, KatoTestCluster, get_tests_for_cluster
 
 
 @dataclass
@@ -203,7 +203,7 @@ class ClusterTestRunner:
         
         return passed, failed, skipped, errors
     
-    def run_cluster(self, cluster: TestCluster) -> ClusterResult:
+    def run_cluster(self, cluster: KatoTestCluster) -> ClusterResult:
         """Run all tests in a cluster."""
         if self.verbose:
             print(f"\n{'#'*60}")

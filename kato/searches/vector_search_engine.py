@@ -186,7 +186,7 @@ class VectorSearchEngine:
                 if vector_id is None:
                     # Generate ID from vector hash
                     vector_hash = hashlib.sha1(str(vector_array).encode()).hexdigest()
-                    vector_id = f"VECTOR|{vector_hash}"
+                    vector_id = f"VCTR|{vector_hash}"
             
             # Add to vector store
             success = await self.store.add_vector(
@@ -243,7 +243,7 @@ class VectorSearchEngine:
                         vector_ids.append(v.name)
                     else:
                         vector_hash = hashlib.sha1(str(v).encode()).hexdigest()
-                        vector_ids.append(f"VECTOR|{vector_hash}")
+                        vector_ids.append(f"VCTR|{vector_hash}")
             
             # Convert vectors to numpy arrays
             vector_arrays = []
@@ -322,7 +322,7 @@ class VectorSearchEngine:
             else:
                 query_array = query_vector
                 query_hash = hashlib.sha1(str(query_array).encode()).hexdigest()
-                query_id = f"VECTOR|{query_hash}"
+                query_id = f"VCTR|{query_hash}"
             
             # Check cache
             cache_key = None

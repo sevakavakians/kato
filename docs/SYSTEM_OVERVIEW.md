@@ -136,7 +136,7 @@ KATO generates predictions when observations match learned patterns.
 Valid for predictions:
 - Single event with 2+ strings: `[['hello', 'world']]` ✅
 - Multiple events totaling 2+ strings: `[['hello'], ['world']]` ✅
-- Single string with vectors: `[['hello', 'VECTOR|<hash>']]` ✅ (vectors generate string representations)
+- Single string with vectors: `[['hello', 'VCTR|<hash>']]` ✅ (vectors generate string representations)
 
 Invalid (no predictions):
 - Single string only: `[['hello']]` ❌
@@ -232,7 +232,7 @@ observe({'strings': ['happy']})
 
 #### Vector Processing
 - Processed through configurable classifiers
-- May generate VECTOR|<hash> symbols
+- May generate VCTR|<hash> symbols
 - Appear before string symbols in mixed events
 - Classifier-dependent short-term memory behavior
 

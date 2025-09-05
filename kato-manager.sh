@@ -256,7 +256,7 @@ run_tests() {
     
     # Run tests
     cd "$KATO_ROOT"
-    ./run_simple_tests.sh
+    ./run_tests.sh
 }
 
 # Create a new KATO instance dynamically

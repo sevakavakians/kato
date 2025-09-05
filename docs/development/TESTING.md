@@ -44,7 +44,7 @@ pip install -r requirements.txt
 pip install -r tests/requirements.txt
 
 # Run all tests
-./run_simple_tests.sh
+./run_tests.sh
 
 # OR run directly with pytest
 python -m pytest tests/tests/ -v
@@ -54,10 +54,10 @@ python -m pytest tests/tests/ -v
 
 ```bash
 # Run specific test suites
-./run_simple_tests.sh tests/tests/unit/          # Unit tests only
-./run_simple_tests.sh tests/tests/integration/   # Integration tests only
-./run_simple_tests.sh tests/tests/api/          # API tests only
-./run_simple_tests.sh tests/tests/performance/  # Performance tests
+./run_tests.sh tests/tests/unit/          # Unit tests only
+./run_tests.sh tests/tests/integration/   # Integration tests only
+./run_tests.sh tests/tests/api/          # API tests only
+./run_tests.sh tests/tests/performance/  # Performance tests
 
 # Run specific test file
 python -m pytest tests/tests/unit/test_observations.py -v
@@ -75,10 +75,10 @@ python -m pytest tests/tests/ --tb=short  # Short traceback format
 
 ```bash
 # Run tests without starting/stopping KATO
-./run_simple_tests.sh --no-start --no-stop tests/tests/
+./run_tests.sh --no-start --no-stop tests/tests/
 
 # Run tests with verbose output
-./run_simple_tests.sh -v tests/tests/
+./run_tests.sh -v tests/tests/
 
 # Generate coverage report
 python -m pytest tests/tests/ --cov=kato --cov-report=html
@@ -133,7 +133,7 @@ tests/
 │   └── performance/      # Performance tests
 │       └── test_vector_stress.py
 ├── requirements-test.txt     # Test dependencies
-├── run_simple_tests.sh      # Simple test runner script
+├── run_tests.sh      # Simple test runner script
 ├── scripts/
 │   └── run_tests_direct.py  # Direct Python test runner
 └── pytest.ini               # Pytest configuration
@@ -398,7 +398,7 @@ pip install -r tests/requirements.txt
 
 ### Environment Variables
 ```bash
-# Disable any container mode (set automatically by run_simple_tests.sh)
+# Disable any container mode (set automatically by run_tests.sh)
 export KATO_TEST_MODE=local
 export KATO_CLUSTER_MODE=false
 

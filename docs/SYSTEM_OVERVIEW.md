@@ -22,23 +22,23 @@ Input (Observation) → Processing → Short-Term Memory → Learning → Long-T
                       Predictions ← Pattern Matching ← Query
 ```
 
-### Distributed Deployment
+### FastAPI Architecture
 
-KATO uses a high-performance architecture with ZeroMQ for inter-process communication:
+KATO uses a modern FastAPI architecture with direct embedding:
 
 ```
-REST Client → REST Gateway (Port 8000) → ZMQ Pool → ZMQ Server → KATO Processors
-                    ↓                        ↓           ↓
-            HTTP to ZMQ Translation    Connection Pool  Internal Queue
-                    ↓                        ↓           ↓  
-            Processor ID Routing      Load Balancing   Process Isolation
+Client Request → FastAPI Service (Ports 8001-8003) → Embedded KATO Processor
+                           ↓                                    ↓
+                    Async Processing                    MongoDB & Qdrant
+                           ↓                            (Isolated by processor_id)
+                    JSON Response
 ```
 
 **Key Components:**
-- **REST Gateway**: HTTP API endpoints, translates REST calls to ZMQ messages
-- **ZMQ Pool**: Connection pooling and load balancing for ZMQ clients  
-- **ZMQ Server**: High-performance message queue server (Port 5555)
-- **KATO Processor**: Core AI processing engine with short-term memory and patterns
+- **FastAPI Service**: Modern async web framework with automatic API documentation
+- **Embedded Processor**: Each container runs one KATO processor instance
+- **Database Isolation**: Each processor has isolated data via processor_id
+- **Async Processing**: Non-blocking I/O for high performance
 
 ## End-to-End Behavior
 
@@ -272,15 +272,15 @@ observe({'strings': ['happy']})
 ### 7. Deployment Configuration
 
 #### Container Architecture
-- Each KATO processor runs as independent container
-- REST gateway provides unified access point
-- Sticky routing ensures session consistency
-- Processor IDs maintain state isolation
+- Each KATO processor runs as independent FastAPI container
+- Direct HTTP access to each container (ports 8001-8003)
+- Processor IDs maintain complete database isolation
+- Async processing ensures high throughput
 
 #### Scaling Considerations
-- Horizontal scaling via multiple processors
+- Horizontal scaling via multiple FastAPI containers
 - Each processor maintains independent memory
-- Gateway handles routing and load distribution
+- Optional load balancer for traffic distribution
 - State persistence through processor lifecycle
 
 ## Key Properties

@@ -91,29 +91,28 @@ curl -X POST http://localhost:8000/p46b6b076c/genes/change \
 | `--no-sort` | flag | false | Disable alphanumeric sorting |
 | `--no-predictions` | flag | false | Disable prediction processing |
 
-### ZeroMQ Configuration
+### FastAPI Configuration
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `KATO_ZMQ_IMPLEMENTATION` | string | "improved" | **ZMQ implementation**: "improved" (ROUTER/DEALER - recommended) or "legacy" (REQ/REP) |
-| `ZMQ_PORT` | integer | 5555 | ZeroMQ server port |
-| `REST_PORT` | integer | 8000 | REST gateway port |
+| `HOST` | string | "0.0.0.0" | FastAPI host binding |
+| `PORT` | integer | 8000 | FastAPI internal port (mapped externally) |
+| `WORKERS` | integer | 1 | Number of Uvicorn workers |
+| `LOG_LEVEL` | string | "INFO" | FastAPI logging level |
 
-**Important**: The "improved" ROUTER/DEALER implementation is strongly recommended for production use as it provides:
-- Non-blocking communication (no deadlocks under load)
-- Better timeout handling (graceful timeout without socket corruption)
-- Connection health monitoring (30-second heartbeats)
-- Concurrent request support (handles multiple clients efficiently)
+**Service Ports**:
+- Primary KATO: `http://localhost:8001`
+- Testing KATO: `http://localhost:8002`
+- Analytics KATO: `http://localhost:8003`
 
 Example:
 ```bash
-# Use improved ROUTER/DEALER implementation (default and recommended)
-export KATO_ZMQ_IMPLEMENTATION=improved
+# Start all FastAPI services
 ./kato-manager.sh start
 
-# Only use legacy if you have specific compatibility requirements
-export KATO_ZMQ_IMPLEMENTATION=legacy
-./kato-manager.sh start
+# Services will be available at their respective ports
+curl http://localhost:8001/health
+curl http://localhost:8002/health
 ```
 
 ## Usage Examples
@@ -285,19 +284,17 @@ KATO automatically maintains an instance registry at `~/.kato/instances.json`:
 ```json
 {
   "instances": {
-    "processor-1": {
-      "name": "Main Processor",
-      "container": "kato-processor-1",
+    "primary": {
+      "name": "Primary Processor",
+      "container": "kato-primary",
       "api_port": 8001,
-      "zmq_port": 5556,
       "status": "running",
       "updated": "2024-01-01T12:00:00"
     },
-    "processor-2": {
-      "name": "Secondary",
-      "container": "kato-processor-2",
+    "testing": {
+      "name": "Testing Processor",
+      "container": "kato-testing",
       "api_port": 8002,
-      "zmq_port": 5557,
       "status": "running",
       "updated": "2024-01-01T12:05:00"
     }

@@ -11,10 +11,10 @@ Comprehensive guide for diagnosing and resolving common KATO issues.
 ./kato-manager.sh status
 
 # Check API health
-curl http://localhost:8000/kato-api/ping
+curl http://localhost:8001/health
 
-# Check specific processor
-curl http://localhost:8000/p46b6b076c/ping
+# Check processor status
+curl http://localhost:8001/status
 
 # View recent logs
 ./kato-manager.sh logs kato --tail 50
@@ -139,32 +139,32 @@ rm ~/.kato/instances.json
 ./kato-manager.sh list  # Rebuilds registry
 ```
 
-### ZeroMQ Communication Issues
+### FastAPI Communication Issues
 
-#### Timeout Errors with REQ/REP Pattern
+#### Timeout Errors
 
 **Symptoms:**
-- "Resource temporarily unavailable" errors
-- Tests timing out after 2 minutes
-- `/connect` endpoint hanging
+- Request timeouts
+- Slow API responses
+- Connection refused errors
 
 **Solutions:**
 
-1. Switch to improved ROUTER/DEALER implementation (default):
+1. Check FastAPI service status:
 ```bash
-export KATO_ZMQ_IMPLEMENTATION=improved
+docker logs kato-primary --tail 20
+docker logs kato-testing --tail 20
+```
+
+2. Restart container to reset state:
+```bash
 ./kato-manager.sh restart
 ```
 
-2. If issues persist, check ZMQ server status:
+3. Verify service health:
 ```bash
-docker exec kato-api-${USER}-1 ps aux | grep zmq
-docker logs kato-api-${USER}-1 --tail 20 | grep "ZMQ"
-```
-
-3. Restart container to clear connection state:
-```bash
-./kato-manager.sh restart
+curl http://localhost:8001/health
+curl http://localhost:8002/health
 ```
 
 #### Test Runner Timeout
@@ -263,7 +263,7 @@ docker exec mongo-kb-${USER}-1 mongo --eval "db.adminCommand('ping')"
 #### Connection Refused
 
 **Symptoms:**
-- `curl: (7) Failed to connect to localhost port 8000`
+- `curl: (7) Failed to connect to localhost port 8001`
 - Browser shows "Unable to connect"
 
 **Solutions:**
@@ -275,12 +275,13 @@ docker ps | grep kato
 
 2. Check port mapping:
 ```bash
-docker port kato-api-${USER}-1
+docker port kato-primary
+docker port kato-testing
 ```
 
 3. Test internal connectivity:
 ```bash
-docker exec kato-api-${USER}-1 curl localhost:8000/kato-api/ping
+docker exec kato-primary curl localhost:8000/health
 ```
 
 4. Check firewall:
@@ -305,19 +306,19 @@ sudo iptables -L
 docker exec kato-api-${USER}-1 env | grep PROCESSOR
 ```
 
-2. Use correct processor ID in URLs:
+2. Use correct endpoint URLs:
 ```bash
-# Wrong
-curl http://localhost:8000/wrong-id/observe
-
-# Right
-curl http://localhost:8000/p46b6b076c/observe
+# FastAPI endpoints (no processor ID in URL)
+curl http://localhost:8001/observe
+curl http://localhost:8001/predictions
+curl http://localhost:8001/stm
 ```
 
-3. Check API base path:
+3. Check service health:
 ```bash
-# Some endpoints need /kato-api prefix
-curl http://localhost:8000/kato-api/ping
+# Health check endpoints
+curl http://localhost:8001/health
+curl http://localhost:8002/health
 ```
 
 ### Performance Issues
@@ -343,10 +344,10 @@ docker stats kato-api-${USER}-1
   --recall-threshold 0.3
 ```
 
-3. Check connection pool:
+3. Check async processing:
 ```bash
-# Look for connection pool issues in logs
-docker logs kato-api-${USER}-1 | grep -i pool
+# Look for processing issues in logs
+docker logs kato-primary | grep -i "error\|warning"
 ```
 
 4. Reduce load:
@@ -365,7 +366,7 @@ docker logs kato-api-${USER}-1 | grep -i pool
 
 1. Clear memory:
 ```bash
-curl -X POST http://localhost:8000/p46b6b076c/memory/clear-all
+curl -X POST http://localhost:8001/clear-all
 ```
 
 2. Limit pattern length:
@@ -379,53 +380,48 @@ curl -X POST http://localhost:8000/p46b6b076c/memory/clear-all
 # Implement pattern rotation
 ```
 
-### ZeroMQ Issues
+### FastAPI Performance Issues
 
-#### Resource Temporarily Unavailable
+#### High Latency
 
 **Symptoms:**
-- Error: "Resource temporarily unavailable"
-- ZMQ timeout errors
+- Slow API responses (>100ms)
+- Request timeouts
 
 **Solutions:**
 
-1. Check ZMQ server:
+1. Check resource usage:
 ```bash
-docker exec kato-api-${USER}-1 ps aux | grep zmq
+docker stats kato-primary
+docker stats kato-testing
 ```
 
-2. Test ZMQ connectivity:
+2. Monitor async processing:
 ```bash
-docker exec kato-api-${USER}-1 python3 -c "
-import zmq
-ctx = zmq.Context()
-sock = ctx.socket(zmq.REQ)
-sock.connect('tcp://localhost:5555')
-print('Connected successfully')
-"
+docker logs kato-primary | grep "Processing time"
 ```
 
-3. Restart with fresh connections:
+3. Restart to clear state:
 ```bash
 ./kato-manager.sh restart
 ```
 
-#### Connection Pool Exhaustion
+#### Memory Issues
 
 **Symptoms:**
-- "No available connections" errors
-- Increasing latency over time
+- Container using excessive memory
+- Out of memory errors
 
 **Solutions:**
 
-1. Check pool statistics:
+1. Check memory usage:
 ```bash
-docker logs kato-api-${USER}-1 | grep "Connection pool"
+docker stats --no-stream
 ```
 
-2. Increase pool size or restart:
+2. Clear processor memory:
 ```bash
-./kato-manager.sh restart
+curl -X POST http://localhost:8001/clear-all
 ```
 
 ### MongoDB Issues
@@ -617,28 +613,7 @@ TestCluster(
 
 **Root Causes and Solutions:**
 
-1. **Method Name Mismatch in REST Gateway**
-
-*Problem:* REST gateway calls wrong ZMQ method name (`gene_change` instead of `change_gene`).
-
-*Symptoms:*
-```bash
-# Gene updates fail silently
-curl -X POST http://localhost:8000/p5f2b9323c3/genes/change \
-  -d '{"data": {"max_pattern_length": 3}}'
-# Returns success but gene value unchanged
-```
-
-*Solution:* Fixed in `kato/workers/rest_gateway.py:463-466`:
-```python
-# OLD (incorrect)
-response = pool.execute('gene_change', gene_name, gene_value)
-
-# NEW (correct)  
-response = pool.execute('change_gene', gene_name, gene_value)
-```
-
-2. **Docker Container Not Including Code Changes**
+1. **Docker Container Not Including Code Changes**
 
 *Problem:* Modified code not appearing in running container due to Docker layer caching.
 
@@ -649,13 +624,13 @@ response = pool.execute('change_gene', gene_name, gene_value)
 
 *Solution:* Rebuild Docker image from scratch:
 ```bash
-/usr/local/bin/docker system prune -f
-/usr/local/bin/docker rmi kato:latest
-/usr/local/bin/docker build --no-cache -t kato:latest /Users/sevakavakians/PROGRAMMING/kato
+docker system prune -f
+docker rmi kato:latest
+./kato-manager.sh build --no-cache
 ./kato-manager.sh restart
 ```
 
-3. **Test Isolation Issues with Gene Values**
+2. **Test Isolation Issues with Gene Values**
 
 *Problem:* Gene values persist between tests, causing unpredictable failures.
 
@@ -673,47 +648,21 @@ def clear_all_memory(self, reset_genes: bool = True) -> str:
     # ... rest of method
 ```
 
-And updated problematic tests:
-```python
-def test_max_pattern_length(kato_fixture):
-    # Clear memory first, then set gene (don't call clear_all_memory after)
-    kato_fixture.clear_short_term_memory()  # Only clear STM, not genes
-    kato_fixture.update_genes({"max_pattern_length": 3})
-    # ... rest of test
-```
-
-4. **ZMQ Communication Failures**
-
-*Problem:* "Resource temporarily unavailable" errors preventing processor communication.
-
-*Symptoms:*
-```bash
-curl http://localhost:8000/p5f2b9323c3/ping
-# Returns HTML error page instead of JSON
-```
-
-*Solution:* Restart KATO with proper processor ID:
-```bash
-PROCESSOR_ID=p5f2b9323c3 PROCESSOR_NAME=P1 ./kato-manager.sh restart
-```
-
 #### Verification Commands
 
 After fixing auto-learning issues, verify with:
 
 ```bash
 # 1. Test gene updates work
-curl -X POST http://localhost:8000/p5f2b9323c3/genes/change \
-  -d '{"data": {"max_pattern_length": 3}}'
+curl -X POST http://localhost:8001/genes/update \
+  -H "Content-Type: application/json" \
+  -d '{"genes": {"max_pattern_length": 3}}'
 
 # 2. Verify gene value changed  
-curl http://localhost:8000/p5f2b9323c3/gene/max_pattern_length
+curl http://localhost:8001/gene/max_pattern_length
 
-# 3. Test auto-learning behavior
-python3 test_p1_processor.py
-
-# 4. Run specific auto-learning tests
-./test-harness.sh test tests/ -k "test_max_pattern_length" -v
+# 3. Run specific auto-learning tests
+./run_tests.sh --no-start --no-stop tests/tests/unit/ -k "test_max_pattern_length" -v
 ```
 
 #### Sorting Assertions Fail
@@ -859,15 +808,18 @@ echo -n "Docker: "
 docker version > /dev/null 2>&1 && echo "OK" || echo "FAIL"
 
 # Check containers
-echo -n "KATO Container: "
-docker ps | grep -q kato-api && echo "Running" || echo "Not Running"
+echo -n "KATO Primary: "
+docker ps | grep -q kato-primary && echo "Running" || echo "Not Running"
+
+echo -n "KATO Testing: "
+docker ps | grep -q kato-testing && echo "Running" || echo "Not Running"
 
 echo -n "MongoDB Container: "
-docker ps | grep -q mongo-kb && echo "Running" || echo "Not Running"
+docker ps | grep -q kato-mongodb && echo "Running" || echo "Not Running"
 
 # Check API
 echo -n "API Health: "
-curl -s http://localhost:8000/kato-api/ping > /dev/null 2>&1 && echo "OK" || echo "FAIL"
+curl -s http://localhost:8001/health > /dev/null 2>&1 && echo "OK" || echo "FAIL"
 
 # Check disk space
 echo "Disk Usage:"
@@ -875,7 +827,7 @@ df -h / | tail -1
 
 # Check memory
 echo "Memory Usage:"
-docker stats --no-stream kato-api-${USER}-1 2>/dev/null || echo "Container not running"
+docker stats --no-stream kato-primary kato-testing 2>/dev/null || echo "Containers not running"
 ```
 
 ### Performance Check Script
@@ -888,8 +840,7 @@ import time
 import requests
 from statistics import mean, stdev
 
-BASE_URL = "http://localhost:8000"
-PROCESSOR_ID = "p46b6b076c"
+BASE_URL = "http://localhost:8001"
 
 def time_operation(func, iterations=10):
     times = []
@@ -916,14 +867,14 @@ def time_operation(func, iterations=10):
 
 # Test operations
 def test_ping():
-    requests.get(f"{BASE_URL}/kato-api/ping")
+    requests.get(f"{BASE_URL}/health")
 
 def test_observe():
-    requests.post(f"{BASE_URL}/{PROCESSOR_ID}/observe",
+    requests.post(f"{BASE_URL}/observe",
                   json={"strings": ["test"], "vectors": [], "emotives": {}})
 
 def test_predictions():
-    requests.get(f"{BASE_URL}/{PROCESSOR_ID}/predictions")
+    requests.get(f"{BASE_URL}/predictions")
 
 # Run tests
 print("KATO Performance Check")
@@ -953,13 +904,15 @@ docker version
 docker-compose version
 
 # KATO logs
-docker logs kato-api-${USER}-1 --tail 1000 > kato.log
+docker logs kato-primary --tail 1000 > kato-primary.log
+docker logs kato-testing --tail 1000 > kato-testing.log
 
 # MongoDB logs
-docker logs mongo-kb-${USER}-1 --tail 1000 > mongo.log
+docker logs kato-mongodb --tail 1000 > mongo.log
 
 # Container details
-docker inspect kato-api-${USER}-1 > container.json
+docker inspect kato-primary > container-primary.json
+docker inspect kato-testing > container-testing.json
 
 # Configuration
 ./kato-manager.sh config > config.json

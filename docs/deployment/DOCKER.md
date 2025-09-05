@@ -111,12 +111,13 @@ Show all registered KATO instances.
 
 Output:
 ```
-KATO Instances:
-===============
-ID                   Name                 Status     API Port   ZMQ Port   Container
-----------------------------------------------------------------------------------------------------
-processor-1          Main                 running    8001       5556       kato-processor-1
-processor-2          Secondary            running    8002       5557       kato-processor-2
+KATO FastAPI Services Status:
+
+NAME           IMAGE         COMMAND                  SERVICE        STATUS    PORTS
+kato-primary   kato:latest   "uvicorn kato.servic…"   kato-primary   healthy   0.0.0.0:8001->8000/tcp
+kato-testing   kato:latest   "uvicorn kato.servic…"   kato-testing   healthy   0.0.0.0:8002->8000/tcp
+kato-mongodb   mongo:4.4     "docker-entrypoint.s…"   mongodb        healthy   0.0.0.0:27017->27017/tcp
+kato-qdrant    qdrant/qdrant "entrypoint.sh"          qdrant         running   0.0.0.0:6333->6333/tcp
 ```
 
 #### restart
@@ -378,20 +379,20 @@ CMD ["python", "-m", "kato.scripts.kato_engine"]
 
 ### Optional Variables
 - `MONGO_BASE_URL`: MongoDB connection string (default: mongodb://localhost:27017)
+- `QDRANT_HOST`: Qdrant host (default: localhost)
+- `QDRANT_PORT`: Qdrant port (default: 6333)
 - `LOG_LEVEL`: Logging level (DEBUG, INFO, WARNING, ERROR)
-- `REST_PORT`: REST API port (default: 8000)
-- `ZMQ_PORT`: ZeroMQ server port (default: 5555)
 
 ### Configuration Example
 
 ```bash
 # .env file
-PROCESSOR_ID=p46b6b076c
-PROCESSOR_NAME=MainProcessor
-MONGO_BASE_URL=mongodb://mongodb:27017
+PROCESSOR_ID=primary
+PROCESSOR_NAME=PrimaryProcessor
+MONGO_BASE_URL=mongodb://kato-mongodb:27017
+QDRANT_HOST=kato-qdrant
+QDRANT_PORT=6333
 LOG_LEVEL=INFO
-REST_PORT=8000
-ZMQ_PORT=5555
 MAX_PREDICTIONS=100
 RECALL_THRESHOLD=0.1
 ```

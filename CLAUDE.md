@@ -122,8 +122,11 @@ Client Request → FastAPI Service (Port 8001-8003) → Embedded KATO Processor
 1. **FastAPI Service** (`kato/services/kato_fastapi.py`)
    - Direct embedding of KATO processor
    - Async request handling with FastAPI
-   - Handles `/observe`, `/learn`, `/predict`, `/health` endpoints
-   - WebSocket support for real-time communication
+   - Core endpoints: `/observe`, `/learn`, `/predictions`, `/health`, `/status`
+   - Advanced endpoints: `/pattern/{id}`, `/genes/update`, `/gene/{name}`, `/percept-data`, `/cognition-data`, `/metrics`
+   - STM endpoints: `/stm` (alias: `/short-term-memory`)
+   - Clear endpoints: `/clear-stm`, `/clear-all` (with aliases)
+   - WebSocket support at `/ws` for real-time communication
 
 2. **KATO Processor** (`kato/workers/kato_processor.py`)
    - Core AI engine managing observations and predictions
@@ -239,15 +242,33 @@ The codebase has comprehensive test coverage with 143+ test functions across mul
 ## Configuration
 
 ### Environment Variables
+
+#### Core Configuration
 - `PROCESSOR_ID`: Unique identifier for processor instance
 - `PROCESSOR_NAME`: Display name for the processor
 - `LOG_LEVEL`: DEBUG, INFO, WARNING, ERROR (default: INFO)
+
+#### Database Configuration
 - `MONGO_BASE_URL`: MongoDB connection string
 - `QDRANT_HOST`: Qdrant host (default: localhost)
 - `QDRANT_PORT`: Qdrant port (default: 6333)
-- `MAX_PATTERN_LENGTH`: Auto-learn after N observations (0 = manual only)
-- `PERSISTENCE`: STM persistence length
+
+#### Learning Configuration
+- `MAX_PATTERN_LENGTH`: Auto-learn after N observations (0 = manual only, default: 0)
+- `PERSISTENCE`: STM persistence length (default: 5)
 - `RECALL_THRESHOLD`: Pattern matching threshold (0.0-1.0, default: 0.1)
+- `SMOOTHNESS`: Smoothing factor for pattern matching (default: 3)
+
+#### Processing Configuration
+- `INDEXER_TYPE`: Vector indexer type (default: 'VI')
+- `AUTO_ACT_METHOD`: Auto-action method (default: 'none')
+- `AUTO_ACT_THRESHOLD`: Threshold for auto-actions (default: 0.8)
+- `ALWAYS_UPDATE_FREQUENCIES`: Update pattern frequencies on re-observation (default: false)
+- `MAX_PREDICTIONS`: Maximum predictions to return (default: 100)
+- `QUIESCENCE`: Quiescence period for pattern stabilization (default: 3)
+- `SEARCH_DEPTH`: Depth for pattern searching (default: 10)
+- `SORT`: Sort symbols alphabetically within events (default: true)
+- `PROCESS_PREDICTIONS`: Enable prediction processing (default: true)
 
 ### Multi-Instance Configuration
 The `docker-compose.yml` includes three pre-configured instances:

@@ -1,632 +1,485 @@
 # KATO API Reference
 
-Complete reference for all KATO REST API endpoints.
+Complete API documentation for the KATO FastAPI service.
 
-## Base URL
+## Base URLs
 
-```
-http://localhost:8000
-```
+- Primary Instance: `http://localhost:8001`
+- Testing Instance: `http://localhost:8002`
+- Analytics Instance: `http://localhost:8003`
 
-## Multi-Instance Support
+## Interactive Documentation
 
-When running multiple KATO instances, each has its own base URL:
-- Instance 1: `http://localhost:8001`
-- Instance 2: `http://localhost:8002`
-- etc.
+- Swagger UI: `http://localhost:8001/docs`
+- ReDoc: `http://localhost:8001/redoc`
 
-Each instance requires its processor ID in the API path:
-```
-http://localhost:{port}/{processor_id}/{endpoint}
-```
+## Core Endpoints
 
-## Authentication
+### Health Check
 
-Currently, KATO API does not require authentication. Future versions may support API key authentication via the `--api-key` parameter.
-
-## Response Format
-
-All responses are JSON with the following structure:
-
-```json
-{
-  "status": "okay" | "error",
-  "message": "response message",
-  // Additional endpoint-specific data
-}
+```http
+GET /health
 ```
 
-## Endpoints
-
-### System Health
-
-#### GET /kato-api/ping
-Check if the KATO API is running.
+Returns service health status.
 
 **Response:**
 ```json
 {
   "status": "healthy",
-  "message": "KATO API is running"
+  "processor_id": "primary",
+  "uptime": 123.45
 }
 ```
 
-### Connection Management
+### Status
 
-#### POST /connect
-Establish connection with KATO system.
-
-**Request Body:**
-```json
-{
-  "processor_id": "p46b6b076c"
-}
+```http
+GET /status
 ```
 
-**Response:**
+Returns detailed processor status.
+
+**Response Model: `ProcessorStatus`**
 ```json
 {
   "status": "okay",
-  "message": "connected",
-  "processor_id": "p46b6b076c"
+  "processor_id": "primary",
+  "processor_name": "PrimaryProcessor",
+  "uptime": 123.45,
+  "stm_length": 3,
+  "time": 42
 }
 ```
 
-### Processor Operations
+### Observe
 
-#### GET /{processor_id}/ping
-Check if a specific processor is responsive.
+```http
+POST /observe
+```
 
-**Parameters:**
-- `processor_id` (path): Processor identifier
+Processes an observation and adds it to short-term memory.
 
-**Response:**
+**Request Model: `ObservationData`**
+```json
+{
+  "strings": ["hello", "world"],      // Required: String symbols to observe
+  "vectors": [[0.1, 0.2, ...]],      // Optional: 768-dim vectors
+  "emotives": {"joy": 0.8},          // Optional: Emotional/utility values
+  "unique_id": "obs-123"              // Optional: Tracking identifier
+}
+```
+
+**Response Model: `ObservationResult`**
 ```json
 {
   "status": "okay",
-  "message": "pong",
-  "processor_id": "p46b6b076c"
-}
-```
-
-#### GET /{processor_id}/status
-Get detailed processor status.
-
-**Parameters:**
-- `processor_id` (path): Processor identifier
-
-**Response:**
-```json
-{
-  "status": "okay",
-  "id": "p46b6b076c",  // The processor's unique identifier
-  "processor": "P1",
-  "time_stamp": 1234567890.123,
-  "interval": 0,
-  "message": {...}  // Full processor information
-}
-```
-
-### Observation and Learning
-
-#### POST /{processor_id}/observe
-Send an observation to the processor.
-
-**Parameters:**
-- `processor_id` (path): Processor identifier
-
-**Request Body:**
-```json
-{
-  "strings": ["hello", "world"],
-  "vectors": [[1.0, 2.0, 3.0]],
-  "emotives": {
-    "joy": 0.8,
-    "confidence": 0.6
-  }
-}
-```
-
-**Response:**
-```json
-{
-  "status": "observed",
-  "processor_id": "p46b6b076c",
-  "short_term_memory": [["hello", "world"]]
+  "processor_id": "primary",
+  "auto_learned_pattern": "PTRN|abc123...",  // If auto-learning triggered
+  "time": 43,
+  "unique_id": "obs-123"
 }
 ```
 
 **Notes:**
-- Strings are automatically sorted alphanumerically within each event
-- Empty observations are ignored
-- Vectors are optional; when provided, they generate vector name strings for STM
-- Emotives are optional key-value pairs (0.0-1.0)
+- Vectors are converted to symbolic representations (e.g., `VECTOR|<hash>`)
+- Symbols within events are sorted alphabetically if SORT=true
+- Auto-learning triggers when STM length reaches MAX_PATTERN_LENGTH
 
-#### POST /{processor_id}/learn
-Trigger learning from current short-term memory.
+### Get Short-Term Memory
 
-**Parameters:**
-- `processor_id` (path): Processor identifier
-
-**Response:**
-```json
-{
-  "status": "learned",
-  "processor_id": "p46b6b076c",
-  "pattern_name": "PTRN|a5b9c3d7e1f2..."
-}
+```http
+GET /stm
+GET /short-term-memory  # Alias
 ```
 
-**Behavior:**
-- Creates pattern from current STM content
-- Pattern identified by SHA1 hash: `PTRN|<sha1_hash>`
-- Frequency tracking:
-  - New patterns start with frequency = 1
-  - Re-learning identical pattern increments frequency
-  - No patterns exist with frequency = 0
-- STM clearing:
-  - Regular learn(): STM completely cleared
-  - Auto-learn (max_pattern_length reached): Last event preserved
-- Returns empty string if STM has < 2 strings (no pattern created)
+Returns current short-term memory state.
 
-### Short-Term Memory
-
-#### GET /{processor_id}/short-term-memory
-Get current short-term memory contents.
-
-**Parameters:**
-- `processor_id` (path): Processor identifier
-
-**Response:**
+**Response Model: `STMResponse`**
 ```json
 {
-  "message": [
-    ["first", "event"],
-    ["second"],
-    ["third", "event", "here"]
+  "stm": [
+    ["hello", "world"],
+    ["foo", "bar"]
   ],
-  "time_stamp": 1234567890.123,
-  "interval": 0
+  "processor_id": "primary"
 }
 ```
 
-#### POST /{processor_id}/short-term-memory/clear
-Clear short-term memory (preserves learned patterns).
+### Learn
 
-**Parameters:**
-- `processor_id` (path): Processor identifier
+```http
+POST /learn
+```
 
-**Response:**
+Learns a pattern from current short-term memory.
+
+**Response Model: `LearnResult`**
 ```json
 {
-  "status": "okay",
-  "processor_id": "p46b6b076c",
-  "message": "short-term memory cleared"
+  "pattern_name": "PTRN|7f3a2b1c...",
+  "processor_id": "primary",
+  "message": "Learned pattern: PTRN|7f3a2b1c..."
 }
 ```
 
-### Memory Management
+**Notes:**
+- Returns empty pattern_name if STM has < 2 strings
+- Pattern name format: `PTRN|<sha1_hash>`
+- Clears STM after learning
 
-#### POST /{processor_id}/memory/clear-all
-Clear all memory (short-term memory and learned patterns).
+### Get Predictions
 
-**Parameters:**
-- `processor_id` (path): Processor identifier
-
-**Response:**
-```json
-{
-  "status": "okay",
-  "processor_id": "p46b6b076c",
-  "message": "all memory cleared"
-}
+```http
+GET /predictions
+POST /predictions
+GET /predictions?unique_id=<observation_id>
 ```
 
-### Predictions
+Returns predictions based on current STM or specific observation.
 
-#### GET /{processor_id}/predictions
-Get current predictions based on short-term memory.
-
-**Important**: KATO requires at least 2 strings total in short-term memory to generate predictions. Vectors contribute their own string representations (e.g., 'VECTOR|<hash>'), so a single user string with vectors meets this requirement. With fewer than 2 strings total, this endpoint will return an empty predictions array.
-
-**Parameters:**
-- `processor_id` (path): Processor identifier
-
-**Query Parameters:**
-- `unique_id` (optional): Filter predictions by unique identifier
-
-**Response:**
+**Response Model: `PredictionsResponse`**
 ```json
 {
-  "status": "okay",
-  "processor_id": "p46b6b076c",
   "predictions": [
     {
       "name": "PTRN|abc123...",
-      "past": [["previous", "events"]],
-      "present": [["current", "matching"]],
-      "future": [["expected", "next"]],
-      "missing": ["symbol1"],
-      "extras": ["unexpected"],
-      "confidence": 0.85,
-      "similarity": 0.92,
-      "frequency": 3,
-      "matches": ["current"],
-      "emotives": {"joy": 0.7},
-      "hamiltonian": -2.5,
-      "grand_hamiltonian": -3.2,
-      "entropy": 0.15
+      "frequency": 5,
+      "matches": ["hello", "world"],
+      "missing": ["foo"],
+      "extras": ["bar"],
+      "past": [["previous"]],
+      "present": [["hello", "world"]],
+      "future": [["next"]],
+      "evidence": 0.8,
+      "confidence": 0.7,
+      "similarity": 0.85,
+      "snr": 0.9,
+      "fragmentation": 1,
+      "emotives": {"joy": 0.5},
+      "potential": 2.5,
+      "hamiltonian": 0.3,
+      "grand_hamiltonian": 0.4,
+      "confluence": 0.6
     }
-  ]
+  ],
+  "processor_id": "primary"
 }
 ```
 
-**Prediction Fields:**
-- `past`: Events before current match position
-- `present`: Current matching events (may be partial)
-- `future`: Events expected after current position
-- `missing`: Expected symbols not observed in present
-- `extras`: Observed symbols not expected in present
-- `confidence`: Prediction confidence (0-1)
-- `similarity`: Match quality measure
-- `frequency`: Times this pattern was learned
-- `emotives`: Emotional context if learned with pattern
+### Clear STM
 
-### Data Retrieval
+```http
+POST /clear-stm
+POST /clear-short-term-memory  # Alias
+```
 
-#### GET /{processor_id}/percept-data
-Get perceptual data from the processor.
+Clears short-term memory only.
 
-**Parameters:**
-- `processor_id` (path): Processor identifier
-
-**Response:**
+**Response Model: `StatusResponse`**
 ```json
 {
   "status": "okay",
-  "processor_id": "p46b6b076c",
-  "percept_data": {
-    "observations": [...],
-    "timestamp": "2024-01-01T12:00:00Z"
-  }
+  "message": "stm-cleared",
+  "processor_id": "primary"
 }
 ```
 
-#### GET /{processor_id}/cognition-data
-Get cognitive processing data.
+### Clear All Memory
 
-**Parameters:**
-- `processor_id` (path): Processor identifier
+```http
+POST /clear-all
+POST /clear-all-memory  # Alias
+```
 
-**Note**: The predictions field will be empty unless short-term memory contains at least 2 strings total (including vector-contributed strings like 'VECTOR|<hash>').
+Clears all memory (STM and long-term patterns).
 
-**Response:**
+**Response Model: `StatusResponse`**
 ```json
 {
   "status": "okay",
-  "processor_id": "p46b6b076c",
-  "short_term_memory": [...],
-  "predictions": [...],
-  "emotives": {...},
-  "symbols": [...],
-  "command": null
+  "message": "all-cleared",
+  "processor_id": "primary"
 }
 ```
 
-### Gene/Parameter Management
+## Advanced Endpoints
 
-#### GET /{processor_id}/gene/{gene_name}
-Get a specific gene/parameter value.
+### Get Pattern
+
+```http
+GET /pattern/{pattern_id}
+```
+
+Retrieves a specific pattern by ID.
 
 **Parameters:**
-- `processor_id` (path): Processor identifier
-- `gene_name` (path): Gene/parameter name
+- `pattern_id`: Pattern identifier (with or without `PTRN|` prefix)
 
-**Available Genes:**
-- `indexer_type`: Vector indexer type (VI only)
-- `max_predictions`: Maximum predictions to generate
-- `recall_threshold`: Minimum similarity score required for predictions (0.0-1.0)
-  - **Purpose**: Rough filter for pattern matching, NOT exact decimal precision
-  - **Default**: 0.1 (permissive, allows weak matches)
-  - **CRITICAL**: Patterns with NO matching symbols are NEVER returned regardless of threshold
-  - **Impact** (approximate behavior):
-    - `0.0-0.3`: Very permissive, includes many predictions with partial matches
-    - `0.3-0.5`: Balanced filtering, moderate quality threshold
-    - `0.5-0.7`: Restrictive, only stronger pattern matches
-    - `0.7-1.0`: Very restrictive, requires high similarity
-  - **How it works**: Uses heuristic similarity calculations for speed - values are approximate, not exact ratios
-- `persistence`: Emotive persistence duration
-- `max_pattern_length`: Maximum pattern length
-- `quiescence`: Quiescence period
-
-**Response:**
+**Response Model: `PatternResponse`**
 ```json
 {
-  "gene_name": "max_predictions",
-  "gene_value": 100,
-  "message": 100  // The gene value for backward compatibility
+  "pattern": {
+    "name": "PTRN|abc123...",
+    "pattern_data": [["a"], ["b", "c"]],
+    "frequency": 3,
+    "emotives": {"confidence": 0.8},
+    "length": 3
+  },
+  "processor_id": "primary"
 }
 ```
 
-#### POST /{processor_id}/gene/{gene_name}/change
-Update a gene/parameter value.
+### Update Genes
 
-**Parameters:**
-- `processor_id` (path): Processor identifier
-- `gene_name` (path): Gene/parameter name
-
-**Request Body:**
-```json
-{
-  "value": 150
-}
+```http
+POST /genes/update
 ```
 
-**Response:**
-```json
-{
-  "id": "p46b6b076c",  // The processor's unique identifier
-  "status": "okay",
-  "message": "updated-genes"
-}
-```
+Updates processor configuration parameters.
 
-#### POST /{processor_id}/genes/change
-Update multiple genes at once (primary gene update endpoint).
-
-**Parameters:**
-- `processor_id` (path): Processor identifier
-
-**Request Body:**
-```json
-{
-  "data": {
-    "max_predictions": 200,
-    "recall_threshold": 0.15, 
-    "persistence": 10,
-    "max_pattern_length": 3
-  }
-}
-```
-
-**Response:**
-```json
-{
-  "id": "p46b6b076c",  // The processor's unique identifier
-  "status": "okay",
-  "message": "updated-genes"
-}
-```
-
-#### POST /{processor_id}/genes/update
-Update multiple genes at once (alternative endpoint).
-
-**Parameters:**
-- `processor_id` (path): Processor identifier
-
-**Request Body:**
+**Request Model: `GeneUpdates`**
 ```json
 {
   "genes": {
-    "max_predictions": 200,
-    "recall_threshold": 0.15,
+    "recall_threshold": 0.5,
+    "max_predictions": 50,
     "persistence": 10
   }
 }
 ```
 
-**Response:**
-```json
-{
-  "status": "okay",
-  "processor_id": "p46b6b076c",
-  "updated_genes": ["max_predictions", "recall_threshold", "persistence"]
-}
+**Available Genes:**
+- `recall_threshold`: Pattern matching threshold (0.0-1.0)
+- `max_predictions`: Maximum predictions to return
+- `persistence`: STM persistence length
+- `smoothness`: Pattern matching smoothness
+- `quiescence`: Quiescence period
+- And others (see Configuration guide)
+
+### Get Gene
+
+```http
+GET /gene/{gene_name}
 ```
 
-#### POST /{processor_id}/recall-threshold/increment
-Increment the recall threshold.
-
-**Parameters:**
-- `processor_id` (path): Processor identifier
-
-**Request Body:**
-```json
-{
-  "increment": 0.05
-}
-```
+Retrieves current value of a specific gene.
 
 **Response:**
 ```json
 {
-  "status": "okay",
-  "processor_id": "p46b6b076c",
-  "old_value": 0.1,
-  "new_value": 0.15
+  "gene_name": "recall_threshold",
+  "gene_value": 0.1,
+  "processor_id": "primary"
+}
+```
+
+### Get Percept Data
+
+```http
+GET /percept-data
+```
+
+Returns last received observation data (input perception).
+
+**Response:**
+```json
+{
+  "percept_data": {
+    "strings": ["last", "observation"],
+    "vectors": [],
+    "emotives": {},
+    "path": ["source-path"],
+    "metadata": {}
+  },
+  "processor_id": "primary"
+}
+```
+
+### Get Cognition Data
+
+```http
+GET /cognition-data
+```
+
+Returns current cognitive state.
+
+**Response:**
+```json
+{
+  "cognition_data": {
+    "predictions": [...],
+    "emotives": {"current": 0.5},
+    "symbols": ["active", "symbols"],
+    "command": "last-command",
+    "metadata": {},
+    "path": [],
+    "strings": [],
+    "vectors": [],
+    "short_term_memory": [["stm", "events"]]
+  },
+  "processor_id": "primary"
+}
+```
+
+### Get Metrics
+
+```http
+GET /metrics
+```
+
+Returns processor performance metrics.
+
+**Response:**
+```json
+{
+  "processor_id": "primary",
+  "observations_processed": 1234,
+  "patterns_learned": 56,
+  "stm_size": 3,
+  "uptime_seconds": 3600.5
+}
+```
+
+## WebSocket Endpoint
+
+```http
+WS /ws
+```
+
+Establishes WebSocket connection for real-time bidirectional communication.
+
+### Message Types
+
+#### Observe
+```json
+{
+  "type": "observe",
+  "payload": {
+    "strings": ["hello"],
+    "vectors": [],
+    "emotives": {}
+  }
+}
+```
+
+#### Get STM
+```json
+{
+  "type": "get_stm",
+  "payload": {}
+}
+```
+
+#### Get Predictions
+```json
+{
+  "type": "get_predictions",
+  "payload": {
+    "unique_id": "optional-id"
+  }
+}
+```
+
+#### Learn
+```json
+{
+  "type": "learn",
+  "payload": {}
+}
+```
+
+#### Clear STM
+```json
+{
+  "type": "clear_stm",
+  "payload": {}
+}
+```
+
+#### Clear All
+```json
+{
+  "type": "clear_all",
+  "payload": {}
+}
+```
+
+#### Ping
+```json
+{
+  "type": "ping",
+  "payload": {}
+}
+```
+
+### Response Format
+
+All WebSocket responses follow this format:
+```json
+{
+  "type": "response_type",
+  "data": {
+    // Response data
+  }
 }
 ```
 
 ## Error Responses
 
-### 404 Not Found
+All errors follow a consistent format:
+
 ```json
 {
-  "status": "error",
-  "message": "Processor p123 not found",
-  "error_code": "PROCESSOR_NOT_FOUND"
-}
-```
-
-### 400 Bad Request
-```json
-{
-  "status": "error",
-  "message": "Invalid observation format",
-  "error_code": "INVALID_FORMAT"
-}
-```
-
-### 500 Internal Server Error
-```json
-{
-  "status": "error",
-  "message": "Internal processing error",
-  "error_code": "INTERNAL_ERROR"
-}
-```
-
-## Rate Limiting
-
-Currently no rate limiting is implemented. The system can handle:
-- 10,000+ requests/second per processor
-- Sustained high-volume operations
-- Concurrent requests from multiple clients
-
-## WebSocket Support
-
-WebSocket support for real-time predictions is planned for future versions.
-
-## Examples
-
-### Complete Session Example
-
-```python
-import requests
-import json
-
-BASE_URL = "http://localhost:8000"
-PROCESSOR_ID = "p46b6b076c"
-
-# 1. Check health
-response = requests.get(f"{BASE_URL}/kato-api/ping")
-print("Health:", response.json())
-
-# 2. Connect
-response = requests.post(f"{BASE_URL}/connect", 
-                        json={"processor_id": PROCESSOR_ID})
-print("Connected:", response.json())
-
-# 3. Send observations
-observations = [
-    ["morning", "routine"],
-    ["coffee", "breakfast"],
-    ["work", "email"]
-]
-
-for obs in observations:
-    response = requests.post(
-        f"{BASE_URL}/{PROCESSOR_ID}/observe",
-        json={"strings": obs, "vectors": [], "emotives": {}}
-    )
-    print(f"Observed {obs}:", response.status_code)
-
-# 4. Learn the pattern
-response = requests.post(f"{BASE_URL}/{PROCESSOR_ID}/learn")
-pattern = response.json()
-print("Learned pattern:", pattern)
-
-# 5. Clear and test recall
-requests.post(f"{BASE_URL}/{PROCESSOR_ID}/short-term-memory/clear")
-
-response = requests.post(
-    f"{BASE_URL}/{PROCESSOR_ID}/observe",
-    json={"strings": ["morning"], "vectors": [], "emotives": {}}
-)
-
-# 6. Get predictions
-response = requests.get(f"{BASE_URL}/{PROCESSOR_ID}/predictions")
-predictions = response.json()
-print("Predictions:", json.dumps(predictions, indent=2))
-```
-
-### cURL Examples
-
-```bash
-# Observe with emotives
-curl -X POST http://localhost:8000/p46b6b076c/observe \
-  -H "Content-Type: application/json" \
-  -d '{
-    "strings": ["happy", "day"],
-    "vectors": [],
-    "emotives": {"joy": 0.9, "energy": 0.7}
-  }'
-
-# Get cognition data
-curl http://localhost:8000/p46b6b076c/cognition-data
-
-# Update multiple genes (primary endpoint)
-curl -X POST http://localhost:8000/p46b6b076c/genes/change \
-  -H "Content-Type: application/json" \
-  -d '{
-    "data": {
-      "max_predictions": 50,
-      "recall_threshold": 0.2,
-      "max_pattern_length": 3
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "Human-readable error message",
+    "details": {
+      // Additional error context
     }
-  }'
-
-# Set recall_threshold for different use cases
-# High precision (few, high-quality predictions)
-curl -X POST http://localhost:8000/p46b6b076c/gene/recall_threshold/change \
-  -H "Content-Type: application/json" \
-  -d '{"value": 0.7}'
-
-# Balanced (moderate filtering)
-curl -X POST http://localhost:8000/p46b6b076c/gene/recall_threshold/change \
-  -H "Content-Type: application/json" \
-  -d '{"value": 0.4}'
-
-# Pattern discovery (many predictions, including weak matches)
-curl -X POST http://localhost:8000/p46b6b076c/gene/recall_threshold/change \
-  -H "Content-Type: application/json" \
-  -d '{"value": 0.1}'
-
-# Update multiple genes (alternative endpoint)
-curl -X POST http://localhost:8000/p46b6b076c/genes/update \
-  -H "Content-Type: application/json" \
-  -d '{
-    "genes": {
-      "max_predictions": 50,
-      "recall_threshold": 0.2
-    }
-  }'
+  },
+  "status": 400
+}
 ```
 
-## Version History
+Common HTTP status codes:
+- `400`: Bad Request - Invalid input
+- `404`: Not Found - Resource not found
+- `500`: Internal Server Error
+- `503`: Service Unavailable - Processor not initialized
 
-- **v2.0.0**: Migration to ZeroMQ, improved performance
-- **v1.0.0**: Initial REST API implementation
+## Data Types
 
-## Management Commands
+### ObservationData
+- `strings`: List[str] - String symbols to observe
+- `vectors`: List[List[float]] - Optional 768-dim vectors
+- `emotives`: Dict[str, float] - Optional emotional values
+- `unique_id`: Optional[str] - Tracking identifier
 
-While not part of the REST API, KATO provides CLI management commands:
+### Prediction Fields
+- `name`: Pattern identifier (PTRN|hash)
+- `frequency`: Number of times pattern learned
+- `matches`: Symbols matching observation
+- `missing`: Symbols in pattern but not observed
+- `extras`: Observed symbols not in pattern
+- `past`: Events before first match
+- `present`: Events containing matches
+- `future`: Events after last match
+- `evidence`: Strength of pattern match (0-1)
+- `confidence`: Ratio of matches to present length (0-1)
+- `similarity`: Overall pattern similarity (0-1)
+- `snr`: Signal-to-noise ratio
+- `fragmentation`: Pattern cohesion measure
+- `emotives`: Emotional/utility values
+- `potential`: Composite ranking metric
+- `hamiltonian`: Entropy-like complexity measure
+- `grand_hamiltonian`: Extended hamiltonian
+- `confluence`: Probability vs random chance
 
-### Instance Management
-```bash
-# Start instances
-./kato-manager.sh start --id processor-1 --name "Main" --port 8001
-./kato-manager.sh start --id processor-2 --name "Secondary" --port 8002
+## Notes
 
-# List all instances
-./kato-manager.sh list
-
-# Stop instances (automatically removes containers)
-./kato-manager.sh stop processor-1         # By ID
-./kato-manager.sh stop "Main"              # By name
-./kato-manager.sh stop --all               # All instances
-./kato-manager.sh stop --all --with-mongo  # Including MongoDB
-```
-
-### Container Lifecycle
-- **Automatic Cleanup**: The `stop` command removes containers to prevent accumulation
-- **Registry Sync**: Instance registry (`~/.kato/instances.json`) stays synchronized
-- **MongoDB Persistence**: MongoDB container is preserved unless explicitly removed
-
-## Support
-
-For issues or questions:
-- Check the [Troubleshooting Guide](technical/TROUBLESHOOTING.md)
-- Review the [System Overview](SYSTEM_OVERVIEW.md)
-- See [Multi-Instance Guide](MULTI_INSTANCE_GUIDE.md) for advanced usage
-- Open an issue on GitHub
+1. **Pattern Naming**: All patterns use format `PTRN|<sha1_hash>` where hash is SHA1 of pattern data
+2. **Minimum Prediction Requirement**: STM must contain at least 2 strings total to generate predictions
+3. **Sorting**: Symbols within events are sorted alphabetically when SORT=true (default)
+4. **Auto-Learning**: Triggers when STM reaches MAX_PATTERN_LENGTH (if > 0)
+5. **Recall Threshold**: Controls pattern matching sensitivity (0.0 = all patterns, 1.0 = exact matches only)

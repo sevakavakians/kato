@@ -99,21 +99,20 @@ curl http://localhost:8001/health
 curl -X POST http://localhost:8001/observe \
   -H "Content-Type: application/json" \
   -d '{
-    "processor_id": "my-processor",
     "strings": ["hello", "world"],
     "vectors": [],
-    "emotives": {"joy": 0.8}
+    "emotives": {"joy": 0.8},
+    "unique_id": "obs-123"  # Optional unique identifier
   }'
 
-# Learn pattern
-curl -X POST http://localhost:8001/learn \
-  -H "Content-Type: application/json" \
-  -d '{"processor_id": "my-processor"}'
+# Learn pattern from current STM
+curl -X POST http://localhost:8001/learn
+# Returns: {"pattern_name": "PTRN|<hash>", "processor_id": "...", "message": "..."}
 
 # Get predictions
-curl -X POST http://localhost:8001/predict \
-  -H "Content-Type: application/json" \
-  -d '{"processor_id": "my-processor"}'
+curl -X GET http://localhost:8001/predictions
+# Or with specific observation ID:
+curl -X GET "http://localhost:8001/predictions?unique_id=obs-123"
 ```
 
 ## Core Concepts
@@ -207,6 +206,9 @@ See [Testing Guide](docs/TESTING.md) for complete details.
 
 ### 📚 Getting Started
 - [Quick Start Guide](docs/GETTING_STARTED.md) - Get running in 5 minutes
+- [API Reference](docs/API_REFERENCE.md) - Complete endpoint documentation
+- [Configuration Guide](docs/CONFIGURATION.md) - All environment variables
+- [Glossary](docs/GLOSSARY.md) - Terms and concepts defined
 - [Multi-Instance Guide](docs/MULTI_INSTANCE_GUIDE.md) - Run multiple KATO processors
 - [System Overview](docs/SYSTEM_OVERVIEW.md) - Understand the architecture
 - [Core Concepts](docs/CONCEPTS.md) - Learn KATO's behavior
@@ -317,46 +319,109 @@ GET /health
 ```
 Returns service health status and uptime.
 
+#### Status
+```http
+GET /status
+```
+Returns detailed processor status including STM length and time counter.
+
 #### Observe
 ```http
 POST /observe
 {
-  "processor_id": "string",
-  "strings": ["string"],
-  "vectors": [[float]],
-  "emotives": {"key": float}
+  "strings": ["string"],          # String symbols to observe
+  "vectors": [[float]],            # Optional vector embeddings (768-dim)
+  "emotives": {"key": float},      # Optional emotional/utility values
+  "unique_id": "string"            # Optional unique identifier for tracking
 }
 ```
-Adds observation to short-term memory.
+Adds observation to short-term memory. Returns observation result with auto-learning status.
+
+#### Get Short-Term Memory
+```http
+GET /stm
+GET /short-term-memory  # Alias
+```
+Returns current short-term memory state as list of events.
 
 #### Learn
 ```http
 POST /learn
-{
-  "processor_id": "string"
-}
 ```
-Learns pattern from current short-term memory.
+Learns pattern from current short-term memory. Returns pattern name as `PTRN|<hash>`.
 
-#### Predict
+#### Get Predictions
 ```http
-POST /predict
-{
-  "processor_id": "string",
-  "recall_threshold": 0.1
-}
+GET /predictions
+POST /predictions
+GET /predictions?unique_id=<id>  # Get predictions for specific observation
 ```
-Gets predictions based on current observations.
+Returns predictions based on current STM state or specific observation.
 
-#### Clear Memory
+#### Clear STM
 ```http
-POST /clear-memory
+POST /clear-stm
+POST /clear-short-term-memory  # Alias
+```
+Clears short-term memory only.
+
+#### Clear All Memory
+```http
+POST /clear-all
+POST /clear-all-memory  # Alias
+```
+Clears all memory (STM and long-term patterns).
+
+### Advanced Endpoints
+
+#### Get Pattern
+```http
+GET /pattern/{pattern_id}
+```
+Retrieves specific pattern by ID (with or without PTRN| prefix).
+
+#### Update Genes
+```http
+POST /genes/update
 {
-  "processor_id": "string",
-  "memory_type": "all|stm|ltm"
+  "genes": {
+    "recall_threshold": 0.5,
+    "max_predictions": 100
+  }
 }
 ```
-Clears specified memory type.
+Updates processor configuration parameters (genes).
+
+#### Get Gene
+```http
+GET /gene/{gene_name}
+```
+Retrieves current value of a specific gene.
+
+#### Get Percept Data
+```http
+GET /percept-data
+```
+Returns last received observation data (input perception).
+
+#### Get Cognition Data
+```http
+GET /cognition-data
+```
+Returns current cognitive state including predictions, STM, and emotives.
+
+#### Get Metrics
+```http
+GET /metrics
+```
+Returns processor metrics including observation count, patterns learned, and uptime.
+
+### WebSocket Endpoint
+```http
+WS /ws
+```
+WebSocket connection for real-time bidirectional communication.
+Supported message types: observe, get_stm, get_predictions, learn, clear_stm, clear_all, ping.
 
 ### Interactive Documentation
 - Swagger UI: http://localhost:8001/docs

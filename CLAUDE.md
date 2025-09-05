@@ -95,7 +95,12 @@ curl http://localhost:8003/health   # Analytics
 # Test basic operations
 curl -X POST http://localhost:8001/observe \
   -H "Content-Type: application/json" \
-  -d '{"processor_id": "test", "strings": ["hello"], "vectors": [], "emotives": {}}'
+  -d '{"strings": ["hello"], "vectors": [], "emotives": {}}'
+
+# Test bulk observation endpoint
+curl -X POST http://localhost:8001/observe-sequence \
+  -H "Content-Type: application/json" \
+  -d '{"observations": [{"strings": ["test1"]}, {"strings": ["test2"]}]}'
 
 # View API documentation
 open http://localhost:8001/docs     # macOS
@@ -122,7 +127,8 @@ Client Request → FastAPI Service (Port 8001-8003) → Embedded KATO Processor
 1. **FastAPI Service** (`kato/services/kato_fastapi.py`)
    - Direct embedding of KATO processor
    - Async request handling with FastAPI
-   - Core endpoints: `/observe`, `/learn`, `/predictions`, `/health`, `/status`
+   - Core endpoints: `/observe`, `/observe-sequence`, `/learn`, `/predictions`, `/health`, `/status`
+   - Bulk processing: `/observe-sequence` for batch observations with isolation options
    - Advanced endpoints: `/pattern/{id}`, `/genes/update`, `/gene/{name}`, `/percept-data`, `/cognition-data`, `/metrics`
    - STM endpoints: `/stm` (alias: `/short-term-memory`)
    - Clear endpoints: `/clear-stm`, `/clear-all` (with aliases)

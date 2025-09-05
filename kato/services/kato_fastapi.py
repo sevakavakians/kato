@@ -97,6 +97,24 @@ class GeneUpdate(BaseModel):
     gene_value: Any = Field(..., description="New value for the gene")
 
 
+class ObservationSequence(BaseModel):
+    """Batch of observations to process sequentially"""
+    observations: List[ObservationData] = Field(..., description="List of observations to process in sequence")
+    learn_after_each: bool = Field(False, description="Learn pattern after each observation")
+    learn_at_end: bool = Field(False, description="Learn pattern after all observations")
+    clear_stm_between: bool = Field(False, description="Clear STM between observations")
+
+
+class ObservationSequenceResult(BaseModel):
+    """Result of batch observation processing"""
+    status: str = Field(..., description="Overall status of the operation")
+    processor_id: str = Field(..., description="ID of the processor")
+    observations_processed: int = Field(..., description="Number of observations processed")
+    patterns_learned: List[str] = Field(default_factory=list, description="Patterns learned during processing")
+    individual_results: List[ObservationResult] = Field(default_factory=list, description="Results for each observation")
+    final_predictions: Optional[List[Dict]] = Field(None, description="Predictions after all observations")
+
+
 class GeneUpdates(BaseModel):
     """Multiple gene updates"""
     genes: Dict[str, Any] = Field(..., description="Dictionary of gene names and values")
@@ -253,6 +271,93 @@ async def get_stm():
         stm=stm,
         processor_id=processor.id
     )
+
+
+@app.post("/observe-sequence", response_model=ObservationSequenceResult)
+async def observe_sequence(data: ObservationSequence):
+    """
+    Process a sequence of observations in batch.
+    
+    This endpoint allows efficient processing of multiple observations in a single API call.
+    Each observation is processed independently with proper isolation.
+    
+    Options:
+    - learn_after_each: Learn pattern after each individual observation
+    - learn_at_end: Learn pattern once after processing all observations
+    - clear_stm_between: Clear STM between observations for complete isolation
+    """
+    if not processor:
+        raise HTTPException(status_code=503, detail="Processor not initialized")
+    
+    patterns_learned = []
+    individual_results = []
+    observations_processed = 0
+    
+    async with processor_lock:
+        try:
+            # Process each observation in sequence
+            for idx, obs_data in enumerate(data.observations):
+                # Clear STM between observations if requested
+                if idx > 0 and data.clear_stm_between:
+                    processor.clear_stm()
+                
+                # Generate unique ID if not provided
+                if not obs_data.unique_id:
+                    obs_data.unique_id = f"batch-obs-{idx}-{uuid.uuid4().hex}-{int(time.time() * 1000000)}"
+                
+                # Prepare observation data
+                observation = {
+                    'strings': obs_data.strings,
+                    'vectors': obs_data.vectors,
+                    'emotives': obs_data.emotives,
+                    'unique_id': obs_data.unique_id,
+                    'source': 'fastapi-batch'
+                }
+                
+                # Process observation
+                result = processor.observe(observation)
+                observations_processed += 1
+                
+                # Create individual result
+                individual_result = ObservationResult(
+                    status="okay",
+                    processor_id=processor.id,
+                    auto_learned_pattern=result.get('auto_learned_pattern'),
+                    time=processor.time,
+                    unique_id=result.get('unique_id', obs_data.unique_id)
+                )
+                individual_results.append(individual_result)
+                
+                # Learn after each observation if requested
+                if data.learn_after_each:
+                    pattern_name = processor.learn()
+                    if pattern_name:
+                        patterns_learned.append(pattern_name)
+            
+            # Learn at end if requested
+            if data.learn_at_end and not data.clear_stm_between:
+                pattern_name = processor.learn()
+                if pattern_name:
+                    patterns_learned.append(pattern_name)
+            
+            # Get final predictions if STM has content
+            final_predictions = None
+            if not data.clear_stm_between or not data.learn_after_each:
+                # predictions is an attribute, not a method
+                final_predictions = processor.predictions
+            
+            return ObservationSequenceResult(
+                status="okay",
+                processor_id=processor.id,
+                observations_processed=observations_processed,
+                patterns_learned=patterns_learned,
+                individual_results=individual_results,
+                final_predictions=final_predictions
+            )
+            
+        except Exception as e:
+            logger.error(f"Error processing observation sequence: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/learn", response_model=LearnResult)

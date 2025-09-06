@@ -348,6 +348,52 @@ All predictions MUST contain these fields:
 - `emotives`: Emotional context data
 - `present`: Events containing matching symbols
 
+## Emotives and PERSISTENCE
+
+### Quick Reference
+- **Input Format**: `Dict[str, float]` - e.g., `{"happiness": 0.8, "arousal": -0.3}`
+- **Storage**: Rolling window arrays per pattern, limited by PERSISTENCE parameter
+- **PERSISTENCE**: Controls window size (default: 5) - how many historical values kept
+- **Averaging**: Multiple emotive values are averaged (arithmetic mean)
+- **Critical**: Emotives in predictions come from learned patterns, NOT current observations
+
+### Data Flow
+1. Observation includes emotives dict
+2. Added to STM accumulator list
+3. Averaged when learning pattern
+4. Stored with MongoDB `$slice` operation
+5. Retrieved and averaged in predictions
+
+### Rolling Window Behavior
+With PERSISTENCE=5, pattern's emotive arrays maintain last 5 values:
+```python
+# Array grows until limit
+[0.8] → [0.8, 0.6] → [0.8, 0.6, 0.9] → [0.8, 0.6, 0.9, 0.7] → [0.8, 0.6, 0.9, 0.7, 0.5]
+# Next value pushes off oldest
+[0.6, 0.9, 0.7, 0.5, 0.3]  # 0.8 dropped
+```
+
+### Configuration Guidelines
+- `PERSISTENCE=1`: Instant adaptation (only latest value)
+- `PERSISTENCE=5`: Default, balanced adaptation
+- `PERSISTENCE=10+`: Slower adaptation, longer memory
+
+### Testing Emotives
+```python
+# 1. Learn pattern WITH emotives
+kato.observe({'strings': ['A'], 'emotives': {'joy': 0.8}})
+kato.observe({'strings': ['B'], 'emotives': {'joy': 0.6}})
+kato.learn()
+
+# 2. Clear STM and observe matching pattern
+kato.clear_short_term_memory()
+kato.observe({'strings': ['A', 'B']})
+
+# 3. Predictions will contain averaged emotives from learned pattern
+predictions = kato.get_predictions()
+# predictions[0]['emotives'] will have averaged values
+```
+
 ## Automated Planning System Protocol
 
 ### ⚠️ CRITICAL RULE: NEVER EDIT planning-docs/ FILES DIRECTLY ⚠️

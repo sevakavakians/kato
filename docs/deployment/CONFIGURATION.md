@@ -48,7 +48,7 @@ All parameters can be specified directly when starting KATO:
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `--max-seq-length` | integer | 0 | **Auto-learning threshold**: When short-term memory reaches this length, automatically learn pattern. Regular learn() completely clears STM, auto-learn preserves last event (0=disabled) |
-| `--persistence` | integer | 5 | Emotive persistence duration |
+| `--persistence` | integer | 5 | Rolling window size for emotive history |
 | `--smoothness` | integer | 3 | Learning smoothness parameter |
 | `--quiescence` | integer | 3 | Quiescence period |
 
@@ -259,11 +259,13 @@ Limits the number of predictions returned:
 
 ### Persistence
 
-How long emotives are retained:
-- `1-5`: Short-term emotional context
-- `5-10`: Default range
-- `10-20`: Extended emotional memory
-- `20+`: Long-term emotional tracking
+Controls the rolling window size for emotive value history:
+- `1-5`: Fast adaptation to emotional changes
+- `5-10`: Balanced memory and adaptation (default)
+- `10-20`: Extended emotional memory with slower adaptation
+- `20+`: Long-term emotional tracking, resistant to change
+
+Each pattern maintains arrays of emotive values limited to PERSISTENCE length. When patterns are re-learned with new emotives, oldest values drop off, creating an adaptive rolling window.
 
 ### Max Pattern Length
 

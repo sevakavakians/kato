@@ -71,9 +71,29 @@ KATO uses environment variables for configuration. These can be set in:
 ### PERSISTENCE
 - **Type**: Integer
 - **Default**: `5`
-- **Description**: Length of emotional/utility value history maintained
+- **Range**: `1` to unlimited (practical max: 100)
+- **Description**: Rolling window size for emotive value history per pattern
 - **Example**: `5`, `10`, `20`
-- **Notes**: Controls how many historical emotives are averaged
+- **Notes**: Controls adaptive learning and memory for emotional/utility values
+
+**How PERSISTENCE Works:**
+- Each pattern maintains arrays of emotive values (one array per emotive type)
+- Arrays are limited to PERSISTENCE length using MongoDB's `$slice` operator
+- When a pattern is re-learned with new emotive values, oldest values drop off
+- This creates a rolling window that adapts to changing contexts
+
+**Configuration Impact:**
+- **Low values (1-5)**: Fast adaptation, quick forgetting of old emotives
+- **Medium values (5-10)**: Balanced memory and adaptation (default range)
+- **High values (10-20)**: Longer memory, slower adaptation to changes
+- **Very high (20+)**: Extended historical context, resistant to change
+
+**Use Cases by PERSISTENCE Value:**
+- `1`: Only most recent emotive matters (instant adaptation)
+- `3-5`: Quick response to emotional changes (chatbots, real-time systems)
+- `5-10`: Standard applications with moderate memory needs
+- `10-20`: Systems requiring emotional trend analysis
+- `20+`: Long-term emotional profiling or sentiment tracking
 
 ### RECALL_THRESHOLD
 - **Type**: Float

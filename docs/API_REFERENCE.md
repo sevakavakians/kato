@@ -65,7 +65,7 @@ Processes an observation and adds it to short-term memory.
 {
   "strings": ["hello", "world"],      // Required: String symbols to observe
   "vectors": [[0.1, 0.2, ...]],      // Optional: 768-dim vectors
-  "emotives": {"joy": 0.8},          // Optional: Emotional/utility values
+  "emotives": {"joy": 0.8},          // Optional: Dict[str, float] - emotional/utility values
   "unique_id": "obs-123"              // Optional: Tracking identifier
 }
 ```
@@ -124,6 +124,9 @@ Learns a pattern from current short-term memory.
 ```
 
 **Notes:**
+- Emotives accumulated in STM are averaged and stored with the pattern
+- Pattern emotives are maintained as rolling window arrays (size = PERSISTENCE)
+- When patterns are re-learned, oldest emotive values drop off
 - Returns empty pattern_name if STM has < 2 strings
 - Pattern name format: `PTRN|<sha1_hash>`
 - Clears STM after learning
@@ -156,7 +159,7 @@ Returns predictions based on current STM or specific observation.
       "similarity": 0.85,
       "snr": 0.9,
       "fragmentation": 1,
-      "emotives": {"joy": 0.5},
+      "emotives": {"joy": 0.5},      // Averaged emotives from learned pattern
       "potential": 2.5,
       "hamiltonian": 0.3,
       "grand_hamiltonian": 0.4,
@@ -223,7 +226,7 @@ Retrieves a specific pattern by ID.
     "name": "PTRN|abc123...",
     "pattern_data": [["a"], ["b", "c"]],
     "frequency": 3,
-    "emotives": {"confidence": 0.8},
+    "emotives": {"confidence": [0.8, 0.7, 0.9]},  // Rolling window arrays per emotive
     "length": 3
   },
   "processor_id": "primary"

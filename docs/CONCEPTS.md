@@ -318,12 +318,65 @@ KATO processes multiple data types simultaneously within each observation:
 - Deterministic hashing: `VCTR|<sha1_hash>`
 
 ### Emotives
-- Key-value pairs representing emotional context
-- Values are floating-point numbers (0.0 to 1.0)
-- Aggregated across observations (averaging)
-- Preserved in learned patterns
 
-**Critical Insight**: Emotives only appear in predictions from previously learned patterns, not from current observations.
+Emotives represent emotional, utility, or contextual values associated with observations and patterns. They provide a mechanism for attaching and tracking non-symbolic information alongside pattern data.
+
+#### Input Format
+- Received as dictionary: `Dict[str, float]`
+- Keys: emotive names (e.g., "happiness", "confidence", "arousal")
+- Values: numeric (positive/negative, integer/float)
+- Example: `{"happiness": 0.8, "confidence": -0.3, "arousal": 1.5}`
+
+#### Data Flow Through KATO
+
+1. **Observation Input** → Emotives received as dictionary
+2. **STM Accumulation** → Added to list: `self.pattern_processor.emotives += [emotives]`
+3. **Current State** → Averaged across all STM emotives: `average_emotives(self.pattern_processor.emotives)`
+4. **Pattern Learning** → Averaged and stored with pattern using MongoDB `$slice`
+5. **Pattern Storage** → Maintained as rolling window arrays per emotive
+6. **Predictions** → Retrieved patterns include averaged emotives from their history
+
+#### Rolling Window Mechanism (PERSISTENCE)
+
+The PERSISTENCE parameter controls how many historical emotive values are retained for each pattern:
+
+```python
+# MongoDB storage with rolling window
+"$push": {"emotives": {"$each": [emotives], "$slice": -1 * self.persistence}}
+```
+
+**Why Rolling Windows?**
+- **Adaptation**: Allows patterns to adapt to changing emotional contexts
+- **Error Recovery**: Erroneous values eventually drop off
+- **Trend Tracking**: Maintains recent history while forgetting old data
+- **Memory Efficiency**: Prevents unbounded growth of emotive arrays
+
+**Example with PERSISTENCE=5:**
+```python
+# Initial pattern emotives
+{"happiness": [0.8]}
+
+# After 3 more observations
+{"happiness": [0.8, 0.6, 0.9, 0.7]}
+
+# After 6 total observations (oldest dropped)
+{"happiness": [0.6, 0.9, 0.7, 0.5, 0.8]}  # First value (0.8) dropped
+```
+
+#### Storage Format
+
+- **In Patterns**: Stored as arrays with length ≤ PERSISTENCE
+- **Format**: `{"emotive_name": [val1, val2, ...valN]}`
+- **Averaging**: When retrieved for predictions, arrays are averaged
+- **Validation**: System enforces array length ≤ PERSISTENCE
+
+#### Critical Insights
+
+1. **Emotives in Predictions**: Come from previously learned patterns, NOT current observations
+2. **Zero Values**: Emotives with value 0 are filtered out during storage
+3. **New Emotives**: System tracks all emotive keys ever seen in `emotives_available`
+4. **Averaging Strategy**: Uses arithmetic mean to aggregate multiple values
+5. **Test Requirement**: Must learn pattern WITH emotives to see them in predictions
 
 ### Example Multi-Modal Observation
 ```python

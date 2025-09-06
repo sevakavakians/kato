@@ -46,7 +46,7 @@ Output from pattern matching containing temporal segmentation and match metrics.
 - **extras**: Observed symbols not in pattern
 
 ### Emotives
-Emotional or utility values associated with observations and patterns. These are key-value pairs where keys are emotion names and values are floating-point intensities (typically 0.0 to 1.0).
+Emotional, utility, or contextual values associated with observations and patterns. Input as dictionary `Dict[str, float]` where keys are emotive names and values are numeric (can be positive, negative, integer, or float). Stored in patterns as rolling window arrays limited by PERSISTENCE parameter. When retrieved for predictions, arrays are averaged to produce single values per emotive.
 
 ## Processing Concepts
 
@@ -199,7 +199,10 @@ Each processor instance uses a unique `processor_id` for complete database isola
 ## Configuration Terms
 
 ### Persistence
-The length of emotional/utility value history maintained. Controls how many historical emotives are averaged.
+Rolling window size for emotive value history in patterns. Each pattern maintains arrays of emotive values (one per emotive type) limited to PERSISTENCE length. When patterns are re-learned with new emotives, oldest values drop off, creating an adaptive window. Lower values (1-5) enable fast adaptation, higher values (10+) provide longer memory but slower adaptation to changes.
+
+### Rolling Window
+A data structure mechanism used for emotives storage where a fixed-size array maintains the most recent N values (controlled by PERSISTENCE). When new values are added beyond the limit, the oldest values are automatically removed. Implemented using MongoDB's `$slice` operator to maintain array bounds.
 
 ### Smoothness
 Smoothing factor for pattern matching algorithms. Higher values provide more lenient matching.

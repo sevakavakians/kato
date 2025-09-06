@@ -117,8 +117,9 @@ TEST_RESULT=$?
 # Stop KATO if requested
 if [ "$STOP_KATO" = true ]; then
     echo
-    echo -e "${GREEN}Stopping KATO...${NC}"
-    ./kato-manager.sh stop
+    echo -e "${GREEN}Stopping and removing KATO containers...${NC}"
+    # Use the down command to stop and remove containers (but keep volumes)
+    ./kato-manager.sh down
 fi
 
 # Report results

@@ -152,6 +152,24 @@ stop_services() {
     fi
 }
 
+# Down services (stop and remove containers, keep volumes)
+down_services() {
+    check_docker
+    check_docker_compose
+    
+    log_info "Stopping and removing KATO containers..."
+    
+    cd "$KATO_ROOT"
+    
+    # Use docker-compose down without -v to keep volumes
+    if $DOCKER_COMPOSE -f "$COMPOSE_FILE" down; then
+        log_success "KATO containers stopped and removed"
+    else
+        log_error "Failed to remove containers"
+        exit 1
+    fi
+}
+
 # Restart services
 restart_services() {
     local service_name="${1:-}"
@@ -328,6 +346,7 @@ show_usage() {
     echo "  build              Build Docker image"
     echo "  start [service]    Start KATO services (or specific service)"
     echo "  stop [service]     Stop KATO services (or specific service)"
+    echo "  down               Stop and remove containers (keep volumes)"
     echo "  restart [service]  Restart KATO services"
     echo "  status             Show status of services"
     echo "  logs [service]     View service logs"
@@ -362,6 +381,9 @@ case "${1:-}" in
         ;;
     stop)
         stop_services "${2:-}"
+        ;;
+    down)
+        down_services
         ;;
     restart)
         restart_services "${2:-}"

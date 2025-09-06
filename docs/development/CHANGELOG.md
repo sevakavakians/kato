@@ -1,5 +1,13 @@
 # KATO Changelog
 
+## [Unreleased] - 2025-09-06
+
+### Maintenance
+- **Branch Cleanup**: Removed obsolete remote branches
+  - All feature branches have been merged or pruned
+  - Repository now maintains only `main` branch
+  - Decision: Rejected `legacy-code-cleanup` branch as it contained outdated architecture that would revert FastAPI migration
+
 ## [3.0.0] - 2025-09-05
 
 ### Changed - BREAKING

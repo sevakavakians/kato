@@ -33,17 +33,22 @@ from kato.exceptions import (
     LearningError, ValidationError, ConfigurationError,
     DatabaseConnectionError, ResourceNotFoundError
 )
+from kato.config.settings import get_settings
+from kato.config.api import get_api_config
 
-# Configure structured logging
+# Load configuration
+settings = get_settings()
+api_config = get_api_config()
+
+# Configure structured logging from settings
 configure_logging(
-    level=os.environ.get('LOG_LEVEL', 'INFO'),
-    format_type=os.environ.get('LOG_FORMAT', 'human'),
-    output=os.environ.get('LOG_OUTPUT', 'stdout')
+    level=settings.logging.log_level,
+    format_type=settings.logging.log_format,
+    output=settings.logging.log_output
 )
 
-# Get logger with processor_id if available
-processor_id = os.environ.get('PROCESSOR_ID')
-logger = get_logger('kato.fastapi', processor_id)
+# Get logger with processor_id from settings
+logger = get_logger('kato.fastapi', settings.processor.processor_id)
 
 # Global processor instance and lock
 processor: Optional[KatoProcessor] = None
@@ -151,32 +156,30 @@ async def lifespan(app: FastAPI):
     """Manage processor lifecycle"""
     global processor
     
+    # Reload settings to ensure latest configuration
+    settings = get_settings()
+    
     # Startup: Initialize processor
-    processor_id = os.environ.get('PROCESSOR_ID')
-    if not processor_id:
-        # Generate unique processor ID if not provided
-        processor_id = f"kato-{uuid.uuid4().hex[:8]}-{int(time.time())}"
-        logger.warning(f"No PROCESSOR_ID provided, using generated: {processor_id}")
+    processor_id = settings.processor.processor_id
+    processor_name = settings.processor.processor_name
     
-    processor_name = os.environ.get('PROCESSOR_NAME', 'KatoProcessor')
-    
-    # Build manifest from environment
+    # Build manifest from settings
     manifest = {
         'id': processor_id,
         'name': processor_name,
-        'indexer_type': os.environ.get('INDEXER_TYPE', 'VI'),
-        'max_pattern_length': int(os.environ.get('MAX_PATTERN_LENGTH', '0')),
-        'persistence': int(os.environ.get('PERSISTENCE', '5')),
-        'smoothness': int(os.environ.get('SMOOTHNESS', '3')),
-        'auto_act_method': os.environ.get('AUTO_ACT_METHOD', 'none'),
-        'auto_act_threshold': float(os.environ.get('AUTO_ACT_THRESHOLD', '0.8')),
-        'always_update_frequencies': os.environ.get('ALWAYS_UPDATE_FREQUENCIES', 'false').lower() == 'true',
-        'max_predictions': int(os.environ.get('MAX_PREDICTIONS', '100')),
-        'recall_threshold': float(os.environ.get('RECALL_THRESHOLD', '0.1')),
-        'quiescence': int(os.environ.get('QUIESCENCE', '3')),
-        'search_depth': int(os.environ.get('SEARCH_DEPTH', '10')),
-        'sort': os.environ.get('SORT', 'true').lower() == 'true',
-        'process_predictions': os.environ.get('PROCESS_PREDICTIONS', 'true').lower() == 'true'
+        'indexer_type': settings.processing.indexer_type,
+        'max_pattern_length': settings.learning.max_pattern_length,
+        'persistence': settings.learning.persistence,
+        'smoothness': settings.learning.smoothness,
+        'auto_act_method': settings.processing.auto_act_method,
+        'auto_act_threshold': settings.processing.auto_act_threshold,
+        'always_update_frequencies': settings.processing.always_update_frequencies,
+        'max_predictions': settings.processing.max_predictions,
+        'recall_threshold': settings.learning.recall_threshold,
+        'quiescence': settings.learning.quiescence,
+        'search_depth': settings.processing.search_depth,
+        'sort': settings.processing.sort_symbols,
+        'process_predictions': settings.processing.process_predictions
     }
     
     logger.info(f"Initializing processor: {processor_id} ({processor_name})")
@@ -197,12 +200,26 @@ async def lifespan(app: FastAPI):
 
 # Create FastAPI app with lifespan management
 app = FastAPI(
-    title="KATO FastAPI Service",
-    description="Direct FastAPI implementation of KATO processor",
-    version="1.0.0",
-    lifespan=lifespan
+    title=api_config.documentation.title,
+    description=api_config.documentation.description,
+    version=api_config.documentation.version,
+    lifespan=lifespan,
+    docs_url=api_config.documentation.docs_url if api_config.documentation.enabled else None,
+    redoc_url=api_config.documentation.redoc_url if api_config.documentation.enabled else None,
+    openapi_url=api_config.documentation.openapi_url if api_config.documentation.enabled else None
 )
 
+# Configure CORS if enabled
+if api_config.cors.enabled:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=api_config.cors.allow_origins,
+        allow_credentials=api_config.cors.allow_credentials,
+        allow_methods=api_config.cors.allow_methods,
+        allow_headers=api_config.cors.allow_headers,
+        expose_headers=api_config.cors.expose_headers,
+        max_age=api_config.cors.max_age
+    )
 
 # Add request/response logging middleware
 @app.middleware("http")
@@ -880,5 +897,10 @@ async def get_metrics():
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.environ.get('PORT', '8000'))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    # Reload settings for main execution
+    settings = get_settings()
+    api_config = get_api_config()
+    
+    # Get uvicorn configuration
+    uvicorn_config = api_config.get_uvicorn_config()
+    uvicorn.run(app, **uvicorn_config)

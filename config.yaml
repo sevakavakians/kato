@@ -1,0 +1,101 @@
+# KATO Configuration File
+# This file provides default configuration values for KATO
+# Environment variables will override these settings
+
+# Deployment environment
+environment: development  # development, testing, production
+debug: false
+
+# Processor Configuration
+processor:
+  processor_id: null  # Auto-generated if not specified
+  processor_name: KatoProcessor
+
+# Logging Configuration
+logging:
+  log_level: INFO  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  log_format: human  # json, human
+  log_output: stdout  # stdout, stderr, or file path
+
+# Database Configuration
+database:
+  # MongoDB
+  mongo_url: mongodb://localhost:27017
+  mongo_timeout: 5000
+  
+  # Qdrant Vector Database
+  qdrant_host: localhost
+  qdrant_port: 6333
+  qdrant_grpc_port: 6334
+  qdrant_collection_prefix: vectors
+  
+  # Redis Cache (optional)
+  redis_host: localhost
+  redis_port: 6379
+  redis_enabled: false
+
+# Learning Configuration
+learning:
+  max_pattern_length: 0  # 0 = unlimited
+  persistence: 5  # Number of events to retain
+  recall_threshold: 0.1  # Pattern matching threshold (0.0-1.0)
+  smoothness: 3  # Smoothing factor
+  quiescence: 3  # Stabilization period
+  auto_learn_enabled: false
+  auto_learn_threshold: 50
+
+# Processing Configuration
+processing:
+  indexer_type: VI
+  auto_act_method: none  # none, threshold, adaptive
+  auto_act_threshold: 0.8
+  always_update_frequencies: false
+  max_predictions: 100
+  search_depth: 10
+  sort_symbols: true
+  process_predictions: true
+
+# Performance Configuration
+performance:
+  use_fast_matching: true
+  use_indexing: true
+  use_optimized: true
+  batch_size: 1000
+  vector_batch_size: 1000
+  vector_search_limit: 100
+  connection_pool_size: 10
+  request_timeout: 30.0
+
+# API Configuration
+api:
+  host: 0.0.0.0
+  port: 8000
+  workers: 1
+  cors_enabled: true
+  cors_origins:
+    - "*"
+  docs_enabled: true
+  max_request_size: 104857600  # 100MB
+
+# Example configurations for different environments
+# Uncomment and modify as needed
+
+# Production Configuration Example
+# environment: production
+# debug: false
+# logging:
+#   log_level: WARNING
+#   log_format: json
+#   log_output: /var/log/kato/kato.log
+# database:
+#   mongo_url: mongodb://username:password@mongo-cluster:27017/?replicaSet=rs0
+#   qdrant_host: qdrant-cluster
+#   redis_enabled: true
+# api:
+#   workers: 4
+#   cors_origins:
+#     - https://example.com
+#   docs_enabled: false
+# performance:
+#   batch_size: 5000
+#   connection_pool_size: 20

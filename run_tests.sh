@@ -85,7 +85,7 @@ if [ "$START_KATO" = true ]; then
     # Wait for KATO to be ready
     echo "Waiting for KATO to be ready..."
     for i in {1..30}; do
-        if curl -s http://localhost:8000/kato-api/ping > /dev/null 2>&1; then
+        if curl -s http://localhost:8001/health > /dev/null 2>&1; then
             echo -e "${GREEN}KATO is ready!${NC}"
             break
         fi

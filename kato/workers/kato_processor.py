@@ -1,6 +1,6 @@
 # cimport cython
 import logging
-from os import environ
+import os
 import traceback
 from typing import Counter
 from multiprocessing import cpu_count, Lock
@@ -8,12 +8,16 @@ from multiprocessing import cpu_count, Lock
 from kato.workers.vector_processor import VectorProcessor
 from kato.workers.pattern_processor import PatternProcessor
 from kato.informatics.metrics import average_emotives
+from kato.config.settings import get_settings
 
 
 
+
+# Get settings for logging configuration
+settings = get_settings()
 
 logger = logging.getLogger('kato.workers.kato-processor')
-logger.setLevel(getattr(logging, environ.get('LOG_LEVEL', 'INFO')))
+logger.setLevel(getattr(logging, settings.logging.log_level))
 logger.info('logging initiated')
 
 
@@ -24,7 +28,8 @@ class KatoProcessor:
         self.id = self.genome_manifest['id']
         self.name = self.genome_manifest["name"]
         self.vector_indexer_type = self.genome_manifest["indexer_type"]
-        self.agent_name = environ['HOSTNAME']
+        # Get hostname from environment or use processor_id as fallback
+        self.agent_name = os.environ.get('HOSTNAME', self.id)
         logger.info(" Starting KatoProcessor ID: %s" %self.id)
 
         self.SORT = self.genome_manifest["sort"]

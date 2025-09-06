@@ -1,15 +1,18 @@
 import logging
-from os import environ
 
 from numpy import array
 from pymongo import ASCENDING, DESCENDING, MongoClient
+from kato.config.settings import get_settings
 
 
 from collections import Counter
 from itertools import chain
 
+# Get settings for configuration
+settings = get_settings()
+
 logger = logging.getLogger('kato.informatics.knowledge-base')
-logger.setLevel(getattr(logging, environ.get('LOG_LEVEL', 'INFO')))
+logger.setLevel(getattr(logging, settings.logging.log_level))
 logger.info('logging initiated')
 
 
@@ -54,10 +57,10 @@ class SuperKnowledgeBase:
         "Provide the primitive's ID."
         self.id = primitive_id
         self.persistence = int(persistence)
-        logger.info(f" Attaching knowledgebase for {self.id} using {environ['MONGO_BASE_URL']} ...")
+        logger.info(f" Attaching knowledgebase for {self.id} using {settings.database.mongo_url} ...")
         try:
             ### MongoDB
-            self.connection = MongoClient('%s' %environ['MONGO_BASE_URL'])
+            self.connection = MongoClient(settings.database.mongo_url)
             self.write_concern = {"w": 0}
             self.knowledge = self.connection[self.id]
             self.patterns_kb = self.knowledge.patterns_kb

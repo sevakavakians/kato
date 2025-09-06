@@ -207,6 +207,7 @@ See [Testing Guide](docs/TESTING.md) for complete details.
 ### 📚 Getting Started
 - [Quick Start Guide](docs/GETTING_STARTED.md) - Get running in 5 minutes
 - [API Reference](docs/API_REFERENCE.md) - Complete endpoint documentation
+- [Configuration Management](docs/CONFIGURATION_MANAGEMENT.md) - Comprehensive configuration system guide
 - [Configuration Guide](docs/CONFIGURATION.md) - All environment variables
 - [Glossary](docs/GLOSSARY.md) - Terms and concepts defined
 - [Multi-Instance Guide](docs/MULTI_INSTANCE_GUIDE.md) - Run multiple KATO processors
@@ -285,29 +286,270 @@ Each processor_id maintains complete isolation:
 - **Qdrant**: Collection name = `vectors_{processor_id}`
 - **In-Memory**: Per-processor caches and state
 
-## Configuration
+## Configuration Management System
 
-### Environment Variables
-Services can be configured via environment variables in `docker-compose.yml`:
+KATO uses a comprehensive configuration management system built with Pydantic for type safety and validation. The system implements the **Application Startup Pattern** to ensure proper environment variable loading in containerized environments.
 
-```yaml
-environment:
-  - PROCESSOR_ID=primary           # Unique identifier
-  - PROCESSOR_NAME=Primary          # Display name
-  - MONGO_BASE_URL=mongodb://mongodb:27017
-  - QDRANT_HOST=qdrant
-  - QDRANT_PORT=6333
-  - MAX_PATTERN_LENGTH=0           # 0 = manual learning only
-  - PERSISTENCE=5                  # STM persistence
-  - RECALL_THRESHOLD=0.1           # Pattern matching threshold
-  - LOG_LEVEL=INFO                 # DEBUG, INFO, WARNING, ERROR
+### Configuration Architecture
+
+The configuration system is organized into logical sections:
+
+```python
+# kato/config/settings.py
+Settings
+├── ProcessorConfig      # Instance identification
+├── LoggingConfig        # Logging behavior
+├── DatabaseConfig       # MongoDB & Qdrant connections
+├── LearningConfig       # Pattern learning parameters
+├── ProcessingConfig     # Prediction processing
+├── PerformanceConfig    # Optimization settings
+└── APIConfig           # API service configuration
 ```
 
-### Multiple Configurations
-The `docker-compose.yml` includes three pre-configured instances:
-- **Primary** (8001): General use, manual learning
-- **Testing** (8002): Debug logging, for development
-- **Analytics** (8003): Auto-learn after 50 observations, higher recall threshold
+### Environment Variables
+
+All configuration is managed through environment variables. The system uses Pydantic v2 with `pydantic-settings` for automatic loading and validation.
+
+#### Core Configuration
+
+```yaml
+# Processor Identity
+PROCESSOR_ID: "primary"              # Unique identifier (auto-generated if not set)
+PROCESSOR_NAME: "KatoProcessor"      # Display name for the processor
+
+# Logging
+LOG_LEVEL: "INFO"                    # DEBUG, INFO, WARNING, ERROR, CRITICAL
+LOG_FORMAT: "human"                  # "json" or "human"
+LOG_OUTPUT: "stdout"                 # "stdout", "stderr", or file path
+```
+
+#### Database Configuration
+
+```yaml
+# MongoDB
+MONGO_BASE_URL: "mongodb://localhost:27017"  # MongoDB connection URL
+MONGO_TIMEOUT: 5000                          # Connection timeout (ms)
+
+# Qdrant Vector Database
+QDRANT_HOST: "localhost"                     # Qdrant host address
+QDRANT_PORT: 6333                            # Qdrant HTTP port
+QDRANT_GRPC_PORT: 6334                      # Qdrant gRPC port
+QDRANT_COLLECTION_PREFIX: "vectors"         # Collection name prefix
+
+# Redis (Optional Caching)
+REDIS_ENABLED: false                        # Enable Redis caching
+REDIS_HOST: "localhost"                     # Redis host (if enabled)
+REDIS_PORT: 6379                            # Redis port
+```
+
+#### Learning Configuration
+
+```yaml
+# Pattern Learning
+MAX_PATTERN_LENGTH: 0                # Auto-learn after N observations (0 = manual only)
+PERSISTENCE: 5                        # Number of events to retain in memory
+RECALL_THRESHOLD: 0.1                # Similarity threshold for pattern matching (0.0-1.0)
+SMOOTHNESS: 3                        # Smoothing factor for pattern matching
+QUIESCENCE: 3                        # Quiescence period for pattern stabilization
+
+# Auto-Learning
+AUTO_LEARN_ENABLED: false            # Enable automatic pattern learning
+AUTO_LEARN_THRESHOLD: 50            # Observations before auto-learning
+```
+
+#### Processing Configuration
+
+```yaml
+# Pattern Processing
+INDEXER_TYPE: "VI"                  # Type of vector indexer
+AUTO_ACT_METHOD: "none"              # Automatic action method: "none", "threshold", "adaptive"
+AUTO_ACT_THRESHOLD: 0.8             # Threshold for automatic actions
+ALWAYS_UPDATE_FREQUENCIES: false    # Update pattern frequencies on re-observation
+MAX_PREDICTIONS: 100                 # Maximum predictions to return
+SEARCH_DEPTH: 10                    # Depth for pattern searching
+SORT: true                          # Sort symbols alphabetically within events
+PROCESS_PREDICTIONS: true           # Enable prediction processing
+```
+
+#### Performance Configuration
+
+```yaml
+# Optimization Settings
+KATO_USE_FAST_MATCHING: true        # Use optimized fast matching algorithms
+KATO_USE_INDEXING: true             # Use pattern indexing for faster lookups
+KATO_USE_OPTIMIZED: true            # Enable general optimizations
+KATO_BATCH_SIZE: 1000               # Batch size for bulk operations
+KATO_VECTOR_BATCH_SIZE: 1000        # Batch size for vector operations
+KATO_VECTOR_SEARCH_LIMIT: 100       # Maximum vector search results
+CONNECTION_POOL_SIZE: 10             # Database connection pool size
+REQUEST_TIMEOUT: 30.0                # Request timeout in seconds
+```
+
+#### API Configuration
+
+```yaml
+# API Service
+HOST: "0.0.0.0"                      # API host address
+PORT: 8000                           # API port number
+WORKERS: 1                           # Number of worker processes
+CORS_ENABLED: true                   # Enable CORS support
+CORS_ORIGINS: "*"                    # Allowed CORS origins (comma-separated)
+DOCS_ENABLED: true                   # Enable API documentation endpoints
+MAX_REQUEST_SIZE: 104857600         # Maximum request size in bytes (100MB)
+```
+
+### Configuration Loading
+
+The configuration system uses the **Application Startup Pattern** to ensure proper environment variable loading:
+
+1. **Fresh Instance at Startup**: Settings are created fresh when the FastAPI app starts
+2. **Dependency Injection**: All routes receive configuration via FastAPI's `Depends()`
+3. **No Module-Level Singletons**: Avoids Docker timing issues with environment variables
+
+```python
+# How it works internally (simplified)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Create fresh settings at startup
+    settings = Settings()  # Reads current environment variables
+    app.state.settings = settings
+    
+    # Initialize processor with settings
+    processor = KatoProcessor(manifest, settings=settings)
+    app.state.processor = processor
+    
+    yield  # App runs
+    
+    # Cleanup on shutdown
+
+# Routes use dependency injection
+@app.post("/observe")
+async def observe(
+    data: ObservationData,
+    processor: KatoProcessor = Depends(get_processor)
+):
+    # processor has correct configuration
+```
+
+### Configuration Files
+
+You can also load configuration from YAML or JSON files:
+
+```yaml
+# config.yaml
+processor:
+  processor_id: "my-processor"
+  processor_name: "Custom Processor"
+  
+database:
+  MONGO_BASE_URL: "mongodb://localhost:27017"
+  QDRANT_HOST: "localhost"
+  
+learning:
+  max_pattern_length: 10
+  recall_threshold: 0.2
+```
+
+Set the file path via environment variable:
+```bash
+export KATO_CONFIG_FILE=/path/to/config.yaml
+```
+
+### Docker Compose Configuration
+
+The `docker-compose.yml` includes three pre-configured instances with different settings:
+
+```yaml
+services:
+  kato-primary:
+    environment:
+      - PROCESSOR_ID=primary
+      - PROCESSOR_NAME=Primary
+      - MAX_PATTERN_LENGTH=0        # Manual learning only
+      - RECALL_THRESHOLD=0.1        # Default threshold
+      - LOG_LEVEL=INFO
+      
+  kato-testing:
+    environment:
+      - PROCESSOR_ID=testing
+      - PROCESSOR_NAME=Testing
+      - MAX_PATTERN_LENGTH=0        # Manual learning
+      - RECALL_THRESHOLD=0.1
+      - LOG_LEVEL=DEBUG             # Verbose logging
+      
+  kato-analytics:
+    environment:
+      - PROCESSOR_ID=analytics
+      - PROCESSOR_NAME=Analytics
+      - MAX_PATTERN_LENGTH=50       # Auto-learn after 50 observations
+      - RECALL_THRESHOLD=0.3        # Higher threshold
+      - AUTO_LEARN_ENABLED=true
+```
+
+### Configuration Validation
+
+The system validates configuration at startup and logs warnings for potential issues:
+
+- Using localhost MongoDB in production
+- Debug mode enabled in production
+- CORS allowing all origins in production
+- Auto-learning with unlimited pattern length
+- Large batch sizes that may cause memory issues
+
+### Programmatic Configuration
+
+You can also configure KATO programmatically:
+
+```python
+from kato.config.settings import Settings
+
+# Create custom settings
+settings = Settings(
+    processor=ProcessorConfig(
+        processor_id="custom-123",
+        processor_name="Custom Processor"
+    ),
+    database=DatabaseConfig(
+        MONGO_BASE_URL="mongodb://custom:27017"
+    ),
+    learning=LearningConfig(
+        recall_threshold=0.5,
+        max_pattern_length=20
+    )
+)
+
+# Validate configuration
+warnings = settings.validate_configuration()
+if warnings:
+    for warning in warnings:
+        print(f"Warning: {warning}")
+
+# Export configuration
+settings.save("my-config.yaml")  # Save as YAML
+settings.save("my-config.json")  # Save as JSON
+```
+
+### Runtime Configuration Updates
+
+Some configuration values can be updated at runtime via the API:
+
+```bash
+# Update recall threshold
+curl -X POST http://localhost:8001/genes/update \
+  -H "Content-Type: application/json" \
+  -d '{"genes": {"recall_threshold": 0.5}}'
+
+# Get current value
+curl http://localhost:8001/gene/recall_threshold
+```
+
+### Best Practices
+
+1. **Use Environment Variables**: Prefer environment variables over config files for production
+2. **Isolate by Processor ID**: Each processor_id should be unique to prevent data mixing
+3. **Start Conservative**: Begin with default values and adjust based on performance
+4. **Monitor Warnings**: Check configuration warnings in logs at startup
+5. **Test Configuration**: Verify settings with `/status` endpoint after changes
 
 ## API Reference
 

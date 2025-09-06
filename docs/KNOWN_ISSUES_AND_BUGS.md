@@ -27,6 +27,13 @@ Last Updated: 2025-09-06
 - Primary (8001) and Testing (8002) instances work correctly
 - Does not affect core functionality
 
+**Configuration Details**:
+- Analytics instance has different settings:
+  - MAX_PATTERN_LENGTH=50 (auto-learns after 50 observations)
+  - PERSISTENCE=10 (longer memory retention)
+  - RECALL_THRESHOLD=0.3 (higher matching threshold)
+- Intended for specialized analytics workloads
+
 **Impact**:
 - Analytics instance unavailable for multi-instance testing
 - Can use Primary and Testing instances for all functionality
@@ -34,6 +41,7 @@ Last Updated: 2025-09-06
 **Next Steps**:
 - Investigate docker-compose.yml configuration for analytics service
 - Check port conflicts or resource constraints
+- Verify if analytics-specific settings are causing startup issues
 
 ---
 

@@ -79,8 +79,8 @@ fi
 
 # Start KATO if requested
 if [ "$START_KATO" = true ]; then
-    echo -e "${GREEN}Starting KATO...${NC}"
-    ./kato-manager.sh start
+    echo -e "${GREEN}Starting KATO in test mode (single instance)...${NC}"
+    ./kato-manager.sh test-start
     
     # Wait for KATO to be ready
     echo "Waiting for KATO to be ready..."
@@ -117,9 +117,9 @@ TEST_RESULT=$?
 # Stop KATO if requested
 if [ "$STOP_KATO" = true ]; then
     echo
-    echo -e "${GREEN}Stopping and removing KATO containers...${NC}"
-    # Use the down command to stop and remove containers (but keep volumes)
-    ./kato-manager.sh down
+    echo -e "${GREEN}Stopping and removing KATO test containers...${NC}"
+    # Use the test-down command to stop and remove test containers (but keep volumes)
+    ./kato-manager.sh test-down
 fi
 
 # Report results

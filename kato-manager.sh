@@ -11,6 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 KATO_ROOT="$SCRIPT_DIR"
 LOGS_DIR="$KATO_ROOT/logs"
 COMPOSE_FILE="docker-compose.yml"
+TEST_COMPOSE_FILE="docker-compose.test.yml"
 DOCKER_IMAGE="kato:latest"
 
 # Colors for output
@@ -167,6 +168,91 @@ down_services() {
     else
         log_error "Failed to remove containers"
         exit 1
+    fi
+}
+
+# Start services in test mode (single instance)
+start_test_services() {
+    check_docker
+    check_docker_compose
+    
+    log_info "Starting KATO in test mode (single instance)..."
+    
+    cd "$KATO_ROOT"
+    
+    # Start services using test compose file
+    if $DOCKER_COMPOSE -f "$TEST_COMPOSE_FILE" up -d; then
+        log_success "KATO test instance started"
+        
+        # Wait for services to be ready
+        log_info "Waiting for services to be ready..."
+        sleep 5
+        
+        # Show status
+        show_test_status
+    else
+        log_error "Failed to start test services"
+        exit 1
+    fi
+}
+
+# Stop test services
+stop_test_services() {
+    check_docker
+    check_docker_compose
+    
+    log_info "Stopping KATO test services..."
+    
+    cd "$KATO_ROOT"
+    
+    if $DOCKER_COMPOSE -f "$TEST_COMPOSE_FILE" stop; then
+        log_success "KATO test services stopped"
+    else
+        log_error "Failed to stop test services"
+        exit 1
+    fi
+}
+
+# Down test services (stop and remove)
+down_test_services() {
+    check_docker
+    check_docker_compose
+    
+    log_info "Stopping and removing KATO test containers..."
+    
+    cd "$KATO_ROOT"
+    
+    if $DOCKER_COMPOSE -f "$TEST_COMPOSE_FILE" down; then
+        log_success "KATO test containers stopped and removed"
+    else
+        log_error "Failed to remove test containers"
+        exit 1
+    fi
+}
+
+# Show test status
+show_test_status() {
+    check_docker
+    
+    log_info "KATO Test Instance Status:"
+    echo
+    
+    # Show running containers
+    docker ps --filter "name=kato" --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}"
+    
+    echo
+    log_info "Service URLs:"
+    echo "  KATO Test:  http://localhost:8001"
+    echo "  MongoDB:    mongodb://localhost:27017"
+    echo "  Qdrant:     http://localhost:6333"
+    
+    # Health check
+    echo
+    log_info "Health Check:"
+    if curl -s http://localhost:8001/health > /dev/null 2>&1; then
+        echo -e "  Port 8001: ${GREEN}✓ Healthy${NC}"
+    else
+        echo -e "  Port 8001: ${RED}✗ Not responding${NC}"
     fi
 }
 
@@ -350,6 +436,14 @@ show_usage() {
     echo "  restart [service]  Restart KATO services"
     echo "  status             Show status of services"
     echo "  logs [service]     View service logs"
+    echo ""
+    echo "Test Mode Commands (single instance):"
+    echo "  test-start         Start single KATO instance for testing"
+    echo "  test-stop          Stop test instance"
+    echo "  test-down          Stop and remove test containers"
+    echo "  test-status        Show test instance status"
+    echo ""
+    echo "Other Commands:"
     echo "  test               Run FastAPI tests"
     echo "  test-all           Run full test suite"
     echo "  create <name>      Create new KATO instance"
@@ -384,6 +478,18 @@ case "${1:-}" in
         ;;
     down)
         down_services
+        ;;
+    test-start)
+        start_test_services
+        ;;
+    test-stop)
+        stop_test_services
+        ;;
+    test-down)
+        down_test_services
+        ;;
+    test-status)
+        show_test_status
         ;;
     restart)
         restart_services "${2:-}"

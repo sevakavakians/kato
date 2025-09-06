@@ -242,8 +242,15 @@ class VectorDBConfig:
         
         return cls.from_dict(config_dict)
     
-    def save(self, filepath: str):
-        """Save configuration to file"""
+    def save(self, filepath: str) -> None:
+        """Save configuration to file.
+        
+        Args:
+            filepath: Path to save configuration file (JSON or YAML).
+            
+        Raises:
+            ValueError: If file format is not supported.
+        """
         config_dict = self.to_dict()
         
         with open(filepath, 'w') as f:
@@ -324,8 +331,15 @@ def get_vector_db_config() -> VectorDBConfig:
     return _global_config
 
 
-def set_vector_db_config(config: VectorDBConfig):
-    """Set global vector database configuration"""
+def set_vector_db_config(config: VectorDBConfig) -> None:
+    """Set global vector database configuration.
+    
+    Args:
+        config: Vector database configuration to set globally.
+        
+    Raises:
+        ValueError: If configuration validation fails.
+    """
     global _global_config
     
     if not config.validate():

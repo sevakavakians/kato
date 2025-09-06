@@ -1,26 +1,40 @@
 import traceback
 from functools import partial, wraps
 from time import sleep
+from typing import Type, Union, Tuple, Callable, Any, Optional, Dict, List
+import logging
 
 
-def retry(ExceptionToCheck, tries=4, delay=3, backoff=2, logger=None):
+def retry(
+    ExceptionToCheck: Union[Type[Exception], Tuple[Type[Exception], ...]], 
+    tries: int = 4, 
+    delay: int = 3, 
+    backoff: int = 2, 
+    logger: Optional[logging.Logger] = None
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Retry calling the decorated function using an exponential backoff.
-    :param ExceptionToCheck: the exception to check. may be a tuple of
-        excpetions to check
-    :type ExceptionToCheck: Exception or tuple
-    :param tries: number of times to try (not retry) before giving up
-    :type tries: int
-    :param delay: initial delay between retries in seconds
-    :type delay: int
-    :param backoff: backoff multiplier e.g. value of 2 will double the delay
-        each retry
-    :type backoff: int
-    :param logger: logger to use. If None, print
-    :type logger: logger.Logger instance
+    
+    Args:
+        ExceptionToCheck: The exception(s) to check. May be a single exception
+            class or a tuple of exception classes.
+        tries: Number of times to try (not retry) before giving up.
+        delay: Initial delay between retries in seconds.
+        backoff: Backoff multiplier. E.g., value of 2 will double the delay
+            each retry.
+        logger: Logger to use for messages. If None, uses print.
+        
+    Returns:
+        Decorator function that adds retry logic to the wrapped function.
+        
+    Example:
+        >>> @retry(ConnectionError, tries=3, delay=1)
+        ... def connect_to_db():
+        ...     # Connection logic here
+        ...     pass
     """
-    def deco_retry(f):
+    def deco_retry(f: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(f)
-        def f_retry(*args, **kwargs):
+        def f_retry(*args: Any, **kwargs: Any) -> Any:
             mtries, mdelay = tries, delay
             while mtries > 1:
                 try:
@@ -38,16 +52,34 @@ def retry(ExceptionToCheck, tries=4, delay=3, backoff=2, logger=None):
         return f_retry  # true decorator
     return deco_retry
 
-class memoized(object):
-
+class memoized:
     """Decorator that caches a function's return value each time it is called.
-    If called later with the same arguments, the cached value is returned, and
-    not re-evaluated.
+    
+    If called later with the same arguments, the cached value is returned,
+    and not re-evaluated. Useful for expensive computations.
+    
+    Attributes:
+        func: The function being memoized.
+        cache: Dictionary storing cached results.
     """
-    def __init__(self, func):
-        self.func = func
-        self.cache = {}
-    def __call__(self, *args):
+    
+    def __init__(self, func: Callable[..., Any]) -> None:
+        """Initialize the memoized decorator.
+        
+        Args:
+            func: Function to be memoized.
+        """
+        self.func: Callable[..., Any] = func
+        self.cache: Dict[Tuple[Any, ...], Any] = {}
+    def __call__(self, *args: Any) -> Any:
+        """Call the memoized function.
+        
+        Args:
+            *args: Arguments to pass to the function.
+            
+        Returns:
+            Cached result if available, otherwise computes and caches result.
+        """
         try:
             return self.cache[args]
         except KeyError:
@@ -58,33 +90,65 @@ class memoized(object):
             # uncachable -- for instance, passing a list as an argument.
             # Better to not cache than to blow up entirely.
             return self.func(*args)
-    def __repr__(self):
-        """Return the function's docstring."""
-        return self.func.__doc__
-    def __get__(self, obj, objtype):
-        """Support instance methods."""
+    def __repr__(self) -> str:
+        """Return the function's docstring.
+        
+        Returns:
+            The wrapped function's docstring or empty string.
+        """
+        return self.func.__doc__ or ""
+    def __get__(self, obj: Any, objtype: Optional[type] = None) -> Callable[..., Any]:
+        """Support instance methods.
+        
+        Args:
+            obj: Instance object.
+            objtype: Type of the instance.
+            
+        Returns:
+            Partial function bound to the instance.
+        """
         return partial(self.__call__, obj)
 
 
-class tracebackMessage(object):
-
-    """Decorator that caches a function's return value each time it is called.
-    If called later with the same arguments, the cached value is returned, and
-    not re-evaluated.
+class tracebackMessage:
+    """Decorator that enhances exception messages with full traceback.
+    
+    Wraps a function to catch exceptions and re-raise them with detailed
+    traceback information for better debugging.
+    
+    Attributes:
+        func: The function being wrapped.
     """
-    def __init__(self, func):
-        self.func = func
+    
+    def __init__(self, func: Callable[..., Any]) -> None:
+        """Initialize the traceback decorator.
+        
+        Args:
+            func: Function to wrap with traceback handling.
+        """
+        self.func: Callable[..., Any] = func
 
-    def __call__(self, *args):
+    def __call__(self, *args: Any) -> Any:
+        """Call the wrapped function with traceback handling.
+        
+        Args:
+            *args: Arguments to pass to the function.
+            
+        Returns:
+            Result of the wrapped function.
+            
+        Raises:
+            Exception: Re-raises any exception with full traceback.
+        """
         try:
             return self.func(*args)
         except:
-            raise traceback.format_exc()
+            raise Exception(traceback.format_exc())
 
 
 
-## First 430 prime numbers:
-primes = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73,
+# First 430 prime numbers
+primes: List[int] = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73,
             79, 83, 89, 97, 101, 103, 107, 109, 113, 127, 131, 137, 139, 149, 151, 157, 163,
             167, 173, 179, 181, 191, 193, 197, 199, 211, 223, 227, 229, 233, 239, 241, 251,
             257, 263, 269, 271, 277, 281, 283, 293, 307, 311, 313, 317, 331, 337, 347, 349,
@@ -114,24 +178,32 @@ primes = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67
             2789, 2791,2797, 2801, 2803, 2819, 2833, 2837, 2843, 2851, 2857, 2861, 2879, 2887,
             2897, 2903, 2909, 2917, 2927, 2939, 2953, 2957, 2963, 2969, 2971, 2999]
 
-special_primes = [0] + primes[1:]
-### Distances between special primes are such that the difference is never a summation of any previous special primes.
+special_primes: List[int] = [0] + primes[1:]
+# Distances between special primes are such that the difference is never a summation of any previous special primes.
 
 ## The following companding laws are from pg.363 in The Scientists and Engineer's Guide to Digital Signal Processing, Steve W. Smith
 
-#compandingFunction=lambda a,l:min(l,key=lambda x:abs(x-a))
-'toCollection is like valueLock below, but finds the closest match, rather than the lower closest match.'
-def compandingFunction(target, collection):
-    """
-    Reduces the data rate of signals by making the quantization levels unequal.
-    Given a target number and a collection of numbers as a list,
-    find the lower closest match of the target to numbers in the collection
-    Helps to create vectors that are canonical in their values by
-    locking a range of values to a single value in the collection.
+# compandingFunction=lambda a,l:min(l,key=lambda x:abs(x-a))
+# toCollection is like valueLock below, but finds the closest match, rather than the lower closest match.
 
-    ex:
-        compandingFunction(10, [0, 3, 5, 7, 11])
+def compandingFunction(target: Union[int, float], collection: List[Union[int, float]]) -> Union[int, float]:
+    """Reduces the data rate of signals by making the quantization levels unequal.
+    
+    Given a target number and a collection of numbers, finds the closest match
+    of the target to numbers in the collection. Helps create vectors that are
+    canonical in their values by locking a range of values to a single value.
+    
+    Args:
+        target: The target number to match.
+        collection: List of numbers to match against.
+        
+    Returns:
+        The closest number from the collection to the target.
+        
+    Example:
+        >>> compandingFunction(10, [0, 3, 5, 7, 11])
         7
-        where the lowest closest match for 9 is 7.
+        >>> compandingFunction(9, [0, 3, 5, 7, 11])
+        7
     """
     return min((abs(target - i), i) for i in collection)[1]

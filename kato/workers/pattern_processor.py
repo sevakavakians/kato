@@ -5,6 +5,7 @@ from os import environ
 from collections import deque
 from itertools import chain
 from operator import itemgetter
+from typing import Dict, List, Any, Optional, Deque, Set, Tuple, Union
 
 import pymongo
 import numpy as np
@@ -30,9 +31,20 @@ logger.info('logging initiated')
 class PatternProcessor:
     """
     Responsible for creating new, recognizing known, discovering unknown, and predicting patterns.
-    Patterns can be temporal (sequences) or non-temporal (profiles).
+    
+    Patterns can be temporal (sequences) or non-temporal (profiles). This processor manages
+    short-term memory (STM), pattern learning, and prediction generation.
+    
+    Attributes:
+        name: Name of the processor instance.
+        kb_id: Knowledge base identifier for database connections.
+        max_pattern_length: Maximum allowed pattern length.
+        persistence: Number of events to retain in memory.
+        recall_threshold: Minimum similarity threshold for pattern matching.
+        STM: Short-term memory deque containing observed events.
+        predictions_kb: MongoDB collection for storing predictions.
     """
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
         logger.debug("Starting PatternProcessor...")
         logger.debug(f"PatternProcessor kwargs: {kwargs}")
         self.name = f"{kwargs['name']}-PatternProcessor"
@@ -59,47 +71,70 @@ class PatternProcessor:
         logger.info(f"PatternProcessor {self.name} started!")
         return
 
-    def setSTM(self, x):
+    def setSTM(self, x: List[List[str]]) -> None:
+        """Set the short-term memory to a specific state.
+        
+        Args:
+            x: List of events, where each event is a list of symbol strings.
+        """
         self.STM = deque(x)
         return
 
-    def clear_stm(self):
+    def clear_stm(self) -> None:
+        """Clear the short-term memory and reset related state.
+        
+        Empties the STM deque, disables prediction triggering, and clears emotives.
+        Logs stack trace for debugging purposes.
+        """
         logger.warning("DEBUG clear_stm called! Stack trace:")
         import traceback
         logger.warning(''.join(traceback.format_stack()))
-        self.STM = deque()
-        self.trigger_predictions = False
-        self.emotives = []
+        self.STM: Deque[List[str]] = deque()
+        self.trigger_predictions: bool = False
+        self.emotives: List[Dict[str, float]] = []
         return
 
-    def clear_all_memory(self):
+    def clear_all_memory(self) -> None:
+        """Clear all memory including STM and long-term patterns.
+        
+        Resets the entire processor state including short-term memory,
+        learned patterns cache, and observation counters.
+        """
         logger.warning("DEBUG clear_all_memory called! Stack trace:")
         import traceback
         logger.warning(''.join(traceback.format_stack()))
         self.clear_stm()
-        self.last_learned_pattern_name = None
+        self.last_learned_pattern_name: Optional[str] = None
         self.patterns_searcher.clearPatternsFromRAM()
         self.superkb.patterns_observation_count = 0
         self.superkb.symbols_observation_count = 0
         self.initiateDefaults()
         return
 
-    def initiateDefaults(self):
-        self.QUIESCENCE_COUNT = 0
-        self.STM = deque()
-        self.emotives = []
-        self.mood = {}
-        self.last_learned_pattern_name = None
+    def initiateDefaults(self) -> None:
+        """Initialize default values for processor state.
+        
+        Sets up empty STM, emotives, mood, and loads patterns from database.
+        Called during initialization and memory clearing.
+        """
+        self.QUIESCENCE_COUNT: int = 0
+        self.STM: Deque[List[str]] = deque()
+        self.emotives: List[Dict[str, float]] = []
+        self.mood: Dict[str, float] = {}
+        self.last_learned_pattern_name: Optional[str] = None
         self.patterns_searcher.getPatterns()
-        self.trigger_predictions = False
+        self.trigger_predictions: bool = False
         return
 
-    def learn(self):
+    def learn(self) -> Optional[str]:
         """
         Convert current short-term memory into a persistent pattern.
         
         Creates a hash-named pattern from the data in STM, stores it in MongoDB,
         and distributes it to search workers for future pattern matching.
+        
+        Returns:
+            Pattern name (PTRN|<hash>) if learned successfully, None otherwise.
         """
         pattern = Pattern(self.STM)  # Create pattern from short-term memory data
         self.STM.clear()  # Reset short-term memory after learning
@@ -123,7 +158,7 @@ class PatternProcessor:
         self.emotives = []
         return None
 
-    def delete_pattern(self, name):
+    def delete_pattern(self, name: str) -> str:
         if not self.patterns_searcher.delete_pattern(name):
             raise Exception(f'Unable to find and delete pattern {name} in RAM')
         result = self.patterns_kb.delete_one({"name": name})
@@ -131,8 +166,20 @@ class PatternProcessor:
             logger.warning(f'Expected to delete 1 record for pattern {name} but deleted {result.deleted_count}')
         return 'deleted'
 
-    def update_pattern(self, name, frequency, emotives):
-        """Return the updated version of the pattern *name* with new frequency and emotives set."""
+    def update_pattern(self, name: str, frequency: int, emotives: Dict[str, List[float]]) -> Optional[Dict[str, Any]]:
+        """Update a pattern's frequency and emotional values.
+        
+        Args:
+            name: Pattern name to update.
+            frequency: New frequency value.
+            emotives: Dictionary of emotional values.
+            
+        Returns:
+            Updated pattern document or None if not found.
+            
+        Raises:
+            Exception: If emotive array exceeds persistence limit.
+        """
         for emotive, values_list in emotives.items():
             if len(values_list) > self.persistence:
                 raise Exception(f'{emotive} array length ({len(values_list)}) exceeds system persistence ({self.persistence})')
@@ -143,7 +190,7 @@ class PatternProcessor:
             return_document=ReturnDocument.AFTER
         )
 
-    def processEvents(self, current_unique_id):
+    def processEvents(self, current_unique_id: str) -> List[Dict[str, Any]]:
         """
         Generate predictions by matching short-term memory against learned patterns.
         
@@ -151,7 +198,14 @@ class PatternProcessor:
         then searches for similar patterns in the pattern database.
         Predictions are cached in MongoDB for retrieval.
         
-        Note: KATO requires at least 2 strings in STM to generate predictions.
+        Args:
+            current_unique_id: Unique identifier for this observation.
+            
+        Returns:
+            List of prediction dictionaries with pattern matches and metrics.
+            
+        Note:
+            KATO requires at least 2 strings in STM to generate predictions.
         """
         # Flatten short-term memory: [["a","b"],["c"]] -> ["a","b","c"]
         state = list(chain(*self.STM))
@@ -172,12 +226,15 @@ class PatternProcessor:
         # Return empty predictions if state is too short
         return []
 
-    def setCurrentEvent(self, symbols):
+    def setCurrentEvent(self, symbols: List[str]) -> None:
         """
         Add a new event (list of symbols) to short-term memory.
         
         Short-term memory is a deque of events, where each event is a list of symbols
         observed at the same time. E.g., STM = [["cat","dog"], ["bird"], ["cat"]]
+        
+        Args:
+            symbols: List of symbol strings to add as a new event.
         """
         logger.info(f"DEBUG setCurrentEvent called with symbols: {symbols}")
         if symbols:
@@ -187,22 +244,63 @@ class PatternProcessor:
             logger.info(f"DEBUG No symbols to add, STM unchanged: {list(self.STM)}")
         return
     
-    def symbolFrequency(self, symbol):
+    def symbolFrequency(self, symbol: str) -> int:
+        """Get the frequency count for a symbol.
+        
+        Args:
+            symbol: Symbol name to look up.
+            
+        Returns:
+            Frequency count of the symbol.
+        """
         return self.superkb.symbols_kb.find_one({"name": symbol})['frequency']
 
-    def symbolProbability(self, symbol, total_symbols_in_patterns_frequencies):
-        "Grab symbol frequency from symbols_kb. Test 'pattern_member_frequency' or 'frequency'."
+    def symbolProbability(self, symbol: str, total_symbols_in_patterns_frequencies: int) -> float:
+        """Calculate the probability of a symbol appearing in patterns.
+        
+        Args:
+            symbol: Symbol name to calculate probability for.
+            total_symbols_in_patterns_frequencies: Total frequency count across all symbols.
+            
+        Returns:
+            Probability value between 0.0 and 1.0.
+        """
         # We can either look at using the probability of a symbol to appear anywhere in the KB, which means it can also appear
         # multiple times in one pattern, or we can look at the probability of a symbol to appear in any pattern, regardless
         # of the number of times it appears within any one pattern.
         # We can also look at coming up with a formula to account for both to affect the potential.
         return float(self.superkb.symbols_kb.find_one({"name": symbol})['pattern_member_frequency']/total_symbols_in_patterns_frequencies) if total_symbols_in_patterns_frequencies > 0 else 0.0 ## or ['frequency']
 
-    def patternProbability(self, freq, total_pattern_frequencies):
+    def patternProbability(self, freq: int, total_pattern_frequencies: int) -> float:
+        """Calculate the probability of a pattern based on its frequency.
+        
+        Args:
+            freq: Frequency of the specific pattern.
+            total_pattern_frequencies: Total frequency across all patterns.
+            
+        Returns:
+            Probability value between 0.0 and 1.0.
+        """
         return float(freq/total_pattern_frequencies) if total_pattern_frequencies > 0 else 0.0
 
-    def predictPattern(self, state):
-        "Predict patterns and update active pattern fractional frequencies considering the inverse frequency values of the symbols."
+    def predictPattern(self, state: List[str]) -> List[Dict[str, Any]]:
+        """Predict patterns matching the given state.
+        
+        Searches for patterns that match the current state and calculates
+        various metrics including hamiltonian, ITFDF similarity, potential,
+        and confluence for ranking predictions.
+        
+        Args:
+            state: Flattened list of symbols representing current STM state.
+            
+        Returns:
+            List of prediction dictionaries sorted by potential, containing
+            pattern information and calculated metrics.
+            
+        Raises:
+            Exception: If causalBelief search fails.
+            ValueError: If predictions are missing required fields.
+        """
         logger.debug(f" {self.name} [ PatternProcessor predictPattern called ]")
         total_symbols = self.superkb.symbols_kb.count_documents({})
         metadata_doc = self.superkb.metadata.find_one({"class": "totals"})

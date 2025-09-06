@@ -9,7 +9,12 @@ here for easier management and documentation.
 import os
 from pathlib import Path
 from typing import Optional, Literal, Dict, Any, List
-from pydantic import BaseSettings, Field, validator, root_validator
+from pydantic import Field, validator, root_validator
+try:
+    from pydantic_settings import BaseSettings
+except ImportError:
+    # Fallback for older Pydantic versions
+    from pydantic import BaseSettings
 from pydantic.types import SecretStr
 
 
@@ -66,45 +71,65 @@ class LoggingConfig(BaseSettings):
 class DatabaseConfig(BaseSettings):
     """Database configuration for MongoDB and Qdrant."""
     
-    # MongoDB settings
-    mongo_url: str = Field(
+    # MongoDB settings - field name must match env var for pydantic-settings v2
+    MONGO_BASE_URL: str = Field(
         'mongodb://localhost:27017',
-        env='MONGO_BASE_URL',
         description="MongoDB connection URL"
     )
-    mongo_timeout: int = Field(
+    MONGO_TIMEOUT: int = Field(
         5000,
-        env='MONGO_TIMEOUT',
         ge=1000,
         le=30000,
         description="MongoDB connection timeout in milliseconds"
     )
     
-    # Qdrant settings
-    qdrant_host: str = Field(
+    @property
+    def mongo_url(self) -> str:
+        """Backward compatibility property."""
+        return self.MONGO_BASE_URL
+    
+    @property
+    def mongo_timeout(self) -> int:
+        """Backward compatibility property."""
+        return self.MONGO_TIMEOUT
+    
+    # Qdrant settings - field names must match env vars
+    QDRANT_HOST: str = Field(
         'localhost',
-        env='QDRANT_HOST',
         description="Qdrant host address"
     )
-    qdrant_port: int = Field(
+    QDRANT_PORT: int = Field(
         6333,
-        env='QDRANT_PORT',
         ge=1,
         le=65535,
         description="Qdrant port number"
     )
-    qdrant_grpc_port: int = Field(
+    QDRANT_GRPC_PORT: int = Field(
         6334,
-        env='QDRANT_GRPC_PORT',
         ge=1,
         le=65535,
         description="Qdrant gRPC port number"
     )
-    qdrant_collection_prefix: str = Field(
+    QDRANT_COLLECTION_PREFIX: str = Field(
         'vectors',
-        env='QDRANT_COLLECTION_PREFIX',
         description="Prefix for Qdrant collection names"
     )
+    
+    @property
+    def qdrant_host(self) -> str:
+        return self.QDRANT_HOST
+    
+    @property
+    def qdrant_port(self) -> int:
+        return self.QDRANT_PORT
+    
+    @property
+    def qdrant_grpc_port(self) -> int:
+        return self.QDRANT_GRPC_PORT
+    
+    @property
+    def qdrant_collection_prefix(self) -> str:
+        return self.QDRANT_COLLECTION_PREFIX
     
     # Redis settings (optional, for caching)
     redis_host: Optional[str] = Field(

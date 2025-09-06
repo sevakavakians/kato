@@ -6,7 +6,12 @@ middleware, security, rate limiting, and service discovery.
 """
 
 from typing import List, Dict, Any, Optional, Literal
-from pydantic import BaseSettings, Field, validator, HttpUrl
+from pydantic import Field, validator, HttpUrl
+try:
+    from pydantic_settings import BaseSettings
+except ImportError:
+    # Fallback for older Pydantic versions
+    from pydantic import BaseSettings
 from datetime import timedelta
 
 

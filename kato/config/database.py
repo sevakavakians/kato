@@ -6,7 +6,12 @@ pooling, and optimization settings for MongoDB, Qdrant, and Redis.
 """
 
 from typing import Optional, Dict, Any, List
-from pydantic import BaseSettings, Field, validator, SecretStr
+from pydantic import Field, validator, SecretStr
+try:
+    from pydantic_settings import BaseSettings
+except ImportError:
+    # Fallback for older Pydantic versions
+    from pydantic import BaseSettings
 from dataclasses import dataclass
 import logging
 

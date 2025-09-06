@@ -44,9 +44,10 @@ class PatternProcessor:
         STM: Short-term memory deque containing observed events.
         predictions_kb: MongoDB collection for storing predictions.
     """
-    def __init__(self, **kwargs: Any) -> None:
+    def __init__(self, settings=None, **kwargs: Any) -> None:
         logger.debug("Starting PatternProcessor...")
         logger.debug(f"PatternProcessor kwargs: {kwargs}")
+        self.settings = settings  # Store settings for passing to SuperKnowledgeBase
         self.name = f"{kwargs['name']}-PatternProcessor"
         self.kb_id = kwargs["kb_id"] # Use this to connect to the KB.
         self.max_pattern_length = kwargs["max_pattern_length"]
@@ -58,7 +59,7 @@ class PatternProcessor:
         self.max_predictions = int(kwargs["max_predictions"])
         self.recall_threshold = float(kwargs["recall_threshold"])
         self.QUIESCENCE = kwargs["quiescence"]
-        self.superkb = SuperKnowledgeBase(self.kb_id, self.persistence)
+        self.superkb = SuperKnowledgeBase(self.kb_id, self.persistence, settings=self.settings)
         self.patterns_searcher = PatternSearcher(kb_id=self.kb_id,
                                              max_predictions=self.max_predictions,
                                              recall_threshold=self.recall_threshold)

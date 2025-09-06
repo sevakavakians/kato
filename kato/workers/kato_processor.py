@@ -13,17 +13,23 @@ from kato.config.settings import get_settings
 
 
 
-# Get settings for logging configuration
-settings = get_settings()
-
 logger = logging.getLogger('kato.workers.kato-processor')
-logger.setLevel(getattr(logging, settings.logging.log_level))
+# Logger level will be set when first instance is created
 logger.info('logging initiated')
 
 
 class KatoProcessor:
-    def __init__(self, genome_manifest, **kwargs):
+    def __init__(self, genome_manifest, settings=None, **kwargs):
         '''genome is the specific kato processor's genes.'''
+        # Accept settings via dependency injection, fallback to get_settings() for compatibility
+        if settings is None:
+            settings = get_settings()
+        self.settings = settings
+        
+        # Configure logger level if not already set
+        if logger.level == 0:  # Logger level not set
+            logger.setLevel(getattr(logging, settings.logging.log_level))
+        
         self.genome_manifest = genome_manifest
         self.id = self.genome_manifest['id']
         self.name = self.genome_manifest["name"]
@@ -40,7 +46,7 @@ class KatoProcessor:
 
         self.genome_manifest["kb_id"] = self.id
         self.vector_processor = VectorProcessor(self.procs_for_searches, **self.genome_manifest)
-        self.pattern_processor = PatternProcessor(**self.genome_manifest)
+        self.pattern_processor = PatternProcessor(settings=self.settings, **self.genome_manifest)
         self.knowledge = self.pattern_processor.superkb.knowledge
         self.pattern_processor.patterns_kb = self.pattern_processor.superkb.patterns_kb
         self.predictions_kb = self.knowledge.predictions_kb

@@ -15,7 +15,7 @@ import uuid
 from contextlib import asynccontextmanager
 from typing import Dict, List, Optional, Any
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request, Depends
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -33,25 +33,13 @@ from kato.exceptions import (
     LearningError, ValidationError, ConfigurationError,
     DatabaseConnectionError, ResourceNotFoundError
 )
-from kato.config.settings import get_settings
-from kato.config.api import get_api_config
+from kato.config.settings import Settings
+from kato.config.api import APIServiceConfig
 
-# Load configuration
-settings = get_settings()
-api_config = get_api_config()
+# Logger will be configured after settings are loaded
+logger = logging.getLogger('kato.fastapi')
 
-# Configure structured logging from settings
-configure_logging(
-    level=settings.logging.log_level,
-    format_type=settings.logging.log_format,
-    output=settings.logging.log_output
-)
-
-# Get logger with processor_id from settings
-logger = get_logger('kato.fastapi', settings.processor.processor_id)
-
-# Global processor instance and lock
-processor: Optional[KatoProcessor] = None
+# Global processor lock (processor will be stored in app.state)
 processor_lock = asyncio.Lock()
 startup_time = time.time()
 
@@ -153,11 +141,25 @@ class ErrorResponse(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Manage processor lifecycle"""
-    global processor
+    """Manage processor lifecycle and configuration"""
+    # Create fresh settings and API config at startup
+    settings = Settings()  # Fresh instance reads current environment variables
+    api_config = APIServiceConfig()
     
-    # Reload settings to ensure latest configuration
-    settings = get_settings()
+    # Configure structured logging with settings
+    configure_logging(
+        level=settings.logging.log_level,
+        format_type=settings.logging.log_format,
+        output=settings.logging.log_output
+    )
+    
+    # Configure logger
+    global logger
+    logger = get_logger('kato.fastapi', settings.processor.processor_id)
+    
+    # Store settings in app state for global access
+    app.state.settings = settings
+    app.state.api_config = api_config
     
     # Startup: Initialize processor
     processor_id = settings.processor.processor_id
@@ -185,7 +187,8 @@ async def lifespan(app: FastAPI):
     logger.info(f"Initializing processor: {processor_id} ({processor_name})")
     
     try:
-        processor = KatoProcessor(manifest)
+        processor = KatoProcessor(manifest, settings=settings)
+        app.state.processor = processor  # Store processor in app state
         logger.info(f"Processor {processor_id} initialized successfully")
     except Exception as e:
         logger.error(f"Failed to initialize processor: {e}")
@@ -195,31 +198,48 @@ async def lifespan(app: FastAPI):
     
     # Shutdown: Cleanup
     logger.info(f"Shutting down processor: {processor_id}")
-    # Add any cleanup code here if needed
+    # Clean up app state
+    if hasattr(app.state, 'processor'):
+        del app.state.processor
+    if hasattr(app.state, 'settings'):
+        del app.state.settings
+    if hasattr(app.state, 'api_config'):
+        del app.state.api_config
 
 
 # Create FastAPI app with lifespan management
 app = FastAPI(
-    title=api_config.documentation.title,
-    description=api_config.documentation.description,
-    version=api_config.documentation.version,
-    lifespan=lifespan,
-    docs_url=api_config.documentation.docs_url if api_config.documentation.enabled else None,
-    redoc_url=api_config.documentation.redoc_url if api_config.documentation.enabled else None,
-    openapi_url=api_config.documentation.openapi_url if api_config.documentation.enabled else None
+    title="KATO API",
+    description="Knowledge Abstraction for Traceable Outcomes - FastAPI Service",
+    version="1.0.0",
+    lifespan=lifespan
 )
 
-# Configure CORS if enabled
-if api_config.cors.enabled:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=api_config.cors.allow_origins,
-        allow_credentials=api_config.cors.allow_credentials,
-        allow_methods=api_config.cors.allow_methods,
-        allow_headers=api_config.cors.allow_headers,
-        expose_headers=api_config.cors.expose_headers,
-        max_age=api_config.cors.max_age
-    )
+# Configure CORS with default settings (will use environment variables)
+# The actual configuration values come from docker-compose environment
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Will be restricted in production via env vars
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# Dependency injection helpers
+from fastapi import Depends
+
+async def get_processor(request: Request) -> KatoProcessor:
+    """Dependency to get the processor from app state."""
+    return request.app.state.processor
+
+async def get_settings(request: Request) -> Settings:
+    """Dependency to get settings from app state."""
+    return request.app.state.settings
+
+async def get_api_config(request: Request) -> APIServiceConfig:
+    """Dependency to get API config from app state."""
+    return request.app.state.api_config
 
 # Add request/response logging middleware
 @app.middleware("http")
@@ -315,7 +335,10 @@ async def kato_exception_handler(request: Request, exc: KatoBaseException):
 
 # Health and Status Endpoints
 @app.get("/health")
-async def health_check():
+async def health_check(
+    processor: KatoProcessor = Depends(get_processor),
+    settings: Settings = Depends(get_settings)
+):
     """Health check endpoint"""
     return {
         "status": "healthy",
@@ -325,14 +348,11 @@ async def health_check():
 
 
 @app.get("/status", response_model=ProcessorStatus)
-async def get_status():
+async def get_status(
+    processor: KatoProcessor = Depends(get_processor),
+    settings: Settings = Depends(get_settings)
+):
     """Get processor status"""
-    if not processor:
-        raise ConfigurationError(
-            "Processor not initialized",
-            config_key="processor",
-            trace_id=get_trace_id()
-        )
     
     async with processor_lock:
         with PerformanceTimer(logger, 'get_status'):
@@ -350,14 +370,11 @@ async def get_status():
 
 # Core KATO Operations
 @app.post("/observe", response_model=ObservationResult)
-async def observe(data: ObservationData):
+async def observe(
+    data: ObservationData,
+    processor: KatoProcessor = Depends(get_processor)
+):
     """Process an observation"""
-    if not processor:
-        raise ConfigurationError(
-            "Processor not initialized",
-            config_key="processor",
-            trace_id=get_trace_id()
-        )
     
     # Generate unique ID if not provided
     if not data.unique_id:
@@ -408,11 +425,10 @@ async def observe(data: ObservationData):
 
 @app.get("/stm", response_model=STMResponse)
 @app.get("/short-term-memory", response_model=STMResponse)
-async def get_stm():
+async def get_stm(
+    processor: KatoProcessor = Depends(get_processor)
+):
     """Get current short-term memory"""
-    if not processor:
-        raise HTTPException(status_code=503, detail="Processor not initialized")
-    
     async with processor_lock:
         stm = processor.get_stm()
     
@@ -423,7 +439,10 @@ async def get_stm():
 
 
 @app.post("/observe-sequence", response_model=ObservationSequenceResult)
-async def observe_sequence(data: ObservationSequence):
+async def observe_sequence(
+    data: ObservationSequence,
+    processor: KatoProcessor = Depends(get_processor)
+):
     """
     Process a sequence of observations in batch.
     
@@ -435,8 +454,6 @@ async def observe_sequence(data: ObservationSequence):
     - learn_at_end: Learn pattern once after processing all observations
     - clear_stm_between: Clear STM between observations for complete isolation
     """
-    if not processor:
-        raise HTTPException(status_code=503, detail="Processor not initialized")
     
     patterns_learned = []
     individual_results = []
@@ -517,10 +534,10 @@ async def observe_sequence(data: ObservationSequence):
 
 
 @app.post("/learn", response_model=LearnResult)
-async def learn():
+async def learn(
+    processor: KatoProcessor = Depends(get_processor)
+):
     """Learn from current STM"""
-    if not processor:
-        raise HTTPException(status_code=503, detail="Processor not initialized")
     
     async with processor_lock:
         try:
@@ -543,10 +560,10 @@ async def learn():
 
 @app.post("/clear-stm", response_model=StatusResponse)
 @app.post("/clear-short-term-memory", response_model=StatusResponse)
-async def clear_stm():
+async def clear_stm(
+    processor: KatoProcessor = Depends(get_processor)
+):
     """Clear short-term memory"""
-    if not processor:
-        raise HTTPException(status_code=503, detail="Processor not initialized")
     
     async with processor_lock:
         processor.clear_stm()
@@ -560,10 +577,10 @@ async def clear_stm():
 
 @app.post("/clear-all", response_model=StatusResponse)
 @app.post("/clear-all-memory", response_model=StatusResponse)
-async def clear_all_memory():
+async def clear_all_memory(
+    processor: KatoProcessor = Depends(get_processor)
+):
     """Clear all memory"""
-    if not processor:
-        raise HTTPException(status_code=503, detail="Processor not initialized")
     
     async with processor_lock:
         processor.clear_all_memory()
@@ -577,10 +594,11 @@ async def clear_all_memory():
 
 @app.get("/predictions", response_model=PredictionsResponse)
 @app.post("/predictions", response_model=PredictionsResponse)
-async def get_predictions(unique_id: Optional[str] = None):
+async def get_predictions(
+    unique_id: Optional[str] = None,
+    processor: KatoProcessor = Depends(get_processor)
+):
     """Get predictions"""
-    if not processor:
-        raise HTTPException(status_code=503, detail="Processor not initialized")
     
     async with processor_lock:
         if unique_id:
@@ -603,10 +621,11 @@ async def get_predictions(unique_id: Optional[str] = None):
 
 # Advanced Operations
 @app.get("/pattern/{pattern_id}", response_model=PatternResponse)
-async def get_pattern(pattern_id: str):
+async def get_pattern(
+    pattern_id: str,
+    processor: KatoProcessor = Depends(get_processor)
+):
     """Get pattern by ID"""
-    if not processor:
-        raise HTTPException(status_code=503, detail="Processor not initialized")
     
     async with processor_lock:
         result = processor.get_pattern(pattern_id)
@@ -621,10 +640,11 @@ async def get_pattern(pattern_id: str):
 
 
 @app.post("/genes/update", response_model=StatusResponse)
-async def update_genes(updates: GeneUpdates):
+async def update_genes(
+    updates: GeneUpdates,
+    processor: KatoProcessor = Depends(get_processor)
+):
     """Update multiple gene values"""
-    if not processor:
-        raise HTTPException(status_code=503, detail="Processor not initialized")
     
     async with processor_lock:
         try:
@@ -656,10 +676,11 @@ async def update_genes(updates: GeneUpdates):
 
 
 @app.get("/gene/{gene_name}")
-async def get_gene(gene_name: str):
+async def get_gene(
+    gene_name: str,
+    processor: KatoProcessor = Depends(get_processor)
+):
     """Get gene value"""
-    if not processor:
-        raise HTTPException(status_code=503, detail="Processor not initialized")
     
     async with processor_lock:
         # Check processor first
@@ -682,10 +703,10 @@ async def get_gene(gene_name: str):
 
 
 @app.get("/percept-data")
-async def get_percept_data():
+async def get_percept_data(
+    processor: KatoProcessor = Depends(get_processor)
+):
     """Get percept data"""
-    if not processor:
-        raise HTTPException(status_code=503, detail="Processor not initialized")
     
     async with processor_lock:
         data = processor.get_percept_data()
@@ -697,10 +718,10 @@ async def get_percept_data():
 
 
 @app.get("/cognition-data")
-async def get_cognition_data():
+async def get_cognition_data(
+    processor: KatoProcessor = Depends(get_processor)
+):
     """Get cognition data"""
-    if not processor:
-        raise HTTPException(status_code=503, detail="Processor not initialized")
     
     async with processor_lock:
         data = processor.cognition_data
@@ -715,9 +736,11 @@ async def get_cognition_data():
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     """WebSocket for bidirectional real-time communication"""
-    if not processor:
+    # WebSockets can't use Depends the same way, get processor from app state
+    if not hasattr(app.state, 'processor'):
         await websocket.close(code=1011, reason="Processor not initialized")
         return
+    processor = app.state.processor
     
     await websocket.accept()
     logger.info(f"WebSocket connected for processor {processor.id}")
@@ -873,11 +896,10 @@ async def general_exception_handler(request, exc):
 
 # Metrics endpoint
 @app.get("/metrics")
-async def get_metrics():
+async def get_metrics(
+    processor: KatoProcessor = Depends(get_processor)
+):
     """Get processor metrics"""
-    if not processor:
-        raise HTTPException(status_code=503, detail="Processor not initialized")
-    
     async with processor_lock:
         stm_length = len(processor.get_stm())
         # Get pattern count from MongoDB
@@ -897,9 +919,9 @@ async def get_metrics():
 
 if __name__ == "__main__":
     import uvicorn
-    # Reload settings for main execution
-    settings = get_settings()
-    api_config = get_api_config()
+    # Create fresh settings for main execution
+    settings = Settings()
+    api_config = APIServiceConfig()
     
     # Get uvicorn configuration
     uvicorn_config = api_config.get_uvicorn_config()

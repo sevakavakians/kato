@@ -8,11 +8,8 @@ from kato.config.settings import get_settings
 from collections import Counter
 from itertools import chain
 
-# Get settings for configuration
-settings = get_settings()
-
 logger = logging.getLogger('kato.informatics.knowledge-base')
-logger.setLevel(getattr(logging, settings.logging.log_level))
+# Configure logging lazily
 logger.info('logging initiated')
 
 
@@ -53,10 +50,19 @@ class KnowledgeBase(dict):
 
 class SuperKnowledgeBase:
     "KnowledgeBase database that can be combined with other KBs"
-    def __init__(self, primitive_id, persistence=7):
+    def __init__(self, primitive_id, persistence=7, settings=None):
         "Provide the primitive's ID."
         self.id = primitive_id
         self.persistence = int(persistence)
+        
+        # Accept settings via dependency injection, fallback to get_settings() for compatibility
+        if settings is None:
+            settings = get_settings()
+        
+        # Configure logger level if not already set
+        if logger.level == 0:  # Logger level not set
+            logger.setLevel(getattr(logging, settings.logging.log_level))
+        
         logger.info(f" Attaching knowledgebase for {self.id} using {settings.database.mongo_url} ...")
         try:
             ### MongoDB

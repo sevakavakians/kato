@@ -449,6 +449,122 @@ class MemoryError(KatoBaseException):
         )
 
 
+# Alias for consistency with new module naming
+MemoryOperationError = MemoryError
+
+
+class MetricCalculationError(KatoBaseException):
+    """
+    Raised when metric calculations fail.
+    """
+    
+    def __init__(
+        self,
+        message: str,
+        metric_name: Optional[str] = None,
+        calculation_context: Optional[Dict[str, Any]] = None,
+        **kwargs
+    ):
+        """
+        Initialize metric calculation error.
+        
+        Args:
+            message: Error message
+            metric_name: Name of the metric that failed
+            calculation_context: Context of the calculation
+            **kwargs: Additional arguments for base exception
+        """
+        context = kwargs.pop('context', {})
+        
+        if metric_name:
+            context['metric_name'] = metric_name
+        if calculation_context:
+            context['calculation_context'] = calculation_context
+            
+        super().__init__(
+            message=message,
+            error_code='METRIC_CALCULATION_ERROR',
+            context=context,
+            **kwargs
+        )
+
+
+class PatternHashingError(KatoBaseException):
+    """
+    Raised when pattern hashing or identification fails.
+    """
+    
+    def __init__(
+        self,
+        message: str,
+        pattern_data: Optional[Any] = None,
+        hash_value: Optional[str] = None,
+        **kwargs
+    ):
+        """
+        Initialize pattern hashing error.
+        
+        Args:
+            message: Error message
+            pattern_data: Pattern data that caused the error
+            hash_value: Hash value if available
+            **kwargs: Additional arguments for base exception
+        """
+        context = kwargs.pop('context', {})
+        
+        if pattern_data is not None:
+            context['pattern_data'] = str(pattern_data)[:500]  # Limit size
+        if hash_value:
+            context['hash_value'] = hash_value
+            
+        super().__init__(
+            message=message,
+            error_code='PATTERN_HASHING_ERROR',
+            context=context,
+            **kwargs
+        )
+
+
+class VectorSearchError(KatoBaseException):
+    """
+    Raised when vector database search operations fail.
+    """
+    
+    def __init__(
+        self,
+        message: str,
+        search_type: Optional[str] = None,
+        vector_dimension: Optional[int] = None,
+        collection: Optional[str] = None,
+        **kwargs
+    ):
+        """
+        Initialize vector search error.
+        
+        Args:
+            message: Error message
+            search_type: Type of search operation
+            vector_dimension: Dimension of vectors involved
+            collection: Vector collection name
+            **kwargs: Additional arguments for base exception
+        """
+        context = kwargs.pop('context', {})
+        
+        if search_type:
+            context['search_type'] = search_type
+        if vector_dimension is not None:
+            context['vector_dimension'] = vector_dimension
+        if collection:
+            context['collection'] = collection
+            
+        super().__init__(
+            message=message,
+            error_code='VECTOR_SEARCH_ERROR',
+            context=context,
+            **kwargs
+        )
+
+
 # Convenience function for getting trace ID from logging context
 def get_current_trace_id() -> Optional[str]:
     """

@@ -658,6 +658,9 @@ async def update_genes(
                     # Special handling for recall_threshold
                     if gene_name == 'recall_threshold' and hasattr(processor.pattern_processor, 'patterns_searcher'):
                         processor.pattern_processor.patterns_searcher.recall_threshold = gene_value
+                    # Special handling for max_pattern_length - update observation_processor's copy
+                    if gene_name == 'max_pattern_length' and hasattr(processor, 'observation_processor'):
+                        processor.observation_processor.max_pattern_length = gene_value
                 else:
                     raise ValueError(f"Unknown gene: {gene_name}")
                 

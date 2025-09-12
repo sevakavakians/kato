@@ -35,6 +35,8 @@ from kato.exceptions import (
 )
 from kato.config.settings import Settings
 from kato.config.api import APIServiceConfig
+from kato.v2.monitoring.metrics import get_metrics_collector, MetricsCollector
+from kato.v2.errors.handlers import setup_error_handlers
 
 # Logger will be configured after settings are loaded
 logger = logging.getLogger('kato.fastapi')
@@ -189,7 +191,16 @@ async def lifespan(app: FastAPI):
     try:
         processor = KatoProcessor(manifest, settings=settings)
         app.state.processor = processor  # Store processor in app state
-        logger.info(f"Processor {processor_id} initialized successfully")
+        
+        # Initialize v2 monitoring
+        metrics_collector = get_metrics_collector()
+        app.state.metrics_collector = metrics_collector
+        metrics_collector.start_collection()
+        
+        # Setup v2 error handlers
+        setup_error_handlers(app)
+        
+        logger.info(f"Processor {processor_id} initialized successfully with v2 monitoring")
     except Exception as e:
         logger.error(f"Failed to initialize processor: {e}")
         raise
@@ -198,6 +209,12 @@ async def lifespan(app: FastAPI):
     
     # Shutdown: Cleanup
     logger.info(f"Shutting down processor: {processor_id}")
+    
+    # Stop metrics collection
+    if hasattr(app.state, 'metrics_collector'):
+        await app.state.metrics_collector.stop_collection()
+        del app.state.metrics_collector
+    
     # Clean up app state
     if hasattr(app.state, 'processor'):
         del app.state.processor
@@ -241,6 +258,10 @@ async def get_api_config(request: Request) -> APIServiceConfig:
     """Dependency to get API config from app state."""
     return request.app.state.api_config
 
+async def get_metrics_collector_from_app(request: Request) -> MetricsCollector:
+    """Dependency to get metrics collector from app state."""
+    return request.app.state.metrics_collector
+
 # Add request/response logging middleware
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
@@ -271,6 +292,21 @@ async def log_requests(request: Request, call_next):
         
         # Calculate duration
         duration_ms = (time.time() - start_time) * 1000
+        duration_seconds = duration_ms / 1000.0
+        
+        # Record metrics if collector is available
+        if hasattr(request.app.state, 'metrics_collector'):
+            try:
+                metrics_collector = request.app.state.metrics_collector
+                metrics_collector.record_request(
+                    path=request.url.path,
+                    method=request.method,
+                    status_code=response.status_code,
+                    duration=duration_seconds
+                )
+            except Exception as e:
+                # Don't let metrics recording break the request
+                logger.warning(f"Failed to record metrics: {e}")
         
         # Log response
         logger.info(
@@ -292,6 +328,21 @@ async def log_requests(request: Request, call_next):
     except Exception as e:
         # Calculate duration even for errors
         duration_ms = (time.time() - start_time) * 1000
+        duration_seconds = duration_ms / 1000.0
+        
+        # Record error metrics if collector is available
+        if hasattr(request.app.state, 'metrics_collector'):
+            try:
+                metrics_collector = request.app.state.metrics_collector
+                metrics_collector.record_request(
+                    path=request.url.path,
+                    method=request.method,
+                    status_code=500,  # Default error status
+                    duration=duration_seconds
+                )
+            except Exception as metrics_error:
+                # Don't let metrics recording break the request
+                logger.warning(f"Failed to record error metrics: {metrics_error}")
         
         # Log error
         logger.error(
@@ -917,6 +968,188 @@ async def get_metrics(
         "patterns_learned": pattern_count,
         "stm_size": stm_length,
         "uptime_seconds": time.time() - startup_time
+    }
+
+
+# V2 Monitoring Endpoints
+@app.get("/v2/health")
+async def v2_health_check(
+    processor: KatoProcessor = Depends(get_processor),
+    metrics_collector: MetricsCollector = Depends(get_metrics_collector_from_app)
+):
+    """Enhanced health check for v2 with metrics integration"""
+    try:
+        health_status = metrics_collector.get_health_status()
+        processor_status = "healthy" if processor else "unhealthy"
+        
+        # Get metrics summary
+        all_metrics = metrics_collector.get_all_metrics()
+        metrics_collected = len(all_metrics)
+        
+        return {
+            "status": health_status["status"],
+            "processor_status": processor_status,
+            "processor_id": processor.id if processor else None,
+            "uptime_seconds": time.time() - startup_time,
+            "issues": health_status["issues"],
+            "metrics_collected": metrics_collected,
+            "last_collection": health_status["timestamp"] if "timestamp" in health_status else time.time()
+        }
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return {
+            "status": "unhealthy",
+            "processor_status": "unknown",
+            "processor_id": processor.id if processor else None,
+            "uptime_seconds": time.time() - startup_time,
+            "issues": [f"Health check error: {str(e)}"],
+            "metrics_collected": 0,
+            "last_collection": time.time()
+        }
+
+
+@app.get("/v2/metrics")
+async def v2_get_comprehensive_metrics(
+    processor: KatoProcessor = Depends(get_processor),
+    metrics_collector: MetricsCollector = Depends(get_metrics_collector_from_app)
+):
+    """Get comprehensive v2 metrics including system resources and performance"""
+    try:
+        # Get comprehensive metrics from collector
+        summary_metrics = metrics_collector.get_summary_metrics()
+        rates = metrics_collector.calculate_rates()
+        
+        # Enhance with processor-specific data
+        async with processor_lock:
+            stm_length = len(processor.get_stm())
+            try:
+                pattern_count = processor.pattern_processor.superkb.patterns_kb.count_documents({})
+            except:
+                pattern_count = 0
+        
+        # Merge processor data into summary
+        summary_metrics["processor"] = {
+            "processor_id": processor.id,
+            "processor_name": processor.name,
+            "observations_processed": processor.time,
+            "patterns_learned": pattern_count,
+            "stm_size": stm_length
+        }
+        
+        summary_metrics["rates"] = rates
+        
+        return summary_metrics
+    except Exception as e:
+        logger.error(f"Failed to get v2 metrics: {e}")
+        # Return basic fallback metrics
+        return {
+            "error": f"Metrics collection failed: {str(e)}",
+            "timestamp": time.time(),
+            "processor": {
+                "processor_id": processor.id if processor else None,
+                "uptime_seconds": time.time() - startup_time
+            }
+        }
+
+
+@app.get("/v2/stats")
+async def v2_get_stats(
+    minutes: int = 10,
+    processor: KatoProcessor = Depends(get_processor),
+    metrics_collector: MetricsCollector = Depends(get_metrics_collector_from_app)
+):
+    """Get time-series statistics for the last N minutes"""
+    try:
+        # Available time series metrics
+        available_metrics = [
+            "cpu_percent", "memory_percent", "memory_used_mb", 
+            "disk_percent", "load_average_1m", "requests_total", 
+            "response_time", "errors_total", "sessions_created", 
+            "sessions_deleted", "session_operations",
+            "mongodb_operations", "mongodb_response_time", "mongodb_errors",
+            "qdrant_operations", "qdrant_response_time", "qdrant_errors",
+            "redis_operations", "redis_response_time", "redis_errors"
+        ]
+        
+        # Collect time series data for all metrics
+        time_series_data = {}
+        for metric_name in available_metrics:
+            time_series_data[metric_name] = metrics_collector.get_time_series(metric_name, minutes)
+        
+        # Summary statistics
+        current_status = metrics_collector.get_health_status()
+        summary = metrics_collector.get_summary_metrics()
+        
+        return {
+            "time_range_minutes": minutes,
+            "timestamp": time.time(),
+            "processor_id": processor.id,
+            "current_status": current_status,
+            "time_series": time_series_data,
+            "summary": {
+                "sessions": summary["sessions"],
+                "performance": summary["performance"],
+                "resources": summary["resources"],
+                "databases": summary["databases"]
+            }
+        }
+    except Exception as e:
+        logger.error(f"Failed to get v2 stats: {e}")
+        return {
+            "error": f"Stats collection failed: {str(e)}",
+            "time_range_minutes": minutes,
+            "timestamp": time.time(),
+            "processor_id": processor.id if processor else None
+        }
+
+
+@app.get("/v2/metrics/{metric_name}")
+async def v2_get_specific_metric_history(
+    metric_name: str,
+    minutes: int = 10,
+    metrics_collector: MetricsCollector = Depends(get_metrics_collector_from_app)
+):
+    """Get time series data for a specific metric"""
+    try:
+        time_series_data = metrics_collector.get_time_series(metric_name, minutes)
+        
+        if not time_series_data:
+            raise HTTPException(
+                status_code=404, 
+                detail=f"No data available for metric '{metric_name}' in the last {minutes} minutes"
+            )
+        
+        # Calculate basic statistics
+        values = [point["value"] for point in time_series_data]
+        stats = {
+            "count": len(values),
+            "min": min(values) if values else 0,
+            "max": max(values) if values else 0,
+            "avg": sum(values) / len(values) if values else 0
+        }
+        
+        return {
+            "metric_name": metric_name,
+            "time_range_minutes": minutes,
+            "timestamp": time.time(),
+            "statistics": stats,
+            "data_points": time_series_data
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get metric {metric_name}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve metric: {str(e)}")
+
+
+# V2 Session Management endpoints (placeholder for future implementation)
+@app.post("/v2/sessions")
+async def v2_create_session():
+    """Create a new v2 session (placeholder)"""
+    return {
+        "message": "V2 sessions not yet implemented",
+        "session_id": None,
+        "status": "not_implemented"
     }
 
 

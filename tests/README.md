@@ -4,6 +4,62 @@ This directory contains the complete test suite for KATO. For comprehensive test
 
 **📖 [Complete Testing Documentation](../docs/development/TESTING.md)**
 
+## Test Infrastructure: Docker Containers
+
+When you run the test suite, three KATO containers are automatically started via docker-compose.yml, each serving a specific purpose:
+
+### 1. **kato-primary** (Port 8001)
+- **Purpose**: General development and manual testing
+- **Configuration**:
+  - `MAX_PATTERN_LENGTH=0`: Manual learning only (no auto-learn)
+  - `PERSISTENCE=5`: Standard memory persistence
+  - `RECALL_THRESHOLD=0.1`: Low threshold (permissive matching)
+  - `LOG_LEVEL=INFO`: Standard logging
+- **Use Case**: Interactive development, manual pattern learning, general API testing
+
+### 2. **kato-testing** (Port 8002)
+- **Purpose**: Automated test execution and debugging
+- **Configuration**:
+  - `MAX_PATTERN_LENGTH=0`: Manual learning (controlled by tests)
+  - `PERSISTENCE=5`: Standard memory persistence
+  - `RECALL_THRESHOLD=0.1`: Low threshold (permissive)
+  - `LOG_LEVEL=DEBUG`: Verbose logging for debugging
+- **Use Case**: Running test suites, debugging issues, detailed logging during test failures
+
+### 3. **kato-analytics** (Port 8003)
+- **Purpose**: Demonstration of specialized configuration for analytics workloads
+- **Configuration**:
+  - `MAX_PATTERN_LENGTH=50`: **Auto-learns after 50 observations**
+  - `PERSISTENCE=10`: Longer memory (keeps more historical emotives)
+  - `RECALL_THRESHOLD=0.3`: Higher threshold (stricter matching)
+  - `LOG_LEVEL=INFO`: Standard logging
+- **Use Case**: Long-running analytics, automatic pattern discovery, stricter pattern matching
+
+### Why Multiple Containers?
+
+1. **Test Isolation**: Each container has its own `PROCESSOR_ID`, ensuring complete database isolation. Tests can run in parallel without interfering with each other.
+2. **Configuration Testing**: Different configurations can be tested simultaneously to verify KATO works correctly with various settings.
+3. **Performance Testing**: Multi-instance deployments can be simulated for load testing.
+4. **Development Flexibility**: Developers can use different instances for different purposes without reconfiguring.
+
+### Container Management
+
+```bash
+# Start all containers
+./kato-manager.sh start
+
+# Check container status
+./kato-manager.sh status
+
+# View logs for specific container
+docker logs kato-primary --tail 50
+docker logs kato-testing --tail 50
+docker logs kato-analytics --tail 50
+
+# Stop all containers
+./kato-manager.sh stop
+```
+
 ## Quick Start
 
 ### Using Local Python Testing

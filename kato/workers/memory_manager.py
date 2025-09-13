@@ -39,6 +39,7 @@ class MemoryManager:
         # Initialize state variables
         self.symbols: List[str] = []
         self.current_emotives: Dict[str, float] = {}
+        self.emotives_accumulator: List[Dict[str, float]] = []  # v2.0: For session isolation
         self.last_command: str = ""
         self.percept_data: Dict[str, Any] = {}
         self.percept_data_vector: Optional[List[float]] = None
@@ -56,6 +57,7 @@ class MemoryManager:
         try:
             self.symbols = []
             self.current_emotives = {}
+            self.emotives_accumulator = []  # v2.0: Reset emotives accumulator
             self.last_command = ""
             self.pattern_processor.v_identified = []
             self.percept_data = {}

@@ -67,7 +67,8 @@ class SuperKnowledgeBase:
         try:
             ### MongoDB
             self.connection = MongoClient(settings.database.mongo_url)
-            self.write_concern = {"w": 0}
+            # CRITICAL FIX: Changed from w=0 (fire-and-forget) to w="majority" for data durability
+            self.write_concern = {"w": "majority", "j": True}  # v2.0: Ensure write acknowledgment
             self.knowledge = self.connection[self.id]
             self.patterns_kb = self.knowledge.patterns_kb
             self.symbols_kb = self.knowledge.symbols_kb

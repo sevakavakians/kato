@@ -1,11 +1,11 @@
 {
 	"folders": [
-		{
-			"path": "."
-		},
-		{
-			"path": "../kato-agent-bot"
-		}
-	],
+        {
+            "path": "."
+        },
+        {
+            "path": "../kato-bot"
+        }
+    ],
     "settings": {}
 }

@@ -10,9 +10,39 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 KATO_ROOT="$SCRIPT_DIR"
 LOGS_DIR="$KATO_ROOT/logs"
-COMPOSE_FILE="docker-compose.yml"
-TEST_COMPOSE_FILE="docker-compose.test.yml"
-DOCKER_IMAGE="kato:latest"
+
+# Version selection (auto-detect or default to v2)
+# Auto-detect running version based on container names
+if docker ps --format "{{.Names}}" 2>/dev/null | grep -q "kato-.*-v2"; then
+    # v2 containers are running
+    KATO_VERSION="${KATO_VERSION:-v2}"
+elif docker ps --format "{{.Names}}" 2>/dev/null | grep -q "kato-primary\|kato-testing\|kato-analytics" | grep -v "v2"; then
+    # v1 containers are running
+    KATO_VERSION="${KATO_VERSION:-v1}"
+else
+    # No containers running, default to v2 (latest version)
+    KATO_VERSION="${KATO_VERSION:-v2}"
+fi
+
+# Compose files based on version
+if [ "$KATO_VERSION" = "v1" ]; then
+    COMPOSE_FILE="docker-compose.yml"
+    DOCKERFILE="Dockerfile"
+    DOCKER_IMAGE="kato:latest"
+    VERSION_LABEL="v1.0"
+else
+    COMPOSE_FILE="docker-compose.v2.yml"
+    DOCKERFILE="Dockerfile.v2"
+    DOCKER_IMAGE="kato:v2"
+    VERSION_LABEL="v2.0"
+fi
+
+# Test compose file based on version
+if [ "$KATO_VERSION" = "v1" ]; then
+    TEST_COMPOSE_FILE="docker-compose.test.yml"
+else
+    TEST_COMPOSE_FILE="docker-compose.test.v2.yml"
+fi
 
 # Colors for output
 RED='\033[0;31m'
@@ -71,13 +101,13 @@ check_docker_compose() {
 
 # Build Docker image
 build_image() {
-    log_info "Building KATO Docker image..."
+    log_info "Building KATO $VERSION_LABEL Docker image..."
     
     cd "$KATO_ROOT"
-    docker build -f Dockerfile -t "$DOCKER_IMAGE" .
+    docker build -f "$DOCKERFILE" -t "$DOCKER_IMAGE" .
     
     if [ $? -eq 0 ]; then
-        log_success "Docker image built successfully"
+        log_success "KATO $VERSION_LABEL Docker image built successfully"
     else
         log_error "Failed to build Docker image"
         exit 1
@@ -91,13 +121,26 @@ start_services() {
     check_docker
     check_docker_compose
     
+    # Check for conflicting v1/v2 services
+    if [ "$KATO_VERSION" = "v2" ]; then
+        if docker ps | grep -q "kato-primary[^-]\|kato-testing[^-]\|kato-analytics[^-]"; then
+            log_warning "KATO v1.0 services are running. Please stop them first with: KATO_VERSION=v1 $0 down"
+            exit 1
+        fi
+    else
+        if docker ps | grep -q "kato-primary-v2\|kato-testing-v2\|kato-analytics-v2"; then
+            log_warning "KATO v2.0 services are running. Please stop them first with: $0 down"
+            exit 1
+        fi
+    fi
+    
     # Build image if it doesn't exist
-    if ! docker images | grep -q "kato.*latest"; then
+    if ! docker images | grep -q "$DOCKER_IMAGE"; then
         log_warning "Image not found, building..."
         build_image
     fi
     
-    log_info "Starting KATO services..."
+    log_info "Starting KATO $VERSION_LABEL services..."
     
     cd "$KATO_ROOT"
     
@@ -105,14 +148,22 @@ start_services() {
         # Start specific service
         $DOCKER_COMPOSE -f "$COMPOSE_FILE" up -d "$service_name"
     else
-        # Start all services
-        $DOCKER_COMPOSE -f "$COMPOSE_FILE" up -d mongodb qdrant
-        sleep 5  # Wait for databases
-        $DOCKER_COMPOSE -f "$COMPOSE_FILE" up -d kato-primary kato-testing
+        # Start all services based on version
+        if [ "$KATO_VERSION" = "v2" ]; then
+            # v2 includes Redis
+            $DOCKER_COMPOSE -f "$COMPOSE_FILE" up -d mongodb qdrant redis
+            sleep 5  # Wait for databases
+            $DOCKER_COMPOSE -f "$COMPOSE_FILE" up -d kato-primary-v2 kato-testing-v2 kato-analytics-v2
+        else
+            # v1 services
+            $DOCKER_COMPOSE -f "$COMPOSE_FILE" up -d mongodb qdrant
+            sleep 5  # Wait for databases
+            $DOCKER_COMPOSE -f "$COMPOSE_FILE" up -d kato-primary kato-testing kato-analytics
+        fi
     fi
     
     if [ $? -eq 0 ]; then
-        log_success "KATO services started"
+        log_success "KATO $VERSION_LABEL services started"
         
         # Wait for services to be ready
         log_info "Waiting for services to be ready..."
@@ -133,24 +184,27 @@ stop_services() {
     check_docker
     check_docker_compose
     
-    log_info "Stopping KATO services..."
+    log_info "Stopping KATO $VERSION_LABEL services..."
     
     cd "$KATO_ROOT"
     
+    # First try docker-compose stop
     if [ -n "$service_name" ]; then
         # Stop specific service
-        $DOCKER_COMPOSE -f "$COMPOSE_FILE" stop "$service_name"
+        $DOCKER_COMPOSE -f "$COMPOSE_FILE" stop "$service_name" 2>/dev/null
     else
         # Stop all services
-        $DOCKER_COMPOSE -f "$COMPOSE_FILE" stop
+        $DOCKER_COMPOSE -f "$COMPOSE_FILE" stop 2>/dev/null
     fi
     
-    if [ $? -eq 0 ]; then
-        log_success "KATO services stopped"
+    # Also try stopping containers directly if compose file issues
+    if [ "$KATO_VERSION" = "v2" ]; then
+        docker stop kato-primary-v2 kato-testing-v2 kato-analytics-v2 2>/dev/null || true
     else
-        log_error "Failed to stop services"
-        exit 1
+        docker stop kato-primary kato-testing kato-analytics 2>/dev/null || true
     fi
+    
+    log_success "KATO $VERSION_LABEL services stopped"
 }
 
 # Down services (stop and remove containers, keep volumes)
@@ -158,17 +212,21 @@ down_services() {
     check_docker
     check_docker_compose
     
-    log_info "Stopping and removing KATO containers..."
+    log_info "Stopping and removing KATO $VERSION_LABEL containers..."
     
     cd "$KATO_ROOT"
     
     # Use docker-compose down without -v to keep volumes
-    if $DOCKER_COMPOSE -f "$COMPOSE_FILE" down; then
-        log_success "KATO containers stopped and removed"
+    $DOCKER_COMPOSE -f "$COMPOSE_FILE" down 2>/dev/null || true
+    
+    # Also remove containers directly if needed
+    if [ "$KATO_VERSION" = "v2" ]; then
+        docker rm -f kato-primary-v2 kato-testing-v2 kato-analytics-v2 2>/dev/null || true
     else
-        log_error "Failed to remove containers"
-        exit 1
+        docker rm -f kato-primary kato-testing kato-analytics 2>/dev/null || true
     fi
+    
+    log_success "KATO $VERSION_LABEL containers stopped and removed"
 }
 
 # Start services in test mode (single instance)
@@ -270,7 +328,7 @@ show_status() {
     check_docker
     check_docker_compose
     
-    log_info "KATO FastAPI Services Status:"
+    log_info "KATO $VERSION_LABEL Services Status:"
     echo ""
     
     cd "$KATO_ROOT"
@@ -283,18 +341,42 @@ show_status() {
     echo "  Analytics KATO: http://localhost:8003"
     echo "  MongoDB:       mongodb://localhost:27017"
     echo "  Qdrant:        http://localhost:6333"
+    if [ "$KATO_VERSION" = "v2" ]; then
+        echo "  Redis:         redis://localhost:6379"
+    fi
     
     echo ""
     log_info "Health Check:"
     
     # Check each service
     for port in 8001 8002 8003; do
-        if curl -s "http://localhost:${port}/health" > /dev/null 2>&1; then
-            echo -e "  Port ${port}: ${GREEN}✓ Healthy${NC}"
+        if [ "$KATO_VERSION" = "v2" ]; then
+            # Check v2 health endpoint
+            if curl -s "http://localhost:${port}/v2/health" > /dev/null 2>&1; then
+                echo -e "  Port ${port}: ${GREEN}✓ Healthy (v2)${NC}"
+            elif curl -s "http://localhost:${port}/health" > /dev/null 2>&1; then
+                echo -e "  Port ${port}: ${GREEN}✓ Healthy${NC}"
+            else
+                echo -e "  Port ${port}: ${RED}✗ Not responding${NC}"
+            fi
         else
-            echo -e "  Port ${port}: ${RED}✗ Not responding${NC}"
+            # Check v1 health endpoint
+            if curl -s "http://localhost:${port}/health" > /dev/null 2>&1; then
+                echo -e "  Port ${port}: ${GREEN}✓ Healthy${NC}"
+            else
+                echo -e "  Port ${port}: ${RED}✗ Not responding${NC}"
+            fi
         fi
     done
+    
+    if [ "$KATO_VERSION" = "v2" ]; then
+        echo ""
+        log_info "v2.0 Features:"
+        echo "  ✅ Multi-user session isolation"
+        echo "  ✅ Write concern = majority (no data loss)"
+        echo "  ✅ Session management endpoints (/v2/sessions)"
+        echo "  ✅ Backward compatible with v1 API"
+    fi
 }
 
 # View logs
@@ -333,16 +415,24 @@ cleanup() {
 
 # Test the FastAPI implementation
 test_fastapi() {
-    log_info "Testing KATO FastAPI implementation..."
+    log_info "Testing KATO $VERSION_LABEL FastAPI implementation..."
     
     # Check if services are running
-    if ! curl -s "http://localhost:8001/health" > /dev/null 2>&1; then
-        log_warning "Services not running, starting them..."
-        start_services
+    if [ "$KATO_VERSION" = "v2" ]; then
+        if ! curl -s "http://localhost:8001/v2/health" > /dev/null 2>&1; then
+            log_warning "Services not running, starting them..."
+            start_services
+        fi
+        # Run v2 test
+        python3 "$KATO_ROOT/test_v2_quick.py"
+    else
+        if ! curl -s "http://localhost:8001/health" > /dev/null 2>&1; then
+            log_warning "Services not running, starting them..."
+            start_services
+        fi
+        # Run v1 test
+        python3 "$KATO_ROOT/test_fastapi.py"
     fi
-    
-    # Run test script
-    python3 "$KATO_ROOT/test_fastapi.py"
 }
 
 # Run full test suite
@@ -381,18 +471,42 @@ create_instance() {
     
     check_docker
     
-    log_info "Creating new KATO instance: $instance_name on port $port"
+    log_info "Creating new KATO $VERSION_LABEL instance: $instance_name on port $port"
     
-    # Run new container
-    docker run -d \
-        --name "kato-${instance_name}" \
-        --network kato-network \
-        -p "${port}:8000" \
-        -e "PROCESSOR_ID=${instance_name}" \
-        -e "PROCESSOR_NAME=${instance_name}" \
-        -e "MONGO_BASE_URL=mongodb://mongodb:27017" \
-        -e "LOG_LEVEL=INFO" \
-        "$DOCKER_IMAGE"
+    # Determine network name based on version
+    local network_name="kato-network"
+    if [ "$KATO_VERSION" = "v2" ]; then
+        network_name="kato-network-v2"
+    fi
+    
+    # Run new container with version-appropriate settings
+    if [ "$KATO_VERSION" = "v2" ]; then
+        docker run -d \
+            --name "kato-${instance_name}" \
+            --network "$network_name" \
+            -p "${port}:8000" \
+            -e "PROCESSOR_ID=${instance_name}" \
+            -e "PROCESSOR_NAME=${instance_name}" \
+            -e "MONGO_BASE_URL=mongodb://mongodb:27017" \
+            -e "QDRANT_HOST=qdrant" \
+            -e "QDRANT_PORT=6333" \
+            -e "REDIS_URL=redis://redis:6379" \
+            -e "ENABLE_V2_FEATURES=true" \
+            -e "LOG_LEVEL=INFO" \
+            "$DOCKER_IMAGE"
+    else
+        docker run -d \
+            --name "kato-${instance_name}" \
+            --network "$network_name" \
+            -p "${port}:8000" \
+            -e "PROCESSOR_ID=${instance_name}" \
+            -e "PROCESSOR_NAME=${instance_name}" \
+            -e "MONGO_BASE_URL=mongodb://mongodb:27017" \
+            -e "QDRANT_HOST=qdrant" \
+            -e "QDRANT_PORT=6333" \
+            -e "LOG_LEVEL=INFO" \
+            "$DOCKER_IMAGE"
+    fi
     
     if [ $? -eq 0 ]; then
         log_success "Instance created: http://localhost:${port}"
@@ -422,11 +536,49 @@ remove_instance() {
     log_success "Instance removed"
 }
 
+# Switch between v1 and v2
+switch_version() {
+    local target_version="${1:-}"
+    
+    if [ -z "$target_version" ] || { [ "$target_version" != "v1" ] && [ "$target_version" != "v2" ]; }; then
+        log_error "Invalid version. Use 'v1' or 'v2'"
+        exit 1
+    fi
+    
+    log_info "Switching to KATO $target_version..."
+    
+    # Stop current version
+    log_info "Stopping current services..."
+    down_services
+    
+    # Switch version and start
+    export KATO_VERSION="$target_version"
+    
+    # Reinitialize config for new version
+    if [ "$KATO_VERSION" = "v1" ]; then
+        COMPOSE_FILE="docker-compose.yml"
+        DOCKERFILE="Dockerfile"
+        DOCKER_IMAGE="kato:latest"
+        VERSION_LABEL="v1.0"
+    else
+        COMPOSE_FILE="docker-compose.v2.yml"
+        DOCKERFILE="Dockerfile.v2"
+        DOCKER_IMAGE="kato:v2"
+        VERSION_LABEL="v2.0"
+    fi
+    
+    log_info "Starting KATO $VERSION_LABEL..."
+    start_services
+}
+
 # Show usage information
 show_usage() {
-    echo "KATO FastAPI Manager"
+    echo "KATO FastAPI Manager (Current: $VERSION_LABEL)"
     echo ""
     echo "Usage: $0 [command] [options]"
+    echo "       KATO_VERSION=v1 $0 [command] [options]  # Use v1.0"
+    echo ""
+    echo "Current Version: $VERSION_LABEL"
     echo ""
     echo "Commands:"
     echo "  build              Build Docker image"
@@ -449,20 +601,39 @@ show_usage() {
     echo "  create <name>      Create new KATO instance"
     echo "  remove <name>      Remove KATO instance"
     echo "  cleanup            Remove all containers and volumes"
+    echo "  switch <version>   Switch between v1 and v2 (e.g., switch v1)"
+    echo "  version            Show current version"
     echo "  help               Show this help message"
+    echo ""
+    echo "Version Control:"
+    echo "  Auto-detects running version, defaults to v2.0 if none running"
+    echo "  To force v1.0: KATO_VERSION=v1 $0 [command]"
+    echo "  To force v2.0: KATO_VERSION=v2 $0 [command]"
+    echo "  To switch: $0 switch v1  OR  $0 switch v2"
     echo ""
     echo "Services:"
     echo "  mongodb            MongoDB database"
     echo "  qdrant             Qdrant vector database"
-    echo "  kato-primary       Primary KATO instance"
-    echo "  kato-testing       Testing KATO instance"
-    echo "  kato-analytics     Analytics KATO instance"
+    if [ "$KATO_VERSION" = "v2" ]; then
+        echo "  kato-primary-v2    Primary KATO v2 instance"
+        echo "  kato-testing-v2    Testing KATO v2 instance"
+        echo "  kato-analytics-v2  Analytics KATO v2 instance"
+    else
+        echo "  kato-primary       Primary KATO v1 instance"
+        echo "  kato-testing       Testing KATO v1 instance"
+        echo "  kato-analytics     Analytics KATO v1 instance"
+    fi
     echo ""
     echo "Examples:"
-    echo "  $0 start                    # Start all services"
-    echo "  $0 start kato-testing       # Start only testing instance"
-    echo "  $0 logs kato-primary        # View primary instance logs"
+    echo "  $0 start                    # Start all services (v2.0 by default)"
+    echo "  KATO_VERSION=v1 $0 start     # Start v1.0 services"
+    echo "  $0 switch v1                # Switch to and start v1.0"
+    echo "  $0 logs kato-primary-v2     # View v2 primary logs"
     echo "  $0 create myinstance 8080   # Create new instance on port 8080"
+    echo ""
+    echo "Testing v2.0:"
+    echo "  python test_v2_quick.py      # Quick v2.0 test"
+    echo "  python test_v2_demo.py       # Full v2.0 demo"
 }
 
 # Main command handler
@@ -514,6 +685,13 @@ case "${1:-}" in
         ;;
     cleanup)
         cleanup
+        ;;
+    switch)
+        switch_version "${2:-}"
+        ;;
+    version)
+        echo "Current KATO version: $VERSION_LABEL"
+        echo "To change: KATO_VERSION=v1 $0 [command]  OR  $0 switch v1"
         ;;
     help|--help|-h)
         show_usage

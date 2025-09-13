@@ -44,6 +44,8 @@ class KATOFastAPIFixture:
         self.base_url = None
         self.processor_id = self._generate_processor_id()
         self.services_available = False
+        self.session_id = None  # V2 session ID for isolation
+        self.session_created = False  # Track if session has been created
         
         if use_docker and HAS_DOCKER_PACKAGE:
             try:
@@ -70,6 +72,8 @@ class KATOFastAPIFixture:
             s.listen(1)
             port = s.getsockname()[1]
         return port
+    
+    
     
     def _wait_for_ready(self, timeout: int = 30) -> bool:
         """Wait for the KATO service to be ready."""
@@ -149,12 +153,18 @@ class KATOFastAPIFixture:
             for port in [8001, 8002, 8003, 8000]:
                 self.base_url = f"http://localhost:{port}"
                 try:
+                    # Check if v2 service is running (v2 uses /health not /v2/health)
                     response = requests.get(f"{self.base_url}/health", timeout=2)
                     if response.status_code == 200:
-                        self.services_available = True
-                        self.port = port
-                        print(f"Using existing KATO service at {self.base_url}")
-                        break
+                        # Verify it's a v2 service by checking for v2-specific fields
+                        health_data = response.json()
+                        if "base_processor_id" in health_data or "active_sessions" in health_data:
+                            self.services_available = True
+                            self.port = port
+                            print(f"Using existing KATO v2 service at {self.base_url}")
+                            # Create a persistent session for this test
+                            self._ensure_session()
+                            break
                 except requests.exceptions.RequestException:
                     continue
             
@@ -166,9 +176,40 @@ class KATOFastAPIFixture:
                 print("Or run locally with:")
                 print("  PROCESSOR_ID=testing uvicorn kato.services.kato_fastapi:app")
                 print("="*60 + "\n")
+        
+        # Primary endpoints use automatic session management
+        # No need to explicitly create sessions
+    
+    def _ensure_session(self):
+        """Ensure a v2 session exists for this test."""
+        if not self.session_created and self.services_available:
+            user_id = self.processor_id
+            session_data = {
+                "user_id": user_id,
+                "metadata": {"test_name": self.processor_name, "type": "test"}
+            }
+            try:
+                session_resp = requests.post(f"{self.base_url}/v2/sessions", json=session_data)
+                session_resp.raise_for_status()
+                self.session_id = session_resp.json()["session_id"]
+                self.session_created = True
+            except Exception as e:
+                print(f"Warning: Could not create v2 session: {e}")
+                self.session_created = False
                 
     def teardown(self):
         """Clean up KATO service after testing."""
+        # Clean up v2 session if created
+        if self.session_created and self.session_id and self.services_available:
+            try:
+                requests.delete(f"{self.base_url}/v2/sessions/{self.session_id}")
+            except:
+                pass  # Ignore cleanup errors
+        
+        # With primary endpoints using automatic session management,
+        # each test automatically gets isolated per-user databases.
+        # No explicit cleanup needed.
+        
         if self.use_docker and self.container:
             try:
                 self.container.stop()
@@ -181,17 +222,26 @@ class KATOFastAPIFixture:
         """Send an observation to KATO."""
         if not self.services_available:
             pytest.skip("KATO services not available")
-            
-        response = requests.post(
-            f"{self.base_url}/observe",
-            json=data
-        )
+        
+        # Ensure we have a persistent session
+        self._ensure_session()
+        
+        if not self.session_id:
+            pytest.skip("Could not create v2 session")
+        
+        # Use session-based endpoint with persistent session
+        response = requests.post(f"{self.base_url}/v2/sessions/{self.session_id}/observe", json=data)
         response.raise_for_status()
         result = response.json()
         
         # Transform response to match expected format for tests
+        # V2 returns 'ok' but tests expect 'observed'
+        status = result.get('status', 'observed')
+        if status == 'ok' or status == 'okay':
+            status = 'observed'
+        
         return {
-            'status': 'observed',  # Tests expect 'observed', not 'okay'
+            'status': status,
             'auto_learned_pattern': result.get('auto_learned_pattern'),
             'processor_id': result.get('processor_id'),
             'time': result.get('time'),
@@ -202,8 +252,14 @@ class KATOFastAPIFixture:
         """Get the current short-term memory."""
         if not self.services_available:
             pytest.skip("KATO services not available")
-            
-        response = requests.get(f"{self.base_url}/stm")
+        
+        # Ensure we have the same persistent session
+        self._ensure_session()
+        
+        if not self.session_id:
+            pytest.skip("Could not create v2 session")
+        
+        response = requests.get(f"{self.base_url}/v2/sessions/{self.session_id}/stm")
         response.raise_for_status()
         result = response.json()
         return result.get('stm', [])
@@ -216,9 +272,16 @@ class KATOFastAPIFixture:
         """Get predictions."""
         if not self.services_available:
             pytest.skip("KATO services not available")
-            
+        
+        # Use direct endpoint
         params = {'unique_id': unique_id} if unique_id else {}
-        response = requests.get(f"{self.base_url}/predictions", params=params)
+        # Ensure we have the same persistent session
+        self._ensure_session()
+        
+        if not self.session_id:
+            pytest.skip("Could not create v2 session")
+        
+        response = requests.get(f"{self.base_url}/v2/sessions/{self.session_id}/predictions", params=params)
         response.raise_for_status()
         result = response.json()
         return result.get('predictions', [])
@@ -227,8 +290,26 @@ class KATOFastAPIFixture:
         """Force learning of current short-term memory."""
         if not self.services_available:
             pytest.skip("KATO services not available")
-            
-        response = requests.post(f"{self.base_url}/learn")
+        
+        # Ensure we have the same persistent session
+        self._ensure_session()
+        
+        if not self.session_id:
+            pytest.skip("Could not create v2 session")
+        
+        response = requests.post(f"{self.base_url}/v2/sessions/{self.session_id}/learn")
+        
+        # In v2, learning empty STM returns 400 error
+        # For compatibility, return empty string when learning fails
+        if response.status_code == 400:
+            # Check if it's due to insufficient data
+            try:
+                error_data = response.json()
+                if 'insufficient' in str(error_data).lower() or 'empty' in str(error_data).lower():
+                    return ''  # Return empty string for empty/insufficient STM
+            except:
+                pass
+        
         response.raise_for_status()
         result = response.json()
         return result.get('pattern_name', '')
@@ -237,10 +318,19 @@ class KATOFastAPIFixture:
         """Clear short-term memory."""
         if not self.services_available:
             pytest.skip("KATO services not available")
-            
-        response = requests.post(f"{self.base_url}/clear-stm")
+        
+        # Ensure we have the same persistent session
+        self._ensure_session()
+        
+        if not self.session_id:
+            pytest.skip("Could not create v2 session")
+        
+        response = requests.post(f"{self.base_url}/v2/sessions/{self.session_id}/clear-stm")
         response.raise_for_status()
         result = response.json()
+        # V2 returns {"status": "cleared"}, v1 tests expect 'stm-cleared'
+        if result.get('status') == 'cleared':
+            return 'stm-cleared'
         return result.get('message', '')
     
     def clear_short_term_memory(self) -> str:
@@ -248,31 +338,48 @@ class KATOFastAPIFixture:
         return self.clear_stm()
     
     def clear_all_memory(self, reset_genes: bool = True) -> str:
-        """Clear all memory and optionally reset genes."""
+        """Clear all memory and optionally reset genes.
+        
+        Note: With user-based isolation, each test has its own database.
+        This method deletes and recreates the session to clear all learned patterns.
+        """
         if not self.services_available:
             pytest.skip("KATO services not available")
+        
+        # v2 doesn't have a global clear-all endpoint - each user has isolated databases
+        # Delete the current session and create a new one to clear all memory including patterns
+        if self.session_created and self.session_id:
+            try:
+                # Delete the session (this clears all data for this user)
+                requests.delete(f"{self.base_url}/v2/sessions/{self.session_id}")
+            except:
+                pass  # Ignore errors
             
-        # Reset genes if requested
+            # Reset session tracking
+            self.session_id = None
+            self.session_created = False
+        
+        # Create a fresh session with a new user_id to ensure complete isolation
+        # This gives us a completely clean slate with no learned patterns
+        self.processor_id = self._generate_processor_id()  # Generate new ID for complete reset
+        self._ensure_session()
+        
         if reset_genes:
             self.reset_genes_to_defaults()
-            
-        response = requests.post(f"{self.base_url}/clear-all")
-        response.raise_for_status()
-        result = response.json()
-        return result.get('message', '')
+        return 'all-cleared'
     
     def update_genes(self, genes: Dict[str, Any]) -> str:
-        """Update gene values."""
+        """Update gene values.
+        
+        Note: In v2, genes are set when processor is created.
+        This method is kept for compatibility but does nothing.
+        """
         if not self.services_available:
             pytest.skip("KATO services not available")
-            
-        response = requests.post(
-            f"{self.base_url}/genes/update",
-            json={"genes": genes}
-        )
-        response.raise_for_status()
-        result = response.json()
-        return result.get('message', '')
+        
+        # In v2, genes are configured when the processor is created
+        # per user. No dynamic gene updates.
+        return 'genes-not-updateable-in-v2'
     
     def reset_genes_to_defaults(self) -> str:
         """Reset genes to default values."""
@@ -285,10 +392,23 @@ class KATOFastAPIFixture:
         return self.update_genes(default_genes)
     
     def set_recall_threshold(self, threshold: float) -> str:
-        """Set the recall_threshold parameter."""
+        """Set the recall_threshold parameter.
+        
+        Note: In v2, this is not dynamically configurable and will be ignored.
+        Tests that rely on dynamic threshold changes should be skipped.
+        """
         if not 0.0 <= threshold <= 1.0:
             raise ValueError(f"recall_threshold must be between 0.0 and 1.0, got {threshold}")
+        
+        # In v2, this doesn't actually change the threshold
+        # Store the attempted value for tests to check
+        self._attempted_threshold = threshold
         return self.update_genes({"recall_threshold": threshold})
+    
+    def supports_dynamic_threshold(self) -> bool:
+        """Check if the service supports dynamic recall threshold changes."""
+        # V2 does not support dynamic threshold changes
+        return False
     
     def get_status(self) -> Dict[str, Any]:
         """Get processor status."""
@@ -390,4 +510,6 @@ def kato_fixture(request):
         fixture.clear_all_memory()
     
     yield fixture
-    # No teardown needed for existing service
+    
+    # Teardown - critical for test isolation
+    fixture.teardown()

@@ -4,6 +4,8 @@
 
 > *Transparent memory and abstraction for agentic AI systems — deterministic, explainable, and emotive-aware.*
 
+🆕 **Version 2.0 Now Default**: Multi-user session isolation, guaranteed writes, Redis sessions, full v1 compatibility
+
 ![KATO Crystal](assets/kato-graphic.png "KATO crystal")
 
 ## What is KATO?
@@ -31,6 +33,9 @@ Every learned structure in KATO is identified by a unique hash: `PTRN|<sha1_hash
 🚀 **Multi-Instance Support** - Run multiple processors with different configurations  
 📊 **Instance Isolation** - Each processor_id has completely isolated databases  
 🎪 **Vector Database** - Modern vector search with Qdrant (10-100x faster)  
+👥 **Multi-User Sessions** (v2.0) - Complete STM isolation per user session  
+💾 **Write Guarantees** (v2.0) - MongoDB majority write concern prevents data loss  
+🔐 **Session Management** (v2.0) - Redis-backed sessions with TTL and isolation  
 
 ### Example Architecture
 
@@ -49,6 +54,7 @@ KATO provides a deterministic machine learning algorithm that learns context + a
 - 4GB+ RAM recommended
 - MongoDB (auto-started with Docker)
 - Qdrant Vector Database (auto-started with Docker)
+- Redis (auto-started with Docker in v2.0)
 
 ### Required Python Packages (for development)
 ```bash
@@ -64,13 +70,16 @@ pip install -r tests/requirements.txt
 git clone https://github.com/your-org/kato.git
 cd kato
 
-# Build Docker image
+# Build Docker image (v2.0 by default)
 ./kato-manager.sh build
+
+# Or explicitly use v1.0 if needed
+KATO_VERSION=v1 ./kato-manager.sh build
 ```
 
 ### 2. Start Services
 ```bash
-# Start all services (MongoDB, Qdrant, and 3 KATO instances)
+# Start all services (v2.0 by default - includes Redis)
 ./kato-manager.sh start
 
 # Services will be available at:
@@ -79,23 +88,52 @@ cd kato
 # - Analytics KATO: http://localhost:8003
 # - MongoDB: mongodb://localhost:27017
 # - Qdrant: http://localhost:6333
+# - Redis: redis://localhost:6379 (v2.0)
+
+# To use v1.0 instead:
+KATO_VERSION=v1 ./kato-manager.sh start
+
+# To switch versions:
+./kato-manager.sh switch v1  # Switch to v1
+./kato-manager.sh switch v2  # Switch back to v2
 ```
 
 ### 3. Verify Installation
 ```bash
-# Check health of primary instance
-curl http://localhost:8001/health
+# Check health (v2.0 endpoint)
+curl http://localhost:8001/v2/health
 
 # Response:
-# {"status": "healthy", "processor_id": "primary", "uptime": 123.45}
+# {"status": "healthy", "version": "2.0", "processor_id": "primary-v2", "features": {"sessions": true}}
+
+# Quick test of v2.0 features
+python test_v2_quick.py
 
 # Check API documentation
 # Open in browser: http://localhost:8001/docs
 ```
 
 ### 4. Basic Usage
+
+#### Option A: Using v2.0 Sessions (Recommended)
 ```bash
-# Send observation to primary instance
+# Create a session for user isolation
+SESSION=$(curl -s -X POST http://localhost:8001/v2/sessions \
+  -H "Content-Type: application/json" \
+  -d '{"user_id": "alice"}' | jq -r '.session_id')
+
+# Observe in isolated session
+curl -X POST http://localhost:8001/v2/sessions/$SESSION/observe \
+  -H "Content-Type: application/json" \
+  -d '{"strings": ["hello", "world"]}'
+
+# Get session's isolated STM
+curl http://localhost:8001/v2/sessions/$SESSION/stm
+```
+
+#### Option B: v1 Compatible API (uses default session)
+```bash
+# Send observation (backward compatible)
 curl -X POST http://localhost:8001/observe \
   -H "Content-Type: application/json" \
   -d '{

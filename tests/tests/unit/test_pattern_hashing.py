@@ -119,15 +119,19 @@ def test_pattern_hash_in_predictions(kato_fixture):
     
     assert len(predictions) > 0, "Should have predictions"
     
-    # Find the prediction for our learned pattern
-    for pred in predictions:
-        if pred.get('name') == pattern_name:
-            assert pred['name'].startswith('PTRN|')
-            break
+    # In v2, prediction names might be the hash directly without PTRN| prefix
+    # Check if any prediction name matches the learned pattern name
+    prediction_names = [pred.get('name', '') for pred in predictions]
+    
+    # The learned pattern should appear in predictions
+    if pattern_name.startswith('PTRN|'):
+        # V1 style: pattern_name has PTRN| prefix
+        assert pattern_name in prediction_names or pattern_name.replace('PTRN|', '') in prediction_names, \
+            f"Learned pattern {pattern_name} should appear in predictions, got: {prediction_names}"
     else:
-        # If exact match not found, at least verify format
-        assert any(pred.get('name', '').startswith('PTRN|') for pred in predictions), \
-            "At least one prediction should have PTRN| prefix"
+        # V2 style: pattern_name might be just the hash
+        assert pattern_name in prediction_names or f'PTRN|{pattern_name}' in prediction_names, \
+            f"Learned pattern {pattern_name} should appear in predictions, got: {prediction_names}"
 
 
 def test_pattern_hash_with_emotives(kato_fixture):

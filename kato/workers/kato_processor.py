@@ -226,3 +226,40 @@ class KatoProcessor:
                 if gene_name == 'max_pattern_length':
                     self.observation_processor.max_pattern_length = value
         return "genes-updated"
+    
+    # ========================================================================
+    # v2.0 Session State Management Methods
+    # ========================================================================
+    
+    def set_stm(self, stm):
+        """
+        Set the short-term memory to a specific state.
+        Used for session isolation in v2.0.
+        
+        Args:
+            stm: List of event lists representing the STM state
+        """
+        # Set the STM in the pattern processor which maintains the proper structure
+        self.pattern_processor.STM = stm.copy() if stm else []
+        return
+    
+    def set_emotives_accumulator(self, emotives_acc):
+        """
+        Set the emotives accumulator to a specific state.
+        Used for session isolation in v2.0.
+        
+        Args:
+            emotives_acc: List of emotive dictionaries
+        """
+        self.memory_manager.emotives_accumulator = emotives_acc.copy() if emotives_acc else []
+        return
+    
+    def get_emotives_accumulator(self):
+        """
+        Get the current emotives accumulator state.
+        Used for session persistence in v2.0.
+        
+        Returns:
+            List of emotive dictionaries
+        """
+        return self.memory_manager.emotives_accumulator.copy() if hasattr(self.memory_manager, 'emotives_accumulator') else []

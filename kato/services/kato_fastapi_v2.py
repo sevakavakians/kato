@@ -960,12 +960,15 @@ async def observe_sequence_primary(request: Request, batch_request: dict):
         options = batch_request.get('options', {})
         
         results = []
-        for obs in observations:
-            result = processor.observe(
-                strings=obs.get('strings', []),
-                vectors=obs.get('vectors', []),
-                emotives=obs.get('emotives', {})
-            )
+        for idx, obs in enumerate(observations):
+            # processor.observe expects a dict with unique_id
+            import uuid
+            result = processor.observe({
+                'strings': obs.get('strings', []),
+                'vectors': obs.get('vectors', []),
+                'emotives': obs.get('emotives', {}),
+                'unique_id': obs.get('unique_id', str(uuid.uuid4()))  # Generate if not provided
+            })
             results.append(result)
             
             # Add to session STM
@@ -975,11 +978,16 @@ async def observe_sequence_primary(request: Request, batch_request: dict):
         
         await app_state.session_manager.update_session(session)
         
+        # Get final predictions after all observations
+        predictions = processor.get_predictions()
+        
+        # Format response to match test expectations
         return {
-            "status": "success",
-            "count": len(results),
-            "results": results,
-            "processor_id": processor.processor_id
+            "status": "okay",  # Tests expect 'okay'
+            "processor_id": session.user_id,  # Use user_id as processor_id in v2
+            "observations_processed": len(results),
+            "individual_results": results,
+            "final_predictions": predictions
         }
         
     except Exception as e:

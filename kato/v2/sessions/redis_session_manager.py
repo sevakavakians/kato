@@ -22,6 +22,7 @@ except ImportError:
 from dataclasses import dataclass, asdict
 
 from .session_manager import SessionState, SessionManager
+from kato.v2.config.user_config import UserConfiguration
 
 logger = logging.getLogger('kato.v2.sessions.redis')
 
@@ -59,6 +60,51 @@ class RedisSessionManager(SessionManager):
         
         logger.info(f"RedisSessionManager initialized with URL: {redis_url}")
     
+    def _serialize_user_config(self, user_config: UserConfiguration) -> Dict[str, Any]:
+        """
+        Serialize UserConfiguration for JSON storage.
+        
+        Args:
+            user_config: UserConfiguration instance
+        
+        Returns:
+            Dictionary with JSON-serializable values
+        """
+        config_dict = user_config.to_dict()
+        # Convert datetime fields to ISO strings
+        if 'created_at' in config_dict and config_dict['created_at']:
+            if hasattr(config_dict['created_at'], 'isoformat'):
+                config_dict['created_at'] = config_dict['created_at'].isoformat()
+        if 'updated_at' in config_dict and config_dict['updated_at']:
+            if hasattr(config_dict['updated_at'], 'isoformat'):
+                config_dict['updated_at'] = config_dict['updated_at'].isoformat()
+        return config_dict
+    
+    def _deserialize_session(self, session_dict: Dict[str, Any]) -> SessionState:
+        """
+        Deserialize a session from a dictionary.
+        
+        Args:
+            session_dict: Dictionary representation of session
+        
+        Returns:
+            SessionState instance
+        """
+        # Convert datetime strings back to datetime objects
+        session_dict['created_at'] = datetime.fromisoformat(session_dict['created_at'])
+        session_dict['last_accessed'] = datetime.fromisoformat(session_dict['last_accessed'])
+        session_dict['expires_at'] = datetime.fromisoformat(session_dict['expires_at'])
+        
+        # Handle UserConfiguration if present
+        if 'user_config' in session_dict and session_dict['user_config']:
+            if isinstance(session_dict['user_config'], dict):
+                session_dict['user_config'] = UserConfiguration.from_dict(session_dict['user_config'])
+        else:
+            # Create default user config if not present
+            session_dict['user_config'] = UserConfiguration(user_id=session_dict.get('user_id', ''))
+        
+        return SessionState(**session_dict)
+    
     async def initialize(self):
         """Initialize Redis connection"""
         if self._connected:
@@ -86,6 +132,56 @@ class RedisSessionManager(SessionManager):
         except Exception as e:
             logger.error(f"Failed to connect to Redis: {e}")
             raise
+    
+    async def get_or_create_session(
+        self,
+        user_id: str,
+        metadata: Optional[Dict[str, Any]] = None,
+        ttl_seconds: Optional[int] = None
+    ) -> SessionState:
+        """
+        Get existing session for a user or create a new one.
+        
+        This enables session persistence across requests from the same user.
+        
+        Args:
+            user_id: User identifier (required for processor isolation)
+            metadata: Optional session metadata
+            ttl_seconds: Session TTL (uses default if not specified)
+        
+        Returns:
+            SessionState for this user (existing or newly created)
+        """
+        if not self._connected:
+            await self.initialize()
+        
+        # Use a user-specific key to track their active session
+        user_session_key = f"{self.key_prefix}user:{user_id}:active"
+        
+        # Check if user has an active session
+        session_id = await self.redis_client.get(user_session_key)
+        
+        if session_id:
+            # Try to get the existing session
+            session = await self.get_session(session_id)
+            if session and not session.is_expired():
+                session.update_access()
+                await self.update_session(session)
+                logger.info(f"Returning existing session {session.session_id} for user {user_id}")
+                return session
+            else:
+                # Session expired or not found, clear the reference
+                await self.redis_client.delete(user_session_key)
+        
+        # No existing session, create new one
+        session = await self.create_session(user_id, metadata, ttl_seconds)
+        
+        # Store the session ID for this user
+        ttl = ttl_seconds or self.default_ttl
+        await self.redis_client.setex(user_session_key, ttl, session.session_id)
+        
+        logger.info(f"Created new session {session.session_id} for user {user_id}")
+        return session
     
     async def create_session(
         self,
@@ -163,13 +259,7 @@ class RedisSessionManager(SessionManager):
             
             # Deserialize session
             session_dict = json.loads(session_data)
-            
-            # Convert datetime strings back to datetime objects
-            session_dict['created_at'] = datetime.fromisoformat(session_dict['created_at'])
-            session_dict['last_accessed'] = datetime.fromisoformat(session_dict['last_accessed'])
-            session_dict['expires_at'] = datetime.fromisoformat(session_dict['expires_at'])
-            
-            session = SessionState(**session_dict)
+            session = self._deserialize_session(session_dict)
             
             # Check if expired
             if session.is_expired():
@@ -452,7 +542,8 @@ class RedisSessionManager(SessionManager):
             'metadata': session.metadata,
             'access_count': session.access_count,
             'max_stm_size': session.max_stm_size,
-            'max_emotives_size': session.max_emotives_size
+            'max_emotives_size': session.max_emotives_size,
+            'user_config': self._serialize_user_config(session.user_config) if session.user_config else None
         }
         
         # Serialize to JSON

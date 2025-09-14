@@ -394,21 +394,19 @@ class KATOFastAPIFixture:
     def set_recall_threshold(self, threshold: float) -> str:
         """Set the recall_threshold parameter.
         
-        Note: In v2, this is not dynamically configurable and will be ignored.
-        Tests that rely on dynamic threshold changes should be skipped.
+        Note: V2 now supports dynamic configuration through user-specific settings.
         """
         if not 0.0 <= threshold <= 1.0:
             raise ValueError(f"recall_threshold must be between 0.0 and 1.0, got {threshold}")
         
-        # In v2, this doesn't actually change the threshold
-        # Store the attempted value for tests to check
+        # V2 now supports dynamic threshold changes via user configuration
         self._attempted_threshold = threshold
         return self.update_genes({"recall_threshold": threshold})
     
     def supports_dynamic_threshold(self) -> bool:
         """Check if the service supports dynamic recall threshold changes."""
-        # V2 does not support dynamic threshold changes
-        return False
+        # V2 now supports dynamic threshold changes
+        return True
     
     def get_status(self) -> Dict[str, Any]:
         """Get processor status."""

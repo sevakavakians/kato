@@ -17,6 +17,7 @@ from datetime import datetime, timedelta
 
 from kato.workers.kato_processor import KatoProcessor
 from kato.config.settings import get_settings
+from kato.v2.config.user_config import UserConfiguration
 
 logger = logging.getLogger('kato.v2.processors.manager')
 
@@ -104,12 +105,13 @@ class ProcessorManager:
         
         return f"{safe_user_id}_{safe_base_id}"
     
-    async def get_processor(self, user_id: str) -> KatoProcessor:
+    async def get_processor(self, user_id: str, user_config: Optional[UserConfiguration] = None) -> KatoProcessor:
         """
         Get or create a processor for a specific user.
         
         Args:
             user_id: User identifier
+            user_config: Optional user configuration to apply
         
         Returns:
             KatoProcessor instance for this user
@@ -142,10 +144,8 @@ class ProcessorManager:
             # Create new processor
             logger.info(f"Creating new processor for user {user_id} with id {processor_id}")
             
-            # Build genome manifest with user-specific processor_id
-            genome_manifest = {
-                'id': processor_id,  # This becomes the MongoDB database name
-                'name': f"User-{user_id}",
+            # Get default settings
+            defaults = {
                 'indexer_type': self.settings.processing.indexer_type,
                 'max_pattern_length': self.settings.learning.max_pattern_length,
                 'persistence': self.settings.learning.persistence,
@@ -159,6 +159,19 @@ class ProcessorManager:
                 'search_depth': self.settings.processing.search_depth,
                 'sort': self.settings.processing.sort_symbols,
                 'process_predictions': self.settings.processing.process_predictions
+            }
+            
+            # Merge with user configuration if provided
+            if user_config:
+                genome_values = user_config.merge_with_defaults(defaults)
+            else:
+                genome_values = defaults
+            
+            # Build genome manifest with user-specific processor_id
+            genome_manifest = {
+                'id': processor_id,  # This becomes the MongoDB database name
+                'name': f"User-{user_id}",
+                **genome_values
             }
             
             # Create processor instance
@@ -205,6 +218,91 @@ class ProcessorManager:
             f"Evicted processor {evicted_id} for user {evicted_info['user_id']} "
             f"(created: {evicted_info['created_at']}, accesses: {evicted_info['access_count']})"
         )
+    
+    async def update_processor_config(self, user_id: str, user_config: UserConfiguration) -> bool:
+        """
+        Update a processor's configuration dynamically.
+        
+        Args:
+            user_id: User identifier
+            user_config: New user configuration
+        
+        Returns:
+            True if successful, False otherwise
+        """
+        processor_id = self._get_processor_id(user_id)
+        
+        if processor_id not in self.processors:
+            # Processor doesn't exist, will be created with new config on next access
+            return True
+        
+        processor_info = self.processors[processor_id]
+        processor = processor_info['processor']
+        
+        try:
+            # Get default settings
+            defaults = {
+                'indexer_type': self.settings.processing.indexer_type,
+                'max_pattern_length': self.settings.learning.max_pattern_length,
+                'persistence': self.settings.learning.persistence,
+                'recall_threshold': self.settings.learning.recall_threshold,
+                'smoothness': self.settings.learning.smoothness,
+                'auto_act_method': self.settings.processing.auto_act_method,
+                'auto_act_threshold': self.settings.processing.auto_act_threshold,
+                'always_update_frequencies': self.settings.processing.always_update_frequencies,
+                'max_predictions': self.settings.processing.max_predictions,
+                'quiescence': self.settings.learning.quiescence,
+                'search_depth': self.settings.processing.search_depth,
+                'sort': self.settings.processing.sort_symbols,
+                'process_predictions': self.settings.processing.process_predictions
+            }
+            
+            # Merge with user configuration
+            new_config = user_config.merge_with_defaults(defaults)
+            
+            # Update processor attributes directly
+            # These are the safe runtime-updateable parameters
+            if 'recall_threshold' in new_config:
+                processor.recall_threshold = new_config['recall_threshold']
+                if hasattr(processor, 'pattern_processor'):
+                    processor.pattern_processor.recall_threshold = new_config['recall_threshold']
+            
+            if 'persistence' in new_config:
+                processor.persistence = new_config['persistence']
+            
+            if 'max_pattern_length' in new_config:
+                processor.max_pattern_length = new_config['max_pattern_length']
+            
+            if 'smoothness' in new_config:
+                processor.smoothness = new_config['smoothness']
+            
+            if 'quiescence' in new_config:
+                processor.quiescence = new_config['quiescence']
+            
+            if 'auto_act_threshold' in new_config:
+                processor.auto_act_threshold = new_config['auto_act_threshold']
+            
+            if 'always_update_frequencies' in new_config:
+                processor.always_update_frequencies = new_config['always_update_frequencies']
+            
+            if 'max_predictions' in new_config:
+                processor.max_predictions = new_config['max_predictions']
+            
+            if 'search_depth' in new_config:
+                processor.search_depth = new_config['search_depth']
+            
+            if 'sort' in new_config:
+                processor.sort = new_config['sort']
+            
+            if 'process_predictions' in new_config:
+                processor.process_predictions = new_config['process_predictions']
+            
+            logger.info(f"Updated processor {processor_id} configuration for user {user_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to update processor config for {user_id}: {e}")
+            return False
     
     async def remove_processor(self, user_id: str) -> bool:
         """

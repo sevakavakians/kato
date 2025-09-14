@@ -271,7 +271,7 @@ async def create_session(request: CreateSessionRequest):
     without any data collision.
     """
     logger.info(f"Creating session with manager id: {id(app_state.session_manager)}")
-    session = await app_state.session_manager.create_session(
+    session = await app_state.session_manager.get_or_create_session(
         user_id=request.user_id,
         metadata=request.metadata,
         ttl_seconds=request.ttl_seconds
@@ -347,8 +347,8 @@ async def observe_in_session(
     if not session:
         raise HTTPException(404, detail=f"Session {session_id} not found or expired")
     
-    # Get user's processor (isolated per user)
-    processor = await app_state.processor_manager.get_processor(session.user_id)
+    # Get user's processor (isolated per user) with their configuration
+    processor = await app_state.processor_manager.get_processor(session.user_id, session.user_config)
     
     # Get session lock to ensure sequential processing within session
     lock = await app_state.session_manager.get_session_lock(session_id)
@@ -424,8 +424,8 @@ async def learn_in_session(session_id: str):
     if not session.stm:
         raise HTTPException(400, detail="Cannot learn from empty STM")
     
-    # Get user's processor (isolated per user)
-    processor = await app_state.processor_manager.get_processor(session.user_id)
+    # Get user's processor (isolated per user) with their configuration
+    processor = await app_state.processor_manager.get_processor(session.user_id, session.user_config)
     
     lock = await app_state.session_manager.get_session_lock(session_id)
     
@@ -469,8 +469,8 @@ async def get_session_predictions(session_id: str):
     if not session:
         raise HTTPException(404, detail=f"Session {session_id} not found or expired")
     
-    # Get user's processor (isolated per user)
-    processor = await app_state.processor_manager.get_processor(session.user_id)
+    # Get user's processor (isolated per user) with their configuration
+    processor = await app_state.processor_manager.get_processor(session.user_id, session.user_config)
     
     lock = await app_state.session_manager.get_session_lock(session_id)
     
@@ -719,13 +719,13 @@ def get_user_id_from_request(request: Request) -> str:
 async def observe_primary(request: Request, observation: ObservationData):
     """Primary observe endpoint with automatic session management."""
     user_id = get_user_id_from_request(request)
-    session = await app_state.session_manager.create_session(
+    session = await app_state.session_manager.get_or_create_session(
         user_id=user_id,
         metadata={"type": "auto_created", "endpoint": "observe"}
     )
     
     # Process the observation using the session
-    processor = await app_state.processor_manager.get_processor(session.user_id)
+    processor = await app_state.processor_manager.get_processor(session.user_id, session.user_config)
     
     try:
         # Convert observation to required format
@@ -766,7 +766,7 @@ async def observe_primary(request: Request, observation: ObservationData):
 async def get_stm_primary(request: Request):
     """Primary STM endpoint with automatic session management."""
     user_id = get_user_id_from_request(request)
-    session = await app_state.session_manager.create_session(
+    session = await app_state.session_manager.get_or_create_session(
         user_id=user_id,
         metadata={"type": "auto_created", "endpoint": request.url.path}
     )
@@ -777,11 +777,11 @@ async def get_stm_primary(request: Request):
 async def learn_primary(request: Request):
     """Primary learn endpoint with automatic session management."""
     user_id = get_user_id_from_request(request)
-    session = await app_state.session_manager.create_session(
+    session = await app_state.session_manager.get_or_create_session(
         user_id=user_id,
         metadata={"type": "auto_created", "endpoint": request.url.path}
     )
-    processor = await app_state.processor_manager.get_processor(session.user_id)
+    processor = await app_state.processor_manager.get_processor(session.user_id, session.user_config)
     
     try:
         if not session.stm:
@@ -813,7 +813,7 @@ async def learn_primary(request: Request):
 async def clear_stm_primary(request: Request):
     """Primary clear STM endpoint with automatic session management."""
     user_id = get_user_id_from_request(request)
-    session = await app_state.session_manager.create_session(
+    session = await app_state.session_manager.get_or_create_session(
         user_id=user_id,
         metadata={"type": "auto_created", "endpoint": request.url.path}
     )
@@ -827,11 +827,11 @@ async def clear_stm_primary(request: Request):
 async def clear_all_primary(request: Request):
     """Primary clear all endpoint with automatic session management."""
     user_id = get_user_id_from_request(request)
-    session = await app_state.session_manager.create_session(
+    session = await app_state.session_manager.get_or_create_session(
         user_id=user_id,
         metadata={"type": "auto_created", "endpoint": request.url.path}
     )
-    processor = await app_state.processor_manager.get_processor(session.user_id)
+    processor = await app_state.processor_manager.get_processor(session.user_id, session.user_config)
     
     try:
         # Clear STM
@@ -853,11 +853,11 @@ async def clear_all_primary(request: Request):
 async def get_predictions_primary(request: Request, unique_id: Optional[str] = None):
     """Primary predictions endpoint with automatic session management."""
     user_id = get_user_id_from_request(request)
-    session = await app_state.session_manager.create_session(
+    session = await app_state.session_manager.get_or_create_session(
         user_id=user_id,
         metadata={"type": "auto_created", "endpoint": request.url.path}
     )
-    processor = await app_state.processor_manager.get_processor(session.user_id)
+    processor = await app_state.processor_manager.get_processor(session.user_id, session.user_config)
     
     try:
         # Set STM in processor to match session
@@ -881,37 +881,78 @@ async def get_predictions_primary(request: Request, unique_id: Optional[str] = N
 
 # Gene and pattern endpoints (simplified, no dynamic updates in v2)
 @app.get("/gene/{gene_name}")
-async def get_gene_primary(gene_name: str):
-    """Get a gene value."""
-    # In v2, genes are set at processor creation time
-    processor_genes = {
+async def get_gene_primary(request: Request, gene_name: str):
+    """Get a gene value for the current user."""
+    user_id = get_user_id_from_request(request)
+    session = await app_state.session_manager.get_or_create_session(
+        user_id=user_id,
+        metadata={"type": "auto_created", "endpoint": request.url.path}
+    )
+    
+    # Get default values
+    default_genes = {
         "recall_threshold": app_state.settings.learning.recall_threshold,
         "persistence": app_state.settings.learning.persistence,
         "max_pattern_length": app_state.settings.learning.max_pattern_length,
         "smoothness": app_state.settings.learning.smoothness,
+        "quiescence": app_state.settings.learning.quiescence,
+        "auto_act_method": app_state.settings.processing.auto_act_method,
+        "auto_act_threshold": app_state.settings.processing.auto_act_threshold,
+        "always_update_frequencies": app_state.settings.processing.always_update_frequencies,
+        "max_predictions": app_state.settings.processing.max_predictions,
+        "search_depth": app_state.settings.processing.search_depth,
+        "sort": app_state.settings.processing.sort_symbols,
+        "process_predictions": app_state.settings.processing.process_predictions,
     }
     
-    if gene_name not in processor_genes:
+    # Merge with user configuration
+    user_genes = session.user_config.merge_with_defaults(default_genes)
+    
+    if gene_name not in user_genes:
         raise HTTPException(status_code=404, detail=f"Gene '{gene_name}' not found")
     
-    return {"gene": gene_name, "value": processor_genes[gene_name]}
+    return {"gene": gene_name, "value": user_genes[gene_name]}
 
 
 @app.post("/genes/update")
-async def update_genes_primary(genes: dict):
-    """Update genes - no-op in v2 (genes are set at processor creation)."""
-    return {"status": "genes-not-updateable-in-v2", "message": "Genes are configured per user at processor creation"}
+async def update_genes_primary(request: Request, genes: dict):
+    """Update genes for the current user's configuration."""
+    user_id = get_user_id_from_request(request)
+    session = await app_state.session_manager.get_or_create_session(
+        user_id=user_id,
+        metadata={"type": "auto_created", "endpoint": request.url.path}
+    )
+    
+    # Extract the actual gene updates from the nested structure
+    # The input is {"genes": {"recall_threshold": 0.5}} but we need just {"recall_threshold": 0.5}
+    gene_updates = genes.get('genes', genes)
+    
+    # Update user configuration
+    if session.user_config.update(gene_updates):
+        # Apply configuration to processor
+        success = await app_state.processor_manager.update_processor_config(
+            user_id, session.user_config
+        )
+        
+        if success:
+            # Save updated session
+            await app_state.session_manager.update_session(session)
+            return {"status": "okay", "message": "genes-updated", "genes": gene_updates}
+        else:
+            return {"status": "error", "message": "Failed to apply configuration"}
+    else:
+        return {"status": "error", "message": "Invalid gene values"}
 
 
 @app.get("/pattern/{pattern_id}")
 async def get_pattern_primary(request: Request, pattern_id: str):
     """Get a pattern by ID."""
     user_id = get_user_id_from_request(request)
-    session = await app_state.session_manager.create_session(
+    session = await app_state.session_manager.get_or_create_session(
         user_id=user_id,
         metadata={"type": "auto_created", "endpoint": request.url.path}
     )
-    processor = await app_state.processor_manager.get_processor(session.user_id)
+    processor = await app_state.processor_manager.get_processor(session.user_id, session.user_config)
     
     try:
         pattern = processor.get_pattern(pattern_id)
@@ -929,11 +970,11 @@ async def get_pattern_primary(request: Request, pattern_id: str):
 async def get_percept_data_primary(request: Request):
     """Get percept data."""
     user_id = get_user_id_from_request(request)
-    session = await app_state.session_manager.create_session(
+    session = await app_state.session_manager.get_or_create_session(
         user_id=user_id,
         metadata={"type": "auto_created", "endpoint": request.url.path}
     )
-    processor = await app_state.processor_manager.get_processor(session.user_id)
+    processor = await app_state.processor_manager.get_processor(session.user_id, session.user_config)
     
     try:
         percept_data = processor.get_percept_data()
@@ -948,11 +989,11 @@ async def get_percept_data_primary(request: Request):
 async def get_cognition_data_primary(request: Request):
     """Get cognition data."""
     user_id = get_user_id_from_request(request)
-    session = await app_state.session_manager.create_session(
+    session = await app_state.session_manager.get_or_create_session(
         user_id=user_id,
         metadata={"type": "auto_created", "endpoint": request.url.path}
     )
-    processor = await app_state.processor_manager.get_processor(session.user_id)
+    processor = await app_state.processor_manager.get_processor(session.user_id, session.user_config)
     
     try:
         cognition_data = processor.get_cognition_data()
@@ -968,11 +1009,11 @@ async def get_cognition_data_primary(request: Request):
 async def observe_sequence_primary(request: Request, batch_request: dict):
     """Primary bulk observe endpoint."""
     user_id = get_user_id_from_request(request)
-    session = await app_state.session_manager.create_session(
+    session = await app_state.session_manager.get_or_create_session(
         user_id=user_id,
         metadata={"type": "auto_created", "endpoint": request.url.path}
     )
-    processor = await app_state.processor_manager.get_processor(session.user_id)
+    processor = await app_state.processor_manager.get_processor(session.user_id, session.user_config)
     
     try:
         observations = batch_request.get('observations', [])

@@ -243,7 +243,8 @@ def test_gene_endpoints(kato_fixture):
     
     # Verify update
     response = requests.get(f"{kato_fixture.base_url}/gene/recall_threshold")
-    assert response.json()['gene_value'] == 0.5
+    # V2 returns 'value' instead of 'gene_value'
+    assert response.json()['value'] == 0.5
     
     # Restore original value
     update_data['genes']['recall_threshold'] = original_value

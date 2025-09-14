@@ -16,6 +16,8 @@ from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
 import logging
 
+from kato.v2.config.user_config import UserConfiguration
+
 logger = logging.getLogger('kato.v2.sessions.manager')
 
 
@@ -32,6 +34,9 @@ class SessionState:
     stm: List[List[str]] = field(default_factory=list)
     emotives_accumulator: List[Dict[str, float]] = field(default_factory=list)
     time: int = 0
+    
+    # User-specific configuration
+    user_config: UserConfiguration = field(default_factory=lambda: UserConfiguration())
     
     # Metadata
     metadata: Dict[str, Any] = field(default_factory=dict)
@@ -85,6 +90,36 @@ class SessionManager:
         
         logger.info(f"SessionManager initialized with {default_ttl_seconds}s default TTL")
     
+    async def get_or_create_session(
+        self,
+        user_id: str,
+        metadata: Optional[Dict[str, Any]] = None,
+        ttl_seconds: Optional[int] = None
+    ) -> SessionState:
+        """
+        Get existing session for a user or create a new one.
+        
+        This enables session persistence across requests from the same user.
+        
+        Args:
+            user_id: User identifier (required for processor isolation)
+            metadata: Optional session metadata
+            ttl_seconds: Session TTL (uses default if not specified)
+        
+        Returns:
+            SessionState for this user (existing or newly created)
+        """
+        # Look for existing session for this user
+        for session_id, session in self.sessions.items():
+            if session.user_id == user_id and not session.is_expired():
+                # Found existing session for this user
+                session.update_access()
+                logger.debug(f"Returning existing session {session_id} for user {user_id}")
+                return session
+        
+        # No existing session, create new one
+        return await self.create_session(user_id, metadata, ttl_seconds)
+    
     async def create_session(
         self,
         user_id: str,  # Now required for processor isolation
@@ -108,13 +143,17 @@ class SessionManager:
         now = datetime.utcnow()
         ttl = ttl_seconds or self.default_ttl
         
+        # Initialize user configuration
+        user_config = UserConfiguration(user_id=user_id)
+        
         session = SessionState(
             session_id=session_id,
             user_id=user_id,
             created_at=now,
             last_accessed=now,
             expires_at=now + timedelta(seconds=ttl),
-            metadata=metadata or {}
+            metadata=metadata or {},
+            user_config=user_config
         )
         
         # Store session

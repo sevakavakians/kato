@@ -765,6 +765,24 @@ docker volume prune -f
 ./kato-manager.sh start
 ```
 
+#### MongoDB Init Container Exits After Startup
+**This is expected behavior.** The `mongodb-init-v2` container is designed to:
+1. Start up when MongoDB is ready
+2. Initialize the MongoDB replica set configuration
+3. Exit successfully (with status code 0)
+4. Remain in "Exited" state
+
+This is an initialization container that only needs to run once. You can verify it completed successfully:
+```bash
+# Check exit status (should show "Exited (0)")
+docker ps -a | grep mongodb-init
+
+# View initialization logs
+docker logs kato-mongodb-init-v2
+```
+
+The main MongoDB container (`kato-mongodb-v2`) will continue running normally. Only the init container stops after completing its setup task.
+
 See [Troubleshooting Guide](docs/technical/TROUBLESHOOTING.md) for more solutions.
 
 ## Contributing

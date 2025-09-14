@@ -11,29 +11,30 @@ services:
       - kato-network-v2
     command: mongod --replSet rs0 --bind_ip_all
     restart: unless-stopped
-    healthcheck:
-      test: echo 'db.runCommand("ping").ok' | mongo localhost:27017/test --quiet
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   # MongoDB replica set initializer
   mongodb-init:
     image: mongo:4.4
     container_name: kato-mongodb-init-v2
     depends_on:
-      mongodb:
-        condition: service_healthy
+      - mongodb
     networks:
       - kato-network-v2
     command: >
       bash -c "
-        mongo --host mongodb:27017 --eval '
-          rs.initiate({
-            _id: \"rs0\",
-            members: [{_id: 0, host: \"mongodb:27017\"}]
-          })
-        ' || true
+        for i in {1..30}; do
+          if mongo --host mongodb:27017 --eval '
+            rs.initiate({
+              _id: \"rs0\",
+              members: [{_id: 0, host: \"mongodb:27017\"}]
+            })
+          ' 2>/dev/null; then
+            echo 'Replica set initialized successfully'
+            break
+          fi
+          echo 'Waiting for MongoDB to be ready... (attempt \$i/30)'
+          sleep 2
+        done
       "
     restart: "no"
 
@@ -90,8 +91,6 @@ services:
     networks:
       - kato-network-v2
     depends_on:
-      mongodb:
-        condition: service_healthy
       redis:
         condition: service_healthy
       mongodb-init:

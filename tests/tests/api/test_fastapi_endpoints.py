@@ -36,8 +36,8 @@ def test_status_endpoint(kato_fixture):
     data = response.json()
     # V2 uses 'base_processor_id', v1 uses 'processor_id'
     assert 'processor_id' in data or 'base_processor_id' in data
-    # V2 uses 'timestamp', v1 uses 'time'
-    assert 'time' in data or 'timestamp' in data
+    # V2 uses 'uptime_seconds', v1 uses 'time' or 'timestamp'
+    assert 'time' in data or 'timestamp' in data or 'uptime_seconds' in data
     # V2 doesn't have stm_length in status, skip this check for v2
     if 'stm_length' in data:
         assert isinstance(data['stm_length'], int)
@@ -55,13 +55,13 @@ def test_observe_endpoint(kato_fixture):
     assert response.status_code == 200
     
     data = response.json()
-    # V2 returns 'ok', v1 returns 'okay'
-    assert data['status'] in ['ok', 'okay']
+    # V2 returns 'ok', v1 returns 'okay', KatoProcessor returns 'observed'
+    assert data['status'] in ['ok', 'okay', 'observed']
     # V2 doesn't always include processor_id in observe response
     # Check for session_id or processor_id
     assert 'processor_id' in data or 'session_id' in data or 'status' in data
-    # V2 uses 'timestamp', v1 uses 'time'
-    assert 'time' in data or 'timestamp' in data
+    # V2 uses 'uptime_seconds', v1 uses 'time' or 'timestamp'
+    assert 'time' in data or 'timestamp' in data or 'uptime_seconds' in data
     # unique_id is optional in v2
     if 'unique_id' in data:
         assert isinstance(data['unique_id'], str)

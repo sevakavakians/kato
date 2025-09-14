@@ -163,8 +163,11 @@ class KatoProcessor:
         
         # Return format expected by callers
         return {
+            'status': 'observed',
             'unique_id': result['unique_id'],
-            'auto_learned_pattern': result.get('auto_learned_pattern')
+            'auto_learned_pattern': result.get('auto_learned_pattern'),
+            'time': self.time,
+            'processor_id': self.id
         }
             
     def get_predictions(self, unique_id={}):

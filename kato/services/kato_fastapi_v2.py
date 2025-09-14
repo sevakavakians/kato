@@ -74,30 +74,38 @@ class ObservationData(BaseModel):
 class ObservationResult(BaseModel):
     """Result of an observation"""
     status: str = Field(..., description="Status of the operation")
-    session_id: str = Field(..., description="Session ID")
-    stm_length: int = Field(..., description="Current STM length")
+    session_id: Optional[str] = Field(None, description="Session ID")
+    processor_id: Optional[str] = Field(None, description="Processor ID for v1 compatibility")
+    stm_length: Optional[int] = Field(None, description="Current STM length")
     time: int = Field(..., description="Session time counter")
+    unique_id: Optional[str] = Field(None, description="Unique observation ID")
+    auto_learned_pattern: Optional[str] = Field(None, description="Auto-learned pattern name if any")
 
 
 class STMResponse(BaseModel):
     """Short-term memory response"""
     stm: List[List[str]] = Field(..., description="Current STM state")
-    session_id: str = Field(..., description="Session ID")
-    length: int = Field(..., description="Number of events in STM")
+    session_id: Optional[str] = Field(None, description="Session ID")
+    length: Optional[int] = Field(None, description="Number of events in STM")
 
 
 class LearnResult(BaseModel):
     """Result of learning operation"""
     pattern_name: str = Field(..., description="Name of the learned pattern")
-    session_id: str = Field(..., description="Session ID")
-    message: str = Field(..., description="Human-readable message")
+    session_id: Optional[str] = Field(None, description="Session ID")
+    processor_id: Optional[str] = Field(None, description="Processor ID for v1 compatibility")
+    message: Optional[str] = Field(None, description="Human-readable message")
+    status: Optional[str] = Field('learned', description="Operation status")
 
 
 class PredictionsResponse(BaseModel):
     """Predictions response"""
     predictions: List[Dict] = Field(default_factory=list, description="List of predictions")
-    session_id: str = Field(..., description="Session ID")
+    session_id: Optional[str] = Field(None, description="Session ID")
+    processor_id: Optional[str] = Field(None, description="Processor ID for v1 compatibility")
     count: int = Field(..., description="Number of predictions")
+    time: Optional[int] = Field(None, description="Time counter")
+    unique_id: Optional[str] = Field(None, description="Unique ID if provided")
 
 
 # ============================================================================
@@ -373,8 +381,11 @@ async def observe_in_session(
     return ObservationResult(
         status="ok",
         session_id=session_id,
+        processor_id=session.user_id,  # For v1 compatibility
         stm_length=len(session.stm),
-        time=session.time
+        time=session.time,
+        unique_id=result.get('unique_id', ''),
+        auto_learned_pattern=result.get('auto_learned_pattern')
     )
 
 
@@ -498,6 +509,7 @@ async def get_system_status():
 
 
 @app.get("/health")
+@app.get("/v2/health")  # Alias for v2 compatibility
 async def health_check():
     """Enhanced health check endpoint for v2 with metrics integration"""
     print("*** HEALTH CHECK ENDPOINT CALLED ***")
@@ -719,12 +731,16 @@ async def observe_primary(request: Request, observation: ObservationData):
         # Convert observation to required format
         observation_dict = observation.dict()
         
+        # Add unique_id if not present
+        if 'unique_id' not in observation_dict or not observation_dict.get('unique_id'):
+            import uuid
+            observation_dict['unique_id'] = str(uuid.uuid4())
+        
+        # Set processor STM to match session
+        processor.set_stm(session.stm)
+        
         # Observe and get results
-        result = processor.observe(
-            strings=observation_dict.get('strings', []),
-            vectors=observation_dict.get('vectors', []),
-            emotives=observation_dict.get('emotives', {})
-        )
+        result = processor.observe(observation_dict)
         
         # Update session STM
         new_event = observation_dict.get('strings', [])
@@ -734,7 +750,7 @@ async def observe_primary(request: Request, observation: ObservationData):
         
         return ObservationResult(
             status=result.get('status', 'okay'),
-            processor_id=processor.processor_id,
+            processor_id=processor.id,
             time=result.get('time', int(time.time())),
             unique_id=result.get('unique_id', ''),
             auto_learned_pattern=result.get('auto_learned_pattern')
@@ -754,7 +770,7 @@ async def get_stm_primary(request: Request):
         user_id=user_id,
         metadata={"type": "auto_created", "endpoint": request.url.path}
     )
-    return STMResponse(stm=session.stm)
+    return STMResponse(stm=session.stm, length=len(session.stm))
 
 
 @app.post("/learn", response_model=LearnResult)
@@ -771,8 +787,11 @@ async def learn_primary(request: Request):
         if not session.stm:
             raise HTTPException(status_code=400, detail="No observations in STM to learn")
         
+        # Set processor STM to session STM
+        processor.set_stm(session.stm)
+        
         # Learn the current STM sequence
-        pattern_name = processor.learn(session.stm)
+        pattern_name = processor.learn()
         
         # Clear STM after learning
         session.stm = []
@@ -850,7 +869,7 @@ async def get_predictions_primary(request: Request, unique_id: Optional[str] = N
         return PredictionsResponse(
             predictions=predictions,
             count=len(predictions),
-            processor_id=processor.processor_id,
+            processor_id=processor.id,
             time=int(time.time()),
             unique_id=unique_id
         )
@@ -959,16 +978,21 @@ async def observe_sequence_primary(request: Request, batch_request: dict):
         observations = batch_request.get('observations', [])
         options = batch_request.get('options', {})
         
+        # Set initial processor STM to match session
+        processor.set_stm(session.stm)
+        
         results = []
         for idx, obs in enumerate(observations):
             # processor.observe expects a dict with unique_id
             import uuid
-            result = processor.observe({
+            obs_dict = {
                 'strings': obs.get('strings', []),
                 'vectors': obs.get('vectors', []),
                 'emotives': obs.get('emotives', {}),
                 'unique_id': obs.get('unique_id', str(uuid.uuid4()))  # Generate if not provided
-            })
+            }
+            
+            result = processor.observe(obs_dict)
             results.append(result)
             
             # Add to session STM
@@ -976,6 +1000,8 @@ async def observe_sequence_primary(request: Request, batch_request: dict):
             if new_event:
                 session.stm.append(new_event)
         
+        # Update processor STM to match final session state
+        processor.set_stm(session.stm)
         await app_state.session_manager.update_session(session)
         
         # Get final predictions after all observations

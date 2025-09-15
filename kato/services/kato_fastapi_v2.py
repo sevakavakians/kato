@@ -742,14 +742,14 @@ async def observe_primary(request: Request, observation: ObservationData):
         # Observe and get results
         result = processor.observe(observation_dict)
         
-        # Update session STM
-        new_event = observation_dict.get('strings', [])
-        if new_event:  # Only add non-empty events
-            session.stm.append(new_event)
+        # Update session STM with combined symbols (includes vector names)
+        combined_symbols = result.get('symbols', observation_dict.get('strings', []))
+        if combined_symbols:  # Only add non-empty events
+            session.stm.append(combined_symbols)
             await app_state.session_manager.update_session(session)
         
         return ObservationResult(
-            status=result.get('status', 'okay'),
+            status='okay',  # Always return 'okay' for v1 compatibility
             processor_id=processor.id,
             time=result.get('time', int(time.time())),
             unique_id=result.get('unique_id', ''),
@@ -800,7 +800,7 @@ async def learn_primary(request: Request):
         return LearnResult(
             status='learned',
             pattern_name=pattern_name or '',
-            processor_id=processor.processor_id
+            processor_id=processor.id  # Fixed: use 'id' not 'processor_id'
         )
         
     except Exception as e:
@@ -819,7 +819,7 @@ async def clear_stm_primary(request: Request):
     )
     session.stm = []
     await app_state.session_manager.update_session(session)
-    return {"message": "STM cleared", "status": "cleared"}
+    return {"status": "okay", "message": "stm-cleared"}
 
 
 @app.post("/clear-all")
@@ -841,11 +841,33 @@ async def clear_all_primary(request: Request):
         # Clear all memory in processor (this is per-user isolated)
         processor.clear_all_memory()
         
-        return {"message": "All memory cleared", "status": "all-cleared"}
+        return {"status": "okay", "message": "all-cleared"}
         
     except Exception as e:
         logger.error(f"Clear all failed: {e}")
         raise HTTPException(status_code=500, detail=f"Clear all failed: {str(e)}")
+
+
+@app.get("/stm", response_model=STMResponse)
+@app.get("/short-term-memory", response_model=STMResponse)
+async def get_stm_primary(request: Request):
+    """Primary STM endpoint with automatic session management."""
+    user_id = get_user_id_from_request(request)
+    session = await app_state.session_manager.get_or_create_session(
+        user_id=user_id,
+        metadata={"type": "auto_created", "endpoint": request.url.path}
+    )
+    processor = await app_state.processor_manager.get_processor(session.user_id, session.user_config)
+    
+    # Get STM from processor
+    processor.set_stm(session.stm)
+    stm = processor.get_stm()
+    
+    return STMResponse(
+        stm=stm,
+        processor_id=processor.id,
+        length=len(stm)
+    )
 
 
 @app.get("/predictions", response_model=PredictionsResponse)
@@ -865,6 +887,12 @@ async def get_predictions_primary(request: Request, unique_id: Optional[str] = N
             processor.pattern_processor.superkb.stm = session.stm
         
         predictions = processor.get_predictions(unique_id=unique_id)
+        
+        # Add pattern_name field for v1 compatibility
+        # V1 expects 'pattern_name' but v2 returns 'name'
+        for pred in predictions:
+            if 'name' in pred and 'pattern_name' not in pred:
+                pred['pattern_name'] = f"PTRN|{pred['name']}"
         
         return PredictionsResponse(
             predictions=predictions,
@@ -1015,44 +1043,105 @@ async def observe_sequence_primary(request: Request, batch_request: dict):
     )
     processor = await app_state.processor_manager.get_processor(session.user_id, session.user_config)
     
+    # Validate input structure first (outside try-except to let HTTPException propagate)
+    observations = batch_request.get('observations')
+    if observations is None:
+        raise HTTPException(status_code=422, detail="Missing required field: observations")
+    if not isinstance(observations, list):
+        raise HTTPException(status_code=422, detail="Field 'observations' must be a list")
+    
     try:
-        observations = batch_request.get('observations', [])
-        options = batch_request.get('options', {})
         
-        # Set initial processor STM to match session
-        processor.set_stm(session.stm)
+        # Extract learning options
+        learn_after_each = batch_request.get('learn_after_each', False)
+        learn_at_end = batch_request.get('learn_at_end', False)
+        clear_stm_between = batch_request.get('clear_stm_between', False)
+        
+        # Clear session STM for batch processing (v1 compatibility - each batch starts fresh)
+        session.stm = []
+        
+        # Set initial processor STM to empty for batch
+        processor.set_stm([])
         
         results = []
+        patterns_learned = []
+        
         for idx, obs in enumerate(observations):
+            # Clear STM between observations if requested
+            if clear_stm_between and idx > 0:
+                processor.set_stm([])
+                session.stm = []
+            
             # processor.observe expects a dict with unique_id
             import uuid
+            # Sort strings alphanumerically for consistency
+            sorted_strings = sorted(obs.get('strings', []))
             obs_dict = {
-                'strings': obs.get('strings', []),
+                'strings': sorted_strings,
                 'vectors': obs.get('vectors', []),
                 'emotives': obs.get('emotives', {}),
                 'unique_id': obs.get('unique_id', str(uuid.uuid4()))  # Generate if not provided
             }
             
             result = processor.observe(obs_dict)
-            results.append(result)
+            # Transform result to match v1 API format
+            formatted_result = {
+                'status': 'okay',  # v1 compatibility
+                'processor_id': processor.id,
+                'unique_id': result.get('unique_id', obs_dict['unique_id']),
+                'time': result.get('time', 0),
+                'auto_learned_pattern': result.get('auto_learned_pattern')
+            }
+            results.append(formatted_result)
             
-            # Add to session STM
-            new_event = obs.get('strings', [])
-            if new_event:
-                session.stm.append(new_event)
+            # Add to session STM - use the combined symbols (includes vector names)
+            # The processor.observe returns symbols that include both strings and vector names
+            combined_symbols = result.get('symbols', sorted_strings)
+            if combined_symbols:
+                session.stm.append(combined_symbols)
+            
+            # Learn after each observation if requested
+            if learn_after_each:
+                # Update processor STM before learning
+                processor.set_stm(session.stm)
+                pattern_name = processor.learn()
+                if pattern_name:
+                    patterns_learned.append(pattern_name)
+                # Clear STM after learning (auto-learn behavior)
+                processor.set_stm([])
+                session.stm = []
         
-        # Update processor STM to match final session state
-        processor.set_stm(session.stm)
+        # Learn at end if requested (and not already learning after each)
+        if learn_at_end and not learn_after_each:
+            # Update processor STM to match final session state
+            processor.set_stm(session.stm)
+            pattern_name = processor.learn()
+            if pattern_name:
+                patterns_learned.append(pattern_name)
+            # Clear STM after learning (auto-learn behavior)
+            processor.set_stm([])
+            session.stm = []
+        
+        # Update processor STM to match final session state (if no learning happened)
+        if not learn_after_each and not learn_at_end:
+            processor.set_stm(session.stm)
+        
         await app_state.session_manager.update_session(session)
         
         # Get final predictions after all observations
         predictions = processor.get_predictions()
+        
+        # Add pattern_name field for v1 compatibility
+        for pred in predictions:
+            if 'name' in pred and 'pattern_name' not in pred:
+                pred['pattern_name'] = f"PTRN|{pred['name']}"
         
         # Format response to match test expectations
         return {
             "status": "okay",  # Tests expect 'okay'
             "processor_id": session.user_id,  # Use user_id as processor_id in v2
             "observations_processed": len(results),
+            "patterns_learned": patterns_learned,
             "individual_results": results,
             "final_predictions": predictions
         }

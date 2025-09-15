@@ -166,6 +166,7 @@ class KatoProcessor:
             'status': 'observed',
             'unique_id': result['unique_id'],
             'auto_learned_pattern': result.get('auto_learned_pattern'),
+            'symbols': result.get('symbols', []),  # Include combined symbols (strings + VCTR names)
             'time': self.time,
             'processor_id': self.id
         }

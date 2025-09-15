@@ -280,10 +280,6 @@ def test_cognition_data_endpoint(kato_fixture):
     kato_fixture.observe({'strings': ['cog1'], 'vectors': [], 'emotives': {}})
     
     response = requests.get(f"{kato_fixture.base_url}/cognition-data")
-    # V2 might have issues with cognition-data endpoint
-    # Accept 200 or 500 (known issue)
-    if response.status_code == 500:
-        pytest.skip("V2 cognition-data endpoint has known issues")
     assert response.status_code == 200
     
     data = response.json()

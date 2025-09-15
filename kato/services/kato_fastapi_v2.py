@@ -1024,7 +1024,7 @@ async def get_cognition_data_primary(request: Request):
     processor = await app_state.processor_manager.get_processor(session.user_id, session.user_config)
     
     try:
-        cognition_data = processor.get_cognition_data()
+        cognition_data = processor.cognition_data
         return {"cognition_data": cognition_data}
         
     except Exception as e:

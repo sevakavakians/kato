@@ -369,17 +369,27 @@ class KATOFastAPIFixture:
         return 'all-cleared'
     
     def update_genes(self, genes: Dict[str, Any]) -> str:
-        """Update gene values.
+        """Update gene values via V2 API.
         
-        Note: In v2, genes are set when processor is created.
-        This method is kept for compatibility but does nothing.
+        V2 supports dynamic configuration updates through the /genes/update endpoint.
         """
         if not self.services_available:
             pytest.skip("KATO services not available")
         
-        # In v2, genes are configured when the processor is created
-        # per user. No dynamic gene updates.
-        return 'genes-not-updateable-in-v2'
+        # V2 supports dynamic gene updates via API
+        response = requests.post(
+            f"{self.base_url}/genes/update",
+            json={"genes": genes},
+            timeout=5
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            return result.get('message', 'genes-updated')
+        else:
+            # Log the error but don't fail - some tests may expect this
+            print(f"Warning: Failed to update genes: {response.status_code} - {response.text}")
+            return 'genes-update-failed'
     
     def reset_genes_to_defaults(self) -> str:
         """Reset genes to default values."""
@@ -394,12 +404,12 @@ class KATOFastAPIFixture:
     def set_recall_threshold(self, threshold: float) -> str:
         """Set the recall_threshold parameter.
         
-        Note: V2 now supports dynamic configuration through user-specific settings.
+        V2 supports dynamic configuration through the /genes/update endpoint.
         """
         if not 0.0 <= threshold <= 1.0:
             raise ValueError(f"recall_threshold must be between 0.0 and 1.0, got {threshold}")
         
-        # V2 now supports dynamic threshold changes via user configuration
+        # V2 supports dynamic threshold changes via the API
         self._attempted_threshold = threshold
         return self.update_genes({"recall_threshold": threshold})
     

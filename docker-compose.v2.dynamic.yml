@@ -12,12 +12,39 @@ services:
       - mongo-data-v2:/data/db
     networks:
       - kato-network-v2
+    command: mongod --replSet rs0 --bind_ip_all
     restart: unless-stopped
     healthcheck:
       test: echo 'db.runCommand("ping").ok' | mongo localhost:27017/test --quiet
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # MongoDB replica set initializer
+  mongodb-init:
+    image: mongo:4.4
+    container_name: kato-mongodb-init-v2
+    depends_on:
+      - mongodb
+    networks:
+      - kato-network-v2
+    command: >
+      bash -c "
+        for i in {1..30}; do
+          if mongo --host mongodb:27017 --eval '
+            rs.initiate({
+              _id: \"rs0\",
+              members: [{_id: 0, host: \"mongodb:27017\"}]
+            })
+          ' 2>/dev/null; then
+            echo 'Replica set initialized successfully'
+            break
+          fi
+          echo 'Waiting for MongoDB to be ready... (attempt $$i/30)'
+          sleep 2
+        done
+      "
+    restart: "no"
 
   # Qdrant vector database
   qdrant:
@@ -61,7 +88,7 @@ services:
       - PROCESSOR_ID=primary-v2
       - PROCESSOR_NAME=Primary-v2
       # Internal container names for service discovery
-      - MONGO_BASE_URL=mongodb://mongodb:27017
+      - MONGO_BASE_URL=mongodb://mongodb:27017/?replicaSet=rs0
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
       - REDIS_URL=redis://redis:6379
@@ -76,7 +103,7 @@ services:
     networks:
       - kato-network-v2
     depends_on:
-      - mongodb
+      - mongodb-init
       - qdrant
       - redis
     restart: unless-stopped
@@ -100,7 +127,7 @@ services:
       - PROCESSOR_ID=testing-v2
       - PROCESSOR_NAME=Testing-v2
       # Internal container names for service discovery
-      - MONGO_BASE_URL=mongodb://mongodb:27017
+      - MONGO_BASE_URL=mongodb://mongodb:27017/?replicaSet=rs0
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
       - REDIS_URL=redis://redis:6379
@@ -115,7 +142,7 @@ services:
     networks:
       - kato-network-v2
     depends_on:
-      - mongodb
+      - mongodb-init
       - qdrant
       - redis
     restart: unless-stopped
@@ -139,7 +166,7 @@ services:
       - PROCESSOR_ID=analytics-v2
       - PROCESSOR_NAME=Analytics-v2
       # Internal container names for service discovery
-      - MONGO_BASE_URL=mongodb://mongodb:27017
+      - MONGO_BASE_URL=mongodb://mongodb:27017/?replicaSet=rs0
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
       - REDIS_URL=redis://redis:6379
@@ -154,7 +181,7 @@ services:
     networks:
       - kato-network-v2
     depends_on:
-      - mongodb
+      - mongodb-init
       - qdrant
       - redis
     restart: unless-stopped
@@ -166,32 +193,6 @@ services:
     labels:
       - "kato.service=analytics"
       - "kato.version=v2"
-
-  # MongoDB initialization container
-  mongodb-init:
-    image: mongo:4.4
-    container_name: kato-mongodb-init-v2
-    depends_on:
-      - mongodb
-    networks:
-      - kato-network-v2
-    command: |
-      bash -c "
-        echo 'Waiting for MongoDB to be ready...';
-        until mongosh --host mongodb --eval 'db.adminCommand(\"ping\")' > /dev/null 2>&1; do
-          sleep 2;
-        done;
-        echo 'MongoDB is ready. Initializing with write concern...';
-        mongosh --host mongodb --eval '
-          db = db.getSiblingDB(\"admin\");
-          db.runCommand({
-            setDefaultRWConcern: 1,
-            defaultWriteConcern: { w: \"majority\", j: true, wtimeout: 5000 }
-          });
-          print(\"Write concern set to majority with journal and 5s timeout\");
-        '
-        echo 'MongoDB initialization complete';
-      "
 
 networks:
   kato-network-v2:

@@ -82,3 +82,6 @@ test_*.py
 !tests/test_*.py
 debug_*.py
 update_container.sh
+
+# Dynamic port mappings (generated)
+.kato-ports.json

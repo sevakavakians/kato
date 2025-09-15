@@ -34,6 +34,7 @@ services:
       context: .
       dockerfile: Dockerfile
     image: kato:latest
+    pull_policy: never  # Always use local image, never pull from registry
     container_name: kato-test
     environment:
       - PROCESSOR_ID=test

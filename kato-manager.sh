@@ -11,6 +11,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 KATO_ROOT="$SCRIPT_DIR"
 LOGS_DIR="$KATO_ROOT/logs"
 
+# Parse command line arguments for port mode
+USE_FIXED_PORTS=false
+for arg in "$@"; do
+    if [ "$arg" = "--fixed-ports" ] || [ "$arg" = "-f" ]; then
+        USE_FIXED_PORTS=true
+    fi
+done
+
 # Version selection (auto-detect or default to v2)
 # Auto-detect running version based on container names
 if docker ps --format "{{.Names}}" 2>/dev/null | grep -q "kato-.*-v2"; then
@@ -24,14 +32,21 @@ else
     KATO_VERSION="${KATO_VERSION:-v2}"
 fi
 
-# Compose files based on version
+# Compose files based on version and port mode
 if [ "$KATO_VERSION" = "v1" ]; then
     COMPOSE_FILE="docker-compose.yml"
     DOCKERFILE="Dockerfile"
     DOCKER_IMAGE="kato:latest"
     VERSION_LABEL="v1.0"
 else
-    COMPOSE_FILE="docker-compose.v2.yml"
+    # v2 uses dynamic ports by default, fixed ports with flag
+    if [ "$USE_FIXED_PORTS" = true ]; then
+        COMPOSE_FILE="docker-compose.v2.yml"
+        PORT_MODE="fixed"
+    else
+        COMPOSE_FILE="docker-compose.v2.dynamic.yml"
+        PORT_MODE="dynamic"
+    fi
     DOCKERFILE="Dockerfile.v2"
     DOCKER_IMAGE="kato:v2"
     VERSION_LABEL="v2.0"
@@ -169,6 +184,16 @@ start_services() {
         log_info "Waiting for services to be ready..."
         sleep 5
         
+        # If using dynamic ports, discover them
+        if [ "$PORT_MODE" = "dynamic" ]; then
+            log_info "Discovering dynamic port assignments..."
+            if [ -x "./discover-ports.sh" ]; then
+                ./discover-ports.sh discover
+            else
+                log_warning "Port discovery script not found. Run './discover-ports.sh' manually to see port mappings."
+            fi
+        fi
+        
         # Show status
         show_status
     else
@@ -236,10 +261,16 @@ start_test_services() {
     
     log_info "Starting KATO in test mode (single instance)..."
     
+    # Build image if it doesn't exist
+    if ! docker images | grep -q "$DOCKER_IMAGE"; then
+        log_warning "Image not found, building..."
+        build_image
+    fi
+    
     cd "$KATO_ROOT"
     
-    # Start services using test compose file
-    if $DOCKER_COMPOSE -f "$TEST_COMPOSE_FILE" up -d; then
+    # Start services using test compose file with --pull never to use local images
+    if $DOCKER_COMPOSE -f "$TEST_COMPOSE_FILE" up -d --pull never; then
         log_success "KATO test instance started"
         
         # Wait for services to be ready
@@ -335,39 +366,73 @@ show_status() {
     $DOCKER_COMPOSE -f "$COMPOSE_FILE" ps
     
     echo ""
-    log_info "Service URLs:"
-    echo "  Primary KATO:  http://localhost:8001"
-    echo "  Testing KATO:  http://localhost:8002"
-    echo "  Analytics KATO: http://localhost:8003"
-    echo "  MongoDB:       mongodb://localhost:27017"
-    echo "  Qdrant:        http://localhost:6333"
-    if [ "$KATO_VERSION" = "v2" ]; then
-        echo "  Redis:         redis://localhost:6379"
-    fi
     
-    echo ""
-    log_info "Health Check:"
-    
-    # Check each service
-    for port in 8001 8002 8003; do
-        if [ "$KATO_VERSION" = "v2" ]; then
-            # Check v2 health endpoint
-            if curl -s "http://localhost:${port}/v2/health" > /dev/null 2>&1; then
-                echo -e "  Port ${port}: ${GREEN}✓ Healthy (v2)${NC}"
-            elif curl -s "http://localhost:${port}/health" > /dev/null 2>&1; then
-                echo -e "  Port ${port}: ${GREEN}✓ Healthy${NC}"
+    # Show URLs based on port mode
+    if [ "$PORT_MODE" = "dynamic" ]; then
+        log_info "Service URLs (Dynamic Ports):"
+        
+        # Try to read from saved ports file
+        if [ -f ".kato-ports.json" ]; then
+            # Parse JSON and display ports
+            if command -v python3 &> /dev/null; then
+                python3 -c "
+import json
+try:
+    with open('.kato-ports.json', 'r') as f:
+        data = json.load(f)
+    for name, info in data.get('services', {}).items():
+        print(f'  {name.capitalize()} KATO: {info[\"url\"]}')
+    for name, info in data.get('databases', {}).items():
+        print(f'  {name.capitalize()}: {info[\"url\"]}')
+except:
+    print('  Run ./discover-ports.sh to see port mappings')
+"
             else
-                echo -e "  Port ${port}: ${RED}✗ Not responding${NC}"
+                echo "  Run './discover-ports.sh show' to see port mappings"
             fi
         else
-            # Check v1 health endpoint
-            if curl -s "http://localhost:${port}/health" > /dev/null 2>&1; then
-                echo -e "  Port ${port}: ${GREEN}✓ Healthy${NC}"
-            else
-                echo -e "  Port ${port}: ${RED}✗ Not responding${NC}"
-            fi
+            echo "  Run './discover-ports.sh' to discover port mappings"
         fi
-    done
+        
+        echo ""
+        log_info "Health Check:"
+        echo "  Services using dynamic ports - run './discover-ports.sh' for details"
+    else
+        # Fixed ports mode
+        log_info "Service URLs (Fixed Ports):"
+        echo "  Primary KATO:  http://localhost:8001"
+        echo "  Testing KATO:  http://localhost:8002"
+        echo "  Analytics KATO: http://localhost:8003"
+        echo "  MongoDB:       mongodb://localhost:27017"
+        echo "  Qdrant:        http://localhost:6333"
+        if [ "$KATO_VERSION" = "v2" ]; then
+            echo "  Redis:         redis://localhost:6379"
+        fi
+        
+        echo ""
+        log_info "Health Check:"
+        
+        # Check each service
+        for port in 8001 8002 8003; do
+            if [ "$KATO_VERSION" = "v2" ]; then
+                # Check v2 health endpoint
+                if curl -s "http://localhost:${port}/v2/health" > /dev/null 2>&1; then
+                    echo -e "  Port ${port}: ${GREEN}✓ Healthy (v2)${NC}"
+                elif curl -s "http://localhost:${port}/health" > /dev/null 2>&1; then
+                    echo -e "  Port ${port}: ${GREEN}✓ Healthy${NC}"
+                else
+                    echo -e "  Port ${port}: ${RED}✗ Not responding${NC}"
+                fi
+            else
+                # Check v1 health endpoint
+                if curl -s "http://localhost:${port}/health" > /dev/null 2>&1; then
+                    echo -e "  Port ${port}: ${GREEN}✓ Healthy${NC}"
+                else
+                    echo -e "  Port ${port}: ${RED}✗ Not responding${NC}"
+                fi
+            fi
+        done
+    fi
     
     if [ "$KATO_VERSION" = "v2" ]; then
         echo ""
@@ -579,6 +644,11 @@ show_usage() {
     echo "       KATO_VERSION=v1 $0 [command] [options]  # Use v1.0"
     echo ""
     echo "Current Version: $VERSION_LABEL"
+    if [ "$PORT_MODE" = "dynamic" ]; then
+        echo "Port Mode: Dynamic (default)"
+    else
+        echo "Port Mode: Fixed"
+    fi
     echo ""
     echo "Commands:"
     echo "  build              Build Docker image"
@@ -588,6 +658,15 @@ show_usage() {
     echo "  restart [service]  Restart KATO services"
     echo "  status             Show status of services"
     echo "  logs [service]     View service logs"
+    echo ""
+    echo "Port Options:"
+    echo "  --fixed-ports, -f  Use fixed ports (8001-8003) instead of dynamic"
+    echo "                     Example: $0 start --fixed-ports"
+    echo ""
+    echo "Dynamic Port Commands:"
+    echo "  ./discover-ports.sh         Discover and display port mappings"
+    echo "  ./discover-ports.sh show    Show saved port mappings"
+    echo "  ./discover-ports.sh export  Export ports as environment variables"
     echo ""
     echo "Test Mode Commands (single instance):"
     echo "  test-start         Start single KATO instance for testing"
@@ -636,16 +715,25 @@ show_usage() {
     echo "  python test_v2_demo.py       # Full v2.0 demo"
 }
 
+# Filter out flags from arguments
+COMMAND="${1:-}"
+SERVICE_ARG=""
+
+# Get the service argument if it exists and is not a flag
+if [ -n "${2:-}" ] && [[ "${2}" != --* ]] && [[ "${2}" != -* ]]; then
+    SERVICE_ARG="${2}"
+fi
+
 # Main command handler
-case "${1:-}" in
+case "${COMMAND}" in
     build)
         build_image
         ;;
     start)
-        start_services "${2:-}"
+        start_services "${SERVICE_ARG}"
         ;;
     stop)
-        stop_services "${2:-}"
+        stop_services "${SERVICE_ARG}"
         ;;
     down)
         down_services
@@ -663,7 +751,7 @@ case "${1:-}" in
         show_test_status
         ;;
     restart)
-        restart_services "${2:-}"
+        restart_services "${SERVICE_ARG}"
         ;;
     status)
         show_status

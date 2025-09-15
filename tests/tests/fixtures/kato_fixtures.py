@@ -12,6 +12,7 @@ import requests
 import pytest
 from typing import Dict, Any, Optional, List
 import uuid
+from pathlib import Path
 
 # Try to import docker, but don't fail if it's not available
 try:
@@ -72,6 +73,52 @@ class KATOFastAPIFixture:
             s.listen(1)
             port = s.getsockname()[1]
         return port
+    
+    def _discover_dynamic_port(self) -> Optional[int]:
+        """Discover dynamically assigned port from saved port mappings or Docker."""
+        # First try to read from saved ports file
+        ports_file = Path(os.path.dirname(__file__)).parent.parent.parent / '.kato-ports.json'
+        if ports_file.exists():
+            try:
+                with open(ports_file, 'r') as f:
+                    port_data = json.load(f)
+                # Try to use testing service first, then primary
+                for service_name in ['testing', 'primary']:
+                    if service_name in port_data.get('services', {}):
+                        port = port_data['services'][service_name].get('port')
+                        if port:
+                            # Verify the service is actually running
+                            try:
+                                response = requests.get(f"http://localhost:{port}/health", timeout=1)
+                                if response.status_code == 200:
+                                    return port
+                            except:
+                                continue
+            except (json.JSONDecodeError, KeyError):
+                pass
+        
+        # Try to discover using docker port command
+        if HAS_DOCKER_PACKAGE:
+            for container_name in ['kato-testing-v2', 'kato-primary-v2']:
+                try:
+                    result = subprocess.run(
+                        ['docker', 'port', container_name, '8000'],
+                        capture_output=True,
+                        text=True,
+                        timeout=2
+                    )
+                    if result.returncode == 0 and result.stdout:
+                        # Parse output like "0.0.0.0:32768"
+                        port_str = result.stdout.strip().split(':')[-1]
+                        port = int(port_str)
+                        # Verify the service is running
+                        response = requests.get(f"http://localhost:{port}/health", timeout=1)
+                        if response.status_code == 200:
+                            return port
+                except (subprocess.TimeoutExpired, ValueError, requests.exceptions.RequestException):
+                    continue
+        
+        return None
     
     
     
@@ -149,24 +196,33 @@ class KATOFastAPIFixture:
                 
         if not self.use_docker:
             # Use existing KATO service (for local development)
-            # Try FastAPI ports first
-            for port in [8001, 8002, 8003, 8000]:
-                self.base_url = f"http://localhost:{port}"
-                try:
-                    # Check if v2 service is running (v2 uses /health not /v2/health)
-                    response = requests.get(f"{self.base_url}/health", timeout=2)
-                    if response.status_code == 200:
-                        # Verify it's a v2 service by checking for v2-specific fields
-                        health_data = response.json()
-                        if "base_processor_id" in health_data or "active_sessions" in health_data:
-                            self.services_available = True
-                            self.port = port
-                            print(f"Using existing KATO v2 service at {self.base_url}")
-                            # Create a persistent session for this test
-                            self._ensure_session()
-                            break
-                except requests.exceptions.RequestException:
-                    continue
+            # First try to discover dynamic ports
+            discovered_port = self._discover_dynamic_port()
+            if discovered_port:
+                self.port = discovered_port
+                self.base_url = f"http://localhost:{self.port}"
+                self.services_available = True
+                print(f"Using dynamically discovered KATO v2 service at {self.base_url}")
+                self._ensure_session()
+            else:
+                # Fall back to trying fixed ports
+                for port in [8001, 8002, 8003, 8000]:
+                    self.base_url = f"http://localhost:{port}"
+                    try:
+                        # Check if v2 service is running (v2 uses /health not /v2/health)
+                        response = requests.get(f"{self.base_url}/health", timeout=2)
+                        if response.status_code == 200:
+                            # Verify it's a v2 service by checking for v2-specific fields
+                            health_data = response.json()
+                            if "base_processor_id" in health_data or "active_sessions" in health_data:
+                                self.services_available = True
+                                self.port = port
+                                print(f"Using existing KATO v2 service at {self.base_url}")
+                                # Create a persistent session for this test
+                                self._ensure_session()
+                                break
+                    except requests.exceptions.RequestException:
+                        continue
             
             if not self.services_available:
                 print("\n" + "="*60)

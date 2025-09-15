@@ -28,7 +28,7 @@ from load_generator import (
 
 # Import test fixtures
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../tests/fixtures')))
-from kato_fixtures import KATOTestFixture
+from kato_fixtures import KATOFastAPIFixture as KATOTestFixture
 
 logging.basicConfig(
     level=logging.INFO,

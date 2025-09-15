@@ -108,13 +108,15 @@ echo "========================================="
 export PYTHONPATH="${PWD}:${PWD}/tests:$PYTHONPATH"
 
 # Run pytest with appropriate options
+# Note: We capture the exit code but don't let it stop the script due to set -e
 if [ -n "$VERBOSE" ]; then
-    python -m pytest "$TEST_PATH" $VERBOSE --tb=short --color=yes
+    python -m pytest "$TEST_PATH" $VERBOSE --tb=short --color=yes || TEST_RESULT=$?
 else
-    python -m pytest "$TEST_PATH" -v --tb=short --color=yes
+    python -m pytest "$TEST_PATH" -v --tb=short --color=yes || TEST_RESULT=$?
 fi
 
-TEST_RESULT=$?
+# Ensure TEST_RESULT is set (0 if tests passed)
+TEST_RESULT=${TEST_RESULT:-0}
 
 # Stop KATO if requested
 if [ "$STOP_KATO" = true ]; then

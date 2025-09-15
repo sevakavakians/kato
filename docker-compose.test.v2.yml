@@ -32,7 +32,7 @@ services:
             echo 'Replica set initialized successfully'
             break
           fi
-          echo 'Waiting for MongoDB to be ready... (attempt \$i/30)'
+          echo 'Waiting for MongoDB to be ready... (attempt $$i/30)'
           sleep 2
         done
       "
@@ -73,6 +73,7 @@ services:
       context: .
       dockerfile: Dockerfile.v2
     image: kato:v2
+    pull_policy: never  # Always use local image, never pull from registry
     container_name: kato-test-v2
     environment:
       - PROCESSOR_ID=test-v2

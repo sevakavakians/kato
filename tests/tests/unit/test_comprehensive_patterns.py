@@ -423,10 +423,10 @@ def test_extreme_length_sequence(kato_fixture):
     if pattern_name:
         assert len(pattern_name) > 0, "Pattern name should not be empty"
     
-    # Observe somewhere in the middle - use first 2 events for simpler matching
+    # Observe somewhere in the middle - use events from middle of sequence
     kato_fixture.clear_short_term_memory()
-    kato_fixture.observe({'strings': sort_event_strings(mega_sequence[0]), 'vectors': [], 'emotives': {}})
-    kato_fixture.observe({'strings': sort_event_strings(mega_sequence[1]), 'vectors': [], 'emotives': {}})
+    kato_fixture.observe({'strings': sort_event_strings(mega_sequence[20]), 'vectors': [], 'emotives': {}})
+    kato_fixture.observe({'strings': sort_event_strings(mega_sequence[21]), 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
     
     # For extremely long sequences, v2 might not generate predictions due to complexity

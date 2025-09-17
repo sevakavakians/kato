@@ -126,8 +126,13 @@ class ProcessorManager:
             # Move to end for LRU
             self.processors.move_to_end(processor_id)
             
+            # Apply dynamic configuration updates to cached processor
+            processor = processor_info['processor']
+            if user_config:
+                self._apply_config_to_processor(processor, user_config)
+            
             logger.debug(f"Returning cached processor for user {user_id}")
-            return processor_info['processor']
+            return processor
         
         # Need to create new processor
         if processor_id not in self.processor_locks:
@@ -195,6 +200,44 @@ class ProcessorManager:
                 self._cleanup_task = asyncio.create_task(self._cleanup_loop())
             
             return processor
+    
+    def _apply_config_to_processor(self, processor: 'KatoProcessor', user_config: UserConfiguration):
+        """
+        Apply dynamic configuration updates to an existing processor.
+        
+        Args:
+            processor: The KatoProcessor instance to update
+            user_config: User configuration with updates
+        """
+        # Update critical parameters that can be changed dynamically
+        if user_config.recall_threshold is not None:
+            # Update the pattern processor's recall threshold
+            if hasattr(processor, 'pattern_processor'):
+                processor.pattern_processor.recall_threshold = user_config.recall_threshold
+                # Also update the pattern searcher's threshold
+                if hasattr(processor.pattern_processor, 'patterns_searcher'):
+                    processor.pattern_processor.patterns_searcher.recall_threshold = user_config.recall_threshold
+                    logger.debug(f"Updated recall_threshold to {user_config.recall_threshold}")
+        
+        if user_config.max_pattern_length is not None:
+            if hasattr(processor, 'max_pattern_length'):
+                processor.max_pattern_length = user_config.max_pattern_length
+            if hasattr(processor, 'pattern_processor'):
+                processor.pattern_processor.max_pattern_length = user_config.max_pattern_length
+                logger.debug(f"Updated max_pattern_length to {user_config.max_pattern_length}")
+        
+        if user_config.persistence is not None:
+            if hasattr(processor, 'pattern_processor'):
+                processor.pattern_processor.persistence = user_config.persistence
+                logger.debug(f"Updated persistence to {user_config.persistence}")
+        
+        # Update other configurable parameters
+        if user_config.max_predictions is not None:
+            if hasattr(processor, 'pattern_processor'):
+                processor.pattern_processor.max_predictions = user_config.max_predictions
+                if hasattr(processor.pattern_processor, 'patterns_searcher'):
+                    processor.pattern_processor.patterns_searcher.max_predictions = user_config.max_predictions
+                logger.debug(f"Updated max_predictions to {user_config.max_predictions}")
     
     def _evict_oldest(self):
         """Evict the least recently used processor."""

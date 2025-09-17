@@ -249,6 +249,9 @@ class KATOFastAPIFixture:
                 session_resp.raise_for_status()
                 self.session_id = session_resp.json()["session_id"]
                 self.session_created = True
+                
+                # Clear the STM immediately after creating session to ensure clean state
+                requests.post(f"{self.base_url}/v2/sessions/{self.session_id}/clear-stm")
             except Exception as e:
                 print(f"Warning: Could not create v2 session: {e}")
                 self.session_created = False
@@ -406,6 +409,8 @@ class KATOFastAPIFixture:
         # Delete the current session and create a new one to clear all memory including patterns
         if self.session_created and self.session_id:
             try:
+                # First clear the STM for this session
+                requests.post(f"{self.base_url}/v2/sessions/{self.session_id}/clear-stm")
                 # Delete the session (this clears all data for this user)
                 requests.delete(f"{self.base_url}/v2/sessions/{self.session_id}")
             except:
@@ -415,9 +420,11 @@ class KATOFastAPIFixture:
             self.session_id = None
             self.session_created = False
         
-        # Create a fresh session with a new user_id to ensure complete isolation
-        # This gives us a completely clean slate with no learned patterns
-        self.processor_id = self._generate_processor_id()  # Generate new ID for complete reset
+        # Generate a NEW processor_id to ensure complete isolation
+        # This prevents session reuse even within the same test
+        self.processor_id = self._generate_processor_id()
+        
+        # Create a fresh session with the new user_id
         self._ensure_session()
         
         if reset_genes:
@@ -427,25 +434,42 @@ class KATOFastAPIFixture:
     def update_genes(self, genes: Dict[str, Any]) -> str:
         """Update gene values via V2 API.
         
-        V2 supports dynamic configuration updates through the /genes/update endpoint.
+        V2 supports dynamic configuration updates through the session's user_config.
         """
         if not self.services_available:
             pytest.skip("KATO services not available")
         
-        # V2 supports dynamic gene updates via API
+        # Ensure we have a session
+        self._ensure_session()
+        
+        if not self.session_id:
+            pytest.skip("Could not create v2 session")
+        
+        # V2 uses session-based configuration updates
+        # Update the session's user configuration
         response = requests.post(
-            f"{self.base_url}/genes/update",
-            json={"genes": genes},
+            f"{self.base_url}/v2/sessions/{self.session_id}/config",
+            json={"config": genes},
             timeout=5
         )
         
         if response.status_code == 200:
             result = response.json()
             return result.get('message', 'genes-updated')
-        else:
-            # Log the error but don't fail - some tests may expect this
-            print(f"Warning: Failed to update genes: {response.status_code} - {response.text}")
-            return 'genes-update-failed'
+        elif response.status_code == 404:
+            # Session config endpoint might not exist, try the global genes endpoint as fallback
+            response = requests.post(
+                f"{self.base_url}/genes/update",
+                json={"genes": genes},
+                timeout=5
+            )
+            if response.status_code == 200:
+                result = response.json()
+                return result.get('message', 'genes-updated')
+        
+        # Log the error but don't fail - some tests may expect this
+        print(f"Warning: Failed to update genes: {response.status_code} - {response.text if hasattr(response, 'text') else ''}")
+        return 'genes-update-failed'
     
     def reset_genes_to_defaults(self) -> str:
         """Reset genes to default values."""

@@ -315,6 +315,26 @@ async def delete_session(session_id: str):
     return {"status": "deleted", "session_id": session_id}
 
 
+@app.post("/v2/sessions/{session_id}/config")
+async def update_session_config(session_id: str, config: Dict[str, Any]):
+    """Update session configuration (genes/parameters)"""
+    session = await app_state.session_manager.get_session(session_id)
+    
+    if not session:
+        raise HTTPException(404, detail=f"Session {session_id} not found")
+    
+    # Update the session's user config
+    if 'config' in config:
+        session.user_config.update(config['config'])
+    else:
+        session.user_config.update(config)
+    
+    # Save the updated session
+    await app_state.session_manager.update_session(session)
+    
+    return {"status": "okay", "message": "Configuration updated", "session_id": session_id}
+
+
 @app.post("/v2/sessions/{session_id}/extend")
 async def extend_session(session_id: str, ttl_seconds: int = 3600):
     """Extend session expiration"""
@@ -702,6 +722,17 @@ async def get_specific_metric_history(metric_name: str, minutes: int = 10):
 
 def get_user_id_from_request(request: Request) -> str:
     """Generate a user ID from request for automatic session management."""
+    # Check for test isolation header first
+    test_id = request.headers.get("x-test-id")
+    if test_id:
+        return f"test_{test_id}"
+    
+    # Check for explicit user ID header
+    user_id_header = request.headers.get("x-user-id")
+    if user_id_header:
+        return user_id_header
+    
+    # Fall back to IP + user agent based ID
     client_ip = request.client.host if request.client else "unknown"
     user_agent = request.headers.get("user-agent", "unknown")[:50]  # Limit length
     

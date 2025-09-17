@@ -113,10 +113,17 @@ class RedisSessionStore:
         if self.serialization == "json":
             # JSON serialization (human readable but limited types)
             data = asdict(session)
-            # Convert datetime objects to ISO strings
-            data['created_at'] = session.created_at.isoformat()
-            data['last_accessed'] = session.last_accessed.isoformat()
-            data['expires_at'] = session.expires_at.isoformat()
+            # Convert datetime objects to ISO strings BEFORE JSON serialization
+            for field in ['created_at', 'last_accessed', 'expires_at']:
+                if field in data and hasattr(data[field], 'isoformat'):
+                    data[field] = data[field].isoformat()
+            
+            # Also handle datetime in nested user_config
+            if 'user_config' in data and isinstance(data['user_config'], dict):
+                for field in ['created_at', 'updated_at']:
+                    if field in data['user_config'] and hasattr(data['user_config'][field], 'isoformat'):
+                        data['user_config'][field] = data['user_config'][field].isoformat()
+            
             return json.dumps(data).encode('utf-8')
         else:
             # Pickle serialization (full Python object support)
@@ -131,6 +138,13 @@ class RedisSessionStore:
             data_dict['created_at'] = datetime.fromisoformat(data_dict['created_at'])
             data_dict['last_accessed'] = datetime.fromisoformat(data_dict['last_accessed'])
             data_dict['expires_at'] = datetime.fromisoformat(data_dict['expires_at'])
+            
+            # Also handle datetime in nested user_config
+            if 'user_config' in data_dict and isinstance(data_dict['user_config'], dict):
+                for field in ['created_at', 'updated_at']:
+                    if field in data_dict['user_config'] and isinstance(data_dict['user_config'][field], str):
+                        data_dict['user_config'][field] = datetime.fromisoformat(data_dict['user_config'][field])
+            
             # Reconstruct SessionState
             return SessionState(**data_dict)
         else:

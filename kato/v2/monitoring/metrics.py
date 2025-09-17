@@ -388,6 +388,80 @@ class MetricsCollector:
                 logger.error(f"Error in collection loop: {e}")
                 await asyncio.sleep(self._collection_interval)
     
+    def get_summary_metrics(self) -> Dict[str, Any]:
+        """Get comprehensive summary of all metrics"""
+        current_time = time.time()
+        
+        # Get all current metrics
+        all_metrics = self.get_all_metrics()
+        
+        # Organize into categories
+        summary = {
+            "timestamp": current_time,
+            "sessions": {
+                "total_created": all_metrics.get("sessions_created", {}).get("current", 0),
+                "total_deleted": all_metrics.get("sessions_deleted", {}).get("current", 0),
+                "active": all_metrics.get("sessions_active", {}).get("current", 0),
+                "operations_total": all_metrics.get("session_operations", {}).get("current", 0)
+            },
+            "performance": {
+                "total_requests": all_metrics.get("requests_total", {}).get("current", 0),
+                "total_errors": all_metrics.get("errors_total", {}).get("current", 0),
+                "error_rate": (all_metrics.get("errors_total", {}).get("current", 0) / 
+                              max(1, all_metrics.get("requests_total", {}).get("current", 0))),
+                "average_response_time": all_metrics.get("response_time", {}).get("average_1m", 0)
+            },
+            "resources": {
+                "cpu_percent": all_metrics.get("cpu_percent", {}).get("current", 0),
+                "memory_percent": all_metrics.get("memory_percent", {}).get("current", 0),
+                "disk_percent": all_metrics.get("disk_percent", {}).get("current", 0)
+            },
+            "databases": {
+                "mongodb": {
+                    "operations": all_metrics.get("mongodb_operations", {}).get("current", 0),
+                    "errors": all_metrics.get("mongodb_errors", {}).get("current", 0),
+                    "avg_response_time": all_metrics.get("mongodb_response_time", {}).get("average_1m", 0)
+                },
+                "qdrant": {
+                    "operations": all_metrics.get("qdrant_operations", {}).get("current", 0),
+                    "errors": all_metrics.get("qdrant_errors", {}).get("current", 0),
+                    "avg_response_time": all_metrics.get("qdrant_response_time", {}).get("average_1m", 0)
+                },
+                "redis": {
+                    "operations": all_metrics.get("redis_operations", {}).get("current", 0),
+                    "errors": all_metrics.get("redis_errors", {}).get("current", 0),
+                    "avg_response_time": all_metrics.get("redis_response_time", {}).get("average_1m", 0)
+                }
+            }
+        }
+        
+        return summary
+    
+    def calculate_rates(self) -> Dict[str, float]:
+        """Calculate rate metrics over different time windows"""
+        rates = {}
+        
+        # Request rates
+        if "requests_total" in self.metrics:
+            rates["requests_per_second"] = self.metrics["requests_total"].get_rate(60)
+            rates["requests_per_minute"] = self.metrics["requests_total"].get_rate(60) * 60
+        
+        # Error rates
+        if "errors_total" in self.metrics:
+            rates["errors_per_minute"] = self.metrics["errors_total"].get_rate(60) * 60
+        
+        # Session rates
+        if "sessions_created" in self.metrics:
+            rates["sessions_per_minute"] = self.metrics["sessions_created"].get_rate(60) * 60
+        
+        # Database operation rates
+        for db in ["mongodb", "qdrant", "redis"]:
+            metric_name = f"{db}_operations"
+            if metric_name in self.metrics:
+                rates[f"{db}_ops_per_second"] = self.metrics[metric_name].get_rate(60)
+        
+        return rates
+    
     def get_health_status(self) -> Dict[str, Any]:
         """
         Get system health status based on metrics.

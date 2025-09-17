@@ -9,6 +9,9 @@ import pytest
 import pytest_asyncio
 import uuid
 import time
+import json
+import os
+from pathlib import Path
 from typing import Dict, Any, Optional, List
 
 
@@ -148,12 +151,38 @@ class SessionNotFoundError(Exception):
     pass
 
 
+def _get_dynamic_port():
+    """Get dynamic port from .kato-ports.json file"""
+    ports_file = Path(__file__).parent.parent.parent.parent / '.kato-ports.json'
+    if ports_file.exists():
+        try:
+            with open(ports_file, 'r') as f:
+                port_data = json.load(f)
+            # Try to use testing service first, then primary
+            for service_name in ['testing', 'primary']:
+                if service_name in port_data.get('services', {}):
+                    port = port_data['services'][service_name].get('port')
+                    if port:
+                        return port
+        except (json.JSONDecodeError, KeyError):
+            pass
+    return None
+
+
 @pytest_asyncio.fixture
 async def kato_v2_client():
     """Fixture providing KATO v2 client for testing"""
-    # Try different service ports
+    # First try dynamic port from .kato-ports.json
     client = None
-    for port in [8001, 8002, 8003]:
+    dynamic_port = _get_dynamic_port()
+    
+    ports_to_try = []
+    if dynamic_port:
+        ports_to_try.append(dynamic_port)
+    # Then try standard ports
+    ports_to_try.extend([8001, 8002, 8003])
+    
+    for port in ports_to_try:
         base_url = f"http://localhost:{port}"
         test_client = KatoV2Client(base_url)
         await test_client.__aenter__()
@@ -167,7 +196,7 @@ async def kato_v2_client():
     
     if client is None:
         # If no service found, skip test
-        pytest.skip("No KATO v2.0 services available. Start with: ./start_v2.sh")
+        pytest.skip("No KATO v2.0 services available. Start with: ./kato-manager.sh start")
     
     try:
         yield client

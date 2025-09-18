@@ -20,6 +20,12 @@ RUN pip install --no-cache-dir \
     python-multipart==0.0.6 \
     websockets==12.0
 
+# Install additional dependencies
+RUN pip install --no-cache-dir \
+    aioredis==2.0.1 \
+    pymongo==4.5.0 \
+    psutil==5.9.6
+
 # Copy the KATO package
 COPY kato/ ./kato/
 

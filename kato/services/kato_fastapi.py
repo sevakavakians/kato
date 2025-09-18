@@ -1,304 +1,150 @@
-#!/usr/bin/env python3
 """
-KATO FastAPI Service
-Direct FastAPI implementation embedding a single KatoProcessor instance.
-Provides simplified direct access to KATO functionality.
+KATO FastAPI Service with Session Management
+
+This service provides multi-user support with complete session isolation.
+Each user maintains their own STM without any data collision.
+
+Critical improvements:
+- Session-based isolation (no more shared STM)
+- Database connection pooling
+- Write concern = majority (no more data loss)
+- Circuit breakers for fault tolerance
+- Structured error handling
 """
 
 import asyncio
-import json
 import logging
-import os
-import sys
 import time
 import uuid
-from contextlib import asynccontextmanager
 from typing import Dict, List, Optional, Any
+from datetime import datetime
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request, Depends
+from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-# Add parent directories to path for imports
+# Import v2 components
+import sys
+import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
-from kato.workers.kato_processor import KatoProcessor
-from kato.config.logging_config import (
-    configure_logging, get_logger, set_trace_id, get_trace_id,
-    start_request_timer, get_request_duration, PerformanceTimer
+from kato.sessions.session_manager import get_session_manager, SessionState
+from kato.sessions.redis_session_manager import get_redis_session_manager
+from kato.sessions.session_middleware_simple import (
+    SessionMiddleware, get_session, get_session_id, 
+    get_optional_session, mark_session_modified
 )
-from kato.exceptions import (
-    KatoBaseException, ObservationError, PredictionError, 
-    LearningError, ValidationError, ConfigurationError,
-    DatabaseConnectionError, ResourceNotFoundError
-)
-from kato.config.settings import Settings
-from kato.config.api import APIServiceConfig
-from kato.v2.monitoring.metrics import get_metrics_collector, MetricsCollector
-from kato.v2.errors.handlers import setup_error_handlers
+from kato.processors.processor_manager import ProcessorManager
 
-# Logger will be configured after settings are loaded
+from kato.workers.kato_processor import KatoProcessor
+from kato.config.settings import get_settings
+from kato.monitoring.metrics import get_metrics_collector, MetricsCollector
+from kato.errors.handlers import setup_error_handlers
+
 logger = logging.getLogger('kato.fastapi')
 
-# Global processor lock (processor will be stored in app.state)
-processor_lock = asyncio.Lock()
-startup_time = time.time()
+# ============================================================================
+# Pydantic Models for v2 API
+# ============================================================================
+
+class CreateSessionRequest(BaseModel):
+    """Request to create a new session"""
+    user_id: str = Field(..., description="User identifier (required for processor isolation)")
+    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Session metadata")
+    ttl_seconds: Optional[int] = Field(3600, description="Session TTL in seconds")
 
 
-# Pydantic Models for Request/Response validation
+class SessionResponse(BaseModel):
+    """Session creation/info response"""
+    session_id: str = Field(..., description="Unique session identifier")
+    user_id: str = Field(..., description="Associated user ID")
+    created_at: datetime = Field(..., description="Session creation time")
+    expires_at: datetime = Field(..., description="Session expiration time")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Session metadata")
+
+
 class ObservationData(BaseModel):
     """Input data for observations"""
     strings: List[str] = Field(default_factory=list, description="String symbols to observe")
     vectors: List[List[float]] = Field(default_factory=list, description="Vector embeddings")
     emotives: Dict[str, float] = Field(default_factory=dict, description="Emotional values")
-    unique_id: Optional[str] = Field(None, description="Optional unique identifier")
 
 
 class ObservationResult(BaseModel):
     """Result of an observation"""
     status: str = Field(..., description="Status of the operation")
-    processor_id: str = Field(..., description="ID of the processor")
-    auto_learned_pattern: Optional[str] = Field(None, description="Pattern learned if auto-learning triggered")
-    time: int = Field(..., description="Processor time counter")
-    unique_id: str = Field(..., description="Unique ID of the observation")
+    session_id: Optional[str] = Field(None, description="Session ID")
+    processor_id: Optional[str] = Field(None, description="Processor ID for v1 compatibility")
+    stm_length: Optional[int] = Field(None, description="Current STM length")
+    time: int = Field(..., description="Session time counter")
+    unique_id: Optional[str] = Field(None, description="Unique observation ID")
+    auto_learned_pattern: Optional[str] = Field(None, description="Auto-learned pattern name if any")
 
 
 class STMResponse(BaseModel):
     """Short-term memory response"""
-    stm: List[List[str]] = Field(..., description="Current short-term memory state")
-    processor_id: str = Field(..., description="ID of the processor")
+    stm: List[List[str]] = Field(..., description="Current STM state")
+    session_id: Optional[str] = Field(None, description="Session ID")
+    length: Optional[int] = Field(None, description="Number of events in STM")
 
 
 class LearnResult(BaseModel):
     """Result of learning operation"""
     pattern_name: str = Field(..., description="Name of the learned pattern")
-    processor_id: str = Field(..., description="ID of the processor")
-    message: str = Field(..., description="Human-readable message")
+    session_id: Optional[str] = Field(None, description="Session ID")
+    processor_id: Optional[str] = Field(None, description="Processor ID for v1 compatibility")
+    message: Optional[str] = Field(None, description="Human-readable message")
+    status: Optional[str] = Field('learned', description="Operation status")
 
 
 class PredictionsResponse(BaseModel):
     """Predictions response"""
     predictions: List[Dict] = Field(default_factory=list, description="List of predictions")
-    processor_id: str = Field(..., description="ID of the processor")
+    session_id: Optional[str] = Field(None, description="Session ID")
+    processor_id: Optional[str] = Field(None, description="Processor ID for v1 compatibility")
+    count: int = Field(..., description="Number of predictions")
+    time: Optional[int] = Field(None, description="Time counter")
+    unique_id: Optional[str] = Field(None, description="Unique ID if provided")
 
 
-class StatusResponse(BaseModel):
-    """Generic status response"""
-    status: str = Field(..., description="Status of the operation")
-    message: str = Field(..., description="Human-readable message")
-    processor_id: str = Field(..., description="ID of the processor")
+# ============================================================================
+# FastAPI Application Setup
+# ============================================================================
 
-
-class ProcessorStatus(BaseModel):
-    """Processor status information"""
-    status: str = Field(..., description="Health status")
-    processor_id: str = Field(..., description="ID of the processor")
-    processor_name: str = Field(..., description="Name of the processor")
-    uptime: float = Field(..., description="Uptime in seconds")
-    stm_length: int = Field(..., description="Current STM length")
-    time: int = Field(..., description="Processor time counter")
-
-
-class GeneUpdate(BaseModel):
-    """Gene update request"""
-    gene_name: str = Field(..., description="Name of the gene to update")
-    gene_value: Any = Field(..., description="New value for the gene")
-
-
-class ObservationSequence(BaseModel):
-    """Batch of observations to process sequentially"""
-    observations: List[ObservationData] = Field(..., description="List of observations to process in sequence")
-    learn_after_each: bool = Field(False, description="Learn pattern after each observation")
-    learn_at_end: bool = Field(False, description="Learn pattern after all observations")
-    clear_stm_between: bool = Field(False, description="Clear STM between observations")
-
-
-class ObservationSequenceResult(BaseModel):
-    """Result of batch observation processing"""
-    status: str = Field(..., description="Overall status of the operation")
-    processor_id: str = Field(..., description="ID of the processor")
-    observations_processed: int = Field(..., description="Number of observations processed")
-    patterns_learned: List[str] = Field(default_factory=list, description="Patterns learned during processing")
-    individual_results: List[ObservationResult] = Field(default_factory=list, description="Results for each observation")
-    final_predictions: Optional[List[Dict]] = Field(None, description="Predictions after all observations")
-
-
-class GeneUpdates(BaseModel):
-    """Multiple gene updates"""
-    genes: Dict[str, Any] = Field(..., description="Dictionary of gene names and values")
-
-
-class PatternResponse(BaseModel):
-    """Pattern data response"""
-    pattern: Dict = Field(..., description="Pattern data")
-    processor_id: str = Field(..., description="ID of the processor")
-
-
-class ErrorResponse(BaseModel):
-    """Error response format"""
-    error: Dict[str, Any] = Field(..., description="Error details")
-    status: int = Field(..., description="HTTP status code")
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Manage processor lifecycle and configuration"""
-    # Create fresh settings and API config at startup
-    settings = Settings()  # Fresh instance reads current environment variables
-    api_config = APIServiceConfig()
-    
-    # Configure structured logging with settings
-    configure_logging(
-        level=settings.logging.log_level,
-        format_type=settings.logging.log_format,
-        output=settings.logging.log_output
-    )
-    
-    # Configure logger
-    global logger
-    logger = get_logger('kato.fastapi', settings.processor.processor_id)
-    
-    # Store settings in app state for global access
-    app.state.settings = settings
-    app.state.api_config = api_config
-    
-    # Startup: Initialize processor
-    processor_id = settings.processor.processor_id
-    processor_name = settings.processor.processor_name
-    
-    # Build manifest from settings
-    manifest = {
-        'id': processor_id,
-        'name': processor_name,
-        'indexer_type': settings.processing.indexer_type,
-        'max_pattern_length': settings.learning.max_pattern_length,
-        'persistence': settings.learning.persistence,
-        'smoothness': settings.learning.smoothness,
-        'auto_act_method': settings.processing.auto_act_method,
-        'auto_act_threshold': settings.processing.auto_act_threshold,
-        'always_update_frequencies': settings.processing.always_update_frequencies,
-        'max_predictions': settings.processing.max_predictions,
-        'recall_threshold': settings.learning.recall_threshold,
-        'quiescence': settings.learning.quiescence,
-        'search_depth': settings.processing.search_depth,
-        'sort': settings.processing.sort_symbols,
-        'process_predictions': settings.processing.process_predictions
-    }
-    
-    logger.info(f"Initializing processor: {processor_id} ({processor_name})")
-    
-    try:
-        processor = KatoProcessor(manifest, settings=settings)
-        app.state.processor = processor  # Store processor in app state
-        
-        # Initialize v2 monitoring
-        metrics_collector = get_metrics_collector()
-        app.state.metrics_collector = metrics_collector
-        metrics_collector.start_collection()
-        
-        # Setup v2 error handlers
-        setup_error_handlers(app)
-        
-        logger.info(f"Processor {processor_id} initialized successfully with v2 monitoring")
-    except Exception as e:
-        logger.error(f"Failed to initialize processor: {e}")
-        raise
-    
-    yield
-    
-    # Shutdown: Cleanup
-    logger.info(f"Shutting down processor: {processor_id}")
-    
-    # Stop metrics collection
-    if hasattr(app.state, 'metrics_collector'):
-        await app.state.metrics_collector.stop_collection()
-        del app.state.metrics_collector
-    
-    # Clean up app state
-    if hasattr(app.state, 'processor'):
-        del app.state.processor
-    if hasattr(app.state, 'settings'):
-        del app.state.settings
-    if hasattr(app.state, 'api_config'):
-        del app.state.api_config
-
-
-# Create FastAPI app with lifespan management
 app = FastAPI(
     title="KATO API",
-    description="Knowledge Abstraction for Traceable Outcomes - FastAPI Service",
-    version="1.0.0",
-    lifespan=lifespan
+    description="Knowledge Abstraction for Traceable Outcomes with Multi-User Support",
+    version="1.0.0"
 )
 
-# Configure CORS with default settings (will use environment variables)
-# The actual configuration values come from docker-compose environment
+# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Will be restricted in production via env vars
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Add session middleware
+app.add_middleware(SessionMiddleware, auto_create=False)
 
-# Dependency injection helpers
-from fastapi import Depends
-
-async def get_processor(request: Request) -> KatoProcessor:
-    """Dependency to get the processor from app state."""
-    return request.app.state.processor
-
-async def get_settings(request: Request) -> Settings:
-    """Dependency to get settings from app state."""
-    return request.app.state.settings
-
-async def get_api_config(request: Request) -> APIServiceConfig:
-    """Dependency to get API config from app state."""
-    return request.app.state.api_config
-
-async def get_metrics_collector_from_app(request: Request) -> MetricsCollector:
-    """Dependency to get metrics collector from app state."""
-    return request.app.state.metrics_collector
-
-# Add request/response logging middleware
+# Add metrics collection middleware
 @app.middleware("http")
-async def log_requests(request: Request, call_next):
-    """
-    Middleware to log all requests and responses with trace IDs.
-    """
-    # Generate or extract trace ID
-    trace_id = request.headers.get('X-Trace-ID') or set_trace_id()
-    
-    # Start request timer
-    start_request_timer()
+async def metrics_middleware(request: Request, call_next):
+    """Middleware to collect request metrics"""
     start_time = time.time()
-    
-    # Log request
-    logger.info(
-        f"Request started: {request.method} {request.url.path}",
-        extra={'extra_fields': {
-            'method': request.method,
-            'path': request.url.path,
-            'client': request.client.host if request.client else None,
-            'trace_id': trace_id
-        }}
-    )
     
     try:
         # Process request
         response = await call_next(request)
         
-        # Calculate duration
-        duration_ms = (time.time() - start_time) * 1000
-        duration_seconds = duration_ms / 1000.0
-        
         # Record metrics if collector is available
-        if hasattr(request.app.state, 'metrics_collector'):
+        if hasattr(app_state, 'metrics_collector') and app_state.metrics_collector:
             try:
-                metrics_collector = request.app.state.metrics_collector
-                metrics_collector.record_request(
+                duration_seconds = time.time() - start_time
+                app_state.metrics_collector.record_request(
                     path=request.url.path,
                     method=request.method,
                     status_code=response.status_code,
@@ -306,736 +152,461 @@ async def log_requests(request: Request, call_next):
                 )
             except Exception as e:
                 # Don't let metrics recording break the request
-                logger.warning(f"Failed to record metrics: {e}")
-        
-        # Log response
-        logger.info(
-            f"Request completed: {request.method} {request.url.path} - {response.status_code} in {duration_ms:.2f}ms",
-            extra={'extra_fields': {
-                'method': request.method,
-                'path': request.url.path,
-                'status_code': response.status_code,
-                'duration_ms': round(duration_ms, 2),
-                'trace_id': trace_id
-            }}
-        )
-        
-        # Add trace ID to response headers
-        response.headers['X-Trace-ID'] = trace_id
+                logger.warning(f"Failed to record request metrics: {e}")
         
         return response
         
     except Exception as e:
-        # Calculate duration even for errors
-        duration_ms = (time.time() - start_time) * 1000
-        duration_seconds = duration_ms / 1000.0
-        
         # Record error metrics if collector is available
-        if hasattr(request.app.state, 'metrics_collector'):
+        if hasattr(app_state, 'metrics_collector') and app_state.metrics_collector:
             try:
-                metrics_collector = request.app.state.metrics_collector
-                metrics_collector.record_request(
-                    path=request.url.path,
+                duration_seconds = time.time() - start_time
+                app_state.metrics_collector.record_request(
+                    endpoint=request.url.path,
                     method=request.method,
                     status_code=500,  # Default error status
-                    duration=duration_seconds
+                    duration=duration_seconds,
+                    error=str(e)
                 )
             except Exception as metrics_error:
                 # Don't let metrics recording break the request
                 logger.warning(f"Failed to record error metrics: {metrics_error}")
         
-        # Log error
-        logger.error(
-            f"Request failed: {request.method} {request.url.path} - {str(e)} after {duration_ms:.2f}ms",
-            extra={'extra_fields': {
-                'method': request.method,
-                'path': request.url.path,
-                'error': str(e),
-                'duration_ms': round(duration_ms, 2),
-                'trace_id': trace_id
-            }}
-        )
-        
-        # Re-raise the exception
+        # Re-raise the original exception
         raise
 
+# ============================================================================
+# Application State Management
+# ============================================================================
 
-# Custom exception handler for KatoBaseException
-@app.exception_handler(KatoBaseException)
-async def kato_exception_handler(request: Request, exc: KatoBaseException):
-    """
-    Handle KATO-specific exceptions with proper logging and response formatting.
-    """
-    # Add trace ID if not present
-    if not exc.trace_id:
-        exc.trace_id = get_trace_id()
+class AppState:
+    """Application state container"""
+    def __init__(self):
+        self.processor_manager: Optional[ProcessorManager] = None
+        self.settings = get_settings()
+        self.startup_time = time.time()
+        self._session_manager = None
     
-    # Log the exception
-    logger.error(
-        f"KATO exception: {exc.error_code} - {exc.message}",
-        extra={'extra_fields': exc.to_dict()}
-    )
-    
-    # Return structured error response
-    return JSONResponse(
-        status_code=400,
-        content=exc.to_dict(),
-        headers={'X-Trace-ID': exc.trace_id} if exc.trace_id else {}
-    )
-
-
-# Health and Status Endpoints
-@app.get("/health")
-async def health_check(
-    processor: KatoProcessor = Depends(get_processor),
-    settings: Settings = Depends(get_settings)
-):
-    """Health check endpoint"""
-    return {
-        "status": "healthy",
-        "processor_id": processor.id if processor else None,
-        "uptime": time.time() - startup_time
-    }
-
-
-@app.get("/status", response_model=ProcessorStatus)
-async def get_status(
-    processor: KatoProcessor = Depends(get_processor),
-    settings: Settings = Depends(get_settings)
-):
-    """Get processor status"""
-    
-    async with processor_lock:
-        with PerformanceTimer(logger, 'get_status'):
-            stm_length = len(processor.get_stm())
-        
-    return ProcessorStatus(
-        status="okay",
-        processor_id=processor.id,
-        processor_name=processor.name,
-        uptime=time.time() - startup_time,
-        stm_length=stm_length,
-        time=processor.time
-    )
-
-
-# Core KATO Operations
-@app.post("/observe", response_model=ObservationResult)
-async def observe(
-    data: ObservationData,
-    processor: KatoProcessor = Depends(get_processor)
-):
-    """Process an observation"""
-    
-    # Generate unique ID if not provided
-    if not data.unique_id:
-        data.unique_id = f"obs-{uuid.uuid4().hex}-{int(time.time() * 1000000)}"
-    
-    # Validate vectors if provided
-    if data.vectors:
-        for i, vector in enumerate(data.vectors):
-            if not isinstance(vector, list) or not all(isinstance(v, (int, float)) for v in vector):
-                raise ValidationError(
-                    f"Invalid vector at index {i}: vectors must be lists of numbers",
-                    field_name=f"vectors[{i}]",
-                    field_value=str(vector)[:100],
-                    trace_id=get_trace_id()
-                )
-    
-    # Prepare observation data
-    observation = {
-        'strings': data.strings,
-        'vectors': data.vectors,
-        'emotives': data.emotives,
-        'unique_id': data.unique_id,
-        'source': 'fastapi'
-    }
-    
-    # Process observation with lock to ensure sequential processing
-    async with processor_lock:
-        try:
-            with PerformanceTimer(logger, 'observe', {'observation_id': data.unique_id}):
-                result = processor.observe(observation)
-            
-            return ObservationResult(
-                status="okay",
-                processor_id=processor.id,
-                auto_learned_pattern=result.get('auto_learned_pattern'),
-                time=processor.time,
-                unique_id=result.get('unique_id', data.unique_id)
-            )
-        except Exception as e:
-            # Wrap unknown exceptions in ObservationError
-            raise ObservationError(
-                f"Failed to process observation: {str(e)}",
-                observation_id=data.unique_id,
-                observation_data={'strings': data.strings[:5] if data.strings else []},  # Limited preview
-                trace_id=get_trace_id()
-            )
-
-
-@app.get("/stm", response_model=STMResponse)
-@app.get("/short-term-memory", response_model=STMResponse)
-async def get_stm(
-    processor: KatoProcessor = Depends(get_processor)
-):
-    """Get current short-term memory"""
-    async with processor_lock:
-        stm = processor.get_stm()
-    
-    return STMResponse(
-        stm=stm,
-        processor_id=processor.id
-    )
-
-
-@app.post("/observe-sequence", response_model=ObservationSequenceResult)
-async def observe_sequence(
-    data: ObservationSequence,
-    processor: KatoProcessor = Depends(get_processor)
-):
-    """
-    Process a sequence of observations in batch.
-    
-    This endpoint allows efficient processing of multiple observations in a single API call.
-    Each observation is processed independently with proper isolation.
-    
-    Options:
-    - learn_after_each: Learn pattern after each individual observation
-    - learn_at_end: Learn pattern once after processing all observations
-    - clear_stm_between: Clear STM between observations for complete isolation
-    """
-    
-    patterns_learned = []
-    individual_results = []
-    observations_processed = 0
-    
-    async with processor_lock:
-        try:
-            # Process each observation in sequence
-            for idx, obs_data in enumerate(data.observations):
-                # Clear STM between observations if requested
-                if idx > 0 and data.clear_stm_between:
-                    processor.clear_stm()
-                
-                # Generate unique ID if not provided
-                if not obs_data.unique_id:
-                    obs_data.unique_id = f"batch-obs-{idx}-{uuid.uuid4().hex}-{int(time.time() * 1000000)}"
-                
-                # Prepare observation data
-                observation = {
-                    'strings': obs_data.strings,
-                    'vectors': obs_data.vectors,
-                    'emotives': obs_data.emotives,
-                    'unique_id': obs_data.unique_id,
-                    'source': 'fastapi-batch'
-                }
-                
-                # Process observation
-                result = processor.observe(observation)
-                observations_processed += 1
-                
-                # Create individual result
-                individual_result = ObservationResult(
-                    status="okay",
-                    processor_id=processor.id,
-                    auto_learned_pattern=result.get('auto_learned_pattern'),
-                    time=processor.time,
-                    unique_id=result.get('unique_id', obs_data.unique_id)
-                )
-                individual_results.append(individual_result)
-                
-                # Learn after each observation if requested
-                # Note: Learning always clears STM
-                if data.learn_after_each:
-                    pattern_name = processor.learn()
-                    if pattern_name:
-                        patterns_learned.append(pattern_name)
-            
-            # Learn at end if requested
-            # Note: Learning always clears STM, regardless of the learning mode
-            if data.learn_at_end and not data.clear_stm_between:
-                pattern_name = processor.learn()
-                if pattern_name:
-                    patterns_learned.append(pattern_name)
-            
-            # Get final predictions if STM has content
-            final_predictions = None
-            if not data.clear_stm_between or not data.learn_after_each:
-                # predictions is an attribute, not a method
-                final_predictions = processor.predictions
-                # Rename 'name' to 'pattern_name' for consistency with API conventions
-                if final_predictions:
-                    for pred in final_predictions:
-                        if isinstance(pred, dict) and 'name' in pred:
-                            pred['pattern_name'] = pred.pop('name')
-            
-            return ObservationSequenceResult(
-                status="okay",
-                processor_id=processor.id,
-                observations_processed=observations_processed,
-                patterns_learned=patterns_learned,
-                individual_results=individual_results,
-                final_predictions=final_predictions
-            )
-            
-        except Exception as e:
-            logger.error(f"Error processing observation sequence: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/learn", response_model=LearnResult)
-async def learn(
-    processor: KatoProcessor = Depends(get_processor)
-):
-    """Learn from current STM"""
-    
-    async with processor_lock:
-        try:
-            pattern_name = processor.learn()
-            
-            if pattern_name:
-                message = f"Learned pattern: {pattern_name}"
+    @property
+    def session_manager(self):
+        """Get session manager singleton"""
+        if self._session_manager is None:
+            # Use Redis session manager if Redis is configured
+            redis_url = os.environ.get('REDIS_URL')
+            if redis_url:
+                logger.info(f"Using Redis session manager with URL: {redis_url}")
+                self._session_manager = get_redis_session_manager(redis_url=redis_url)
             else:
-                message = "Insufficient data for learning"
-            
-            return LearnResult(
-                pattern_name=pattern_name or "",
-                processor_id=processor.id,
-                message=message
-            )
-        except Exception as e:
-            logger.error(f"Error during learning: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
+                logger.info("Using in-memory session manager")
+                self._session_manager = get_session_manager()
+        return self._session_manager
 
 
-@app.post("/clear-stm", response_model=StatusResponse)
-@app.post("/clear-short-term-memory", response_model=StatusResponse)
-async def clear_stm(
-    processor: KatoProcessor = Depends(get_processor)
-):
-    """Clear short-term memory"""
+app_state = AppState()
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize application on startup"""
+    logger.info("Starting KATO FastAPI service...")
     
-    async with processor_lock:
-        processor.clear_stm()
+    # Initialize Redis session manager if using Redis
+    if hasattr(app_state.session_manager, 'initialize'):
+        await app_state.session_manager.initialize()
+        logger.info("Redis session manager initialized")
     
-    return StatusResponse(
-        status="okay",
-        message="stm-cleared",
-        processor_id=processor.id
+    # Initialize ProcessorManager for per-user isolation
+    settings = app_state.settings
+    base_processor_id = settings.processor.processor_id
+    app_state.processor_manager = ProcessorManager(
+        base_processor_id=base_processor_id,
+        max_processors=100,
+        eviction_ttl_seconds=3600
+    )
+    
+    # Initialize v2 monitoring
+    metrics_collector = get_metrics_collector()
+    app_state.metrics_collector = metrics_collector
+    await metrics_collector.start_collection()
+    
+    # Setup v2 error handlers
+    setup_error_handlers(app)
+    
+    logger.info(f"KATO service started with ProcessorManager (base: {base_processor_id}) and monitoring")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup on shutdown"""
+    logger.info("Shutting down KATO service...")
+    
+    # Stop metrics collection
+    if hasattr(app_state, 'metrics_collector'):
+        await app_state.metrics_collector.stop_collection()
+    
+    # Shutdown processor manager
+    if app_state.processor_manager:
+        await app_state.processor_manager.shutdown()
+    
+    await app_state.session_manager.shutdown()
+
+
+# ============================================================================
+# Session Management Endpoints
+# ============================================================================
+
+@app.get("/test/{test_id}")
+async def test_endpoint(test_id: str):
+    """Simple test endpoint to verify routing works"""
+    print(f"*** TEST ENDPOINT CALLED: {test_id}")
+    logger.error(f"*** TEST ENDPOINT CALLED: {test_id}")
+    return {"test_id": test_id, "message": "endpoint works"}
+
+@app.post("/sessions", response_model=SessionResponse)
+async def create_session(request: CreateSessionRequest):
+    """
+    Create a new isolated session for a user.
+    
+    This enables multiple users to use KATO simultaneously
+    without any data collision.
+    """
+    logger.info(f"Creating session with manager id: {id(app_state.session_manager)}")
+    session = await app_state.session_manager.get_or_create_session(
+        user_id=request.user_id,
+        metadata=request.metadata,
+        ttl_seconds=request.ttl_seconds
+    )
+    
+    return SessionResponse(
+        session_id=session.session_id,
+        user_id=session.user_id,
+        created_at=session.created_at,
+        expires_at=session.expires_at,
+        metadata=session.metadata
     )
 
 
-@app.post("/clear-all", response_model=StatusResponse)
-@app.post("/clear-all-memory", response_model=StatusResponse)
-async def clear_all_memory(
-    processor: KatoProcessor = Depends(get_processor)
-):
-    """Clear all memory"""
+@app.get("/sessions/{session_id}", response_model=SessionResponse)
+async def get_session_info(session_id: str):
+    """Get information about a session"""
+    logger.info(f"Getting session info for: {session_id}")
+    session = await app_state.session_manager.get_session(session_id)
     
-    async with processor_lock:
-        processor.clear_all_memory()
+    if not session:
+        raise HTTPException(404, detail=f"Session {session_id} not found or expired")
     
-    return StatusResponse(
-        status="okay",
-        message="all-cleared",
-        processor_id=processor.id
+    return SessionResponse(
+        session_id=session.session_id,
+        user_id=session.user_id,
+        created_at=session.created_at,
+        expires_at=session.expires_at,
+        metadata=session.metadata
     )
 
 
-@app.get("/predictions", response_model=PredictionsResponse)
-@app.post("/predictions", response_model=PredictionsResponse)
-async def get_predictions(
-    unique_id: Optional[str] = None,
-    processor: KatoProcessor = Depends(get_processor)
+@app.delete("/sessions/{session_id}")
+async def delete_session(session_id: str):
+    """Delete a session and cleanup resources"""
+    deleted = await app_state.session_manager.delete_session(session_id)
+    
+    if not deleted:
+        raise HTTPException(404, detail=f"Session {session_id} not found")
+    
+    return {"status": "deleted", "session_id": session_id}
+
+
+@app.post("/sessions/{session_id}/config")
+async def update_session_config(session_id: str, config: Dict[str, Any]):
+    """Update session configuration (genes/parameters)"""
+    session = await app_state.session_manager.get_session(session_id)
+    
+    if not session:
+        raise HTTPException(404, detail=f"Session {session_id} not found")
+    
+    # Update the session's user config
+    if 'config' in config:
+        session.user_config.update(config['config'])
+    else:
+        session.user_config.update(config)
+    
+    # Save the updated session
+    await app_state.session_manager.update_session(session)
+    
+    return {"status": "okay", "message": "Configuration updated", "session_id": session_id}
+
+
+@app.post("/sessions/{session_id}/extend")
+async def extend_session(session_id: str, ttl_seconds: int = 3600):
+    """Extend session expiration"""
+    extended = await app_state.session_manager.extend_session(session_id, ttl_seconds)
+    
+    if not extended:
+        raise HTTPException(404, detail=f"Session {session_id} not found")
+    
+    return {"status": "extended", "session_id": session_id, "ttl_seconds": ttl_seconds}
+
+
+# ============================================================================
+# Session-Scoped KATO Operations
+# ============================================================================
+
+@app.post("/sessions/{session_id}/observe", response_model=ObservationResult)
+async def observe_in_session(
+    session_id: str,
+    data: ObservationData,
+    request: Request
 ):
-    """Get predictions"""
+    """
+    Process an observation in a specific session context.
     
-    async with processor_lock:
-        if unique_id:
-            predictions = processor.get_predictions({'unique_id': unique_id})
-        else:
-            predictions = processor.get_predictions()
+    This is the core endpoint that enables multi-user support.
+    Each session maintains its own isolated STM.
+    """
+    # Get session
+    session = await app_state.session_manager.get_session(session_id)
+    if not session:
+        raise HTTPException(404, detail=f"Session {session_id} not found or expired")
     
-    # Add PTRN| prefix to pattern names for consistency
-    for pred in predictions:
-        if isinstance(pred, dict):
-            name = pred.get('name', '')
-            if name and not name.startswith('PTRN|'):
-                pred['name'] = f'PTRN|{name}'
+    # Get user's processor (isolated per user) with their configuration
+    processor = await app_state.processor_manager.get_processor(session.user_id, session.user_config)
+    
+    # Get session lock to ensure sequential processing within session
+    lock = await app_state.session_manager.get_session_lock(session_id)
+    
+    async with lock:
+        # Set processor state to session's state
+        processor.set_stm(session.stm)
+        processor.set_emotives_accumulator(session.emotives_accumulator)
+        processor.time = session.time
+        
+        # Process observation
+        observation = {
+            'strings': data.strings,
+            'vectors': data.vectors,
+            'emotives': data.emotives,
+            'unique_id': f"obs-{uuid.uuid4().hex}",
+            'source': 'session'
+        }
+        
+        result = processor.observe(observation)
+        
+        # Update session state with results
+        session.stm = processor.get_stm()
+        session.emotives_accumulator = processor.get_emotives_accumulator()
+        session.time = processor.time
+        
+        # Save updated session
+        await app_state.session_manager.update_session(session)
+    
+    return ObservationResult(
+        status="ok",
+        session_id=session_id,
+        processor_id=session.user_id,  # For v1 compatibility
+        stm_length=len(session.stm),
+        time=session.time,
+        unique_id=result.get('unique_id', ''),
+        auto_learned_pattern=result.get('auto_learned_pattern')
+    )
+
+
+@app.get("/sessions/{session_id}/stm", response_model=STMResponse)
+async def get_session_stm(session_id: str):
+    """Get the short-term memory for a specific session"""
+    print(f"*** ENDPOINT CALLED: Getting STM for session: {session_id}")
+    logger.error(f"*** ENDPOINT CALLED: Getting STM for session: {session_id}")
+    logger.info(f"Getting STM for session: {session_id}")
+    logger.info(f"Session manager type: {type(app_state.session_manager)}")
+    logger.info(f"Session manager id: {id(app_state.session_manager)}")
+    logger.info(f"Session manager connected: {getattr(app_state.session_manager, '_connected', 'N/A')}")
+    
+    session = await app_state.session_manager.get_session(session_id)
+    
+    if not session:
+        logger.error(f"Session {session_id} not found")
+        raise HTTPException(404, detail=f"Session {session_id} not found or expired")
+    
+    logger.info(f"Successfully retrieved session {session_id}")
+    return STMResponse(
+        stm=session.stm,
+        session_id=session_id,
+        length=len(session.stm)
+    )
+
+
+@app.post("/sessions/{session_id}/learn", response_model=LearnResult)
+async def learn_in_session(session_id: str):
+    """Learn a pattern from the session's current STM"""
+    session = await app_state.session_manager.get_session(session_id)
+    
+    if not session:
+        raise HTTPException(404, detail=f"Session {session_id} not found or expired")
+    
+    if not session.stm:
+        raise HTTPException(400, detail="Cannot learn from empty STM")
+    
+    # Get user's processor (isolated per user) with their configuration
+    processor = await app_state.processor_manager.get_processor(session.user_id, session.user_config)
+    
+    lock = await app_state.session_manager.get_session_lock(session_id)
+    
+    async with lock:
+        # Set processor state
+        processor.set_stm(session.stm)
+        processor.set_emotives_accumulator(session.emotives_accumulator)
+        
+        # Learn pattern
+        pattern_name = processor.learn()
+        
+        # Update session state
+        session.stm = processor.get_stm()
+        session.emotives_accumulator = processor.get_emotives_accumulator()
+        
+        await app_state.session_manager.update_session(session)
+    
+    return LearnResult(
+        pattern_name=pattern_name,
+        session_id=session_id,
+        message=f"Learned pattern {pattern_name} from {len(session.stm)} events"
+    )
+
+
+@app.post("/sessions/{session_id}/clear-stm")
+async def clear_session_stm(session_id: str):
+    """Clear the STM for a specific session"""
+    cleared = await app_state.session_manager.clear_session_stm(session_id)
+    
+    if not cleared:
+        raise HTTPException(404, detail=f"Session {session_id} not found")
+    
+    return {"status": "cleared", "session_id": session_id}
+
+
+@app.get("/sessions/{session_id}/predictions", response_model=PredictionsResponse)
+async def get_session_predictions(session_id: str):
+    """Get predictions based on the session's current STM"""
+    session = await app_state.session_manager.get_session(session_id)
+    
+    if not session:
+        raise HTTPException(404, detail=f"Session {session_id} not found or expired")
+    
+    # Get user's processor (isolated per user) with their configuration
+    processor = await app_state.processor_manager.get_processor(session.user_id, session.user_config)
+    
+    lock = await app_state.session_manager.get_session_lock(session_id)
+    
+    async with lock:
+        # Set processor state
+        processor.set_stm(session.stm)
+        
+        # Get predictions
+        predictions = processor.get_predictions()
     
     return PredictionsResponse(
         predictions=predictions,
-        processor_id=processor.id
+        session_id=session_id,
+        count=len(predictions)
     )
 
 
-# Advanced Operations
-@app.get("/pattern/{pattern_id}", response_model=PatternResponse)
-async def get_pattern(
-    pattern_id: str,
-    processor: KatoProcessor = Depends(get_processor)
-):
-    """Get pattern by ID"""
+# ============================================================================
+# System Status Endpoints
+# ============================================================================
+
+@app.get("/status")
+async def get_system_status():
+    """Get overall system status including session statistics"""
+    session_stats = app_state.session_manager.get_session_stats()
+    processor_stats = app_state.processor_manager.get_stats()
     
-    async with processor_lock:
-        result = processor.get_pattern(pattern_id)
-    
-    if result.get('status') == 'error':
-        raise HTTPException(status_code=404, detail=result.get('message'))
-    
-    return PatternResponse(
-        pattern=result.get('pattern', {}),
-        processor_id=processor.id
-    )
+    return {
+        "status": "healthy",
+        "base_processor_id": app_state.settings.processor.processor_id,
+        "uptime_seconds": time.time() - app_state.startup_time,
+        "sessions": session_stats,
+        "processors": processor_stats,
+        "version": "1.0.0"
+    }
 
 
-@app.post("/genes/update", response_model=StatusResponse)
-async def update_genes(
-    updates: GeneUpdates,
-    processor: KatoProcessor = Depends(get_processor)
-):
-    """Update multiple gene values"""
-    
-    async with processor_lock:
-        try:
-            for gene_name, gene_value in updates.genes.items():
-                # Try updating processor directly
-                if hasattr(processor, gene_name):
-                    setattr(processor, gene_name, gene_value)
-                # Also try pattern_processor
-                elif hasattr(processor.pattern_processor, gene_name):
-                    setattr(processor.pattern_processor, gene_name, gene_value)
-                    # Special handling for recall_threshold
-                    if gene_name == 'recall_threshold' and hasattr(processor.pattern_processor, 'patterns_searcher'):
-                        processor.pattern_processor.patterns_searcher.recall_threshold = gene_value
-                    # Special handling for max_pattern_length - update observation_processor's copy
-                    if gene_name == 'max_pattern_length' and hasattr(processor, 'observation_processor'):
-                        processor.observation_processor.max_pattern_length = gene_value
-                else:
-                    raise ValueError(f"Unknown gene: {gene_name}")
-                
-                # Update genome_manifest for consistency
-                if hasattr(processor, 'genome_manifest'):
-                    processor.genome_manifest[gene_name] = gene_value
+@app.get("/health")
+async def health_check():
+    """Enhanced health check endpoint for v2 with metrics integration"""
+    print("*** HEALTH CHECK ENDPOINT CALLED ***")
+    logger.error("*** HEALTH CHECK ENDPOINT CALLED ***")
+    try:
+        if hasattr(app_state, 'metrics_collector'):
+            health_status = app_state.metrics_collector.get_health_status()
+            processor_status = "healthy" if app_state.processor_manager else "unhealthy"
             
-            return StatusResponse(
-                status="okay",
-                message="genes-updated",
-                processor_id=processor.id
-            )
-        except Exception as e:
-            logger.error(f"Error updating genes: {e}")
-            raise HTTPException(status_code=400, detail=str(e))
-
-
-@app.get("/gene/{gene_name}")
-async def get_gene(
-    gene_name: str,
-    processor: KatoProcessor = Depends(get_processor)
-):
-    """Get gene value"""
-    
-    async with processor_lock:
-        # Check processor first
-        if hasattr(processor, gene_name):
-            value = getattr(processor, gene_name)
-        # Then check pattern_processor
-        elif hasattr(processor.pattern_processor, gene_name):
-            value = getattr(processor.pattern_processor, gene_name)
-        # Finally check genome_manifest
-        elif hasattr(processor, 'genome_manifest') and gene_name in processor.genome_manifest:
-            value = processor.genome_manifest[gene_name]
+            return {
+                "status": health_status["status"],
+                "processor_status": processor_status,
+                "base_processor_id": app_state.settings.processor.processor_id,
+                "uptime_seconds": time.time() - app_state.startup_time,
+                "issues": health_status.get("issues", []),
+                "metrics_collected": len(app_state.metrics_collector.metrics),
+                "last_collection": app_state.startup_time,
+                "active_sessions": app_state.session_manager.get_active_session_count(),
+                "timestamp": datetime.utcnow().isoformat()
+            }
         else:
-            raise HTTPException(status_code=404, detail=f"Gene {gene_name} not found")
-    
-    return {
-        "gene_name": gene_name,
-        "gene_value": value,
-        "processor_id": processor.id
-    }
-
-
-@app.get("/percept-data")
-async def get_percept_data(
-    processor: KatoProcessor = Depends(get_processor)
-):
-    """Get percept data"""
-    
-    async with processor_lock:
-        data = processor.get_percept_data()
-    
-    return {
-        "percept_data": data,
-        "processor_id": processor.id
-    }
-
-
-@app.get("/cognition-data")
-async def get_cognition_data(
-    processor: KatoProcessor = Depends(get_processor)
-):
-    """Get cognition data"""
-    
-    async with processor_lock:
-        data = processor.cognition_data
-    
-    return {
-        "cognition_data": data,
-        "processor_id": processor.id
-    }
-
-
-# WebSocket endpoint for real-time communication
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    """WebSocket for bidirectional real-time communication"""
-    # WebSockets can't use Depends the same way, get processor from app state
-    if not hasattr(app.state, 'processor'):
-        await websocket.close(code=1011, reason="Processor not initialized")
-        return
-    processor = app.state.processor
-    
-    await websocket.accept()
-    logger.info(f"WebSocket connected for processor {processor.id}")
-    
-    try:
-        while True:
-            # Receive message from client
-            data = await websocket.receive_json()
-            
-            message_type = data.get('type')
-            payload = data.get('payload', {})
-            
-            async with processor_lock:
-                try:
-                    if message_type == 'observe':
-                        # Process observation
-                        if 'unique_id' not in payload:
-                            payload['unique_id'] = f"ws-{uuid.uuid4().hex}-{int(time.time() * 1000000)}"
-                        payload['source'] = 'websocket'
-                        
-                        result = processor.observe(payload)
-                        await websocket.send_json({
-                            'type': 'observation_result',
-                            'data': {
-                                'status': 'okay',
-                                'processor_id': processor.id,
-                                'auto_learned_pattern': result.get('auto_learned_pattern'),
-                                'time': processor.time,
-                                'unique_id': result.get('unique_id')
-                            }
-                        })
-                    
-                    elif message_type == 'get_stm':
-                        stm = processor.get_stm()
-                        await websocket.send_json({
-                            'type': 'stm',
-                            'data': {
-                                'stm': stm,
-                                'processor_id': processor.id
-                            }
-                        })
-                    
-                    elif message_type == 'get_predictions':
-                        predictions = processor.get_predictions(payload)
-                        await websocket.send_json({
-                            'type': 'predictions',
-                            'data': {
-                                'predictions': predictions,
-                                'processor_id': processor.id
-                            }
-                        })
-                    
-                    elif message_type == 'learn':
-                        pattern_name = processor.learn()
-                        await websocket.send_json({
-                            'type': 'learn_result',
-                            'data': {
-                                'pattern_name': pattern_name or "",
-                                'processor_id': processor.id
-                            }
-                        })
-                    
-                    elif message_type == 'clear_stm':
-                        processor.clear_stm()
-                        await websocket.send_json({
-                            'type': 'status',
-                            'data': {
-                                'status': 'okay',
-                                'message': 'stm-cleared',
-                                'processor_id': processor.id
-                            }
-                        })
-                    
-                    elif message_type == 'clear_all':
-                        processor.clear_all_memory()
-                        await websocket.send_json({
-                            'type': 'status',
-                            'data': {
-                                'status': 'okay',
-                                'message': 'all-cleared',
-                                'processor_id': processor.id
-                            }
-                        })
-                    
-                    elif message_type == 'ping':
-                        await websocket.send_json({
-                            'type': 'pong',
-                            'data': {
-                                'processor_id': processor.id,
-                                'timestamp': time.time()
-                            }
-                        })
-                    
-                    else:
-                        await websocket.send_json({
-                            'type': 'error',
-                            'data': {
-                                'message': f'Unknown message type: {message_type}'
-                            }
-                        })
-                
-                except Exception as e:
-                    logger.error(f"Error processing WebSocket message: {e}")
-                    await websocket.send_json({
-                        'type': 'error',
-                        'data': {
-                            'message': str(e)
-                        }
-                    })
-    
-    except WebSocketDisconnect:
-        logger.info(f"WebSocket disconnected for processor {processor.id}")
-    except Exception as e:
-        logger.error(f"WebSocket error: {e}")
-        await websocket.close(code=1011, reason=str(e))
-
-
-# Error handling
-@app.exception_handler(HTTPException)
-async def http_exception_handler(request, exc):
-    """Handle HTTP exceptions with consistent format"""
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={
-            "error": {
-                "code": f"HTTP_{exc.status_code}",
-                "message": exc.detail,
-                "details": {}
-            },
-            "status": exc.status_code
-        }
-    )
-
-
-@app.exception_handler(Exception)
-async def general_exception_handler(request, exc):
-    """Handle unexpected exceptions"""
-    logger.error(f"Unexpected error: {exc}")
-    return JSONResponse(
-        status_code=500,
-        content={
-            "error": {
-                "code": "INTERNAL_ERROR",
-                "message": "An unexpected error occurred",
-                "details": {
-                    "error": str(exc)
-                }
-            },
-            "status": 500
-        }
-    )
-
-
-# Metrics endpoint
-@app.get("/metrics")
-async def get_metrics(
-    processor: KatoProcessor = Depends(get_processor)
-):
-    """Get processor metrics"""
-    async with processor_lock:
-        stm_length = len(processor.get_stm())
-        # Get pattern count from MongoDB
-        try:
-            pattern_count = processor.pattern_processor.superkb.patterns_kb.count_documents({})
-        except:
-            pattern_count = 0
-    
-    return {
-        "processor_id": processor.id,
-        "observations_processed": processor.time,
-        "patterns_learned": pattern_count,
-        "stm_size": stm_length,
-        "uptime_seconds": time.time() - startup_time
-    }
-
-
-# V2 Monitoring Endpoints
-@app.get("/v2/health")
-async def v2_health_check(
-    processor: KatoProcessor = Depends(get_processor),
-    metrics_collector: MetricsCollector = Depends(get_metrics_collector_from_app)
-):
-    """Enhanced health check for v2 with metrics integration"""
-    try:
-        health_status = metrics_collector.get_health_status()
-        processor_status = "healthy" if processor else "unhealthy"
-        
-        # Get metrics summary
-        all_metrics = metrics_collector.get_all_metrics()
-        metrics_collected = len(all_metrics)
-        
-        return {
-            "status": health_status["status"],
-            "processor_status": processor_status,
-            "processor_id": processor.id if processor else None,
-            "uptime_seconds": time.time() - startup_time,
-            "issues": health_status["issues"],
-            "metrics_collected": metrics_collected,
-            "last_collection": health_status["timestamp"] if "timestamp" in health_status else time.time()
-        }
+            # Fallback if metrics collector not available
+            return {
+                "status": "healthy",
+                "processor_status": "healthy" if app_state.processor_manager else "unhealthy", 
+                "base_processor_id": app_state.settings.processor.processor_id,
+                "uptime_seconds": time.time() - app_state.startup_time,
+                "issues": [],
+                "metrics_collected": 0,
+                "last_collection": app_state.startup_time,
+                "active_sessions": app_state.session_manager.get_active_session_count(),
+                "timestamp": datetime.utcnow().isoformat()
+            }
     except Exception as e:
         logger.error(f"Health check failed: {e}")
         return {
             "status": "unhealthy",
             "processor_status": "unknown",
-            "processor_id": processor.id if processor else None,
-            "uptime_seconds": time.time() - startup_time,
+            "base_processor_id": app_state.settings.processor.processor_id,
+            "uptime_seconds": time.time() - app_state.startup_time,
             "issues": [f"Health check error: {str(e)}"],
             "metrics_collected": 0,
-            "last_collection": time.time()
+            "last_collection": app_state.startup_time,
+            "active_sessions": 0,
+            "timestamp": datetime.utcnow().isoformat()
         }
 
 
-@app.get("/v2/metrics")
-async def v2_get_comprehensive_metrics(
-    processor: KatoProcessor = Depends(get_processor),
-    metrics_collector: MetricsCollector = Depends(get_metrics_collector_from_app)
-):
+# ============================================================================
+# Monitoring Endpoints
+# ============================================================================
+
+@app.get("/metrics")
+async def get_comprehensive_metrics():
     """Get comprehensive v2 metrics including system resources and performance"""
     try:
+        if not hasattr(app_state, 'metrics_collector'):
+            # Return basic metrics if collector not available
+            return {
+                "error": "Metrics collector not available",
+                "timestamp": time.time(),
+                "processor_manager": app_state.processor_manager.get_stats() if app_state.processor_manager else {},
+                "uptime_seconds": time.time() - app_state.startup_time,
+                "active_sessions": app_state.session_manager.get_active_session_count()
+            }
+        
         # Get comprehensive metrics from collector
-        summary_metrics = metrics_collector.get_summary_metrics()
-        rates = metrics_collector.calculate_rates()
+        summary_metrics = app_state.metrics_collector.get_summary_metrics()
+        rates = app_state.metrics_collector.calculate_rates()
         
-        # Enhance with processor-specific data
-        async with processor_lock:
-            stm_length = len(processor.get_stm())
-            try:
-                pattern_count = processor.pattern_processor.superkb.patterns_kb.count_documents({})
-            except:
-                pattern_count = 0
+        # Enhance with processor-specific and session data
+        session_count = app_state.session_manager.get_active_session_count()
         
-        # Merge processor data into summary
-        summary_metrics["processor"] = {
-            "processor_id": processor.id,
-            "processor_name": processor.name,
-            "observations_processed": processor.time,
-            "patterns_learned": pattern_count,
-            "stm_size": stm_length
-        }
+        # Merge processor manager data into summary
+        summary_metrics["processor_manager"] = app_state.processor_manager.get_stats() if app_state.processor_manager else {}
         
+        # Add session information
+        summary_metrics["sessions"]["active"] = session_count
         summary_metrics["rates"] = rates
         
         return summary_metrics
@@ -1045,21 +616,24 @@ async def v2_get_comprehensive_metrics(
         return {
             "error": f"Metrics collection failed: {str(e)}",
             "timestamp": time.time(),
-            "processor": {
-                "processor_id": processor.id if processor else None,
-                "uptime_seconds": time.time() - startup_time
-            }
+            "processor_manager": app_state.processor_manager.get_stats() if app_state.processor_manager else {},
+            "uptime_seconds": time.time() - app_state.startup_time,
+            "active_sessions": app_state.session_manager.get_active_session_count()
         }
 
 
-@app.get("/v2/stats")
-async def v2_get_stats(
-    minutes: int = 10,
-    processor: KatoProcessor = Depends(get_processor),
-    metrics_collector: MetricsCollector = Depends(get_metrics_collector_from_app)
-):
+@app.get("/stats")
+async def get_stats(minutes: int = 10):
     """Get time-series statistics for the last N minutes"""
     try:
+        if not hasattr(app_state, 'metrics_collector'):
+            return {
+                "error": "Metrics collector not available",
+                "time_range_minutes": minutes,
+                "timestamp": time.time(),
+                "processor_manager": app_state.processor_manager.get_stats() if app_state.processor_manager else {}
+            }
+        
         # Available time series metrics
         available_metrics = [
             "cpu_percent", "memory_percent", "memory_used_mb", 
@@ -1074,16 +648,16 @@ async def v2_get_stats(
         # Collect time series data for all metrics
         time_series_data = {}
         for metric_name in available_metrics:
-            time_series_data[metric_name] = metrics_collector.get_time_series(metric_name, minutes)
+            time_series_data[metric_name] = app_state.metrics_collector.get_time_series(metric_name, minutes)
         
         # Summary statistics
-        current_status = metrics_collector.get_health_status()
-        summary = metrics_collector.get_summary_metrics()
+        current_status = app_state.metrics_collector.get_health_status()
+        summary = app_state.metrics_collector.get_summary_metrics()
         
         return {
             "time_range_minutes": minutes,
             "timestamp": time.time(),
-            "processor_id": processor.id,
+            "processor_manager": app_state.processor_manager.get_stats() if app_state.processor_manager else {},
             "current_status": current_status,
             "time_series": time_series_data,
             "summary": {
@@ -1099,19 +673,18 @@ async def v2_get_stats(
             "error": f"Stats collection failed: {str(e)}",
             "time_range_minutes": minutes,
             "timestamp": time.time(),
-            "processor_id": processor.id if processor else None
+            "processor_manager": app_state.processor_manager.get_stats() if app_state.processor_manager else {}
         }
 
 
-@app.get("/v2/metrics/{metric_name}")
-async def v2_get_specific_metric_history(
-    metric_name: str,
-    minutes: int = 10,
-    metrics_collector: MetricsCollector = Depends(get_metrics_collector_from_app)
-):
+@app.get("/metrics/{metric_name}")
+async def get_specific_metric_history(metric_name: str, minutes: int = 10):
     """Get time series data for a specific metric"""
     try:
-        time_series_data = metrics_collector.get_time_series(metric_name, minutes)
+        if not hasattr(app_state, 'metrics_collector'):
+            raise HTTPException(status_code=503, detail="Metrics collector not available")
+        
+        time_series_data = app_state.metrics_collector.get_time_series(metric_name, minutes)
         
         if not time_series_data:
             raise HTTPException(
@@ -1142,23 +715,472 @@ async def v2_get_specific_metric_history(
         raise HTTPException(status_code=500, detail=f"Failed to retrieve metric: {str(e)}")
 
 
-# V2 Session Management endpoints (placeholder for future implementation)
-@app.post("/v2/sessions")
-async def v2_create_session():
-    """Create a new v2 session (placeholder)"""
-    return {
-        "message": "V2 sessions not yet implemented",
-        "session_id": None,
-        "status": "not_implemented"
+# ============================================================================
+# PRIMARY ENDPOINTS - Automatic Session Management
+# ============================================================================
+
+def get_user_id_from_request(request: Request) -> str:
+    """Generate a user ID from request for automatic session management."""
+    # Check for test isolation header first
+    test_id = request.headers.get("x-test-id")
+    if test_id:
+        return f"test_{test_id}"
+    
+    # Check for explicit user ID header
+    user_id_header = request.headers.get("x-user-id")
+    if user_id_header:
+        return user_id_header
+    
+    # Fall back to IP + user agent based ID
+    client_ip = request.client.host if request.client else "unknown"
+    user_agent = request.headers.get("user-agent", "unknown")[:50]  # Limit length
+    
+    # Create a stable user_id for this client
+    import hashlib
+    user_key = f"{client_ip}_{user_agent}"
+    user_id = f"default_{hashlib.md5(user_key.encode()).hexdigest()[:16]}"
+    
+    return user_id
+
+
+
+
+@app.post("/observe", response_model=ObservationResult)  
+async def observe_primary(request: Request, observation: ObservationData):
+    """Primary observe endpoint with automatic session management."""
+    user_id = get_user_id_from_request(request)
+    session = await app_state.session_manager.get_or_create_session(
+        user_id=user_id,
+        metadata={"type": "auto_created", "endpoint": "observe"}
+    )
+    
+    # Process the observation using the session
+    processor = await app_state.processor_manager.get_processor(session.user_id, session.user_config)
+    
+    try:
+        # Convert observation to required format
+        observation_dict = observation.dict()
+        
+        # Add unique_id if not present
+        if 'unique_id' not in observation_dict or not observation_dict.get('unique_id'):
+            import uuid
+            observation_dict['unique_id'] = str(uuid.uuid4())
+        
+        # Set processor STM to match session
+        processor.set_stm(session.stm)
+        
+        # Observe and get results
+        result = processor.observe(observation_dict)
+        
+        # Update session STM with combined symbols (includes vector names)
+        combined_symbols = result.get('symbols', observation_dict.get('strings', []))
+        if combined_symbols:  # Only add non-empty events
+            session.stm.append(combined_symbols)
+            await app_state.session_manager.update_session(session)
+        
+        return ObservationResult(
+            status='okay',  # Always return 'okay' for v1 compatibility
+            processor_id=processor.id,
+            time=result.get('time', int(time.time())),
+            unique_id=result.get('unique_id', ''),
+            auto_learned_pattern=result.get('auto_learned_pattern')
+        )
+        
+    except Exception as e:
+        logger.error(f"Observation failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Observation failed: {str(e)}")
+
+
+@app.get("/stm", response_model=STMResponse)
+@app.get("/short-term-memory", response_model=STMResponse)  # Alias
+async def get_stm_primary(request: Request):
+    """Primary STM endpoint with automatic session management."""
+    user_id = get_user_id_from_request(request)
+    session = await app_state.session_manager.get_or_create_session(
+        user_id=user_id,
+        metadata={"type": "auto_created", "endpoint": request.url.path}
+    )
+    return STMResponse(stm=session.stm, length=len(session.stm))
+
+
+@app.post("/learn", response_model=LearnResult)
+async def learn_primary(request: Request):
+    """Primary learn endpoint with automatic session management."""
+    user_id = get_user_id_from_request(request)
+    session = await app_state.session_manager.get_or_create_session(
+        user_id=user_id,
+        metadata={"type": "auto_created", "endpoint": request.url.path}
+    )
+    processor = await app_state.processor_manager.get_processor(session.user_id, session.user_config)
+    
+    try:
+        if not session.stm:
+            raise HTTPException(status_code=400, detail="No observations in STM to learn")
+        
+        # Set processor STM to session STM
+        processor.set_stm(session.stm)
+        
+        # Learn the current STM sequence
+        pattern_name = processor.learn()
+        
+        # Clear STM after learning
+        session.stm = []
+        await app_state.session_manager.update_session(session)
+        
+        return LearnResult(
+            status='learned',
+            pattern_name=pattern_name or '',
+            processor_id=processor.id  # Fixed: use 'id' not 'processor_id'
+        )
+        
+    except Exception as e:
+        logger.error(f"Learning failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Learning failed: {str(e)}")
+
+
+@app.post("/clear-stm")
+@app.post("/clear-short-term-memory")  # Alias
+async def clear_stm_primary(request: Request):
+    """Primary clear STM endpoint with automatic session management."""
+    user_id = get_user_id_from_request(request)
+    session = await app_state.session_manager.get_or_create_session(
+        user_id=user_id,
+        metadata={"type": "auto_created", "endpoint": request.url.path}
+    )
+    session.stm = []
+    await app_state.session_manager.update_session(session)
+    return {"status": "okay", "message": "stm-cleared"}
+
+
+@app.post("/clear-all")
+@app.post("/clear-all-memory")  # Alias
+async def clear_all_primary(request: Request):
+    """Primary clear all endpoint with automatic session management."""
+    user_id = get_user_id_from_request(request)
+    session = await app_state.session_manager.get_or_create_session(
+        user_id=user_id,
+        metadata={"type": "auto_created", "endpoint": request.url.path}
+    )
+    processor = await app_state.processor_manager.get_processor(session.user_id, session.user_config)
+    
+    try:
+        # Clear STM
+        session.stm = []
+        await app_state.session_manager.update_session(session)
+        
+        # Clear all memory in processor (this is per-user isolated)
+        processor.clear_all_memory()
+        
+        return {"status": "okay", "message": "all-cleared"}
+        
+    except Exception as e:
+        logger.error(f"Clear all failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Clear all failed: {str(e)}")
+
+
+@app.get("/stm", response_model=STMResponse)
+@app.get("/short-term-memory", response_model=STMResponse)
+async def get_stm_primary(request: Request):
+    """Primary STM endpoint with automatic session management."""
+    user_id = get_user_id_from_request(request)
+    session = await app_state.session_manager.get_or_create_session(
+        user_id=user_id,
+        metadata={"type": "auto_created", "endpoint": request.url.path}
+    )
+    processor = await app_state.processor_manager.get_processor(session.user_id, session.user_config)
+    
+    # Get STM from processor
+    processor.set_stm(session.stm)
+    stm = processor.get_stm()
+    
+    return STMResponse(
+        stm=stm,
+        processor_id=processor.id,
+        length=len(stm)
+    )
+
+
+@app.get("/predictions", response_model=PredictionsResponse)
+@app.post("/predictions", response_model=PredictionsResponse)  # Some tests use POST
+async def get_predictions_primary(request: Request, unique_id: Optional[str] = None):
+    """Primary predictions endpoint with automatic session management."""
+    user_id = get_user_id_from_request(request)
+    session = await app_state.session_manager.get_or_create_session(
+        user_id=user_id,
+        metadata={"type": "auto_created", "endpoint": request.url.path}
+    )
+    processor = await app_state.processor_manager.get_processor(session.user_id, session.user_config)
+    
+    try:
+        # Set STM in processor to match session
+        if hasattr(processor.pattern_processor, 'superkb'):
+            processor.pattern_processor.superkb.stm = session.stm
+        
+        predictions = processor.get_predictions(unique_id=unique_id)
+        
+        # Add pattern_name field for v1 compatibility
+        # V1 expects 'pattern_name' but v2 returns 'name'
+        for pred in predictions:
+            if 'name' in pred and 'pattern_name' not in pred:
+                pred['pattern_name'] = f"PTRN|{pred['name']}"
+        
+        return PredictionsResponse(
+            predictions=predictions,
+            count=len(predictions),
+            processor_id=processor.id,
+            time=int(time.time()),
+            unique_id=unique_id
+        )
+        
+    except Exception as e:
+        logger.error(f"Get predictions failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Predictions failed: {str(e)}")
+
+
+# Gene and pattern endpoints (simplified, no dynamic updates in v2)
+@app.get("/gene/{gene_name}")
+async def get_gene_primary(request: Request, gene_name: str):
+    """Get a gene value for the current user."""
+    user_id = get_user_id_from_request(request)
+    session = await app_state.session_manager.get_or_create_session(
+        user_id=user_id,
+        metadata={"type": "auto_created", "endpoint": request.url.path}
+    )
+    
+    # Get default values
+    default_genes = {
+        "recall_threshold": app_state.settings.learning.recall_threshold,
+        "persistence": app_state.settings.learning.persistence,
+        "max_pattern_length": app_state.settings.learning.max_pattern_length,
+        "smoothness": app_state.settings.learning.smoothness,
+        "quiescence": app_state.settings.learning.quiescence,
+        "auto_act_method": app_state.settings.processing.auto_act_method,
+        "auto_act_threshold": app_state.settings.processing.auto_act_threshold,
+        "always_update_frequencies": app_state.settings.processing.always_update_frequencies,
+        "max_predictions": app_state.settings.processing.max_predictions,
+        "search_depth": app_state.settings.processing.search_depth,
+        "sort": app_state.settings.processing.sort_symbols,
+        "process_predictions": app_state.settings.processing.process_predictions,
     }
+    
+    # Merge with user configuration
+    user_genes = session.user_config.merge_with_defaults(default_genes)
+    
+    if gene_name not in user_genes:
+        raise HTTPException(status_code=404, detail=f"Gene '{gene_name}' not found")
+    
+    return {"gene": gene_name, "value": user_genes[gene_name]}
+
+
+@app.post("/genes/update")
+async def update_genes_primary(request: Request, genes: dict):
+    """Update genes for the current user's configuration."""
+    user_id = get_user_id_from_request(request)
+    session = await app_state.session_manager.get_or_create_session(
+        user_id=user_id,
+        metadata={"type": "auto_created", "endpoint": request.url.path}
+    )
+    
+    # Extract the actual gene updates from the nested structure
+    # The input is {"genes": {"recall_threshold": 0.5}} but we need just {"recall_threshold": 0.5}
+    gene_updates = genes.get('genes', genes)
+    
+    # Update user configuration
+    if session.user_config.update(gene_updates):
+        # Apply configuration to processor
+        success = await app_state.processor_manager.update_processor_config(
+            user_id, session.user_config
+        )
+        
+        if success:
+            # Save updated session
+            await app_state.session_manager.update_session(session)
+            return {"status": "okay", "message": "genes-updated", "genes": gene_updates}
+        else:
+            return {"status": "error", "message": "Failed to apply configuration"}
+    else:
+        return {"status": "error", "message": "Invalid gene values"}
+
+
+@app.get("/pattern/{pattern_id}")
+async def get_pattern_primary(request: Request, pattern_id: str):
+    """Get a pattern by ID."""
+    user_id = get_user_id_from_request(request)
+    session = await app_state.session_manager.get_or_create_session(
+        user_id=user_id,
+        metadata={"type": "auto_created", "endpoint": request.url.path}
+    )
+    processor = await app_state.processor_manager.get_processor(session.user_id, session.user_config)
+    
+    try:
+        pattern = processor.get_pattern(pattern_id)
+        if not pattern:
+            raise HTTPException(status_code=404, detail=f"Pattern '{pattern_id}' not found")
+        
+        return {"pattern": pattern}
+        
+    except Exception as e:
+        logger.error(f"Get pattern failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Pattern retrieval failed: {str(e)}")
+
+
+@app.get("/percept-data")
+async def get_percept_data_primary(request: Request):
+    """Get percept data."""
+    user_id = get_user_id_from_request(request)
+    session = await app_state.session_manager.get_or_create_session(
+        user_id=user_id,
+        metadata={"type": "auto_created", "endpoint": request.url.path}
+    )
+    processor = await app_state.processor_manager.get_processor(session.user_id, session.user_config)
+    
+    try:
+        percept_data = processor.get_percept_data()
+        return {"percept_data": percept_data}
+        
+    except Exception as e:
+        logger.error(f"Get percept data failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Percept data retrieval failed: {str(e)}")
+
+
+@app.get("/cognition-data")  
+async def get_cognition_data_primary(request: Request):
+    """Get cognition data."""
+    user_id = get_user_id_from_request(request)
+    session = await app_state.session_manager.get_or_create_session(
+        user_id=user_id,
+        metadata={"type": "auto_created", "endpoint": request.url.path}
+    )
+    processor = await app_state.processor_manager.get_processor(session.user_id, session.user_config)
+    
+    try:
+        cognition_data = processor.cognition_data
+        return {"cognition_data": cognition_data}
+        
+    except Exception as e:
+        logger.error(f"Get cognition data failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Cognition data retrieval failed: {str(e)}")
+
+
+# Bulk endpoint
+@app.post("/observe-sequence")
+async def observe_sequence_primary(request: Request, batch_request: dict):
+    """Primary bulk observe endpoint."""
+    user_id = get_user_id_from_request(request)
+    session = await app_state.session_manager.get_or_create_session(
+        user_id=user_id,
+        metadata={"type": "auto_created", "endpoint": request.url.path}
+    )
+    processor = await app_state.processor_manager.get_processor(session.user_id, session.user_config)
+    
+    # Validate input structure first (outside try-except to let HTTPException propagate)
+    observations = batch_request.get('observations')
+    if observations is None:
+        raise HTTPException(status_code=422, detail="Missing required field: observations")
+    if not isinstance(observations, list):
+        raise HTTPException(status_code=422, detail="Field 'observations' must be a list")
+    
+    try:
+        
+        # Extract learning options
+        learn_after_each = batch_request.get('learn_after_each', False)
+        learn_at_end = batch_request.get('learn_at_end', False)
+        clear_stm_between = batch_request.get('clear_stm_between', False)
+        
+        # Clear session STM for batch processing (v1 compatibility - each batch starts fresh)
+        session.stm = []
+        
+        # Set initial processor STM to empty for batch
+        processor.set_stm([])
+        
+        results = []
+        patterns_learned = []
+        
+        for idx, obs in enumerate(observations):
+            # Clear STM between observations if requested
+            if clear_stm_between and idx > 0:
+                processor.set_stm([])
+                session.stm = []
+            
+            # processor.observe expects a dict with unique_id
+            import uuid
+            # Sort strings alphanumerically for consistency
+            sorted_strings = sorted(obs.get('strings', []))
+            obs_dict = {
+                'strings': sorted_strings,
+                'vectors': obs.get('vectors', []),
+                'emotives': obs.get('emotives', {}),
+                'unique_id': obs.get('unique_id', str(uuid.uuid4()))  # Generate if not provided
+            }
+            
+            result = processor.observe(obs_dict)
+            # Transform result to match v1 API format
+            formatted_result = {
+                'status': 'okay',  # v1 compatibility
+                'processor_id': processor.id,
+                'unique_id': result.get('unique_id', obs_dict['unique_id']),
+                'time': result.get('time', 0),
+                'auto_learned_pattern': result.get('auto_learned_pattern')
+            }
+            results.append(formatted_result)
+            
+            # Add to session STM - use the combined symbols (includes vector names)
+            # The processor.observe returns symbols that include both strings and vector names
+            combined_symbols = result.get('symbols', sorted_strings)
+            if combined_symbols:
+                session.stm.append(combined_symbols)
+            
+            # Learn after each observation if requested
+            if learn_after_each:
+                # Update processor STM before learning
+                processor.set_stm(session.stm)
+                pattern_name = processor.learn()
+                if pattern_name:
+                    patterns_learned.append(pattern_name)
+                # Clear STM after learning (auto-learn behavior)
+                processor.set_stm([])
+                session.stm = []
+        
+        # Learn at end if requested (and not already learning after each)
+        if learn_at_end and not learn_after_each:
+            # Update processor STM to match final session state
+            processor.set_stm(session.stm)
+            pattern_name = processor.learn()
+            if pattern_name:
+                patterns_learned.append(pattern_name)
+            # Clear STM after learning (auto-learn behavior)
+            processor.set_stm([])
+            session.stm = []
+        
+        # Update processor STM to match final session state (if no learning happened)
+        if not learn_after_each and not learn_at_end:
+            processor.set_stm(session.stm)
+        
+        await app_state.session_manager.update_session(session)
+        
+        # Get final predictions after all observations
+        predictions = processor.get_predictions()
+        
+        # Add pattern_name field for v1 compatibility
+        for pred in predictions:
+            if 'name' in pred and 'pattern_name' not in pred:
+                pred['pattern_name'] = f"PTRN|{pred['name']}"
+        
+        # Format response to match test expectations
+        return {
+            "status": "okay",  # Tests expect 'okay'
+            "processor_id": session.user_id,  # Use user_id as processor_id in v2
+            "observations_processed": len(results),
+            "patterns_learned": patterns_learned,
+            "individual_results": results,
+            "final_predictions": predictions
+        }
+        
+    except Exception as e:
+        logger.error(f"Observe sequence failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Observe sequence failed: {str(e)}")
 
 
 if __name__ == "__main__":
     import uvicorn
-    # Create fresh settings for main execution
-    settings = Settings()
-    api_config = APIServiceConfig()
-    
-    # Get uvicorn configuration
-    uvicorn_config = api_config.get_uvicorn_config()
-    uvicorn.run(app, **uvicorn_config)
+    uvicorn.run(app, host="0.0.0.0", port=8000)

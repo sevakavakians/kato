@@ -215,7 +215,7 @@ def test_dense_matches_threshold_filtering(kato_fixture):
     for item in base:
         kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
     
-    # In v2, recall_threshold is not dynamically configurable
+    # In current, recall_threshold is not dynamically configurable
     # Just verify we get predictions for the learned patterns
     predictions = kato_fixture.get_predictions()
     

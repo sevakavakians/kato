@@ -19,7 +19,7 @@ from redis.asyncio import Redis
 
 from .session_manager import SessionState
 
-logger = logging.getLogger('kato.v2.sessions.redis_store')
+logger = logging.getLogger('kato.sessions.redis_store')
 
 
 class RedisSessionStore:

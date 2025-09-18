@@ -1,5 +1,5 @@
 """
-KATO v2.0 Processor Management Implementation
+KATO Processor Management Implementation
 
 This module provides per-user processor isolation for true multi-user support.
 Each user gets their own KatoProcessor instance with isolated MongoDB and Qdrant databases.
@@ -17,16 +17,16 @@ from datetime import datetime, timedelta
 
 from kato.workers.kato_processor import KatoProcessor
 from kato.config.settings import get_settings
-from kato.v2.config.user_config import UserConfiguration
+from kato.config.user_config import UserConfiguration
 
-logger = logging.getLogger('kato.v2.processors.manager')
+logger = logging.getLogger('kato.processors.manager')
 
 
 class ProcessorManager:
     """
     Manages KatoProcessor instances per user with complete database isolation.
     
-    This is the core component that enables true multi-user support in KATO v2.
+    This is the core component that enables true multi-user support in KATO.
     Each user gets their own MongoDB database and Qdrant collection.
     """
     

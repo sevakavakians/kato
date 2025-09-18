@@ -28,6 +28,23 @@ services:
       - kato-network
     restart: unless-stopped
 
+  # Redis for session storage
+  redis:
+    image: redis:7-alpine
+    container_name: kato-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - kato-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # Single KATO instance for testing
   kato:
     build:
@@ -42,6 +59,8 @@ services:
       - MONGO_BASE_URL=mongodb://mongodb:27017
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
+      - REDIS_URL=redis://redis:6379
+      - SESSION_TTL=3600
       - MAX_PATTERN_LENGTH=0
       - PERSISTENCE=5
       - RECALL_THRESHOLD=0.1
@@ -52,6 +71,8 @@ services:
       - kato-network
     depends_on:
       mongodb:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
@@ -64,6 +85,7 @@ services:
 volumes:
   mongo-data:
   qdrant-data:
+  redis-data:
 
 networks:
   kato-network:

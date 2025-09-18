@@ -1,5 +1,5 @@
 """
-KATO v2.0 Session Management Implementation
+KATO Session Management Implementation
 
 This module provides multi-user session isolation to prevent STM collision.
 Each user/session maintains completely isolated state.
@@ -16,9 +16,9 @@ from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
 import logging
 
-from kato.v2.config.user_config import UserConfiguration
+from kato.config.user_config import UserConfiguration
 
-logger = logging.getLogger('kato.v2.sessions.manager')
+logger = logging.getLogger('kato.sessions.manager')
 
 
 @dataclass

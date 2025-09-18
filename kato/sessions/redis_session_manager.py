@@ -1,5 +1,5 @@
 """
-Redis-backed Session Manager for KATO v2.0
+Redis-backed Session Manager for KATO
 
 Provides persistent session storage using Redis, enabling:
 - Session persistence across service restarts
@@ -22,9 +22,9 @@ except ImportError:
 from dataclasses import dataclass, asdict
 
 from .session_manager import SessionState, SessionManager
-from kato.v2.config.user_config import UserConfiguration
+from kato.config.user_config import UserConfiguration
 
-logger = logging.getLogger('kato.v2.sessions.redis')
+logger = logging.getLogger('kato.sessions.redis')
 
 
 class RedisSessionManager(SessionManager):

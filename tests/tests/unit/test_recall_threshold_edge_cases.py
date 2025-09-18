@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from fixtures.kato_fixtures import kato_fixture as kato_fixture
 from fixtures.test_helpers import sort_event_strings
 
-# V2 now supports dynamic thresholds via user configuration
+# Current now supports dynamic thresholds via user configuration
 # No need to skip tests anymore
 
 

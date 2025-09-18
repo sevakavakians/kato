@@ -1,8 +1,7 @@
 #!/bin/bash
 
-# Simple test runner for KATO v2.0
-# Uses KATO v2.0 by default (with session management)
-# Override with: KATO_VERSION=v1 ./run_tests.sh
+# Simple test runner for KATO
+# Tests run in local Python connecting to KATO services
 
 set -e
 
@@ -80,9 +79,8 @@ fi
 
 # Start KATO if requested
 if [ "$START_KATO" = true ]; then
-    echo -e "${GREEN}Starting KATO v2.0 in test mode (single instance)...${NC}"
-    # Default to v2, can override with KATO_VERSION=v1
-    ./kato-manager.sh test-start
+    echo -e "${GREEN}Starting KATO in test mode (single instance)...${NC}"
+    ./kato-manager.sh start
     
     # Wait for KATO to be ready
     echo "Waiting for KATO to be ready..."

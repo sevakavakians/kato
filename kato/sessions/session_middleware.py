@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 
 from .session_manager import get_session_manager, SessionState
 
-logger = logging.getLogger('kato.v2.sessions.middleware')
+logger = logging.getLogger('kato.sessions.middleware')
 
 
 class SessionMiddleware:

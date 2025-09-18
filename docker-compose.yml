@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   # MongoDB shared by all KATO instances
   mongodb:
@@ -16,7 +18,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # Qdrant vector database (optional, for vector operations)
+  # Qdrant vector database
   qdrant:
     image: qdrant/qdrant:latest
     container_name: kato-qdrant
@@ -28,7 +30,24 @@ services:
       - kato-network
     restart: unless-stopped
 
-  # Primary KATO instance for general use
+  # Redis for session storage
+  redis:
+    image: redis:7-alpine
+    container_name: kato-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - kato-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # KATO Primary Instance with Session Support
   kato-primary:
     build:
       context: .
@@ -41,20 +60,28 @@ services:
       - MONGO_BASE_URL=mongodb://mongodb:27017
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
+      - REDIS_URL=redis://redis:6379
       - MAX_PATTERN_LENGTH=0
       - PERSISTENCE=5
       - RECALL_THRESHOLD=0.1
       - LOG_LEVEL=INFO
+      - SESSION_TTL=3600
     ports:
       - "8001:8000"
     networks:
       - kato-network
     depends_on:
-      mongodb:
-        condition: service_healthy
+      - mongodb
+      - qdrant
+      - redis
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5).read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
-  # Testing KATO instance (isolated for tests)
+  # KATO Testing Instance (for isolated testing)
   kato-testing:
     build:
       context: .
@@ -67,20 +94,28 @@ services:
       - MONGO_BASE_URL=mongodb://mongodb:27017
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
-      - MAX_PATTERN_LENGTH=0
+      - REDIS_URL=redis://redis:6379
+      - MAX_PATTERN_LENGTH=10
       - PERSISTENCE=5
       - RECALL_THRESHOLD=0.1
       - LOG_LEVEL=DEBUG
+      - SESSION_TTL=1800
     ports:
       - "8002:8000"
     networks:
       - kato-network
     depends_on:
-      mongodb:
-        condition: service_healthy
+      - mongodb
+      - qdrant
+      - redis
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5).read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
-  # Analytics KATO instance (example of specialized configuration)
+  # KATO Analytics Instance (auto-learning enabled)
   kato-analytics:
     build:
       context: .
@@ -93,55 +128,26 @@ services:
       - MONGO_BASE_URL=mongodb://mongodb:27017
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
-      - MAX_PATTERN_LENGTH=50  # Auto-learn after 50 observations
-      - PERSISTENCE=10  # Longer persistence for analytics
-      - RECALL_THRESHOLD=0.3  # Higher threshold for analytics
+      - REDIS_URL=redis://redis:6379
+      - MAX_PATTERN_LENGTH=50
+      - PERSISTENCE=10
+      - RECALL_THRESHOLD=0.5
       - LOG_LEVEL=INFO
+      - SESSION_TTL=7200
     ports:
       - "8003:8000"
     networks:
       - kato-network
     depends_on:
-      mongodb:
-        condition: service_healthy
+      - mongodb
+      - qdrant
+      - redis
     restart: unless-stopped
-
-  # Template for dynamically spawned instances
-  # Use --scale or Docker API to create more instances
-  kato-template:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: kato:latest
-    environment:
-      - MONGO_BASE_URL=mongodb://mongodb:27017
-      - QDRANT_HOST=qdrant
-      - QDRANT_PORT=6333
-      - LOG_LEVEL=INFO
-    networks:
-      - kato-network
-    depends_on:
-      mongodb:
-        condition: service_healthy
-    deploy:
-      replicas: 0  # Don't start by default
-    restart: unless-stopped
-
-  # Optional: Nginx reverse proxy for load balancing
-  # nginx:
-  #   image: nginx:alpine
-  #   container_name: kato-nginx
-  #   ports:
-  #     - "80:80"
-  #   volumes:
-  #     - ./nginx.conf:/etc/nginx/nginx.conf:ro
-  #   networks:
-  #     - kato-network
-  #   depends_on:
-  #     - kato-primary
-  #     - kato-testing
-  #     - kato-analytics
-  #   restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5).read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 networks:
   kato-network:
@@ -152,6 +158,5 @@ networks:
 
 volumes:
   mongo-data:
-    driver: local
   qdrant-data:
-    driver: local
+  redis-data:

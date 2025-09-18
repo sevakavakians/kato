@@ -154,11 +154,11 @@ def test_memory_persistence(kato_fixture):
 
 def test_max_pattern_length(kato_fixture):
     """Test that max_pattern_length limit is enforced."""
-    # Note: In v2, max_pattern_length is configured at service startup, not dynamically
+    # Note: In current, max_pattern_length is configured at service startup, not dynamically
     # This test validates that STM can hold multiple observations
     kato_fixture.clear_short_term_memory()  # Only clear short-term memory, not genes
     
-    # In v2, gene updates don't work dynamically - skip this specific behavior
+    # In current, gene updates don't work dynamically - skip this specific behavior
     # Instead, test that STM accumulates observations correctly
     kato_fixture.observe({'strings': ['a'], 'vectors': [], 'emotives': {}})
     assert len(kato_fixture.get_short_term_memory()) == 1
@@ -167,10 +167,10 @@ def test_max_pattern_length(kato_fixture):
     assert len(kato_fixture.get_short_term_memory()) == 2
     
     kato_fixture.observe({'strings': ['c'], 'vectors': [], 'emotives': {}})
-    # In v2 without auto-learn, STM keeps all events
+    # In current without auto-learn, STM keeps all events
     stm = kato_fixture.get_short_term_memory()
-    # V2 behavior: all events remain in STM until explicitly learned or cleared
-    assert len(stm) == 3  # All events remain in v2
+    # Current behavior: all events remain in STM until explicitly learned or cleared
+    assert len(stm) == 3  # All events remain in current
     
     # Learn the sequence before testing predictions
     kato_fixture.learn()

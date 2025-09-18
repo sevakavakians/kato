@@ -15,7 +15,7 @@ from collections import defaultdict, deque
 from dataclasses import dataclass, field
 import threading
 
-logger = logging.getLogger('kato.v2.monitoring.metrics')
+logger = logging.getLogger('kato.monitoring.metrics')
 
 
 @dataclass

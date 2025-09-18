@@ -22,9 +22,9 @@ def test_health_endpoint(kato_fixture):
     
     data = response.json()
     assert data['status'] == 'healthy'
-    # V2 uses 'uptime_seconds', v1 uses 'uptime'
+    # Current uses 'uptime_seconds', legacy uses 'uptime'
     assert 'uptime' in data or 'uptime_seconds' in data
-    # V2 uses 'base_processor_id', v1 uses 'processor_id'
+    # Current uses 'base_processor_id', legacy uses 'processor_id'
     assert 'processor_id' in data or 'base_processor_id' in data
 
 
@@ -34,11 +34,11 @@ def test_status_endpoint(kato_fixture):
     assert response.status_code == 200
     
     data = response.json()
-    # V2 uses 'base_processor_id', v1 uses 'processor_id'
+    # Current uses 'base_processor_id', legacy uses 'processor_id'
     assert 'processor_id' in data or 'base_processor_id' in data
-    # V2 uses 'uptime_seconds', v1 uses 'time' or 'timestamp'
+    # Current uses 'uptime_seconds', legacy uses 'time' or 'timestamp'
     assert 'time' in data or 'timestamp' in data or 'uptime_seconds' in data
-    # V2 doesn't have stm_length in status, skip this check for v2
+    # Current doesn't have stm_length in status, skip this check for current
     if 'stm_length' in data:
         assert isinstance(data['stm_length'], int)
 
@@ -55,14 +55,14 @@ def test_observe_endpoint(kato_fixture):
     assert response.status_code == 200
     
     data = response.json()
-    # V2 returns 'ok', v1 returns 'okay', KatoProcessor returns 'observed'
+    # Current returns 'ok', legacy returns 'okay', KatoProcessor returns 'observed'
     assert data['status'] in ['ok', 'okay', 'observed']
-    # V2 doesn't always include processor_id in observe response
+    # Current doesn't always include processor_id in observe response
     # Check for session_id or processor_id
     assert 'processor_id' in data or 'session_id' in data or 'status' in data
-    # V2 uses 'uptime_seconds', v1 uses 'time' or 'timestamp'
+    # Current uses 'uptime_seconds', legacy uses 'time' or 'timestamp'
     assert 'time' in data or 'timestamp' in data or 'uptime_seconds' in data
-    # unique_id is optional in v2
+    # unique_id is optional in current
     if 'unique_id' in data:
         assert isinstance(data['unique_id'], str)
 
@@ -97,8 +97,8 @@ def test_short_term_memory_endpoints(kato_fixture):
     
     # Also test the raw endpoints with session IDs
     if kato_fixture.session_id:
-        # Test /v2/sessions/{session_id}/stm endpoint directly
-        response = requests.get(f"{kato_fixture.base_url}/v2/sessions/{kato_fixture.session_id}/stm")
+        # Test /current/sessions/{session_id}/stm endpoint directly
+        response = requests.get(f"{kato_fixture.base_url}/current/sessions/{kato_fixture.session_id}/stm")
         assert response.status_code == 200
         data = response.json()
         assert 'stm' in data
@@ -187,7 +187,7 @@ def test_predictions_endpoints(kato_fixture):
     
     # Also test the raw endpoint with session ID
     if kato_fixture.session_id:
-        response = requests.get(f"{kato_fixture.base_url}/v2/sessions/{kato_fixture.session_id}/predictions")
+        response = requests.get(f"{kato_fixture.base_url}/current/sessions/{kato_fixture.session_id}/predictions")
         assert response.status_code == 200
         data = response.json()
         assert 'predictions' in data
@@ -203,17 +203,17 @@ def test_pattern_endpoint(kato_fixture):
     
     # Pattern retrieval must use the same processor/session that created it
     # Since patterns are stored per-processor, we need to use fixture's processor
-    # For v2, patterns are user-specific, so we need to use the same user_id
+    # For current, patterns are user-specific, so we need to use the same user_id
     
     # The pattern was created in kato_fixture's session
-    # Since we can't easily test cross-user pattern access in v2,
+    # Since we can't easily test cross-user pattern access in current,
     # we'll just verify the pattern was created successfully
     assert pattern_name is not None
     assert pattern_name.startswith('PTRN|')
     
-    # Note: In v2, patterns are isolated per user. The primary /pattern endpoint
+    # Note: In current, patterns are isolated per user. The primary /pattern endpoint
     # creates a new session with a different user ID, so it won't find patterns
-    # created in the test fixture's session. This is expected behavior for v2.
+    # created in the test fixture's session. This is expected behavior for current.
 
 
 def test_gene_endpoints(kato_fixture):
@@ -222,7 +222,7 @@ def test_gene_endpoints(kato_fixture):
     response = requests.get(f"{kato_fixture.base_url}/gene/recall_threshold")
     assert response.status_code in [200, 404]  # Gene endpoint might not be fully implemented
     data = response.json()
-    # V2 returns 'gene' and 'value', v1 returns 'gene_name' and 'gene_value'
+    # Current returns 'gene' and 'value', legacy returns 'gene_name' and 'gene_value'
     assert 'gene_name' in data or 'gene' in data
     assert 'gene_value' in data or 'value' in data
     original_value = data.get('gene_value', data.get('value'))
@@ -245,7 +245,7 @@ def test_gene_endpoints(kato_fixture):
     
     # Verify update
     response = requests.get(f"{kato_fixture.base_url}/gene/recall_threshold")
-    # V2 returns 'value' instead of 'gene_value'
+    # Current returns 'value' instead of 'gene_value'
     assert response.json()['value'] == 0.5
     
     # Restore original value
@@ -265,7 +265,7 @@ def test_percept_data_endpoint(kato_fixture):
     
     data = response.json()
     assert 'percept_data' in data
-    # V2 might return empty percept_data or different structure
+    # Current might return empty percept_data or different structure
     # Just verify the field exists
     assert isinstance(data['percept_data'], dict)
 
@@ -286,7 +286,7 @@ def test_cognition_data_endpoint(kato_fixture):
     
     data = response.json()
     assert 'cognition_data' in data
-    # V2 might have different cognition_data structure
+    # Current might have different cognition_data structure
     # Just verify it's a dict
     assert isinstance(data['cognition_data'], dict)
 
@@ -297,7 +297,7 @@ def test_metrics_endpoint(kato_fixture):
     assert response.status_code == 200
     
     data = response.json()
-    # V2 has different metrics structure
+    # Current has different metrics structure
     # Just verify we got some metrics data
     assert isinstance(data, dict)
     # Should have at least some metrics
@@ -313,23 +313,23 @@ def test_error_handling_missing_fields(kato_fixture):
     }
     
     response = requests.post(f"{kato_fixture.base_url}/observe", json=incomplete_data)
-    # V2 might require all fields or handle defaults differently
+    # Current might require all fields or handle defaults differently
     # Accept either 200 (with defaults) or 422/400 (validation error)
-    assert response.status_code in [200, 400, 422, 500]  # 500 is unfortunately what v2 returns
+    assert response.status_code in [200, 400, 422, 500]  # 500 is unfortunately what current returns
 
 
 def test_error_handling_invalid_pattern(kato_fixture):
     """Test error handling for invalid pattern ID."""
     response = requests.get(f"{kato_fixture.base_url}/pattern/invalid_pattern_id")
-    # V2 returns 200 with None/null pattern, v1 returns 404
+    # Current returns 200 with None/null pattern, legacy returns 404
     assert response.status_code in [200, 404]
     
     if response.status_code == 404:
         data = response.json()
-        # V2 might use 'detail' or 'error' for error messages
+        # Current might use 'detail' or 'error' for error messages
         assert 'error' in data or 'detail' in data
     else:
-        # V2 returns 200 with pattern: null
+        # Current returns 200 with pattern: null
         data = response.json()
         assert 'pattern' in data
 
@@ -337,11 +337,11 @@ def test_error_handling_invalid_pattern(kato_fixture):
 def test_error_handling_invalid_gene(kato_fixture):
     """Test error handling for invalid gene name."""
     response = requests.get(f"{kato_fixture.base_url}/gene/INVALID_GENE")
-    # V2 might return 400 or 404 for invalid gene
+    # Current might return 400 or 404 for invalid gene
     assert response.status_code in [400, 404]
     
     data = response.json()
-    # V2 might use 'detail' or 'error' for error messages
+    # Current might use 'detail' or 'error' for error messages
     assert 'error' in data or 'detail' in data
 
 

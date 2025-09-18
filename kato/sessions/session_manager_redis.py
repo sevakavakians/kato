@@ -16,7 +16,7 @@ import os
 from .session_manager import SessionState  # Import the dataclass
 from .redis_session_store import RedisSessionStore, get_redis_session_store
 
-logger = logging.getLogger('kato.v2.sessions.manager')
+logger = logging.getLogger('kato.sessions.manager')
 
 
 class RedisSessionManager:

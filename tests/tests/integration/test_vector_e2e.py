@@ -57,7 +57,7 @@ def test_vector_observation_and_learning(kato_fixture):
     response = requests.post(f"{kato_fixture.base_url}/learn", json={})
     assert response.status_code == 200
     result = response.json()
-    # V2 returns pattern_name field, V1 returns it in message
+    # Current returns pattern_name field, Legacy returns it in message
     pattern_name = result.get('pattern_name') or result.get('message', result)
     assert pattern_name is not None
     print(f"Learned model: {pattern_name}")
@@ -264,7 +264,7 @@ def test_vector_persistence(kato_fixture):
     response = requests.post(f"{kato_fixture.base_url}/learn", json={})
     assert response.status_code == 200
     model1_resp = response.json()
-    # Extract model name from response (V2 uses 'pattern_name', V1 uses 'message')
+    # Extract model name from response (Current uses 'pattern_name', Legacy uses 'message')
     model1 = model1_resp.get('pattern_name') or model1_resp.get('message', model1_resp)
     
     # Second learning cycle with different vector
@@ -279,7 +279,7 @@ def test_vector_persistence(kato_fixture):
     response = requests.post(f"{kato_fixture.base_url}/learn", json={})
     assert response.status_code == 200
     model2_resp = response.json()
-    # Extract model name from response (V2 uses 'pattern_name', V1 uses 'message')
+    # Extract model name from response (Current uses 'pattern_name', Legacy uses 'message')
     model2 = model2_resp.get('pattern_name') or model2_resp.get('message', model2_resp)
     
     # Models should be different

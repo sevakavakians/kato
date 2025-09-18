@@ -418,7 +418,7 @@ def test_extreme_length_sequence(kato_fixture):
     pattern_name = kato_fixture.learn()
     assert pattern_name != '', "Should learn the mega sequence"
     
-    # In v2, pattern names might not have PTRN| prefix
+    # In current, pattern names might not have PTRN| prefix
     # Just verify we learned something
     if pattern_name:
         assert len(pattern_name) > 0, "Pattern name should not be empty"
@@ -429,10 +429,10 @@ def test_extreme_length_sequence(kato_fixture):
     kato_fixture.observe({'strings': sort_event_strings(mega_sequence[21]), 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
     
-    # For extremely long sequences, v2 might not generate predictions due to complexity
+    # For extremely long sequences, current might not generate predictions due to complexity
     # Just verify the pattern was learned and can be queried
     if len(predictions) == 0:
-        # This is acceptable for extreme sequences in v2
+        # This is acceptable for extreme sequences in current
         # The important part is that the pattern was learned
         assert pattern_name != '', "Pattern should have been learned even if no predictions"
         return  # Skip prediction validation for extreme sequences

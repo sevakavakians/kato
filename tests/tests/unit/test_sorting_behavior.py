@@ -206,12 +206,12 @@ def test_sorting_consistency_across_learns(kato_fixture):
     kato_fixture.clear_all_memory()
     
     # Same strings in different order
-    strings_v1 = ['gamma', 'alpha', 'beta']
-    strings_v2 = ['beta', 'gamma', 'alpha']
+    strings_legacy = ['gamma', 'alpha', 'beta']
+    strings_current = ['beta', 'gamma', 'alpha']
     strings_v3 = ['alpha', 'beta', 'gamma']
     
     # Observe and learn each version
-    for strings in [strings_v1, strings_v2, strings_v3]:
+    for strings in [strings_legacy, strings_current, strings_v3]:
         kato_fixture.clear_short_term_memory()
         kato_fixture.observe({
             'strings': strings,

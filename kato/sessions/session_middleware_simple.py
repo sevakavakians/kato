@@ -1,5 +1,5 @@
 """
-Simple Session Middleware for FastAPI v2.0
+Simple Session Middleware for FastAPI
 
 This middleware handles session management for all requests,
 enabling multi-user support with complete isolation.
@@ -13,7 +13,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from .session_manager import get_session_manager, SessionState
 
-logger = logging.getLogger('kato.v2.sessions.middleware')
+logger = logging.getLogger('kato.sessions.middleware')
 
 
 class SessionMiddleware(BaseHTTPMiddleware):
@@ -45,15 +45,15 @@ class SessionMiddleware(BaseHTTPMiddleware):
         # Get session manager from app state if not set
         if self.session_manager is None:
             # Access the app state through the app instance
-            from kato.services.kato_fastapi_v2 import app_state
+            from kato.services.kato_fastapi import app_state
             self.session_manager = app_state.session_manager
         
         path = str(request.url.path)
         session_id = None
         
-        # For v2 session-specific endpoints, extract session ID from path
-        # BUT exclude GET /v2/sessions/{session_id} which is for session info retrieval
-        if path.startswith('/v2/sessions/') and path != '/v2/sessions':
+        # For session-specific endpoints, extract session ID from path
+        # BUT exclude GET /sessions/{session_id} which is for session info retrieval
+        if path.startswith('/sessions/') and path != '/sessions':
             parts = path.split('/')
             if len(parts) >= 4 and parts[3]:
                 session_id = parts[3]

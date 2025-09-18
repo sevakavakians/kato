@@ -29,7 +29,7 @@ from .exceptions import (
     TimeoutError
 )
 
-logger = logging.getLogger('kato.v2.errors.handlers')
+logger = logging.getLogger('kato.errors.handlers')
 
 
 def create_error_response(

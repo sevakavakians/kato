@@ -205,22 +205,29 @@ class KATOFastAPIFixture:
                 print(f"Using dynamically discovered KATO v2 service at {self.base_url}")
                 self._ensure_session()
             else:
-                # Fall back to trying fixed ports
+                # Fall back to trying fixed ports - check 8001 first (test default)
                 for port in [8001, 8002, 8003, 8000]:
                     self.base_url = f"http://localhost:{port}"
                     try:
-                        # Check if v2 service is running (v2 uses /health not /v2/health)
+                        # Check if service is running (works for both v1 and v2)
                         response = requests.get(f"{self.base_url}/health", timeout=2)
                         if response.status_code == 200:
-                            # Verify it's a v2 service by checking for v2-specific fields
                             health_data = response.json()
+                            # Accept both v1 and v2 services
+                            # V2 has "base_processor_id" or "active_sessions"
+                            # V1 has just "processor_id" and "uptime"
+                            self.services_available = True
+                            self.port = port
+                            
+                            # Check if it's a v2 service
                             if "base_processor_id" in health_data or "active_sessions" in health_data:
-                                self.services_available = True
-                                self.port = port
                                 print(f"Using existing KATO v2 service at {self.base_url}")
                                 # Create a persistent session for this test
                                 self._ensure_session()
-                                break
+                            else:
+                                # V1 service - no session needed
+                                print(f"Using existing KATO v1 service at {self.base_url}")
+                            break
                     except requests.exceptions.RequestException:
                         continue
             
@@ -282,14 +289,18 @@ class KATOFastAPIFixture:
         if not self.services_available:
             pytest.skip("KATO services not available")
         
-        # Ensure we have a persistent session
-        self._ensure_session()
+        # Check if we're using v2 (session-based) or v1 (direct)
+        if self.session_created and self.session_id:
+            # V2 service with session
+            # Use session-based endpoint with persistent session
+            response = requests.post(f"{self.base_url}/v2/sessions/{self.session_id}/observe", json=data)
+        else:
+            # V1 service or v2 without session - use direct endpoint
+            # Add processor_id to the request for isolation
+            data_with_id = data.copy()
+            data_with_id['processor_id'] = self.processor_id
+            response = requests.post(f"{self.base_url}/observe", json=data_with_id)
         
-        if not self.session_id:
-            pytest.skip("Could not create v2 session")
-        
-        # Use session-based endpoint with persistent session
-        response = requests.post(f"{self.base_url}/v2/sessions/{self.session_id}/observe", json=data)
         response.raise_for_status()
         result = response.json()
         
@@ -302,7 +313,7 @@ class KATOFastAPIFixture:
         return {
             'status': status,
             'auto_learned_pattern': result.get('auto_learned_pattern'),
-            'processor_id': result.get('processor_id'),
+            'processor_id': result.get('processor_id', self.processor_id),
             'time': result.get('time'),
             'unique_id': result.get('unique_id')
         }
@@ -312,13 +323,13 @@ class KATOFastAPIFixture:
         if not self.services_available:
             pytest.skip("KATO services not available")
         
-        # Ensure we have the same persistent session
-        self._ensure_session()
+        if self.session_created and self.session_id:
+            # V2 service with session
+            response = requests.get(f"{self.base_url}/v2/sessions/{self.session_id}/stm")
+        else:
+            # V1 service - use direct endpoint with processor_id
+            response = requests.get(f"{self.base_url}/stm", params={'processor_id': self.processor_id})
         
-        if not self.session_id:
-            pytest.skip("Could not create v2 session")
-        
-        response = requests.get(f"{self.base_url}/v2/sessions/{self.session_id}/stm")
         response.raise_for_status()
         result = response.json()
         return result.get('stm', [])
@@ -332,15 +343,18 @@ class KATOFastAPIFixture:
         if not self.services_available:
             pytest.skip("KATO services not available")
         
-        # Use direct endpoint
-        params = {'unique_id': unique_id} if unique_id else {}
-        # Ensure we have the same persistent session
-        self._ensure_session()
+        params = {}
+        if unique_id:
+            params['unique_id'] = unique_id
         
-        if not self.session_id:
-            pytest.skip("Could not create v2 session")
+        if self.session_created and self.session_id:
+            # V2 service with session
+            response = requests.get(f"{self.base_url}/v2/sessions/{self.session_id}/predictions", params=params)
+        else:
+            # V1 service - add processor_id to params
+            params['processor_id'] = self.processor_id
+            response = requests.get(f"{self.base_url}/predictions", params=params)
         
-        response = requests.get(f"{self.base_url}/v2/sessions/{self.session_id}/predictions", params=params)
         response.raise_for_status()
         result = response.json()
         return result.get('predictions', [])
@@ -350,16 +364,14 @@ class KATOFastAPIFixture:
         if not self.services_available:
             pytest.skip("KATO services not available")
         
-        # Ensure we have the same persistent session
-        self._ensure_session()
+        if self.session_created and self.session_id:
+            # V2 service with session
+            response = requests.post(f"{self.base_url}/v2/sessions/{self.session_id}/learn")
+        else:
+            # V1 service - use direct endpoint with processor_id
+            response = requests.post(f"{self.base_url}/learn", json={'processor_id': self.processor_id})
         
-        if not self.session_id:
-            pytest.skip("Could not create v2 session")
-        
-        response = requests.post(f"{self.base_url}/v2/sessions/{self.session_id}/learn")
-        
-        # In v2, learning empty STM returns 400 error
-        # For compatibility, return empty string when learning fails
+        # Handle empty STM learning failures
         if response.status_code == 400:
             # Check if it's due to insufficient data
             try:
@@ -378,16 +390,16 @@ class KATOFastAPIFixture:
         if not self.services_available:
             pytest.skip("KATO services not available")
         
-        # Ensure we have the same persistent session
-        self._ensure_session()
+        if self.session_created and self.session_id:
+            # V2 service with session
+            response = requests.post(f"{self.base_url}/v2/sessions/{self.session_id}/clear-stm")
+        else:
+            # V1 service - use direct endpoint with processor_id
+            response = requests.post(f"{self.base_url}/clear-stm", json={'processor_id': self.processor_id})
         
-        if not self.session_id:
-            pytest.skip("Could not create v2 session")
-        
-        response = requests.post(f"{self.base_url}/v2/sessions/{self.session_id}/clear-stm")
         response.raise_for_status()
         result = response.json()
-        # V2 returns {"status": "cleared"}, v1 tests expect 'stm-cleared'
+        # V2 returns {"status": "cleared"}, v1 returns {"message": "stm-cleared"}
         if result.get('status') == 'cleared':
             return 'stm-cleared'
         return result.get('message', '')
@@ -405,9 +417,8 @@ class KATOFastAPIFixture:
         if not self.services_available:
             pytest.skip("KATO services not available")
         
-        # v2 doesn't have a global clear-all endpoint - each user has isolated databases
-        # Delete the current session and create a new one to clear all memory including patterns
         if self.session_created and self.session_id:
+            # V2 service - Delete the current session and create a new one
             try:
                 # First clear the STM for this session
                 requests.post(f"{self.base_url}/v2/sessions/{self.session_id}/clear-stm")
@@ -419,48 +430,62 @@ class KATOFastAPIFixture:
             # Reset session tracking
             self.session_id = None
             self.session_created = False
-        
-        # Generate a NEW processor_id to ensure complete isolation
-        # This prevents session reuse even within the same test
-        self.processor_id = self._generate_processor_id()
-        
-        # Create a fresh session with the new user_id
-        self._ensure_session()
+            
+            # Generate a NEW processor_id to ensure complete isolation
+            self.processor_id = self._generate_processor_id()
+            
+            # Create a fresh session with the new user_id
+            self._ensure_session()
+        else:
+            # V1 service - use clear-all endpoint with processor_id
+            response = requests.post(f"{self.base_url}/clear-all", 
+                                    json={'processor_id': self.processor_id, 
+                                          'reset_genes': reset_genes})
+            if response.status_code == 200:
+                return response.json().get('message', 'all-cleared')
         
         if reset_genes:
             self.reset_genes_to_defaults()
         return 'all-cleared'
     
     def update_genes(self, genes: Dict[str, Any]) -> str:
-        """Update gene values via V2 API.
+        """Update gene values.
         
         V2 supports dynamic configuration updates through the session's user_config.
+        V1 uses the global genes endpoint with processor_id.
         """
         if not self.services_available:
             pytest.skip("KATO services not available")
         
-        # Ensure we have a session
-        self._ensure_session()
-        
-        if not self.session_id:
-            pytest.skip("Could not create v2 session")
-        
-        # V2 uses session-based configuration updates
-        # Update the session's user configuration
-        response = requests.post(
-            f"{self.base_url}/v2/sessions/{self.session_id}/config",
-            json={"config": genes},
-            timeout=5
-        )
-        
-        if response.status_code == 200:
-            result = response.json()
-            return result.get('message', 'genes-updated')
-        elif response.status_code == 404:
-            # Session config endpoint might not exist, try the global genes endpoint as fallback
+        if self.session_created and self.session_id:
+            # V2 service - try session-based config first
+            # V2 uses session-based configuration updates
+            response = requests.post(
+                f"{self.base_url}/v2/sessions/{self.session_id}/config",
+                json={"config": genes},
+                timeout=5
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                return result.get('message', 'genes-updated')
+            elif response.status_code == 404:
+                # Session config endpoint might not exist, try the global genes endpoint as fallback
+                response = requests.post(
+                    f"{self.base_url}/genes/update",
+                    json={"genes": genes},
+                    timeout=5
+                )
+                if response.status_code == 200:
+                    result = response.json()
+                    return result.get('message', 'genes-updated')
+        else:
+            # V1 service - use global genes endpoint with processor_id
+            genes_with_id = genes.copy()
+            genes_with_id['processor_id'] = self.processor_id
             response = requests.post(
                 f"{self.base_url}/genes/update",
-                json={"genes": genes},
+                json={"genes": genes_with_id},
                 timeout=5
             )
             if response.status_code == 200:

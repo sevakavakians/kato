@@ -91,7 +91,8 @@ class STMResponse(BaseModel):
 
 class LearnResult(BaseModel):
     """Result of learning operation"""
-    pattern_name: str = Field(..., description="Name of the learned pattern")
+    status: str = Field(..., description="Status of the learning operation (learned/insufficient_data)")
+    pattern_name: str = Field(..., description="Name of the learned pattern (empty if not learned)")
     session_id: Optional[str] = Field(None, description="Session ID")
     processor_id: Optional[str] = Field(None, description="Processor ID for v1 compatibility")
     message: Optional[str] = Field(None, description="Human-readable message")
@@ -772,11 +773,17 @@ async def observe_primary(request: Request, observation: ObservationData):
         # Observe and get results
         result = processor.observe(observation_dict)
         
-        # Update session STM with combined symbols (includes vector names)
-        combined_symbols = result.get('symbols', observation_dict.get('strings', []))
-        if combined_symbols:  # Only add non-empty events
-            session.stm.append(combined_symbols)
-            await app_state.session_manager.update_session(session)
+        # If auto-learning occurred, sync session STM with processor STM
+        if result.get('auto_learned_pattern'):
+            # Auto-learning modifies the processor's STM, so sync it back to session
+            session.stm = processor.get_stm()
+        else:
+            # Normal case: Update session STM with combined symbols (includes vector names)
+            combined_symbols = result.get('symbols', observation_dict.get('strings', []))
+            if combined_symbols:  # Only add non-empty events
+                session.stm.append(combined_symbols)
+        
+        await app_state.session_manager.update_session(session)
         
         return ObservationResult(
             status='okay',  # Always return 'okay' for v1 compatibility
@@ -814,8 +821,18 @@ async def learn_primary(request: Request):
     processor = await app_state.processor_manager.get_processor(session.user_id, session.user_config)
     
     try:
-        if not session.stm:
-            raise HTTPException(status_code=400, detail="No observations in STM to learn")
+        # Check if STM has sufficient data for learning
+        # Pattern requires at least 2 symbols total across all events
+        total_symbols = sum(len(event) for event in session.stm) if session.stm else 0
+        
+        if total_symbols < 2:
+            # Don't clear STM if learning wasn't attempted
+            return LearnResult(
+                status='insufficient_data',
+                pattern_name='',
+                processor_id=processor.id,
+                message=f'Cannot learn pattern: STM requires at least 2 symbols, found {total_symbols}'
+            )
         
         # Set processor STM to session STM
         processor.set_stm(session.stm)
@@ -823,18 +840,19 @@ async def learn_primary(request: Request):
         # Learn the current STM sequence
         pattern_name = processor.learn()
         
-        # Clear STM after learning
+        # Clear STM after successful learning
         session.stm = []
         await app_state.session_manager.update_session(session)
         
         return LearnResult(
             status='learned',
             pattern_name=pattern_name or '',
-            processor_id=processor.id  # Fixed: use 'id' not 'processor_id'
+            processor_id=processor.id,
+            message='Pattern learned successfully'
         )
         
     except Exception as e:
-        logger.error(f"Learning failed: {e}")
+        logger.error(f"Learning failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Learning failed: {str(e)}")
 
 

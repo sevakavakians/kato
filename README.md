@@ -4,7 +4,7 @@
 
 > *Transparent memory and abstraction for agentic AI systems — deterministic, explainable, and emotive-aware.*
 
-🆕 **Version 2.0 Now Default**: Multi-user session isolation, guaranteed writes, Redis sessions, full v1 compatibility
+🆕 **Latest Features**: Multi-user session isolation, guaranteed writes, Redis sessions, complete backwards compatibility
 
 ![KATO Crystal](assets/kato-graphic.png "KATO crystal")
 
@@ -33,9 +33,9 @@ Every learned structure in KATO is identified by a unique hash: `PTRN|<sha1_hash
 🚀 **Multi-Instance Support** - Run multiple processors with different configurations  
 📊 **Instance Isolation** - Each processor_id has completely isolated databases  
 🎪 **Vector Database** - Modern vector search with Qdrant (10-100x faster)  
-👥 **Multi-User Sessions** (v2.0) - Complete STM isolation per user session  
-💾 **Write Guarantees** (v2.0) - MongoDB majority write concern prevents data loss  
-🔐 **Session Management** (v2.0) - Redis-backed sessions with TTL and isolation  
+👥 **Multi-User Sessions** - Complete STM isolation per user session  
+💾 **Write Guarantees** - MongoDB majority write concern prevents data loss  
+🔐 **Session Management** - Redis-backed sessions with TTL and isolation  
 
 ### Example Architecture
 
@@ -54,7 +54,7 @@ KATO provides a deterministic machine learning algorithm that learns context + a
 - 4GB+ RAM recommended
 - MongoDB (auto-started with Docker)
 - Qdrant Vector Database (auto-started with Docker)
-- Redis (auto-started with Docker in v2.0)
+- Redis (auto-started with Docker)
 
 ### Required Python Packages (for development)
 ```bash
@@ -70,16 +70,13 @@ pip install -r tests/requirements.txt
 git clone https://github.com/your-org/kato.git
 cd kato
 
-# Build Docker image (v2.0 by default)
+# Build Docker image
 ./kato-manager.sh build
-
-# Or explicitly use v1.0 if needed
-KATO_VERSION=v1 ./kato-manager.sh build
 ```
 
 ### 2. Start Services
 ```bash
-# Start all services (v2.0 by default - includes Redis)
+# Start all services (includes MongoDB, Qdrant, Redis)
 ./kato-manager.sh start
 
 # Services will be available at:
@@ -88,25 +85,18 @@ KATO_VERSION=v1 ./kato-manager.sh build
 # - Analytics KATO: http://localhost:8003
 # - MongoDB: mongodb://localhost:27017
 # - Qdrant: http://localhost:6333
-# - Redis: redis://localhost:6379 (v2.0)
-
-# To use v1.0 instead:
-KATO_VERSION=v1 ./kato-manager.sh start
-
-# To switch versions:
-./kato-manager.sh switch v1  # Switch to v1
-./kato-manager.sh switch v2  # Switch back to v2
+# - Redis: redis://localhost:6379
 ```
 
 ### 3. Verify Installation
 ```bash
-# Check health (v2.0 endpoint)
-curl http://localhost:8001/v2/health
+# Check health
+curl http://localhost:8001/health
 
 # Response:
-# {"status": "healthy", "version": "2.0", "processor_id": "primary-v2", "features": {"sessions": true}}
+# {"status": "healthy", "processor_id": "primary", "uptime": 123.45}
 
-# Quick test of v2.0 features
+# Quick test of session features
 python test_v2_quick.py
 
 # Check API documentation
@@ -115,23 +105,23 @@ python test_v2_quick.py
 
 ### 4. Basic Usage
 
-#### Option A: Using v2.0 Sessions (Recommended)
+#### Option A: Using Sessions (Recommended)
 ```bash
 # Create a session for user isolation
-SESSION=$(curl -s -X POST http://localhost:8001/v2/sessions \
+SESSION=$(curl -s -X POST http://localhost:8001/sessions \
   -H "Content-Type: application/json" \
   -d '{"user_id": "alice"}' | jq -r '.session_id')
 
 # Observe in isolated session
-curl -X POST http://localhost:8001/v2/sessions/$SESSION/observe \
+curl -X POST http://localhost:8001/sessions/$SESSION/observe \
   -H "Content-Type: application/json" \
   -d '{"strings": ["hello", "world"]}'
 
 # Get session's isolated STM
-curl http://localhost:8001/v2/sessions/$SESSION/stm
+curl http://localhost:8001/sessions/$SESSION/stm
 ```
 
-#### Option B: v1 Compatible API (uses default session)
+#### Option B: Default Session API (backwards compatible)
 ```bash
 # Send observation (backward compatible)
 curl -X POST http://localhost:8001/observe \
@@ -766,7 +756,7 @@ docker volume prune -f
 ```
 
 #### MongoDB Init Container Exits After Startup
-**This is expected behavior.** The `mongodb-init-v2` container is designed to:
+**This is expected behavior.** The `mongodb-init` container is designed to:
 1. Start up when MongoDB is ready
 2. Initialize the MongoDB replica set configuration
 3. Exit successfully (with status code 0)
@@ -778,10 +768,10 @@ This is an initialization container that only needs to run once. You can verify 
 docker ps -a | grep mongodb-init
 
 # View initialization logs
-docker logs kato-mongodb-init-v2
+docker logs kato-mongodb-init
 ```
 
-The main MongoDB container (`kato-mongodb-v2`) will continue running normally. Only the init container stops after completing its setup task.
+The main MongoDB container (`kato-mongodb`) will continue running normally. Only the init container stops after completing its setup task.
 
 See [Troubleshooting Guide](docs/technical/TROUBLESHOOTING.md) for more solutions.
 

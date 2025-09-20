@@ -201,7 +201,7 @@ def test_empty_sequence_hash(kato_fixture):
     # Try to learn an empty sequence
     pattern_name = kato_fixture.learn()
     
-    # Empty sequence should not create a pattern (requires at least 2 strings)
+    # Empty sequence should not create a pattern (requires at least 2 symbols)
     # Should return empty string
     assert pattern_name == '', f"Expected empty string for empty sequence, got: {pattern_name}"
 

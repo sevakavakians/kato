@@ -597,11 +597,30 @@ async def get_comprehensive_metrics():
             }
         
         # Get comprehensive metrics from collector
-        summary_metrics = app_state.metrics_collector.get_summary_metrics()
-        rates = app_state.metrics_collector.calculate_rates()
+        try:
+            summary_metrics = app_state.metrics_collector.get_summary_metrics()
+            rates = app_state.metrics_collector.calculate_rates()
+        except Exception as e:
+            logger.error(f"Error getting metrics: {e}")
+            # Return fallback metrics with basic structure for compatibility
+            return {
+                "timestamp": time.time(),
+                "sessions": {"total_created": 0, "total_deleted": 0, "active": 0, "operations_total": 0},
+                "performance": {"total_requests": 0, "total_errors": 0, "error_rate": 0.0, "average_response_time": 0.0},
+                "resources": {"cpu_percent": 0.0, "memory_percent": 0.0, "disk_percent": 0.0},
+                "databases": {
+                    "mongodb": {"operations": 0, "errors": 0, "avg_response_time": 0.0},
+                    "qdrant": {"operations": 0, "errors": 0, "avg_response_time": 0.0},
+                    "redis": {"operations": 0, "errors": 0, "avg_response_time": 0.0}
+                },
+                "rates": {},
+                "processor_manager": app_state.processor_manager.get_stats() if app_state.processor_manager else {},
+                "uptime_seconds": time.time() - app_state.startup_time,
+                "active_sessions": app_state.session_manager.get_active_session_count() or 0
+            }
         
         # Enhance with processor-specific and session data
-        session_count = app_state.session_manager.get_active_session_count()
+        session_count = app_state.session_manager.get_active_session_count() or 0
         
         # Merge processor manager data into summary
         summary_metrics["processor_manager"] = app_state.processor_manager.get_stats() if app_state.processor_manager else {}
@@ -773,15 +792,9 @@ async def observe_primary(request: Request, observation: ObservationData):
         # Observe and get results
         result = processor.observe(observation_dict)
         
-        # If auto-learning occurred, sync session STM with processor STM
-        if result.get('auto_learned_pattern'):
-            # Auto-learning modifies the processor's STM, so sync it back to session
-            session.stm = processor.get_stm()
-        else:
-            # Normal case: Update session STM with combined symbols (includes vector names)
-            combined_symbols = result.get('symbols', observation_dict.get('strings', []))
-            if combined_symbols:  # Only add non-empty events
-                session.stm.append(combined_symbols)
+        # Always sync session STM with processor STM after observation
+        # This ensures consistency between session and processor state
+        session.stm = processor.get_stm()
         
         await app_state.session_manager.update_session(session)
         

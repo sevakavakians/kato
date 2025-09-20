@@ -224,7 +224,10 @@ class ProcessorManager:
                 processor.max_pattern_length = user_config.max_pattern_length
             if hasattr(processor, 'pattern_processor'):
                 processor.pattern_processor.max_pattern_length = user_config.max_pattern_length
-                logger.debug(f"Updated max_pattern_length to {user_config.max_pattern_length}")
+            if hasattr(processor, 'observation_processor'):
+                processor.observation_processor.max_pattern_length = user_config.max_pattern_length
+                logger.debug(f"Updated observation_processor.max_pattern_length to {user_config.max_pattern_length}")
+            logger.debug(f"Updated max_pattern_length to {user_config.max_pattern_length}")
         
         if user_config.persistence is not None:
             if hasattr(processor, 'pattern_processor'):

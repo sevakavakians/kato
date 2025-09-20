@@ -55,11 +55,11 @@ class SessionMiddleware(BaseHTTPMiddleware):
         # BUT exclude GET /sessions/{session_id} which is for session info retrieval
         if path.startswith('/sessions/') and path != '/sessions':
             parts = path.split('/')
-            if len(parts) >= 4 and parts[3]:
-                session_id = parts[3]
+            if len(parts) >= 3 and parts[2]:
+                session_id = parts[2]
                 
                 # Skip validation for GET session info endpoint - let the endpoint handle it
-                if len(parts) == 4 and request.method == 'GET':
+                if len(parts) == 3 and request.method == 'GET':
                     session_id = None  # Don't validate, let endpoint handle it
                 else:
                     # Validate the session exists for session-scoped operations

@@ -11,7 +11,7 @@ import asyncio
 import json
 import uuid
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Any
 try:
     # Try modern redis with async support
@@ -206,7 +206,7 @@ class RedisSessionManager(SessionManager):
         session_id = f"session-{uuid.uuid4().hex}-{int(datetime.utcnow().timestamp() * 1000)}"
         ttl = ttl_seconds or self.default_ttl
         
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         expires_at = now + timedelta(seconds=ttl)
         
         session = SessionState(
@@ -299,7 +299,8 @@ class RedisSessionManager(SessionManager):
         
         try:
             # Calculate remaining TTL
-            remaining_ttl = int((session.expires_at - datetime.utcnow()).total_seconds())
+            # Calculate remaining TTL (all datetimes should now be timezone-aware)
+            remaining_ttl = int((session.expires_at - datetime.now(timezone.utc)).total_seconds())
             
             if remaining_ttl <= 0:
                 # Session expired
@@ -372,7 +373,7 @@ class RedisSessionManager(SessionManager):
             # Update session expires_at if we have it in memory
             session = await self.get_session(session_id)
             if session:
-                session.expires_at = datetime.utcnow() + timedelta(seconds=ttl_seconds)
+                session.expires_at = datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)
                 await self._save_session(session, ttl_seconds)
             
             logger.info(f"Extended session {session_id} by {ttl_seconds}s")

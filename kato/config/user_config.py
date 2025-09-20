@@ -8,7 +8,7 @@ complete isolation between users.
 
 from typing import Optional, Dict, Any, Literal
 from dataclasses import dataclass, field, asdict
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
 
 logger = logging.getLogger('kato.v2.config.user_config')
@@ -41,8 +41,8 @@ class UserConfiguration:
     
     # Metadata
     user_id: str = field(default="")
-    created_at: datetime = field(default_factory=datetime.utcnow)
-    updated_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     version: int = field(default=1)
     
     def validate(self) -> bool:
@@ -140,7 +140,7 @@ class UserConfiguration:
                 return False
             
             # Update metadata
-            self.updated_at = datetime.utcnow()
+            self.updated_at = datetime.now(timezone.utc)
             self.version += 1
             
             return True

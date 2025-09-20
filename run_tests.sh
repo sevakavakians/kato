@@ -120,8 +120,8 @@ TEST_RESULT=${TEST_RESULT:-0}
 if [ "$STOP_KATO" = true ]; then
     echo
     echo -e "${GREEN}Stopping and removing KATO test containers...${NC}"
-    # Use the test-down command to stop and remove test containers (but keep volumes)
-    ./kato-manager.sh test-down
+    # Stop the test containers (but keep volumes)
+    ./kato-manager.sh stop
 fi
 
 # Report results

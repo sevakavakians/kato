@@ -11,7 +11,7 @@ sequences without any data collision.
 import asyncio
 import time
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
 import logging
@@ -48,11 +48,11 @@ class SessionState:
     
     def is_expired(self) -> bool:
         """Check if session has expired"""
-        return datetime.utcnow() > self.expires_at
+        return datetime.now(timezone.utc) > self.expires_at
     
     def update_access(self):
         """Update last access time and count"""
-        self.last_accessed = datetime.utcnow()
+        self.last_accessed = datetime.now(timezone.utc)
         self.access_count += 1
     
     def enforce_limits(self):
@@ -140,7 +140,7 @@ class SessionManager:
         # Generate cryptographically secure session ID
         session_id = f"session-{uuid.uuid4().hex}-{int(time.time() * 1000)}"
         
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         ttl = ttl_seconds or self.default_ttl
         
         # Initialize user configuration
@@ -282,7 +282,7 @@ class SessionManager:
         Returns:
             Number of sessions cleaned up
         """
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         expired_ids = [
             sid for sid, session in self.sessions.items()
             if session.expires_at < now
@@ -309,7 +309,7 @@ class SessionManager:
     
     def get_active_session_count(self) -> int:
         """Get count of active (non-expired) sessions"""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         return sum(
             1 for session in self.sessions.values()
             if session.expires_at > now
@@ -317,7 +317,7 @@ class SessionManager:
     
     def get_session_stats(self) -> Dict[str, Any]:
         """Get statistics about current sessions"""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         active_sessions = [s for s in self.sessions.values() if s.expires_at > now]
         
         return {

@@ -10,7 +10,7 @@ import json
 import logging
 import pickle
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional, Any, Union
 from dataclasses import asdict
 
@@ -169,7 +169,7 @@ class RedisSessionStore:
             serialized = self._serialize_session(session)
             
             # Calculate TTL in seconds
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             ttl_seconds = max(1, int((session.expires_at - now).total_seconds()))
             
             # Store with TTL

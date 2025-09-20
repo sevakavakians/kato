@@ -8,7 +8,7 @@ Sessions survive service restarts and can be shared across multiple instances.
 import asyncio
 import time
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Any
 import logging
 import os
@@ -94,7 +94,7 @@ class RedisSessionManager:
         # Generate cryptographically secure session ID
         session_id = f"session-{uuid.uuid4().hex}-{int(time.time() * 1000)}"
         
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         ttl = ttl_seconds or self.default_ttl
         
         session = SessionState(

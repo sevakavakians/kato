@@ -9,7 +9,7 @@ import sys
 import time
 import uuid
 from contextvars import ContextVar
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Union
 from logging import LogRecord
 
@@ -44,7 +44,7 @@ class StructuredFormatter(logging.Formatter):
         
         # Build structured log entry
         log_entry = {
-            'timestamp': datetime.utcnow().isoformat() + 'Z',
+            'timestamp': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
             'level': record.levelname,
             'logger': record.name,
             'message': record.getMessage(),

@@ -239,9 +239,9 @@ def get_recovery_suggestions(exc: KatoV2Exception) -> Dict[str, Any]:
     if isinstance(exc, SessionNotFoundError):
         return {
             "actions": [
-                "Create a new session using POST /v2/sessions",
-                "Check if the session ID is correct",
-                "Verify the session has not expired"
+                "Use observe endpoint with unique processor_id for isolation",
+                "Check if the processor_id is correct",
+                "Ensure consistent processor_id across related operations"
             ],
             "retry_recommended": False
         }
@@ -249,9 +249,9 @@ def get_recovery_suggestions(exc: KatoV2Exception) -> Dict[str, Any]:
     elif isinstance(exc, SessionExpiredError):
         return {
             "actions": [
-                "Create a new session using POST /v2/sessions",
-                "Use session extension endpoint if available",
-                "Check session TTL configuration"
+                "Use a new processor_id to start fresh",
+                "Clear all memory if needed with /clear-all endpoint",
+                "Check processor eviction TTL configuration"
             ],
             "retry_recommended": False
         }

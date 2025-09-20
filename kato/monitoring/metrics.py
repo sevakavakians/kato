@@ -55,7 +55,7 @@ class Metric:
             return 0.0
         
         cutoff = time.time() - window_seconds
-        recent_values = [v.value for v in self.values if v.timestamp > cutoff]
+        recent_values = [v.value or 0 for v in self.values if v.timestamp > cutoff and v.value is not None]
         
         if recent_values:
             return sum(recent_values) / len(recent_values)
@@ -67,7 +67,7 @@ class Metric:
             return 0.0
         
         cutoff = time.time() - window_seconds
-        recent_values = [(v.value, v.timestamp) for v in self.values if v.timestamp > cutoff]
+        recent_values = [(v.value or 0, v.timestamp) for v in self.values if v.timestamp > cutoff and v.value is not None]
         
         if len(recent_values) < 2:
             return 0.0
@@ -388,6 +388,37 @@ class MetricsCollector:
                 logger.error(f"Error in collection loop: {e}")
                 await asyncio.sleep(self._collection_interval)
     
+    def _get_metric_value(self, all_metrics: Dict, metric_name: str, value_type: str = "current") -> float:
+        """Safely get a metric value, returning 0 if None or missing"""
+        try:
+            metric_data = all_metrics.get(metric_name, {})
+            if not isinstance(metric_data, dict):
+                return 0.0
+            value = metric_data.get(value_type, 0)
+            return float(value) if value is not None else 0.0
+        except (TypeError, ValueError):
+            return 0.0
+
+    def _calculate_error_rate(self, all_metrics: Dict) -> float:
+        """Safely calculate error rate, handling None values"""
+        try:
+            errors = self._get_metric_value(all_metrics, "kato_errors_total")
+            requests = self._get_metric_value(all_metrics, "kato_requests_total")
+            
+            # Ensure both values are numbers
+            if errors is None or requests is None:
+                return 0.0
+            
+            errors = float(errors) if errors is not None else 0.0
+            requests = float(requests) if requests is not None else 0.0
+            
+            if requests == 0:
+                return 0.0
+            
+            return errors / requests
+        except (TypeError, ValueError, ZeroDivisionError):
+            return 0.0
+
     def get_summary_metrics(self) -> Dict[str, Any]:
         """Get comprehensive summary of all metrics"""
         current_time = time.time()
@@ -399,38 +430,37 @@ class MetricsCollector:
         summary = {
             "timestamp": current_time,
             "sessions": {
-                "total_created": all_metrics.get("sessions_created", {}).get("current", 0),
-                "total_deleted": all_metrics.get("sessions_deleted", {}).get("current", 0),
-                "active": all_metrics.get("sessions_active", {}).get("current", 0),
-                "operations_total": all_metrics.get("session_operations", {}).get("current", 0)
+                "total_created": self._get_metric_value(all_metrics, "sessions_created"),
+                "total_deleted": self._get_metric_value(all_metrics, "sessions_deleted"),
+                "active": self._get_metric_value(all_metrics, "sessions_active"),
+                "operations_total": self._get_metric_value(all_metrics, "session_operations")
             },
             "performance": {
-                "total_requests": all_metrics.get("requests_total", {}).get("current", 0),
-                "total_errors": all_metrics.get("errors_total", {}).get("current", 0),
-                "error_rate": (all_metrics.get("errors_total", {}).get("current", 0) / 
-                              max(1, all_metrics.get("requests_total", {}).get("current", 0))),
-                "average_response_time": all_metrics.get("response_time", {}).get("average_1m", 0)
+                "total_requests": self._get_metric_value(all_metrics, "kato_requests_total"),
+                "total_errors": self._get_metric_value(all_metrics, "kato_errors_total"),
+                "error_rate": self._calculate_error_rate(all_metrics),
+                "average_response_time": self._get_metric_value(all_metrics, "kato_request_duration_seconds", "average_1m")
             },
             "resources": {
-                "cpu_percent": all_metrics.get("cpu_percent", {}).get("current", 0),
-                "memory_percent": all_metrics.get("memory_percent", {}).get("current", 0),
-                "disk_percent": all_metrics.get("disk_percent", {}).get("current", 0)
+                "cpu_percent": self._get_metric_value(all_metrics, "cpu_percent"),
+                "memory_percent": self._get_metric_value(all_metrics, "memory_percent"),
+                "disk_percent": self._get_metric_value(all_metrics, "disk_percent")
             },
             "databases": {
                 "mongodb": {
-                    "operations": all_metrics.get("mongodb_operations", {}).get("current", 0),
-                    "errors": all_metrics.get("mongodb_errors", {}).get("current", 0),
-                    "avg_response_time": all_metrics.get("mongodb_response_time", {}).get("average_1m", 0)
+                    "operations": self._get_metric_value(all_metrics, "mongodb_operations"),
+                    "errors": self._get_metric_value(all_metrics, "mongodb_errors"),
+                    "avg_response_time": self._get_metric_value(all_metrics, "mongodb_response_time", "average_1m")
                 },
                 "qdrant": {
-                    "operations": all_metrics.get("qdrant_operations", {}).get("current", 0),
-                    "errors": all_metrics.get("qdrant_errors", {}).get("current", 0),
-                    "avg_response_time": all_metrics.get("qdrant_response_time", {}).get("average_1m", 0)
+                    "operations": self._get_metric_value(all_metrics, "qdrant_operations"),
+                    "errors": self._get_metric_value(all_metrics, "qdrant_errors"),
+                    "avg_response_time": self._get_metric_value(all_metrics, "qdrant_response_time", "average_1m")
                 },
                 "redis": {
-                    "operations": all_metrics.get("redis_operations", {}).get("current", 0),
-                    "errors": all_metrics.get("redis_errors", {}).get("current", 0),
-                    "avg_response_time": all_metrics.get("redis_response_time", {}).get("average_1m", 0)
+                    "operations": self._get_metric_value(all_metrics, "redis_operations"),
+                    "errors": self._get_metric_value(all_metrics, "redis_errors"),
+                    "avg_response_time": self._get_metric_value(all_metrics, "redis_response_time", "average_1m")
                 }
             }
         }
@@ -442,23 +472,27 @@ class MetricsCollector:
         rates = {}
         
         # Request rates
-        if "requests_total" in self.metrics:
-            rates["requests_per_second"] = self.metrics["requests_total"].get_rate(60)
-            rates["requests_per_minute"] = self.metrics["requests_total"].get_rate(60) * 60
+        if "kato_requests_total" in self.metrics:
+            rate = self.metrics["kato_requests_total"].get_rate(60) or 0
+            rates["requests_per_second"] = rate
+            rates["requests_per_minute"] = rate * 60
         
         # Error rates
-        if "errors_total" in self.metrics:
-            rates["errors_per_minute"] = self.metrics["errors_total"].get_rate(60) * 60
+        if "kato_errors_total" in self.metrics:
+            rate = self.metrics["kato_errors_total"].get_rate(60) or 0
+            rates["errors_per_minute"] = rate * 60
         
         # Session rates
         if "sessions_created" in self.metrics:
-            rates["sessions_per_minute"] = self.metrics["sessions_created"].get_rate(60) * 60
+            rate = self.metrics["sessions_created"].get_rate(60) or 0
+            rates["sessions_per_minute"] = rate * 60
         
         # Database operation rates
         for db in ["mongodb", "qdrant", "redis"]:
             metric_name = f"{db}_operations"
             if metric_name in self.metrics:
-                rates[f"{db}_ops_per_second"] = self.metrics[metric_name].get_rate(60)
+                rate = self.metrics[metric_name].get_rate(60) or 0
+                rates[f"{db}_ops_per_second"] = rate
         
         return rates
     

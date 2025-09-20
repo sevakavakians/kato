@@ -231,7 +231,7 @@ Client Request → FastAPI Service (Port 8001-8003) → Embedded KATO Processor
 
 ## Testing Strategy
 
-The codebase has comprehensive test coverage with 143+ test functions across multiple test files. Tests are organized under `tests/tests/`:
+The codebase has comprehensive test coverage with 287 test functions across multiple test files. Tests are organized under `tests/tests/`:
 
 1. **Unit Tests** (`tests/tests/unit/`): Test individual components
 2. **Integration Tests** (`tests/tests/integration/`): Test end-to-end workflows

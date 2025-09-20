@@ -1206,3 +1206,4 @@
 [0;32m[SUCCESS][0m KATO services are running!
 [0;34m[INFO][0m Stopping KATO services...
 [0;32m[SUCCESS][0m Services stopped
+[0;31m[ERROR][0m Docker is not installed or not in PATH

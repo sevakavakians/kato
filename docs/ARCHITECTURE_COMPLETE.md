@@ -356,7 +356,7 @@ The system uses FastAPI with embedded processor for:
 - **Behavior**: Auto-learn on max_pattern_length
 - **Clearing**: 
   - Regular learn(): Completely cleared
-  - Auto-learn: Preserves last event as first event of new STM
+  - Auto-learn: Completely cleared (same as regular learn)
 
 ### Long-Term Memory
 - **Type**: Persistent MongoDB/Qdrant storage

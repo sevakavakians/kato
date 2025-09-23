@@ -261,6 +261,7 @@ The codebase has comprehensive test coverage with 287 test functions across mult
 
 #### Learning Configuration
 - `MAX_PATTERN_LENGTH`: Auto-learn after N observations (0 = manual only, default: 0)
+  - When auto-learn triggers, STM is completely cleared (no retention of last event)
 - `PERSISTENCE`: STM persistence length (default: 5)
 - `RECALL_THRESHOLD`: Pattern matching threshold (0.0-1.0, default: 0.1)
 - `SMOOTHNESS`: Smoothing factor for pattern matching (default: 3)

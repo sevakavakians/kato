@@ -288,10 +288,10 @@ def test_max_pattern_length_auto_learn(kato_fixture):
     for event in events:
         kato_fixture.observe({'strings': [event], 'vectors': [], 'emotives': {}})
     
-    # Should auto-learn and clear short-term memory except last
+    # Should auto-learn and completely clear short-term memory
     stm = kato_fixture.get_short_term_memory()
-    assert len(stm) == 1
-    assert stm == [['auto3']]
+    assert len(stm) == 0
+    assert stm == []
     
     # Verify sequence was learned (KATO requires 2+ strings for predictions)
     kato_fixture.clear_short_term_memory()

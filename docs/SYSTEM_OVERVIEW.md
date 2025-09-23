@@ -91,7 +91,7 @@ observe({'strings': ['m']})
   - Triggers auto-learning when limit reached
   - Cleared after learning:
     - Regular learn(): Completely cleared
-    - Auto-learn: Last event preserved as first event of new STM
+    - Auto-learn: Completely cleared (same as regular learn)
 
 #### Long-Term Memory
 - **Purpose**: Persistent storage of learned patterns
@@ -111,7 +111,7 @@ Learning occurs when explicitly triggered or when short-term memory reaches capa
 4. **Frequency Update**: Frequency starts at 1 for new patterns, increments if identical pattern learned again
 5. **Memory Clear**: 
    - **Regular learning (explicit learn() call)**: Short-term memory COMPLETELY cleared
-   - **Auto-learning (max_pattern_length reached)**: Last event preserved as first event of new STM
+   - **Auto-learning (max_pattern_length reached)**: Short-term memory COMPLETELY cleared
 
 ```python
 # Regular Learning Example
@@ -124,7 +124,7 @@ kato.learn()
 # Short-Term Memory: [['a'], ['b'], ['c']]  # Reaches max
 # Auto-learn triggers
 # Creates: PTRN|xyz123... with pattern [['a'], ['b'], ['c']]
-# Short-Term Memory after: [['c']]  # Last event preserved for continuity
+# Short-Term Memory after: []  # Completely cleared
 ```
 
 ### 4. Prediction Generation

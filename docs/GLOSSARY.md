@@ -135,7 +135,7 @@ Inverse Term Frequency-Document Frequency similarity. Measures pattern relevance
 ### Auto-Learning
 Automatic pattern learning triggered when STM reaches `MAX_PATTERN_LENGTH`. When triggered:
 1. Creates a pattern from current STM
-2. Clears STM (keeping last event for continuity)
+2. Completely clears STM
 3. Stores pattern in long-term memory
 
 ### Manual Learning

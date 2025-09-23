@@ -226,9 +226,9 @@ class ObservationProcessor:
                        f"max_pattern_length {self.max_pattern_length}")
             
             if stm_length > 1:
-                # Keep the last event as context for the next pattern
-                # This maintains continuity between learned chunks
-                pattern_name = self.pattern_operations.learn_pattern(keep_tail=True)
+                # Learn the pattern and clear STM completely
+                # No longer keeping the last event for continuity
+                pattern_name = self.pattern_operations.learn_pattern(keep_tail=False)
                 
                 if pattern_name:
                     logger.info(f"Auto-learned pattern: {pattern_name}")

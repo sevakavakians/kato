@@ -265,16 +265,10 @@ The codebase has comprehensive test coverage with 287 test functions across mult
 - `PERSISTENCE`: Rolling window size for emotive values per pattern (default: 5)
   - Controls how many historical emotive entries are kept when patterns are re-learned
 - `RECALL_THRESHOLD`: Pattern matching threshold (0.0-1.0, default: 0.1)
-- `SMOOTHNESS`: Smoothing factor for pattern matching (default: 3)
 
 #### Processing Configuration
 - `INDEXER_TYPE`: Vector indexer type (default: 'VI')
-- `AUTO_ACT_METHOD`: Auto-action method (default: 'none')
-- `AUTO_ACT_THRESHOLD`: Threshold for auto-actions (default: 0.8)
-- `ALWAYS_UPDATE_FREQUENCIES`: Update pattern frequencies on re-observation (default: false)
 - `MAX_PREDICTIONS`: Maximum predictions to return (default: 100)
-- `QUIESCENCE`: Quiescence period for pattern stabilization (default: 3)
-- `SEARCH_DEPTH`: Depth for pattern searching (default: 10)
 - `SORT`: Sort symbols alphabetically within events (default: true)
 - `PROCESS_PREDICTIONS`: Enable prediction processing (default: true)
 

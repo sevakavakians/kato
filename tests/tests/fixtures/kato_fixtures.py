@@ -419,7 +419,6 @@ class KATOFastAPIFixture:
             'max_pattern_length': 0,  # Disable auto-learning by default
             'recall_threshold': 0.1,
             'persistence': 5,
-            'smoothness': 3,
         }
         return self.update_genes(default_genes)
     

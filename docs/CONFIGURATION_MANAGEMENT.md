@@ -288,8 +288,6 @@ curl http://localhost:8001/status
 | MAX_PATTERN_LENGTH | int | 0 | Auto-learn after N observations (0 = manual) |
 | PERSISTENCE | int | 5 | Rolling window size for emotive values per pattern |
 | RECALL_THRESHOLD | float | 0.1 | Pattern matching threshold (0.0-1.0) |
-| SMOOTHNESS | int | 3 | Smoothing factor for pattern matching |
-| QUIESCENCE | int | 3 | Quiescence period for stabilization |
 | AUTO_LEARN_ENABLED | bool | false | Enable automatic learning |
 | AUTO_LEARN_THRESHOLD | int | 50 | Observations before auto-learning |
 
@@ -298,11 +296,7 @@ curl http://localhost:8001/status
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
 | INDEXER_TYPE | str | "VI" | Type of vector indexer |
-| AUTO_ACT_METHOD | str | "none" | Automatic action method |
-| AUTO_ACT_THRESHOLD | float | 0.8 | Threshold for automatic actions |
-| ALWAYS_UPDATE_FREQUENCIES | bool | false | Update frequencies on re-observation |
 | MAX_PREDICTIONS | int | 100 | Maximum predictions to return |
-| SEARCH_DEPTH | int | 10 | Depth for pattern searching |
 | SORT | bool | true | Sort symbols alphabetically |
 | PROCESS_PREDICTIONS | bool | true | Enable prediction processing |
 

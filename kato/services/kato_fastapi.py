@@ -983,13 +983,7 @@ async def get_gene_primary(request: Request, gene_name: str):
         "recall_threshold": app_state.settings.learning.recall_threshold,
         "persistence": app_state.settings.learning.persistence,
         "max_pattern_length": app_state.settings.learning.max_pattern_length,
-        "smoothness": app_state.settings.learning.smoothness,
-        "quiescence": app_state.settings.learning.quiescence,
-        "auto_act_method": app_state.settings.processing.auto_act_method,
-        "auto_act_threshold": app_state.settings.processing.auto_act_threshold,
-        "always_update_frequencies": app_state.settings.processing.always_update_frequencies,
         "max_predictions": app_state.settings.processing.max_predictions,
-        "search_depth": app_state.settings.processing.search_depth,
         "sort": app_state.settings.processing.sort_symbols,
         "process_predictions": app_state.settings.processing.process_predictions,
     }

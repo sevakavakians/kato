@@ -27,15 +27,9 @@ class UserConfiguration:
     recall_threshold: Optional[float] = None  # 0.0-1.0
     persistence: Optional[int] = None  # 1-100
     max_pattern_length: Optional[int] = None  # 0+ (0 = unlimited)
-    smoothness: Optional[int] = None  # 1-10
-    quiescence: Optional[int] = None  # 0-100
     
     # Processing parameters
-    auto_act_method: Optional[Literal['none', 'threshold', 'adaptive']] = None
-    auto_act_threshold: Optional[float] = None  # 0.0-1.0
-    always_update_frequencies: Optional[bool] = None
     max_predictions: Optional[int] = None  # 1-10000
-    search_depth: Optional[int] = None  # 1-100
     sort_symbols: Optional[bool] = None
     process_predictions: Optional[bool] = None
     
@@ -71,40 +65,9 @@ class UserConfiguration:
                     logger.error(f"Invalid max_pattern_length: {self.max_pattern_length}")
                     return False
             
-            # Validate smoothness
-            if self.smoothness is not None:
-                if not 1 <= self.smoothness <= 10:
-                    logger.error(f"Invalid smoothness: {self.smoothness}")
-                    return False
-            
-            # Validate quiescence
-            if self.quiescence is not None:
-                if not 0 <= self.quiescence <= 100:
-                    logger.error(f"Invalid quiescence: {self.quiescence}")
-                    return False
-            
-            # Validate auto_act_method
-            if self.auto_act_method is not None:
-                if self.auto_act_method not in ['none', 'threshold', 'adaptive']:
-                    logger.error(f"Invalid auto_act_method: {self.auto_act_method}")
-                    return False
-            
-            # Validate auto_act_threshold
-            if self.auto_act_threshold is not None:
-                if not 0.0 <= self.auto_act_threshold <= 1.0:
-                    logger.error(f"Invalid auto_act_threshold: {self.auto_act_threshold}")
-                    return False
-            
-            # Validate max_predictions
             if self.max_predictions is not None:
                 if not 1 <= self.max_predictions <= 10000:
                     logger.error(f"Invalid max_predictions: {self.max_predictions}")
-                    return False
-            
-            # Validate search_depth
-            if self.search_depth is not None:
-                if not 1 <= self.search_depth <= 100:
-                    logger.error(f"Invalid search_depth: {self.search_depth}")
                     return False
             
             return True
@@ -196,10 +159,8 @@ class UserConfiguration:
         """
         # Filter only valid fields
         valid_fields = {
-            'recall_threshold', 'persistence', 'max_pattern_length', 
-            'smoothness', 'quiescence', 'auto_act_method', 
-            'auto_act_threshold', 'always_update_frequencies',
-            'max_predictions', 'search_depth', 'sort_symbols',
+            'recall_threshold', 'persistence', 'max_pattern_length',
+            'max_predictions', 'sort_symbols',
             'process_predictions', 'user_id', 'version'
         }
         

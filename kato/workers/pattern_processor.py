@@ -52,13 +52,8 @@ class PatternProcessor:
         self.kb_id = kwargs["kb_id"] # Use this to connect to the KB.
         self.max_pattern_length = kwargs["max_pattern_length"]
         self.persistence = kwargs["persistence"]
-        self.smoothness = kwargs["smoothness"]
-        self.AUTOACT_METHOD = kwargs["auto_act_method"]
-        self.AUTOACT_THRESHOLD = kwargs["auto_act_threshold"]
-        self.always_update_frequencies = kwargs["always_update_frequencies"]
         self.max_predictions = int(kwargs["max_predictions"])
         self.recall_threshold = float(kwargs["recall_threshold"])
-        self.QUIESCENCE = kwargs["quiescence"]
         self.superkb = SuperKnowledgeBase(self.kb_id, self.persistence, settings=self.settings)
         self.patterns_searcher = PatternSearcher(kb_id=self.kb_id,
                                              max_predictions=self.max_predictions,
@@ -118,7 +113,6 @@ class PatternProcessor:
         Sets up empty STM, emotives, mood, and loads patterns from database.
         Called during initialization and memory clearing.
         """
-        self.QUIESCENCE_COUNT: int = 0
         self.STM: Deque[List[str]] = deque()
         self.emotives: List[Dict[str, float]] = []
         self.mood: Dict[str, float] = {}

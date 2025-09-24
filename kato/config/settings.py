@@ -194,20 +194,6 @@ class LearningConfig(BaseSettings):
         le=1.0,
         description="Minimum similarity threshold for pattern matching"
     )
-    smoothness: int = Field(
-        3,
-        env='SMOOTHNESS',
-        ge=1,
-        le=10,
-        description="Smoothing factor for pattern matching"
-    )
-    quiescence: int = Field(
-        3,
-        env='QUIESCENCE',
-        ge=0,
-        le=100,
-        description="Quiescence period for pattern stabilization"
-    )
     auto_learn_enabled: bool = Field(
         False,
         env='AUTO_LEARN_ENABLED',
@@ -239,36 +225,12 @@ class ProcessingConfig(BaseSettings):
         env='INDEXER_TYPE',
         description="Type of vector indexer to use"
     )
-    auto_act_method: Literal['none', 'threshold', 'adaptive'] = Field(
-        'none',
-        env='AUTO_ACT_METHOD',
-        description="Automatic action method"
-    )
-    auto_act_threshold: float = Field(
-        0.8,
-        env='AUTO_ACT_THRESHOLD',
-        ge=0.0,
-        le=1.0,
-        description="Threshold for automatic actions"
-    )
-    always_update_frequencies: bool = Field(
-        False,
-        env='ALWAYS_UPDATE_FREQUENCIES',
-        description="Always update pattern frequencies on re-observation"
-    )
     max_predictions: int = Field(
         100,
         env='MAX_PREDICTIONS',
         ge=1,
         le=10000,
         description="Maximum number of predictions to return"
-    )
-    search_depth: int = Field(
-        10,
-        env='SEARCH_DEPTH',
-        ge=1,
-        le=100,
-        description="Depth for pattern searching"
     )
     sort_symbols: bool = Field(
         True,

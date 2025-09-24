@@ -155,13 +155,7 @@ class ProcessorManager:
                 'max_pattern_length': self.settings.learning.max_pattern_length,
                 'persistence': self.settings.learning.persistence,
                 'recall_threshold': self.settings.learning.recall_threshold,
-                'smoothness': self.settings.learning.smoothness,
-                'auto_act_method': self.settings.processing.auto_act_method,
-                'auto_act_threshold': self.settings.processing.auto_act_threshold,
-                'always_update_frequencies': self.settings.processing.always_update_frequencies,
                 'max_predictions': self.settings.processing.max_predictions,
-                'quiescence': self.settings.learning.quiescence,
-                'search_depth': self.settings.processing.search_depth,
                 'sort': self.settings.processing.sort_symbols,
                 'process_predictions': self.settings.processing.process_predictions
             }
@@ -292,13 +286,7 @@ class ProcessorManager:
                 'max_pattern_length': self.settings.learning.max_pattern_length,
                 'persistence': self.settings.learning.persistence,
                 'recall_threshold': self.settings.learning.recall_threshold,
-                'smoothness': self.settings.learning.smoothness,
-                'auto_act_method': self.settings.processing.auto_act_method,
-                'auto_act_threshold': self.settings.processing.auto_act_threshold,
-                'always_update_frequencies': self.settings.processing.always_update_frequencies,
                 'max_predictions': self.settings.processing.max_predictions,
-                'quiescence': self.settings.learning.quiescence,
-                'search_depth': self.settings.processing.search_depth,
                 'sort': self.settings.processing.sort_symbols,
                 'process_predictions': self.settings.processing.process_predictions
             }
@@ -319,23 +307,8 @@ class ProcessorManager:
             if 'max_pattern_length' in new_config:
                 processor.max_pattern_length = new_config['max_pattern_length']
             
-            if 'smoothness' in new_config:
-                processor.smoothness = new_config['smoothness']
-            
-            if 'quiescence' in new_config:
-                processor.quiescence = new_config['quiescence']
-            
-            if 'auto_act_threshold' in new_config:
-                processor.auto_act_threshold = new_config['auto_act_threshold']
-            
-            if 'always_update_frequencies' in new_config:
-                processor.always_update_frequencies = new_config['always_update_frequencies']
-            
             if 'max_predictions' in new_config:
                 processor.max_predictions = new_config['max_predictions']
-            
-            if 'search_depth' in new_config:
-                processor.search_depth = new_config['search_depth']
             
             if 'sort' in new_config:
                 processor.sort = new_config['sort']

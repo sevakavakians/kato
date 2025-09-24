@@ -185,7 +185,7 @@ observations = [
 
 1. **Alphanumeric Sorting**: Strings within each event are automatically sorted alphanumerically
 2. **Vector Processing**: Vectors are converted to symbolic names (VCTR|hash) in STM
-3. **Persistence Limits**: Default STM persistence is 5 events (configurable)
+3. **Emotive Persistence**: Default emotive rolling window is 5 entries per pattern (configurable via PERSISTENCE)
 4. **Pattern Naming**: Learned patterns follow the format PTRN|<sha1_hash>
 5. **Deterministic**: Same inputs always produce same outputs
 6. **Learning Clears STM**: Any learning operation (learn_after_each or learn_at_end) always clears STM

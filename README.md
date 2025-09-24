@@ -96,8 +96,8 @@ curl http://localhost:8001/health
 # Response:
 # {"status": "healthy", "processor_id": "primary", "uptime": 123.45}
 
-# Quick test of session features
-python test_v2_quick.py
+# Quick test of basic functionality
+./run_tests.sh --no-start --no-stop tests/tests/api/test_fastapi_endpoints.py::test_health_endpoint -v
 
 # Check API documentation
 # Open in browser: http://localhost:8001/docs
@@ -375,7 +375,7 @@ REDIS_PORT: 6379                            # Redis port
 ```yaml
 # Pattern Learning
 MAX_PATTERN_LENGTH: 0                # Auto-learn after N observations (0 = manual only)
-PERSISTENCE: 5                        # Number of events to retain in memory
+PERSISTENCE: 5                        # Rolling window size for emotive values per pattern
 RECALL_THRESHOLD: 0.1                # Similarity threshold for pattern matching (0.0-1.0)
 SMOOTHNESS: 3                        # Smoothing factor for pattern matching
 QUIESCENCE: 3                        # Quiescence period for pattern stabilization

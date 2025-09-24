@@ -185,7 +185,7 @@ class LearningConfig(BaseSettings):
         env='PERSISTENCE',
         ge=1,
         le=100,
-        description="Number of events to retain in memory"
+        description="Rolling window size for emotive values per pattern"
     )
     recall_threshold: float = Field(
         0.1,

@@ -65,7 +65,7 @@ The current cognitive state after processing, including:
 Configuration parameters that control processor behavior. These can be updated at runtime and include:
 - `recall_threshold`: Pattern matching sensitivity
 - `max_predictions`: Maximum predictions to return
-- `persistence`: STM persistence length
+- `persistence`: Rolling window size for emotive values per pattern
 - And many others
 
 ### Genome Manifest

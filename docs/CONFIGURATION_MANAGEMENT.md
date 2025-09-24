@@ -286,7 +286,7 @@ curl http://localhost:8001/status
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
 | MAX_PATTERN_LENGTH | int | 0 | Auto-learn after N observations (0 = manual) |
-| PERSISTENCE | int | 5 | Number of events to retain in memory |
+| PERSISTENCE | int | 5 | Rolling window size for emotive values per pattern |
 | RECALL_THRESHOLD | float | 0.1 | Pattern matching threshold (0.0-1.0) |
 | SMOOTHNESS | int | 3 | Smoothing factor for pattern matching |
 | QUIESCENCE | int | 3 | Quiescence period for stabilization |

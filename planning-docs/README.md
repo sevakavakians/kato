@@ -1,136 +1,123 @@
-# Planning Documentation System - Quick Start Guide
+# KATO Planning Documentation
 
-## Purpose
-This planning system ensures development continuity across sessions and provides intelligent context management for the KATO project.
+## Overview
+This directory contains planning and design documentation for the KATO (Knowledge Abstraction for Traceable Outcomes) project. The documentation is kept minimal and focused on current development needs.
 
-## For Claude Code: Context Loading Strategy
+## Quick Start for Development
 
-### 1. ALWAYS Start Here (Immediate Context)
-Read these files in order:
-1. **This file** (`planning-docs/README.md`) - You are here
-2. **SESSION_STATE.md** - Current task and progress
-3. **DAILY_BACKLOG.md** - Today's priorities
-4. **Latest session log** in `sessions/` folder (if exists)
+### Essential Files (Read First)
+1. **PROJECT_OVERVIEW.md** - Core project information and current status
+2. **ARCHITECTURE.md** - Technical architecture and design decisions
+3. **DECISIONS.md** - Important architectural and design decisions with rationale
 
-### 2. Load When Needed (On-Demand Context)
-Only read these when relevant to current task:
-- **PROJECT_OVERVIEW.md** - When needing project scope/tech info
-- **ARCHITECTURE.md** - When making structural decisions
-- **SPRINT_BACKLOG.md** - When planning beyond today
-- **DECISIONS.md** - When questioning past choices
-- **Historical sessions/** - When investigating past work
-- **completed/** - When building on previous features
+### Reference Files
+- **FUTURE_FEATURES.md** - Aspirational features and research ideas
+- **ARCHIVE_SUMMARY.md** - Summary of completed major milestones
+- **completed/** - Detailed documentation of completed work
 
-### 3. Current System Status
-
-**Active Development**: Planning Documentation System Implementation
-**Last Updated**: 2025-08-29
-**Session Focus**: Creating planning infrastructure
-
-**Quick Status Check**:
+### System Status Check
 ```bash
-# View current git status
-git status
-
 # Check KATO system status
 ./kato-manager.sh status
 
-# Run tests
-./test-harness.sh test
-```
+# Run all tests
+./run_tests.sh
 
-## Document Purposes (Quick Reference)
-
-| Document | Purpose | Update Frequency |
-|----------|---------|------------------|
-| SESSION_STATE.md | Live development status | Every 30 minutes |
-| PROJECT_OVERVIEW.md | Master project reference | Weekly |
-| DAILY_BACKLOG.md | Today's tasks | Morning & Evening |
-| SPRINT_BACKLOG.md | Week's planned work | Weekly |
-| ARCHITECTURE.md | Technical documentation | As needed |
-| DECISIONS.md | Decision log | When decisions made |
-
-## Automated Maintenance
-
-The **project-manager** agent automatically updates documentation when:
-- Tasks are completed
-- New tasks are added
-- Blockers are identified
-- Architectural decisions are made
-- Context switches occur
-
-## Quick Commands for KATO Development
-
-```bash
-# Start development environment
-./kato-manager.sh start
-
-# Run tests in container
-./test-harness.sh test
-
-# Hot reload changes
-./update_container.sh
-
-# View logs
-docker logs kato-primary --tail 20
-
-# Check API health
+# View API health
 curl http://localhost:8001/health
 ```
 
-## Folder Structure
+## Development Workflow
+
+### Standard Development Commands
+```bash
+# Start KATO services
+./kato-manager.sh start
+
+# Stop services
+./kato-manager.sh stop
+
+# Build and restart
+./kato-manager.sh restart
+
+# Run all tests
+./run_tests.sh
+
+# Run specific test categories
+./run_tests.sh tests/tests/unit/
+./run_tests.sh tests/tests/integration/
+./run_tests.sh tests/tests/api/
+
+# View logs
+./kato-manager.sh logs
+docker logs kato-primary --tail 50
+```
+
+### Service URLs (After Starting)
+- **Primary KATO**: http://localhost:8001
+- **Testing KATO**: http://localhost:8002  
+- **Analytics KATO**: http://localhost:8003
+- **API Documentation**: http://localhost:8001/docs
+
+### Common Development Tasks
+
+#### Making Changes
+```bash
+# 1. Make code changes
+vim kato/workers/kato_processor.py
+
+# 2. Rebuild and restart
+./kato-manager.sh restart
+
+# 3. Run relevant tests
+./run_tests.sh tests/tests/unit/test_processor.py
+
+# 4. Run full test suite if major changes
+./run_tests.sh
+```
+
+#### Adding New Features
+1. Check **ARCHITECTURE.md** for design patterns
+2. Implement following existing patterns
+3. Add comprehensive tests
+4. Update documentation if needed
+5. Document decisions in **DECISIONS.md** if architectural
+
+#### Troubleshooting
+- Check service status: `./kato-manager.sh status`
+- View system logs: `./kato-manager.sh logs`
+- Test basic functionality: `curl http://localhost:8001/health`
+- Run specific failing tests: `./run_tests.sh tests/tests/unit/test_failing.py`
+
+## Current System State
+
+**Status**: Stable and production-ready  
+**Architecture**: FastAPI with direct processor embedding  
+**Test Coverage**: 99.5% pass rate (197/198 tests)  
+**Performance**: ~10ms average response time  
+**Last Major Update**: Code organization refactoring completed  
+
+## Directory Structure
 ```
 planning-docs/
-├── README.md              # You are here
-├── SESSION_STATE.md       # Current task status
-├── PROJECT_OVERVIEW.md    # Project reference
-├── DAILY_BACKLOG.md      # Today's tasks
-├── SPRINT_BACKLOG.md     # Week's tasks
-├── ARCHITECTURE.md       # Technical docs
-├── DECISIONS.md          # Decision log
-├── sessions/             # Session logs
-├── completed/            # Archived work
-└── project-manager/  # Agent workspace
+├── README.md              # This file
+├── PROJECT_OVERVIEW.md    # Core project information
+├── ARCHITECTURE.md       # Technical architecture
+├── DECISIONS.md          # Design decisions log
+├── FUTURE_FEATURES.md    # Aspirational features
+├── ARCHIVE_SUMMARY.md    # Completed milestone summary
+├── completed/            # Detailed completed work docs
+└── archive-2024/         # Archived planning documents
 ```
 
-## For Humans: Using This System
+## Documentation Philosophy
 
-1. **Start of Day**: Check DAILY_BACKLOG.md
-2. **During Work**: SESSION_STATE.md auto-updates
-3. **Making Decisions**: Add to DECISIONS.md
-4. **End of Day**: Review progress in SESSION_STATE.md
-5. **Weekly Planning**: Update SPRINT_BACKLOG.md
-
-## For Claude Code: Your Protocol
-
-1. **Every Session Start**: Read this README → SESSION_STATE → DAILY_BACKLOG
-2. **During Work**: Update SESSION_STATE.md every 30 minutes
-3. **Task Completion**: Trigger project-manager
-4. **Context Switch**: Archive current work, update state
-5. **Decision Made**: Log in DECISIONS.md with rationale
-
-## Integration with KATO Workflow
-
-This planning system integrates with:
-- **kato-manager.sh**: Development commands
-- **test-harness.sh**: Testing workflow
-- **update_container.sh**: Hot reload during development
-- **Docker ecosystem**: Container-based development
-
-## Current Focus Areas
-
-Based on SESSION_STATE.md:
-- Implementing planning documentation system
-- Test suite stabilization
-- Documentation updates
-
-## Need Help?
-
-- Check PROJECT_OVERVIEW.md for project details
-- Review ARCHITECTURE.md for technical decisions
-- See DECISIONS.md for historical context
-- Examine completed/ for similar past work
+This documentation follows a "minimal and current" approach:
+- **Essential information only** - No outdated or aspirational content mixed with current facts
+- **Clear separation** - Historical work in archives, future ideas in dedicated files
+- **Developer-focused** - Practical information for getting work done
+- **Self-maintaining** - Simple structure that doesn't require constant updates
 
 ---
 
-*This README is the entry point for all planning documentation. Start here, load what you need, ignore what you don't.*
+*Keep this documentation clean, current, and focused on what developers actually need.*

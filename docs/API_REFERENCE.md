@@ -255,7 +255,7 @@ Updates processor configuration parameters.
 **Available Genes:**
 - `recall_threshold`: Pattern matching threshold (0.0-1.0)
 - `max_predictions`: Maximum predictions to return
-- `persistence`: STM persistence length
+- `persistence`: Rolling window size for emotive values per pattern
 - `smoothness`: Pattern matching smoothness
 - `quiescence`: Quiescence period
 - And others (see Configuration guide)

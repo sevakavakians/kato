@@ -7,17 +7,20 @@ context and recovery suggestions.
 
 from typing import Optional, Dict, Any
 import time
+from kato.exceptions import KatoBaseException
 
 
-class KatoV2Exception(Exception):
-    """Base exception for all KATO v2.0 errors"""
+# Use the unified exception base class from kato.exceptions
+class KatoV2Exception(KatoBaseException):
+    """Base exception for all KATO v2.0 errors - extends KatoBaseException"""
     
     def __init__(
         self, 
         message: str, 
         error_code: str = "KATO_V2_ERROR",
         context: Optional[Dict[str, Any]] = None,
-        recoverable: bool = True
+        recoverable: bool = True,
+        **kwargs
     ):
         """
         Initialize KATO v2.0 exception.
@@ -27,26 +30,40 @@ class KatoV2Exception(Exception):
             error_code: Machine-readable error code
             context: Additional error context
             recoverable: Whether this error can be recovered from
+            **kwargs: Additional arguments for base exception
         """
-        super().__init__(message)
-        self.message = message
-        self.error_code = error_code
-        self.context = context or {}
+        # Call parent constructor with unified interface
+        super().__init__(
+            message=message,
+            error_code=error_code,
+            context=context,
+            **kwargs
+        )
         self.recoverable = recoverable
         self.timestamp = time.time()
     
     def to_dict(self) -> Dict[str, Any]:
-        """Convert exception to dictionary for API responses"""
-        return {
-            "error": {
-                "type": self.__class__.__name__,
-                "message": self.message,
-                "code": self.error_code,
-                "context": self.context,
-                "recoverable": self.recoverable,
-                "timestamp": self.timestamp
+        """Convert exception to dictionary for API responses - enhanced format"""
+        # Create nested error structure as expected by tests
+        result = {
+            'error': {
+                'type': self.__class__.__name__,
+                'message': self.message,
+                'code': self.error_code,
+                'recoverable': self.recoverable
             }
         }
+        
+        # Add optional fields
+        if self.context:
+            result['error']['context'] = self.context
+            
+        if hasattr(self, 'trace_id') and self.trace_id:
+            result['error']['trace_id'] = self.trace_id
+            
+        result['timestamp'] = self.timestamp
+        
+        return result
 
 
 # Session Management Errors

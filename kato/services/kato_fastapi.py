@@ -19,8 +19,7 @@ import uuid
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 
-from fastapi import FastAPI, HTTPException, Request, Depends
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -29,17 +28,16 @@ import sys
 import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
-from kato.sessions.session_manager import get_session_manager, SessionState
+from kato.sessions.session_manager import get_session_manager
 from kato.sessions.redis_session_manager import get_redis_session_manager
 from kato.sessions.session_middleware_simple import (
-    SessionMiddleware, get_session, get_session_id, 
-    get_optional_session, mark_session_modified
+    SessionMiddleware
 )
 from kato.processors.processor_manager import ProcessorManager
 
 from kato.workers.kato_processor import KatoProcessor
 from kato.config.settings import get_settings
-from kato.monitoring.metrics import get_metrics_collector, MetricsCollector
+from kato.monitoring.metrics import get_metrics_collector
 from kato.errors.handlers import setup_error_handlers
 
 logger = logging.getLogger('kato.fastapi')
@@ -259,8 +257,7 @@ async def shutdown_event():
 @app.get("/test/{test_id}")
 async def test_endpoint(test_id: str):
     """Simple test endpoint to verify routing works"""
-    print(f"*** TEST ENDPOINT CALLED: {test_id}")
-    logger.error(f"*** TEST ENDPOINT CALLED: {test_id}")
+    logger.debug(f"Test endpoint called: {test_id}")
     return {"test_id": test_id, "message": "endpoint works"}
 
 @app.post("/sessions", response_model=SessionResponse)
@@ -413,20 +410,15 @@ async def observe_in_session(
 @app.get("/sessions/{session_id}/stm", response_model=STMResponse)
 async def get_session_stm(session_id: str):
     """Get the short-term memory for a specific session"""
-    print(f"*** ENDPOINT CALLED: Getting STM for session: {session_id}")
-    logger.error(f"*** ENDPOINT CALLED: Getting STM for session: {session_id}")
-    logger.info(f"Getting STM for session: {session_id}")
-    logger.info(f"Session manager type: {type(app_state.session_manager)}")
-    logger.info(f"Session manager id: {id(app_state.session_manager)}")
-    logger.info(f"Session manager connected: {getattr(app_state.session_manager, '_connected', 'N/A')}")
+    logger.debug(f"Getting STM for session: {session_id}")
     
     session = await app_state.session_manager.get_session(session_id)
     
     if not session:
-        logger.error(f"Session {session_id} not found")
+        logger.warning(f"Session {session_id} not found")
         raise HTTPException(404, detail=f"Session {session_id} not found or expired")
     
-    logger.info(f"Successfully retrieved session {session_id}")
+    logger.debug(f"Successfully retrieved session {session_id}")
     return STMResponse(
         stm=session.stm,
         session_id=session_id,
@@ -532,8 +524,7 @@ async def get_system_status():
 @app.get("/health")
 async def health_check():
     """Enhanced health check endpoint for v2 with metrics integration"""
-    print("*** HEALTH CHECK ENDPOINT CALLED ***")
-    logger.error("*** HEALTH CHECK ENDPOINT CALLED ***")
+    logger.debug("Health check endpoint called")
     try:
         if hasattr(app_state, 'metrics_collector'):
             health_status = app_state.metrics_collector.get_health_status()
@@ -820,7 +811,17 @@ async def get_stm_primary(request: Request):
         user_id=user_id,
         metadata={"type": "auto_created", "endpoint": request.url.path}
     )
-    return STMResponse(stm=session.stm, length=len(session.stm))
+    processor = await app_state.processor_manager.get_processor(session.user_id, session.user_config)
+    
+    # Ensure processor STM matches session state
+    processor.set_stm(session.stm)
+    stm = processor.get_stm()
+    
+    return STMResponse(
+        stm=stm,
+        processor_id=processor.id,
+        length=len(stm)
+    )
 
 
 @app.post("/learn", response_model=LearnResult)
@@ -909,26 +910,6 @@ async def clear_all_primary(request: Request):
         raise HTTPException(status_code=500, detail=f"Clear all failed: {str(e)}")
 
 
-@app.get("/stm", response_model=STMResponse)
-@app.get("/short-term-memory", response_model=STMResponse)
-async def get_stm_primary(request: Request):
-    """Primary STM endpoint with automatic session management."""
-    user_id = get_user_id_from_request(request)
-    session = await app_state.session_manager.get_or_create_session(
-        user_id=user_id,
-        metadata={"type": "auto_created", "endpoint": request.url.path}
-    )
-    processor = await app_state.processor_manager.get_processor(session.user_id, session.user_config)
-    
-    # Get STM from processor
-    processor.set_stm(session.stm)
-    stm = processor.get_stm()
-    
-    return STMResponse(
-        stm=stm,
-        processor_id=processor.id,
-        length=len(stm)
-    )
 
 
 @app.get("/predictions", response_model=PredictionsResponse)

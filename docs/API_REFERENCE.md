@@ -160,10 +160,19 @@ Returns predictions based on current STM or specific observation.
       "snr": 0.9,
       "fragmentation": 1,
       "emotives": {"joy": 0.5},      // Averaged emotives from learned pattern
-      "potential": 2.5,
+      "predictive_information": 0.75,  // Information-theoretic predictive value
+      "potential": 0.6375,             // similarity * predictive_information
       "hamiltonian": 0.3,
       "grand_hamiltonian": 0.4,
       "confluence": 0.6
+    }
+  ],
+  "future_potentials": [             // Optional: aggregate future predictions
+    {
+      "future": [["next"]],
+      "aggregate_potential": 0.85,
+      "supporting_patterns": 3,
+      "total_weighted_frequency": 12.5
     }
   ],
   "processor_id": "primary"
@@ -472,10 +481,102 @@ Common HTTP status codes:
 - `snr`: Signal-to-noise ratio
 - `fragmentation`: Pattern cohesion measure
 - `emotives`: Emotional/utility values
-- `potential`: Composite ranking metric
+- `predictive_information`: Information-theoretic predictive value (0-1)
+- `potential`: Information-theoretic ranking metric (similarity × predictive_information)
 - `hamiltonian`: Entropy-like complexity measure
 - `grand_hamiltonian`: Extended hamiltonian
 - `confluence`: Probability vs random chance
+
+### Future Potentials Fields (Optional Response)
+- `future`: The predicted future event sequence
+- `aggregate_potential`: Combined potential of all patterns predicting this future (0-1)
+- `supporting_patterns`: Number of patterns that predict this future
+- `total_weighted_frequency`: Sum of frequency × similarity for supporting patterns
+
+## Predictive Information User Guide
+
+### Understanding Predictive Information Values
+
+**Predictive Information (PI)** measures how much information a pattern provides about its future outcomes. This information-theoretic metric helps rank predictions based on their reliability and usefulness.
+
+### Key Concepts
+
+#### 1. **Predictive Information Range: 0.0 to 1.0**
+- **0.0**: Pattern provides no predictive information about the future
+- **0.5**: Pattern provides moderate predictive information  
+- **1.0**: Pattern provides maximum predictive information (rare, indicates strong predictive relationship)
+
+#### 2. **New Potential Formula**
+```
+potential = similarity × predictive_information
+```
+- **similarity**: How well the pattern matches your current observation (0.0-1.0)
+- **predictive_information**: How reliably this pattern predicts its future (0.0-1.0)
+- **potential**: Combined ranking metric (0.0-1.0)
+
+### Practical Usage Examples
+
+#### Example 1: High PI Pattern
+```json
+{
+  "name": "PTRN|abc123",
+  "similarity": 0.9,
+  "predictive_information": 0.8,
+  "potential": 0.72,
+  "frequency": 15,
+  "future": [["expected_next_event"]]
+}
+```
+**Interpretation**: This pattern matches well (90%) and has strong predictive power (80%). The high frequency (15) suggests it's been learned many times, making it very reliable.
+
+#### Example 2: Low PI Pattern  
+```json
+{
+  "name": "PTRN|def456",
+  "similarity": 0.85,
+  "predictive_information": 0.2,
+  "potential": 0.17,
+  "frequency": 2,
+  "future": [["uncertain_outcome"]]
+}
+```
+**Interpretation**: Although this pattern matches reasonably well (85%), it has low predictive power (20%) and low frequency (2), making it less reliable for prediction.
+
+### Using Future Potentials
+
+The `future_potentials` field aggregates predictions across multiple patterns:
+
+```json
+"future_potentials": [
+  {
+    "future": [["high_confidence_outcome"]],
+    "aggregate_potential": 0.85,
+    "supporting_patterns": 5,
+    "total_weighted_frequency": 47.3
+  },
+  {
+    "future": [["lower_confidence_outcome"]],
+    "aggregate_potential": 0.3,
+    "supporting_patterns": 2,
+    "total_weighted_frequency": 8.1
+  }
+]
+```
+
+**Best Practice**: Use futures with high `aggregate_potential` and multiple `supporting_patterns` for most reliable predictions.
+
+### Decision-Making Guidelines
+
+1. **Primary Ranking**: Sort predictions by `potential` (descending) for best overall predictions
+2. **Reliability Check**: Consider both `predictive_information` and `frequency` for confidence assessment
+3. **Future Planning**: Use `future_potentials` to identify most likely outcomes across all patterns
+4. **Threshold Setting**: Patterns with PI < 0.3 may be unreliable for critical decisions
+
+### Information-Theoretic Foundation
+
+Predictive Information is based on **Excess Entropy** from information theory, measuring mutual information between past and future sequence segments. Higher values indicate stronger statistical dependencies and more reliable predictions.
+
+For theoretical details, see: `docs/PREDICTIVE_INFORMATION.md`
 
 ## Notes
 
@@ -484,3 +585,4 @@ Common HTTP status codes:
 3. **Sorting**: Symbols within events are sorted alphabetically when SORT=true (default)
 4. **Auto-Learning**: Triggers when STM reaches MAX_PATTERN_LENGTH (if > 0)
 5. **Recall Threshold**: Controls pattern matching sensitivity (0.0 = all patterns, 1.0 = exact matches only)
+6. **Dynamic Calculation**: Predictive information is calculated at prediction time using ensemble statistics

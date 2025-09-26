@@ -19,6 +19,9 @@ from kato.informatics.metrics import average_emotives, \
                                             conditionalProbability, \
                                             confluence, \
                                             expectation
+from kato.informatics.predictive_information import (
+    calculate_ensemble_predictive_information
+)
 from kato.representations.pattern import Pattern
 from kato.searches.pattern_search import PatternSearcher
 
@@ -64,6 +67,7 @@ class PatternProcessor:
         self.mood = {}
         self.target_class = None
         self.target_class_candidates = []
+        self.future_potentials = []  # Store aggregated future potentials for API
         logger.info(f"PatternProcessor {self.name} started!")
         return
 
@@ -426,16 +430,10 @@ class PatternProcessor:
                 except ZeroDivisionError as e:
                     logger.error(f"ZeroDivisionError in confluence calculation: _p_e_h={_p_e_h}, _present={_present}, symbol_probability_cache={symbol_probability_cache}, error={e}")
                     raise
-                try:
-                    # Handle fragmentation = -1 case to avoid division by zero
-                    if prediction['fragmentation'] == -1:
-                        fragmentation_term = 0.0
-                    else:
-                        fragmentation_term = 1 / (prediction['fragmentation'] + 1)
-                    prediction['potential'] = round(float( ( prediction['evidence'] + prediction['confidence'] ) * prediction.get("snr", 0) + prediction['itfdf_similarity'] + fragmentation_term ), 12)
-                except ZeroDivisionError as e:
-                    logger.error(f"ZeroDivisionError in potential calculation: evidence={prediction['evidence']}, confidence={prediction['confidence']}, snr={prediction.get('snr', 0)}, itfdf_similarity={prediction['itfdf_similarity']}, fragmentation={prediction['fragmentation']}, error={e}")
-                    raise
+                # Temporarily set placeholder values - will be calculated ensemble-wide
+                prediction['predictive_information'] = 0.0
+                prediction['potential'] = 0.0
+                
                 try:
                     prediction['emotives'] = average_emotives(prediction['emotives'])
                 except ZeroDivisionError as e:
@@ -455,6 +453,22 @@ class PatternProcessor:
             import traceback
             tb = traceback.format_exc()
             raise Exception(f"\nException in PatternProcessor.predictPattern: Error in potential calculation! {self.kb_id}: {e}\nTraceback: {tb}")
+        
+        # Calculate ensemble-based predictive information and update potentials
+        try:
+            causal_patterns, future_potentials = calculate_ensemble_predictive_information(causal_patterns)
+            # Store future_potentials for the API response
+            self.future_potentials = future_potentials
+        except Exception as e:
+            logger.error(f"Error in ensemble predictive information calculation: {e}")
+            # Set defaults if calculation fails
+            for prediction in causal_patterns:
+                if 'predictive_information' not in prediction:
+                    prediction['predictive_information'] = 0.0
+                if 'potential' not in prediction:
+                    prediction['potential'] = prediction.get('similarity', 0.0) * 0.0
+            self.future_potentials = []
+        
         try:
             active_causal_patterns = sorted([x for x in heapq.nlargest(self.max_predictions,causal_patterns,key=itemgetter('potential'))], reverse=True, key=itemgetter('potential'))
         except Exception as e:

@@ -127,19 +127,25 @@ A Prediction Object is generated when KATO's pattern recognition engine identifi
 **Range**: 0.0 to 1.0  
 **Purpose**: Weights predictions by both local frequency and global rarity, similar to TF-IDF in document retrieval.
 
-### 20. **potential** (float)
-**Description**: Composite score combining multiple metrics to rank prediction strength.  
-**Formula**: `potential = (evidence + confidence) * snr + itfdf_similarity + (1 / (fragmentation + 1))`  
-**Range**: Variable, typically 0.0 to ~5.0  
-**Purpose**: Primary ranking metric for selecting the best prediction among alternatives.
+### 20. **predictive_information** (float)
+**Description**: Measures how much information this specific pattern contributes to predicting its future relative to other patterns in the ensemble.  
+**Formula**: Based on ensemble-wide statistics and pattern frequencies using information-theoretic mutual information principles.  
+**Range**: 0.0 to 1.0 (normalized)  
+**Purpose**: Quantifies the predictive value of this pattern for its anticipated future events. Higher values indicate more reliable predictions.
 
-### 21. **emotives** (map<string, float>)
+### 21. **potential** (float)
+**Description**: Primary ranking metric combining pattern similarity with predictive information.  
+**Formula**: `potential = similarity * predictive_information`  
+**Range**: 0.0 to 1.0  
+**Purpose**: Simplified ranking metric that prioritizes both how well the pattern matches the observation (similarity) and how reliably it predicts the future (predictive_information).
+
+### 22. **emotives** (map<string, float>)
 **Description**: Emotional or utility values associated with this pattern.  
 **Structure**: Dictionary mapping emotive names to float values.  
 **Purpose**: Allows patterns to carry emotional salience or utility information for decision-making.  
 **Example**: `{"utility": 50.0, "danger": -10.0}`
 
-### 22. **pattern** (internal, not in protobuf)
+### 23. **pattern** (internal, not in protobuf)
 **Description**: Full pattern structure from the pattern (used internally during prediction construction).  
 **Purpose**: Internal reference to complete pattern for temporal field extraction.
 
@@ -158,14 +164,15 @@ A Prediction Object is generated when KATO's pattern recognition engine identifi
 - **entropy**: Local information content
 - **hamiltonian, grand_hamiltonian**: Energy/disorder measures
 - **confluence**: Meaningfulness of patterns
+- **predictive_information**: Pattern's contribution to future prediction
 
 ### Composite Metrics
-- **potential**: Overall prediction quality
+- **potential**: Information-theoretic ranking metric (similarity × predictive_information)
 - **itfdf_similarity**: Frequency-weighted importance
 
 ## Usage Notes
 
-1. **Prediction Selection**: When multiple predictions are generated, use `potential` as the primary ranking metric.
+1. **Prediction Selection**: When multiple predictions are generated, use `potential` as the primary ranking metric. The new formula `potential = similarity * predictive_information` provides a theoretically grounded ranking based on both pattern match quality and predictive reliability.
 
 2. **Confidence vs Evidence**: 
    - `confidence` measures match quality in the current context

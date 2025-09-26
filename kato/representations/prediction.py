@@ -38,6 +38,7 @@ class Prediction(dict):
         self['hamiltonian'] = float(0)
         self['grand_hamiltonian'] = float(0)
         self['confluence'] = float(0)
+        self['predictive_information'] = float(0)  # Excess entropy / mutual information between past and future
         self['sequence'] = _pattern['pattern_data']
         self['pattern_data'] = _pattern['pattern_data']  # Keep for later popping in pattern_processor
         

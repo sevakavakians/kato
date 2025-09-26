@@ -100,6 +100,7 @@ class LearnResult(BaseModel):
 class PredictionsResponse(BaseModel):
     """Predictions response"""
     predictions: List[Dict] = Field(default_factory=list, description="List of predictions")
+    future_potentials: Optional[List[Dict]] = Field(None, description="Aggregated future potentials")
     session_id: Optional[str] = Field(None, description="Session ID")
     processor_id: Optional[str] = Field(None, description="Processor ID for v1 compatibility")
     count: int = Field(..., description="Number of predictions")
@@ -493,9 +494,15 @@ async def get_session_predictions(session_id: str):
         
         # Get predictions
         predictions = processor.get_predictions()
+        
+        # Get future_potentials from the pattern processor if available
+        future_potentials = None
+        if hasattr(processor.pattern_processor, 'future_potentials'):
+            future_potentials = processor.pattern_processor.future_potentials
     
     return PredictionsResponse(
         predictions=predictions,
+        future_potentials=future_potentials,
         session_id=session_id,
         count=len(predictions)
     )
@@ -936,8 +943,14 @@ async def get_predictions_primary(request: Request, unique_id: Optional[str] = N
             if 'name' in pred and 'pattern_name' not in pred:
                 pred['pattern_name'] = f"PTRN|{pred['name']}"
         
+        # Get future_potentials from the pattern processor if available
+        future_potentials = None
+        if hasattr(processor.pattern_processor, 'future_potentials'):
+            future_potentials = processor.pattern_processor.future_potentials
+        
         return PredictionsResponse(
             predictions=predictions,
+            future_potentials=future_potentials,
             count=len(predictions),
             processor_id=processor.id,
             time=int(time.time()),

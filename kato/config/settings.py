@@ -131,18 +131,22 @@ class DatabaseConfig(BaseSettings):
     def qdrant_collection_prefix(self) -> str:
         return self.QDRANT_COLLECTION_PREFIX
     
-    # Redis settings (optional, for caching)
+    # Redis settings (optional, for caching and sessions)
+    REDIS_URL: Optional[str] = Field(
+        None,
+        description="Redis connection URL"
+    )
     redis_host: Optional[str] = Field(
         None,
         env='REDIS_HOST',
-        description="Redis host for caching (optional)"
+        description="Redis host (deprecated, use REDIS_URL)"
     )
     redis_port: int = Field(
         6379,
         env='REDIS_PORT',
         ge=1,
         le=65535,
-        description="Redis port number"
+        description="Redis port (deprecated, use REDIS_URL)"
     )
     redis_enabled: bool = Field(
         False,
@@ -163,6 +167,10 @@ class DatabaseConfig(BaseSettings):
     @property
     def redis_url(self) -> Optional[str]:
         """Get Redis connection URL if enabled."""
+        # Prefer REDIS_URL env var if set
+        if self.REDIS_URL:
+            return self.REDIS_URL
+        # Fallback to constructing from host/port for backwards compatibility  
         if self.redis_enabled and self.redis_host:
             return f"redis://{self.redis_host}:{self.redis_port}/0"
         return None
@@ -305,6 +313,21 @@ class PerformanceConfig(BaseSettings):
         env_prefix = ''
 
 
+class SessionConfig(BaseSettings):
+    """Session management configuration."""
+    
+    session_ttl: int = Field(
+        3600,
+        env='SESSION_TTL',
+        ge=60,
+        le=86400,
+        description="Session time-to-live in seconds"
+    )
+    
+    class Config:
+        env_prefix = ''
+
+
 class APIConfig(BaseSettings):
     """API service configuration."""
     
@@ -370,6 +393,7 @@ class Settings(BaseSettings):
     learning: LearningConfig = Field(default_factory=LearningConfig)
     processing: ProcessingConfig = Field(default_factory=ProcessingConfig)
     performance: PerformanceConfig = Field(default_factory=PerformanceConfig)
+    session: SessionConfig = Field(default_factory=SessionConfig)
     api: APIConfig = Field(default_factory=APIConfig)
     
     # Environment and deployment

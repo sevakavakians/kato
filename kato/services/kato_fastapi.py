@@ -50,7 +50,7 @@ class CreateSessionRequest(BaseModel):
     """Request to create a new session"""
     user_id: str = Field(..., description="User identifier (required for processor isolation)")
     metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Session metadata")
-    ttl_seconds: Optional[int] = Field(3600, description="Session TTL in seconds")
+    ttl_seconds: Optional[int] = Field(None, description="Session TTL in seconds (uses default if not specified)")
 
 
 class SessionResponse(BaseModel):
@@ -221,7 +221,7 @@ async def startup_event():
     app_state.processor_manager = ProcessorManager(
         base_processor_id=base_processor_id,
         max_processors=100,
-        eviction_ttl_seconds=3600
+        eviction_ttl_seconds=settings.session.session_ttl
     )
     
     # Initialize v2 monitoring

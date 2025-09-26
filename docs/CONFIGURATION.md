@@ -2,13 +2,31 @@
 
 Complete reference for all KATO configuration options and environment variables.
 
-## Environment Variables
+## Table of Contents
+- [Environment Variables Overview](#environment-variables-overview)
+- [Core Configuration](#core-configuration)
+- [Database Configuration](#database-configuration)
+- [Learning Configuration](#learning-configuration)
+- [Processing Configuration](#processing-configuration)
+- [Performance Configuration](#performance-configuration)
+- [API Configuration](#api-configuration)
+- [Logging Configuration](#logging-configuration)
+- [Session Configuration](#session-configuration)
+- [Environment & Deployment](#environment--deployment)
+- [Docker Compose Examples](#docker-compose-configuration-examples)
+- [Configuration Profiles](#configuration-profiles)
+- [Runtime Configuration Updates](#runtime-configuration-updates)
+- [Best Practices](#configuration-best-practices)
+- [Troubleshooting](#troubleshooting-configuration-issues)
+
+## Environment Variables Overview
 
 KATO uses environment variables for configuration. These can be set in:
 - Docker Compose files
 - Shell environment
 - `.env` files
 - Container runtime parameters
+- Configuration files (JSON/YAML via KATO_CONFIG_FILE)
 
 ## Core Configuration
 
@@ -25,19 +43,6 @@ KATO uses environment variables for configuration. These can be set in:
 - **Description**: Human-readable display name for the processor
 - **Example**: `PrimaryProcessor`, `TestingInstance`
 
-### LOG_LEVEL
-- **Type**: String (enum)
-- **Default**: `INFO`
-- **Options**: `DEBUG`, `INFO`, `WARNING`, `ERROR`
-- **Description**: Controls logging verbosity
-- **Notes**: Use `DEBUG` for troubleshooting, `INFO` for production
-
-### PORT
-- **Type**: Integer
-- **Default**: `8000`
-- **Description**: Port number for FastAPI service
-- **Example**: `8001`, `8002`, `8003`
-
 ## Database Configuration
 
 ### MONGO_BASE_URL
@@ -46,6 +51,13 @@ KATO uses environment variables for configuration. These can be set in:
 - **Description**: MongoDB connection string
 - **Example**: `mongodb://mongo:27017`, `mongodb://user:pass@host:27017`
 - **Notes**: Each processor creates its own database named after PROCESSOR_ID
+
+### MONGO_TIMEOUT
+- **Type**: Integer
+- **Default**: `5000`
+- **Range**: `1000` to `30000`
+- **Description**: MongoDB connection timeout in milliseconds
+- **Example**: `5000`, `10000`
 
 ### QDRANT_HOST
 - **Type**: String
@@ -56,22 +68,66 @@ KATO uses environment variables for configuration. These can be set in:
 ### QDRANT_PORT
 - **Type**: Integer
 - **Default**: `6333`
-- **Description**: Qdrant vector database port
-- **Example**: `6333`, `6334`
+- **Range**: `1` to `65535`
+- **Description**: Qdrant vector database HTTP port
+- **Example**: `6333`
+
+### QDRANT_GRPC_PORT
+- **Type**: Integer
+- **Default**: `6334`
+- **Range**: `1` to `65535`
+- **Description**: Qdrant vector database gRPC port
+- **Example**: `6334`
+- **Notes**: Used for high-performance vector operations
+
+### QDRANT_COLLECTION_PREFIX
+- **Type**: String
+- **Default**: `vectors`
+- **Description**: Prefix for Qdrant collection names
+- **Example**: `vectors`, `embeddings`
+- **Notes**: Full collection name becomes `{prefix}_{processor_id}`
+
+### REDIS_HOST
+- **Type**: String
+- **Default**: `None` (optional)
+- **Description**: Redis host for caching and session storage
+- **Example**: `redis`, `localhost`, `192.168.1.101`
+
+### REDIS_PORT
+- **Type**: Integer
+- **Default**: `6379`
+- **Range**: `1` to `65535`
+- **Description**: Redis port number
+- **Example**: `6379`
+
+### REDIS_ENABLED
+- **Type**: Boolean
+- **Default**: `false`
+- **Description**: Enable Redis caching layer
+- **Options**: `true`, `false`
+- **Notes**: Improves performance for frequently accessed patterns
+
+### REDIS_URL
+- **Type**: String (Redis connection URL)
+- **Default**: Constructed from REDIS_HOST and REDIS_PORT
+- **Description**: Full Redis connection URL (alternative to HOST/PORT)
+- **Example**: `redis://redis:6379`, `redis://localhost:6379/0`
+- **Notes**: Used in docker-compose for session management
 
 ## Learning Configuration
 
 ### MAX_PATTERN_LENGTH
 - **Type**: Integer
 - **Default**: `0`
+- **Range**: `0` to unlimited
 - **Description**: Auto-learn after N observations (0 = manual learning only)
-- **Example**: `0` (manual), `10` (auto-learn after 10 observations), `50`
-- **Notes**: When reached, triggers automatic pattern learning and STM clearing
+- **Example**: `0` (manual), `10` (auto-learn after 10), `50`
+- **Notes**: When reached, triggers automatic pattern learning and complete STM clearing
 
 ### PERSISTENCE
 - **Type**: Integer
 - **Default**: `5`
-- **Range**: `1` to unlimited (practical max: 100)
+- **Range**: `1` to `100`
 - **Description**: Rolling window size for emotive value history per pattern
 - **Example**: `5`, `10`, `20`
 - **Notes**: Controls adaptive learning and memory for emotional/utility values
@@ -88,85 +144,51 @@ KATO uses environment variables for configuration. These can be set in:
 - **High values (10-20)**: Longer memory, slower adaptation to changes
 - **Very high (20+)**: Extended historical context, resistant to change
 
-**Use Cases by PERSISTENCE Value:**
-- `1`: Only most recent emotive matters (instant adaptation)
-- `3-5`: Quick response to emotional changes (chatbots, real-time systems)
-- `5-10`: Standard applications with moderate memory needs
-- `10-20`: Systems requiring emotional trend analysis
-- `20+`: Long-term emotional profiling or sentiment tracking
-
 ### RECALL_THRESHOLD
 - **Type**: Float
 - **Default**: `0.1`
 - **Range**: `0.0` to `1.0`
 - **Description**: Pattern matching sensitivity threshold
 - **Examples**:
-  - `0.0`: Include all patterns (even non-matching)
-  - `0.1`: Very permissive (default)
+  - `0.0-0.1`: Very permissive (include most partial matches)
   - `0.3`: Permissive
   - `0.5`: Moderate filtering
   - `0.7`: Strict
   - `0.9`: Very strict
   - `1.0`: Exact matches only
-- **Notes**: Lower values return more predictions with partial matches
+- **Notes**: Acts as rough filter, not exact decimal precision
 
-### SMOOTHNESS
+### AUTO_LEARN_ENABLED
+- **Type**: Boolean
+- **Default**: `false`
+- **Description**: Enable automatic pattern learning
+- **Options**: `true`, `false`
+- **Notes**: Works in conjunction with AUTO_LEARN_THRESHOLD
+
+### AUTO_LEARN_THRESHOLD
 - **Type**: Integer
-- **Default**: `3`
-- **Description**: Smoothing factor for pattern matching
-- **Example**: `1` (no smoothing), `3` (moderate), `5` (high smoothing)
-- **Notes**: Higher values provide more lenient matching
+- **Default**: `50`
+- **Range**: `1` to unlimited
+- **Description**: Number of observations before auto-learning triggers
+- **Example**: `10`, `50`, `100`
+- **Notes**: Only applies when AUTO_LEARN_ENABLED is true
 
 ## Processing Configuration
 
 ### INDEXER_TYPE
 - **Type**: String
 - **Default**: `VI`
-- **Description**: Type of vector indexing
+- **Description**: Type of vector indexing to use
 - **Options**: `VI` (Vector Indexing)
 - **Notes**: Controls vector storage and retrieval strategy
-
-### AUTO_ACT_METHOD
-- **Type**: String
-- **Default**: `none`
-- **Description**: Method for automatic actions
-- **Options**: `none`, `threshold`, `pattern`
-- **Notes**: Enables automated responses based on patterns
-
-### AUTO_ACT_THRESHOLD
-- **Type**: Float
-- **Default**: `0.8`
-- **Range**: `0.0` to `1.0`
-- **Description**: Threshold for triggering automatic actions
-- **Notes**: Only used when AUTO_ACT_METHOD is not `none`
-
-### ALWAYS_UPDATE_FREQUENCIES
-- **Type**: Boolean
-- **Default**: `false`
-- **Description**: Update pattern frequencies on re-observation
-- **Options**: `true`, `false`
-- **Notes**: When true, re-observing a pattern increments its frequency
 
 ### MAX_PREDICTIONS
 - **Type**: Integer
 - **Default**: `100`
+- **Range**: `1` to `10000`
 - **Description**: Maximum number of predictions to return
 - **Example**: `10`, `50`, `100`, `1000`
-- **Notes**: Limits prediction response size for performance
-
-### QUIESCENCE
-- **Type**: Integer
-- **Default**: `3`
-- **Description**: Quiescence period for pattern stabilization
-- **Example**: `1`, `3`, `5`
-- **Notes**: Number of observations before certain operations trigger
-
-### SEARCH_DEPTH
-- **Type**: Integer
-- **Default**: `10`
-- **Description**: Maximum depth for pattern search operations
-- **Example**: `5`, `10`, `20`
-- **Notes**: Controls search exhaustiveness vs performance
+- **Notes**: Limits response payload size
 
 ### SORT
 - **Type**: Boolean
@@ -182,6 +204,178 @@ KATO uses environment variables for configuration. These can be set in:
 - **Options**: `true`, `false`
 - **Notes**: Can be disabled for observation-only mode
 
+## Performance Configuration
+
+### KATO_USE_FAST_MATCHING
+- **Type**: Boolean
+- **Default**: `true`
+- **Description**: Use optimized fast matching algorithms
+- **Options**: `true`, `false`
+- **Notes**: Significantly improves pattern matching speed
+
+### KATO_USE_INDEXING
+- **Type**: Boolean
+- **Default**: `true`
+- **Description**: Use pattern indexing for faster lookups
+- **Options**: `true`, `false`
+- **Notes**: Creates indexes for common query patterns
+
+### KATO_USE_OPTIMIZED
+- **Type**: Boolean
+- **Default**: `true`
+- **Description**: Enable general performance optimizations
+- **Options**: `true`, `false`
+- **Notes**: Applies various optimization strategies
+
+### KATO_BATCH_SIZE
+- **Type**: Integer
+- **Default**: `1000`
+- **Range**: `1` to `100000`
+- **Description**: Batch size for bulk database operations
+- **Example**: `100`, `1000`, `10000`
+- **Notes**: Larger batches improve throughput but use more memory
+
+### KATO_VECTOR_BATCH_SIZE
+- **Type**: Integer
+- **Default**: `1000`
+- **Range**: `1` to `100000`
+- **Description**: Batch size for vector operations
+- **Example**: `100`, `1000`, `5000`
+- **Notes**: Optimize based on vector dimension and available memory
+
+### KATO_VECTOR_SEARCH_LIMIT
+- **Type**: Integer
+- **Default**: `100`
+- **Range**: `1` to `10000`
+- **Description**: Maximum vector search results
+- **Example**: `50`, `100`, `500`
+- **Notes**: Limits vector similarity search results
+
+### CONNECTION_POOL_SIZE
+- **Type**: Integer
+- **Default**: `10`
+- **Range**: `1` to `100`
+- **Description**: Database connection pool size
+- **Example**: `5`, `10`, `20`
+- **Notes**: Balance between resource usage and concurrency
+
+### REQUEST_TIMEOUT
+- **Type**: Float
+- **Default**: `30.0`
+- **Range**: `1.0` to `300.0`
+- **Description**: Request timeout in seconds
+- **Example**: `10.0`, `30.0`, `60.0`
+- **Notes**: Prevents hanging requests
+
+## API Configuration
+
+### HOST
+- **Type**: String
+- **Default**: `0.0.0.0`
+- **Description**: API host address to bind to
+- **Example**: `0.0.0.0`, `localhost`, `127.0.0.1`
+- **Notes**: Use `0.0.0.0` for Docker containers
+
+### PORT
+- **Type**: Integer
+- **Default**: `8000`
+- **Range**: `1` to `65535`
+- **Description**: API port number
+- **Example**: `8000`, `8001`, `8002`
+- **Notes**: Must be available and >= 1024 for non-root
+
+### WORKERS
+- **Type**: Integer
+- **Default**: `1`
+- **Range**: `1` to `16`
+- **Description**: Number of worker processes
+- **Example**: `1`, `4`, `8`
+- **Notes**: Set based on CPU cores available
+
+### CORS_ENABLED
+- **Type**: Boolean
+- **Default**: `true`
+- **Description**: Enable CORS support
+- **Options**: `true`, `false`
+- **Notes**: Required for browser-based clients
+
+### CORS_ORIGINS
+- **Type**: String (comma-separated) or List
+- **Default**: `*`
+- **Description**: Allowed CORS origins
+- **Example**: `*`, `http://localhost:3000,http://example.com`
+- **Notes**: Use specific origins in production
+
+### DOCS_ENABLED
+- **Type**: Boolean
+- **Default**: `true`
+- **Description**: Enable API documentation endpoints (/docs, /redoc)
+- **Options**: `true`, `false`
+- **Notes**: Consider disabling in production
+
+### MAX_REQUEST_SIZE
+- **Type**: Integer
+- **Default**: `104857600` (100MB)
+- **Range**: `1024` to unlimited
+- **Description**: Maximum request size in bytes
+- **Example**: `1048576` (1MB), `10485760` (10MB)
+- **Notes**: Protects against memory exhaustion
+
+## Logging Configuration
+
+### LOG_LEVEL
+- **Type**: String (enum)
+- **Default**: `INFO`
+- **Options**: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`
+- **Description**: Controls logging verbosity
+- **Notes**: Use `DEBUG` for development, `INFO` or `WARNING` for production
+
+### LOG_FORMAT
+- **Type**: String (enum)
+- **Default**: `human`
+- **Options**: `json`, `human`
+- **Description**: Log output format
+- **Notes**: Use `json` for log aggregation systems
+
+### LOG_OUTPUT
+- **Type**: String
+- **Default**: `stdout`
+- **Description**: Log output destination
+- **Example**: `stdout`, `stderr`, `/var/log/kato.log`
+- **Notes**: File paths create rotating log files
+
+## Session Configuration
+
+### SESSION_TTL
+- **Type**: Integer
+- **Default**: `3600`
+- **Description**: Session time-to-live in seconds
+- **Example**: `1800` (30 min), `3600` (1 hour), `7200` (2 hours)
+- **Notes**: Controls how long user sessions remain active
+
+## Environment & Deployment
+
+### ENVIRONMENT
+- **Type**: String (enum)
+- **Default**: `development`
+- **Options**: `development`, `testing`, `production`
+- **Description**: Deployment environment
+- **Notes**: Affects default settings and behavior
+
+### DEBUG
+- **Type**: Boolean
+- **Default**: `false` (true in development)
+- **Description**: Enable debug mode
+- **Options**: `true`, `false`
+- **Notes**: Automatically true when ENVIRONMENT=development
+
+### KATO_CONFIG_FILE
+- **Type**: String (file path)
+- **Default**: `None`
+- **Description**: Path to configuration file (YAML or JSON)
+- **Example**: `/etc/kato/config.yaml`, `./config.json`
+- **Notes**: File settings are overridden by environment variables
+
 ## Docker Compose Configuration Examples
 
 ### Primary Instance (Manual Learning)
@@ -189,10 +383,15 @@ KATO uses environment variables for configuration. These can be set in:
 environment:
   - PROCESSOR_ID=primary
   - PROCESSOR_NAME=PrimaryProcessor
-  - LOG_LEVEL=INFO
+  - MONGO_BASE_URL=mongodb://mongodb:27017
+  - QDRANT_HOST=qdrant
+  - QDRANT_PORT=6333
+  - REDIS_URL=redis://redis:6379
+  - SESSION_TTL=3600
   - MAX_PATTERN_LENGTH=0  # Manual learning only
   - PERSISTENCE=5
   - RECALL_THRESHOLD=0.1
+  - LOG_LEVEL=INFO
   - PORT=8001
 ```
 
@@ -201,10 +400,15 @@ environment:
 environment:
   - PROCESSOR_ID=testing
   - PROCESSOR_NAME=TestingProcessor
-  - LOG_LEVEL=DEBUG
+  - MONGO_BASE_URL=mongodb://mongodb:27017
+  - QDRANT_HOST=qdrant
+  - QDRANT_PORT=6333
+  - REDIS_URL=redis://redis:6379
+  - SESSION_TTL=1800
   - MAX_PATTERN_LENGTH=10  # Auto-learn after 10
-  - PERSISTENCE=10
-  - RECALL_THRESHOLD=0.3
+  - PERSISTENCE=5
+  - RECALL_THRESHOLD=0.1
+  - LOG_LEVEL=DEBUG
   - PORT=8002
 ```
 
@@ -213,10 +417,15 @@ environment:
 environment:
   - PROCESSOR_ID=analytics
   - PROCESSOR_NAME=AnalyticsProcessor
-  - LOG_LEVEL=WARNING
+  - MONGO_BASE_URL=mongodb://mongodb:27017
+  - QDRANT_HOST=qdrant
+  - QDRANT_PORT=6333
+  - REDIS_URL=redis://redis:6379
+  - SESSION_TTL=7200
   - MAX_PATTERN_LENGTH=50  # Auto-learn after 50
-  - PERSISTENCE=20
-  - RECALL_THRESHOLD=0.5  # Stricter matching
+  - PERSISTENCE=10
+  - RECALL_THRESHOLD=0.5
+  - LOG_LEVEL=INFO
   - MAX_PREDICTIONS=200
   - PORT=8003
 ```
@@ -226,43 +435,48 @@ environment:
 ### Development Profile
 ```bash
 export PROCESSOR_ID=dev
+export ENVIRONMENT=development
 export LOG_LEVEL=DEBUG
+export LOG_FORMAT=human
 export MAX_PATTERN_LENGTH=5
 export RECALL_THRESHOLD=0.1
-export SORT=true
-export PROCESS_PREDICTIONS=true
+export DOCS_ENABLED=true
+export CORS_ORIGINS="*"
 ```
 
 ### Production Profile
 ```bash
-export PROCESSOR_ID=prod
+export PROCESSOR_ID=prod_$(hostname)_$(date +%s)
+export ENVIRONMENT=production
 export LOG_LEVEL=WARNING
+export LOG_FORMAT=json
 export MAX_PATTERN_LENGTH=0
 export RECALL_THRESHOLD=0.3
 export MAX_PREDICTIONS=50
-export ALWAYS_UPDATE_FREQUENCIES=true
+export DOCS_ENABLED=false
+export CORS_ORIGINS="https://app.example.com"
+export REDIS_ENABLED=true
 ```
 
 ### Testing Profile
 ```bash
-export PROCESSOR_ID=test_$(date +%s)
+export PROCESSOR_ID=test_$(date +%s)_$(uuidgen)
+export ENVIRONMENT=testing
 export LOG_LEVEL=INFO
 export MAX_PATTERN_LENGTH=10
 export RECALL_THRESHOLD=0.1
 export PERSISTENCE=5
+export KATO_USE_FAST_MATCHING=true
 ```
 
 ## Runtime Configuration Updates
 
 Some configuration can be updated at runtime using the `/genes/update` endpoint:
 
-### Updatable Genes
+### Updatable Parameters
 - `recall_threshold`
 - `max_predictions`
 - `persistence`
-- `smoothness`
-- `quiescence`
-- `always_update_frequencies`
 
 ### Example Update Request
 ```bash
@@ -271,7 +485,8 @@ curl -X POST http://localhost:8001/genes/update \
   -d '{
     "genes": {
       "recall_threshold": 0.5,
-      "max_predictions": 50
+      "max_predictions": 50,
+      "persistence": 10
     }
   }'
 ```
@@ -296,31 +511,29 @@ Adjust configuration based on deployment environment:
 - LOG_LEVEL=DEBUG
 - MAX_PATTERN_LENGTH=5-10 (quick learning)
 - RECALL_THRESHOLD=0.1 (see all matches)
+- DOCS_ENABLED=true
 
 **Production**:
 - LOG_LEVEL=WARNING or ERROR
 - MAX_PATTERN_LENGTH=0 or high value
 - RECALL_THRESHOLD=0.3-0.5 (filter noise)
+- DOCS_ENABLED=false
+- CORS_ORIGINS=specific domains
 
 ### 3. Performance Tuning
 For high-throughput scenarios:
 - MAX_PREDICTIONS=20-50 (limit response size)
-- SEARCH_DEPTH=5-10 (balance accuracy/speed)
-- PROCESS_PREDICTIONS=false (observation-only mode)
+- KATO_BATCH_SIZE=5000-10000 (larger batches)
+- KATO_VECTOR_SEARCH_LIMIT=50 (faster searches)
+- CONNECTION_POOL_SIZE=20-50 (more connections)
+- REDIS_ENABLED=true (enable caching)
 
 ### 4. Memory Management
 For long-running instances:
 - MAX_PATTERN_LENGTH > 0 (prevent unbounded STM growth)
 - PERSISTENCE=5-10 (limit emotives history)
-
-## Validation Rules
-
-1. **PROCESSOR_ID**: Must be unique across all instances
-2. **RECALL_THRESHOLD**: Must be between 0.0 and 1.0
-3. **MAX_PATTERN_LENGTH**: Must be >= 0
-4. **PERSISTENCE**: Must be > 0
-5. **MAX_PREDICTIONS**: Must be > 0
-6. **PORT**: Must be available and >= 1024 for non-root
+- KATO_BATCH_SIZE=appropriate for memory
+- MAX_REQUEST_SIZE=reasonable limit
 
 ## Troubleshooting Configuration Issues
 
@@ -337,11 +550,16 @@ For long-running instances:
 
 ### Issue: Too Many Predictions
 **Symptom**: Large response payloads, slow API
-**Solution**: Reduce MAX_PREDICTIONS or increase RECALL_THRESHOLD
+**Solution**: 
+- Reduce MAX_PREDICTIONS
+- Increase RECALL_THRESHOLD
+- Enable KATO_VECTOR_SEARCH_LIMIT
 
 ### Issue: Auto-Learning Not Triggering
 **Symptom**: STM grows unbounded
-**Solution**: Set MAX_PATTERN_LENGTH > 0 (e.g., 10, 50)
+**Solution**: 
+- Set MAX_PATTERN_LENGTH > 0
+- Or enable AUTO_LEARN_ENABLED=true with AUTO_LEARN_THRESHOLD
 
 ### Issue: Patterns Not Matching
 **Symptom**: Known patterns not found
@@ -349,3 +567,24 @@ For long-running instances:
 - SORT setting differs between learning and matching
 - RECALL_THRESHOLD too high
 - Different PROCESSOR_ID (different database)
+
+### Issue: Poor Performance
+**Symptom**: Slow responses, high latency
+**Solution**:
+- Enable KATO_USE_FAST_MATCHING=true
+- Enable KATO_USE_INDEXING=true
+- Enable REDIS_ENABLED=true
+- Increase CONNECTION_POOL_SIZE
+- Tune batch sizes appropriately
+
+## Validation Rules
+
+1. **PROCESSOR_ID**: Must be unique across all instances
+2. **RECALL_THRESHOLD**: Must be between 0.0 and 1.0
+3. **MAX_PATTERN_LENGTH**: Must be >= 0
+4. **PERSISTENCE**: Must be >= 1
+5. **MAX_PREDICTIONS**: Must be > 0
+6. **PORT**: Must be available and >= 1024 for non-root
+7. **Batch sizes**: Must be > 0 and reasonable for memory
+8. **Timeouts**: Must be positive numbers
+9. **ENVIRONMENT**: Must be valid option (development/testing/production)

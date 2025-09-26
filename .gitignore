@@ -78,8 +78,6 @@ Thumbs.db
 
 # Project specific
 kato-manager.sh.backup
-test_*.py
-!tests/test_*.py
 debug_*.py
 update_container.sh
 

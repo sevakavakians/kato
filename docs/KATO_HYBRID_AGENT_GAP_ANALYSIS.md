@@ -373,7 +373,7 @@ kato/
 
 ```yaml
 # LLM Processing
-POST /{processor_id}/process-llm:
+POST /{session_id}/process-llm:
   description: Process input through LLM and get structured ontology
   request:
     text: string
@@ -382,7 +382,7 @@ POST /{processor_id}/process-llm:
     ontology: object
     
 # Decision Making
-POST /{processor_id}/decide:
+POST /{session_id}/decide:
   description: Make decision based on current predictions
   request:
     include_reasoning: boolean
@@ -392,12 +392,12 @@ POST /{processor_id}/decide:
     reasoning: string (optional)
     
 # Action Management
-GET /{processor_id}/actions:
+GET /{session_id}/actions:
   description: Get available actions from MCP
   response:
     actions: array
     
-POST /{processor_id}/actions/execute:
+POST /{session_id}/actions/execute:
   description: Execute specific action
   request:
     action: string
@@ -406,12 +406,12 @@ POST /{processor_id}/actions/execute:
     result: object
     
 # Cost Management
-GET /{processor_id}/actions/costs:
+GET /{session_id}/actions/costs:
   description: Get current action costs
   response:
     costs: object
     
-POST /{processor_id}/actions/costs:
+POST /{session_id}/actions/costs:
   description: Update action costs
   request:
     costs: object
@@ -421,7 +421,7 @@ POST /{processor_id}/actions/costs:
 
 ```yaml
 kato:
-  processor_id: "p46b6b076c"
+  session_id: "p46b6b076c"
   
   llm:
     default_model: "openai"

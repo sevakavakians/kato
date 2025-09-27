@@ -296,13 +296,13 @@ logger.debug(f"Short-term memory state: {short_term_memory}")
 
 ```bash
 # Run with debug logging
-./kato-manager.sh start --log-level DEBUG
+./start.sh --log-level DEBUG
 
 # Open shell in container
 ./kato-manager.sh shell
 
 # View logs
-./kato-manager.sh logs kato -f
+docker-compose logs kato -f
 ```
 
 ## Pull Request Process

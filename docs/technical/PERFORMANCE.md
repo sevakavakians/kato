@@ -68,7 +68,7 @@ Async/Await:
 
 #### For Speed
 ```bash
-./kato-manager.sh start \
+./start.sh \
   --indexer-type VI \
   --max-predictions 20 \
   --recall-threshold 0.3 \
@@ -77,7 +77,7 @@ Async/Await:
 
 #### For Accuracy
 ```bash
-./kato-manager.sh start \
+./start.sh \
   --indexer-type VI \
   --max-predictions 500 \
   --recall-threshold 0.01 \
@@ -86,7 +86,7 @@ Async/Await:
 
 #### For Memory Efficiency
 ```bash
-./kato-manager.sh start \
+./start.sh \
   --max-predictions 50 \
   --max-seq-length 50 \
   --persistence 3
@@ -324,7 +324,7 @@ session.mount('http://', adapter)
 
 ```javascript
 // Create indexes for faster queries
-db.patterns.createIndex({"processor_id": 1, "name": 1})
+db.patterns.createIndex({"session_id": 1, "name": 1})
 db.patterns.createIndex({"frequency": -1})
 db.patterns.createIndex({"created_at": -1})
 ```

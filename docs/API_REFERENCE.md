@@ -4,14 +4,12 @@ Complete API documentation for the KATO FastAPI service.
 
 ## Base URLs
 
-- Primary Instance: `http://localhost:8001`
-- Testing Instance: `http://localhost:8002`
-- Analytics Instance: `http://localhost:8003`
+- KATO Service: `http://localhost:8000`
 
 ## Interactive Documentation
 
-- Swagger UI: `http://localhost:8001/docs`
-- ReDoc: `http://localhost:8001/redoc`
+- Swagger UI: `http://localhost:8000/docs`
+- ReDoc: `http://localhost:8000/redoc`
 
 ## Core Endpoints
 
@@ -27,7 +25,7 @@ Returns service health status.
 ```json
 {
   "status": "healthy",
-  "processor_id": "primary",
+  "session_id": "default",
   "uptime": 123.45
 }
 ```
@@ -44,7 +42,7 @@ Returns detailed processor status.
 ```json
 {
   "status": "okay",
-  "processor_id": "primary",
+  "session_id": "default",
   "processor_name": "PrimaryProcessor",
   "uptime": 123.45,
   "stm_length": 3,
@@ -74,7 +72,7 @@ Processes an observation and adds it to short-term memory.
 ```json
 {
   "status": "okay",
-  "processor_id": "primary",
+  "session_id": "default",
   "auto_learned_pattern": "PTRN|abc123...",  // If auto-learning triggered
   "time": 43,
   "unique_id": "obs-123"
@@ -102,7 +100,7 @@ Returns current short-term memory state.
     ["hello", "world"],
     ["foo", "bar"]
   ],
-  "processor_id": "primary"
+  "session_id": "primary"
 }
 ```
 
@@ -118,7 +116,7 @@ Learns a pattern from current short-term memory.
 ```json
 {
   "pattern_name": "PTRN|7f3a2b1c...",
-  "processor_id": "primary",
+  "session_id": "default",
   "message": "Learned pattern: PTRN|7f3a2b1c..."
 }
 ```
@@ -175,7 +173,7 @@ Returns predictions based on current STM or specific observation.
       "total_weighted_frequency": 12.5
     }
   ],
-  "processor_id": "primary"
+  "session_id": "primary"
 }
 ```
 
@@ -193,7 +191,7 @@ Clears short-term memory only.
 {
   "status": "okay",
   "message": "stm-cleared",
-  "processor_id": "primary"
+  "session_id": "primary"
 }
 ```
 
@@ -211,7 +209,7 @@ Clears all memory (STM and long-term patterns).
 {
   "status": "okay",
   "message": "all-cleared",
-  "processor_id": "primary"
+  "session_id": "primary"
 }
 ```
 
@@ -238,7 +236,7 @@ Retrieves a specific pattern by ID.
     "emotives": {"confidence": [0.8, 0.7, 0.9]},  // Rolling window arrays per emotive
     "length": 3
   },
-  "processor_id": "primary"
+  "session_id": "primary"
 }
 ```
 
@@ -280,7 +278,7 @@ Retrieves current value of a specific gene.
 {
   "gene_name": "recall_threshold",
   "gene_value": 0.1,
-  "processor_id": "primary"
+  "session_id": "primary"
 }
 ```
 
@@ -302,7 +300,7 @@ Returns last received observation data (input perception).
     "path": ["source-path"],
     "metadata": {}
   },
-  "processor_id": "primary"
+  "session_id": "primary"
 }
 ```
 
@@ -328,7 +326,7 @@ Returns current cognitive state.
     "vectors": [],
     "short_term_memory": [["stm", "events"]]
   },
-  "processor_id": "primary"
+  "session_id": "primary"
 }
 ```
 
@@ -343,7 +341,7 @@ Returns processor performance metrics.
 **Response:**
 ```json
 {
-  "processor_id": "primary",
+  "session_id": "default",
   "observations_processed": 1234,
   "patterns_learned": 56,
   "stm_size": 3,

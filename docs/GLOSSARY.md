@@ -185,15 +185,15 @@ Optimized pattern matching engine:
 - **metadata**: Stores processor metadata
 
 ### Qdrant Collections
-Vector database collections named `vectors_{processor_id}` storing:
+Vector database collections named `vectors_{session_id}` storing:
 - Vector embeddings
 - Associated metadata
 - HNSW index for fast similarity search
 
 ### Processor Isolation
-Each processor instance uses a unique `processor_id` for complete database isolation:
-- MongoDB: Database name = processor_id
-- Qdrant: Collection name = `vectors_{processor_id}`
+Each processor instance uses a unique `session_id` for complete database isolation:
+- MongoDB: Database name = session_id
+- Qdrant: Collection name = `vectors_{session_id}`
 - Prevents cross-contamination between instances
 
 ## Configuration Terms

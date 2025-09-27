@@ -38,13 +38,13 @@ Each "observation" in the array represents:
 ```json
 {
   "status": "okay",
-  "processor_id": "primary",
+  "session_id": "primary",
   "observations_processed": 3,
   "patterns_learned": ["PTRN|abc123..."],
   "individual_results": [
     {
       "status": "okay",
-      "processor_id": "primary",
+      "session_id": "primary",
       "auto_learned_pattern": null,
       "time": 1,
       "unique_id": "obs-1-..."
@@ -215,7 +215,7 @@ user_session = {
 }
 
 response = requests.post(
-    "http://localhost:8001/observe-sequence",
+    "http://localhost:8000/observe-sequence",
     json=user_session
 )
 

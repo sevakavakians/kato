@@ -169,21 +169,21 @@ Stress and benchmark tests:
 ## Database Isolation
 
 ### MongoDB Isolation
-Each cluster uses its processor_id as the database name:
-- Patterns: `{processor_id}.patterns_kb`
-- Symbols: `{processor_id}.symbols_kb`
-- Predictions: `{processor_id}.predictions_kb`
-- Metadata: `{processor_id}.metadata`
+Each cluster uses its session_id as the database name:
+- Patterns: `{session_id}.patterns_kb`
+- Symbols: `{session_id}.symbols_kb`
+- Predictions: `{session_id}.predictions_kb`
+- Metadata: `{session_id}.metadata`
 
 ### Qdrant Isolation
 Each cluster has its own vector collection:
-- Collection name: `vectors_{processor_id}`
+- Collection name: `vectors_{session_id}`
 - Complete HNSW index per cluster
 - No shared embeddings
 
 ### Redis Isolation
 Each cluster uses namespaced keys:
-- Key pattern: `{processor_id}:*`
+- Key pattern: `{session_id}:*`
 - Isolated cache per instance
 
 ## Writing Tests
@@ -269,7 +269,7 @@ def test_with_custom_config(kato_fixture):
 
 #### KATO Not Running
 - **Issue**: Connection refused on port 8000
-- **Solution**: Start KATO with `./kato-manager.sh start`
+- **Solution**: Start KATO with `./start.sh`
 - **Solution**: Check if KATO is running: `docker ps | grep kato`
 
 #### Import Errors
@@ -280,7 +280,7 @@ def test_with_custom_config(kato_fixture):
 #### Database Connection Issues
 - **Issue**: Tests timeout connecting to MongoDB/Qdrant
 - **Solution**: Check KATO logs: `docker logs kato-api-$(whoami)-1`
-- **Solution**: Restart KATO: `./kato-manager.sh restart`
+- **Solution**: Restart KATO: `docker-compose restart`
 
 #### Test Isolation Issues
 - **Issue**: Tests affect each other
@@ -337,7 +337,7 @@ The test suite is CI/CD ready:
     pip install -r tests/requirements.txt
 
 - name: Start KATO
-  run: ./kato-manager.sh start
+  run: ./start.sh
 
 - name: Run tests
   run: python -m pytest tests/tests/ -v --junit-xml=test-results.xml
@@ -383,7 +383,7 @@ The test suite is CI/CD ready:
 
 ### Prerequisites
 - Python 3.8 or later
-- Running KATO instance (via `./kato-manager.sh start`)
+- Running KATO instance (via `./start.sh`)
 - Virtual environment with dependencies
 
 ### Initial Setup

@@ -20,19 +20,19 @@ chmod +x kato-manager.sh
 ### Basic Commands
 ```bash
 # Build Docker image
-./kato-manager.sh build
+docker-compose build
 
 # Start KATO system
-./kato-manager.sh start
+./start.sh
 
 # Check status
-./kato-manager.sh status
+docker-compose ps
 
 # View logs
-./kato-manager.sh logs
+docker-compose logs
 
 # Stop system
-./kato-manager.sh stop
+docker-compose down
 ```
 
 ## Docker Architecture
@@ -58,8 +58,8 @@ When started with `--id` flag, containers are named by processor ID:
 
 Examples:
 ```bash
-./kato-manager.sh start --id processor-1  # Creates: kato-processor-1
-./kato-manager.sh start --id nlp-engine   # Creates: kato-nlp-engine
+./start.sh --id processor-1  # Creates: kato-processor-1
+./start.sh --id nlp-engine   # Creates: kato-nlp-engine
 ```
 
 ## Management Commands
@@ -71,14 +71,14 @@ Start KATO processor instance(s) with MongoDB backend.
 
 ```bash
 # Start default instance
-./kato-manager.sh start
+./start.sh
 
 # Start with custom parameters
-./kato-manager.sh start --name "MyProcessor" --port 9000
+./start.sh --name "MyProcessor" --port 9000
 
 # Start multiple instances
-./kato-manager.sh start --id processor-1 --name "Main" --port 8001
-./kato-manager.sh start --id processor-2 --name "Secondary" --port 8002
+./start.sh --id processor-1 --name "Main" --port 8001
+./start.sh --id processor-2 --name "Secondary" --port 8002
 ```
 
 #### stop
@@ -86,18 +86,18 @@ Stop KATO instance(s) and automatically remove containers.
 
 ```bash
 # Stop all instances (prompts for MongoDB removal)
-./kato-manager.sh stop
+docker-compose down
 
 # Stop specific instance by ID or name
-./kato-manager.sh stop processor-1         # By ID
-./kato-manager.sh stop "Main"              # By name
+docker-compose down processor-1         # By ID
+docker-compose down "Main"              # By name
 
 # Stop with explicit options
-./kato-manager.sh stop --id processor-1    # Specific ID
-./kato-manager.sh stop --name "Main"       # Specific name
-./kato-manager.sh stop --all               # All instances
-./kato-manager.sh stop --all --with-mongo  # All + MongoDB
-./kato-manager.sh stop --all --no-mongo    # All, keep MongoDB
+docker-compose down --id processor-1    # Specific ID
+docker-compose down --name "Main"       # Specific name
+docker-compose down --all               # All instances
+docker-compose down --all --with-mongo  # All + MongoDB
+docker-compose down --all --no-mongo    # All, keep MongoDB
 ```
 
 **Note**: Containers are automatically removed after stopping to prevent accumulation.
@@ -114,7 +114,7 @@ Output:
 KATO FastAPI Services Status:
 
 NAME           IMAGE         COMMAND                  SERVICE        STATUS    PORTS
-kato-primary   kato:latest   "uvicorn kato.servic…"   kato-primary   healthy   0.0.0.0:8001->8000/tcp
+kato   kato:latest   "uvicorn kato.servic…"   kato   healthy   0.0.0.0:8001->8000/tcp
 kato-testing   kato:latest   "uvicorn kato.servic…"   kato-testing   healthy   0.0.0.0:8002->8000/tcp
 kato-mongodb   mongo:4.4     "docker-entrypoint.s…"   mongodb        healthy   0.0.0.0:27017->27017/tcp
 kato-qdrant    qdrant/qdrant "entrypoint.sh"          qdrant         running   0.0.0.0:6333->6333/tcp
@@ -124,17 +124,17 @@ kato-qdrant    qdrant/qdrant "entrypoint.sh"          qdrant         running   0
 Restart KATO system (stop + start).
 
 ```bash
-./kato-manager.sh restart
+docker-compose restart
 ```
 
 #### build
 Build or rebuild KATO Docker image.
 
 ```bash
-./kato-manager.sh build
+docker-compose build
 
 # Force rebuild with no cache
-./kato-manager.sh build --no-cache
+docker-compose build --no-cache
 ```
 
 #### clean
@@ -150,7 +150,7 @@ Complete cleanup of containers, images, and volumes.
 Show status of all KATO containers and services.
 
 ```bash
-./kato-manager.sh status
+docker-compose ps
 ```
 
 Output shows:
@@ -164,16 +164,16 @@ View container logs.
 
 ```bash
 # KATO API logs
-./kato-manager.sh logs kato
+docker-compose logs kato
 
 # MongoDB logs
-./kato-manager.sh logs mongo
+docker-compose logs mongo
 
 # All logs
-./kato-manager.sh logs all
+docker-compose logs all
 
 # Follow logs (real-time)
-./kato-manager.sh logs kato -f
+docker-compose logs kato -f
 ```
 
 #### shell
@@ -203,7 +203,7 @@ KATO now implements automatic container cleanup to prevent Docker resource accum
 docker ps -a | grep kato
 
 # After using stop command - container is removed
-./kato-manager.sh stop processor-1
+docker-compose down processor-1
 docker ps -a | grep processor-1  # No results - container removed
 ```
 
@@ -262,17 +262,17 @@ The easiest way to deploy multiple instances:
 
 ```bash
 # Start multiple instances with different configurations
-./kato-manager.sh start --id sentiment --name "Sentiment Analysis" --port 8001
-./kato-manager.sh start --id classifier --name "Text Classifier" --port 8002 --indexer-type VI
-./kato-manager.sh start --id learner --name "Pattern Learner" --port 8003 --max-seq-length 10
+./start.sh --id sentiment --name "Sentiment Analysis" --port 8001
+./start.sh --id classifier --name "Text Classifier" --port 8002 --indexer-type VI
+./start.sh --id learner --name "Pattern Learner" --port 8003 --max-seq-length 10
 
 # View all instances
 ./kato-manager.sh list
 
 # Each instance has its own API endpoint
-curl http://localhost:8001/sentiment/ping
-curl http://localhost:8002/classifier/ping
-curl http://localhost:8003/learner/ping
+curl http://localhost:8000/sentiment/ping
+curl http://localhost:8000/classifier/ping
+curl http://localhost:8000/learner/ping
 ```
 
 #### Using docker-compose-multi.yml
@@ -452,7 +452,7 @@ services:
 
 ```bash
 # Set log level via environment
-LOG_LEVEL=DEBUG ./kato-manager.sh start
+LOG_LEVEL=DEBUG ./start.sh
 
 # Or in docker-compose.yml
 environment:
@@ -487,14 +487,14 @@ logging:
 docker logs kato-api-${USER}-1
 
 # Rebuild image
-./kato-manager.sh build --no-cache
-./kato-manager.sh start
+docker-compose build --no-cache
+./start.sh
 ```
 
 #### Port Already in Use
 ```bash
 # Use different port
-./kato-manager.sh start --port 9000
+./start.sh --port 9000
 
 # Or find and kill process using port
 lsof -i :8000
@@ -587,10 +587,10 @@ jobs:
       - uses: actions/checkout@v2
       
       - name: Build KATO
-        run: ./kato-manager.sh build
+        run: docker-compose build
       
       - name: Start KATO
-        run: ./kato-manager.sh start
+        run: ./start.sh
       
       - name: Run Tests
         run: |
@@ -598,7 +598,7 @@ jobs:
           ./kato-manager.sh test
       
       - name: Stop KATO
-        run: ./kato-manager.sh stop
+        run: docker-compose down
 ```
 
 ### Docker Hub Publishing

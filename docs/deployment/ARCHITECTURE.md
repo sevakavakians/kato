@@ -2,7 +2,7 @@
 
 ## Overview
 
-KATO uses a distributed architecture with FastAPI services that provide direct access to embedded processors. Each instance maintains its own state, isolated by processor_id.
+KATO uses a distributed architecture with FastAPI services that provide direct access to embedded processors. Each instance maintains its own state, isolated by session_id.
 
 ## Current Architecture (FastAPI Direct Embedding)
 
@@ -100,12 +100,12 @@ KATO uses a distributed architecture with FastAPI services that provide direct a
 - Pattern storage with SHA1 hash indexing
 - Long-term memory persistence
 - Metadata storage
-- Database isolation by processor_id
+- Database isolation by session_id
 
 **Qdrant** (Optional but Recommended):
 - Vector similarity search
 - HNSW indexing for performance
-- Collection isolation by processor_id
+- Collection isolation by session_id
 
 ## Data Flow
 
@@ -139,7 +139,7 @@ Client → FastAPI → Processor → Pattern Search → MongoDB/Qdrant
 ```yaml
 services:
   # Primary KATO instance
-  kato-primary:
+  kato:
     image: kato:latest
     ports:
       - "8001:8000"  # API
@@ -217,7 +217,7 @@ Standard port allocations:
 | Layer | Protection |
 |-------|------------|
 | API | Rate limiting, input validation |
-| Processor | Isolated by processor_id |
+| Processor | Isolated by session_id |
 | MongoDB | Database-level isolation |
 | Qdrant | Collection-level isolation |
 | Network | Docker network isolation |
@@ -248,25 +248,25 @@ Standard port allocations:
 ### Health Endpoints
 ```bash
 # Check instance health
-curl http://localhost:8001/health
+curl http://localhost:8000/health
 
 # Get detailed status
-curl http://localhost:8001/status
+curl http://localhost:8000/status
 ```
 
 ### Logs
 ```bash
 # View container logs
-docker logs kato-primary --tail 50
+docker logs kato --tail 50
 
 # Monitor in real-time
-docker logs -f kato-primary
+docker logs -f kato
 ```
 
 ### Metrics
 ```bash
 # Get performance metrics
-curl http://localhost:8001/metrics
+curl http://localhost:8000/metrics
 ```
 
 ## Troubleshooting
@@ -276,7 +276,7 @@ curl http://localhost:8001/metrics
 1. **Connection Refused**: Check service status
    ```bash
    docker ps
-   ./kato-manager.sh status
+   docker-compose ps
    ```
 
 2. **Database Connection**: Verify MongoDB is running

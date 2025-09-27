@@ -18,33 +18,21 @@ git clone https://github.com/your-org/kato.git
 cd kato
 ```
 
-### 2. Make the Manager Script Executable
+### 2. Start KATO
 
 ```bash
-chmod +x kato-manager.sh
+# Start all services (MongoDB, Qdrant, Redis, KATO)
+./start.sh
 ```
 
-### 3. Build and Start KATO
-
-```bash
-# Build the Docker image
-./kato-manager.sh build
-
-# Start KATO with default settings (single instance)
-./kato-manager.sh start
-
-# Or start with custom processor ID and port
-./kato-manager.sh start --id my-processor --name "My KATO" --port 8001
-```
-
-### 4. Verify Installation
+### 3. Verify Installation
 
 ```bash
 # Check system status
-./kato-manager.sh status
+docker-compose ps
 
 # Test the API
-curl http://localhost:8000/kato-api/ping
+curl http://localhost:8000/health
 ```
 
 You should see:
@@ -133,7 +121,7 @@ KATO will predict the rest of the pattern!
 
 ```bash
 # Start with specific configuration
-./kato-manager.sh start \
+./start.sh \
   --name "MyProcessor" \
   --max-predictions 200 \
   --recall-threshold 0.1
@@ -143,27 +131,27 @@ KATO will predict the rest of the pattern!
 
 ```bash
 # Follow KATO logs
-./kato-manager.sh logs kato
+docker-compose logs kato
 
 # Check all logs
-./kato-manager.sh logs all
+docker-compose logs all
 ```
 
 ### Stop KATO
 
 ```bash
 # Stop and remove all instances (asks about MongoDB)
-./kato-manager.sh stop
+docker-compose down
 
 # Stop specific instance by name or ID
-./kato-manager.sh stop "My KATO"           # By name
-./kato-manager.sh stop my-processor        # By ID
+docker-compose down "My KATO"           # By name
+docker-compose down my-processor        # By ID
 
 # Stop all instances and MongoDB
-./kato-manager.sh stop --all --with-mongo
+docker-compose down --all --with-mongo
 
 # Stop all instances but keep MongoDB
-./kato-manager.sh stop --all --no-mongo
+docker-compose down --all --no-mongo
 ```
 
 ### Clean Up Everything
@@ -180,13 +168,13 @@ import requests
 import json
 
 class KATOClient:
-    def __init__(self, base_url="http://localhost:8000", processor_id="p46b6b076c"):
+    def __init__(self, base_url="http://localhost:8000", session_id="p46b6b076c"):
         self.base_url = base_url
-        self.processor_id = processor_id
+        self.session_id = session_id
     
     def observe(self, strings, vectors=None, emotives=None):
         """Send an observation to KATO"""
-        url = f"{self.base_url}/{self.processor_id}/observe"
+        url = f"{self.base_url}/{self.session_id}/observe"
         data = {
             "strings": strings,
             "vectors": vectors or [],
@@ -197,19 +185,19 @@ class KATOClient:
     
     def learn(self):
         """Trigger learning from short-term memory"""
-        url = f"{self.base_url}/{self.processor_id}/learn"
+        url = f"{self.base_url}/{self.session_id}/learn"
         response = requests.post(url)
         return response.json()
     
     def get_predictions(self):
         """Get current predictions"""
-        url = f"{self.base_url}/{self.processor_id}/predictions"
+        url = f"{self.base_url}/{self.session_id}/predictions"
         response = requests.get(url)
         return response.json()
     
     def clear_short_term_memory(self):
         """Clear short-term memory"""
-        url = f"{self.base_url}/{self.processor_id}/short-term-memory/clear"
+        url = f"{self.base_url}/{self.session_id}/short-term-memory/clear"
         response = requests.post(url)
         return response.json()
 
@@ -272,22 +260,22 @@ For detailed testing information, see the [Testing Guide](development/TESTING.md
 ### Port Already in Use
 ```bash
 # Use a different port
-./kato-manager.sh start --port 9000
+./start.sh --port 9000
 ```
 
 ### Docker Not Running
 ```bash
 # Start Docker Desktop, then retry
-./kato-manager.sh start
+./start.sh
 ```
 
 ### Container Won't Start
 ```bash
 # Check logs and rebuild
-./kato-manager.sh logs kato
+docker-compose logs kato
 ./kato-manager.sh clean
-./kato-manager.sh build
-./kato-manager.sh start
+docker-compose build
+./start.sh
 ```
 
 ## Next Steps

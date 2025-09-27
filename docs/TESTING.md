@@ -8,15 +8,14 @@ KATO uses a simplified testing architecture where tests run in local Python and 
 
 ### 1. Start KATO Services
 ```bash
-# Build and start all services (MongoDB, Qdrant, 3 KATO instances)
-./kato-manager.sh build  # Only needed first time or after code changes
-./kato-manager.sh start
+# Start all services (MongoDB, Qdrant, Redis, KATO)
+./start.sh
 
 # Verify services are running
-./kato-manager.sh status
+docker-compose ps
 
 # Check health
-curl http://localhost:8001/health  # Should return {"status": "healthy", ...}
+curl http://localhost:8000/health  # Should return {"status": "healthy", ...}
 ```
 
 ### 2. Set Up Python Environment
@@ -84,20 +83,20 @@ python -m pytest tests/tests/unit/ -n auto
 
 ### How It Works
 
-1. **Services Run in Docker**: MongoDB, Qdrant, and 3 KATO instances run in containers
+1. **Services Run in Docker**: MongoDB, Qdrant, Redis, and KATO service run in containers
 2. **Tests Run Locally**: Python tests execute in your local environment
-3. **Connection via HTTP**: Tests connect to KATO services on ports 8001-8003
-4. **Automatic Isolation**: Each test gets a unique processor_id for complete database isolation
+3. **Connection via HTTP**: Tests connect to KATO service on port 8000
+4. **Automatic Isolation**: Each test gets a unique session_id for complete database isolation
 
 ### Test Isolation
 
-Each test automatically receives a unique processor_id that ensures:
-- **MongoDB Isolation**: Database name = processor_id
-- **Qdrant Isolation**: Collection name = `vectors_{processor_id}`
+Each test automatically receives a unique session_id that ensures:
+- **MongoDB Isolation**: Database name = session_id
+- **Qdrant Isolation**: Collection name = `vectors_{session_id}`
 - **No Cross-Contamination**: Tests cannot affect each other
 - **Parallel Safety**: Tests can run concurrently without issues
 
-Example processor_id format: `test_sorting_behavior_1699123456789_a1b2c3d4`
+Example session_id format: `test_sorting_behavior_1699123456789_a1b2c3d4`
 
 ### Test Fixture
 
@@ -160,7 +159,7 @@ tests/tests/
 
 ### Recent Migration to FastAPI
 The test suite was successfully updated following the architectural migration from REST/ZMQ to FastAPI:
-- All endpoint URLs updated (removed processor_id prefixes)
+- All endpoint URLs updated (removed session_id prefixes)
 - Response format changes handled (e.g., 'observed' → 'okay')
 - Field name updates (e.g., 'stm_size' → 'stm_length')
 - Async/sync boundary issues resolved
@@ -201,7 +200,7 @@ def test_my_feature(kato_fixture):
 ```python
 def test_with_debugging(kato_fixture):
     # Add print statements
-    print(f"Processor ID: {kato_fixture.processor_id}")
+    print(f"Processor ID: {kato_fixture.session_id}")
     
     # Use breakpoints
     import pdb; pdb.set_trace()
@@ -214,14 +213,13 @@ def test_with_debugging(kato_fixture):
 ### View Service Logs
 ```bash
 # View KATO service logs
-docker logs kato-primary --tail 50
-docker logs kato-testing --tail 50
+docker logs kato --tail 50
 
 # View MongoDB logs
 docker logs kato-mongodb --tail 50
 
 # Follow logs in real-time
-docker logs -f kato-primary
+docker logs -f kato
 ```
 
 ### Common Issues and Solutions
@@ -229,21 +227,22 @@ docker logs -f kato-primary
 #### Services Not Running
 ```bash
 # Check if services are up
-./kato-manager.sh status
+docker-compose ps
 
 # If not running, start them
-./kato-manager.sh start
+./start.sh
 
 # Check health
-curl http://localhost:8001/health
+curl http://localhost:8000/health
 ```
 
 #### Port Conflicts
 ```bash
 # Check if ports are in use
-lsof -i :8001
-lsof -i :8002
-lsof -i :8003
+lsof -i :8000
+lsof -i :27017
+lsof -i :6333
+lsof -i :6379
 
 # Stop conflicting services or change ports in docker-compose.yml
 ```
@@ -251,10 +250,10 @@ lsof -i :8003
 #### Test Failures After Code Changes
 ```bash
 # Rebuild Docker image after code changes
-./kato-manager.sh build
+docker-compose build
 
 # Restart services
-./kato-manager.sh restart
+docker-compose restart
 
 # Then run tests
 ./run_tests.sh --no-start --no-stop
@@ -265,9 +264,9 @@ For systematic troubleshooting of test failures, see the [Test Troubleshooting G
 #### Database Issues
 ```bash
 # Clean restart with fresh databases
-./kato-manager.sh stop
+docker-compose down
 docker volume prune -f  # WARNING: Removes all unused volumes
-./kato-manager.sh start
+./start.sh
 ```
 
 ## Performance Testing
@@ -317,8 +316,8 @@ jobs:
       
       - name: Build and start services
         run: |
-          ./kato-manager.sh build
-          ./kato-manager.sh start
+          docker-compose build
+          ./start.sh
           
       - name: Set up Python
         uses: actions/setup-python@v2
@@ -336,7 +335,7 @@ jobs:
           
       - name: Stop services
         if: always()
-        run: ./kato-manager.sh stop
+        run: docker-compose down
 ```
 
 ## Test Coverage
@@ -370,8 +369,8 @@ xdg-open htmlcov/index.html  # Linux
 The KATO testing system provides:
 - **Fast Feedback**: Local Python execution for quick iteration
 - **Easy Debugging**: Direct access with print/breakpoint debugging
-- **Complete Isolation**: Each test gets its own processor_id
+- **Complete Isolation**: Each test gets its own session_id
 - **Parallel Execution**: Tests can run concurrently
 - **No Container Overhead**: Tests run directly, containers only for services
 
-Remember: Always start services with `./kato-manager.sh start` before running tests!
+Remember: Always start services with `./start.sh` before running tests!

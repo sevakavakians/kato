@@ -1,52 +1,61 @@
-# KATO Multi-Instance Management Guide
+# KATO Session Management Guide
 
 ## Overview
 
-KATO now supports running multiple independent processor instances simultaneously, each with unique IDs, names, and configurations. This guide explains how to create, manage, and configure multiple KATO instances.
+KATO uses a session-based architecture with a single service that supports multiple isolated user sessions. Each session provides complete isolation for short-term memory, patterns, and configurations. This guide explains how to create and manage KATO sessions.
 
 ## Key Features
 
-- **Dynamic Instance Creation**: Create multiple KATO processors with unique IDs
-- **Instance Registry**: Automatic tracking of all instances in `~/.kato/instances.json`
-- **Port Management**: Automatic port allocation to avoid conflicts
-- **Individual Control**: Start, stop, and restart specific instances
-- **Configuration Files**: Support for YAML/JSON configuration files
+- **Session Isolation**: Complete STM and configuration isolation per session
+- **Redis-Backed Sessions**: Fast, persistent session state management
+- **Dynamic Session Creation**: Create sessions via API with custom user identifiers
+- **Session TTL**: Automatic cleanup of inactive sessions
+- **Backwards Compatibility**: Default session for legacy API compatibility
 
 ## Quick Start
 
-### Starting Multiple Instances
+### Creating Sessions
 
 ```bash
-# Start first instance with custom ID and name
-./kato-manager.sh start --id processor-1 --name "Main Processor" --port 8001
+# Start KATO service
+./start.sh
 
-# Start second instance with different configuration
-./kato-manager.sh start --id processor-2 --name "Secondary" --port 8002 --max-predictions 200
+# Create a session for a specific user
+curl -X POST http://localhost:8000/sessions \
+  -H "Content-Type: application/json" \
+  -d '{"user_id": "alice", "config": {"max_predictions": 50}}'
 
-# Start third instance with auto-learning enabled
-./kato-manager.sh start --id processor-3 --name "Auto Learner" --port 8003 --max-seq-length 10
+# Create session with custom configuration
+curl -X POST http://localhost:8000/sessions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": "bob", 
+    "config": {
+      "recall_threshold": 0.3,
+      "max_pattern_length": 10
+    }
+  }'
 ```
 
-### Managing Instances
+### Managing Sessions
 
 ```bash
-# List all instances
-./kato-manager.sh list
+# List all active sessions
+curl http://localhost:8000/sessions
 
-# Stop specific instance by ID or name (removes container)
-./kato-manager.sh stop processor-1         # By ID
-./kato-manager.sh stop "Main Processor"    # By name
-./kato-manager.sh stop --id processor-1    # Explicit ID
-./kato-manager.sh stop --name "Main"       # Explicit name
+# Get specific session info
+curl http://localhost:8000/sessions/{session_id}
 
-# Stop all instances
-./kato-manager.sh stop                     # Asks about MongoDB
-./kato-manager.sh stop --all               # Same as above
-./kato-manager.sh stop --all --with-mongo  # Also stops MongoDB
-./kato-manager.sh stop --all --no-mongo    # Keeps MongoDB running
+# Delete a session (clears all session data)
+curl -X DELETE http://localhost:8000/sessions/{session_id}
+
+# Update session configuration
+curl -X PUT http://localhost:8000/sessions/{session_id}/config \
+  -H "Content-Type: application/json" \
+  -d '{"recall_threshold": 0.5}'
 
 # Check system status
-./kato-manager.sh status
+docker-compose ps
 ```
 
 **Important**: The `stop` command now automatically removes containers after stopping them, preventing container accumulation. Instances are also removed from the registry.
@@ -73,12 +82,12 @@ If the requested port is in use, KATO automatically finds the next available por
 
 ```bash
 # If port 8000 is busy, will use 8001, 8002, etc.
-./kato-manager.sh start --id my-processor
+./start.sh --id my-processor
 ```
 
 ### Manual Port Assignment
 ```bash
-./kato-manager.sh start --id my-processor --port 9000
+./start.sh --id my-processor --port 9000
 ```
 
 ## Instance Registry
@@ -113,7 +122,7 @@ All instances are tracked in `~/.kato/instances.json`:
 All standard KATO parameters can be set per instance:
 
 ```bash
-./kato-manager.sh start \
+./start.sh \
   --id my-processor \
   --name "Custom Processor" \
   --port 8001 \
@@ -167,14 +176,14 @@ Each instance has its own API endpoint based on its processor ID:
 
 ```bash
 # Instance 1: processor-1 on port 8001
-curl http://localhost:8001/processor-1/ping
+curl http://localhost:8000/processor-1/ping
 
 # Instance 2: processor-2 on port 8002
-curl http://localhost:8002/processor-2/observe \
+curl http://localhost:8000/processor-2/observe \
   -d '{"strings": ["hello"], "vectors": [], "emotives": {}}'
 
 # Instance 3: processor-3 on port 8003
-curl http://localhost:8003/processor-3/predictions
+curl http://localhost:8000/processor-3/predictions
 ```
 
 ## Docker Networking
@@ -193,22 +202,22 @@ Each instance has:
 ### 1. Different Recall Thresholds
 Run instances with different similarity thresholds:
 ```bash
-./kato-manager.sh start --id high-recall --recall-threshold 0.05 --port 8001
-./kato-manager.sh start --id low-recall --recall-threshold 0.5 --port 8002
+./start.sh --id high-recall --recall-threshold 0.05 --port 8001
+./start.sh --id low-recall --recall-threshold 0.5 --port 8002
 ```
 
 ### 2. Different Configurations
 Test different parameter settings:
 ```bash
-./kato-manager.sh start --id conservative --recall-threshold 0.3 --port 8001
-./kato-manager.sh start --id aggressive --recall-threshold 0.05 --port 8002
+./start.sh --id conservative --recall-threshold 0.3 --port 8001
+./start.sh --id aggressive --recall-threshold 0.05 --port 8002
 ```
 
 ### 3. Specialized Processors
 Create task-specific processors:
 ```bash
-./kato-manager.sh start --id nlp-processor --name "NLP" --max-seq-length 20 --port 8001
-./kato-manager.sh start --id stream-processor --name "Stream" --max-predictions 50 --port 8002
+./start.sh --id nlp-processor --name "NLP" --max-seq-length 20 --port 8001
+./start.sh --id stream-processor --name "Stream" --max-predictions 50 --port 8002
 ```
 
 ## Container Management
@@ -225,16 +234,16 @@ This prevents accumulation of stopped containers and keeps your system clean.
 
 ```bash
 # Stop by ID or name
-./kato-manager.sh stop processor-1        # Stops and removes container
-./kato-manager.sh stop "My Processor"     # Find by name, then remove
+docker-compose down processor-1        # Stops and removes container
+docker-compose down "My Processor"     # Find by name, then remove
 
 # Stop all with options
-./kato-manager.sh stop --all              # Stop all, prompt for MongoDB
-./kato-manager.sh stop --all --with-mongo # Stop everything
-./kato-manager.sh stop --all --no-mongo   # Keep MongoDB running
+docker-compose down --all              # Stop all, prompt for MongoDB
+docker-compose down --all --with-mongo # Stop everything
+docker-compose down --all --no-mongo   # Keep MongoDB running
 
 # Legacy commands still work
-./kato-manager.sh stop                    # Same as --all
+docker-compose down                    # Same as --all
 ```
 
 ## Troubleshooting
@@ -274,24 +283,24 @@ rm ~/.kato/instances.json
 ### Example 1: A/B Testing
 ```bash
 # Version A with current settings
-./kato-manager.sh start --id version-a --name "Version A" --port 8001
+./start.sh --id version-a --name "Version A" --port 8001
 
 # Version B with experimental settings
-./kato-manager.sh start --id version-b --name "Version B" \
+./start.sh --id version-b --name "Version B" \
   --port 8002 --max-predictions 200 --recall-threshold 0.05
 ```
 
 ### Example 2: Multi-Modal Processing
 ```bash
 # Text processor
-./kato-manager.sh start --id text-proc --name "Text" --port 8001
+./start.sh --id text-proc --name "Text" --port 8001
 
 # High-performance processor
-./kato-manager.sh start --id high-perf --name "Performance" \
+./start.sh --id high-perf --name "Performance" \
   --port 8002 --max-predictions 20 --recall-threshold 0.3
 
 # Combined processor
-./kato-manager.sh start --id combined-proc --name "Combined" \
+./start.sh --id combined-proc --name "Combined" \
   --port 8003 --max-seq-length 15
 ```
 

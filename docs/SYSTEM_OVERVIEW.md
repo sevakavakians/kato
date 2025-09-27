@@ -30,14 +30,14 @@ KATO uses a modern FastAPI architecture with direct embedding:
 Client Request → FastAPI Service (Ports 8001-8003) → Embedded KATO Processor
                            ↓                                    ↓
                     Async Processing                    MongoDB & Qdrant
-                           ↓                            (Isolated by processor_id)
+                           ↓                            (Isolated by session_id)
                     JSON Response
 ```
 
 **Key Components:**
 - **FastAPI Service**: Modern async web framework with automatic API documentation
 - **Embedded Processor**: Each container runs one KATO processor instance
-- **Database Isolation**: Each processor has isolated data via processor_id
+- **Database Isolation**: Each processor has isolated data via session_id
 - **Async Processing**: Non-blocking I/O for high performance
 
 ## End-to-End Behavior

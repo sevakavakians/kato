@@ -8,16 +8,16 @@ Comprehensive guide for diagnosing and resolving common KATO issues.
 
 ```bash
 # Check if KATO is running
-./kato-manager.sh status
+docker-compose ps
 
 # Check API health
-curl http://localhost:8001/health
+curl http://localhost:8000/health
 
 # Check processor status
-curl http://localhost:8001/status
+curl http://localhost:8000/status
 
 # View recent logs
-./kato-manager.sh logs kato --tail 50
+docker-compose logs kato --tail 50
 ```
 
 ## Common Issues and Solutions
@@ -42,12 +42,12 @@ docker ps | grep kato
 2. Use automatic port allocation:
 ```bash
 # Don't specify port - let KATO find available one
-./kato-manager.sh start --id my-processor
+./start.sh --id my-processor
 ```
 
 3. Specify unique port manually:
 ```bash
-./kato-manager.sh start --id my-processor --port 8005
+./start.sh --id my-processor --port 8005
 ```
 
 4. Clean up orphaned instances:
@@ -81,7 +81,7 @@ docker restart kato-my-processor
 3. Verify processor ID in API calls:
 ```bash
 # Ensure using correct ID
-curl http://localhost:8001/{processor-id}/ping
+curl http://localhost:8000/{processor-id}/ping
 ```
 
 #### Port Conflicts
@@ -102,13 +102,13 @@ netstat -tulpn | grep 8000
 2. Use next available port:
 ```bash
 # KATO automatically finds free port
-./kato-manager.sh start --id new-processor
+./start.sh --id new-processor
 ```
 
 3. Stop conflicting instance:
 ```bash
 ./kato-manager.sh list
-./kato-manager.sh stop conflicting-processor  # By ID or name
+docker-compose down conflicting-processor  # By ID or name
 ```
 
 #### Stopped Containers Not Removed
@@ -124,7 +124,7 @@ netstat -tulpn | grep 8000
 1. Use the updated stop command:
 ```bash
 # New stop command removes containers automatically
-./kato-manager.sh stop processor-1
+docker-compose down processor-1
 ```
 
 2. Clean up old stopped containers manually:
@@ -152,19 +152,19 @@ rm ~/.kato/instances.json
 
 1. Check FastAPI service status:
 ```bash
-docker logs kato-primary --tail 20
+docker logs kato --tail 20
 docker logs kato-testing --tail 20
 ```
 
 2. Restart container to reset state:
 ```bash
-./kato-manager.sh restart
+docker-compose restart
 ```
 
 3. Verify service health:
 ```bash
-curl http://localhost:8001/health
-curl http://localhost:8002/health
+curl http://localhost:8000/health
+curl http://localhost:8000/health
 ```
 
 #### Test Runner Timeout
@@ -186,7 +186,7 @@ cd tests
 ```bash
 docker images | grep kato
 # If missing, build once:
-./kato-manager.sh build
+docker-compose build
 ```
 
 3. Skip virtual environment if causing issues:
@@ -215,14 +215,14 @@ docker version
 ```bash
 lsof -i :8000
 # Kill conflicting process or use different port
-./kato-manager.sh start --port 9000
+./start.sh --port 9000
 ```
 
 3. Rebuild image:
 ```bash
 ./kato-manager.sh clean
-./kato-manager.sh build --no-cache
-./kato-manager.sh start
+docker-compose build --no-cache
+./start.sh
 ```
 
 4. Check disk space:
@@ -275,13 +275,13 @@ docker ps | grep kato
 
 2. Check port mapping:
 ```bash
-docker port kato-primary
+docker port kato
 docker port kato-testing
 ```
 
 3. Test internal connectivity:
 ```bash
-docker exec kato-primary curl localhost:8000/health
+docker exec kato curl localhost:8000/health
 ```
 
 4. Check firewall:
@@ -309,16 +309,16 @@ docker exec kato-api-${USER}-1 env | grep PROCESSOR
 2. Use correct endpoint URLs:
 ```bash
 # FastAPI endpoints (no processor ID in URL)
-curl http://localhost:8001/observe
-curl http://localhost:8001/predictions
-curl http://localhost:8001/stm
+curl http://localhost:8000/observe
+curl http://localhost:8000/predictions
+curl http://localhost:8000/stm
 ```
 
 3. Check service health:
 ```bash
 # Health check endpoints
-curl http://localhost:8001/health
-curl http://localhost:8002/health
+curl http://localhost:8000/health
+curl http://localhost:8000/health
 ```
 
 ### Performance Issues
@@ -338,7 +338,7 @@ docker stats kato-api-${USER}-1
 
 2. Optimize configuration:
 ```bash
-./kato-manager.sh restart \
+docker-compose restart \
   --indexer-type VI \
   --max-predictions 50 \
   --recall-threshold 0.3
@@ -347,7 +347,7 @@ docker stats kato-api-${USER}-1
 3. Check async processing:
 ```bash
 # Look for processing issues in logs
-docker logs kato-primary | grep -i "error\|warning"
+docker logs kato | grep -i "error\|warning"
 ```
 
 4. Reduce load:
@@ -366,12 +366,12 @@ docker logs kato-primary | grep -i "error\|warning"
 
 1. Clear memory:
 ```bash
-curl -X POST http://localhost:8001/clear-all
+curl -X POST http://localhost:8000/clear-all
 ```
 
 2. Limit pattern length:
 ```bash
-./kato-manager.sh restart --max-seq-length 100
+docker-compose restart --max-seq-length 100
 ```
 
 3. Reduce pattern count:
@@ -392,18 +392,18 @@ curl -X POST http://localhost:8001/clear-all
 
 1. Check resource usage:
 ```bash
-docker stats kato-primary
+docker stats kato
 docker stats kato-testing
 ```
 
 2. Monitor async processing:
 ```bash
-docker logs kato-primary | grep "Processing time"
+docker logs kato | grep "Processing time"
 ```
 
 3. Restart to clear state:
 ```bash
-./kato-manager.sh restart
+docker-compose restart
 ```
 
 #### Memory Issues
@@ -421,7 +421,7 @@ docker stats --no-stream
 
 2. Clear processor memory:
 ```bash
-curl -X POST http://localhost:8001/clear-all
+curl -X POST http://localhost:8000/clear-all
 ```
 
 ### MongoDB Issues
@@ -557,13 +557,13 @@ grep "while.*read.*cluster_json" cluster-orchestrator.sh
 
 1. Verify cluster isolation is working:
 ```bash
-# Each cluster should have unique processor_id
+# Each cluster should have unique session_id
 ./test-harness.sh --verbose test 2>&1 | grep "Processor ID:"
 ```
 
 2. Check test fixtures are using unique processor IDs:
 ```bash
-grep "processor_id" tests/tests/fixtures/kato_fixtures.py
+grep "session_id" tests/tests/fixtures/kato_fixtures.py
 # Should generate unique IDs per test
 ```
 
@@ -626,8 +626,8 @@ TestCluster(
 ```bash
 docker system prune -f
 docker rmi kato:latest
-./kato-manager.sh build --no-cache
-./kato-manager.sh restart
+docker-compose build --no-cache
+docker-compose restart
 ```
 
 2. **Test Isolation Issues with Gene Values**
@@ -654,12 +654,12 @@ After fixing auto-learning issues, verify with:
 
 ```bash
 # 1. Test gene updates work
-curl -X POST http://localhost:8001/genes/update \
+curl -X POST http://localhost:8000/genes/update \
   -H "Content-Type: application/json" \
   -d '{"genes": {"max_pattern_length": 3}}'
 
 # 2. Verify gene value changed  
-curl http://localhost:8001/gene/max_pattern_length
+curl http://localhost:8000/gene/max_pattern_length
 
 # 3. Run specific auto-learning tests
 ./run_tests.sh --no-start --no-stop tests/tests/unit/ -k "test_max_pattern_length" -v
@@ -694,10 +694,10 @@ assert_short_term_memory_equals(actual, expected)
 1. Check parameter spelling:
 ```bash
 # Correct: uses hyphens
-./kato-manager.sh start --max-predictions 50
+./start.sh --max-predictions 50
 
 # Wrong: uses underscores
-./kato-manager.sh start --max_predictions 50
+./start.sh --max_predictions 50
 ```
 
 2. Verify configuration:
@@ -763,10 +763,10 @@ docker logs kato-api-${USER}-1 > kato-debug.log 2>&1
 
 ```bash
 # Complete cleanup and restart
-./kato-manager.sh stop
+docker-compose down
 ./kato-manager.sh clean
-./kato-manager.sh build
-./kato-manager.sh start
+docker-compose build
+./start.sh
 ```
 
 ### Data Recovery
@@ -809,7 +809,7 @@ docker version > /dev/null 2>&1 && echo "OK" || echo "FAIL"
 
 # Check containers
 echo -n "KATO Primary: "
-docker ps | grep -q kato-primary && echo "Running" || echo "Not Running"
+docker ps | grep -q kato && echo "Running" || echo "Not Running"
 
 echo -n "KATO Testing: "
 docker ps | grep -q kato-testing && echo "Running" || echo "Not Running"
@@ -819,7 +819,7 @@ docker ps | grep -q kato-mongodb && echo "Running" || echo "Not Running"
 
 # Check API
 echo -n "API Health: "
-curl -s http://localhost:8001/health > /dev/null 2>&1 && echo "OK" || echo "FAIL"
+curl -s http://localhost:8000/health > /dev/null 2>&1 && echo "OK" || echo "FAIL"
 
 # Check disk space
 echo "Disk Usage:"
@@ -827,7 +827,7 @@ df -h / | tail -1
 
 # Check memory
 echo "Memory Usage:"
-docker stats --no-stream kato-primary kato-testing 2>/dev/null || echo "Containers not running"
+docker stats --no-stream kato kato-testing 2>/dev/null || echo "Containers not running"
 ```
 
 ### Performance Check Script
@@ -840,7 +840,7 @@ import time
 import requests
 from statistics import mean, stdev
 
-BASE_URL = "http://localhost:8001"
+BASE_URL = "http://localhost:8000"
 
 def time_operation(func, iterations=10):
     times = []
@@ -904,14 +904,14 @@ docker version
 docker-compose version
 
 # KATO logs
-docker logs kato-primary --tail 1000 > kato-primary.log
+docker logs kato --tail 1000 > kato.log
 docker logs kato-testing --tail 1000 > kato-testing.log
 
 # MongoDB logs
 docker logs kato-mongodb --tail 1000 > mongo.log
 
 # Container details
-docker inspect kato-primary > container-primary.json
+docker inspect kato > container-primary.json
 docker inspect kato-testing > container-testing.json
 
 # Configuration
@@ -939,16 +939,16 @@ docker logs kato-api-${USER}-1 2>&1 | rotatelogs -n 5 /var/log/kato.log 86400
 2. **Clear old data periodically**
 ```bash
 # Weekly cleanup script
-./kato-manager.sh stop
+docker-compose down
 docker system prune -a --volumes
-./kato-manager.sh start
+./start.sh
 ```
 
 3. **Update regularly**
 ```bash
 git pull
-./kato-manager.sh build
-./kato-manager.sh restart
+docker-compose build
+docker-compose restart
 ```
 
 ### Monitoring Setup

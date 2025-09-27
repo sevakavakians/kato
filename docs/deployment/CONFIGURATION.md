@@ -16,7 +16,7 @@ KATO supports multiple configuration methods:
 All parameters can be specified directly when starting KATO:
 
 ```bash
-./kato-manager.sh start [OPTIONS]
+./start.sh [OPTIONS]
 ```
 
 ### Core Identity Parameters
@@ -68,7 +68,7 @@ When `max_pattern_length` is set to a value greater than 0, KATO automatically l
 **Example:**
 ```bash
 # Set auto-learning at 3 observations
-./kato-manager.sh start --max-seq-length 3
+./start.sh --max-seq-length 3
 
 # Or update dynamically via API
 curl -X POST http://localhost:8000/p46b6b076c/genes/change \
@@ -101,18 +101,18 @@ curl -X POST http://localhost:8000/p46b6b076c/genes/change \
 | `LOG_LEVEL` | string | "INFO" | FastAPI logging level |
 
 **Service Ports**:
-- Primary KATO: `http://localhost:8001`
-- Testing KATO: `http://localhost:8002`
-- Analytics KATO: `http://localhost:8003`
+- Primary KATO: `http://localhost:8000`
+- Testing KATO: `http://localhost:8000`
+- Analytics KATO: `http://localhost:8000`
 
 Example:
 ```bash
 # Start all FastAPI services
-./kato-manager.sh start
+./start.sh
 
 # Services will be available at their respective ports
-curl http://localhost:8001/health
-curl http://localhost:8002/health
+curl http://localhost:8000/health
+curl http://localhost:8000/health
 ```
 
 ## Usage Examples
@@ -121,16 +121,16 @@ curl http://localhost:8002/health
 
 ```bash
 # Start with all defaults
-./kato-manager.sh start
+./start.sh
 
 # Custom name and port
-./kato-manager.sh start --name "ProductionKATO" --port 9000
+./start.sh --name "ProductionKATO" --port 9000
 ```
 
 ### Development Configuration
 
 ```bash
-./kato-manager.sh start \
+./start.sh \
   --name "DevProcessor" \
   --indexer-type VI \
   --max-predictions 50 \
@@ -142,7 +142,7 @@ curl http://localhost:8002/health
 ### Production Configuration
 
 ```bash
-./kato-manager.sh start \
+./start.sh \
   --name "ProdProcessor" \
   --indexer-type VI \
   --max-predictions 200 \
@@ -156,7 +156,7 @@ curl http://localhost:8002/health
 ### Research Configuration
 
 ```bash
-./kato-manager.sh start \
+./start.sh \
   --name "ResearchProcessor" \
   --max-seq-length 5000 \
   --persistence 20 \
@@ -168,7 +168,7 @@ curl http://localhost:8002/health
 ### Minimal Predictions
 
 ```bash
-./kato-manager.sh start \
+./start.sh \
   --name "MinimalProcessor" \
   --max-predictions 10 \
   --recall-threshold 0.5 \
@@ -196,7 +196,7 @@ KATO_LOG_LEVEL=INFO
 EOF
 
 # Start with environment defaults
-./kato-manager.sh start
+./start.sh
 ```
 
 ### Available Environment Variables
@@ -288,7 +288,7 @@ KATO automatically maintains an instance registry at `~/.kato/instances.json`:
   "instances": {
     "primary": {
       "name": "Primary Processor",
-      "container": "kato-primary",
+      "container": "kato",
       "api_port": 8001,
       "status": "running",
       "updated": "2024-01-01T12:00:00"
@@ -308,17 +308,17 @@ KATO automatically maintains an instance registry at `~/.kato/instances.json`:
 
 ```bash
 # Development setup - Different configurations
-./kato-manager.sh start --id test-1 --name "Test High Recall" --port 8001 --recall-threshold 0.05
-./kato-manager.sh start --id test-2 --name "Test Low Recall" --port 8002 --recall-threshold 0.5
+./start.sh --id test-1 --name "Test High Recall" --port 8001 --recall-threshold 0.05
+./start.sh --id test-2 --name "Test Low Recall" --port 8002 --recall-threshold 0.5
 
 # Production setup - Task-specific processors
-./kato-manager.sh start --id nlp --name "NLP Engine" --port 8001 \
+./start.sh --id nlp --name "NLP Engine" --port 8001 \
   --max-seq-length 20 --recall-threshold 0.2
 
-./kato-manager.sh start --id stream --name "Stream Processor" --port 8002 \
+./start.sh --id stream --name "Stream Processor" --port 8002 \
   --max-predictions 50 --persistence 10
 
-./kato-manager.sh start --id realtime --name "Real-time Stream" --port 8003 \
+./start.sh --id realtime --name "Real-time Stream" --port 8003 \
   --max-seq-length 5 --max-predictions 10
 
 # View all instances
@@ -329,7 +329,7 @@ KATO automatically maintains an instance registry at `~/.kato/instances.json`:
 
 ### Speed-Optimized
 ```bash
-./kato-manager.sh start \
+./start.sh \
   --id speed-opt \
   --indexer-type VI \
   --max-predictions 20 \
@@ -339,7 +339,7 @@ KATO automatically maintains an instance registry at `~/.kato/instances.json`:
 
 ### Accuracy-Optimized
 ```bash
-./kato-manager.sh start \
+./start.sh \
   --indexer-type VI \
   --max-predictions 500 \
   --recall-threshold 0.01 \
@@ -348,7 +348,7 @@ KATO automatically maintains an instance registry at `~/.kato/instances.json`:
 
 ### Memory-Optimized
 ```bash
-./kato-manager.sh start \
+./start.sh \
   --indexer-type VI \
   --max-predictions 50 \
   --max-seq-length 100 \
@@ -357,7 +357,7 @@ KATO automatically maintains an instance registry at `~/.kato/instances.json`:
 
 ### Real-Time Processing
 ```bash
-./kato-manager.sh start \
+./start.sh \
   --indexer-type VI \
   --max-predictions 10 \
   --recall-threshold 0.5 \
@@ -449,15 +449,15 @@ The `recall_threshold` parameter is critical for controlling prediction quality 
 
 ```bash
 # For initial pattern exploration
-curl -X POST http://localhost:8000/{processor_id}/gene/recall_threshold/change \
+curl -X POST http://localhost:8000/{session_id}/gene/recall_threshold/change \
   -d '{"value": 0.1}'
 
 # For production with known patterns
-curl -X POST http://localhost:8000/{processor_id}/gene/recall_threshold/change \
+curl -X POST http://localhost:8000/{session_id}/gene/recall_threshold/change \
   -d '{"value": 0.4}'
 
 # For high-precision matching
-curl -X POST http://localhost:8000/{processor_id}/gene/recall_threshold/change \
+curl -X POST http://localhost:8000/{session_id}/gene/recall_threshold/change \
   -d '{"value": 0.6}'
 ```
 
@@ -466,7 +466,7 @@ curl -X POST http://localhost:8000/{processor_id}/gene/recall_threshold/change \
 ### 1. Start Simple
 Begin with defaults and adjust based on performance:
 ```bash
-./kato-manager.sh start --name "Test"
+./start.sh --name "Test"
 ```
 
 ### 2. Profile Your Use Case
@@ -477,8 +477,8 @@ Begin with defaults and adjust based on performance:
 ### 3. Monitor and Adjust
 Use logs and metrics to fine-tune:
 ```bash
-./kato-manager.sh start --log-level DEBUG
-./kato-manager.sh logs kato -f
+./start.sh --log-level DEBUG
+docker-compose logs kato -f
 ```
 
 ### 4. Document Your Configuration

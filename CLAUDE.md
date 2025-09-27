@@ -18,40 +18,36 @@ All learned structures in KATO are patterns, whether they represent time-ordered
 
 ### Building and Running
 ```bash
-# Build Docker image
-./kato-manager.sh build
-
-# Start all services (MongoDB, Qdrant, 3 KATO instances)
-./kato-manager.sh start
+# Start all services (MongoDB, Qdrant, Redis, KATO)
+./start.sh
 
 # Stop services
-./kato-manager.sh stop
+docker-compose down
 
 # Restart services
-./kato-manager.sh restart
+docker-compose restart
 
 # Check status
-./kato-manager.sh status
+docker-compose ps
 
 # View logs
-./kato-manager.sh logs                    # All services
-./kato-manager.sh logs primary           # Specific service
-docker logs kato-primary --tail 50       # Direct Docker logs
+docker-compose logs                      # All services
+docker-compose logs kato                 # KATO service
+docker logs kato --tail 50               # Direct Docker logs
 ```
 
 ### Service URLs
-After running `./kato-manager.sh start`:
-- **Primary KATO**: http://localhost:8001
-- **Testing KATO**: http://localhost:8002  
-- **Analytics KATO**: http://localhost:8003
+After running `./start.sh`:
+- **KATO Service**: http://localhost:8000
 - **MongoDB**: mongodb://localhost:27017
 - **Qdrant**: http://localhost:6333
-- **API Docs**: http://localhost:8001/docs
+- **Redis**: redis://localhost:6379
+- **API Docs**: http://localhost:8000/docs
 
 ### Testing
 ```bash
 # IMPORTANT: Services must be running first!
-./kato-manager.sh start
+./start.sh
 
 # Set up virtual environment (first time only)
 python3 -m venv venv
@@ -88,23 +84,21 @@ python -m pytest tests/tests/unit/ -v --tb=short
 ### Health Checks and Debugging
 ```bash
 # Check service health
-curl http://localhost:8001/health   # Primary
-curl http://localhost:8002/health   # Testing
-curl http://localhost:8003/health   # Analytics
+curl http://localhost:8000/health
 
 # Test basic operations
-curl -X POST http://localhost:8001/observe \
+curl -X POST http://localhost:8000/observe \
   -H "Content-Type: application/json" \
   -d '{"strings": ["hello"], "vectors": [], "emotives": {}}'
 
 # Test bulk observation endpoint
-curl -X POST http://localhost:8001/observe-sequence \
+curl -X POST http://localhost:8000/observe-sequence \
   -H "Content-Type: application/json" \
   -d '{"observations": [{"strings": ["test1"]}, {"strings": ["test2"]}]}'
 
 # View API documentation
-open http://localhost:8001/docs     # macOS
-xdg-open http://localhost:8001/docs # Linux
+open http://localhost:8000/docs     # macOS
+xdg-open http://localhost:8000/docs # Linux
 
 # Check database connections
 docker exec kato-mongodb mongo --eval "db.adminCommand('ping')"
@@ -115,10 +109,10 @@ curl http://localhost:6333/health   # Qdrant
 
 ### FastAPI Architecture (Current)
 ```
-Client Request → FastAPI Service (Port 8001-8003) → Embedded KATO Processor
+Client Request → FastAPI Service (Port 8000) → Embedded KATO Processor
                            ↓                                    ↓
-                    Async Processing                    MongoDB & Qdrant
-                           ↓                            (Isolated by processor_id)
+                    Async Processing              MongoDB, Qdrant & Redis
+                           ↓                     (Isolated by session_id)
                     JSON Response
 ```
 
@@ -140,11 +134,12 @@ Client Request → FastAPI Service (Port 8001-8003) → Embedded KATO Processor
    - Coordinates with vector database for similarity searches
    - Implements deterministic hashing for pattern identification
 
-3. **Vector Database Layer** (`kato/storage/`)
-   - Primary: Qdrant with HNSW indexing for 10-100x performance
+3. **Storage Layer** (`kato/storage/`)
+   - **Vector Storage**: Qdrant with HNSW indexing for 10-100x performance
+   - **Session Storage**: Redis for fast session state management
+   - **Pattern Storage**: MongoDB for persistent pattern knowledge
+   - **Caching**: Redis for frequently accessed data
    - Abstraction layer supports multiple backends
-   - Redis caching for frequently accessed vectors
-   - GPU acceleration and quantization support
 
 ### Memory Architecture
 
@@ -272,11 +267,12 @@ The codebase has comprehensive test coverage with 287 test functions across mult
 - `SORT`: Sort symbols alphabetically within events (default: true)
 - `PROCESS_PREDICTIONS`: Enable prediction processing (default: true)
 
-### Multi-Instance Configuration
-The `docker-compose.yml` includes three pre-configured instances:
-- **Primary** (port 8001): General use, manual learning
-- **Testing** (port 8002): Debug logging, for development  
-- **Analytics** (port 8003): Auto-learn after 50 observations, higher recall threshold
+### Session-Based Configuration
+The system uses Redis-based session management for configuration:
+- **Session Isolation**: Each session gets unique configuration
+- **Dynamic Configuration**: Settings can be changed per session
+- **Persistent State**: Session data persists across service restarts
+- **Configuration via API**: Use session endpoints to modify behavior
 
 ## Recent Modernizations
 
@@ -288,11 +284,10 @@ The `docker-compose.yml` includes three pre-configured instances:
 ## Development Workflow
 
 1. Make changes to source files in `kato/` directory
-2. Rebuild Docker image: `./kato-manager.sh build`
-3. Restart services: `./kato-manager.sh restart`
-4. Run tests: `./run_tests.sh --no-start --no-stop`
-5. Debug failures directly with print statements or debugger
-6. Commit changes when tests pass
+2. Restart services: `docker-compose restart`
+3. Run tests: `./run_tests.sh --no-start --no-stop`
+4. Debug failures directly with print statements or debugger
+5. Commit changes when tests pass
 
 ## Important Files and Locations
 
@@ -304,7 +299,7 @@ The `docker-compose.yml` includes three pre-configured instances:
 - Pattern search: `kato/searches/pattern_search.py`
 - Metrics calculations: `kato/informatics/metrics.py`
 - Test fixtures: `tests/tests/fixtures/kato_fixtures.py`
-- Management script: `kato-manager.sh`
+- Startup script: `start.sh`
 
 ## Prediction Metrics and Calculations
 
@@ -472,7 +467,7 @@ With the new FastAPI architecture, most testing is done locally with Python:
 ### Local Testing (Recommended)
 ```bash
 # Ensure services are running
-./kato-manager.sh start
+./start.sh
 
 # Run tests locally
 ./run_tests.sh --no-start --no-stop
@@ -550,5 +545,5 @@ Without proper isolation:
 ### Common Mistakes to Avoid:
 1. ❌ Editing planning-docs/ directly → ✅ Use project-manager
 2. ❌ Using test-analyst for local tests → ✅ Use `./run_tests.sh`
-3. ❌ Forgetting to start services before tests → ✅ Run `./kato-manager.sh start` first
+3. ❌ Forgetting to start services before tests → ✅ Run `./start.sh` first
 4. ❌ Sharing processor_ids between tests → ✅ Each test gets unique processor_id

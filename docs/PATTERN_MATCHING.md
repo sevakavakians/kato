@@ -382,7 +382,7 @@ export RECALL_THRESHOLD=0.5  # Default is 0.1
 
 **This should never happen** - KATO is fully deterministic. If observed:
 1. Check for concurrent modifications to pattern database
-2. Verify `processor_id` isolation
+2. Verify `session_id` isolation
 3. Report as bug with reproduction steps
 
 ## Advanced Topics

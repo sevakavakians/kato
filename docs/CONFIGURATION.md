@@ -85,7 +85,7 @@ KATO uses environment variables for configuration. These can be set in:
 - **Default**: `vectors`
 - **Description**: Prefix for Qdrant collection names
 - **Example**: `vectors`, `embeddings`
-- **Notes**: Full collection name becomes `{prefix}_{processor_id}`
+- **Notes**: Full collection name becomes `{prefix}_{session_id}`
 
 ### REDIS_HOST
 - **Type**: String
@@ -480,7 +480,7 @@ Some configuration can be updated at runtime using the `/genes/update` endpoint:
 
 ### Example Update Request
 ```bash
-curl -X POST http://localhost:8001/genes/update \
+curl -X POST http://localhost:8000/genes/update \
   -H "Content-Type: application/json" \
   -d '{
     "genes": {

@@ -314,7 +314,7 @@ The system uses FastAPI with embedded processor for:
 ```python
 # HTTP POST Request to /observe
 {
-    "processor_id": "unique_id",
+    "session_id": "unique_id",
     "strings": ["hello", "world"],
     "vectors": [[0.1, 0.2, ...]],
     "emotives": {"joy": 0.8}
@@ -387,15 +387,15 @@ The system uses FastAPI with embedded processor for:
 ### Development Configuration
 ```bash
 # Minimal setup for development
-./kato-manager.sh start --no-vectordb
+./start.sh --no-vectordb
 ```
 
 ### Production Configuration
 ```bash
 # Full setup with vector database
-./kato-manager.sh start
+./start.sh
 # or explicitly:
-./kato-manager.sh start --vectordb-backend qdrant
+./start.sh --vectordb-backend qdrant
 ```
 
 ### High-Performance Configuration
@@ -429,15 +429,15 @@ Client → Load ──────┼─► KATO Instance 2 (Port 8002)
 ### Instance Management
 ```bash
 # Start multiple instances
-./kato-manager.sh start --id proc1 --port 8001
-./kato-manager.sh start --id proc2 --port 8002
-./kato-manager.sh start --id proc3 --port 8003
+./start.sh --id proc1 --port 8001
+./start.sh --id proc2 --port 8002
+./start.sh --id proc3 --port 8003
 
 # List all instances
 ./kato-manager.sh list
 
 # Stop specific instance
-./kato-manager.sh stop proc1
+docker-compose down proc1
 ```
 
 ## Quick Reference
@@ -445,22 +445,22 @@ Client → Load ──────┼─► KATO Instance 2 (Port 8002)
 ### Starting KATO
 ```bash
 # Standard start (with vector DB)
-./kato-manager.sh start
+./start.sh
 
 # Development mode (no vector DB)
-./kato-manager.sh start --no-vectordb
+./start.sh --no-vectordb
 
 # Custom processor configuration
-PROCESSOR_ID=custom1 PROCESSOR_NAME=MyProcessor ./kato-manager.sh start
+PROCESSOR_ID=custom1 PROCESSOR_NAME=MyProcessor ./start.sh
 ```
 
 ### API Endpoints
 - `GET /kato-api/ping` - Health check
-- `POST /{processor_id}/observe` - Send observations
-- `GET /{processor_id}/predictions` - Get predictions
-- `POST /{processor_id}/learn` - Trigger learning
-- `GET /{processor_id}/short-term-memory` - View short-term memory
-- `POST /{processor_id}/clear-short-term-memory` - Clear short-term memory
+- `POST /{session_id}/observe` - Send observations
+- `GET /{session_id}/predictions` - Get predictions
+- `POST /{session_id}/learn` - Trigger learning
+- `GET /{session_id}/short-term-memory` - View short-term memory
+- `POST /{session_id}/clear-short-term-memory` - Clear short-term memory
 
 ### Environment Variables
 ```bash
@@ -484,7 +484,7 @@ INDEXER_TYPE=VI                    # Vector indexing method
 ### Docker Commands
 ```bash
 # View logs
-docker logs kato-primary --tail 50
+docker logs kato --tail 50
 
 # Enter container
 docker exec -it kato-api-${USER}-1 bash
@@ -553,13 +553,13 @@ docker system prune -f
 ### Health Checks
 ```bash
 # Check all services
-./kato-manager.sh status
+docker-compose ps
 
 # Test API health
-curl http://localhost:8001/health
+curl http://localhost:8000/health
 
 # Check specific service
-docker exec kato-primary curl http://localhost:8000/health
+docker exec kato curl http://localhost:8000/health
 ```
 
 ---

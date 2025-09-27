@@ -30,12 +30,11 @@ Every learned structure in KATO is identified by a unique hash: `PTRN|<sha1_hash
 🧠 **Multi-Modal Support** - Process text, vectors, and emotional context  
 ⚡ **High Performance** - FastAPI async architecture with embedded processors  
 🔄 **Stateful Processing** - Maintains context across observations  
-🚀 **Multi-Instance Support** - Run multiple processors with different configurations  
-📊 **Instance Isolation** - Each processor_id has completely isolated databases  
 🎪 **Vector Database** - Modern vector search with Qdrant (10-100x faster)  
 👥 **Multi-User Sessions** - Complete STM isolation per user session  
 💾 **Write Guarantees** - MongoDB majority write concern prevents data loss  
 🔐 **Session Management** - Redis-backed sessions with TTL and isolation  
+📊 **Session Isolation** - Each session has completely isolated state  
 
 ### Example Architecture
 
@@ -64,25 +63,20 @@ pip install -r tests/requirements.txt
 
 ## Quick Start
 
-### 1. Clone and Build
+### 1. Clone Repository
 ```bash
 # Clone repository
 git clone https://github.com/your-org/kato.git
 cd kato
-
-# Build Docker image
-./kato-manager.sh build
 ```
 
 ### 2. Start Services
 ```bash
-# Start all services (includes MongoDB, Qdrant, Redis)
-./kato-manager.sh start
+# Start all services (includes MongoDB, Qdrant, Redis, KATO)
+./start.sh
 
 # Services will be available at:
-# - Primary KATO: http://localhost:8001
-# - Testing KATO: http://localhost:8002
-# - Analytics KATO: http://localhost:8003
+# - KATO Service: http://localhost:8000
 # - MongoDB: mongodb://localhost:27017
 # - Qdrant: http://localhost:6333
 # - Redis: redis://localhost:6379
@@ -91,16 +85,16 @@ cd kato
 ### 3. Verify Installation
 ```bash
 # Check health
-curl http://localhost:8001/health
+curl http://localhost:8000/health
 
 # Response:
-# {"status": "healthy", "processor_id": "primary", "uptime": 123.45}
+# {"status": "healthy", "session_id": "default", "uptime": 123.45}
 
 # Quick test of basic functionality
 ./run_tests.sh --no-start --no-stop tests/tests/api/test_fastapi_endpoints.py::test_health_endpoint -v
 
 # Check API documentation
-# Open in browser: http://localhost:8001/docs
+# Open in browser: http://localhost:8000/docs
 ```
 
 ### 4. Basic Usage
@@ -108,23 +102,23 @@ curl http://localhost:8001/health
 #### Option A: Using Sessions (Recommended)
 ```bash
 # Create a session for user isolation
-SESSION=$(curl -s -X POST http://localhost:8001/sessions \
+SESSION=$(curl -s -X POST http://localhost:8000/sessions \
   -H "Content-Type: application/json" \
   -d '{"user_id": "alice"}' | jq -r '.session_id')
 
 # Observe in isolated session
-curl -X POST http://localhost:8001/sessions/$SESSION/observe \
+curl -X POST http://localhost:8000/sessions/$SESSION/observe \
   -H "Content-Type: application/json" \
   -d '{"strings": ["hello", "world"]}'
 
 # Get session's isolated STM
-curl http://localhost:8001/sessions/$SESSION/stm
+curl http://localhost:8000/sessions/$SESSION/stm
 ```
 
 #### Option B: Default Session API (backwards compatible)
 ```bash
 # Send observation (backward compatible)
-curl -X POST http://localhost:8001/observe \
+curl -X POST http://localhost:8000/observe \
   -H "Content-Type: application/json" \
   -d '{
     "strings": ["hello", "world"],
@@ -134,13 +128,13 @@ curl -X POST http://localhost:8001/observe \
   }'
 
 # Learn pattern from current STM
-curl -X POST http://localhost:8001/learn
-# Returns: {"pattern_name": "PTRN|<hash>", "processor_id": "...", "message": "..."}
+curl -X POST http://localhost:8000/learn
+# Returns: {"pattern_name": "PTRN|<hash>", "session_id": "...", "message": "..."}
 
 # Get predictions
-curl -X GET http://localhost:8001/predictions
+curl -X GET http://localhost:8000/predictions
 # Or with specific observation ID:
-curl -X GET "http://localhost:8001/predictions?unique_id=obs-123"
+curl -X GET "http://localhost:8000/predictions?unique_id=obs-123"
 ```
 
 ## Core Concepts
@@ -159,29 +153,27 @@ Learn more in [Core Concepts](docs/CONCEPTS.md).
 ### Starting and Stopping
 ```bash
 # Start all services
-./kato-manager.sh start
+./start.sh
 
 # Stop all services
-./kato-manager.sh stop
+docker-compose down
 
 # Restart services
-./kato-manager.sh restart
+docker-compose restart
 
 # Check status
-./kato-manager.sh status
+docker-compose ps
 ```
 
 ### Health Monitoring
 ```bash
-# Check individual service health
-curl http://localhost:8001/health  # Primary
-curl http://localhost:8002/health  # Testing
-curl http://localhost:8003/health  # Analytics
+# Check service health
+curl http://localhost:8000/health
 
 # View logs
-./kato-manager.sh logs          # All services
-./kato-manager.sh logs primary  # Specific service
-docker logs kato-primary --tail 50  # Direct Docker logs
+docker-compose logs                # All services
+docker-compose logs kato           # KATO service
+docker logs kato --tail 50         # Direct Docker logs
 ```
 
 ## Testing
@@ -191,7 +183,7 @@ KATO uses a simplified test architecture where tests run in local Python and con
 ### Prerequisites for Testing
 ```bash
 # Services must be running first
-./kato-manager.sh start
+./start.sh
 
 # Set up Python environment (one-time setup)
 python3 -m venv venv
@@ -217,7 +209,7 @@ pip install -r tests/requirements.txt
 ./run_tests.sh --no-start --no-stop -v tests/tests/unit/
 
 # Run tests with fresh KATO (slower but cleaner)
-./run_tests.sh  # Will start/stop KATO automatically
+./run_tests.sh  # Will start/stop services automatically
 ```
 
 ### Test Architecture
@@ -291,13 +283,13 @@ docs/
 ## Architecture Overview
 
 ### FastAPI Architecture (Current)
-KATO now uses a simplified FastAPI architecture with embedded processors:
+KATO uses a simplified FastAPI architecture with embedded processors:
 
 ```
-Client Request → FastAPI Service (Port 8001-8003) → Embedded KATO Processor
+Client Request → FastAPI Service (Port 8000) → Embedded KATO Processor
                            ↓                                    ↓
-                    Async Processing                    MongoDB & Qdrant
-                           ↓                            (Isolated by processor_id)
+                    Async Processing              MongoDB, Qdrant & Redis
+                           ↓                       (Isolated by session_id)
                     JSON Response
 ```
 
@@ -308,11 +300,12 @@ Client Request → FastAPI Service (Port 8001-8003) → Embedded KATO Processor
 - **Simpler Debugging**: Single process, clear stack traces
 - **Full Async Support**: FastAPI's async capabilities for high concurrency
 
-### Database Isolation
-Each processor_id maintains complete isolation:
-- **MongoDB**: Database name = processor_id (e.g., `test_123.patterns_kb`)
-- **Qdrant**: Collection name = `vectors_{processor_id}`
-- **In-Memory**: Per-processor caches and state
+### Session Isolation
+Each session maintains complete isolation:
+- **Redis**: Session state isolated by session_id
+- **MongoDB**: Patterns isolated by session context
+- **Qdrant**: Vectors isolated by session collection
+- **In-Memory**: Per-session caches and state
 
 ## Configuration Management System
 
@@ -485,33 +478,20 @@ export KATO_CONFIG_FILE=/path/to/config.yaml
 
 ### Docker Compose Configuration
 
-The `docker-compose.yml` includes three pre-configured instances with different settings:
+The `docker-compose.yml` includes a single KATO service with session-based configuration:
 
 ```yaml
 services:
-  kato-primary:
+  kato:
     environment:
-      - PROCESSOR_ID=primary
-      - PROCESSOR_NAME=Primary
+      - LOG_LEVEL=INFO
+      - PORT=8000
+      - MONGO_BASE_URL=mongodb://mongodb:27017
+      - QDRANT_HOST=qdrant
+      - REDIS_HOST=redis
+      - REDIS_ENABLED=true
       - MAX_PATTERN_LENGTH=0        # Manual learning only
       - RECALL_THRESHOLD=0.1        # Default threshold
-      - LOG_LEVEL=INFO
-      
-  kato-testing:
-    environment:
-      - PROCESSOR_ID=testing
-      - PROCESSOR_NAME=Testing
-      - MAX_PATTERN_LENGTH=0        # Manual learning
-      - RECALL_THRESHOLD=0.1
-      - LOG_LEVEL=DEBUG             # Verbose logging
-      
-  kato-analytics:
-    environment:
-      - PROCESSOR_ID=analytics
-      - PROCESSOR_NAME=Analytics
-      - MAX_PATTERN_LENGTH=50       # Auto-learn after 50 observations
-      - RECALL_THRESHOLD=0.3        # Higher threshold
-      - AUTO_LEARN_ENABLED=true
 ```
 
 ### Configuration Validation
@@ -563,12 +543,12 @@ Some configuration values can be updated at runtime via the API:
 
 ```bash
 # Update recall threshold
-curl -X POST http://localhost:8001/genes/update \
+curl -X POST http://localhost:8000/genes/update \
   -H "Content-Type: application/json" \
   -d '{"genes": {"recall_threshold": 0.5}}'
 
 # Get current value
-curl http://localhost:8001/gene/recall_threshold
+curl http://localhost:8000/gene/recall_threshold
 ```
 
 ### Best Practices
@@ -694,8 +674,8 @@ WebSocket connection for real-time bidirectional communication.
 Supported message types: observe, get_stm, get_predictions, learn, clear_stm, clear_all, ping.
 
 ### Interactive Documentation
-- Swagger UI: http://localhost:8001/docs
-- ReDoc: http://localhost:8001/redoc
+- Swagger UI: http://localhost:8000/docs
+- ReDoc: http://localhost:8000/redoc
 
 ## Performance
 
@@ -720,12 +700,12 @@ See [Performance Guide](docs/technical/PERFORMANCE.md) for optimization.
 #### Services Won't Start
 ```bash
 # Check if ports are in use
-lsof -i :8001
+lsof -i :8000
 lsof -i :27017
 lsof -i :6333
+lsof -i :6379
 
 # Clean restart
-./kato-manager.sh stop
 docker-compose down
 docker-compose up -d
 ```
@@ -733,14 +713,13 @@ docker-compose up -d
 #### Tests Failing
 ```bash
 # Ensure services are running
-./kato-manager.sh status
+docker-compose ps
 
 # Check service health
-curl http://localhost:8001/health
+curl http://localhost:8000/health
 
-# Rebuild if needed
-./kato-manager.sh build
-./kato-manager.sh restart
+# Restart if needed
+docker-compose restart
 ```
 
 #### Memory Issues
@@ -750,9 +729,9 @@ docker system df
 docker system prune -f
 
 # Restart with fresh state
-./kato-manager.sh stop
+docker-compose down
 docker volume prune -f
-./kato-manager.sh start
+./start.sh
 ```
 
 #### MongoDB Init Container Exits After Startup

@@ -191,7 +191,7 @@ Factory pattern in place at `kato/storage/factory.py`
 ### Running Tests
 ```bash
 # Services must be running
-./kato-manager.sh start
+./start.sh
 
 # Run all tests
 ./run_tests.sh --no-start --no-stop
@@ -204,7 +204,7 @@ Factory pattern in place at `kato/storage/factory.py`
 
 ### Test Architecture
 - Tests run in local Python environment
-- Each test gets unique processor_id for isolation
+- Each test gets unique session_id for isolation
 - Services must be running before tests
 - ~82 seconds for full test suite
 

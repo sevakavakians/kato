@@ -114,7 +114,7 @@ YAML or JSON configuration files can be loaded:
 ```yaml
 # config.yaml
 processor:
-  processor_id: "my-processor"
+  session_id: "my-processor"
   processor_name: "Custom Processor"
 
 database:
@@ -138,7 +138,7 @@ Docker Compose provides environment variables to containers:
 
 ```yaml
 services:
-  kato-primary:
+  kato:
     image: kato:latest
     environment:
       - PROCESSOR_ID=primary
@@ -159,7 +159,7 @@ from kato.config.settings import Settings, ProcessorConfig, DatabaseConfig
 
 settings = Settings(
     processor=ProcessorConfig(
-        processor_id="test-123",
+        session_id="test-123",
         processor_name="Test Processor"
     ),
     database=DatabaseConfig(
@@ -190,10 +190,10 @@ Pydantic automatically validates:
 Example validators:
 ```python
 class ProcessorConfig(BaseSettings):
-    processor_id: Optional[str] = Field(None, env='PROCESSOR_ID')
+    session_id: Optional[str] = Field(None, env='PROCESSOR_ID')
     
-    @validator('processor_id', pre=True, always=True)
-    def generate_processor_id(cls, v):
+    @validator('session_id', pre=True, always=True)
+    def generate_session_id(cls, v):
         """Generate processor ID if not provided."""
         if not v:
             import uuid
@@ -230,7 +230,7 @@ Some configuration can be updated at runtime through the API:
 
 ```bash
 # Update recall threshold
-curl -X POST http://localhost:8001/genes/update \
+curl -X POST http://localhost:8000/genes/update \
   -H "Content-Type: application/json" \
   -d '{
     "genes": {
@@ -244,10 +244,10 @@ curl -X POST http://localhost:8001/genes/update \
 
 ```bash
 # Get specific gene value
-curl http://localhost:8001/gene/recall_threshold
+curl http://localhost:8000/gene/recall_threshold
 
 # Get full status including configuration
-curl http://localhost:8001/status
+curl http://localhost:8000/status
 ```
 
 ## Configuration Reference
@@ -357,7 +357,7 @@ export RECALL_THRESHOLD=1.5  # Invalid - will cause error
 
 **Solution**: Restart the service - configuration is loaded at startup:
 ```bash
-./kato-manager.sh restart
+docker-compose restart
 ```
 
 #### 4. Docker Network Issues

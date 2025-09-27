@@ -280,7 +280,7 @@ class SessionManager:
         if not session:
             return False
         
-        session.expires_at = datetime.utcnow() + timedelta(seconds=ttl_seconds)
+        session.expires_at = datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)
         logger.info(f"Extended session {session_id} by {ttl_seconds}s")
         return True
     

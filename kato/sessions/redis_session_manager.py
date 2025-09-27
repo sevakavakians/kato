@@ -206,7 +206,7 @@ class RedisSessionManager(session_manager_module.SessionManager):
         if not self._connected:
             await self.initialize()
         
-        session_id = f"session-{uuid.uuid4().hex}-{int(datetime.utcnow().timestamp() * 1000)}"
+        session_id = f"session-{uuid.uuid4().hex}-{int(datetime.now(timezone.utc).timestamp() * 1000)}"
         ttl = ttl_seconds or self.default_ttl
         
         now = datetime.now(timezone.utc)

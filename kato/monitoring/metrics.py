@@ -10,7 +10,7 @@ import time
 import psutil
 import logging
 from typing import Dict, List, Optional, Any, Callable
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 import threading
@@ -536,7 +536,7 @@ class MetricsCollector:
                     "memory_percent": memory_current,
                     "error_rate_per_min": error_rate_current
                 },
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.now(timezone.utc).isoformat()
             }
     
     def get_time_series(

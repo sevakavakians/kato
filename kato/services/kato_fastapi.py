@@ -18,7 +18,7 @@ import os
 import time
 import uuid
 from typing import Dict, List, Optional, Any
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -611,7 +611,7 @@ async def health_check():
                 "metrics_collected": len(app_state.metrics_collector.metrics),
                 "last_collection": app_state.startup_time,
                 "active_sessions": app_state.session_manager.get_active_session_count(),
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.now(timezone.utc).isoformat()
             }
         else:
             # Fallback if metrics collector not available
@@ -624,7 +624,7 @@ async def health_check():
                 "metrics_collected": 0,
                 "last_collection": app_state.startup_time,
                 "active_sessions": app_state.session_manager.get_active_session_count(),
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.now(timezone.utc).isoformat()
             }
     except Exception as e:
         logger.error(f"Health check failed: {e}")
@@ -637,7 +637,7 @@ async def health_check():
             "metrics_collected": 0,
             "last_collection": app_state.startup_time,
             "active_sessions": 0,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
 
 

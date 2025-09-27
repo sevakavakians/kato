@@ -13,7 +13,7 @@ import logging
 import time
 from collections import OrderedDict
 from typing import Dict, Optional, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from kato.workers.kato_processor import KatoProcessor
 from kato.config.settings import get_settings
@@ -123,7 +123,7 @@ class ProcessorManager:
         # Check if processor exists and is not expired
         if processor_id in self.processors:
             processor_info = self.processors[processor_id]
-            processor_info['last_accessed'] = datetime.utcnow()
+            processor_info['last_accessed'] = datetime.now(timezone.utc)
             
             # Move to end for LRU
             self.processors.move_to_end(processor_id)
@@ -144,7 +144,7 @@ class ProcessorManager:
             # Double-check after acquiring lock
             if processor_id in self.processors:
                 processor_info = self.processors[processor_id]
-                processor_info['last_accessed'] = datetime.utcnow()
+                processor_info['last_accessed'] = datetime.now(timezone.utc)
                 self.processors.move_to_end(processor_id)
                 return processor_info['processor']
             
@@ -171,8 +171,8 @@ class ProcessorManager:
             self.processors[processor_id] = {
                 'processor': processor,
                 'user_id': user_id,
-                'created_at': datetime.utcnow(),
-                'last_accessed': datetime.utcnow(),
+                'created_at': datetime.now(timezone.utc),
+                'last_accessed': datetime.now(timezone.utc),
                 'access_count': 1
             }
             
@@ -347,7 +347,7 @@ class ProcessorManager:
         Returns:
             Number of processors cleaned up
         """
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         expired_threshold = now - timedelta(seconds=self.eviction_ttl)
         
         expired_ids = [
@@ -396,7 +396,7 @@ class ProcessorManager:
         Returns:
             Dictionary with processor cache statistics
         """
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         
         stats = {
             "total_processors": len(self.processors),

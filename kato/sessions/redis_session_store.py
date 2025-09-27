@@ -118,11 +118,17 @@ class RedisSessionStore:
                 if field in data and hasattr(data[field], 'isoformat'):
                     data[field] = data[field].isoformat()
             
-            # Also handle datetime in nested user_config
-            if 'user_config' in data and isinstance(data['user_config'], dict):
-                for field in ['created_at', 'updated_at']:
-                    if field in data['user_config'] and hasattr(data['user_config'][field], 'isoformat'):
-                        data['user_config'][field] = data['user_config'][field].isoformat()
+            # Also handle datetime in nested session_config
+            if 'session_config' in data and data['session_config'] is not None:
+                # If it's a SessionConfiguration object, convert to dict first
+                if hasattr(data['session_config'], 'to_dict'):
+                    data['session_config'] = data['session_config'].to_dict()
+                
+                # Now handle datetime fields in the dict
+                if isinstance(data['session_config'], dict):
+                    for field in ['created_at', 'updated_at']:
+                        if field in data['session_config'] and hasattr(data['session_config'][field], 'isoformat'):
+                            data['session_config'][field] = data['session_config'][field].isoformat()
             
             return json.dumps(data).encode('utf-8')
         else:
@@ -139,11 +145,15 @@ class RedisSessionStore:
             data_dict['last_accessed'] = datetime.fromisoformat(data_dict['last_accessed'])
             data_dict['expires_at'] = datetime.fromisoformat(data_dict['expires_at'])
             
-            # Also handle datetime in nested user_config
-            if 'user_config' in data_dict and isinstance(data_dict['user_config'], dict):
+            # Also handle datetime in nested session_config
+            if 'session_config' in data_dict and isinstance(data_dict['session_config'], dict):
                 for field in ['created_at', 'updated_at']:
-                    if field in data_dict['user_config'] and isinstance(data_dict['user_config'][field], str):
-                        data_dict['user_config'][field] = datetime.fromisoformat(data_dict['user_config'][field])
+                    if field in data_dict['session_config'] and isinstance(data_dict['session_config'][field], str):
+                        data_dict['session_config'][field] = datetime.fromisoformat(data_dict['session_config'][field])
+                
+                # Convert dict back to SessionConfiguration object
+                from kato.config.session_config import SessionConfiguration
+                data_dict['session_config'] = SessionConfiguration.from_dict(data_dict['session_config'])
             
             # Reconstruct SessionState
             return SessionState(**data_dict)

@@ -24,8 +24,8 @@ def test_health_endpoint(kato_fixture):
     assert data['status'] == 'healthy'
     # Current uses 'uptime_seconds', legacy uses 'uptime'
     assert 'uptime' in data or 'uptime_seconds' in data
-    # Current uses 'base_processor_id', legacy uses 'processor_id'
-    assert 'processor_id' in data or 'base_processor_id' in data
+    # The health endpoint now has service_name and active_sessions
+    assert 'service_name' in data or 'processor_id' in data or 'base_processor_id' in data
 
 
 def test_status_endpoint(kato_fixture):
@@ -97,8 +97,8 @@ def test_short_term_memory_endpoints(kato_fixture):
     
     # Also test the raw endpoints with session IDs
     if kato_fixture.session_id:
-        # Test /current/sessions/{session_id}/stm endpoint directly
-        response = requests.get(f"{kato_fixture.base_url}/current/sessions/{kato_fixture.session_id}/stm")
+        # Test /sessions/{session_id}/stm endpoint directly (without /current prefix)
+        response = requests.get(f"{kato_fixture.base_url}/sessions/{kato_fixture.session_id}/stm")
         assert response.status_code == 200
         data = response.json()
         assert 'stm' in data
@@ -113,14 +113,13 @@ def test_learn_endpoint(kato_fixture):
     kato_fixture.observe({'strings': ['learn1', 'learn2'], 'vectors': [], 'emotives': {}})
     kato_fixture.observe({'strings': ['learn3'], 'vectors': [], 'emotives': {}})
     
-    # Learn the pattern
-    response = requests.post(f"{kato_fixture.base_url}/learn", json={})
-    assert response.status_code == 200
+    # Learn the pattern using the fixture's session-based learn method
+    pattern_name = kato_fixture.learn()
     
-    data = response.json()
-    # Learn endpoint response structure is different
-    assert 'pattern_name' in data
-    assert data['pattern_name'].startswith('PTRN|')
+    # Verify pattern was learned successfully
+    assert pattern_name is not None
+    assert pattern_name != ''
+    assert pattern_name.startswith('PTRN|')
 
 
 def test_clear_stm_endpoints(kato_fixture):
@@ -187,7 +186,7 @@ def test_predictions_endpoints(kato_fixture):
     
     # Also test the raw endpoint with session ID
     if kato_fixture.session_id:
-        response = requests.get(f"{kato_fixture.base_url}/current/sessions/{kato_fixture.session_id}/predictions")
+        response = requests.get(f"{kato_fixture.base_url}/sessions/{kato_fixture.session_id}/predictions")
         assert response.status_code == 200
         data = response.json()
         assert 'predictions' in data

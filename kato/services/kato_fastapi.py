@@ -14,6 +14,7 @@ Critical improvements:
 
 import asyncio
 import logging
+import os
 import time
 import uuid
 from typing import Dict, List, Optional, Any
@@ -37,6 +38,7 @@ from kato.processors.processor_manager import ProcessorManager
 
 from kato.workers.kato_processor import KatoProcessor
 from kato.config.settings import get_settings
+from kato.config.configuration_service import get_configuration_service
 from kato.monitoring.metrics import get_metrics_collector
 from kato.errors.handlers import setup_error_handlers
 
@@ -60,6 +62,7 @@ class SessionResponse(BaseModel):
     created_at: datetime = Field(..., description="Session creation time")
     expires_at: datetime = Field(..., description="Session expiration time")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Session metadata")
+    session_config: Dict[str, Any] = Field(default_factory=dict, description="Session configuration")
 
 
 class ObservationData(BaseModel):
@@ -184,6 +187,7 @@ class AppState:
     def __init__(self):
         self.processor_manager: Optional[ProcessorManager] = None
         self.settings = get_settings()
+        self.config_service = get_configuration_service(self.settings)
         self.startup_time = time.time()
         self._session_manager = None
     
@@ -191,6 +195,9 @@ class AppState:
     def session_manager(self):
         """Get session manager singleton"""
         if self._session_manager is None:
+            import traceback
+            logger.error(f"!!! AppState.session_manager creating new instance (id: {id(self)}) !!!")
+            logger.error(f"!!! Call stack:\n{''.join(traceback.format_stack()[-5:])}")
             # Use Redis session manager if Redis is configured
             redis_url = os.environ.get('REDIS_URL')
             if redis_url:
@@ -199,6 +206,8 @@ class AppState:
             else:
                 logger.info("Using in-memory session manager")
                 self._session_manager = get_session_manager()
+        else:
+            logger.debug(f"AppState.session_manager returning cached instance (id: {id(self)})")
         return self._session_manager
 
 
@@ -217,9 +226,10 @@ async def startup_event():
     
     # Initialize ProcessorManager for per-user isolation
     settings = app_state.settings
-    base_processor_id = settings.processor.processor_id
+    # Use service name instead of processor_id
+    service_name = os.environ.get('SERVICE_NAME', 'kato')
     app_state.processor_manager = ProcessorManager(
-        base_processor_id=base_processor_id,
+        base_processor_id=service_name,
         max_processors=100,
         eviction_ttl_seconds=settings.session.session_ttl
     )
@@ -232,7 +242,7 @@ async def startup_event():
     # Setup v2 error handlers
     setup_error_handlers(app)
     
-    logger.info(f"KATO service started with ProcessorManager (base: {base_processor_id}) and monitoring")
+    logger.info(f"KATO service started with ProcessorManager (base: {service_name}) and monitoring")
 
 
 @app.on_event("shutdown")
@@ -281,7 +291,8 @@ async def create_session(request: CreateSessionRequest):
         user_id=session.user_id,
         created_at=session.created_at,
         expires_at=session.expires_at,
-        metadata=session.metadata
+        metadata=session.metadata,
+        session_config=session.session_config.get_config_only() if hasattr(session, 'session_config') else {}
     )
 
 
@@ -299,7 +310,8 @@ async def get_session_info(session_id: str):
         user_id=session.user_id,
         created_at=session.created_at,
         expires_at=session.expires_at,
-        metadata=session.metadata
+        metadata=session.metadata,
+        session_config=session.session_config.get_config_only() if hasattr(session, 'session_config') else {}
     )
 
 
@@ -315,18 +327,70 @@ async def delete_session(session_id: str):
 
 
 @app.post("/sessions/{session_id}/config")
-async def update_session_config(session_id: str, config: Dict[str, Any]):
+async def update_session_config(session_id: str, request_data: Dict[str, Any]):
     """Update session configuration (genes/parameters)"""
+    logger.error(f"!!! DEBUG: update_session_config called for {session_id} with: {request_data}")
+    logger.info(f"Updating config for session {session_id} with data: {request_data}")
+    
     session = await app_state.session_manager.get_session(session_id)
     
     if not session:
         raise HTTPException(404, detail=f"Session {session_id} not found")
     
-    # Update the session's user config
-    if 'config' in config:
-        session.user_config.update(config['config'])
-    else:
-        session.user_config.update(config)
+    # Extract config from request - it comes as {"config": {...}}
+    config = request_data.get('config', request_data)
+    logger.info(f"Extracted config: {config}")
+    
+    # Update the session's config - using SessionConfiguration's update method
+    for key, value in config.items():
+        if hasattr(session.session_config, key):
+            setattr(session.session_config, key, value)
+            logger.info(f"Updated session config {key} = {value}")
+        else:
+            logger.warning(f"Session config does not have attribute {key}")
+    
+    # Save the updated session back to Redis
+    logger.info(f"Saving updated session to Redis")
+    await app_state.session_manager.update_session(session)
+    logger.info(f"Session saved successfully")
+    
+    # Try to get processor if it exists, otherwise it will be created with new config on next observation
+    processor = None
+    try:
+        processor = await app_state.processor_manager.get_processor(session.user_id, session.session_config)
+    except Exception as e:
+        # Processor doesn't exist yet, will be created with new config on next observation
+        logger.info(f"Processor not yet created for user {session.user_id}, config will be applied on first observation: {e}")
+    
+    if processor:
+        # Apply configuration dynamically to processor
+        for key, value in config.items():
+            if key == 'max_pattern_length':
+                processor.genome_manifest['MAX_PATTERN_LENGTH'] = value
+                processor.MAX_PATTERN_LENGTH = value  # Update the processor's attribute directly
+                # Also update the observation processor's max_pattern_length for auto-learning
+                if hasattr(processor, 'observation_processor'):
+                    processor.observation_processor.max_pattern_length = value
+                    logger.info(f"Updated observation_processor.max_pattern_length to {value}")
+                # And update the pattern processor's max_pattern_length
+                if hasattr(processor, 'pattern_processor'):
+                    processor.pattern_processor.max_pattern_length = value
+                    logger.info(f"Updated pattern_processor.max_pattern_length to {value}")
+            elif key == 'persistence':
+                processor.genome_manifest['PERSISTENCE'] = value
+            elif key == 'recall_threshold':
+                processor.genome_manifest['RECALL_THRESHOLD'] = value
+            elif key == 'indexer_type':
+                processor.genome_manifest['INDEXER_TYPE'] = value
+            elif key == 'max_predictions':
+                processor.genome_manifest['MAX_PREDICTIONS'] = value
+            elif key == 'sort_symbols':
+                processor.genome_manifest['SORT'] = value
+            elif key == 'process_predictions':
+                processor.genome_manifest['PROCESS_PREDICTIONS'] = value
+    
+    # Log session config after update
+    logger.info(f"Session config after update: {session.session_config.get_config_only()}")
     
     # Save the updated session
     await app_state.session_manager.update_session(session)
@@ -366,8 +430,9 @@ async def observe_in_session(
     if not session:
         raise HTTPException(404, detail=f"Session {session_id} not found or expired")
     
-    # Get user's processor (isolated per user) with their configuration
-    processor = await app_state.processor_manager.get_processor(session.user_id, session.user_config)
+    # Get user's processor (isolated per user) with session configuration
+    logger.info(f"Getting processor for user {session.user_id} with session config: {session.session_config.get_config_only()}")
+    processor = await app_state.processor_manager.get_processor(session.user_id, session.session_config)
     
     # Get session lock to ensure sequential processing within session
     lock = await app_state.session_manager.get_session_lock(session_id)
@@ -438,8 +503,8 @@ async def learn_in_session(session_id: str):
     if not session.stm:
         raise HTTPException(400, detail="Cannot learn from empty STM")
     
-    # Get user's processor (isolated per user) with their configuration
-    processor = await app_state.processor_manager.get_processor(session.user_id, session.user_config)
+    # Get user's processor (isolated per user) with session configuration
+    processor = await app_state.processor_manager.get_processor(session.user_id, session.session_config)
     
     lock = await app_state.session_manager.get_session_lock(session_id)
     
@@ -483,8 +548,8 @@ async def get_session_predictions(session_id: str):
     if not session:
         raise HTTPException(404, detail=f"Session {session_id} not found or expired")
     
-    # Get user's processor (isolated per user) with their configuration
-    processor = await app_state.processor_manager.get_processor(session.user_id, session.user_config)
+    # Get user's processor (isolated per user) with session configuration
+    processor = await app_state.processor_manager.get_processor(session.user_id, session.session_config)
     
     lock = await app_state.session_manager.get_session_lock(session_id)
     
@@ -520,7 +585,7 @@ async def get_system_status():
     
     return {
         "status": "healthy",
-        "base_processor_id": app_state.settings.processor.processor_id,
+        "base_processor_id": app_state.processor_manager.base_processor_id,
         "uptime_seconds": time.time() - app_state.startup_time,
         "sessions": session_stats,
         "processors": processor_stats,
@@ -540,7 +605,7 @@ async def health_check():
             return {
                 "status": health_status["status"],
                 "processor_status": processor_status,
-                "base_processor_id": app_state.settings.processor.processor_id,
+                "service_name": app_state.settings.service.service_name,
                 "uptime_seconds": time.time() - app_state.startup_time,
                 "issues": health_status.get("issues", []),
                 "metrics_collected": len(app_state.metrics_collector.metrics),
@@ -553,7 +618,7 @@ async def health_check():
             return {
                 "status": "healthy",
                 "processor_status": "healthy" if app_state.processor_manager else "unhealthy", 
-                "base_processor_id": app_state.settings.processor.processor_id,
+                "service_name": app_state.settings.service.service_name,
                 "uptime_seconds": time.time() - app_state.startup_time,
                 "issues": [],
                 "metrics_collected": 0,
@@ -566,7 +631,7 @@ async def health_check():
         return {
             "status": "unhealthy",
             "processor_status": "unknown",
-            "base_processor_id": app_state.settings.processor.processor_id,
+            "service_name": app_state.settings.service.service_name,
             "uptime_seconds": time.time() - app_state.startup_time,
             "issues": [f"Health check error: {str(e)}"],
             "metrics_collected": 0,
@@ -773,7 +838,7 @@ async def observe_primary(request: Request, observation: ObservationData):
     )
     
     # Process the observation using the session
-    processor = await app_state.processor_manager.get_processor(session.user_id, session.user_config)
+    processor = await app_state.processor_manager.get_processor(session.user_id, session.session_config)
     
     try:
         # Convert observation to required format
@@ -818,7 +883,7 @@ async def get_stm_primary(request: Request):
         user_id=user_id,
         metadata={"type": "auto_created", "endpoint": request.url.path}
     )
-    processor = await app_state.processor_manager.get_processor(session.user_id, session.user_config)
+    processor = await app_state.processor_manager.get_processor(session.user_id, session.session_config)
     
     # Ensure processor STM matches session state
     processor.set_stm(session.stm)
@@ -839,7 +904,7 @@ async def learn_primary(request: Request):
         user_id=user_id,
         metadata={"type": "auto_created", "endpoint": request.url.path}
     )
-    processor = await app_state.processor_manager.get_processor(session.user_id, session.user_config)
+    processor = await app_state.processor_manager.get_processor(session.user_id, session.session_config)
     
     try:
         # Check if STM has sufficient data for learning
@@ -900,7 +965,7 @@ async def clear_all_primary(request: Request):
         user_id=user_id,
         metadata={"type": "auto_created", "endpoint": request.url.path}
     )
-    processor = await app_state.processor_manager.get_processor(session.user_id, session.user_config)
+    processor = await app_state.processor_manager.get_processor(session.user_id, session.session_config)
     
     try:
         # Clear STM
@@ -928,7 +993,7 @@ async def get_predictions_primary(request: Request, unique_id: Optional[str] = N
         user_id=user_id,
         metadata={"type": "auto_created", "endpoint": request.url.path}
     )
-    processor = await app_state.processor_manager.get_processor(session.user_id, session.user_config)
+    processor = await app_state.processor_manager.get_processor(session.user_id, session.session_config)
     
     try:
         # Set STM in processor to match session
@@ -972,18 +1037,13 @@ async def get_gene_primary(request: Request, gene_name: str):
         metadata={"type": "auto_created", "endpoint": request.url.path}
     )
     
-    # Get default values
-    default_genes = {
-        "recall_threshold": app_state.settings.learning.recall_threshold,
-        "persistence": app_state.settings.learning.persistence,
-        "max_pattern_length": app_state.settings.learning.max_pattern_length,
-        "max_predictions": app_state.settings.processing.max_predictions,
-        "sort": app_state.settings.processing.sort_symbols,
-        "process_predictions": app_state.settings.processing.process_predictions,
-    }
-    
-    # Merge with user configuration
-    user_genes = session.user_config.merge_with_defaults(default_genes)
+    # Use ConfigurationService to resolve configuration
+    resolved_config = app_state.config_service.resolve_configuration(
+        session_config=session.session_config,
+        session_id=session.session_id,
+        user_id=session.user_id
+    )
+    user_genes = resolved_config.to_genes_dict()
     
     if gene_name not in user_genes:
         raise HTTPException(status_code=404, detail=f"Gene '{gene_name}' not found")
@@ -1005,10 +1065,10 @@ async def update_genes_primary(request: Request, genes: dict):
     gene_updates = genes.get('genes', genes)
     
     # Update user configuration
-    if session.user_config.update(gene_updates):
+    if session.session_config.update(gene_updates):
         # Apply configuration to processor
         success = await app_state.processor_manager.update_processor_config(
-            user_id, session.user_config
+            user_id, session.session_config
         )
         
         if success:
@@ -1029,7 +1089,7 @@ async def get_pattern_primary(request: Request, pattern_id: str):
         user_id=user_id,
         metadata={"type": "auto_created", "endpoint": request.url.path}
     )
-    processor = await app_state.processor_manager.get_processor(session.user_id, session.user_config)
+    processor = await app_state.processor_manager.get_processor(session.user_id, session.session_config)
     
     try:
         pattern = processor.get_pattern(pattern_id)
@@ -1051,7 +1111,7 @@ async def get_percept_data_primary(request: Request):
         user_id=user_id,
         metadata={"type": "auto_created", "endpoint": request.url.path}
     )
-    processor = await app_state.processor_manager.get_processor(session.user_id, session.user_config)
+    processor = await app_state.processor_manager.get_processor(session.user_id, session.session_config)
     
     try:
         percept_data = processor.get_percept_data()
@@ -1070,7 +1130,7 @@ async def get_cognition_data_primary(request: Request):
         user_id=user_id,
         metadata={"type": "auto_created", "endpoint": request.url.path}
     )
-    processor = await app_state.processor_manager.get_processor(session.user_id, session.user_config)
+    processor = await app_state.processor_manager.get_processor(session.user_id, session.session_config)
     
     try:
         cognition_data = processor.cognition_data
@@ -1090,7 +1150,7 @@ async def observe_sequence_primary(request: Request, batch_request: dict):
         user_id=user_id,
         metadata={"type": "auto_created", "endpoint": request.url.path}
     )
-    processor = await app_state.processor_manager.get_processor(session.user_id, session.user_config)
+    processor = await app_state.processor_manager.get_processor(session.user_id, session.session_config)
     
     # Validate input structure first (outside try-except to let HTTPException propagate)
     observations = batch_request.get('observations')

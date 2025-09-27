@@ -17,7 +17,8 @@ from datetime import datetime, timedelta
 
 from kato.workers.kato_processor import KatoProcessor
 from kato.config.settings import get_settings
-from kato.config.user_config import UserConfiguration
+from kato.config.session_config import SessionConfiguration
+from kato.config.configuration_service import get_configuration_service
 
 logger = logging.getLogger('kato.processors.manager')
 
@@ -52,6 +53,7 @@ class ProcessorManager:
         self.processors: OrderedDict[str, Dict[str, Any]] = OrderedDict()
         self.processor_locks: Dict[str, asyncio.Lock] = {}
         self.settings = get_settings()
+        self.config_service = get_configuration_service(self.settings)
         
         # Background cleanup task
         self._cleanup_task = None
@@ -105,13 +107,13 @@ class ProcessorManager:
         
         return f"{safe_user_id}_{safe_base_id}"
     
-    async def get_processor(self, user_id: str, user_config: Optional[UserConfiguration] = None) -> KatoProcessor:
+    async def get_processor(self, user_id: str, session_config: Optional[SessionConfiguration] = None) -> KatoProcessor:
         """
         Get or create a processor for a specific user.
         
         Args:
             user_id: User identifier
-            user_config: Optional user configuration to apply
+            session_config: Optional session configuration to apply
         
         Returns:
             KatoProcessor instance for this user
@@ -128,8 +130,8 @@ class ProcessorManager:
             
             # Apply dynamic configuration updates to cached processor
             processor = processor_info['processor']
-            if user_config:
-                self._apply_config_to_processor(processor, user_config)
+            if session_config:
+                self._apply_config_to_processor(processor, session_config)
             
             logger.debug(f"Returning cached processor for user {user_id}")
             return processor
@@ -147,34 +149,23 @@ class ProcessorManager:
                 return processor_info['processor']
             
             # Create new processor
-            logger.info(f"Creating new processor for user {user_id} with id {processor_id}")
+            logger.info(f"Creating new processor for user {user_id}")
             
-            # Get default settings
-            defaults = {
-                'indexer_type': self.settings.processing.indexer_type,
-                'max_pattern_length': self.settings.learning.max_pattern_length,
-                'persistence': self.settings.learning.persistence,
-                'recall_threshold': self.settings.learning.recall_threshold,
-                'max_predictions': self.settings.processing.max_predictions,
-                'sort': self.settings.processing.sort_symbols,
-                'process_predictions': self.settings.processing.process_predictions
-            }
+            # Resolve configuration using ConfigurationService
+            resolved_config = self.config_service.resolve_configuration(
+                session_config=session_config,
+                session_id=session_config.session_id if session_config else None,
+                user_id=user_id
+            )
             
-            # Merge with user configuration if provided
-            if user_config:
-                genome_values = user_config.merge_with_defaults(defaults)
-            else:
-                genome_values = defaults
-            
-            # Build genome manifest with user-specific processor_id
+            # Build genome manifest without processor_id (now passed directly)
             genome_manifest = {
-                'id': processor_id,  # This becomes the MongoDB database name
                 'name': f"User-{user_id}",
-                **genome_values
+                **resolved_config.to_genome_manifest()
             }
             
-            # Create processor instance
-            processor = KatoProcessor(genome_manifest, settings=self.settings)
+            # Create processor instance with direct processor_id parameter
+            processor = KatoProcessor(genome_manifest, processor_id=processor_id, settings=self.settings)
             
             # Store in cache
             self.processors[processor_id] = {
@@ -195,46 +186,46 @@ class ProcessorManager:
             
             return processor
     
-    def _apply_config_to_processor(self, processor: 'KatoProcessor', user_config: UserConfiguration):
+    def _apply_config_to_processor(self, processor: 'KatoProcessor', session_config: SessionConfiguration):
         """
         Apply dynamic configuration updates to an existing processor.
         
         Args:
             processor: The KatoProcessor instance to update
-            user_config: User configuration with updates
+            session_config: Session configuration with updates
         """
         # Update critical parameters that can be changed dynamically
-        if user_config.recall_threshold is not None:
+        if session_config.recall_threshold is not None:
             # Update the pattern processor's recall threshold
             if hasattr(processor, 'pattern_processor'):
-                processor.pattern_processor.recall_threshold = user_config.recall_threshold
+                processor.pattern_processor.recall_threshold = session_config.recall_threshold
                 # Also update the pattern searcher's threshold
                 if hasattr(processor.pattern_processor, 'patterns_searcher'):
-                    processor.pattern_processor.patterns_searcher.recall_threshold = user_config.recall_threshold
-                    logger.debug(f"Updated recall_threshold to {user_config.recall_threshold}")
+                    processor.pattern_processor.patterns_searcher.recall_threshold = session_config.recall_threshold
+                    logger.debug(f"Updated recall_threshold to {session_config.recall_threshold}")
         
-        if user_config.max_pattern_length is not None:
+        if session_config.max_pattern_length is not None:
             if hasattr(processor, 'max_pattern_length'):
-                processor.max_pattern_length = user_config.max_pattern_length
+                processor.max_pattern_length = session_config.max_pattern_length
             if hasattr(processor, 'pattern_processor'):
-                processor.pattern_processor.max_pattern_length = user_config.max_pattern_length
+                processor.pattern_processor.max_pattern_length = session_config.max_pattern_length
             if hasattr(processor, 'observation_processor'):
-                processor.observation_processor.max_pattern_length = user_config.max_pattern_length
-                logger.debug(f"Updated observation_processor.max_pattern_length to {user_config.max_pattern_length}")
-            logger.debug(f"Updated max_pattern_length to {user_config.max_pattern_length}")
+                processor.observation_processor.max_pattern_length = session_config.max_pattern_length
+                logger.debug(f"Updated observation_processor.max_pattern_length to {session_config.max_pattern_length}")
+            logger.debug(f"Updated max_pattern_length to {session_config.max_pattern_length}")
         
-        if user_config.persistence is not None:
+        if session_config.persistence is not None:
             if hasattr(processor, 'pattern_processor'):
-                processor.pattern_processor.persistence = user_config.persistence
-                logger.debug(f"Updated persistence to {user_config.persistence}")
+                processor.pattern_processor.persistence = session_config.persistence
+                logger.debug(f"Updated persistence to {session_config.persistence}")
         
         # Update other configurable parameters
-        if user_config.max_predictions is not None:
+        if session_config.max_predictions is not None:
             if hasattr(processor, 'pattern_processor'):
-                processor.pattern_processor.max_predictions = user_config.max_predictions
+                processor.pattern_processor.max_predictions = session_config.max_predictions
                 if hasattr(processor.pattern_processor, 'patterns_searcher'):
-                    processor.pattern_processor.patterns_searcher.max_predictions = user_config.max_predictions
-                logger.debug(f"Updated max_predictions to {user_config.max_predictions}")
+                    processor.pattern_processor.patterns_searcher.max_predictions = session_config.max_predictions
+                logger.debug(f"Updated max_predictions to {session_config.max_predictions}")
     
     def _evict_oldest(self):
         """Evict the least recently used processor."""
@@ -259,13 +250,13 @@ class ProcessorManager:
             f"(created: {evicted_info['created_at']}, accesses: {evicted_info['access_count']})"
         )
     
-    async def update_processor_config(self, user_id: str, user_config: UserConfiguration) -> bool:
+    async def update_processor_config(self, user_id: str, session_config: SessionConfiguration) -> bool:
         """
         Update a processor's configuration dynamically.
         
         Args:
             user_id: User identifier
-            user_config: New user configuration
+            session_config: New session configuration
         
         Returns:
             True if successful, False otherwise
@@ -280,19 +271,15 @@ class ProcessorManager:
         processor = processor_info['processor']
         
         try:
-            # Get default settings
-            defaults = {
-                'indexer_type': self.settings.processing.indexer_type,
-                'max_pattern_length': self.settings.learning.max_pattern_length,
-                'persistence': self.settings.learning.persistence,
-                'recall_threshold': self.settings.learning.recall_threshold,
-                'max_predictions': self.settings.processing.max_predictions,
-                'sort': self.settings.processing.sort_symbols,
-                'process_predictions': self.settings.processing.process_predictions
-            }
+            # Resolve configuration using ConfigurationService
+            resolved_config = self.config_service.resolve_configuration(
+                session_config=session_config,
+                session_id=session_config.session_id if session_config else None,
+                user_id=user_id
+            )
             
-            # Merge with user configuration
-            new_config = user_config.merge_with_defaults(defaults)
+            # Get the configuration values
+            new_config = resolved_config.to_genome_manifest()
             
             # Update processor attributes directly
             # These are the safe runtime-updateable parameters

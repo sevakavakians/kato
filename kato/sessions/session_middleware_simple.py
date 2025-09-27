@@ -11,7 +11,7 @@ from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from .session_manager import get_session_manager, SessionState
+from .session_manager import SessionState
 
 logger = logging.getLogger('kato.sessions.middleware')
 

@@ -11,7 +11,7 @@ from time import time
 @pytest.fixture(scope="function")
 def kato_url():
     """Get the KATO service URL."""
-    return "http://localhost:8001"
+    return "http://localhost:8000"
 
 
 @pytest.fixture(scope="function")

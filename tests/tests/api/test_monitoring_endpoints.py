@@ -13,21 +13,9 @@ from typing import Dict, Any
 
 
 def _get_test_base_url():
-    """Get the base URL for testing - use standard ports"""
-    # After migration, use standard ports directly
-    # Check if testing service is available on port 8002, else use primary on 8001
-    import requests
-    
-    # Try testing service first
-    try:
-        response = requests.get("http://localhost:8002/health", timeout=0.5)
-        if response.status_code == 200:
-            return "http://localhost:8002"
-    except:
-        pass
-    
-    # Fall back to primary service
-    return "http://localhost:8001"
+    """Get the base URL for testing - use single instance"""
+    # Use single KATO instance on port 8000
+    return "http://localhost:8000"
 
 
 class TestCurrentMonitoringEndpoints:
@@ -47,7 +35,8 @@ class TestCurrentMonitoringEndpoints:
         # Check required fields
         assert "status" in data
         assert "processor_status" in data
-        assert "base_processor_id" in data  # current uses base_processor_id instead of processor_id
+        # The health endpoint now has service_name and active_sessions instead of processor_id
+        assert "service_name" in data or "base_processor_id" in data or "processor_id" in data
         assert "uptime_seconds" in data
         assert "issues" in data
         assert "metrics_collected" in data

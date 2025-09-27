@@ -117,11 +117,11 @@ function check_dependencies() {
     else
         print_warning "KATO is not running. Starting KATO..."
         # Try to start KATO
-        if [ -f "${SCRIPT_DIR}/../../kato-manager.sh" ]; then
-            "${SCRIPT_DIR}/../../kato-manager.sh" start
+        if [ -f "${SCRIPT_DIR}/../../start.sh" ]; then
+            "${SCRIPT_DIR}/../../start.sh" start
             sleep 5
         else
-            print_error "Could not find kato-manager.sh to start KATO"
+            print_error "Could not find start.sh to start KATO"
             exit 1
         fi
     fi

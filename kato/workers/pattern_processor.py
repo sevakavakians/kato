@@ -106,6 +106,16 @@ class PatternProcessor:
         self.clear_stm()
         self.last_learned_pattern_name: Optional[str] = None
         self.patterns_searcher.clearPatternsFromRAM()
+        
+        # CRITICAL: Delete all patterns from MongoDB for this processor
+        # This ensures test isolation and prevents pattern contamination
+        deleted = self.superkb.patterns_kb.delete_many({})
+        logger.info(f"Deleted {deleted.deleted_count} patterns from MongoDB for processor {self.kb_id}")
+        
+        # Also clear symbols and predictions
+        self.superkb.symbols_kb.delete_many({})
+        self.superkb.predictions_kb.delete_many({})
+        
         self.superkb.patterns_observation_count = 0
         self.superkb.symbols_observation_count = 0
         self.initiateDefaults()

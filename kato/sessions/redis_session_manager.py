@@ -21,13 +21,16 @@ except ImportError:
     import aioredis as redis
 from dataclasses import dataclass, asdict
 
-from .session_manager import SessionState, SessionManager
-from kato.config.user_config import UserConfiguration
+from .session_manager import SessionState
+from kato.config.session_config import SessionConfiguration
+
+# Import SessionManager as base class only when needed
+import kato.sessions.session_manager as session_manager_module
 
 logger = logging.getLogger('kato.sessions.redis')
 
 
-class RedisSessionManager(SessionManager):
+class RedisSessionManager(session_manager_module.SessionManager):
     """
     Redis-backed session manager for persistent, scalable session storage.
     
@@ -60,17 +63,17 @@ class RedisSessionManager(SessionManager):
         
         logger.info(f"RedisSessionManager initialized with URL: {redis_url}")
     
-    def _serialize_user_config(self, user_config: UserConfiguration) -> Dict[str, Any]:
+    def _serialize_session_config(self, session_config: SessionConfiguration) -> Dict[str, Any]:
         """
-        Serialize UserConfiguration for JSON storage.
+        Serialize SessionConfiguration for JSON storage.
         
         Args:
-            user_config: UserConfiguration instance
+            session_config: SessionConfiguration instance
         
         Returns:
             Dictionary with JSON-serializable values
         """
-        config_dict = user_config.to_dict()
+        config_dict = session_config.to_dict()
         # Convert datetime fields to ISO strings
         if 'created_at' in config_dict and config_dict['created_at']:
             if hasattr(config_dict['created_at'], 'isoformat'):
@@ -95,13 +98,13 @@ class RedisSessionManager(SessionManager):
         session_dict['last_accessed'] = datetime.fromisoformat(session_dict['last_accessed'])
         session_dict['expires_at'] = datetime.fromisoformat(session_dict['expires_at'])
         
-        # Handle UserConfiguration if present
-        if 'user_config' in session_dict and session_dict['user_config']:
-            if isinstance(session_dict['user_config'], dict):
-                session_dict['user_config'] = UserConfiguration.from_dict(session_dict['user_config'])
+        # Handle SessionConfiguration if present
+        if 'session_config' in session_dict and session_dict['session_config']:
+            if isinstance(session_dict['session_config'], dict):
+                session_dict['session_config'] = SessionConfiguration.from_dict(session_dict['session_config'])
         else:
-            # Create default user config if not present
-            session_dict['user_config'] = UserConfiguration(user_id=session_dict.get('user_id', ''))
+            # Create default session config if not present
+            session_dict['session_config'] = SessionConfiguration()
         
         return SessionState(**session_dict)
     
@@ -258,13 +261,35 @@ class RedisSessionManager(SessionManager):
                 return None
             
             # Deserialize session
-            session_dict = json.loads(session_data)
-            session = self._deserialize_session(session_dict)
+            try:
+                session_dict = json.loads(session_data)
+                logger.info(f"Loaded session dict for {session_id}: {list(session_dict.keys())}")
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to decode JSON for session {session_id}: {e}")
+                logger.error(f"Raw data: {session_data}")
+                return None
+            except Exception as e:
+                logger.error(f"Unexpected error loading JSON for session {session_id}: {e}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                return None
+            try:
+                session = self._deserialize_session(session_dict)
+                logger.info(f"Successfully deserialized session {session_id}")
+            except Exception as e:
+                logger.error(f"Failed to deserialize session {session_id}: {e}")
+                logger.error(f"Session dict: {session_dict}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                return None
             
             # Check if expired
             if session.is_expired():
+                logger.info(f"Session {session_id} expired, deleting")
                 await self.delete_session(session_id)
                 return None
+            
+            logger.info(f"Session {session_id} is valid, updating access time")
             
             # Update access time
             session.update_access()
@@ -421,9 +446,14 @@ class RedisSessionManager(SessionManager):
         Returns:
             asyncio.Lock for the session, None if session doesn't exist
         """
-        # For Redis sessions, check if session exists first
-        session = await self.get_session(session_id)
-        if not session:
+        # For Redis sessions, check if session exists first  
+        # Check Redis directly without calling get_session to avoid recursion
+        if not self._connected:
+            await self.initialize()
+        
+        key = f"{self.key_prefix}{session_id}"
+        session_exists = await self.redis_client.exists(key)
+        if not session_exists:
             return None
             
         # Ensure lock exists for this session
@@ -544,7 +574,7 @@ class RedisSessionManager(SessionManager):
             'access_count': session.access_count,
             'max_stm_size': session.max_stm_size,
             'max_emotives_size': session.max_emotives_size,
-            'user_config': self._serialize_user_config(session.user_config) if session.user_config else None
+            'session_config': self._serialize_session_config(session.session_config) if session.session_config else None
         }
         
         # Serialize to JSON
@@ -598,7 +628,12 @@ def get_redis_session_manager(
     global _redis_session_manager
     
     if _redis_session_manager is None:
+        import traceback
+        logger.error(f"!!! Creating new RedisSessionManager in get_redis_session_manager() !!!")
+        logger.error(f"!!! Call stack:\n{''.join(traceback.format_stack()[-5:])}")
         redis_url = redis_url or "redis://localhost:6379"
         _redis_session_manager = RedisSessionManager(redis_url=redis_url, **kwargs)
+    else:
+        logger.debug(f"Returning cached RedisSessionManager")
     
     return _redis_session_manager

@@ -300,7 +300,7 @@ if __name__ == "__main__":
             exit(1)
     except requests.ConnectionError:
         print("ERROR: Cannot connect to KATO on port 8000")
-        print("Please run: ./kato-manager.sh start")
+        print("Please run: ./start.sh start")
         exit(1)
     
     # Run tests

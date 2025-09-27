@@ -79,13 +79,13 @@ fi
 
 # Start KATO if requested
 if [ "$START_KATO" = true ]; then
-    echo -e "${GREEN}Starting KATO in test mode (single instance)...${NC}"
-    ./kato-manager.sh start
+    echo -e "${GREEN}Starting KATO services...${NC}"
+    ./start.sh start
     
     # Wait for KATO to be ready
     echo "Waiting for KATO to be ready..."
     for i in {1..30}; do
-        if curl -s http://localhost:8001/health > /dev/null 2>&1; then
+        if curl -s http://localhost:8000/health > /dev/null 2>&1; then
             echo -e "${GREEN}KATO is ready!${NC}"
             break
         fi
@@ -119,9 +119,9 @@ TEST_RESULT=${TEST_RESULT:-0}
 # Stop KATO if requested
 if [ "$STOP_KATO" = true ]; then
     echo
-    echo -e "${GREEN}Stopping and removing KATO test containers...${NC}"
-    # Stop the test containers (but keep volumes)
-    ./kato-manager.sh stop
+    echo -e "${GREEN}Stopping KATO services...${NC}"
+    # Stop the services
+    ./start.sh stop
 fi
 
 # Report results

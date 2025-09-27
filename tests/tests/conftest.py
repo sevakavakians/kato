@@ -14,18 +14,8 @@ from fixtures.kato_session_client import KatoSessionClient
 @pytest_asyncio.fixture
 async def kato_current_client():
     """Fixture that provides an async KATO session client."""
-    # Use testing service if available, else primary
-    base_url = "http://localhost:8002"  # Testing service
-    
-    # Check if testing service is available
-    import aiohttp
-    async with aiohttp.ClientSession() as session:
-        try:
-            async with session.get(f"{base_url}/health", timeout=aiohttp.ClientTimeout(total=0.5)) as resp:
-                if resp.status != 200:
-                    base_url = "http://localhost:8001"  # Fall back to primary
-        except:
-            base_url = "http://localhost:8001"  # Fall back to primary
+    # Use single KATO instance on port 8000
+    base_url = "http://localhost:8000"
     
     # Create and yield the client
     async with KatoSessionClient(base_url) as client:

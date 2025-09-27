@@ -16,16 +16,16 @@ from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
 import logging
 
-from kato.config.user_config import UserConfiguration
+from kato.config.session_config import SessionConfiguration
 
 logger = logging.getLogger('kato.sessions.manager')
 
 
 @dataclass
 class SessionState:
-    """State for a user session - lightweight connection to user's processor"""
+    """State for a user session with its own configuration"""
     session_id: str
-    user_id: str  # Now required - each user has their own processor
+    user_id: str  # User who owns this session
     created_at: datetime
     last_accessed: datetime
     expires_at: datetime
@@ -35,8 +35,8 @@ class SessionState:
     emotives_accumulator: List[Dict[str, float]] = field(default_factory=list)
     time: int = 0
     
-    # User-specific configuration
-    user_config: UserConfiguration = field(default_factory=lambda: UserConfiguration())
+    # Session-specific configuration (replaces user_config)
+    session_config: SessionConfiguration = field(default_factory=lambda: SessionConfiguration())
     
     # Metadata
     metadata: Dict[str, Any] = field(default_factory=dict)
@@ -82,6 +82,7 @@ class SessionManager:
         Args:
             default_ttl_seconds: Default session TTL (1 hour)
         """
+        import traceback
         self.sessions: Dict[str, SessionState] = {}
         self.default_ttl = default_ttl_seconds
         self.session_locks: Dict[str, asyncio.Lock] = {}
@@ -89,20 +90,22 @@ class SessionManager:
         self._cleanup_interval = 300  # 5 minutes
         
         logger.info(f"SessionManager initialized with {default_ttl_seconds}s default TTL")
+        # Debug: log where this is being called from
+        logger.info(f"SessionManager created from:\n{''.join(traceback.format_stack()[-5:-1])}")
     
     async def get_or_create_session(
         self,
         user_id: str,
+        config: Optional[Dict[str, Any]] = None,
         metadata: Optional[Dict[str, Any]] = None,
         ttl_seconds: Optional[int] = None
     ) -> SessionState:
         """
         Get existing session for a user or create a new one.
         
-        This enables session persistence across requests from the same user.
-        
         Args:
             user_id: User identifier (required for processor isolation)
+            config: Optional session configuration parameters
             metadata: Optional session metadata
             ttl_seconds: Session TTL (uses default if not specified)
         
@@ -118,19 +121,21 @@ class SessionManager:
                 return session
         
         # No existing session, create new one
-        return await self.create_session(user_id, metadata, ttl_seconds)
+        return await self.create_session(user_id, config, metadata, ttl_seconds)
     
     async def create_session(
         self,
-        user_id: str,  # Now required for processor isolation
+        user_id: str,
+        config: Optional[Dict[str, Any]] = None,
         metadata: Optional[Dict[str, Any]] = None,
         ttl_seconds: Optional[int] = None
     ) -> SessionState:
         """
-        Create a new isolated session.
+        Create a new isolated session with its own configuration.
         
         Args:
             user_id: User identifier (required for processor isolation)
+            config: Optional session configuration parameters
             metadata: Optional session metadata
             ttl_seconds: Session TTL (uses default if not specified)
         
@@ -143,8 +148,12 @@ class SessionManager:
         now = datetime.now(timezone.utc)
         ttl = ttl_seconds or self.default_ttl
         
-        # Initialize user configuration
-        user_config = UserConfiguration(user_id=user_id)
+        # Initialize session configuration
+        session_config = SessionConfiguration(session_id=session_id, user_id=user_id)
+        
+        # Apply config if provided
+        if config:
+            session_config.update(config)
         
         session = SessionState(
             session_id=session_id,
@@ -153,7 +162,7 @@ class SessionManager:
             last_accessed=now,
             expires_at=now + timedelta(seconds=ttl),
             metadata=metadata or {},
-            user_config=user_config
+            session_config=session_config
         )
         
         # Store session
@@ -372,6 +381,9 @@ def get_session_manager() -> SessionManager:
     """Get or create the global session manager instance"""
     global _session_manager
     if _session_manager is None:
+        import traceback
+        logger.error("!!! UNEXPECTED SessionManager creation from get_session_manager() !!!")
+        logger.error(f"!!! Full call stack:\n{''.join(traceback.format_stack())}")
         _session_manager = SessionManager()
     return _session_manager
 

@@ -1,5 +1,5 @@
 services:
-  # MongoDB shared by all KATO instances
+  # MongoDB shared by all sessions
   mongodb:
     image: mongo:4.4
     container_name: kato-mongodb
@@ -45,95 +45,23 @@ services:
       timeout: 5s
       retries: 5
 
-  # KATO Primary Instance with Session Support
-  kato-primary:
+  # Single KATO Service - Configuration is now per-session
+  kato:
     build:
       context: .
       dockerfile: Dockerfile
     image: kato:latest
-    container_name: kato-primary
+    container_name: kato
     environment:
-      - PROCESSOR_ID=primary
-      - PROCESSOR_NAME=Primary
+      - SERVICE_NAME=kato
       - MONGO_BASE_URL=mongodb://mongodb:27017
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
       - REDIS_URL=redis://redis:6379
-      - MAX_PATTERN_LENGTH=0
-      - PERSISTENCE=5
-      - RECALL_THRESHOLD=0.1
       - LOG_LEVEL=INFO
       - SESSION_TTL=3600
     ports:
-      - "8001:8000"
-    networks:
-      - kato-network
-    depends_on:
-      - mongodb
-      - qdrant
-      - redis
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5).read()"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  # KATO Testing Instance (for isolated testing)
-  kato-testing:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: kato:latest
-    container_name: kato-testing
-    environment:
-      - PROCESSOR_ID=testing
-      - PROCESSOR_NAME=Testing
-      - MONGO_BASE_URL=mongodb://mongodb:27017
-      - QDRANT_HOST=qdrant
-      - QDRANT_PORT=6333
-      - REDIS_URL=redis://redis:6379
-      - MAX_PATTERN_LENGTH=10
-      - PERSISTENCE=5
-      - RECALL_THRESHOLD=0.1
-      - LOG_LEVEL=DEBUG
-      - SESSION_TTL=1800
-    ports:
-      - "8002:8000"
-    networks:
-      - kato-network
-    depends_on:
-      - mongodb
-      - qdrant
-      - redis
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5).read()"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  # KATO Analytics Instance (auto-learning enabled)
-  kato-analytics:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: kato:latest
-    container_name: kato-analytics
-    environment:
-      - PROCESSOR_ID=analytics
-      - PROCESSOR_NAME=Analytics
-      - MONGO_BASE_URL=mongodb://mongodb:27017
-      - QDRANT_HOST=qdrant
-      - QDRANT_PORT=6333
-      - REDIS_URL=redis://redis:6379
-      - MAX_PATTERN_LENGTH=50
-      - PERSISTENCE=10
-      - RECALL_THRESHOLD=0.5
-      - LOG_LEVEL=INFO
-      - SESSION_TTL=7200
-    ports:
-      - "8003:8000"
+      - "8000:8000"
     networks:
       - kato-network
     depends_on:

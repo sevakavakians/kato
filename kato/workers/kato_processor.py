@@ -22,7 +22,7 @@ logger.info('logging initiated')
 
 
 class KatoProcessor:
-    def __init__(self, genome_manifest, settings=None, **kwargs):
+    def __init__(self, genome_manifest, processor_id: str, settings=None, **kwargs):
         '''genome is the specific kato processor's genes.'''
         # Accept settings via dependency injection, fallback to get_settings() for compatibility
         if settings is None:
@@ -34,11 +34,11 @@ class KatoProcessor:
             logger.setLevel(getattr(logging, settings.logging.log_level))
         
         self.genome_manifest = genome_manifest
-        self.id = self.genome_manifest['id']
+        self.id = processor_id  # Direct processor ID parameter instead of from genome_manifest
         self.name = self.genome_manifest["name"]
         self.vector_indexer_type = self.genome_manifest["indexer_type"]
-        # Get hostname from environment or use processor_id as fallback
-        self.agent_name = os.environ.get('HOSTNAME', self.id)
+        # Get service name from environment
+        self.agent_name = os.environ.get('SERVICE_NAME', 'kato')
         logger.info(" Starting KatoProcessor ID: %s" %self.id)
 
         self.SORT = self.genome_manifest["sort"]
@@ -168,7 +168,7 @@ class KatoProcessor:
             'auto_learned_pattern': result.get('auto_learned_pattern'),
             'symbols': result.get('symbols', []),  # Include combined symbols (strings + VCTR names)
             'time': self.time,
-            'processor_id': self.id
+            'instance_id': self.id
         }
             
     def get_predictions(self, unique_id={}):

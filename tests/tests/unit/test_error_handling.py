@@ -13,21 +13,9 @@ from pathlib import Path
 
 
 def _get_test_base_url():
-    """Get the base URL for testing - use standard ports"""
-    # After migration, use standard ports directly
-    # Check if testing service is available on port 8002, else use primary on 8001
-    import requests
-    
-    # Try testing service first
-    try:
-        response = requests.get("http://localhost:8002/health", timeout=0.5)
-        if response.status_code == 200:
-            return "http://localhost:8002"
-    except:
-        pass
-    
-    # Fall back to primary service
-    return "http://localhost:8001"
+    """Get the base URL for testing - use single instance"""
+    # Use single KATO instance on port 8000
+    return "http://localhost:8000"
 
 
 class TestSessionErrorHandling:

@@ -18,28 +18,19 @@ except ImportError:
 from pydantic.types import SecretStr
 
 
-class ProcessorConfig(BaseSettings):
-    """Processor-specific configuration."""
+class ServiceConfig(BaseSettings):
+    """Service-level configuration."""
     
-    processor_id: Optional[str] = Field(
-        None,
-        env='PROCESSOR_ID',
-        description="Unique identifier for processor instance"
+    service_name: str = Field(
+        'kato',
+        env='SERVICE_NAME',
+        description="Service name identifier"
     )
-    processor_name: str = Field(
-        'KatoProcessor',
-        env='PROCESSOR_NAME',
-        description="Display name for the processor"
+    service_version: str = Field(
+        '2.0',
+        env='SERVICE_VERSION',
+        description="Service version"
     )
-    
-    @validator('processor_id', pre=True, always=True)
-    def generate_processor_id(cls, v):
-        """Generate processor ID if not provided."""
-        if not v:
-            import uuid
-            import time
-            return f"kato-{uuid.uuid4().hex[:8]}-{int(time.time())}"
-        return v
     
     class Config:
         env_prefix = ''
@@ -387,7 +378,7 @@ class Settings(BaseSettings):
     """Main settings class combining all configuration sections."""
     
     # Configuration sections
-    processor: ProcessorConfig = Field(default_factory=ProcessorConfig)
+    service: ServiceConfig = Field(default_factory=ServiceConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     learning: LearningConfig = Field(default_factory=LearningConfig)
@@ -532,9 +523,9 @@ def reload_settings() -> Settings:
 
 
 # Export commonly used settings for backward compatibility
-def get_processor_config() -> ProcessorConfig:
-    """Get processor configuration."""
-    return get_settings().processor
+def get_service_config() -> ServiceConfig:
+    """Get service configuration."""
+    return get_settings().service
 
 
 def get_database_config() -> DatabaseConfig:

@@ -43,11 +43,10 @@ class KATOFastAPIFixture:
         self.container_name = None
         self.port = None
         self.base_url = None
-        self.processor_id = self._generate_processor_id()
+        self.processor_id = self._generate_processor_id()  # Now used as user_id
         self.services_available = False
-        self.session_id = None  # No longer used after v2 removal
-        self.session_created = False  # No longer used after v2 removal
-        self.use_v2_session = False  # Disable v2 session usage
+        self.session_id = None  # Will be created per test
+        self.session_config = {}  # Session-specific configuration
         
         if use_docker and HAS_DOCKER_PACKAGE:
             try:
@@ -169,13 +168,12 @@ class KATOFastAPIFixture:
                     'kato:fastapi',
                     name=self.container_name,
                     environment={
-                        'PROCESSOR_ID': self.processor_id,
-                        'PROCESSOR_NAME': self.processor_name,
+                        'SERVICE_NAME': 'kato-test',
                         'MONGO_BASE_URL': os.environ.get('MONGO_BASE_URL', 'mongodb://host.docker.internal:27017'),
-                        'MAX_PATTERN_LENGTH': '0',
-                        'PERSISTENCE': '5',
-                        'RECALL_THRESHOLD': '0.1',
-                        'LOG_LEVEL': 'INFO'
+                        'QDRANT_HOST': os.environ.get('QDRANT_HOST', 'host.docker.internal'),
+                        'QDRANT_PORT': os.environ.get('QDRANT_PORT', '6333'),
+                        'LOG_LEVEL': 'INFO',
+                        'SESSION_TTL': '3600'
                     },
                     ports={'8000/tcp': self.port},
                     detach=True,
@@ -206,8 +204,8 @@ class KATOFastAPIFixture:
                 print(f"Using dynamically discovered KATO v2 service at {self.base_url}")
                 self._ensure_session()
             else:
-                # Fall back to trying fixed ports - check 8001 first (test default)
-                for port in [8001, 8002, 8003, 8000]:
+                # Fall back to trying fixed ports - check 8000 first (single instance default)
+                for port in [8000, 8001, 8002, 8003]:
                     self.base_url = f"http://localhost:{port}"
                     try:
                         # Check if service is running (works for both v1 and v2)
@@ -245,11 +243,21 @@ class KATOFastAPIFixture:
         # No need to explicitly create sessions
     
     def _ensure_session(self):
-        """V2 sessions no longer used after migration to unified version."""
-        # All session management is now handled internally by the service
-        # Each processor_id acts as isolation boundary
-        self.session_created = False
-        self.session_id = None
+        """Create a session for testing with session-based configuration."""
+        if self.session_id:
+            return  # Session already created
+        
+        # Create a session with test-specific configuration
+        session_data = {
+            'user_id': self.processor_id,  # Use processor_id as user_id for isolation
+            'config': self.session_config  # Session-specific configuration
+        }
+        
+        response = requests.post(f"{self.base_url}/sessions", json=session_data)
+        response.raise_for_status()
+        result = response.json()
+        self.session_id = result['session_id']
+        self.session_created = True
                 
     def teardown(self):
         """Clean up KATO service after testing."""
@@ -273,9 +281,11 @@ class KATOFastAPIFixture:
         if not self.services_available:
             pytest.skip("KATO services not available")
         
-        # Use x-test-id header for isolation (processor_id in body is ignored)
-        headers = {'x-test-id': self.processor_id}
-        response = requests.post(f"{self.base_url}/observe", json=data, headers=headers)
+        # Ensure session exists
+        self._ensure_session()
+        
+        # Use session-based endpoint
+        response = requests.post(f"{self.base_url}/sessions/{self.session_id}/observe", json=data)
         
         response.raise_for_status()
         result = response.json()
@@ -299,9 +309,11 @@ class KATOFastAPIFixture:
         if not self.services_available:
             pytest.skip("KATO services not available")
         
-        # Use x-test-id header for isolation
-        headers = {'x-test-id': self.processor_id}
-        response = requests.get(f"{self.base_url}/stm", headers=headers)
+        # Ensure session exists
+        self._ensure_session()
+        
+        # Use session-based endpoint
+        response = requests.get(f"{self.base_url}/sessions/{self.session_id}/stm")
         
         response.raise_for_status()
         result = response.json()
@@ -316,13 +328,15 @@ class KATOFastAPIFixture:
         if not self.services_available:
             pytest.skip("KATO services not available")
         
+        # Ensure session exists
+        self._ensure_session()
+        
         params = {}
         if unique_id:
             params['unique_id'] = unique_id
         
-        # Use x-test-id header for isolation
-        headers = {'x-test-id': self.processor_id}
-        response = requests.get(f"{self.base_url}/predictions", params=params, headers=headers)
+        # Use session-based endpoint
+        response = requests.get(f"{self.base_url}/sessions/{self.session_id}/predictions", params=params)
         
         response.raise_for_status()
         result = response.json()
@@ -333,11 +347,29 @@ class KATOFastAPIFixture:
         if not self.services_available:
             pytest.skip("KATO services not available")
         
-        # Use x-test-id header for isolation
-        headers = {'x-test-id': self.processor_id}
-        response = requests.post(f"{self.base_url}/learn", json={}, headers=headers)
+        # Ensure session exists
+        self._ensure_session()
         
-        # Always expect 200 OK now, check the status in response
+        # Use session-based endpoint
+        response = requests.post(f"{self.base_url}/sessions/{self.session_id}/learn", json={})
+        
+        # Handle insufficient data case (API returns 400 for empty STM)
+        if response.status_code == 400:
+            # Check if it's due to insufficient data
+            try:
+                error_data = response.json()
+                detail = error_data.get('detail', '').lower()
+                if 'insufficient' in detail or \
+                   'at least' in detail or \
+                   'empty stm' in detail or \
+                   'cannot learn' in detail:
+                    return ''  # Return empty string for insufficient STM
+            except:
+                pass
+            # Re-raise if it's a different error
+            response.raise_for_status()
+        
+        # Normal case - expect 200 OK
         response.raise_for_status()
         result = response.json()
         
@@ -352,9 +384,11 @@ class KATOFastAPIFixture:
         if not self.services_available:
             pytest.skip("KATO services not available")
         
-        # Use x-test-id header for isolation
-        headers = {'x-test-id': self.processor_id}
-        response = requests.post(f"{self.base_url}/clear-stm", json={}, headers=headers)
+        # Ensure session exists
+        self._ensure_session()
+        
+        # Use session-based endpoint
+        response = requests.post(f"{self.base_url}/sessions/{self.session_id}/clear-stm", json={})
         
         response.raise_for_status()
         result = response.json()
@@ -370,39 +404,74 @@ class KATOFastAPIFixture:
     def clear_all_memory(self, reset_genes: bool = True) -> str:
         """Clear all memory and optionally reset genes.
         
-        Note: With user-based isolation, each test has its own database.
-        This method deletes and recreates the session to clear all learned patterns.
+        Note: For complete isolation, we delete the session and create a new one
+        with a new processor_id to ensure no pattern contamination.
         """
         if not self.services_available:
             pytest.skip("KATO services not available")
         
-        # Use x-test-id header for isolation
-        headers = {'x-test-id': self.processor_id}
-        response = requests.post(f"{self.base_url}/clear-all", 
-                                json={'reset_genes': reset_genes},
-                                headers=headers)
-        if response.status_code == 200:
-            return response.json().get('message', 'all-cleared')
+        # Delete current session if it exists
+        if self.session_id:
+            try:
+                # First call clear-all to delete patterns
+                response = requests.post(
+                    f"{self.base_url}/sessions/{self.session_id}/clear-all"
+                )
+                if response.status_code != 200:
+                    # Try legacy endpoint
+                    response = requests.post(f"{self.base_url}/clear-all")
+                
+                # Then delete the session
+                response = requests.delete(f"{self.base_url}/sessions/{self.session_id}")
+            except:
+                pass  # Ignore errors during cleanup
+            
+            # Reset session tracking
+            self.session_id = None
+            self.session_created = False
+        
+        # Generate a new processor_id for complete isolation
+        self.processor_id = self._generate_processor_id()
+        
+        # Create a new session with the new processor_id
+        self._ensure_session()
         
         if reset_genes:
             self.reset_genes_to_defaults()
+        
         return 'all-cleared'
     
     def update_genes(self, genes: Dict[str, Any]) -> str:
-        """Update gene values.
+        """Update gene values through session configuration.
         
-        V2 supports dynamic configuration updates through the session's user_config.
-        V1 uses the global genes endpoint with processor_id.
+        With session-based configuration, genes are updated per session.
         """
         if not self.services_available:
             pytest.skip("KATO services not available")
         
-        # Use x-test-id header for isolation
-        headers = {'x-test-id': self.processor_id}
+        # Ensure session exists
+        self._ensure_session()
+        
+        # Map gene names to config parameters
+        config_update = {}
+        if 'max_pattern_length' in genes:
+            config_update['max_pattern_length'] = genes['max_pattern_length']
+        if 'recall_threshold' in genes:
+            config_update['recall_threshold'] = genes['recall_threshold']
+        if 'persistence' in genes:
+            config_update['persistence'] = genes['persistence']
+        if 'max_predictions' in genes:
+            config_update['max_predictions'] = genes['max_predictions']
+        if 'sort' in genes:
+            config_update['sort_symbols'] = genes['sort']
+        
+        # Update session config
+        self.session_config.update(config_update)
+        
+        # Update session configuration
         response = requests.post(
-            f"{self.base_url}/genes/update",
-            json={"genes": genes},
-            headers=headers,
+            f"{self.base_url}/sessions/{self.session_id}/config",
+            json={"config": config_update},
             timeout=5
         )
         if response.status_code == 200:
@@ -420,6 +489,7 @@ class KATOFastAPIFixture:
             'recall_threshold': 0.1,
             'persistence': 5,
         }
+        self.session_config = {}  # Clear session config to use defaults
         return self.update_genes(default_genes)
     
     def set_recall_threshold(self, threshold: float) -> str:

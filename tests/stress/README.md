@@ -272,7 +272,7 @@ Threshold Violations:
 ```
 Error: Connection refused at http://localhost:8000
 ```
-**Solution:** Ensure KATO is running: `./kato-manager.sh start`
+**Solution:** Ensure KATO is running: `./start.sh start`
 
 #### 2. High Error Rate
 ```
@@ -419,8 +419,8 @@ jobs:
         
     - name: Start KATO
       run: |
-        ./kato-manager.sh build
-        ./kato-manager.sh start
+        docker-compose build
+        ./start.sh start
         
     - name: Run stress tests
       run: |
@@ -453,7 +453,7 @@ pipeline {
     stages {
         stage('Setup') {
             steps {
-                sh './kato-manager.sh start'
+                sh './start.sh start'
             }
         }
         
@@ -476,7 +476,7 @@ pipeline {
     
     post {
         always {
-            sh './kato-manager.sh stop'
+            sh './start.sh stop'
         }
     }
 }

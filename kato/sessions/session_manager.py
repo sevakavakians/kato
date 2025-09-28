@@ -91,7 +91,7 @@ class SessionManager:
         
         logger.info(f"SessionManager initialized with {default_ttl_seconds}s default TTL")
         # Debug: log where this is being called from
-        logger.info(f"SessionManager created from:\n{''.join(traceback.format_stack()[-5:-1])}")
+        logger.debug(f"SessionManager created from:\n{''.join(traceback.format_stack()[-5:-1])}")
     
     async def get_or_create_session(
         self,

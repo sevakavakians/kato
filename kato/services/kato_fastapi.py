@@ -196,8 +196,8 @@ class AppState:
         """Get session manager singleton"""
         if self._session_manager is None:
             import traceback
-            logger.error(f"!!! AppState.session_manager creating new instance (id: {id(self)}) !!!")
-            logger.error(f"!!! Call stack:\n{''.join(traceback.format_stack()[-5:])}")
+            logger.debug(f"AppState.session_manager creating new instance (id: {id(self)})")
+            logger.debug(f"Call stack:\n{''.join(traceback.format_stack()[-5:])}")
             # Use Redis session manager if Redis is configured
             redis_url = os.environ.get('REDIS_URL')
             if redis_url:

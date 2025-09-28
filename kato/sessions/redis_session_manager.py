@@ -629,8 +629,8 @@ def get_redis_session_manager(
     
     if _redis_session_manager is None:
         import traceback
-        logger.error(f"!!! Creating new RedisSessionManager in get_redis_session_manager() !!!")
-        logger.error(f"!!! Call stack:\n{''.join(traceback.format_stack()[-5:])}")
+        logger.debug(f"Creating new RedisSessionManager in get_redis_session_manager()")
+        logger.debug(f"Call stack:\n{''.join(traceback.format_stack()[-5:])}")
         redis_url = redis_url or "redis://localhost:6379"
         _redis_session_manager = RedisSessionManager(redis_url=redis_url, **kwargs)
     else:

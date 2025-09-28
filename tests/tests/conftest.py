@@ -12,7 +12,7 @@ from fixtures.kato_session_client import KatoSessionClient
 
 
 @pytest_asyncio.fixture
-async def kato_current_client():
+async def kato_client():
     """Fixture that provides an async KATO session client."""
     # Use single KATO instance on port 8000
     base_url = "http://localhost:8000"
@@ -23,11 +23,11 @@ async def kato_current_client():
 
 
 @pytest_asyncio.fixture
-async def isolated_session(kato_current_client):
+async def isolated_session(kato_client):
     """Fixture that creates an isolated session for testing."""
     # Create a unique session for this test
     test_id = str(uuid.uuid4())[:8]
-    session = await kato_current_client.create_session(
+    session = await kato_client.create_session(
         user_id=f"test_user_{test_id}",
         ttl_seconds=60,  # Short TTL for tests
         metadata={"test": True, "test_id": test_id}
@@ -38,7 +38,7 @@ async def isolated_session(kato_current_client):
     
     # Cleanup: Try to delete the session
     try:
-        await kato_current_client.delete_session(session["session_id"])
+        await kato_client.delete_session(session["session_id"])
     except:
         pass  # Ignore cleanup errors
 

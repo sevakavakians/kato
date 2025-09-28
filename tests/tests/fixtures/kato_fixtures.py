@@ -99,7 +99,7 @@ class KATOFastAPIFixture:
         
         # Try to discover using docker port command
         if HAS_DOCKER_PACKAGE:
-            for container_name in ['kato-testing-v2', 'kato-primary-v2']:
+            for container_name in ['kato-testing', 'kato-primary']:
                 try:
                     result = subprocess.run(
                         ['docker', 'port', container_name, '8000'],
@@ -201,31 +201,22 @@ class KATOFastAPIFixture:
                 self.port = discovered_port
                 self.base_url = f"http://localhost:{self.port}"
                 self.services_available = True
-                print(f"Using dynamically discovered KATO v2 service at {self.base_url}")
+                print(f"Using dynamically discovered KATO service at {self.base_url}")
                 self._ensure_session()
             else:
                 # Fall back to trying fixed ports - check 8000 first (single instance default)
                 for port in [8000, 8001, 8002, 8003]:
                     self.base_url = f"http://localhost:{port}"
                     try:
-                        # Check if service is running (works for both v1 and v2)
+                        # Check if service is running
                         response = requests.get(f"{self.base_url}/health", timeout=2)
                         if response.status_code == 200:
                             health_data = response.json()
-                            # Accept both v1 and v2 services
-                            # V2 has "base_processor_id" or "active_sessions"
-                            # V1 has just "processor_id" and "uptime"
                             self.services_available = True
                             self.port = port
-                            
-                            # Check if it's a v2 service
-                            if "base_processor_id" in health_data or "active_sessions" in health_data:
-                                print(f"Using existing KATO v2 service at {self.base_url}")
-                                # Create a persistent session for this test
-                                self._ensure_session()
-                            else:
-                                # V1 service - no session needed
-                                print(f"Using existing KATO v1 service at {self.base_url}")
+                            print(f"Using existing KATO service at {self.base_url}")
+                            # Create a persistent session for this test
+                            self._ensure_session()
                             break
                     except requests.exceptions.RequestException:
                         continue
@@ -261,7 +252,7 @@ class KATOFastAPIFixture:
                 
     def teardown(self):
         """Clean up KATO service after testing."""
-        # No v2 session cleanup needed after migration
+        # No explicit session cleanup needed
         pass
         
         # With primary endpoints using automatic session management,
@@ -392,7 +383,7 @@ class KATOFastAPIFixture:
         
         response.raise_for_status()
         result = response.json()
-        # V2 returns {"status": "cleared"}, v1 returns {"message": "stm-cleared"}
+        # Modern API returns {"status": "cleared"}
         if result.get('status') == 'cleared':
             return 'stm-cleared'
         return result.get('message', '')

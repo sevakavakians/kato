@@ -1,5 +1,5 @@
 """
-Test Suite for KATO current.0 Session Management Specification
+Test Suite for KATO Session Management Specification
 
 This test suite validates the critical requirement that multiple users
 must be able to maintain separate STM sequences without collision.
@@ -27,73 +27,73 @@ class TestSessionIsolation:
     """Test that sessions maintain completely isolated STMs"""
     
     @pytest.mark.asyncio
-    async def test_basic_session_isolation(self, kato_current_client):
+    async def test_basic_session_isolation(self, kato_client):
         """Test that two sessions maintain separate STMs without collision"""
         # Create two sessions
-        session1 = await kato_current_client.create_session(user_id="user1")
-        session2 = await kato_current_client.create_session(user_id="user2")
+        session1 = await kato_client.create_session(user_id="user1")
+        session2 = await kato_client.create_session(user_id="user2")
         
         # User 1 builds sequence A, B, C
-        await kato_current_client.observe_in_session(
+        await kato_client.observe_in_session(
             session1['session_id'], 
             {"strings": ["A"]}
         )
-        await kato_current_client.observe_in_session(
+        await kato_client.observe_in_session(
             session1['session_id'],
             {"strings": ["B"]}
         )
-        await kato_current_client.observe_in_session(
+        await kato_client.observe_in_session(
             session1['session_id'],
             {"strings": ["C"]}
         )
         
         # User 2 builds sequence X, Y, Z
-        await kato_current_client.observe_in_session(
+        await kato_client.observe_in_session(
             session2['session_id'],
             {"strings": ["X"]}
         )
-        await kato_current_client.observe_in_session(
+        await kato_client.observe_in_session(
             session2['session_id'],
             {"strings": ["Y"]}
         )
-        await kato_current_client.observe_in_session(
+        await kato_client.observe_in_session(
             session2['session_id'],
             {"strings": ["Z"]}
         )
         
         # Verify User 1's STM
-        stm1 = await kato_current_client.get_session_stm(session1['session_id'])
+        stm1 = await kato_client.get_session_stm(session1['session_id'])
         assert stm1['stm'] == [["A"], ["B"], ["C"]], \
             f"User 1 STM corrupted. Expected [['A'], ['B'], ['C']], got {stm1['stm']}"
         
         # Verify User 2's STM
-        stm2 = await kato_current_client.get_session_stm(session2['session_id'])
+        stm2 = await kato_client.get_session_stm(session2['session_id'])
         assert stm2['stm'] == [["X"], ["Y"], ["Z"]], \
             f"User 2 STM corrupted. Expected [['X'], ['Y'], ['Z']], got {stm2['stm']}"
         
         # Cleanup
-        await kato_current_client.delete_session(session1['session_id'])
-        await kato_current_client.delete_session(session2['session_id'])
+        await kato_client.delete_session(session1['session_id'])
+        await kato_client.delete_session(session2['session_id'])
     
     @pytest.mark.asyncio
-    async def test_concurrent_session_operations(self, kato_current_client):
+    async def test_concurrent_session_operations(self, kato_client):
         """Test that concurrent operations on different sessions don't interfere"""
         sessions = []
         
         # Create 10 sessions
         for i in range(10):
-            session = await kato_current_client.create_session(user_id=f"user{i}")
+            session = await kato_client.create_session(user_id=f"user{i}")
             sessions.append(session)
         
         # Define async operation for each session
         async def process_session(session_id: str, prefix: str):
             """Each session builds its own unique sequence"""
             for j in range(5):
-                await kato_current_client.observe_in_session(
+                await kato_client.observe_in_session(
                     session_id,
                     {"strings": [f"{prefix}_{j}"]}
                 )
-            return await kato_current_client.get_session_stm(session_id)
+            return await kato_client.get_session_stm(session_id)
         
         # Process all sessions concurrently
         tasks = []
@@ -111,16 +111,16 @@ class TestSessionIsolation:
         
         # Cleanup
         for session in sessions:
-            await kato_current_client.delete_session(session['session_id'])
+            await kato_client.delete_session(session['session_id'])
     
     @pytest.mark.asyncio
-    async def test_session_with_vectors_and_emotives(self, kato_current_client):
+    async def test_session_with_vectors_and_emotives(self, kato_client):
         """Test session isolation with multi-modal data (vectors and emotives)"""
-        session1 = await kato_current_client.create_session(user_id="user1")
-        session2 = await kato_current_client.create_session(user_id="user2")
+        session1 = await kato_client.create_session(user_id="user1")
+        session2 = await kato_client.create_session(user_id="user2")
         
         # User 1: Text + vectors + emotives
-        await kato_current_client.observe_in_session(
+        await kato_client.observe_in_session(
             session1['session_id'],
             {
                 "strings": ["hello"],
@@ -130,7 +130,7 @@ class TestSessionIsolation:
         )
         
         # User 2: Different data
-        await kato_current_client.observe_in_session(
+        await kato_client.observe_in_session(
             session2['session_id'],
             {
                 "strings": ["goodbye"],
@@ -140,16 +140,16 @@ class TestSessionIsolation:
         )
         
         # Learn patterns in both sessions
-        pattern1 = await kato_current_client.learn_in_session(session1['session_id'])
-        pattern2 = await kato_current_client.learn_in_session(session2['session_id'])
+        pattern1 = await kato_client.learn_in_session(session1['session_id'])
+        pattern2 = await kato_client.learn_in_session(session2['session_id'])
         
         # Patterns should be different
         assert pattern1['pattern_name'] != pattern2['pattern_name'], \
             "Different sessions generated same pattern"
         
         # Get predictions - should be based on separate learned patterns
-        pred1 = await kato_current_client.get_session_predictions(session1['session_id'])
-        pred2 = await kato_current_client.get_session_predictions(session2['session_id'])
+        pred1 = await kato_client.get_session_predictions(session1['session_id'])
+        pred2 = await kato_client.get_session_predictions(session2['session_id'])
         
         # Predictions should reflect different emotives
         # Note: Emotives come from learned patterns, not current observations
@@ -163,55 +163,55 @@ class TestSessionIsolation:
             assert len(emotives2) > 0, "Session 2 should have emotives"
         
         # Cleanup
-        await kato_current_client.delete_session(session1['session_id'])
-        await kato_current_client.delete_session(session2['session_id'])
+        await kato_client.delete_session(session1['session_id'])
+        await kato_client.delete_session(session2['session_id'])
 
 
 class TestSessionLifecycle:
     """Test session creation, expiration, and cleanup"""
     
     @pytest.mark.asyncio
-    async def test_session_creation(self, kato_current_client):
+    async def test_session_creation(self, kato_client):
         """Test session creation with various parameters"""
         # Basic session creation
-        session = await kato_current_client.create_session()
+        session = await kato_client.create_session()
         assert 'session_id' in session
         assert session['session_id'] is not None
         
         # Session with user_id
-        session_with_user = await kato_current_client.create_session(
+        session_with_user = await kato_client.create_session(
             user_id="test_user_123"
         )
         assert session_with_user['user_id'] == "test_user_123"
         
         # Session with metadata
         metadata = {"app_version": "2.0", "client": "test_suite"}
-        session_with_meta = await kato_current_client.create_session(
+        session_with_meta = await kato_client.create_session(
             metadata=metadata
         )
         assert session_with_meta['metadata'] == metadata
         
         # Session with custom TTL
-        session_with_ttl = await kato_current_client.create_session(
+        session_with_ttl = await kato_client.create_session(
             ttl_seconds=7200  # 2 hours
         )
         assert session_with_ttl['ttl_seconds'] == 7200
         
         # Cleanup all sessions
         for s in [session, session_with_user, session_with_meta, session_with_ttl]:
-            await kato_current_client.delete_session(s['session_id'])
+            await kato_client.delete_session(s['session_id'])
     
     @pytest.mark.asyncio
-    async def test_session_expiration(self, kato_current_client):
+    async def test_session_expiration(self, kato_client):
         """Test that sessions expire and are cleaned up"""
         # Create session with short TTL
-        session = await kato_current_client.create_session(
+        session = await kato_client.create_session(
             ttl_seconds=2  # 2 seconds
         )
         session_id = session['session_id']
         
         # Session should be accessible immediately
-        stm = await kato_current_client.get_session_stm(session_id)
+        stm = await kato_client.get_session_stm(session_id)
         assert stm['stm'] == []
         
         # Wait for expiration
@@ -219,134 +219,134 @@ class TestSessionLifecycle:
         
         # Session should be expired
         with pytest.raises(SessionNotFoundError) as exc:
-            await kato_current_client.get_session_stm(session_id)
+            await kato_client.get_session_stm(session_id)
         assert "expired" in str(exc.value).lower()
     
     @pytest.mark.asyncio
-    async def test_session_cleanup(self, kato_current_client):
+    async def test_session_cleanup(self, kato_client):
         """Test manual session cleanup"""
         # Create sessions
         sessions = []
         for i in range(5):
-            session = await kato_current_client.create_session()
+            session = await kato_client.create_session()
             sessions.append(session)
             # Add some data
-            await kato_current_client.observe_in_session(
+            await kato_client.observe_in_session(
                 session['session_id'],
                 {"strings": [f"data_{i}"]}
             )
         
         # Get active session count
-        initial_count = await kato_current_client.get_active_session_count()
+        initial_count = await kato_client.get_active_session_count()
         assert initial_count >= 5
         
         # Delete sessions
         for session in sessions:
-            await kato_current_client.delete_session(session['session_id'])
+            await kato_client.delete_session(session['session_id'])
         
         # Verify sessions are gone
         for session in sessions:
             with pytest.raises(SessionNotFoundError):
-                await kato_current_client.get_session_stm(session['session_id'])
+                await kato_client.get_session_stm(session['session_id'])
         
         # Active count should be reduced
-        final_count = await kato_current_client.get_active_session_count()
+        final_count = await kato_client.get_active_session_count()
         assert final_count == initial_count - 5
     
     @pytest.mark.asyncio
-    async def test_session_extension(self, kato_current_client):
+    async def test_session_extension(self, kato_client):
         """Test extending session TTL"""
         # Create session with short TTL
-        session = await kato_current_client.create_session(ttl_seconds=5)
+        session = await kato_client.create_session(ttl_seconds=5)
         session_id = session['session_id']
         
         # Wait a bit
         await asyncio.sleep(2)
         
         # Extend session
-        await kato_current_client.extend_session(session_id, ttl_seconds=60)
+        await kato_client.extend_session(session_id, ttl_seconds=60)
         
         # Wait past original expiration
         await asyncio.sleep(4)
         
         # Session should still be active
-        stm = await kato_current_client.get_session_stm(session_id)
+        stm = await kato_client.get_session_stm(session_id)
         assert stm is not None
         
         # Cleanup
-        await kato_current_client.delete_session(session_id)
+        await kato_client.delete_session(session_id)
 
 
 class TestSessionPersistence:
     """Test STM persistence within sessions across requests"""
     
     @pytest.mark.asyncio
-    async def test_stm_persistence(self, kato_current_client):
+    async def test_stm_persistence(self, kato_client):
         """Test that STM persists across multiple requests in same session"""
-        session = await kato_current_client.create_session()
+        session = await kato_client.create_session()
         session_id = session['session_id']
         
         # Build up STM with multiple observations
         observations = ["first", "second", "third", "fourth", "fifth"]
         
         for i, obs in enumerate(observations):
-            await kato_current_client.observe_in_session(
+            await kato_client.observe_in_session(
                 session_id,
                 {"strings": [obs]}
             )
             
             # Check STM after each observation
-            stm = await kato_current_client.get_session_stm(session_id)
+            stm = await kato_client.get_session_stm(session_id)
             expected = [[observations[j]] for j in range(i + 1)]
             assert stm['stm'] == expected, \
                 f"STM not persisting correctly. Expected {expected}, got {stm['stm']}"
         
         # Clear STM
-        await kato_current_client.clear_session_stm(session_id)
+        await kato_client.clear_session_stm(session_id)
         
         # Verify STM is empty
-        stm = await kato_current_client.get_session_stm(session_id)
+        stm = await kato_client.get_session_stm(session_id)
         assert stm['stm'] == []
         
         # Add new observations after clear
-        await kato_current_client.observe_in_session(
+        await kato_client.observe_in_session(
             session_id,
             {"strings": ["new_start"]}
         )
         
-        stm = await kato_current_client.get_session_stm(session_id)
+        stm = await kato_client.get_session_stm(session_id)
         assert stm['stm'] == [["new_start"]]
         
         # Cleanup
-        await kato_current_client.delete_session(session_id)
+        await kato_client.delete_session(session_id)
     
     @pytest.mark.asyncio
-    async def test_session_learn_and_predict(self, kato_current_client):
+    async def test_session_learn_and_predict(self, kato_client):
         """Test learning and prediction within session context"""
-        session = await kato_current_client.create_session()
+        session = await kato_client.create_session()
         session_id = session['session_id']
         
         # Build a pattern
         pattern_sequence = ["A", "B", "C", "D"]
         for item in pattern_sequence:
-            await kato_current_client.observe_in_session(
+            await kato_client.observe_in_session(
                 session_id,
                 {"strings": [item]}
             )
         
         # Learn the pattern
-        learn_result = await kato_current_client.learn_in_session(session_id)
+        learn_result = await kato_client.learn_in_session(session_id)
         assert 'pattern_name' in learn_result
         
         # Clear STM and observe partial sequence
-        await kato_current_client.clear_session_stm(session_id)
-        await kato_current_client.observe_in_session(
+        await kato_client.clear_session_stm(session_id)
+        await kato_client.observe_in_session(
             session_id,
             {"strings": ["A", "B"]}
         )
         
         # Get predictions - should predict C, D
-        predictions = await kato_current_client.get_session_predictions(session_id)
+        predictions = await kato_client.get_session_predictions(session_id)
         
         if predictions['predictions']:
             # Check that future contains C and D
@@ -359,7 +359,7 @@ class TestSessionPersistence:
                 "Prediction should include future elements C or D"
         
         # Cleanup
-        await kato_current_client.delete_session(session_id)
+        await kato_client.delete_session(session_id)
 
 
 class TestSessionLoadAndPerformance:
@@ -367,7 +367,7 @@ class TestSessionLoadAndPerformance:
     
     @pytest.mark.asyncio
     @pytest.mark.performance
-    async def test_many_concurrent_sessions(self, kato_current_client):
+    async def test_many_concurrent_sessions(self, kato_client):
         """Test system with 100+ concurrent sessions"""
         num_sessions = 100
         sessions = []
@@ -375,7 +375,7 @@ class TestSessionLoadAndPerformance:
         # Create sessions
         start_time = time.time()
         for i in range(num_sessions):
-            session = await kato_current_client.create_session(
+            session = await kato_client.create_session(
                 user_id=f"load_test_user_{i}"
             )
             sessions.append(session)
@@ -390,11 +390,11 @@ class TestSessionLoadAndPerformance:
         async def process_session_load(session_id: str, session_num: int):
             """Simulate user activity in session"""
             for j in range(10):
-                await kato_current_client.observe_in_session(
+                await kato_client.observe_in_session(
                     session_id,
                     {"strings": [f"U{session_num}_obs_{j}"]}
                 )
-            return await kato_current_client.get_session_stm(session_id)
+            return await kato_client.get_session_stm(session_id)
         
         # Run all sessions concurrently
         start_time = time.time()
@@ -420,16 +420,16 @@ class TestSessionLoadAndPerformance:
         
         # Cleanup
         cleanup_tasks = [
-            kato_current_client.delete_session(s['session_id'])
+            kato_client.delete_session(s['session_id'])
             for s in sessions
         ]
         await asyncio.gather(*cleanup_tasks)
     
     @pytest.mark.asyncio
     @pytest.mark.performance
-    async def test_session_memory_limits(self, kato_current_client):
+    async def test_session_memory_limits(self, kato_client):
         """Test session memory limits and STM size constraints"""
-        session = await kato_current_client.create_session()
+        session = await kato_client.create_session()
         session_id = session['session_id']
         
         # Try to exceed STM size limit (typically 1000 events)
@@ -437,13 +437,13 @@ class TestSessionLoadAndPerformance:
         
         # Add observations up to limit
         for i in range(max_stm_size + 100):
-            await kato_current_client.observe_in_session(
+            await kato_client.observe_in_session(
                 session_id,
                 {"strings": [f"event_{i}"]}
             )
         
         # Get STM - should be trimmed to max size
-        stm = await kato_current_client.get_session_stm(session_id)
+        stm = await kato_client.get_session_stm(session_id)
         
         # Note: current doesn't enforce STM limits strictly, it may go slightly over
         # Allow 10% tolerance for implementation differences
@@ -458,11 +458,11 @@ class TestSessionLoadAndPerformance:
                 "STM should retain most recent events"
         
         # Cleanup
-        await kato_current_client.delete_session(session_id)
+        await kato_client.delete_session(session_id)
     
     @pytest.mark.asyncio
     @pytest.mark.stress
-    async def test_session_stress_test(self, kato_current_client):
+    async def test_session_stress_test(self, kato_client):
         """Stress test with rapid session creation and deletion"""
         iterations = 50
         success_count = 0
@@ -472,16 +472,16 @@ class TestSessionLoadAndPerformance:
             """Rapidly create, use, and delete a session"""
             try:
                 # Create
-                session = await kato_current_client.create_session()
+                session = await kato_client.create_session()
                 
                 # Use
-                await kato_current_client.observe_in_session(
+                await kato_client.observe_in_session(
                     session['session_id'],
                     {"strings": ["stress_test"]}
                 )
                 
                 # Delete
-                await kato_current_client.delete_session(session['session_id'])
+                await kato_client.delete_session(session['session_id'])
                 
                 return True
             except Exception as e:
@@ -506,17 +506,17 @@ class TestBackwardCompatibility:
     """Test backward compatibility with legacy.0 API"""
     
     @pytest.mark.asyncio
-    async def test_default_session_mode(self, kato_current_client):
+    async def test_default_session_mode(self, kato_client):
         """Test that legacy.0 endpoints work with default session"""
         # Use legacy.0 endpoint without session ID
-        result = await kato_current_client.observe_legacy(
+        result = await kato_client.observe_legacy(
             {"strings": ["backward_compatible"]}
         )
         
         assert result['status'] == "okay"
         
         # Get STM using legacy endpoint
-        stm = await kato_current_client.get_stm_legacy()
+        stm = await kato_client.get_stm_legacy()
         
         # Should have the observation
         assert any(
@@ -525,23 +525,23 @@ class TestBackwardCompatibility:
         )
         
         # Clear using legacy endpoint
-        await kato_current_client.clear_stm_legacy()
+        await kato_client.clear_stm_legacy()
         
         # Verify cleared
-        stm = await kato_current_client.get_stm_legacy()
+        stm = await kato_client.get_stm_legacy()
         # Note: legacy mode might persist some state
     
     @pytest.mark.asyncio
-    async def test_header_based_session_routing(self, kato_current_client):
+    async def test_header_based_session_routing(self, kato_client):
         """Test X-Session-ID header routing"""
         # Create session
-        session = await kato_current_client.create_session()
+        session = await kato_client.create_session()
         session_id = session['session_id']
         
         # Use legacy endpoint with session header
         headers = {"X-Session-ID": session_id}
         
-        result = await kato_current_client.observe_legacy(
+        result = await kato_client.observe_legacy(
             {"strings": ["header_routed"]},
             headers=headers
         )
@@ -549,24 +549,24 @@ class TestBackwardCompatibility:
         assert result['status'] == "okay"
         
         # Get STM for specific session
-        stm = await kato_current_client.get_session_stm(session_id)
+        stm = await kato_client.get_session_stm(session_id)
         assert stm['stm'] == [["header_routed"]]
         
         # Cleanup
-        await kato_current_client.delete_session(session_id)
+        await kato_client.delete_session(session_id)
 
 
 class TestSessionErrorHandling:
     """Test error handling for session operations"""
     
     @pytest.mark.asyncio
-    async def test_invalid_session_id(self, kato_current_client):
+    async def test_invalid_session_id(self, kato_client):
         """Test operations with invalid session ID"""
         fake_session_id = "invalid-session-" + str(uuid.uuid4())
         
         # Try to observe in non-existent session
         with pytest.raises(SessionNotFoundError) as exc:
-            await kato_current_client.observe_in_session(
+            await kato_client.observe_in_session(
                 fake_session_id,
                 {"strings": ["test"]}
             )
@@ -575,21 +575,21 @@ class TestSessionErrorHandling:
         assert fake_session_id in str(exc.value)
     
     @pytest.mark.asyncio
-    async def test_session_limit_exceeded(self, kato_current_client):
+    async def test_session_limit_exceeded(self, kato_client):
         """Test behavior when session limits are exceeded"""
         # This would need configuration of max sessions
         # For now, test the error response structure
         pass  # Implement based on actual limits
     
     @pytest.mark.asyncio
-    async def test_concurrent_session_modifications(self, kato_current_client):
+    async def test_concurrent_session_modifications(self, kato_client):
         """Test that concurrent modifications to same session are serialized"""
-        session = await kato_current_client.create_session()
+        session = await kato_client.create_session()
         session_id = session['session_id']
         
         # Send 10 concurrent observations to same session
         async def observe_concurrent(num):
-            return await kato_current_client.observe_in_session(
+            return await kato_client.observe_in_session(
                 session_id,
                 {"strings": [f"concurrent_{num}"]}
             )
@@ -598,7 +598,7 @@ class TestSessionErrorHandling:
         await asyncio.gather(*tasks)
         
         # Get STM - should have all 10 observations in some order
-        stm = await kato_current_client.get_session_stm(session_id)
+        stm = await kato_client.get_session_stm(session_id)
         
         assert len(stm['stm']) == 10, "Should have all 10 observations"
         
@@ -611,7 +611,7 @@ class TestSessionErrorHandling:
             "All concurrent observations should be preserved"
         
         # Cleanup
-        await kato_current_client.delete_session(session_id)
+        await kato_client.delete_session(session_id)
 
 
 # Test Fixtures (would normally be in conftest.py or fixtures file)
@@ -622,7 +622,7 @@ class SessionNotFoundError(Exception):
 
 
 class MockKatoCurrentClient:
-    """Mock client for testing current.0 session endpoints"""
+    """Mock client for testing session endpoints"""
     
     def __init__(self, base_url: str = "http://localhost:8000"):
         self.base_url = base_url
@@ -767,16 +767,6 @@ class MockKatoCurrentClient:
         if "default-session" in self.sessions:
             self.sessions["default-session"]["stm"] = []
 
-
-@pytest_asyncio.fixture
-async def kato_current_client():
-    """Fixture providing KATO current client for testing"""
-    # In real tests, this would connect to actual KATO service
-    # For now, using mock client
-    client = MockKatoCurrentClient()
-    yield client
-    # Cleanup any remaining sessions
-    client.sessions.clear()
 
 
 if __name__ == "__main__":

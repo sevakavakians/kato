@@ -18,14 +18,14 @@ def _get_test_base_url():
     return "http://localhost:8000"
 
 
-class TestCurrentMonitoringEndpoints:
-    """Test current monitoring endpoints"""
+class TestMonitoringEndpoints:
+    """Test monitoring endpoints"""
     
     @property
     def BASE_URL(self):
         return _get_test_base_url()
     
-    def test_current_health_endpoint(self):
+    def test_health_endpoint(self):
         """Test /health endpoint returns comprehensive health information"""
         response = requests.get(f"{self.BASE_URL}/health")
         
@@ -52,7 +52,7 @@ class TestCurrentMonitoringEndpoints:
         # Issues should be a list
         assert isinstance(data["issues"], list)
     
-    def test_current_metrics_endpoint(self):
+    def test_metrics_endpoint(self):
         """Test /metrics endpoint returns comprehensive metrics"""
         response = requests.get(f"{self.BASE_URL}/metrics")
         
@@ -104,7 +104,7 @@ class TestCurrentMonitoringEndpoints:
         rates = data["rates"]
         assert isinstance(rates, dict)
     
-    def test_current_stats_endpoint_default(self):
+    def test_stats_endpoint_default(self):
         """Test /stats endpoint with default parameters"""
         response = requests.get(f"{self.BASE_URL}/stats")
         
@@ -136,7 +136,7 @@ class TestCurrentMonitoringEndpoints:
         for section in summary_sections:
             assert section in summary, f"Missing summary section: {section}"
     
-    def test_current_stats_endpoint_custom_range(self):
+    def test_stats_endpoint_custom_range(self):
         """Test /stats endpoint with custom time range"""
         minutes = 5
         response = requests.get(f"{self.BASE_URL}/stats?minutes={minutes}")
@@ -146,7 +146,7 @@ class TestCurrentMonitoringEndpoints:
         
         assert data["time_range_minutes"] == minutes
     
-    def test_current_specific_metric_endpoint(self):
+    def test_specific_metric_endpoint(self):
         """Test /metrics/{metric_name} endpoint"""
         # First, make a few requests to generate some metrics
         for _ in range(3):
@@ -188,7 +188,7 @@ class TestCurrentMonitoringEndpoints:
             assert "detail" in error_data
             assert "No data available" in error_data["detail"]
     
-    def test_current_specific_metric_invalid(self):
+    def test_specific_metric_invalid(self):
         """Test /metrics/{metric_name} with invalid metric"""
         response = requests.get(f"{self.BASE_URL}/metrics/invalid_metric_name")
         
@@ -199,7 +199,7 @@ class TestCurrentMonitoringEndpoints:
             data = response.json()
             assert "detail" in data
     
-    def test_current_session_placeholder_endpoint(self):
+    def test_session_placeholder_endpoint(self):
         """Test current session creation placeholder"""
         # Sessions endpoint requires a user_id in the request body
         response = requests.post(f"{self.BASE_URL}/sessions", json={"user_id": "test_user_123"})
@@ -298,72 +298,6 @@ class TestCurrentMonitoringEndpoints:
         for status_code in status_codes:
             assert status_code == 200
 
-
-class TestCurrentMonitoringIntegration:
-    """Test integration between current monitoring and existing endpoints"""
-    
-    @property
-    def BASE_URL(self):
-        return _get_test_base_url()
-    
-    def test_current_health_vs_legacy_health(self):
-        """Compare current health endpoint with legacy health endpoint"""
-        legacy_response = requests.get(f"{self.BASE_URL}/health")
-        current_response = requests.get(f"{self.BASE_URL}/health")
-        
-        assert legacy_response.status_code == 200
-        assert current_response.status_code == 200
-        
-        legacy_data = legacy_response.json()
-        current_data = current_response.json()
-        
-        # Both should report same base processor
-        # current uses base_processor_id, legacy uses processor_id
-        if "base_processor_id" in current_data:
-            if "processor_id" in legacy_data:
-                assert legacy_data["processor_id"] == current_data["base_processor_id"]
-        elif "processor_id" in current_data:
-            if "processor_id" in legacy_data:
-                assert legacy_data["processor_id"] == current_data["processor_id"]
-        
-        # current should have comprehensive information
-        current_fields = set(current_data.keys())
-        legacy_fields = set(legacy_data.keys())
-        
-        # Both should have essential fields
-        assert "status" in current_data
-        assert "uptime_seconds" in current_data or "uptime" in current_data
-    
-    def test_current_metrics_vs_legacy_metrics(self):
-        """Compare current metrics endpoint with legacy metrics endpoint"""
-        legacy_response = requests.get(f"{self.BASE_URL}/metrics")
-        current_response = requests.get(f"{self.BASE_URL}/metrics")
-        
-        assert legacy_response.status_code == 200
-        assert current_response.status_code == 200
-        
-        legacy_data = legacy_response.json()
-        current_data = current_response.json()
-        
-        # Both should report processor information (handle different field structures)
-        if "processor" in current_data and "processor_id" in current_data["processor"]:
-            if "processor_id" in legacy_data:
-                assert legacy_data["processor_id"] == current_data["processor"]["processor_id"]
-        elif "processor_manager" in current_data:
-            # Current structure uses processor_manager
-            assert "total_processors" in current_data["processor_manager"]
-        elif "processor_id" in current_data and "processor_id" in legacy_data:
-            assert legacy_data["processor_id"] == current_data["processor_id"]
-        
-        # current should include comprehensive system metrics
-        assert "resources" in current_data
-        assert "databases" in current_data
-        assert "performance" in current_data
-        
-        # Core processor metrics should be consistent if both have them
-        if "processor" in current_data and "observations_processed" in current_data["processor"]:
-            if "observations_processed" in legacy_data:
-                assert legacy_data["observations_processed"] == current_data["processor"]["observations_processed"]
 
 
 if __name__ == "__main__":

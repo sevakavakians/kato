@@ -1,5 +1,5 @@
 """
-Test KATO v2.0 error handling module
+Test KATO error handling module
 Tests structured exceptions and error handlers
 """
 
@@ -28,8 +28,8 @@ from kato.errors.handlers import (
 )
 
 
-class TestKatoV2Exceptions:
-    """Test KATO v2.0 exception classes"""
+class TestKatoExceptions:
+    """Test KATO exception classes"""
     
     def test_base_exception(self):
         """Test base KatoV2Exception functionality"""
@@ -154,8 +154,8 @@ class TestKatoV2Exceptions:
 class TestErrorHandlers:
     """Test error handler functions"""
     
-    async def test_kato_v2_exception_handler(self):
-        """Test KATO v2.0 exception handler"""
+    async def test_kato_exception_handler(self):
+        """Test KATO exception handler"""
         # Mock request
         request = Mock(spec=Request)
         request.url.path = "/test/endpoint"

@@ -9,12 +9,8 @@ here for easier management and documentation.
 import os
 from pathlib import Path
 from typing import Optional, Literal, Dict, Any, List
-from pydantic import Field, validator, root_validator
-try:
-    from pydantic_settings import BaseSettings
-except ImportError:
-    # Fallback for older Pydantic versions
-    from pydantic import BaseSettings
+from pydantic import Field, field_validator, model_validator, ConfigDict
+from pydantic_settings import BaseSettings
 from pydantic.types import SecretStr
 
 
@@ -23,17 +19,16 @@ class ServiceConfig(BaseSettings):
     
     service_name: str = Field(
         'kato',
-        env='SERVICE_NAME',
+        json_schema_extra={'env': 'SERVICE_NAME'},
         description="Service name identifier"
     )
     service_version: str = Field(
         '2.0',
-        env='SERVICE_VERSION',
+        json_schema_extra={'env': 'SERVICE_VERSION'},
         description="Service version"
     )
     
-    class Config:
-        env_prefix = ''
+    model_config = ConfigDict(env_prefix='')
 
 
 class LoggingConfig(BaseSettings):
@@ -41,22 +36,21 @@ class LoggingConfig(BaseSettings):
     
     log_level: Literal['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'] = Field(
         'INFO',
-        env='LOG_LEVEL',
+        json_schema_extra={'env': 'LOG_LEVEL'},
         description="Logging level"
     )
     log_format: Literal['json', 'human'] = Field(
         'human',
-        env='LOG_FORMAT',
+        json_schema_extra={'env': 'LOG_FORMAT'},
         description="Log output format"
     )
     log_output: str = Field(
         'stdout',
-        env='LOG_OUTPUT',
+        json_schema_extra={'env': 'LOG_OUTPUT'},
         description="Log output destination (stdout, stderr, or file path)"
     )
     
-    class Config:
-        env_prefix = ''
+    model_config = ConfigDict(env_prefix='')
 
 
 class DatabaseConfig(BaseSettings):
@@ -129,19 +123,19 @@ class DatabaseConfig(BaseSettings):
     )
     redis_host: Optional[str] = Field(
         None,
-        env='REDIS_HOST',
+        json_schema_extra={'env': 'REDIS_HOST'},
         description="Redis host (deprecated, use REDIS_URL)"
     )
     redis_port: int = Field(
         6379,
-        env='REDIS_PORT',
+        json_schema_extra={'env': 'REDIS_PORT'},
         ge=1,
         le=65535,
         description="Redis port (deprecated, use REDIS_URL)"
     )
     redis_enabled: bool = Field(
         False,
-        env='REDIS_ENABLED',
+        json_schema_extra={'env': 'REDIS_ENABLED'},
         description="Enable Redis caching"
     )
     
@@ -166,8 +160,7 @@ class DatabaseConfig(BaseSettings):
             return f"redis://{self.redis_host}:{self.redis_port}/0"
         return None
     
-    class Config:
-        env_prefix = ''
+    model_config = ConfigDict(env_prefix='')
 
 
 class LearningConfig(BaseSettings):
@@ -175,45 +168,50 @@ class LearningConfig(BaseSettings):
     
     max_pattern_length: int = Field(
         0,
-        env='MAX_PATTERN_LENGTH',
+        json_schema_extra={'env': 'MAX_PATTERN_LENGTH'},
         ge=0,
         description="Maximum pattern length (0 = unlimited)"
     )
     persistence: int = Field(
         5,
-        env='PERSISTENCE',
+        json_schema_extra={'env': 'PERSISTENCE'},
         ge=1,
         le=100,
         description="Rolling window size for emotive values per pattern"
     )
     recall_threshold: float = Field(
         0.1,
-        env='RECALL_THRESHOLD',
+        json_schema_extra={'env': 'RECALL_THRESHOLD'},
         ge=0.0,
         le=1.0,
         description="Minimum similarity threshold for pattern matching"
     )
     auto_learn_enabled: bool = Field(
         False,
-        env='AUTO_LEARN_ENABLED',
+        json_schema_extra={'env': 'AUTO_LEARN_ENABLED'},
         description="Enable automatic pattern learning"
     )
     auto_learn_threshold: int = Field(
         50,
-        env='AUTO_LEARN_THRESHOLD',
+        json_schema_extra={'env': 'AUTO_LEARN_THRESHOLD'},
         ge=1,
         description="Number of observations before auto-learning"
     )
+    stm_mode: Literal['CLEAR', 'ROLLING'] = Field(
+        'CLEAR',
+        json_schema_extra={'env': 'STM_MODE'},
+        description="Short-term memory mode: CLEAR (reset after auto-learn) or ROLLING (sliding window)"
+    )
     
-    @validator('max_pattern_length')
+    @field_validator('max_pattern_length')
+    @classmethod
     def validate_pattern_length(cls, v):
         """Validate pattern length configuration."""
         if v < 0:
             raise ValueError("max_pattern_length must be non-negative")
         return v
     
-    class Config:
-        env_prefix = ''
+    model_config = ConfigDict(env_prefix='')
 
 
 class ProcessingConfig(BaseSettings):
@@ -221,29 +219,28 @@ class ProcessingConfig(BaseSettings):
     
     indexer_type: str = Field(
         'VI',
-        env='INDEXER_TYPE',
+        json_schema_extra={'env': 'INDEXER_TYPE'},
         description="Type of vector indexer to use"
     )
     max_predictions: int = Field(
         100,
-        env='MAX_PREDICTIONS',
+        json_schema_extra={'env': 'MAX_PREDICTIONS'},
         ge=1,
         le=10000,
         description="Maximum number of predictions to return"
     )
     sort_symbols: bool = Field(
         True,
-        env='SORT',
+        json_schema_extra={'env': 'SORT'},
         description="Sort symbols alphabetically within events"
     )
     process_predictions: bool = Field(
         True,
-        env='PROCESS_PREDICTIONS',
+        json_schema_extra={'env': 'PROCESS_PREDICTIONS'},
         description="Enable prediction processing"
     )
     
-    class Config:
-        env_prefix = ''
+    model_config = ConfigDict(env_prefix='')
 
 
 class PerformanceConfig(BaseSettings):
@@ -251,57 +248,56 @@ class PerformanceConfig(BaseSettings):
     
     use_fast_matching: bool = Field(
         True,
-        env='KATO_USE_FAST_MATCHING',
+        json_schema_extra={'env': 'KATO_USE_FAST_MATCHING'},
         description="Use optimized fast matching algorithms"
     )
     use_indexing: bool = Field(
         True,
-        env='KATO_USE_INDEXING',
+        json_schema_extra={'env': 'KATO_USE_INDEXING'},
         description="Use pattern indexing for faster lookups"
     )
     use_optimized: bool = Field(
         True,
-        env='KATO_USE_OPTIMIZED',
+        json_schema_extra={'env': 'KATO_USE_OPTIMIZED'},
         description="Use general optimizations"
     )
     batch_size: int = Field(
         1000,
-        env='KATO_BATCH_SIZE',
+        json_schema_extra={'env': 'KATO_BATCH_SIZE'},
         ge=1,
         le=100000,
         description="Batch size for bulk operations"
     )
     vector_batch_size: int = Field(
         1000,
-        env='KATO_VECTOR_BATCH_SIZE',
+        json_schema_extra={'env': 'KATO_VECTOR_BATCH_SIZE'},
         ge=1,
         le=100000,
         description="Batch size for vector operations"
     )
     vector_search_limit: int = Field(
         100,
-        env='KATO_VECTOR_SEARCH_LIMIT',
+        json_schema_extra={'env': 'KATO_VECTOR_SEARCH_LIMIT'},
         ge=1,
         le=10000,
         description="Maximum vector search results"
     )
     connection_pool_size: int = Field(
         10,
-        env='CONNECTION_POOL_SIZE',
+        json_schema_extra={'env': 'CONNECTION_POOL_SIZE'},
         ge=1,
         le=100,
         description="Database connection pool size"
     )
     request_timeout: float = Field(
         30.0,
-        env='REQUEST_TIMEOUT',
+        json_schema_extra={'env': 'REQUEST_TIMEOUT'},
         ge=1.0,
         le=300.0,
         description="Request timeout in seconds"
     )
     
-    class Config:
-        env_prefix = ''
+    model_config = ConfigDict(env_prefix='')
 
 
 class SessionConfig(BaseSettings):
@@ -309,14 +305,13 @@ class SessionConfig(BaseSettings):
     
     session_ttl: int = Field(
         3600,
-        env='SESSION_TTL',
+        json_schema_extra={'env': 'SESSION_TTL'},
         ge=60,
         le=86400,
         description="Session time-to-live in seconds"
     )
     
-    class Config:
-        env_prefix = ''
+    model_config = ConfigDict(env_prefix='')
 
 
 class APIConfig(BaseSettings):
@@ -324,54 +319,54 @@ class APIConfig(BaseSettings):
     
     host: str = Field(
         '0.0.0.0',
-        env='HOST',
+        json_schema_extra={'env': 'HOST'},
         description="API host address"
     )
     port: int = Field(
         8000,
-        env='PORT',
+        json_schema_extra={'env': 'PORT'},
         ge=1,
         le=65535,
         description="API port number"
     )
     workers: int = Field(
         1,
-        env='WORKERS',
+        json_schema_extra={'env': 'WORKERS'},
         ge=1,
         le=16,
         description="Number of worker processes"
     )
     cors_enabled: bool = Field(
         True,
-        env='CORS_ENABLED',
+        json_schema_extra={'env': 'CORS_ENABLED'},
         description="Enable CORS support"
     )
     cors_origins: List[str] = Field(
         ['*'],
-        env='CORS_ORIGINS',
+        json_schema_extra={'env': 'CORS_ORIGINS'},
         description="Allowed CORS origins"
     )
     docs_enabled: bool = Field(
         True,
-        env='DOCS_ENABLED',
+        json_schema_extra={'env': 'DOCS_ENABLED'},
         description="Enable API documentation endpoints"
     )
     max_request_size: int = Field(
         100 * 1024 * 1024,  # 100MB
-        env='MAX_REQUEST_SIZE',
+        json_schema_extra={'env': 'MAX_REQUEST_SIZE'},
         ge=1024,
         description="Maximum request size in bytes"
     )
     
-    @validator('cors_origins', pre=True)
+    @field_validator('cors_origins', mode='before')
+    @classmethod
     def parse_cors_origins(cls, v):
         """Parse CORS origins from string or list."""
         if isinstance(v, str):
             return v.split(',')
         return v
     
-    class Config:
-        env_prefix = ''
+    model_config = ConfigDict(env_prefix='')
 
 
 class Settings(BaseSettings):
@@ -390,48 +385,51 @@ class Settings(BaseSettings):
     # Environment and deployment
     environment: Literal['development', 'testing', 'production'] = Field(
         'development',
-        env='ENVIRONMENT',
+        json_schema_extra={'env': 'ENVIRONMENT'},
         description="Deployment environment"
     )
     debug: bool = Field(
         False,
-        env='DEBUG',
+        json_schema_extra={'env': 'DEBUG'},
         description="Enable debug mode"
     )
     config_file: Optional[Path] = Field(
         None,
-        env='KATO_CONFIG_FILE',
+        json_schema_extra={'env': 'KATO_CONFIG_FILE'},
         description="Path to configuration file (YAML or JSON)"
     )
     
-    @root_validator(pre=True)
+    @model_validator(mode='before')
+    @classmethod
     def load_from_file(cls, values):
         """Load configuration from file if specified."""
-        config_file = values.get('config_file') or os.getenv('KATO_CONFIG_FILE')
-        
-        if config_file and os.path.exists(config_file):
-            import json
-            import yaml
+        if isinstance(values, dict):
+            config_file = values.get('config_file') or os.getenv('KATO_CONFIG_FILE')
             
-            with open(config_file, 'r') as f:
-                if config_file.endswith('.json'):
-                    file_config = json.load(f)
-                elif config_file.endswith(('.yml', '.yaml')):
-                    file_config = yaml.safe_load(f)
-                else:
-                    raise ValueError(f"Unsupported config file format: {config_file}")
-            
-            # Merge file config with environment variables (env vars take precedence)
-            for key, value in file_config.items():
-                if key not in values or values[key] is None:
-                    values[key] = value
+            if config_file and os.path.exists(config_file):
+                import json
+                import yaml
+                
+                with open(config_file, 'r') as f:
+                    if config_file.endswith('.json'):
+                        file_config = json.load(f)
+                    elif config_file.endswith(('.yml', '.yaml')):
+                        file_config = yaml.safe_load(f)
+                    else:
+                        raise ValueError(f"Unsupported config file format: {config_file}")
+                
+                # Merge file config with environment variables (env vars take precedence)
+                for key, value in file_config.items():
+                    if key not in values or values[key] is None:
+                        values[key] = value
         
         return values
     
-    @validator('debug', always=True)
-    def set_debug_from_environment(cls, v, values):
+    @field_validator('debug')
+    @classmethod
+    def set_debug_from_environment(cls, v, info):
         """Set debug mode based on environment."""
-        if values.get('environment') == 'development':
+        if info.data.get('environment') == 'development':
             return True
         return v
     
@@ -486,11 +484,12 @@ class Settings(BaseSettings):
         
         return warnings
     
-    class Config:
-        env_prefix = ''
-        env_file = '.env'
-        env_file_encoding = 'utf-8'
-        case_sensitive = False
+    model_config = ConfigDict(
+        env_prefix='',
+        env_file='.env',
+        env_file_encoding='utf-8',
+        case_sensitive=False
+    )
 
 
 # Global settings instance

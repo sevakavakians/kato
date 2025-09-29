@@ -65,9 +65,12 @@ services:
     networks:
       - kato-network
     depends_on:
-      - mongodb
-      - qdrant
-      - redis
+      mongodb:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      redis:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5).read()"]

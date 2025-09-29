@@ -65,8 +65,30 @@ class SuperKnowledgeBase:
         
         logger.info(f" Attaching knowledgebase for {self.id} using {settings.database.mongo_url} ...")
         try:
-            ### MongoDB
-            self.connection = MongoClient(settings.database.mongo_url)
+            ### MongoDB with connection retry
+            max_retries = 5
+            retry_delay = 1  # Start with 1 second
+            
+            for attempt in range(max_retries):
+                try:
+                    logger.info(f" Attempting MongoDB connection (attempt {attempt + 1}/{max_retries}) ...")
+                    self.connection = MongoClient(
+                        settings.database.mongo_url, 
+                        serverSelectionTimeoutMS=10000  # 10 second timeout per attempt
+                    )
+                    # Test the connection
+                    self.connection.admin.command('ping')
+                    logger.info(f" MongoDB connection successful on attempt {attempt + 1}")
+                    break
+                except Exception as e:
+                    if attempt == max_retries - 1:
+                        logger.error(f" MongoDB connection failed after {max_retries} attempts: {e}")
+                        raise
+                    else:
+                        logger.warning(f" MongoDB connection attempt {attempt + 1} failed: {e}. Retrying in {retry_delay}s...")
+                        import time
+                        time.sleep(retry_delay)
+                        retry_delay *= 2  # Exponential backoff
             # CRITICAL FIX: Changed from w=0 (fire-and-forget) to w="majority" for data durability
             self.write_concern = {"w": "majority", "j": True}  # v2.0: Ensure write acknowledgment
             self.knowledge = self.connection[self.id]

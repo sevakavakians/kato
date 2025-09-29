@@ -57,6 +57,7 @@ class PatternProcessor:
         self.persistence = kwargs["persistence"]
         self.max_predictions = int(kwargs["max_predictions"])
         self.recall_threshold = float(kwargs["recall_threshold"])
+        self.stm_mode = kwargs.get("stm_mode", "CLEAR")  # Default to CLEAR for backward compatibility
         self.superkb = SuperKnowledgeBase(self.kb_id, self.persistence, settings=self.settings)
         self.patterns_searcher = PatternSearcher(kb_id=self.kb_id,
                                              max_predictions=self.max_predictions,
@@ -251,6 +252,22 @@ class PatternProcessor:
             logger.info(f"DEBUG STM after append: {list(self.STM)}")
         else:
             logger.info(f"DEBUG No symbols to add, STM unchanged: {list(self.STM)}")
+        return
+
+    def maintain_rolling_window(self, max_length: int) -> None:
+        """
+        Maintain STM as a rolling window of fixed size.
+        
+        If STM exceeds max_length, removes the oldest event(s) to maintain the window size.
+        Used in ROLLING mode to keep STM at a fixed size after auto-learning.
+        
+        Args:
+            max_length: Maximum number of events to keep in STM
+        """
+        while len(self.STM) > max_length:
+            removed_event = self.STM.popleft()
+            logger.debug(f"Rolling window: removed oldest event {removed_event}")
+        logger.debug(f"Rolling window: STM maintained at length {len(self.STM)}")
         return
     
     def symbolFrequency(self, symbol: str) -> int:

@@ -226,9 +226,10 @@ class KatoProcessor:
         for gene_name, value in genes.items():
             if hasattr(self.pattern_processor, gene_name):
                 setattr(self.pattern_processor, gene_name, value)
-                # Also update observation processor's copy if it's max_pattern_length
+                # Also update observation processor's copy for specific genes
                 if gene_name == 'max_pattern_length':
                     self.observation_processor.max_pattern_length = value
+                # No need to update stm_mode in observation_processor - it reads from pattern_processor
         return "genes-updated"
     
     # ========================================================================
@@ -244,7 +245,9 @@ class KatoProcessor:
             stm: List of event lists representing the STM state
         """
         # Set the STM in the pattern processor which maintains the proper structure
-        self.pattern_processor.STM = stm.copy() if stm else []
+        from collections import deque
+        # Fix: Convert list to deque to maintain type consistency
+        self.pattern_processor.STM = deque(stm) if stm else deque()
         return
     
     def set_emotives_accumulator(self, emotives_acc):

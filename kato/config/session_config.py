@@ -30,6 +30,7 @@ class SessionConfiguration:
     max_pattern_length: Optional[int] = None  # 0+ (0 = manual learning only)
     persistence: Optional[int] = None  # 1-100 (emotive window size)
     recall_threshold: Optional[float] = None  # 0.0-1.0 (pattern matching threshold)
+    stm_mode: Optional[str] = None  # STM mode after auto-learning ('CLEAR' or 'ROLLING')
     
     # Processing Configuration
     indexer_type: Optional[str] = None  # Vector indexer type (e.g., 'VI')
@@ -82,6 +83,13 @@ class SessionConfiguration:
                 if self.indexer_type not in valid_indexers:
                     logger.error(f"Invalid indexer_type: {self.indexer_type}")
                     return False
+            
+            # Normalize and validate stm_mode
+            if self.stm_mode is not None:
+                valid_modes = ['CLEAR', 'ROLLING']
+                if self.stm_mode not in valid_modes:
+                    logger.warning(f"Invalid stm_mode '{self.stm_mode}', normalizing to 'CLEAR'")
+                    self.stm_mode = 'CLEAR'
             
             return True
             
@@ -176,7 +184,7 @@ class SessionConfiguration:
         """
         # Filter only valid fields
         valid_fields = {
-            'max_pattern_length', 'persistence', 'recall_threshold',
+            'max_pattern_length', 'persistence', 'recall_threshold', 'stm_mode',
             'indexer_type', 'max_predictions', 'sort_symbols', 'process_predictions',
             'session_id', 'user_id', 'version'
         }

@@ -254,15 +254,30 @@ Updates processor configuration parameters.
   "genes": {
     "recall_threshold": 0.5,
     "max_predictions": 50,
-    "persistence": 10
+    "persistence": 10,
+    "max_pattern_length": 4,
+    "stm_mode": "ROLLING"
   }
 }
 ```
+
+**Rolling Window Example:**
+```json
+{
+  "genes": {
+    "max_pattern_length": 3,
+    "stm_mode": "ROLLING"
+  }
+}
+```
+This enables continuous learning where every new observation after reaching 3 events will trigger pattern learning while maintaining a sliding window of the last 2 events.
 
 **Available Genes:**
 - `recall_threshold`: Pattern matching threshold (0.0-1.0)
 - `max_predictions`: Maximum predictions to return
 - `persistence`: Rolling window size for emotive values per pattern
+- `max_pattern_length`: Auto-learn threshold (0 = manual only)
+- `stm_mode`: Short-term memory mode ('CLEAR' or 'ROLLING')
 - And others (see Configuration guide)
 
 ### Get Gene

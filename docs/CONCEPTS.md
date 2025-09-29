@@ -130,9 +130,10 @@ observe({'strings': ['second']})
 - Maintains temporal order of events
 - Has configurable maximum pattern length
 - Auto-learns when limit reached
-- Cleared when learning is triggered:
+- Cleared when learning is triggered based on STM_MODE:
   - Regular learn(): Completely cleared
-  - Auto-learn: Last event preserved as first event of new STM
+  - Auto-learn CLEAR mode: STM completely emptied (original behavior)
+  - Auto-learn ROLLING mode: STM maintained as sliding window (continuous learning)
 
 ### Long-Term Memory
 - Stores learned patterns with deterministic hashes
@@ -292,14 +293,18 @@ Example: If observing `['a', 'c']` from pattern `[['a', 'b'], ['c', 'd'], ['e', 
    - No patterns exist with frequency = 0 (minimum is 1)
 5. **Memory clearing behavior**:
    - **Regular learning (explicit learn() call)**: Short-term memory is COMPLETELY cleared
-   - **Auto-learning (max_pattern_length reached)**: Last event is preserved as first event of new STM
+   - **Auto-learning (max_pattern_length reached)**: Behavior depends on STM_MODE
+     - **CLEAR mode**: STM is completely emptied (matches regular learning)
+     - **ROLLING mode**: STM maintained as sliding window for continuous learning
 
 ### Auto-Learning
 - Triggered ONLY when short-term memory length reaches max_pattern_length
-- Creates pattern from full STM before clearing
-- **Key difference from regular learning**: The last event is preserved in STM after learning
-- Configurable through processor parameters
-- This preserves continuity for streaming data
+- Creates pattern from full STM, then STM behavior depends on STM_MODE
+- **STM_MODE Behavior**:
+  - **CLEAR** (default): STM is completely emptied after auto-learn (original behavior)
+  - **ROLLING**: STM maintained as sliding window (size = max_pattern_length - 1) for continuous learning
+- Configurable through processor parameters (max_pattern_length and stm_mode)
+- ROLLING mode enables overlapping pattern learning for streaming data scenarios
 - If max_pattern_length not set or is very high, auto-learning won't trigger
 
 ## Multi-Modal Processing

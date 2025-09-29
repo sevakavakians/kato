@@ -61,6 +61,7 @@ class SessionResponse(BaseModel):
     user_id: str = Field(..., description="Associated user ID")
     created_at: datetime = Field(..., description="Session creation time")
     expires_at: datetime = Field(..., description="Session expiration time")
+    ttl_seconds: int = Field(..., description="Session TTL in seconds")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Session metadata")
     session_config: Dict[str, Any] = Field(default_factory=dict, description="Session configuration")
 
@@ -291,9 +292,22 @@ async def create_session(request: CreateSessionRequest):
         user_id=session.user_id,
         created_at=session.created_at,
         expires_at=session.expires_at,
+        ttl_seconds=request.ttl_seconds or 3600,  # Use provided TTL or default
         metadata=session.metadata,
         session_config=session.session_config.get_config_only() if hasattr(session, 'session_config') else {}
     )
+
+
+@app.get("/sessions/count")
+async def get_active_session_count():
+    """Get the count of active sessions"""
+    logger.debug("Getting active session count")
+    try:
+        count = await app_state.session_manager.get_active_session_count_async()
+        return {"active_session_count": count}
+    except Exception as e:
+        logger.error(f"Error getting session count: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get session count")
 
 
 @app.get("/sessions/{session_id}", response_model=SessionResponse)
@@ -305,11 +319,15 @@ async def get_session_info(session_id: str):
     if not session:
         raise HTTPException(404, detail=f"Session {session_id} not found or expired")
     
+    # Calculate TTL from expires_at - current time
+    ttl_seconds = int((session.expires_at - datetime.now(timezone.utc)).total_seconds())
+    
     return SessionResponse(
         session_id=session.session_id,
         user_id=session.user_id,
         created_at=session.created_at,
         expires_at=session.expires_at,
+        ttl_seconds=max(0, ttl_seconds),  # Ensure non-negative
         metadata=session.metadata,
         session_config=session.session_config.get_config_only() if hasattr(session, 'session_config') else {}
     )
@@ -425,21 +443,27 @@ async def observe_in_session(
     This is the core endpoint that enables multi-user support.
     Each session maintains its own isolated STM.
     """
-    # Get session
-    session = await app_state.session_manager.get_session(session_id)
-    if not session:
+    # Get session lock first to ensure proper serialization
+    lock = await app_state.session_manager.get_session_lock(session_id)
+    if not lock:
         raise HTTPException(404, detail=f"Session {session_id} not found or expired")
     
-    # Get user's processor (isolated per user) with session configuration
-    logger.info(f"Getting processor for user {session.user_id} with session config: {session.session_config.get_config_only()}")
-    processor = await app_state.processor_manager.get_processor(session.user_id, session.session_config)
-    
-    # Get session lock to ensure sequential processing within session
-    lock = await app_state.session_manager.get_session_lock(session_id)
-    
     async with lock:
+        # Get fresh session state inside the lock to avoid race conditions
+        session = await app_state.session_manager.get_session(session_id)
+        if not session:
+            raise HTTPException(404, detail=f"Session {session_id} not found or expired")
+        
+        # Get user's processor (isolated per user) with session configuration
+        logger.info(f"DEBUG CONCURRENT: Session user_id: {session.user_id}, session_id: {session_id}")
+        logger.info(f"Getting processor for user {session.user_id} with session config: {session.session_config.get_config_only()}")
+        processor = await app_state.processor_manager.get_processor(session.user_id, session.session_config)
+        logger.info(f"DEBUG CONCURRENT: Got processor with ID: {processor.id}")
+        
         # Set processor state to session's state
+        logger.info(f"DEBUG: Setting processor STM to session STM: {session.stm}")
         processor.set_stm(session.stm)
+        logger.info(f"DEBUG: Processor STM after setting: {processor.get_stm()}")
         processor.set_emotives_accumulator(session.emotives_accumulator)
         processor.time = session.time
         
@@ -455,15 +479,18 @@ async def observe_in_session(
         result = processor.observe(observation)
         
         # Update session state with results
-        session.stm = processor.get_stm()
+        final_stm = processor.get_stm()
+        logger.info(f"DEBUG: Final processor STM after observation: {final_stm}")
+        session.stm = final_stm
         session.emotives_accumulator = processor.get_emotives_accumulator()
         session.time = processor.time
         
         # Save updated session
+        logger.info(f"DEBUG: Saving session with STM: {session.stm}")
         await app_state.session_manager.update_session(session)
     
     return ObservationResult(
-        status="ok",
+        status="okay",
         session_id=session_id,
         processor_id=session.user_id,  # For v1 compatibility
         stm_length=len(session.stm),
@@ -610,7 +637,7 @@ async def health_check():
                 "issues": health_status.get("issues", []),
                 "metrics_collected": len(app_state.metrics_collector.metrics),
                 "last_collection": app_state.startup_time,
-                "active_sessions": app_state.session_manager.get_active_session_count(),
+                "active_sessions": await app_state.session_manager.get_active_session_count_async(),
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
         else:
@@ -623,7 +650,7 @@ async def health_check():
                 "issues": [],
                 "metrics_collected": 0,
                 "last_collection": app_state.startup_time,
-                "active_sessions": app_state.session_manager.get_active_session_count(),
+                "active_sessions": await app_state.session_manager.get_active_session_count_async(),
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
     except Exception as e:
@@ -656,7 +683,7 @@ async def get_comprehensive_metrics():
                 "timestamp": time.time(),
                 "processor_manager": app_state.processor_manager.get_stats() if app_state.processor_manager else {},
                 "uptime_seconds": time.time() - app_state.startup_time,
-                "active_sessions": app_state.session_manager.get_active_session_count()
+                "active_sessions": await app_state.session_manager.get_active_session_count_async()
             }
         
         # Get comprehensive metrics from collector
@@ -679,11 +706,11 @@ async def get_comprehensive_metrics():
                 "rates": {},
                 "processor_manager": app_state.processor_manager.get_stats() if app_state.processor_manager else {},
                 "uptime_seconds": time.time() - app_state.startup_time,
-                "active_sessions": app_state.session_manager.get_active_session_count() or 0
+                "active_sessions": await app_state.session_manager.get_active_session_count_async() or 0
             }
         
         # Enhance with processor-specific and session data
-        session_count = app_state.session_manager.get_active_session_count() or 0
+        session_count = await app_state.session_manager.get_active_session_count_async() or 0
         
         # Merge processor manager data into summary
         summary_metrics["processor_manager"] = app_state.processor_manager.get_stats() if app_state.processor_manager else {}
@@ -701,7 +728,7 @@ async def get_comprehensive_metrics():
             "timestamp": time.time(),
             "processor_manager": app_state.processor_manager.get_stats() if app_state.processor_manager else {},
             "uptime_seconds": time.time() - app_state.startup_time,
-            "active_sessions": app_state.session_manager.get_active_session_count()
+            "active_sessions": await app_state.session_manager.get_active_session_count_async()
         }
 
 
@@ -1054,7 +1081,9 @@ async def get_gene_primary(request: Request, gene_name: str):
 @app.post("/genes/update")
 async def update_genes_primary(request: Request, genes: dict):
     """Update genes for the current user's configuration."""
+    logger.info(f"!!! DEBUG: update_genes_primary called with genes: {genes}")
     user_id = get_user_id_from_request(request)
+    logger.info(f"!!! DEBUG: user_id: {user_id}")
     session = await app_state.session_manager.get_or_create_session(
         user_id=user_id,
         metadata={"type": "auto_created", "endpoint": request.url.path}
@@ -1066,10 +1095,13 @@ async def update_genes_primary(request: Request, genes: dict):
     
     # Update user configuration
     if session.session_config.update(gene_updates):
+        logger.info(f"!!! DEBUG: Session config updated successfully, calling processor_manager.update_processor_config")
         # Apply configuration to processor
         success = await app_state.processor_manager.update_processor_config(
             user_id, session.session_config
         )
+        
+        logger.info(f"!!! DEBUG: processor_manager.update_processor_config returned: {success}")
         
         if success:
             # Save updated session
@@ -1203,11 +1235,14 @@ async def observe_sequence_primary(request: Request, batch_request: dict):
             }
             results.append(formatted_result)
             
-            # Add to session STM - use the combined symbols (includes vector names)
-            # The processor.observe returns symbols that include both strings and vector names
-            combined_symbols = result.get('symbols', sorted_strings)
-            if combined_symbols:
-                session.stm.append(combined_symbols)
+            # Collect auto-learned patterns
+            auto_learned = result.get('auto_learned_pattern')
+            if auto_learned:
+                patterns_learned.append(auto_learned)
+            
+            # Sync session STM with processor STM after observation
+            # The processor.observe() might have triggered auto-learning and modified STM
+            session.stm = processor.get_stm()
             
             # Learn after each observation if requested
             if learn_after_each:

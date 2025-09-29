@@ -324,6 +324,10 @@ class SessionManager:
             if session.expires_at > now
         )
     
+    async def get_active_session_count_async(self) -> int:
+        """Async version of get_active_session_count for compatibility with Redis manager"""
+        return self.get_active_session_count()
+    
     def get_session_stats(self) -> Dict[str, Any]:
         """Get statistics about current sessions"""
         now = datetime.now(timezone.utc)

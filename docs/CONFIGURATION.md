@@ -122,7 +122,21 @@ KATO uses environment variables for configuration. These can be set in:
 - **Range**: `0` to unlimited
 - **Description**: Auto-learn after N observations (0 = manual learning only)
 - **Example**: `0` (manual), `10` (auto-learn after 10), `50`
-- **Notes**: When reached, triggers automatic pattern learning and complete STM clearing
+- **Notes**: When reached, triggers automatic pattern learning. STM behavior depends on STM_MODE
+
+### STM_MODE
+- **Type**: String (Literal)
+- **Default**: `CLEAR`
+- **Options**: `CLEAR`, `ROLLING`
+- **Description**: Short-term memory mode after auto-learning
+- **Example**: `CLEAR`, `ROLLING`
+- **Notes**: 
+  - `CLEAR`: Traditional behavior - STM completely cleared after auto-learn
+  - `ROLLING`: STM maintained as sliding window for continuous learning
+
+**STM_MODE Behavior Details:**
+- **CLEAR Mode**: When MAX_PATTERN_LENGTH is reached, the pattern is learned and STM is emptied
+- **ROLLING Mode**: When MAX_PATTERN_LENGTH is reached, the pattern is learned but STM is maintained as a sliding window of size (MAX_PATTERN_LENGTH - 1), enabling continuous learning of overlapping patterns
 
 ### PERSISTENCE
 - **Type**: Integer

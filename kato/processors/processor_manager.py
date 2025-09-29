@@ -219,6 +219,18 @@ class ProcessorManager:
                 processor.pattern_processor.persistence = session_config.persistence
                 logger.debug(f"Updated persistence to {session_config.persistence}")
         
+        logger.info(f"!!! DEBUG: Checking stm_mode update: session_config.stm_mode = {getattr(session_config, 'stm_mode', 'NOT_SET')}")
+        if session_config.stm_mode is not None:
+            logger.info(f"!!! DEBUG: stm_mode is not None, checking if processor has pattern_processor")
+            if hasattr(processor, 'pattern_processor'):
+                logger.info(f"!!! DEBUG: Processor has pattern_processor, setting stm_mode to {session_config.stm_mode}")
+                processor.pattern_processor.stm_mode = session_config.stm_mode
+                logger.info(f"!!! DEBUG: Updated pattern_processor.stm_mode to {session_config.stm_mode} for processor {processor.id}")
+            else:
+                logger.info(f"!!! DEBUG: Processor does NOT have pattern_processor attribute!")
+        else:
+            logger.info(f"!!! DEBUG: session_config.stm_mode is None, skipping stm_mode update")
+        
         # Update other configurable parameters
         if session_config.max_predictions is not None:
             if hasattr(processor, 'pattern_processor'):
@@ -263,14 +275,24 @@ class ProcessorManager:
         """
         processor_id = self._get_processor_id(user_id)
         
+        logger.info(f"!!! DEBUG: update_processor_config called for user {user_id}, processor_id {processor_id}")
+        logger.info(f"!!! DEBUG: session_config.stm_mode = {getattr(session_config, 'stm_mode', 'NOT_SET')}")
+        
         if processor_id not in self.processors:
             # Processor doesn't exist, will be created with new config on next access
+            logger.info(f"!!! DEBUG: Processor {processor_id} doesn't exist yet, will be created with new config")
             return True
         
         processor_info = self.processors[processor_id]
         processor = processor_info['processor']
         
         try:
+            # Debug session config
+            if session_config:
+                logger.info(f"!!! DEBUG session_config.stm_mode: {getattr(session_config, 'stm_mode', 'NOT_SET')}")
+            else:
+                logger.info(f"!!! DEBUG session_config is None")
+            
             # Resolve configuration using ConfigurationService
             resolved_config = self.config_service.resolve_configuration(
                 session_config=session_config,
@@ -280,6 +302,8 @@ class ProcessorManager:
             
             # Get the configuration values
             new_config = resolved_config.to_genome_manifest()
+            logger.info(f"!!! DEBUG new_config keys: {list(new_config.keys())}")
+            logger.info(f"!!! DEBUG new_config stm_mode: {new_config.get('stm_mode', 'NOT_FOUND')}")
             
             # Update processor attributes directly
             # These are the safe runtime-updateable parameters
@@ -302,6 +326,11 @@ class ProcessorManager:
             
             if 'process_predictions' in new_config:
                 processor.process_predictions = new_config['process_predictions']
+            
+            if 'stm_mode' in new_config:
+                if hasattr(processor, 'pattern_processor'):
+                    processor.pattern_processor.stm_mode = new_config['stm_mode']
+                    logger.debug(f"Updated STM mode to {new_config['stm_mode']} for processor {processor_id}")
             
             logger.info(f"Updated processor {processor_id} configuration for user {user_id}")
             return True

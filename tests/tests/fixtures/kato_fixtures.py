@@ -239,8 +239,10 @@ class KATOFastAPIFixture:
             return  # Session already created
         
         # Create a session with test-specific configuration
+        # IMPORTANT: Direct endpoints use x-test-id header which gets converted to "test_{processor_id}"
+        # by get_user_id_from_request(), so we need to use the same format for session user_id
         session_data = {
-            'user_id': self.processor_id,  # Use processor_id as user_id for isolation
+            'user_id': f'test_{self.processor_id}',  # Match the format used by direct endpoints
             'config': self.session_config  # Session-specific configuration
         }
         
@@ -249,6 +251,7 @@ class KATOFastAPIFixture:
         result = response.json()
         self.session_id = result['session_id']
         self.session_created = True
+    
                 
     def teardown(self):
         """Clean up KATO service after testing."""
@@ -268,15 +271,13 @@ class KATOFastAPIFixture:
                 print(f"Error removing container: {e}")
                 
     def observe(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Send an observation to KATO."""
+        """Send an observation to KATO using direct endpoint for consistency."""
         if not self.services_available:
             pytest.skip("KATO services not available")
         
-        # Ensure session exists
-        self._ensure_session()
-        
-        # Use session-based endpoint
-        response = requests.post(f"{self.base_url}/sessions/{self.session_id}/observe", json=data)
+        # Use direct endpoint with x-test-id header (same as observe_sequence and update_genes)
+        headers = {'x-test-id': self.processor_id}
+        response = requests.post(f"{self.base_url}/observe", json=data, headers=headers)
         
         response.raise_for_status()
         result = response.json()
@@ -296,15 +297,13 @@ class KATOFastAPIFixture:
         }
     
     def get_stm(self) -> List[List[str]]:
-        """Get the current short-term memory."""
+        """Get the current short-term memory using direct endpoint for consistency."""
         if not self.services_available:
             pytest.skip("KATO services not available")
         
-        # Ensure session exists
-        self._ensure_session()
-        
-        # Use session-based endpoint
-        response = requests.get(f"{self.base_url}/sessions/{self.session_id}/stm")
+        # Use direct endpoint with x-test-id header (same as observe_sequence and update_genes)
+        headers = {'x-test-id': self.processor_id}
+        response = requests.get(f"{self.base_url}/stm", headers=headers)
         
         response.raise_for_status()
         result = response.json()
@@ -315,19 +314,17 @@ class KATOFastAPIFixture:
         return self.get_stm()
     
     def get_predictions(self, unique_id: Optional[str] = None) -> List[Dict]:
-        """Get predictions."""
+        """Get predictions using direct endpoint for consistency."""
         if not self.services_available:
             pytest.skip("KATO services not available")
         
-        # Ensure session exists
-        self._ensure_session()
-        
+        # Use direct endpoint with x-test-id header (same as other methods)
+        headers = {'x-test-id': self.processor_id}
         params = {}
         if unique_id:
             params['unique_id'] = unique_id
         
-        # Use session-based endpoint
-        response = requests.get(f"{self.base_url}/sessions/{self.session_id}/predictions", params=params)
+        response = requests.get(f"{self.base_url}/predictions", params=params, headers=headers)
         
         response.raise_for_status()
         result = response.json()
@@ -371,15 +368,13 @@ class KATOFastAPIFixture:
         return result.get('pattern_name', '')
     
     def clear_stm(self) -> str:
-        """Clear short-term memory."""
+        """Clear short-term memory using direct endpoint for consistency."""
         if not self.services_available:
             pytest.skip("KATO services not available")
         
-        # Ensure session exists
-        self._ensure_session()
-        
-        # Use session-based endpoint
-        response = requests.post(f"{self.base_url}/sessions/{self.session_id}/clear-stm", json={})
+        # Use direct endpoint with x-test-id header (same as other methods)
+        headers = {'x-test-id': self.processor_id}
+        response = requests.post(f"{self.base_url}/clear-stm", json={}, headers=headers)
         
         response.raise_for_status()
         result = response.json()
@@ -433,45 +428,32 @@ class KATOFastAPIFixture:
         return 'all-cleared'
     
     def update_genes(self, genes: Dict[str, Any]) -> str:
-        """Update gene values through session configuration.
+        """Update gene values using direct endpoint for compatibility with observe_sequence.
         
-        With session-based configuration, genes are updated per session.
+        Since observe_sequence uses direct endpoints with x-test-id headers,
+        we need to use the direct genes endpoint too for consistency.
         """
         if not self.services_available:
             pytest.skip("KATO services not available")
         
-        # Ensure session exists
-        self._ensure_session()
-        
-        # Map gene names to config parameters
-        config_update = {}
-        if 'max_pattern_length' in genes:
-            config_update['max_pattern_length'] = genes['max_pattern_length']
-        if 'recall_threshold' in genes:
-            config_update['recall_threshold'] = genes['recall_threshold']
-        if 'persistence' in genes:
-            config_update['persistence'] = genes['persistence']
-        if 'max_predictions' in genes:
-            config_update['max_predictions'] = genes['max_predictions']
-        if 'sort' in genes:
-            config_update['sort_symbols'] = genes['sort']
-        
-        # Update session config
-        self.session_config.update(config_update)
-        
-        # Update session configuration
+        # Use direct endpoint with x-test-id header (same as observe_sequence)
+        headers = {'x-test-id': self.processor_id}
         response = requests.post(
-            f"{self.base_url}/sessions/{self.session_id}/config",
-            json={"config": config_update},
+            f"{self.base_url}/genes/update",
+            json=genes,
+            headers=headers,
             timeout=5
         )
+        
         if response.status_code == 200:
             result = response.json()
-            return result.get('message', 'genes-updated')
+            # Update local session config for get_genes compatibility
+            self.session_config.update(genes)
+            return {'status': 'okay', 'message': result.get('message', 'genes-updated')}
         
         # Log the error but don't fail - some tests may expect this
         print(f"Warning: Failed to update genes: {response.status_code} - {response.text if hasattr(response, 'text') else ''}")
-        return 'genes-update-failed'
+        return {'status': 'error', 'message': 'genes-update-failed'}
     
     def reset_genes_to_defaults(self) -> str:
         """Reset genes to default values."""
@@ -499,6 +481,56 @@ class KATOFastAPIFixture:
         """Check if the service supports dynamic recall threshold changes."""
         # V2 now supports dynamic threshold changes
         return True
+    
+    def get_genes(self) -> Dict[str, Any]:
+        """Get current gene/configuration values.
+        
+        Returns the current session configuration.
+        """
+        if not self.services_available:
+            pytest.skip("KATO services not available")
+        
+        # Ensure session exists
+        self._ensure_session()
+        
+        # For session-based configuration, return current session config
+        # with defaults for missing values
+        genes = {
+            'max_pattern_length': self.session_config.get('max_pattern_length', 0),
+            'stm_mode': self.session_config.get('stm_mode', 'CLEAR'),
+            'recall_threshold': self.session_config.get('recall_threshold', 0.1),
+            'persistence': self.session_config.get('persistence', 5),
+            'max_predictions': self.session_config.get('max_predictions', 100),
+            'sort': self.session_config.get('sort_symbols', True),
+        }
+        
+        return genes
+    
+    def observe_sequence(self, observations: List[Dict[str, Any]], 
+                        isolation: str = 'shared') -> Dict[str, Any]:
+        """Observe a sequence of observations in bulk.
+        
+        Args:
+            observations: List of observation dictionaries
+            isolation: Isolation mode ('shared' or 'isolated')
+            
+        Returns:
+            Dictionary with results of the bulk observation
+        """
+        if not self.services_available:
+            pytest.skip("KATO services not available")
+        
+        # Use the bulk observation endpoint
+        headers = {'x-test-id': self.processor_id}
+        data = {
+            'observations': observations,
+            'isolation': isolation
+        }
+        
+        response = requests.post(f"{self.base_url}/observe-sequence", 
+                               json=data, headers=headers, timeout=10)
+        response.raise_for_status()
+        return response.json()
     
     def get_status(self) -> Dict[str, Any]:
         """Get processor status."""

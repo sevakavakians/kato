@@ -432,8 +432,37 @@ class RedisSessionManager(session_manager_module.SessionManager):
         Note: This is an approximation in Redis-backed mode.
         For exact count, use get_all_sessions().
         """
-        # In Redis mode, we can't easily count without scanning
-        # Return cached count or estimate
+        # In Redis mode, count all session keys
+        if self.redis_client:
+            try:
+                # Count all keys matching the session pattern (sync version)
+                keys = self.redis_client.keys(f"{self.key_prefix}*")
+                return len(keys)
+            except Exception:
+                # Fallback to local locks count
+                return len(self.session_locks)
+        return len(self.session_locks)  # Approximate based on local locks
+    
+    async def get_active_session_count_async(self) -> int:
+        """
+        Async version - Get count of active sessions.
+        
+        Note: This is an approximation in Redis-backed mode.
+        For exact count, use get_all_sessions().
+        """
+        # Ensure we're connected
+        await self.initialize()
+        
+        # In Redis mode, count all session keys
+        if self.redis_client:
+            try:
+                # Count all keys matching the session pattern (async version)
+                keys = await self.redis_client.keys(f"{self.key_prefix}*")
+                return len(keys)
+            except Exception as e:
+                logger.warning(f"Failed to count Redis keys, using fallback: {e}")
+                # Fallback to local locks count
+                return len(self.session_locks)
         return len(self.session_locks)  # Approximate based on local locks
     
     async def get_session_lock(self, session_id: str) -> Optional[asyncio.Lock]:

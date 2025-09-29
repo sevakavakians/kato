@@ -1,6 +1,16 @@
 # KATO Changelog
 
-## [Unreleased] - 2025-09-06
+## [Unreleased] - 2025-09-28
+
+### Added
+- **Rolling Window Auto-Learning**: New STM_MODE configuration for continuous learning
+  - `STM_MODE='ROLLING'`: Maintains STM as sliding window for overlapping pattern learning
+  - `STM_MODE='CLEAR'`: Original behavior (default) - STM emptied after auto-learn
+  - Enables continuous learning scenarios for streaming data
+  - Full API support via `/genes/update` endpoint
+  - Comprehensive unit and integration test coverage
+
+## [3.0.1] - 2025-09-06
 
 ### Maintenance
 - **Branch Cleanup**: Removed obsolete remote branches

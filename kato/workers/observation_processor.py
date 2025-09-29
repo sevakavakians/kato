@@ -210,6 +210,10 @@ class ObservationProcessor:
         """
         Check if auto-learning should be triggered and perform it if needed.
         
+        Supports two modes:
+        - CLEAR mode: Learn pattern and completely clear STM (original behavior)
+        - ROLLING mode: Learn pattern and maintain STM as a rolling window
+        
         Returns:
             Pattern name if auto-learning occurred, None otherwise
         """
@@ -219,26 +223,47 @@ class ObservationProcessor:
             return None
         
         stm_length = self.memory_manager.get_stm_length()
-        logger.debug(f"check_auto_learning: STM length={stm_length}, max={self.max_pattern_length}")
+        stm_mode = getattr(self.pattern_processor, 'stm_mode', 'CLEAR')
+        # Normalize invalid modes to CLEAR
+        if stm_mode not in ['CLEAR', 'ROLLING']:
+            stm_mode = 'CLEAR'
+        logger.info(f"check_auto_learning: STM length={stm_length}, max={self.max_pattern_length}, mode={stm_mode}")
         
         if stm_length >= self.max_pattern_length:
             logger.info(f"Auto-learning triggered: STM length {stm_length} >= "
-                       f"max_pattern_length {self.max_pattern_length}")
+                       f"max_pattern_length {self.max_pattern_length} (mode: {stm_mode})")
             
             if stm_length > 1:
-                # Learn the pattern and clear STM completely
-                # No longer keeping the last event for continuity
-                pattern_name = self.pattern_operations.learn_pattern(keep_tail=False)
-                
-                if pattern_name:
-                    logger.info(f"Auto-learned pattern: {pattern_name}")
-                    return pattern_name
+                if stm_mode == 'ROLLING':
+                    # ROLLING mode: Save the last N-1 events before learning
+                    stm_state = self.memory_manager.get_stm_state()
+                    window_size = self.max_pattern_length - 1
+                    events_to_restore = stm_state[-window_size:] if len(stm_state) > window_size else stm_state[1:]
+                    
+                    # Learn pattern (this clears STM)
+                    pattern_name = self.pattern_operations.learn_pattern(keep_stm_for_rolling=True)
+                    
+                    # Restore the rolling window events
+                    if events_to_restore:
+                        self.pattern_processor.setSTM(events_to_restore)
+                        logger.debug(f"Restored rolling window events: {events_to_restore}")
+                    
+                    if pattern_name:
+                        logger.info(f"Auto-learned pattern in ROLLING mode: {pattern_name}")
+                        return pattern_name
+                else:
+                    # CLEAR mode: Learn pattern and clear STM completely (original behavior)
+                    pattern_name = self.pattern_operations.learn_pattern(keep_tail=False)
+                    
+                    if pattern_name:
+                        logger.info(f"Auto-learned pattern in CLEAR mode: {pattern_name}")
+                        return pattern_name
                     
             elif stm_length == 1:
-                # Only one event, just learn it (no tail needed)
+                # Only one event: learn it regardless of mode
                 pattern_name = self.pattern_operations.learn_pattern(keep_tail=False)
                 if pattern_name:
-                    logger.info(f"Auto-learned pattern: {pattern_name}")
+                    logger.info(f"Auto-learned single-event pattern: {pattern_name}")
                     return pattern_name
         
         return None

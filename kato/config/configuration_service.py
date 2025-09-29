@@ -33,6 +33,7 @@ class ResolvedConfiguration:
     max_pattern_length: int
     persistence: int
     recall_threshold: float
+    stm_mode: str
     
     # Processing Configuration
     indexer_type: str
@@ -57,6 +58,7 @@ class ResolvedConfiguration:
             'max_pattern_length': self.max_pattern_length,
             'persistence': self.persistence,
             'recall_threshold': self.recall_threshold,
+            'stm_mode': self.stm_mode,
             'max_predictions': self.max_predictions,
             'sort': self.sort_symbols,
             'process_predictions': self.process_predictions
@@ -73,6 +75,7 @@ class ResolvedConfiguration:
             'recall_threshold': self.recall_threshold,
             'persistence': self.persistence,
             'max_pattern_length': self.max_pattern_length,
+            'stm_mode': self.stm_mode,
             'max_predictions': self.max_predictions,
             'sort': self.sort_symbols,
             'process_predictions': self.process_predictions
@@ -115,6 +118,7 @@ class ConfigurationService:
             'max_pattern_length': self.settings.learning.max_pattern_length,
             'persistence': self.settings.learning.persistence,
             'recall_threshold': self.settings.learning.recall_threshold,
+            'stm_mode': self.settings.learning.stm_mode,
             'max_predictions': self.settings.processing.max_predictions,
             'sort': self.settings.processing.sort_symbols,
             'process_predictions': self.settings.processing.process_predictions
@@ -163,6 +167,7 @@ class ConfigurationService:
             max_pattern_length=merged['max_pattern_length'],
             persistence=merged['persistence'],
             recall_threshold=merged['recall_threshold'],
+            stm_mode=merged['stm_mode'],
             indexer_type=merged['indexer_type'],
             max_predictions=merged['max_predictions'],
             sort_symbols=merged['sort'],
@@ -222,6 +227,16 @@ class ConfigurationService:
             valid_indexers = ['VI', 'LSH', 'ANNOY', 'FAISS']
             if not isinstance(value, str) or value not in valid_indexers:
                 errors['indexer_type'] = f'Must be one of: {", ".join(valid_indexers)}'
+        
+        # Normalize and validate stm_mode
+        if 'stm_mode' in updates:
+            value = updates['stm_mode']
+            valid_modes = ['CLEAR', 'ROLLING']
+            if not isinstance(value, str):
+                errors['stm_mode'] = f'Must be a string'
+            elif value not in valid_modes:
+                logger.warning(f"Invalid stm_mode '{value}', normalizing to 'CLEAR'")
+                updates['stm_mode'] = 'CLEAR'
         
         # Validate boolean fields
         for bool_field in ['sort', 'process_predictions']:

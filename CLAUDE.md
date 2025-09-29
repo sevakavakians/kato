@@ -165,8 +165,15 @@ Client Request → FastAPI Service (Port 8000) → Embedded KATO Processor
    - Valid: `[['A'], ['B']]` (2 strings across 2 events)
    - Valid: `[['A']] + vectors` (1 user string + vector strings like 'VCTR|<hash>')
    - Invalid: `[['A']]` (only 1 string without vectors - no predictions generated)
-2. **Alphanumeric Sorting**: Strings within events are sorted alphanumerically for consistency
-3. **Temporal Segmentation**: Predictions structured as past/present/future
+
+2. **Auto-Learning Modes**: Two STM modes control behavior after reaching MAX_PATTERN_LENGTH
+   - **CLEAR Mode** (default): Traditional behavior - STM is completely emptied after auto-learn
+   - **ROLLING Mode**: STM maintained as sliding window (size = MAX_PATTERN_LENGTH - 1)
+     - Enables continuous learning of overlapping patterns
+     - Every new observation triggers learning and oldest event removal
+     - Example: With MAX_PATTERN_LENGTH=3, sequence A→B→C→D→E learns patterns ABC, BCD, CDE
+3. **Alphanumeric Sorting**: Strings within events are sorted alphanumerically for consistency
+4. **Temporal Segmentation**: Predictions structured as past/present/future
    - **Past**: Events before the first matching event
    - **Present**: ALL events containing matching symbols from the observed state (from first to last match)
      - Includes ALL symbols within those events, even if they weren't observed
@@ -184,16 +191,16 @@ Client Request → FastAPI Service (Port 8000) → Embedded KATO Processor
      - Present: `[['a', 'b'], ['c', 'd']]` (full events, including unobserved 'b' and 'd')
      - Future: `[['e', 'f']]`
      - Missing: `['b', 'd']` (symbols in present events but not observed)
-4. **Empty Event Handling**: Empty events are NOT supported per spec
+5. **Empty Event Handling**: Empty events are NOT supported per spec
    - Empty events should be filtered BEFORE observation
    - STM only processes non-empty event sequences
-5. **Multi-Modal Processing**: Handles strings, vectors (768-dim), and emotional context
+6. **Multi-Modal Processing**: Handles strings, vectors (768-dim), and emotional context
    - Vectors always produce name strings (e.g., 'VCTR|<hash>') for STM
-6. **Deterministic**: Same inputs always produce same outputs
-7. **Variable Pattern Lengths**: Supports patterns of arbitrary length (2+ strings total)
+7. **Deterministic**: Same inputs always produce same outputs
+8. **Variable Pattern Lengths**: Supports patterns of arbitrary length (2+ strings total)
    - Events can have varying numbers of symbols
    - Each prediction has unique missing/matches/extras fields based on partial matching
-8. **Recall Threshold Behavior**:
+9. **Recall Threshold Behavior**:
    - Range: 0.0 to 1.0
    - Default: 0.1 (permissive matching)
    - **PURPOSE**: Rough filter for pattern matching, NOT exact decimal precision
@@ -212,12 +219,12 @@ Client Request → FastAPI Service (Port 8000) → Embedded KATO Processor
      - threshold=0.5: Patterns with ~50% or more matches returned
      - threshold=0.9: Only near-perfect matches returned
    - Note: All patterns in KB have frequency ≥ 1 (learned at least once)
-9. **Error Handling Philosophy**:
+10. **Error Handling Philosophy**:
    - **DO NOT mask errors with safe defaults** - errors must be visible for debugging
    - Better to fail explicitly than hide issues with graceful degradation
    - This helps identify and fix root causes rather than papering over problems
    - All calculation errors should raise exceptions with detailed context
-10. **Edge Cases and Boundaries**:
+11. **Edge Cases and Boundaries**:
    - **Fragmentation**: Can be -1, causing division by zero in potential calculations
    - **Pattern Frequencies**: All patterns have frequency ≥ 1 (no zero-frequency patterns exist)
    - **Empty State**: Hamiltonian calculations require non-empty state
@@ -256,7 +263,10 @@ The codebase has comprehensive test coverage with 287 test functions across mult
 
 #### Learning Configuration
 - `MAX_PATTERN_LENGTH`: Auto-learn after N observations (0 = manual only, default: 0)
-  - When auto-learn triggers, STM is completely cleared (no retention of last event)
+  - When auto-learn triggers, behavior depends on STM_MODE
+- `STM_MODE`: Short-term memory mode after auto-learn (default: 'CLEAR')
+  - 'CLEAR': STM is completely cleared after auto-learn (original behavior)
+  - 'ROLLING': STM is maintained as sliding window for continuous learning
 - `PERSISTENCE`: Rolling window size for emotive values per pattern (default: 5)
   - Controls how many historical emotive entries are kept when patterns are re-learned
 - `RECALL_THRESHOLD`: Pattern matching threshold (0.0-1.0, default: 0.1)
@@ -547,3 +557,4 @@ Without proper isolation:
 2. ❌ Using test-analyst for local tests → ✅ Use `./run_tests.sh`
 3. ❌ Forgetting to start services before tests → ✅ Run `./start.sh` first
 4. ❌ Sharing processor_ids between tests → ✅ Each test gets unique processor_id
+- **ALWAYS** rebuild KATO docker image using no-cache options after **EVERY** code update and **BEFORE** testing.

@@ -47,7 +47,7 @@ class PatternOperations:
         
         logger.debug("PatternOperations initialized")
     
-    def learn_pattern(self, keep_tail=False) -> str:
+    def learn_pattern(self, keep_tail=False, keep_stm_for_rolling=False) -> str:
         """
         Learn a new pattern from current STM.
         
@@ -56,6 +56,7 @@ class PatternOperations:
         
         Args:
             keep_tail: If True, keeps the last event in STM after learning (for auto-learning)
+            keep_stm_for_rolling: If True, preserves STM for rolling window mode (new feature)
         
         Returns:
             Pattern name in format "PTRN|<hash>" if pattern was created,
@@ -65,9 +66,11 @@ class PatternOperations:
             LearningError: If pattern learning fails
         """
         try:
-            # Save tail if needed BEFORE learning (which clears STM)
+            # Save tail event if needed BEFORE learning (which normally clears STM)
             tail_event = None
-            if keep_tail:
+            
+            if keep_tail and not keep_stm_for_rolling:
+                # For tail mode: only save the last event
                 stm_state = self.memory_manager.get_stm_state()
                 if len(stm_state) > 1:
                     tail_event = stm_state[-1]
@@ -78,8 +81,13 @@ class PatternOperations:
             # Learn pattern from STM (this clears STM)
             pattern_name = self.pattern_processor.learn()
             
-            # Restore tail if needed
-            if tail_event:
+            # Handle STM restoration based on mode
+            if keep_stm_for_rolling:
+                # Rolling mode: DON'T restore full STM - that's handled by maintain_rolling_window
+                # The STM has already been cleared by learn(), which is correct for rolling mode
+                logger.debug("Rolling mode: STM cleared after learning, will be maintained by rolling window logic")
+            elif tail_event:
+                # Tail mode: only restore the last event
                 self.memory_manager.set_stm_tail_context(tail_event)
             
             if pattern_name:

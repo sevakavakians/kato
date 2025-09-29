@@ -63,32 +63,15 @@ class SuperKnowledgeBase:
         if logger.level == 0:  # Logger level not set
             logger.setLevel(getattr(logging, settings.logging.log_level))
         
-        logger.info(f" Attaching knowledgebase for {self.id} using {settings.database.mongo_url} ...")
+        logger.info(f" Attaching knowledgebase for {self.id} using optimized connection manager ...")
         try:
-            ### MongoDB with connection retry
-            max_retries = 5
-            retry_delay = 1  # Start with 1 second
+            # Use optimized connection manager for improved performance and reliability
+            from kato.storage.connection_manager import get_mongodb_client
+            self.connection = get_mongodb_client()
             
-            for attempt in range(max_retries):
-                try:
-                    logger.info(f" Attempting MongoDB connection (attempt {attempt + 1}/{max_retries}) ...")
-                    self.connection = MongoClient(
-                        settings.database.mongo_url, 
-                        serverSelectionTimeoutMS=10000  # 10 second timeout per attempt
-                    )
-                    # Test the connection
-                    self.connection.admin.command('ping')
-                    logger.info(f" MongoDB connection successful on attempt {attempt + 1}")
-                    break
-                except Exception as e:
-                    if attempt == max_retries - 1:
-                        logger.error(f" MongoDB connection failed after {max_retries} attempts: {e}")
-                        raise
-                    else:
-                        logger.warning(f" MongoDB connection attempt {attempt + 1} failed: {e}. Retrying in {retry_delay}s...")
-                        import time
-                        time.sleep(retry_delay)
-                        retry_delay *= 2  # Exponential backoff
+            # Test the connection
+            self.connection.admin.command('ping')
+            logger.info(f" MongoDB connection successful via optimized connection manager")
             # CRITICAL FIX: Changed from w=0 (fire-and-forget) to w="majority" for data durability
             self.write_concern = {"w": "majority", "j": True}  # v2.0: Ensure write acknowledgment
             self.knowledge = self.connection[self.id]

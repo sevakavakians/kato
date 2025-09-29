@@ -53,6 +53,47 @@ class KatoProcessor:
         self.knowledge = self.pattern_processor.superkb.knowledge
         self.pattern_processor.patterns_kb = self.pattern_processor.superkb.patterns_kb
         self.predictions_kb = self.knowledge.predictions_kb
+        
+        # Initialize metrics cache for pattern processor - schedule async init
+        import asyncio
+        try:
+            # Try to run async initialization in the current event loop if available
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # Schedule initialization to run later
+                asyncio.create_task(self.pattern_processor.initialize_metrics_cache())
+            else:
+                # Run synchronously if no event loop is running
+                loop.run_until_complete(self.pattern_processor.initialize_metrics_cache())
+        except RuntimeError:
+            # No event loop running, create one
+            asyncio.run(self.pattern_processor.initialize_metrics_cache())
+
+        # Initialize distributed STM if Redis is available
+        self.distributed_stm_manager = None
+        try:
+            from kato.storage.redis_streams import get_distributed_stm_manager
+            # Handle async initialization properly within existing event loop
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # Schedule initialization to run later
+                async def init_distributed_stm():
+                    self.distributed_stm_manager = await get_distributed_stm_manager(self.id)
+                    if self.distributed_stm_manager:
+                        logger.info(f"Distributed STM initialized for processor {self.id}")
+                    else:
+                        logger.info("Distributed STM not available - using local STM only")
+                asyncio.create_task(init_distributed_stm())
+            else:
+                # Run synchronously if no event loop is running
+                self.distributed_stm_manager = loop.run_until_complete(get_distributed_stm_manager(self.id))
+                if self.distributed_stm_manager:
+                    logger.info(f"Distributed STM initialized for processor {self.id}")
+                else:
+                    logger.info("Distributed STM not available - using local STM only")
+        except Exception as e:
+            logger.warning(f"Failed to initialize distributed STM: {e}")
+            self.distributed_stm_manager = None
 
         self.processing_lock = Lock()
 
@@ -114,6 +155,13 @@ class KatoProcessor:
         self.predictions = []
         # Update local references
         self.symbols = self.memory_manager.symbols
+        
+        # Publish clear event to distributed STM if available
+        if self.distributed_stm_manager:
+            try:
+                asyncio.run(self.distributed_stm_manager.clear_stm_distributed())
+            except Exception as e:
+                logger.warning(f"Failed to publish clear STM to distributed STM: {e}")
         self.current_emotives = self.memory_manager.current_emotives
         self.percept_data = self.memory_manager.percept_data
         return
@@ -160,6 +208,13 @@ class KatoProcessor:
         self.current_emotives = self.memory_manager.current_emotives
         self.percept_data = self.memory_manager.percept_data
         self.time = self.memory_manager.time
+        
+        # Publish to distributed STM if available
+        if self.distributed_stm_manager and data:
+            try:
+                asyncio.run(self.distributed_stm_manager.observe_distributed(data))
+            except Exception as e:
+                logger.warning(f"Failed to publish observation to distributed STM: {e}")
         
         # Return format expected by callers
         return {

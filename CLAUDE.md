@@ -558,3 +558,4 @@ Without proper isolation:
 3. ❌ Forgetting to start services before tests → ✅ Run `./start.sh` first
 4. ❌ Sharing processor_ids between tests → ✅ Each test gets unique processor_id
 - **ALWAYS** rebuild KATO docker image using no-cache options after **EVERY** code update and **BEFORE** testing.
+- Do **NOT** use MCPs for this project.

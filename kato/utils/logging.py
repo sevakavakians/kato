@@ -2,7 +2,7 @@
 Centralized logging utilities for KATO
 
 Provides standardized logging patterns and reduces boilerplate code
-throughout the application.
+throughout the application. Includes trace ID support for request tracking.
 """
 
 import logging
@@ -10,6 +10,41 @@ from typing import Optional, Dict, Any
 from functools import wraps
 import time
 import traceback
+import uuid
+from contextvars import ContextVar
+from contextlib import contextmanager
+
+
+# Context variable for trace ID
+_trace_id: ContextVar[Optional[str]] = ContextVar('trace_id', default=None)
+
+
+def get_trace_id() -> Optional[str]:
+    """Get the current trace ID from context."""
+    return _trace_id.get()
+
+
+def set_trace_id(trace_id: str) -> None:
+    """Set the trace ID in current context."""
+    _trace_id.set(trace_id)
+
+
+def generate_trace_id() -> str:
+    """Generate a new trace ID."""
+    return str(uuid.uuid4())[:8]
+
+
+@contextmanager
+def trace_context(trace_id: Optional[str] = None):
+    """Context manager for trace ID."""
+    if trace_id is None:
+        trace_id = generate_trace_id()
+    
+    token = _trace_id.set(trace_id)
+    try:
+        yield trace_id
+    finally:
+        _trace_id.reset(token)
 
 
 class KatoLogger:
@@ -64,6 +99,11 @@ class KatoLogger:
     
     def _log(self, level: int, msg: str, **kwargs):
         """Internal logging method with structured data support."""
+        # Add trace ID if available
+        trace_id = get_trace_id()
+        if trace_id:
+            kwargs['trace_id'] = trace_id
+        
         if kwargs:
             # Format structured data as key=value pairs
             structured = ' '.join(f'{k}={v}' for k, v in kwargs.items())

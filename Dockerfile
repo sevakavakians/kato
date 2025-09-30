@@ -1,4 +1,4 @@
-FROM python:3.9-slim
+FROM python:3.10-slim
 
 # Set working directory
 WORKDIR /app
@@ -10,21 +10,10 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements.lock .
 
-# Install FastAPI and Uvicorn
-RUN pip install --no-cache-dir \
-    fastapi==0.104.1 \
-    uvicorn[standard]==0.24.0 \
-    python-multipart==0.0.6 \
-    websockets==12.0
-
-# Install additional dependencies
-RUN pip install --no-cache-dir \
-    aioredis==2.0.1 \
-    pymongo==4.5.0 \
-    psutil==5.9.6
+# Install all dependencies from locked requirements for reproducible builds
+RUN pip install --no-cache-dir -r requirements.lock
 
 # Copy the KATO package
 COPY kato/ ./kato/

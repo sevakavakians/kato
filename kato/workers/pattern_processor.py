@@ -1,6 +1,7 @@
 import heapq
 import itertools
 import logging
+from kato.utils.logging import get_logger
 from os import environ
 from collections import deque
 from itertools import chain
@@ -30,7 +31,9 @@ from kato.storage.metrics_cache import get_metrics_cache_manager, CachedMetricsC
 
 from collections import Counter
 
-logger = logging.getLogger('kato.pattern_processor')
+# Use enhanced logger with trace ID support
+kato_logger = get_logger('kato.pattern_processor')
+logger = logging.getLogger('kato.pattern_processor')  # Keep for compatibility
 logger.setLevel(getattr(logging, environ.get('LOG_LEVEL', 'INFO')))
 logger.info('logging initiated')
 

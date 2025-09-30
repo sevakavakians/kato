@@ -167,6 +167,9 @@ class ProcessorManager:
             # Create processor instance with direct processor_id parameter
             processor = KatoProcessor(genome_manifest, processor_id=processor_id, settings=self.settings)
             
+            # Initialize async components
+            await processor.initialize_async_components()
+            
             # Store in cache
             self.processors[processor_id] = {
                 'processor': processor,

@@ -54,46 +54,10 @@ class KatoProcessor:
         self.pattern_processor.patterns_kb = self.pattern_processor.superkb.patterns_kb
         self.predictions_kb = self.knowledge.predictions_kb
         
-        # Initialize metrics cache for pattern processor - schedule async init
-        import asyncio
-        try:
-            # Try to run async initialization in the current event loop if available
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # Schedule initialization to run later
-                asyncio.create_task(self.pattern_processor.initialize_metrics_cache())
-            else:
-                # Run synchronously if no event loop is running
-                loop.run_until_complete(self.pattern_processor.initialize_metrics_cache())
-        except RuntimeError:
-            # No event loop running, create one
-            asyncio.run(self.pattern_processor.initialize_metrics_cache())
-
-        # Initialize distributed STM if Redis is available
+        # Mark components that need async initialization
+        self._metrics_cache_initialized = False
         self.distributed_stm_manager = None
-        try:
-            from kato.storage.redis_streams import get_distributed_stm_manager
-            # Handle async initialization properly within existing event loop
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # Schedule initialization to run later
-                async def init_distributed_stm():
-                    self.distributed_stm_manager = await get_distributed_stm_manager(self.id)
-                    if self.distributed_stm_manager:
-                        logger.info(f"Distributed STM initialized for processor {self.id}")
-                    else:
-                        logger.info("Distributed STM not available - using local STM only")
-                asyncio.create_task(init_distributed_stm())
-            else:
-                # Run synchronously if no event loop is running
-                self.distributed_stm_manager = loop.run_until_complete(get_distributed_stm_manager(self.id))
-                if self.distributed_stm_manager:
-                    logger.info(f"Distributed STM initialized for processor {self.id}")
-                else:
-                    logger.info("Distributed STM not available - using local STM only")
-        except Exception as e:
-            logger.warning(f"Failed to initialize distributed STM: {e}")
-            self.distributed_stm_manager = None
+        self._async_initialization_pending = True
 
         self.processing_lock = Lock()
 
@@ -121,6 +85,38 @@ class KatoProcessor:
         self.predictions = []
         logger.info(f" {self.name}-{self.id} kato processor, ready!")
         return
+
+    async def initialize_async_components(self):
+        """
+        Initialize async components after processor creation.
+        Should be called once after processor instantiation.
+        """
+        if not self._async_initialization_pending:
+            return  # Already initialized
+        
+        try:
+            # Initialize metrics cache for pattern processor
+            if not self._metrics_cache_initialized:
+                await self.pattern_processor.initialize_metrics_cache()
+                self._metrics_cache_initialized = True
+                logger.info(f"Metrics cache initialized for processor {self.id}")
+        except Exception as e:
+            logger.warning(f"Failed to initialize metrics cache for processor {self.id}: {e}")
+        
+        try:
+            # Initialize distributed STM if Redis is available
+            from kato.storage.redis_streams import get_distributed_stm_manager
+            self.distributed_stm_manager = await get_distributed_stm_manager(self.id)
+            if self.distributed_stm_manager:
+                logger.info(f"Distributed STM initialized for processor {self.id}")
+            else:
+                logger.info("Distributed STM not available - using local STM only")
+        except Exception as e:
+            logger.warning(f"Failed to initialize distributed STM for processor {self.id}: {e}")
+            self.distributed_stm_manager = None
+        
+        self._async_initialization_pending = False
+        logger.info(f"Async initialization completed for processor {self.id}")
 
     def __primitive_variables_reset__(self):
         """Reset primitive variables - delegates to memory manager"""

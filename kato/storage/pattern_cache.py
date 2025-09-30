@@ -26,8 +26,8 @@ from typing import Dict, List, Any, Optional, Union
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
-import aioredis
-from aioredis import Redis
+import redis.asyncio as redis
+from redis.asyncio import Redis
 from pymongo.collection import Collection
 
 logger = logging.getLogger('kato.storage.pattern_cache')
@@ -572,7 +572,7 @@ class CacheManager:
             
             # Convert synchronous Redis client to async for aioredis compatibility
             # For now, we'll keep the direct connection but use optimized settings
-            self.redis_client = aioredis.from_url(
+            self.redis_client = redis.from_url(
                 self.redis_url,
                 decode_responses=True,
                 max_connections=20,  # Optimized connection pool

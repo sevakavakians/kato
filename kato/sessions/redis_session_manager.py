@@ -13,12 +13,7 @@ import uuid
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Any
-try:
-    # Try modern redis with async support
-    import redis.asyncio as redis
-except ImportError:
-    # Fallback to aioredis
-    import aioredis as redis
+import redis.asyncio as redis
 from dataclasses import dataclass, asdict
 
 from .session_manager import SessionState

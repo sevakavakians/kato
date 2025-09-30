@@ -26,7 +26,7 @@ from dataclasses import dataclass, asdict
 from enum import Enum
 
 try:
-    import aioredis
+    import redis.asyncio as redis
     REDIS_AVAILABLE = True
 except ImportError:
     REDIS_AVAILABLE = False
@@ -111,7 +111,7 @@ class DistributedSTMManager:
     async def initialize(self) -> bool:
         """Initialize Redis connection and streams."""
         if not REDIS_AVAILABLE:
-            logger.warning("aioredis not available, distributed STM disabled")
+            logger.warning("redis.asyncio not available, distributed STM disabled")
             return False
             
         try:
@@ -124,7 +124,7 @@ class DistributedSTMManager:
                 return False
             
             # Create async Redis client
-            self.redis = await aioredis.from_url(
+            self.redis = await redis.from_url(
                 self.redis_url,
                 max_connections=20,
                 retry_on_timeout=True,

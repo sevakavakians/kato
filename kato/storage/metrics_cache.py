@@ -19,7 +19,7 @@ import asyncio
 import time
 
 try:
-    import aioredis
+    import redis.asyncio as redis
     REDIS_AVAILABLE = True
 except ImportError:
     REDIS_AVAILABLE = False
@@ -71,7 +71,7 @@ class MetricsCacheManager:
             True if initialization successful, False otherwise
         """
         if not REDIS_AVAILABLE:
-            logger.warning("aioredis not available, metrics cache disabled")
+            logger.warning("redis.asyncio not available, metrics cache disabled")
             return False
             
         try:
@@ -84,7 +84,7 @@ class MetricsCacheManager:
                 return False
             
             # Create async Redis client with optimized settings
-            self.redis = await aioredis.from_url(
+            self.redis = await redis.from_url(
                 self.redis_url,
                 max_connections=20,  # Optimized connection pool
                 retry_on_timeout=True,

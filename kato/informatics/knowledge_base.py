@@ -291,7 +291,13 @@ class SuperKnowledgeBase:
 
     def close(self):
         """
-        Closes the main database connection.
+        DEPRECATED: Do not close shared database connections.
+        
+        Individual processors share a MongoDB connection managed by OptimizedConnectionManager.
+        Closing the connection from one processor would break all other processors.
+        Connection lifecycle is managed centrally by the connection manager.
         """
-        self.connection.close()
+        # DO NOT CLOSE SHARED CONNECTION - it's managed by OptimizedConnectionManager
+        # self.connection.close()  # REMOVED: This breaks other processors using same connection
+        logger.debug(f"KnowledgeBase.close() called for {self.id} - connection managed centrally, no action taken")
         return

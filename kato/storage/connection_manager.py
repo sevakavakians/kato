@@ -92,6 +92,9 @@ class OptimizedConnectionManager:
         self._redis_client: Optional[redis.Redis] = None
         self._qdrant_client: Optional[QdrantClient] = None
         
+        # Connection state tracking
+        self._connections_closed = False
+        
         # Health monitoring
         self._health_status: Dict[str, ConnectionHealth] = {
             'mongodb': ConnectionHealth(),
@@ -124,6 +127,10 @@ class OptimizedConnectionManager:
     def mongodb(self) -> MongoClient:
         """Get optimized MongoDB client with connection pooling."""
         with self._connection_locks['mongodb']:
+            if self._connections_closed:
+                logger.warning("Attempting to use MongoDB connection after close_all_connections() was called")
+                raise RuntimeError("Cannot use closed connection manager. Connection was explicitly closed.")
+            
             if self._mongodb_client is None:
                 self._create_mongodb_connection()
             
@@ -136,10 +143,14 @@ class OptimizedConnectionManager:
     @property
     def redis(self) -> Optional[redis.Redis]:
         """Get optimized Redis client with connection pooling."""
-        if not self.settings.redis.enabled:
+        if not self.settings.database.redis_enabled:
             return None
             
         with self._connection_locks['redis']:
+            if self._connections_closed:
+                logger.warning("Attempting to use Redis connection after close_all_connections() was called")
+                raise RuntimeError("Cannot use closed connection manager. Connection was explicitly closed.")
+            
             if self._redis_client is None:
                 self._create_redis_connection()
             
@@ -156,6 +167,10 @@ class OptimizedConnectionManager:
             return None
             
         with self._connection_locks['qdrant']:
+            if self._connections_closed:
+                logger.warning("Attempting to use Qdrant connection after close_all_connections() was called")
+                raise RuntimeError("Cannot use closed connection manager. Connection was explicitly closed.")
+            
             if self._qdrant_client is None:
                 self._create_qdrant_connection()
             
@@ -494,6 +509,10 @@ class OptimizedConnectionManager:
     
     def close_all_connections(self) -> None:
         """Close all database connections gracefully."""
+        if self._connections_closed:
+            logger.warning("close_all_connections() called but connections already closed")
+            return
+            
         logger.info("Closing all database connections...")
         
         # Close MongoDB
@@ -529,6 +548,10 @@ class OptimizedConnectionManager:
         # Reset health status
         for service in self._health_status:
             self._health_status[service] = ConnectionHealth()
+        
+        # Mark connections as closed to prevent reuse
+        self._connections_closed = True
+        logger.warning("Connection manager marked as closed - no further connections will be allowed")
 
 
 # Global connection manager instance

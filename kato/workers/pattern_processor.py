@@ -97,11 +97,7 @@ class PatternProcessor:
         """Clear the short-term memory and reset related state.
         
         Empties the STM deque, disables prediction triggering, and clears emotives.
-        Logs stack trace for debugging purposes.
         """
-        logger.warning("DEBUG clear_stm called! Stack trace:")
-        import traceback
-        logger.warning(''.join(traceback.format_stack()))
         self.STM: Deque[List[str]] = deque()
         self.trigger_predictions: bool = False
         self.emotives: List[Dict[str, float]] = []
@@ -113,9 +109,6 @@ class PatternProcessor:
         Resets the entire processor state including short-term memory,
         learned patterns cache, and observation counters.
         """
-        logger.warning("DEBUG clear_all_memory called! Stack trace:")
-        import traceback
-        logger.warning(''.join(traceback.format_stack()))
         self.clear_stm()
         self.last_learned_pattern_name: Optional[str] = None
         self.patterns_searcher.clearPatternsFromRAM()
@@ -282,12 +275,12 @@ class PatternProcessor:
         Args:
             symbols: List of symbol strings to add as a new event.
         """
-        logger.info(f"DEBUG setCurrentEvent called with symbols: {symbols}")
+        logger.debug(f"setCurrentEvent called with symbols: {symbols}")
         if symbols:
             self.STM.append(symbols)
-            logger.info(f"DEBUG STM after append: {list(self.STM)}")
+            logger.debug(f"STM after append: {list(self.STM)}")
         else:
-            logger.info(f"DEBUG No symbols to add, STM unchanged: {list(self.STM)}")
+            logger.debug(f"No symbols to add, STM unchanged: {list(self.STM)}")
         return
 
     def maintain_rolling_window(self, max_length: int) -> None:

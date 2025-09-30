@@ -253,7 +253,7 @@ class KatoProcessor:
         """Get the current short-term memory - delegates to memory manager"""
         logger.debug(f'get_stm called in {self.name}-{self.id}')
         stm_data = self.memory_manager.get_stm_state()
-        logger.info(f"DEBUG get_stm returning: {stm_data}")
+        logger.debug(f"get_stm returning: {stm_data}")
         return stm_data
     
     def get_percept_data(self):

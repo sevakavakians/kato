@@ -1008,9 +1008,17 @@ class PatternSearcher:
         
         return predictions
     
-    def __del__(self):
-        """Clean up resources."""
-        if hasattr(self, 'connection'):
-            self.connection.close()
+    def close(self):
+        """
+        DEPRECATED: Do not close shared database connections.
+        
+        PatternSearcher uses a MongoDB connection managed by OptimizedConnectionManager.
+        Closing the connection from one searcher would break all other processors.
+        Connection lifecycle is managed centrally by the connection manager.
+        """
+        # DO NOT CLOSE SHARED CONNECTION - it's managed by OptimizedConnectionManager
+        # self.connection.close()  # REMOVED: This breaks other processors using same connection
+        logger.debug(f"PatternSearcher.close() called for {self.kb_id} - connection managed centrally, no action taken")
+        return
 
 

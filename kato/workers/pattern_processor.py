@@ -433,7 +433,11 @@ class PatternProcessor:
                     symbol_cache[symbol['name']] = symbol
             for prediction in causal_patterns:
                 total_ensemble_pattern_frequencies += prediction['frequency']
-                for symbol in itertools.chain(prediction['matches'], prediction['missing']):
+                # Flatten missing if it's event-structured (list of lists)
+                missing_symbols = prediction['missing']
+                if missing_symbols and isinstance(missing_symbols[0], list):
+                    missing_symbols = [s for event in missing_symbols for s in event]
+                for symbol in itertools.chain(prediction['matches'], missing_symbols):
                     if symbol not in symbol_probability_cache or symbol not in symbol_frequency_cache:
                         # Check if symbol exists in cache, skip if not (new/unknown symbol)
                         if symbol not in symbol_cache:
@@ -650,7 +654,11 @@ class PatternProcessor:
             # Calculate totals and caches
             for prediction in causal_patterns:
                 total_ensemble_pattern_frequencies += prediction['frequency']
-                for symbol in itertools.chain(prediction['matches'], prediction['missing']):
+                # Flatten missing if it's event-structured (list of lists)
+                missing_symbols_calc = prediction['missing']
+                if missing_symbols_calc and isinstance(missing_symbols_calc[0], list):
+                    missing_symbols_calc = [s for event in missing_symbols_calc for s in event]
+                for symbol in itertools.chain(prediction['matches'], missing_symbols_calc):
                     if symbol not in symbol_probability_cache or symbol not in symbol_frequency_cache:
                         if symbol not in symbol_cache:
                             symbol_probability_cache[symbol] = 0

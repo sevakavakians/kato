@@ -202,8 +202,9 @@ def test_prediction_partial_match_at_start(kato_fixture):
             # Present should be the first two events (both have matches)
             # The first event should have both 'begin' and 'start', but we only observed 'begin'
             assert len(present) == 2, f"Present should have 2 events, got {present}"
-            # Missing should include 'start' (in first event but not observed)
-            assert 'start' in missing, f"Should be missing 'start', got missing={missing}"
+            # Missing should include 'start' (in first event but not observed) - event-structured
+            flat_missing = [s for event in missing for s in event] if missing and isinstance(missing[0], list) else missing
+            assert 'start' in flat_missing, f"Should be missing 'start', got missing={missing}"
             # Future should have the last event
             assert len(future) == 1, f"Should have 1 future event, got {future}"
             assert future == [['end']], f"Future should be [['end']], got {future}"
@@ -237,8 +238,9 @@ def test_prediction_partial_match_at_end(kato_fixture):
             assert [['start']] == past or ['start'] in past, f"Past should contain 'start', got {past}"
             # Present should span middle and end events
             assert len(present) == 2, f"Present should have 2 events, got {present}"
-            # Missing should include 'finish'
-            assert 'finish' in missing, f"Should be missing 'finish', got missing={missing}"
+            # Missing should include 'finish' - event-structured
+            flat_missing = [s for event in missing for s in event] if missing and isinstance(missing[0], list) else missing
+            assert 'finish' in flat_missing, f"Should be missing 'finish', got missing={missing}"
             break
 
 
@@ -328,6 +330,7 @@ def test_single_event_with_missing(kato_fixture):
     pred = predictions[0]
     
     missing = pred.get('missing', [])
-    # Should be missing 'beta' since we observed 'alpha' and 'gamma'
-    assert 'beta' in missing, \
+    # Should be missing 'beta' since we observed 'alpha' and 'gamma' - event-structured
+    flat_missing = [s for event in missing for s in event] if missing and isinstance(missing[0], list) else missing
+    assert 'beta' in flat_missing, \
         f"Should be missing 'beta', got missing={missing}"

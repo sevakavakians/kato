@@ -170,5 +170,5 @@ fi
 ## Remember
 
 **Everything runs in Docker** - If you find yourself creating virtual environments or installing packages locally, stop and use the Docker containers instead:
-- Production: `./kato-manager.sh`
-- Testing: `./test-harness.sh`
+- Production: `./start.sh`
+- Testing: `./run_tests.sh`

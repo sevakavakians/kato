@@ -18,13 +18,13 @@ This directory contains planning and design documentation for the KATO (Knowledg
 ### System Status Check
 ```bash
 # Check KATO system status
-./kato-manager.sh status
+docker-compose ps
 
 # Run all tests
 ./run_tests.sh
 
 # View API health
-curl http://localhost:8001/health
+curl http://localhost:8000/health
 ```
 
 ## Development Workflow
@@ -32,13 +32,13 @@ curl http://localhost:8001/health
 ### Standard Development Commands
 ```bash
 # Start KATO services
-./kato-manager.sh start
+./start.sh
 
 # Stop services
-./kato-manager.sh stop
+docker-compose down
 
 # Build and restart
-./kato-manager.sh restart
+docker-compose up -d --build
 
 # Run all tests
 ./run_tests.sh
@@ -49,15 +49,13 @@ curl http://localhost:8001/health
 ./run_tests.sh tests/tests/api/
 
 # View logs
-./kato-manager.sh logs
-docker logs kato-primary --tail 50
+docker-compose logs
+docker logs kato --tail 50
 ```
 
 ### Service URLs (After Starting)
-- **Primary KATO**: http://localhost:8001
-- **Testing KATO**: http://localhost:8002  
-- **Analytics KATO**: http://localhost:8003
-- **API Documentation**: http://localhost:8001/docs
+- **KATO Service**: http://localhost:8000
+- **API Documentation**: http://localhost:8000/docs
 
 ### Common Development Tasks
 
@@ -67,7 +65,7 @@ docker logs kato-primary --tail 50
 vim kato/workers/kato_processor.py
 
 # 2. Rebuild and restart
-./kato-manager.sh restart
+docker-compose up -d --build
 
 # 3. Run relevant tests
 ./run_tests.sh tests/tests/unit/test_processor.py
@@ -84,18 +82,18 @@ vim kato/workers/kato_processor.py
 5. Document decisions in **DECISIONS.md** if architectural
 
 #### Troubleshooting
-- Check service status: `./kato-manager.sh status`
-- View system logs: `./kato-manager.sh logs`
-- Test basic functionality: `curl http://localhost:8001/health`
+- Check service status: `docker-compose ps`
+- View system logs: `docker-compose logs`
+- Test basic functionality: `curl http://localhost:8000/health`
 - Run specific failing tests: `./run_tests.sh tests/tests/unit/test_failing.py`
 
 ## Current System State
 
-**Status**: Stable and production-ready  
-**Architecture**: FastAPI with direct processor embedding  
-**Test Coverage**: 99.5% pass rate (197/198 tests)  
-**Performance**: ~10ms average response time  
-**Last Major Update**: Code organization refactoring completed  
+**Status**: Stable and production-ready
+**Architecture**: FastAPI with direct processor embedding
+**Test Coverage**: 276 tests with high pass rate
+**Performance**: ~10ms average response time
+**Last Major Update**: Session-based architecture with observe-sequence endpoint  
 
 ## Directory Structure
 ```

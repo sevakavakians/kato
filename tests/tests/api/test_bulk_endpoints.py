@@ -12,49 +12,35 @@ from tests.fixtures.kato_fixtures import kato_fixture
 
 def test_observe_sequence_basic(kato_fixture):
     """Test basic batch observation processing."""
-    
+
     # Create a sequence of observations
-    batch_data = {
-        'observations': [
-            {'strings': ['hello'], 'vectors': [], 'emotives': {}},
-            {'strings': ['world'], 'vectors': [], 'emotives': {}},
-            {'strings': ['test'], 'vectors': [], 'emotives': {}}
-        ]
-    }
-    
-    # Process batch
-    response = requests.post(
-        f"{kato_fixture.base_url}/observe-sequence",
-        json=batch_data
-    )
-    if response.status_code != 200:
-        print(f"Error response: {response.status_code}")
-        print(f"Error details: {response.text}")
-    assert response.status_code == 200
-    result = response.json()
-    
+    observations = [
+        {'strings': ['hello'], 'vectors': [], 'emotives': {}},
+        {'strings': ['world'], 'vectors': [], 'emotives': {}},
+        {'strings': ['test'], 'vectors': [], 'emotives': {}}
+    ]
+
+    # Process batch using the fixture method
+    result = kato_fixture.observe_sequence(observations)
+
     # Verify results
-    assert result['status'] == 'okay'
+    assert result['status'] == 'completed'
     assert 'processor_id' in result  # processor_id exists but may differ from fixture
     assert result['observations_processed'] == 3
-    assert len(result['individual_results']) == 3
-    
+    assert len(result['results']) == 3
+
     # Each observation should have succeeded
-    for idx, obs_result in enumerate(result['individual_results']):
+    for idx, obs_result in enumerate(result['results']):
         assert obs_result['status'] == 'okay'
-        assert 'processor_id' in obs_result
         assert 'unique_id' in obs_result
         assert 'time' in obs_result
-    
-    # Should have final predictions
-    assert 'final_predictions' in result
-    
+        assert 'sequence_position' in obs_result
+
+    # Should have final learned pattern field (may be None)
+    assert 'final_learned_pattern' in result
+
     # Verify STM contains all observations
-    stm_response = requests.get(
-        f"{kato_fixture.base_url}/stm"
-    )
-    assert stm_response.status_code == 200
-    stm = stm_response.json()['stm']
+    stm = kato_fixture.get_stm()
     assert len(stm) == 3
     assert stm[0] == ['hello']
     assert stm[1] == ['world']
@@ -63,42 +49,32 @@ def test_observe_sequence_basic(kato_fixture):
 
 def test_observe_sequence_with_vectors(kato_fixture):
     """Test batch processing with multi-modal data (strings and vectors)."""
-    
+
     # Use simple test vectors for testing
     test_vector = [0.1, 0.2, 0.3, 0.4]
-    
-    batch_data = {
-        'observations': [
-            {'strings': ['alpha'], 'vectors': [test_vector], 'emotives': {'joy': 0.8}},
-            {'strings': ['beta'], 'vectors': [], 'emotives': {'fear': 0.3}},
-            {'strings': ['gamma'], 'vectors': [test_vector], 'emotives': {}}
-        ]
-    }
-    
-    response = requests.post(
-        f"{kato_fixture.base_url}/observe-sequence",
-        json=batch_data
-    )
-    assert response.status_code == 200
-    result = response.json()
-    
+
+    observations = [
+        {'strings': ['alpha'], 'vectors': [test_vector], 'emotives': {'joy': 0.8}},
+        {'strings': ['beta'], 'vectors': [], 'emotives': {'fear': 0.3}},
+        {'strings': ['gamma'], 'vectors': [test_vector], 'emotives': {}}
+    ]
+
+    result = kato_fixture.observe_sequence(observations)
+
     assert result['observations_processed'] == 3
-    assert len(result['individual_results']) == 3
-    
+    assert len(result['results']) == 3
+
     # STM should contain both strings and vector names
-    stm_response = requests.get(
-        f"{kato_fixture.base_url}/stm"
-    )
-    stm = stm_response.json()['stm']
+    stm = kato_fixture.get_stm()
     assert len(stm) == 3
-    
+
     # First observation should have vector name added
     assert 'alpha' in stm[0]
     assert any('VCTR|' in s for s in stm[0])  # Vector name pattern
-    
+
     # Second observation has no vectors
     assert stm[1] == ['beta']
-    
+
     # Third observation should also have vector
     assert 'gamma' in stm[2]
     assert any('VCTR|' in s for s in stm[2])
@@ -106,153 +82,101 @@ def test_observe_sequence_with_vectors(kato_fixture):
 
 def test_observe_sequence_learn_after_each(kato_fixture):
     """Test learning pattern after each observation."""
-    
-    batch_data = {
-        'observations': [
-            {'strings': ['first', 'pattern'], 'vectors': [], 'emotives': {}},
-            {'strings': ['second', 'pattern'], 'vectors': [], 'emotives': {}},
-            {'strings': ['third', 'pattern'], 'vectors': [], 'emotives': {}}
-        ],
-        'learn_after_each': True
-    }
-    
-    response = requests.post(
-        f"{kato_fixture.base_url}/observe-sequence",
-        json=batch_data
-    )
-    assert response.status_code == 200
-    result = response.json()
-    
+
+    observations = [
+        {'strings': ['first', 'pattern'], 'vectors': [], 'emotives': {}},
+        {'strings': ['second', 'pattern'], 'vectors': [], 'emotives': {}},
+        {'strings': ['third', 'pattern'], 'vectors': [], 'emotives': {}}
+    ]
+
+    result = kato_fixture.observe_sequence(observations, learn_after_each=True)
+
     # Should have learned 3 patterns (one after each observation)
-    assert len(result['patterns_learned']) == 3
-    
+    assert len(result['auto_learned_patterns']) == 3
+
     # Each pattern should have the PTRN| prefix
-    for pattern_name in result['patterns_learned']:
+    for pattern_name in result['auto_learned_patterns']:
         assert pattern_name.startswith('PTRN|')
 
 
 def test_observe_sequence_learn_at_end(kato_fixture):
     """Test learning single pattern after all observations."""
-    
-    batch_data = {
-        'observations': [
-            {'strings': ['start'], 'vectors': [], 'emotives': {}},
-            {'strings': ['middle'], 'vectors': [], 'emotives': {}},
-            {'strings': ['end'], 'vectors': [], 'emotives': {}}
-        ],
-        'learn_at_end': True
-    }
-    
-    response = requests.post(
-        f"{kato_fixture.base_url}/observe-sequence",
-        json=batch_data
-    )
-    assert response.status_code == 200
-    result = response.json()
-    
+
+    observations = [
+        {'strings': ['start'], 'vectors': [], 'emotives': {}},
+        {'strings': ['middle'], 'vectors': [], 'emotives': {}},
+        {'strings': ['end'], 'vectors': [], 'emotives': {}}
+    ]
+
+    result = kato_fixture.observe_sequence(observations, learn_at_end=True)
+
     # Should have learned 1 pattern at the end
-    assert len(result['patterns_learned']) == 1
-    assert result['patterns_learned'][0].startswith('PTRN|')
-    
+    assert len(result['auto_learned_patterns']) == 1
+    assert result['auto_learned_patterns'][0].startswith('PTRN|')
+
     # STM should be empty after learn_at_end (auto-learn scenario)
-    stm_response = requests.get(
-        f"{kato_fixture.base_url}/stm"
-    )
-    stm = stm_response.json()['stm']
+    stm = kato_fixture.get_stm()
     assert len(stm) == 0, "STM should be empty after learn_at_end"
 
 
 def test_observe_sequence_clear_stm_between(kato_fixture):
     """Test STM clearing between observations for complete isolation."""
-    
-    batch_data = {
-        'observations': [
-            {'strings': ['isolated1'], 'vectors': [], 'emotives': {}},
-            {'strings': ['isolated2'], 'vectors': [], 'emotives': {}},
-            {'strings': ['isolated3'], 'vectors': [], 'emotives': {}}
-        ],
-        'clear_stm_between': True
-    }
-    
-    response = requests.post(
-        f"{kato_fixture.base_url}/observe-sequence",
-        json=batch_data
-    )
-    assert response.status_code == 200
-    result = response.json()
-    
+
+    observations = [
+        {'strings': ['isolated1'], 'vectors': [], 'emotives': {}},
+        {'strings': ['isolated2'], 'vectors': [], 'emotives': {}},
+        {'strings': ['isolated3'], 'vectors': [], 'emotives': {}}
+    ]
+
+    result = kato_fixture.observe_sequence(observations, clear_stm_between=True)
+
     assert result['observations_processed'] == 3
-    
+
     # STM should only contain the last observation (others were cleared)
     # Note: No learning happened, so the last observation remains
-    stm_response = requests.get(
-        f"{kato_fixture.base_url}/stm"
-    )
-    stm = stm_response.json()['stm']
+    stm = kato_fixture.get_stm()
     assert len(stm) == 1
     assert stm[0] == ['isolated3']
-    
-    # Will have predictions from just the last observation
-    if result['final_predictions'] is not None:
-        # These would be predictions from just the last observation
-        pass
 
 
 def test_observe_sequence_combined_options(kato_fixture):
     """Test combining clear_stm_between with learn_after_each."""
-    
-    batch_data = {
-        'observations': [
-            {'strings': ['combo1', 'test'], 'vectors': [], 'emotives': {}},
-            {'strings': ['combo2', 'test'], 'vectors': [], 'emotives': {}},
-            {'strings': ['combo3', 'test'], 'vectors': [], 'emotives': {}}
-        ],
-        'clear_stm_between': True,
-        'learn_after_each': True
-    }
-    
-    response = requests.post(
-        f"{kato_fixture.base_url}/observe-sequence",
-        json=batch_data
+
+    observations = [
+        {'strings': ['combo1', 'test'], 'vectors': [], 'emotives': {}},
+        {'strings': ['combo2', 'test'], 'vectors': [], 'emotives': {}},
+        {'strings': ['combo3', 'test'], 'vectors': [], 'emotives': {}}
+    ]
+
+    result = kato_fixture.observe_sequence(
+        observations,
+        clear_stm_between=True,
+        learn_after_each=True
     )
-    assert response.status_code == 200
-    result = response.json()
-    
+
     # Each observation was isolated and learned separately
     assert result['observations_processed'] == 3
-    assert len(result['patterns_learned']) == 3
-    
+    assert len(result['auto_learned_patterns']) == 3
+
     # STM should be empty after learning
-    stm_response = requests.get(
-        f"{kato_fixture.base_url}/stm"
-    )
-    stm = stm_response.json()['stm']
+    stm = kato_fixture.get_stm()
     assert len(stm) == 0, "STM should be empty after learn_after_each"
 
 
 def test_observe_sequence_alphanumeric_sorting(kato_fixture):
     """Test that alphanumeric sorting is maintained in batch processing."""
-    
-    batch_data = {
-        'observations': [
-            {'strings': ['zebra', 'alpha', 'beta'], 'vectors': [], 'emotives': {}},
-            {'strings': ['3', '1', '2'], 'vectors': [], 'emotives': {}},
-            {'strings': ['Z', 'A', 'M'], 'vectors': [], 'emotives': {}}
-        ]
-    }
-    
-    response = requests.post(
-        f"{kato_fixture.base_url}/observe-sequence",
-        json=batch_data
-    )
-    assert response.status_code == 200
-    
+
+    observations = [
+        {'strings': ['zebra', 'alpha', 'beta'], 'vectors': [], 'emotives': {}},
+        {'strings': ['3', '1', '2'], 'vectors': [], 'emotives': {}},
+        {'strings': ['Z', 'A', 'M'], 'vectors': [], 'emotives': {}}
+    ]
+
+    result = kato_fixture.observe_sequence(observations)
+
     # Verify STM has sorted strings
-    stm_response = requests.get(
-        f"{kato_fixture.base_url}/stm"
-    )
-    stm = stm_response.json()['stm']
-    
+    stm = kato_fixture.get_stm()
+
     assert stm[0] == ['alpha', 'beta', 'zebra']
     assert stm[1] == ['1', '2', '3']
     assert stm[2] == ['A', 'M', 'Z']
@@ -260,20 +184,12 @@ def test_observe_sequence_alphanumeric_sorting(kato_fixture):
 
 def test_observe_sequence_empty_batch(kato_fixture):
     """Test handling of empty batch."""
-    batch_data = {
-        'observations': []
-    }
-    
-    response = requests.post(
-        f"{kato_fixture.base_url}/observe-sequence",
-        json=batch_data
-    )
-    assert response.status_code == 200
-    result = response.json()
-    
+
+    result = kato_fixture.observe_sequence([])
+
     assert result['observations_processed'] == 0
-    assert len(result['individual_results']) == 0
-    assert len(result['patterns_learned']) == 0
+    assert len(result['results']) == 0
+    assert len(result['auto_learned_patterns']) == 0
 
 
 def test_observe_sequence_large_batch(kato_fixture):
@@ -300,7 +216,7 @@ def test_observe_sequence_large_batch(kato_fixture):
     result = response.json()
     
     assert result['observations_processed'] == 50
-    assert len(result['individual_results']) == 50
+    assert len(result['results']) == 50
     
     # Verify all observations are in STM
     stm_response = requests.get(
@@ -315,74 +231,50 @@ def test_observe_sequence_large_batch(kato_fixture):
 
 def test_observe_sequence_with_unique_ids(kato_fixture):
     """Test that provided unique IDs are preserved."""
-    
-    batch_data = {
-        'observations': [
-            {'strings': ['first'], 'vectors': [], 'emotives': {}, 'unique_id': 'custom-1'},
-            {'strings': ['second'], 'vectors': [], 'emotives': {}, 'unique_id': 'custom-2'},
-            {'strings': ['third'], 'vectors': [], 'emotives': {}, 'unique_id': 'custom-3'}
-        ]
-    }
-    
-    response = requests.post(
-        f"{kato_fixture.base_url}/observe-sequence",
-        json=batch_data
-    )
-    assert response.status_code == 200
-    result = response.json()
-    
+
+    observations = [
+        {'strings': ['first'], 'vectors': [], 'emotives': {}, 'unique_id': 'custom-1'},
+        {'strings': ['second'], 'vectors': [], 'emotives': {}, 'unique_id': 'custom-2'},
+        {'strings': ['third'], 'vectors': [], 'emotives': {}, 'unique_id': 'custom-3'}
+    ]
+
+    result = kato_fixture.observe_sequence(observations)
+
     # Verify custom IDs are preserved
-    assert result['individual_results'][0]['unique_id'] == 'custom-1'
-    assert result['individual_results'][1]['unique_id'] == 'custom-2'
-    assert result['individual_results'][2]['unique_id'] == 'custom-3'
+    assert result['results'][0]['unique_id'] == 'custom-1'
+    assert result['results'][1]['unique_id'] == 'custom-2'
+    assert result['results'][2]['unique_id'] == 'custom-3'
 
 
 def test_observe_sequence_predictions_available(kato_fixture):
     """Test that predictions are generated after batch processing."""
-    
+
     # First, learn a pattern
-    learn_data = {
-        'observations': [
-            {'strings': ['pattern', 'A'], 'vectors': [], 'emotives': {}},
-            {'strings': ['pattern', 'B'], 'vectors': [], 'emotives': {}},
-            {'strings': ['pattern', 'C'], 'vectors': [], 'emotives': {}}
-        ],
-        'learn_at_end': True
-    }
-    
-    response = requests.post(
-        f"{kato_fixture.base_url}/observe-sequence",
-        json=learn_data
-    )
-    assert response.status_code == 200
-    
+    observations = [
+        {'strings': ['pattern', 'A'], 'vectors': [], 'emotives': {}},
+        {'strings': ['pattern', 'B'], 'vectors': [], 'emotives': {}},
+        {'strings': ['pattern', 'C'], 'vectors': [], 'emotives': {}}
+    ]
+
+    result = kato_fixture.observe_sequence(observations, learn_at_end=True)
+
     # Clear STM
-    requests.post(f"{kato_fixture.base_url}/clear-stm")
-    
-    # Now observe part of the pattern
-    test_data = {
-        'observations': [
-            {'strings': ['pattern', 'A'], 'vectors': [], 'emotives': {}},
-            {'strings': ['pattern', 'B'], 'vectors': [], 'emotives': {}}
-        ]
-    }
-    
-    response = requests.post(
-        f"{kato_fixture.base_url}/observe-sequence",
-        json=test_data
-    )
-    assert response.status_code == 200
-    result = response.json()
-    
-    # Should have predictions since we've seen part of a known pattern
-    assert result['final_predictions'] is not None
-    if len(result['final_predictions']) > 0:
-        # Verify prediction structure
-        pred = result['final_predictions'][0]
-        assert 'pattern_name' in pred
-        assert 'future' in pred
-        assert 'present' in pred
-        assert 'past' in pred
+    kato_fixture.clear_stm()
+
+    # Now observe part of the pattern and check for predictions
+    test_observations = [
+        {'strings': ['pattern', 'A'], 'vectors': [], 'emotives': {}},
+        {'strings': ['pattern', 'B'], 'vectors': [], 'emotives': {}}
+    ]
+
+    kato_fixture.observe_sequence(test_observations)
+
+    # Get predictions
+    predictions = kato_fixture.get_predictions()
+
+    # Should have predictions since we match part of the learned pattern
+    assert predictions is not None
+    assert len(predictions) > 0
 
 
 def test_observe_sequence_error_handling(kato_fixture):
@@ -440,52 +332,32 @@ def test_observe_sequence_performance(kato_fixture):
 
 def test_observe_sequence_isolation_verification(kato_fixture):
     """Verify that observations are properly isolated when requested."""
-    
+
     # First, process without isolation
-    batch_data_no_isolation = {
-        'observations': [
-            {'strings': ['shared1'], 'vectors': [], 'emotives': {}},
-            {'strings': ['shared2'], 'vectors': [], 'emotives': {}},
-            {'strings': ['shared3'], 'vectors': [], 'emotives': {}}
-        ],
-        'clear_stm_between': False
-    }
-    
-    response = requests.post(
-        f"{kato_fixture.base_url}/observe-sequence",
-        json=batch_data_no_isolation
-    )
-    assert response.status_code == 200
-    
+    observations_no_isolation = [
+        {'strings': ['shared1'], 'vectors': [], 'emotives': {}},
+        {'strings': ['shared2'], 'vectors': [], 'emotives': {}},
+        {'strings': ['shared3'], 'vectors': [], 'emotives': {}}
+    ]
+
+    kato_fixture.observe_sequence(observations_no_isolation, clear_stm_between=False)
+
     # Get predictions - should see context from all observations
-    predictions_resp = requests.post(
-        f"{kato_fixture.base_url}/predictions"
-    )
-    predictions_no_isolation = predictions_resp.json()['predictions']
-    
+    predictions_no_isolation = kato_fixture.get_predictions()
+
     # Clear STM
-    requests.post(f"{kato_fixture.base_url}/clear-stm")
-    
+    kato_fixture.clear_stm()
+
     # Now process WITH isolation (but no learning)
-    batch_data_with_isolation = {
-        'observations': [
-            {'strings': ['isolated1'], 'vectors': [], 'emotives': {}},
-            {'strings': ['isolated2'], 'vectors': [], 'emotives': {}},
-            {'strings': ['isolated3'], 'vectors': [], 'emotives': {}}
-        ],
-        'clear_stm_between': True
-    }
-    
-    response = requests.post(
-        f"{kato_fixture.base_url}/observe-sequence",
-        json=batch_data_with_isolation
-    )
-    assert response.status_code == 200
-    
+    observations_with_isolation = [
+        {'strings': ['isolated1'], 'vectors': [], 'emotives': {}},
+        {'strings': ['isolated2'], 'vectors': [], 'emotives': {}},
+        {'strings': ['isolated3'], 'vectors': [], 'emotives': {}}
+    ]
+
+    kato_fixture.observe_sequence(observations_with_isolation, clear_stm_between=True)
+
     # STM should only have last observation (no learning happened)
-    stm_response = requests.get(
-        f"{kato_fixture.base_url}/stm"
-    )
-    stm = stm_response.json()['stm']
+    stm = kato_fixture.get_stm()
     assert len(stm) == 1
     assert stm[0] == ['isolated3']

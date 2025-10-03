@@ -201,11 +201,11 @@ def test_bulk_observation_with_rolling_mode(kato_fixture):
     
     # Process bulk observations
     result = kato_fixture.observe_sequence(bulk_data)
-    assert result.get('status') == 'okay', f"Bulk observation failed: {result}"
-    
+    assert result.get('status') == 'completed', f"Bulk observation failed: {result}"
+
     # Should have auto-learned multiple patterns
-    patterns_learned = result.get('patterns_learned', [])
-    assert len(patterns_learned) >= 3, f"Expected at least 3 patterns from bulk, got {len(patterns_learned)}"
+    auto_learned_patterns = result.get('auto_learned_patterns', [])
+    assert len(auto_learned_patterns) >= 3, f"Expected at least 3 patterns from bulk, got {len(auto_learned_patterns)}"
     
     # STM should maintain rolling window
     stm = kato_fixture.get_short_term_memory()

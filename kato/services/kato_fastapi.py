@@ -44,12 +44,14 @@ from kato.exceptions import (
 from kato.utils.logging import get_logger, trace_context, generate_trace_id
 
 # Import modular API endpoints
+print("DEBUG: About to import from kato.api.endpoints")
 from kato.api.endpoints import (
     sessions_router,
     monitoring_router,
     health_router,
     kato_ops_router
 )
+print("DEBUG: Successfully imported all routers")
 
 # Use enhanced logger with trace ID support
 kato_logger = get_logger('kato.fastapi')
@@ -236,8 +238,37 @@ async def shutdown_event():
 # ============================================================================
 
 def get_user_id_from_request(request: Request) -> str:
-    """Extract user ID from request (used by legacy endpoints)"""
-    return request.headers.get('X-User-ID', 'default_user')
+    """Generate a user ID from request for automatic session management."""
+    print(f"DEBUG get_user_id_from_request: ALL HEADERS = {dict(request.headers)}")
+    
+    # Check for test isolation header first
+    test_id = request.headers.get("x-test-id")
+    print(f"DEBUG get_user_id_from_request: x-test-id = {test_id}")
+    if test_id:
+        # If test_id already starts with "test_", don't add another prefix
+        if test_id.startswith("test_"):
+            result = test_id
+        else:
+            result = f"test_{test_id}"
+        print(f"DEBUG get_user_id_from_request: RETURNING {result}")
+        return result
+    
+    # Check for explicit user ID header
+    user_id_header = request.headers.get("x-user-id")
+    print(f"DEBUG get_user_id_from_request: x-user-id = {user_id_header}")
+    if user_id_header:
+        print(f"DEBUG get_user_id_from_request: RETURNING {user_id_header}")
+        return user_id_header
+    
+    # Legacy header support
+    legacy_user_id = request.headers.get('X-User-ID')
+    print(f"DEBUG get_user_id_from_request: X-User-ID = {legacy_user_id}")
+    if legacy_user_id:
+        print(f"DEBUG get_user_id_from_request: RETURNING {legacy_user_id}")
+        return legacy_user_id
+    
+    print(f"DEBUG get_user_id_from_request: RETURNING default_user")
+    return 'default_user'
 
 
 # ============================================================================

@@ -5,7 +5,7 @@ Contains all Pydantic models for API requests and responses.
 """
 
 from .session import CreateSessionRequest, SessionResponse
-from .observation import ObservationData, ObservationResult, STMResponse  
+from .observation import ObservationData, ObservationResult, STMResponse, ObservationSequenceRequest, ObservationSequenceResult  
 from .prediction import PredictionsResponse, LearnResult
 
 __all__ = [
@@ -14,6 +14,8 @@ __all__ = [
     'ObservationData',
     'ObservationResult',
     'STMResponse',
+    'ObservationSequenceRequest',
+    'ObservationSequenceResult',
     'PredictionsResponse',
     'LearnResult'
 ]

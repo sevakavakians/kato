@@ -15,6 +15,9 @@ COPY requirements.lock .
 # Install all dependencies from locked requirements for reproducible builds
 RUN pip install --no-cache-dir -r requirements.lock
 
+# Cache bust for code changes
+ARG CACHE_BUST=7
+
 # Copy the KATO package
 COPY kato/ ./kato/
 

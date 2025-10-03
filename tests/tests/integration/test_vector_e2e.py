@@ -23,7 +23,7 @@ def test_vector_observation_and_learning(kato_fixture):
     response = requests.post(f"{kato_fixture.base_url}/clear-all-memory")
     assert response.status_code == 200
     result = response.json()
-    assert result.get('status') == "okay"  # FastAPI response format
+    assert result.get('status') == "cleared"  # FastAPI response format
     
     # Create a sequence with vectors
     observations = [
@@ -44,45 +44,25 @@ def test_vector_observation_and_learning(kato_fixture):
         }
     ]
     
-    # Observe the sequence
+    # Observe the sequence using fixture
     for obs in observations:
-        response = requests.post(f"{kato_fixture.base_url}/observe", json=obs)
-        assert response.status_code == 200
-        result = response.json()
-        message = result.get('message', result)
-        assert message['status'] == 'okay'  # FastAPI response format
+        kato_fixture.observe(obs)
         print(f"Observed: {obs['strings']} with vector")
-    
+
     # Learn the sequence
-    response = requests.post(f"{kato_fixture.base_url}/learn", json={})
-    assert response.status_code == 200
-    result = response.json()
-    # Current returns pattern_name field, Legacy returns it in message
-    pattern_name = result.get('pattern_name') or result.get('message', result)
+    pattern_name = kato_fixture.learn()
     assert pattern_name is not None
     print(f"Learned model: {pattern_name}")
-    
+
     # Clear short-term memory
-    response = requests.post(f"{kato_fixture.base_url}/clear-stm", json={})
-    assert response.status_code == 200
-    
+    kato_fixture.clear_stm()
+
     # Observe first element to trigger predictions
-    response = requests.post(f"{kato_fixture.base_url}/observe", json=observations[0])
-    assert response.status_code == 200
-    
+    kato_fixture.observe(observations[0])
+
     # Get predictions
-    response = requests.get(f"{kato_fixture.base_url}/predictions")
-    assert response.status_code == 200
-    predictions_resp = response.json()
-    
-    # Extract predictions from response (FastAPI returns them in 'predictions' key)
-    if isinstance(predictions_resp, dict) and 'predictions' in predictions_resp:
-        predictions = predictions_resp['predictions']
-    elif isinstance(predictions_resp, dict) and 'message' in predictions_resp:
-        predictions = predictions_resp['message']
-    else:
-        predictions = predictions_resp
-    
+    predictions = kato_fixture.get_predictions()
+
     assert len(predictions) > 0, "Should have predictions after learning"
     print(f"Got {len(predictions)} predictions")
     
@@ -106,7 +86,7 @@ def test_mixed_modality_processing(kato_fixture):
     response = requests.post(f"{kato_fixture.base_url}/clear-all-memory")
     assert response.status_code == 200
     result = response.json()
-    assert result.get('status') == "okay"  # FastAPI response format
+    assert result.get('status') == "cleared"  # FastAPI response format
     
     # Observe mixed modality data
     observation = {
@@ -167,7 +147,7 @@ def test_vector_similarity_search(kato_fixture):
     response = requests.post(f"{kato_fixture.base_url}/clear-all-memory")
     assert response.status_code == 200
     result = response.json()
-    assert result.get('status') == "okay"  # FastAPI response format
+    assert result.get('status') == "cleared"  # FastAPI response format
     
     # Create and observe several vectors
     base_vectors = [
@@ -213,7 +193,7 @@ def test_large_vector_handling(kato_fixture):
     response = requests.post(f"{kato_fixture.base_url}/clear-all-memory")
     assert response.status_code == 200
     result = response.json()
-    assert result.get('status') == "okay"  # FastAPI response format
+    assert result.get('status') == "cleared"  # FastAPI response format
     
     # Create a large dimensional vector
     large_dim = 128
@@ -250,7 +230,7 @@ def test_vector_persistence(kato_fixture):
     response = requests.post(f"{kato_fixture.base_url}/clear-all-memory")
     assert response.status_code == 200
     result = response.json()
-    assert result.get('status') == "okay"  # FastAPI response format
+    assert result.get('status') == "cleared"  # FastAPI response format
     
     # First learning cycle
     obs1 = {

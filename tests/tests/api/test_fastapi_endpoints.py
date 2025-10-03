@@ -130,7 +130,7 @@ def test_clear_stm_endpoints(kato_fixture):
     # Test /clear-stm
     response = requests.post(f"{kato_fixture.base_url}/clear-stm", json={})
     assert response.status_code == 200
-    assert response.json()['status'] == 'okay'
+    assert response.json()['status'] == 'cleared'
     
     # Verify STM is cleared
     stm_response = requests.get(f"{kato_fixture.base_url}/stm")
@@ -142,7 +142,7 @@ def test_clear_stm_endpoints(kato_fixture):
     # Test /clear-short-term-memory (alias)
     response2 = requests.post(f"{kato_fixture.base_url}/clear-short-term-memory", json={})
     assert response2.status_code == 200
-    assert response2.json()['status'] == 'okay'
+    assert response2.json()['status'] == 'cleared'
 
 
 def test_clear_all_memory_endpoints(kato_fixture):
@@ -154,7 +154,7 @@ def test_clear_all_memory_endpoints(kato_fixture):
     # Test /clear-all
     response = requests.post(f"{kato_fixture.base_url}/clear-all", json={})
     assert response.status_code == 200
-    assert response.json()['status'] == 'okay'
+    assert response.json()['status'] == 'cleared'
     
     # Add and learn another pattern
     kato_fixture.observe({'strings': ['mem3', 'mem4'], 'vectors': [], 'emotives': {}})
@@ -163,7 +163,7 @@ def test_clear_all_memory_endpoints(kato_fixture):
     # Test /clear-all-memory (alias)
     response2 = requests.post(f"{kato_fixture.base_url}/clear-all-memory", json={})
     assert response2.status_code == 200
-    assert response2.json()['status'] == 'okay'
+    assert response2.json()['status'] == 'cleared'
 
 
 def test_predictions_endpoints(kato_fixture):
@@ -220,14 +220,14 @@ def test_gene_endpoints(kato_fixture):
     # Get a specific gene value (gene names are case-sensitive)
     response = requests.get(f"{kato_fixture.base_url}/gene/recall_threshold")
     assert response.status_code in [200, 404]  # Gene endpoint might not be fully implemented
-    data = response.json()
-    # Current returns 'gene' and 'value', legacy returns 'gene_name' and 'gene_value'
-    assert 'gene_name' in data or 'gene' in data
-    assert 'gene_value' in data or 'value' in data
-    original_value = data.get('gene_value', data.get('value'))
     
     # Update gene value (if gene exists)
     if response.status_code == 200:
+        data = response.json()
+        # Current returns 'gene' and 'value', legacy returns 'gene_name' and 'gene_value'
+        assert 'gene_name' in data or 'gene' in data
+        assert 'gene_value' in data or 'value' in data
+        original_value = data.get('gene_value', data.get('value'))
         # FastAPI expects {"genes": {"recall_threshold": 0.5}} format
         update_data = {
             'genes': {

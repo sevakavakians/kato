@@ -107,6 +107,23 @@ class ProcessorManager:
         
         return f"{safe_user_id}_{safe_base_id}"
     
+    async def get_processor_by_id(self, processor_id: Optional[str] = None, session_config: Optional[SessionConfiguration] = None) -> KatoProcessor:
+        """
+        Get or create a processor by processor ID (v1 API compatibility).
+        
+        For backward compatibility with v1 API endpoints.
+        If processor_id is None, uses 'default' as user_id.
+        
+        Args:
+            processor_id: Processor identifier (used as user_id)
+            session_config: Optional session configuration to apply
+        
+        Returns:
+            KatoProcessor instance for this processor_id
+        """
+        user_id = processor_id or 'default'
+        return await self.get_processor(user_id, session_config)
+
     async def get_processor(self, user_id: str, session_config: Optional[SessionConfiguration] = None) -> KatoProcessor:
         """
         Get or create a processor for a specific user.

@@ -10,9 +10,10 @@ from typing import Dict, Any
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Request
-from ..schemas import (
-    CreateSessionRequest, SessionResponse, ObservationData, 
-    ObservationResult, STMResponse, LearnResult, PredictionsResponse
+from kato.api.schemas import (
+    CreateSessionRequest, SessionResponse, ObservationData,
+    ObservationResult, STMResponse, LearnResult, PredictionsResponse,
+    ObservationSequenceRequest, ObservationSequenceResult
 )
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
@@ -158,6 +159,12 @@ async def update_session_config(session_id: str, request_data: Dict[str, Any]):
                 if hasattr(processor, 'pattern_processor'):
                     processor.pattern_processor.max_pattern_length = value
                     logger.info(f"Updated pattern_processor.max_pattern_length to {value}")
+            elif key == 'stm_mode':
+                processor.genome_manifest['STM_MODE'] = value
+                # Update pattern processor's stm_mode
+                if hasattr(processor, 'pattern_processor'):
+                    processor.pattern_processor.stm_mode = value
+                    logger.info(f"Updated pattern_processor.stm_mode to {value}")
             elif key == 'persistence':
                 processor.genome_manifest['PERSISTENCE'] = value
             elif key == 'recall_threshold':
@@ -277,6 +284,20 @@ async def get_session_stm(session_id: str):
         logger.warning(f"Session {session_id} not found")
         raise HTTPException(404, detail=f"Session {session_id} not found or expired")
     
+    # If session STM is empty but processor might have state, sync from processor
+    if not session.stm:
+        try:
+            processor = await app_state.processor_manager.get_processor(session.user_id, session.session_config)
+            processor_stm = processor.get_stm()
+            if processor_stm:
+                logger.info(f"Session STM empty but processor has {len(processor_stm)} events, syncing to session")
+                session.stm = processor_stm
+                session.emotives_accumulator = processor.get_emotives_accumulator()
+                session.time = processor.time
+                await app_state.session_manager.update_session(session)
+        except Exception as sync_error:
+            logger.warning(f"Failed to sync processor STM to session: {sync_error}")
+    
     logger.debug(f"Successfully retrieved session {session_id}")
     return STMResponse(
         stm=session.stm,
@@ -330,6 +351,14 @@ async def clear_session_stm(session_id: str):
     """Clear the STM for a specific session"""
     from kato.services.kato_fastapi import app_state
     
+    session = await app_state.session_manager.get_session(session_id)
+    if not session:
+        raise HTTPException(404, detail=f"Session {session_id} not found")
+
+    # Also clear the processor's STM
+    processor = await app_state.processor_manager.get_processor(session.user_id, session.session_config)
+    processor.clear_stm()
+
     cleared = await app_state.session_manager.clear_session_stm(session_id)
     
     if not cleared:
@@ -338,33 +367,159 @@ async def clear_session_stm(session_id: str):
     return {"status": "cleared", "session_id": session_id}
 
 
+@router.post("/{session_id}/observe-sequence", response_model=ObservationSequenceResult)
+async def observe_sequence_in_session(
+    session_id: str,
+    data: ObservationSequenceRequest
+):
+    """
+    Process multiple observations in sequence within a session context.
+
+    Provides bulk processing capabilities with options for:
+    - Sequential processing with shared STM context
+    - Isolated processing where each observation gets fresh STM
+    - Auto-learning after each observation or at the end
+    """
+    from kato.services.kato_fastapi import app_state
+    from kato.api.schemas import ObservationSequenceRequest, ObservationSequenceResult
+
+    # Get session lock for thread-safe operations
+    lock = await app_state.session_manager.get_session_lock(session_id)
+    if not lock:
+        raise HTTPException(404, detail=f"Session {session_id} not found or expired")
+
+    async with lock:
+        # Get fresh session state inside the lock
+        session = await app_state.session_manager.get_session(session_id)
+        if not session:
+            raise HTTPException(404, detail=f"Session {session_id} not found or expired")
+
+        # Handle empty batch
+        if not data.observations:
+            return ObservationSequenceResult(
+                status="completed",
+                processor_id=session.user_id,
+                observations_processed=0,
+                initial_stm_length=len(session.stm),
+                final_stm_length=len(session.stm),
+                results=[],
+                auto_learned_patterns=[],
+                final_learned_pattern=None,
+                isolated=data.clear_stm_between
+            )
+
+        # Get processor for this session
+        processor = await app_state.processor_manager.get_processor(session.user_id, session.session_config)
+
+        # Set processor state from session
+        processor.set_stm(session.stm)
+        processor.set_emotives_accumulator(session.emotives_accumulator)
+        processor.time = session.time
+
+        logger.info(f"Processing sequence of {len(data.observations)} observations in session {session_id}")
+
+        results = []
+        initial_stm_length = len(processor.get_stm())
+        auto_learned_patterns = []
+
+        for i, obs_data in enumerate(data.observations):
+            # Clear STM before each observation if isolation requested
+            if data.clear_stm_between and i > 0:
+                processor.clear_stm()
+                logger.debug(f"Cleared STM for isolated observation {i}")
+
+            observation = {
+                'strings': obs_data.strings,
+                'vectors': obs_data.vectors,
+                'emotives': obs_data.emotives,
+                'unique_id': obs_data.unique_id or f"seq-obs-{uuid.uuid4().hex}",
+                'source': 'sequence'
+            }
+
+            result = processor.observe(observation)
+
+            # Learn after each if requested
+            if data.learn_after_each:
+                if processor.get_stm():
+                    pattern_name = processor.learn()
+                    auto_learned_patterns.append(pattern_name)
+
+            # Track auto-learned patterns from auto-learning
+            if result.get('auto_learned_pattern'):
+                auto_learned_patterns.append(result['auto_learned_pattern'])
+
+            observation_result = {
+                "status": "okay",
+                "sequence_position": i,
+                "stm_length": len(processor.get_stm()),
+                "time": processor.time,
+                "unique_id": observation['unique_id'],
+                "auto_learned_pattern": result.get('auto_learned_pattern')
+            }
+            results.append(observation_result)
+
+        # Learn from final STM if requested and STM is not empty
+        final_learned_pattern = None
+        if data.learn_at_end:
+            final_stm = processor.get_stm()
+            if final_stm:
+                try:
+                    final_learned_pattern = processor.learn()
+                    auto_learned_patterns.append(final_learned_pattern)
+                    logger.info(f"Learned final pattern: {final_learned_pattern}")
+                except Exception as learn_error:
+                    logger.warning(f"Failed to learn final pattern: {learn_error}")
+
+        final_stm_length = len(processor.get_stm())
+
+        # Update session state with final processor state
+        session.stm = processor.get_stm()
+        session.emotives_accumulator = processor.get_emotives_accumulator()
+        session.time = processor.time
+
+        # Save updated session
+        await app_state.session_manager.update_session(session)
+
+        return ObservationSequenceResult(
+            status="completed",
+            processor_id=session.user_id,
+            observations_processed=len(data.observations),
+            initial_stm_length=initial_stm_length,
+            final_stm_length=final_stm_length,
+            results=results,
+            auto_learned_patterns=auto_learned_patterns,
+            final_learned_pattern=final_learned_pattern,
+            isolated=data.clear_stm_between
+        )
+
+
 @router.get("/{session_id}/predictions", response_model=PredictionsResponse)
 async def get_session_predictions(session_id: str):
     """Get predictions based on the session's current STM"""
     from kato.services.kato_fastapi import app_state
-    
+
     session = await app_state.session_manager.get_session(session_id)
-    
+
     if not session:
         raise HTTPException(404, detail=f"Session {session_id} not found or expired")
-    
+
     # Get user's processor (isolated per user) with session configuration
     processor = await app_state.processor_manager.get_processor(session.user_id, session.session_config)
-    
+
     lock = await app_state.session_manager.get_session_lock(session_id)
-    
+
     async with lock:
         # Set processor state
         processor.set_stm(session.stm)
-        
+
         # Get predictions
         predictions = processor.get_predictions()
-        
+
         # Get future_potentials from the pattern processor if available
         future_potentials = None
         if hasattr(processor.pattern_processor, 'future_potentials'):
             future_potentials = processor.pattern_processor.future_potentials
-    
+
     return PredictionsResponse(
         predictions=predictions,
         future_potentials=future_potentials,

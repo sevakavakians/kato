@@ -7,7 +7,7 @@ from kato.informatics.metrics import expectation, classic_expectation, confluenc
 
 class Prediction(dict):
     "Pattern prediction."
-    def __init__(self, _pattern, matching_intersection, past, present, missing, extras, similarity, number_of_blocks):
+    def __init__(self, _pattern, matching_intersection, past, present, missing, extras, similarity, number_of_blocks, stm_events=None):
         super(Prediction, self).__init__(self)
         self['type'] = 'prototypical'
         self['name'] = _pattern['name']
@@ -29,9 +29,15 @@ class Prediction(dict):
         self['similarity'] = similarity
         self['fragmentation'] = float(number_of_blocks - 1)
         # Calculate SNR with division by zero protection
-        denominator = 2.0 * len(self['matches']) + len(self['extras'])
+        # Handle both event-structured and flat extras
+        if isinstance(self['extras'], list) and self['extras'] and isinstance(self['extras'][0], list):
+            total_extras = sum(len(event) for event in self['extras'])
+        else:
+            total_extras = len(self['extras']) if isinstance(self['extras'], list) else 0
+
+        denominator = 2.0 * len(self['matches']) + total_extras
         if denominator > 0:
-            self['snr'] = float((2.0 * len(self['matches']) - len(self['extras'])) / denominator)
+            self['snr'] = float((2.0 * len(self['matches']) - total_extras) / denominator)
         else:
             self['snr'] = float(0)  # Default to 0 when no matches or extras
         self['entropy'] = float(0)
@@ -74,10 +80,29 @@ class Prediction(dict):
             except Exception as e:
                 raise Exception("Error matching events in predictions! CODE-55 %s" %e)
 
-        self['missing'] = []  ## TODO: Use counts of distinct symbols to include the right amount.
-        for _symbol in chain(*self['present']):
-            if _symbol not in self['matches']:
-                self['missing'].append(_symbol)
+        # Calculate event-aligned missing and extras using STM event structure
+        if stm_events and len(stm_events) > 0:
+            # Event-by-event comparison - align STM events with pattern present events
+            self['missing'] = []
+            self['extras'] = []
+
+            for i, pattern_event in enumerate(self['present']):
+                stm_event = stm_events[i] if i < len(stm_events) else []
+
+                # Missing: symbols in pattern event but not in corresponding STM event
+                event_missing = [s for s in pattern_event if s not in stm_event]
+                self['missing'].append(event_missing)
+
+                # Extras: symbols in STM event but not in corresponding pattern event
+                event_extras = [s for s in stm_event if s not in pattern_event]
+                self['extras'].append(event_extras)
+        else:
+            # Fallback: Use old flat-list behavior (for backward compatibility)
+            self['missing'] = []
+            for _symbol in chain(*self['present']):
+                if _symbol not in self['matches']:
+                    self['missing'].append(_symbol)
+            # extras already set from constructor parameter
 
         __present_length__ = sum([len(_event) for _event in self['present']])
         self['confidence'] = float(len(self['matches'])/__present_length__) if __present_length__ > 0 else 0.0

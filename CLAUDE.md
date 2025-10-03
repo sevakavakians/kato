@@ -179,18 +179,24 @@ Client Request → FastAPI Service (Port 8000) → Embedded KATO Processor
      - Includes ALL symbols within those events, even if they weren't observed
      - The complete events are included, not just the observed symbols
    - **Future**: Events after the last matching event
-   - **Missing**: Symbols that are in the present events but weren't actually observed
-   - **Extras**: Symbols that were observed but aren't in the pattern
+   - **Missing**: Event-structured list (list of lists) aligned with `present` events
+     - Format: `[['sym1'], ['sym2']]` where each sub-list corresponds to a `present` event
+     - Contains symbols from that pattern event that were not observed in corresponding STM event
+     - Example: `missing = [['b'], ['d']]` means 'b' is missing from 1st present event, 'd' from 2nd
+   - **Extras**: Event-structured list (list of lists) aligned with STM events
+     - Format: `[['x'], ['y', 'z']]` where each sub-list corresponds to an STM event
+     - Contains symbols observed in STM but not expected in corresponding pattern event
+     - Example: `extras = [['x', 'y'], ['x']]` means 1st STM event has extras 'x','y', 2nd has 'x'
    - Example 1: Observing `['B'], ['C']` from pattern `[['A'], ['B'], ['C'], ['D']]`:
      - Past: `[['A']]`
      - Present: `[['B'], ['C']]` (both events have matches)
      - Future: `[['D']]`
-     - Missing: `[]` (all symbols in present were observed)
+     - Missing: `[[], []]` (all symbols in present were observed)
    - Example 2: Observing `['a'], ['c']` from pattern `[['a', 'b'], ['c', 'd'], ['e', 'f']]`:
      - Past: `[]` (no events before first match)
      - Present: `[['a', 'b'], ['c', 'd']]` (full events, including unobserved 'b' and 'd')
      - Future: `[['e', 'f']]`
-     - Missing: `['b', 'd']` (symbols in present events but not observed)
+     - Missing: `[['b'], ['d']]` (event-structured: 1st event missing 'b', 2nd missing 'd')
 5. **Empty Event Handling**: Empty events are NOT supported per spec
    - Empty events should be filtered BEFORE observation
    - STM only processes non-empty event sequences

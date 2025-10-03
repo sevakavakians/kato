@@ -74,9 +74,9 @@ def test_prediction_missing_symbols(kato_fixture):
     
     missing = pred.get('missing', [])
     # Should be missing 'world' from first event and 'bar' from second
-    # Order is preserved from the sequence
-    assert missing == ['world', 'bar'], \
-        f"Missing field should contain ['world', 'bar'], got {missing}"
+    # Event-structured format: one sub-list per event
+    assert missing == [['world'], ['bar']], \
+        f"Missing field should contain [['world'], ['bar']], got {missing}"
 
 
 def test_prediction_extra_symbols(kato_fixture):
@@ -99,8 +99,10 @@ def test_prediction_extra_symbols(kato_fixture):
     for pred in predictions:
         if 'alpha' in pred.get('matches', []) or 'beta' in pred.get('matches', []):
             extras = pred.get('extras', [])
-            # Should have 'unexpected' and 'extra' as extras
-            assert 'unexpected' in extras or 'extra' in extras, \
+            # Should have 'unexpected' and 'extra' as extras (event-structured)
+            # Flatten to check if extras exist
+            flat_extras = [item for sublist in extras for item in sublist] if extras and isinstance(extras[0], list) else extras
+            assert 'unexpected' in flat_extras or 'extra' in flat_extras, \
                 f"Should have extras, got {extras}"
             break
 
@@ -135,8 +137,8 @@ def test_prediction_multi_event_present(kato_fixture):
     
     # Present should span the two matching events
     assert len(present) == 2, f"Present should have 2 events, got {present}"
-    # Missing should include 'b' and 'd' in order
-    assert missing == ['b', 'd'], f"Missing should be ['b', 'd'], got {missing}"
+    # Missing should include 'b' and 'd' in event-structured format
+    assert missing == [['b'], ['d']], f"Missing should be [['b'], ['d']], got {missing}"
     # Future should have the third event
     assert len(future) == 1, f"Should have 1 future event, got {future}"
 
@@ -261,10 +263,10 @@ def test_prediction_mixed_missing_and_extras(kato_fixture):
     
     missing = pred.get('missing', [])
     extras = pred.get('extras', [])
-    
-    # Should have both missing and extras
-    assert missing == ['b', 'd'], f"Missing should be ['b', 'd'], got {missing}"
-    assert extras == ['x', 'y'], f"Extras should be ['x', 'y'], got {extras}"
+
+    # Should have both missing and extras in event-structured format
+    assert missing == [['b'], ['d']], f"Missing should be [['b'], ['d']], got {missing}"
+    assert extras == [['x'], ['y']], f"Extras should be [['x'], ['y']], got {extras}"
 
 
 def test_prediction_multiple_past_events(kato_fixture):

@@ -509,19 +509,21 @@ class PatternSearcher:
             # Recreate clean index manager
             self.index_manager = IndexManager()
     
-    def causalBelief(self, state: List[str], 
-                    target_class_candidates: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+    def causalBelief(self, state: List[str],
+                    target_class_candidates: Optional[List[str]] = None,
+                    stm_events: Optional[List[List[str]]] = None) -> List[Dict[str, Any]]:
         """
         Find matching patterns and generate predictions.
-        
+
         Optimized version with fast filtering and matching. Uses indexing
         to reduce search space and parallel processing for extraction.
-        
+
         Args:
             state: Current state sequence (flattened STM).
             target_class_candidates: Optional list of specific pattern names
                 to check. If provided, only these patterns are evaluated.
-            
+            stm_events: Original event-structured STM for calculating event-aligned missing/extras.
+
         Returns:
             List of prediction dictionaries with pattern match information,
             sorted by potential/relevance.
@@ -620,7 +622,8 @@ class PatternSearcher:
                         missing,
                         extras,
                         similarity,
-                        number_of_blocks
+                        number_of_blocks,
+                        stm_events=stm_events
                     )
                     active_list.append(pred)
         
@@ -1002,7 +1005,8 @@ class PatternSearcher:
                         missing,
                         extras,
                         similarity,
-                        number_of_blocks
+                        number_of_blocks,
+                        stm_events=stm_events
                     )
                     predictions.append(pred)
         

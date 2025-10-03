@@ -248,11 +248,11 @@ class PatternProcessor:
         """
         # Flatten short-term memory: [["a","b"],["c"]] -> ["a","b","c"]
         state = list(chain(*self.STM))
-        
+
         # Only generate predictions if we have at least 2 strings in state
         # KATO requires minimum 2 strings for pattern matching
         if len(state) >= 2 and self.predict and self.trigger_predictions:
-            predictions = self.predictPattern(state)
+            predictions = self.predictPattern(state, stm_events=self.STM)
             
             # Cache predictions in memory for quick access
             self.predictions = predictions
@@ -361,20 +361,21 @@ class PatternProcessor:
         """
         return float(freq/total_pattern_frequencies) if total_pattern_frequencies > 0 else 0.0
 
-    def predictPattern(self, state: List[str]) -> List[Dict[str, Any]]:
+    def predictPattern(self, state: List[str], stm_events: Optional[List[List[str]]] = None) -> List[Dict[str, Any]]:
         """Predict patterns matching the given state.
-        
+
         Searches for patterns that match the current state and calculates
         various metrics including hamiltonian, ITFDF similarity, potential,
         and confluence for ranking predictions.
-        
+
         Args:
             state: Flattened list of symbols representing current STM state.
-            
+            stm_events: Original event-structured STM for calculating event-aligned missing/extras.
+
         Returns:
             List of prediction dictionaries sorted by potential, containing
             pattern information and calculated metrics.
-            
+
         Raises:
             Exception: If causalBelief search fails.
             ValueError: If predictions are missing required fields.
@@ -389,7 +390,7 @@ class PatternProcessor:
             total_symbols_in_patterns_frequencies = 0
             total_pattern_frequencies = 0
         try:
-            causal_patterns = self.patterns_searcher.causalBelief(state, self.target_class_candidates)
+            causal_patterns = self.patterns_searcher.causalBelief(state, self.target_class_candidates, stm_events=stm_events)
         except Exception as e:
             raise Exception("\nException in PatternProcessor.predictPattern: Error in causalBelief! %s: %s" %(self.kb_id, e))
         

@@ -127,7 +127,8 @@ def expectation(p: float, num_symbols: int) -> float:
         # Return 0 for invalid values instead of raising
         return 0
     except Exception as e:
-        print("expectation ERROR! p = %s, num_symbols = %s, error = %s" % (p, num_symbols, e))
+        logger = logging.getLogger(__name__)
+        logger.error(f"expectation ERROR! p = {p}, num_symbols = {num_symbols}, error = {e}")
         return 0
 
 

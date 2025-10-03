@@ -458,8 +458,8 @@ class Settings(BaseSettings):
                 f.write(self.to_yaml())
             else:
                 raise ValueError(f"Unsupported file format: {filepath.suffix}")
-        
-        print(f"Configuration saved to {filepath}")
+
+        logging.info(f"Configuration saved to {filepath}")
     
     def validate_configuration(self) -> List[str]:
         """Validate configuration and return any warnings."""

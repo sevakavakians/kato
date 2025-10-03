@@ -19,8 +19,6 @@ from kato.api.schemas import (
 router = APIRouter(tags=["kato-ops"])
 logger = logging.getLogger('kato.api.kato_ops')
 
-print("DEBUG: kato_ops.py router is being loaded!")
-
 
 @router.post("/observe", response_model=ObservationResult)
 async def observe_primary(
@@ -36,22 +34,18 @@ async def observe_primary(
     auto-learning if configured.
     """
     from kato.services.kato_fastapi import app_state, get_user_id_from_request
-    
-    print("=== KATO_OPS DEBUG: observe_primary function ENTRY ===")
-    logger.error("=== KATO_OPS DEBUG: observe_primary function ENTRY ===")
-    
+
+    logger.debug("observe_primary function called")
+
     try:
         # Use header-based user ID if processor_id not provided
         if processor_id is None:
             processor_id = get_user_id_from_request(request)
-            logger.error(f"KATO_OPS_DEBUG: Extracted processor_id from headers: {processor_id}")
-            logger.warning(f"KATO_OPS_DEBUG: Headers were: {dict(request.headers)}")
+            logger.debug(f"Extracted processor_id from headers: {processor_id}")
         else:
-            print(f"DEBUG: Using provided processor_id: {processor_id}")
-            logger.info(f"Using provided processor_id: {processor_id}")
-        
-        print(f"DEBUG: Processing observation for processor {processor_id}")
-        logger.info(f"Processing observation for processor {processor_id}")
+            logger.debug(f"Using provided processor_id: {processor_id}")
+
+        logger.debug(f"Processing observation for processor {processor_id}")
         processor = await app_state.processor_manager.get_processor_by_id(processor_id)
         
         observation = {

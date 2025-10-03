@@ -44,7 +44,8 @@ def retry(
                     if logger:
                         logger.warning(msg)
                     else:
-                        print(msg)
+                        import logging
+                        logging.getLogger(__name__).warning(msg)
                     sleep(mdelay)
                     mtries -= 1
                     mdelay *= backoff

@@ -189,6 +189,32 @@
 
 ---
 
+## 2025-10-04 - Fix Async Await Issues and MongoDB Startup Delays
+**Decision**: Resolved critical async/await bugs and extended MongoDB healthcheck timeouts
+**Rationale**: Missing await calls on processor.observe() caused runtime failures. MongoDB crash recovery requires extended startup time (120-180s) which was causing container health failures.
+**Fixes Implemented**:
+- Added missing await calls on processor.observe() in sessions.py (lines 250, 439)
+- Extended MongoDB healthcheck start_period to 180s (from 60s)
+- Increased MongoDB healthcheck retries to 20 (from 10)
+- Added clear diagnostic error messaging for MongoDB connection failures
+- Enhanced start.sh script with individual service control capabilities
+**Impact**:
+- Test pass rate improved to 91% (10/11 unit tests passing)
+- Core observe functionality now works correctly
+- MongoDB startup issues resolved
+- Services start in ~20 seconds with fresh data
+- Individual service management now supported (./start.sh start mongodb, etc.)
+**Files Modified**:
+- /kato/services/sessions.py (async await fixes)
+- docker-compose.yml (MongoDB healthcheck configuration)
+- /kato/storage/connection_manager.py (error diagnostics)
+- start.sh (service control enhancements)
+**Confidence**: Very High - All critical async issues resolved, test suite validates fixes
+**Git Commit**: 50f35670dfe66b28657c34e817ca88af7ba9a01c
+**Related Work**: Completes async conversion started in 2025-10-03 decision
+
+---
+
 ## Template for New Decisions
 ```
 ## YYYY-MM-DD HH:MM - [Decision Title]

@@ -12,10 +12,10 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "mongo", "--eval", "db.adminCommand('ping')", "--quiet"]
-      interval: 10s
+      interval: 15s
       timeout: 10s
-      retries: 10
-      start_period: 60s
+      retries: 20
+      start_period: 180s
 
   # Qdrant vector database
   qdrant:

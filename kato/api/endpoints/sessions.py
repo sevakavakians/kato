@@ -246,8 +246,8 @@ async def observe_in_session(
             'unique_id': f"obs-{uuid.uuid4().hex}",
             'source': 'session'
         }
-        
-        result = processor.observe(observation)
+
+        result = await processor.observe(observation)
         
         # Update session state with results
         final_stm = processor.get_stm()
@@ -436,7 +436,7 @@ async def observe_sequence_in_session(
                 'source': 'sequence'
             }
 
-            result = processor.observe(observation)
+            result = await processor.observe(observation)
 
             # Learn after each if requested
             if data.learn_after_each:

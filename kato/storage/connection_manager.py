@@ -184,36 +184,68 @@ class OptimizedConnectionManager:
         """Create optimized MongoDB connection with advanced pooling."""
         try:
             start_time = time.time()
-            
+
             # Simplified MongoDB connection options for compatibility
             client_options = {
                 # Basic pool optimization
                 'minPoolSize': 5,
                 'maxPoolSize': 50,
-                
+
                 # Connection timeouts
                 'connectTimeoutMS': self.settings.database.MONGO_TIMEOUT,
                 'socketTimeoutMS': self.settings.database.MONGO_TIMEOUT,
                 'serverSelectionTimeoutMS': self.settings.database.MONGO_TIMEOUT,
             }
-            
+
             self._mongodb_client = MongoClient(
                 self.settings.database.MONGO_BASE_URL,
                 **client_options
             )
-            
+
             # Warm up the connection pool
             self._mongodb_client.admin.command('ping')
-            
+
             response_time = (time.time() - start_time) * 1000
             self._health_status['mongodb'] = ConnectionHealth(
                 is_healthy=True,
                 last_check=time.time(),
                 response_time_ms=response_time
             )
-            
+
             logger.info(f"MongoDB connection established (response: {response_time:.1f}ms)")
-            
+
+        except (ConnectionFailure, ServerSelectionTimeoutError) as e:
+            error_msg = f"""
+╔══════════════════════════════════════════════════════════════════╗
+║                   MONGODB CONNECTION FAILURE                     ║
+╠══════════════════════════════════════════════════════════════════╣
+║ MongoDB is not responding. This is usually caused by:            ║
+║                                                                  ║
+║ 1. MongoDB is still performing crash recovery after unclean     ║
+║    shutdown (check: docker logs kato-mongodb)                   ║
+║                                                                  ║
+║ 2. MongoDB container is not fully started yet                   ║
+║    (check: docker ps and look for 'healthy' status)             ║
+║                                                                  ║
+║ 3. Network connectivity issues between containers               ║
+║                                                                  ║
+║ Troubleshooting steps:                                          ║
+║ - Check MongoDB logs: docker logs kato-mongodb --tail 50        ║
+║ - Check container status: docker ps -a                          ║
+║ - Verify MongoDB health: docker exec kato-mongodb mongo \\       ║
+║   --eval "db.adminCommand('ping')"                              ║
+║                                                                  ║
+║ Original error: {str(e)[:50]}...                                 ║
+╚══════════════════════════════════════════════════════════════════╝
+"""
+            self._health_status['mongodb'] = ConnectionHealth(
+                is_healthy=False,
+                last_check=time.time(),
+                error_count=self._health_status['mongodb'].error_count + 1,
+                last_error=str(e)
+            )
+            logger.error(error_msg)
+            raise ConnectionFailure(error_msg) from e
         except Exception as e:
             self._health_status['mongodb'] = ConnectionHealth(
                 is_healthy=False,

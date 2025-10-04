@@ -185,10 +185,10 @@ class KatoProcessor:
         """Update pattern - delegates to pattern operations"""
         return self.pattern_operations.update_pattern(name, frequency, emotives)
 
-    def observe(self, data=None):
+    async def observe(self, data=None):
         """
         Process incoming observations - delegates to observation processor.
-        
+
         This is the main entry point for new sensory data. It handles:
         - String symbols (already in symbolic form)
         - Vectors (converted to symbols via vector processor)
@@ -196,7 +196,7 @@ class KatoProcessor:
         - Auto-learning when max_pattern_length is reached
         """
         # Process observation through the observation processor
-        result = self.observation_processor.process_observation(data)
+        result = await self.observation_processor.process_observation(data)
         
         # Update local state from result
         self.predictions = result.get('predictions', [])

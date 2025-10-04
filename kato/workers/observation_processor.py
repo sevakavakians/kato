@@ -268,7 +268,7 @@ class ObservationProcessor:
         
         return None
     
-    def process_observation(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    async def process_observation(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Process a complete observation including strings, vectors, and emotives.
         
@@ -351,7 +351,7 @@ class ObservationProcessor:
                     self.pattern_processor.setCurrentEvent(combined_symbols)
                     
                     # Generate predictions
-                    predictions = self.pattern_processor.processEvents(unique_id)
+                    predictions = await self.pattern_processor.processEvents(unique_id)
                     
                     # Check for auto-learning AFTER adding current event
                     # This matches the original behavior where auto-learning happens

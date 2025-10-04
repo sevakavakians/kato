@@ -229,20 +229,20 @@ class PatternProcessor:
             return_document=ReturnDocument.AFTER
         )
 
-    def processEvents(self, current_unique_id: str) -> List[Dict[str, Any]]:
+    async def processEvents(self, current_unique_id: str) -> List[Dict[str, Any]]:
         """
         Generate predictions by matching short-term memory against learned patterns.
-        
+
         Flattens the STM (list of events) into a single state vector,
         then searches for similar patterns in the pattern database.
         Predictions are cached in MongoDB for retrieval.
-        
+
         Args:
             current_unique_id: Unique identifier for this observation.
-            
+
         Returns:
             List of prediction dictionaries with pattern matches and metrics.
-            
+
         Note:
             KATO requires at least 2 strings in STM to generate predictions.
         """
@@ -252,19 +252,19 @@ class PatternProcessor:
         # Only generate predictions if we have at least 2 strings in state
         # KATO requires minimum 2 strings for pattern matching
         if len(state) >= 2 and self.predict and self.trigger_predictions:
-            predictions = self.predictPattern(state, stm_events=self.STM)
-            
+            predictions = await self.predictPattern(state, stm_events=self.STM)
+
             # Cache predictions in memory for quick access
             self.predictions = predictions
-            
+
             # Store predictions for async retrieval
             if predictions:
                 self.predictions_kb.insert_one({
-                    'unique_id': current_unique_id, 
+                    'unique_id': current_unique_id,
                     'predictions': predictions
                 })
             return predictions
-        
+
         # Return empty predictions if state is too short
         return []
 
@@ -361,12 +361,15 @@ class PatternProcessor:
         """
         return float(freq/total_pattern_frequencies) if total_pattern_frequencies > 0 else 0.0
 
-    def predictPattern(self, state: List[str], stm_events: Optional[List[List[str]]] = None) -> List[Dict[str, Any]]:
-        """Predict patterns matching the given state.
+    def predictPatternSync(self, state: List[str], stm_events: Optional[List[List[str]]] = None) -> List[Dict[str, Any]]:
+        """Synchronous version of predictPattern for backward compatibility.
 
         Searches for patterns that match the current state and calculates
         various metrics including hamiltonian, ITFDF similarity, potential,
         and confluence for ranking predictions.
+
+        Note: This sync version cannot use cached_calculator (requires async).
+        Use the async predictPattern() method for better performance with caching.
 
         Args:
             state: Flattened list of symbols representing current STM state.
@@ -573,9 +576,9 @@ class PatternProcessor:
         logger.debug(" [ PatternProcessor predictPattern ] %s active_causal_patterns" %(len(active_causal_patterns)))
         return active_causal_patterns
     
-    async def predictPatternAsync(self, state: List[str], max_workers: Optional[int] = None, batch_size: int = 100) -> List[Dict[str, Any]]:
-        """Async parallel version of predictPattern for high-performance prediction.
-        
+    async def predictPattern(self, state: List[str], stm_events: Optional[List[List[str]]] = None, max_workers: Optional[int] = None, batch_size: int = 100) -> List[Dict[str, Any]]:
+        """Predict patterns matching the given state (async with caching support).
+
         Provides 3-10x performance improvement through:
         - Parallel pattern matching using ThreadPoolExecutor
         - Async database queries for metadata and symbols
@@ -595,7 +598,7 @@ class PatternProcessor:
             Exception: If async pattern search fails.
             ValueError: If predictions are missing required fields.
         """
-        logger.debug(f" {self.name} [ PatternProcessor predictPatternAsync called ]")
+        logger.info(f"*** {self.name} [ PatternProcessor predictPattern (async) called with state={state} ]")
         
         # Fetch metadata concurrently
         total_symbols = self.superkb.symbols_kb.count_documents({})
@@ -610,13 +613,13 @@ class PatternProcessor:
         try:
             # Use async parallel pattern matching
             causal_patterns = await self.patterns_searcher.causalBeliefAsync(
-                state, self.target_class_candidates, max_workers, batch_size)
+                state, self.target_class_candidates, stm_events, max_workers, batch_size)
         except Exception as e:
-            raise Exception(f"\nException in PatternProcessor.predictPatternAsync: Error in causalBeliefAsync! {self.kb_id}: {e}")
+            raise Exception(f"\nException in PatternProcessor.predictPattern: Error in causalBeliefAsync! {self.kb_id}: {e}")
         
         # Early return if no patterns found
         if not causal_patterns:
-            logger.debug(f" {self.name} [ PatternProcessor predictPatternAsync ] No causal patterns found, returning empty list")
+            logger.debug(f" {self.name} [ PatternProcessor predictPattern (async) ] No causal patterns found, returning empty list")
             return []
         
         # Validate all predictions have required fields (same validation as sync version)
@@ -678,7 +681,7 @@ class PatternProcessor:
                     symbol_frequency_cache[symbol] = 0
             
             if total_ensemble_pattern_frequencies == 0:
-                logger.warning(f" {self.name} [ PatternProcessor predictPatternAsync ] total_ensemble_pattern_frequencies is 0")
+                logger.warning(f" {self.name} [ PatternProcessor predictPattern (async) ] total_ensemble_pattern_frequencies is 0")
             
             # Process predictions with metrics calculations (same logic as sync version)
             for prediction in causal_patterns:
@@ -777,12 +780,12 @@ class PatternProcessor:
             self.future_potentials = []
         
         except Exception as e:
-            raise Exception(f"\nException in PatternProcessor.predictPatternAsync: Error in metrics calculation! {self.kb_id}: {e}")
+            raise Exception(f"\nException in PatternProcessor.predictPattern (async): Error in metrics calculation! {self.kb_id}: {e}")
         
         try:
             active_causal_patterns = sorted([x for x in heapq.nlargest(self.max_predictions, causal_patterns, key=itemgetter('potential'))], reverse=True, key=itemgetter('potential'))
         except Exception as e:
-            raise Exception(f"\nException in PatternProcessor.predictPatternAsync: Error in sorting predictions! {self.kb_id}: {e}")
-        
-        logger.debug(f" [ PatternProcessor predictPatternAsync ] {len(active_causal_patterns)} active_causal_patterns")
+            raise Exception(f"\nException in PatternProcessor.predictPattern (async): Error in sorting predictions! {self.kb_id}: {e}")
+
+        logger.debug(f" [ PatternProcessor predictPattern (async) ] {len(active_causal_patterns)} active_causal_patterns")
         return active_causal_patterns

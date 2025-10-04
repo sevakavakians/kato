@@ -55,8 +55,8 @@ async def observe_primary(
             'unique_id': f"obs-{uuid.uuid4().hex}",
             'source': 'primary'
         }
-        
-        result = processor.observe(observation)
+
+        result = await processor.observe(observation)
         stm_length = len(processor.get_stm())
         
         return ObservationResult(
@@ -445,8 +445,8 @@ async def observe_sequence_primary(
                 'unique_id': obs_data.unique_id or f"seq-obs-{uuid.uuid4().hex}",
                 'source': 'sequence'
             }
-            
-            result = processor.observe(observation)
+
+            result = await processor.observe(observation)
             
             if data.learn_after_each:
                 if processor.get_stm():

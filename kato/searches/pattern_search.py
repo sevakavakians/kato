@@ -776,8 +776,9 @@ class PatternSearcher:
                             similarity, number_of_blocks
                         ))
     
-    async def causalBeliefAsync(self, state: List[str], 
+    async def causalBeliefAsync(self, state: List[str],
                                target_class_candidates: Optional[List[str]] = None,
+                               stm_events: Optional[List[List[str]]] = None,
                                max_workers: Optional[int] = None,
                                batch_size: int = 100) -> List[Dict[str, Any]]:
         """
@@ -842,7 +843,7 @@ class PatternSearcher:
         logger.debug(f"Found {len(all_results)} matches above threshold (async parallel)")
         
         # Build Prediction objects asynchronously
-        active_list = await self._build_predictions_async(all_results, max_workers)
+        active_list = await self._build_predictions_async(all_results, max_workers, stm_events)
         
         # Final threshold validation
         filtered_list = [pred for pred in active_list 
@@ -937,28 +938,29 @@ class PatternSearcher:
         
         return batch_results
     
-    async def _build_predictions_async(self, results: List, max_workers: int) -> List[Dict[str, Any]]:
+    async def _build_predictions_async(self, results: List, max_workers: int, stm_events: Optional[List[List[str]]] = None) -> List[Dict[str, Any]]:
         """
         Build Prediction objects from results asynchronously.
-        
+
         Args:
             results: List of match results
             max_workers: Maximum concurrent workers
-            
+            stm_events: Original event-structured STM for calculating event-aligned missing/extras
+
         Returns:
             List of prediction dictionaries
         """
         if not results:
             return []
-        
+
         # Split results into batches for async processing
         batch_size = max(1, len(results) // max_workers)
         result_batches = [results[i:i + batch_size] for i in range(0, len(results), batch_size)]
-        
+
         # Process batches concurrently
         tasks = []
         for batch in result_batches:
-            task = asyncio.create_task(self._build_predictions_batch(batch))
+            task = asyncio.create_task(self._build_predictions_batch(batch, stm_events))
             tasks.append(task)
         
         # Gather all predictions
@@ -974,13 +976,14 @@ class PatternSearcher:
         
         return active_list
     
-    async def _build_predictions_batch(self, batch: List) -> List[Dict[str, Any]]:
+    async def _build_predictions_batch(self, batch: List, stm_events: Optional[List[List[str]]] = None) -> List[Dict[str, Any]]:
         """
         Build predictions for a batch of results.
-        
+
         Args:
             batch: Batch of match results
-            
+            stm_events: Original event-structured STM for calculating event-aligned missing/extras
+
         Returns:
             List of prediction dictionaries for this batch
         """

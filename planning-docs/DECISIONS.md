@@ -163,6 +163,32 @@
 
 ---
 
+## 2025-10-03 - Async Conversion for Redis Cache Integration
+**Decision**: Convert observation processing chain to async (process_observation → processEvents → predictPattern)
+**Rationale**: Enable Redis-based metrics caching for 3-10x performance improvement. Current sync implementation cannot use async cached_calculator even though infrastructure exists.
+**Alternatives Considered**:
+- Sync wrapper with asyncio.run(): Creates event loop conflicts, less efficient
+- Remove unused async version: Loses performance optimization opportunity
+- Keep as-is: Wastes existing cache infrastructure investment
+**Impact**:
+- Convert ObservationProcessor.process_observation() to async
+- Convert PatternProcessor.processEvents() to async
+- Rename PatternProcessor.predictPattern() to predictPatternSync() for backward compatibility
+- Rename PatternProcessor.predictPatternAsync() to predictPattern() as primary method
+- Enable cached_calculator usage in predictPattern() (lines 509-513)
+- Update all FastAPI endpoints to await async observation processing
+- Remove TODO comment at pattern_processor.py:511
+**Confidence**: High - FastAPI is already async-native, minimal disruption
+**Performance Benefit**: 3-10x speedup for pattern prediction with Redis cache enabled
+**Files Modified**:
+- /kato/workers/pattern_processor.py (rename methods, enable cache usage)
+- /kato/workers/observation_processor.py (async process_observation)
+- /kato/services/kato_fastapi.py (await async calls)
+**Backward Compatibility**: Keep predictPatternSync() for any legacy callers that need sync interface
+**Technical Note**: This completes the metrics caching infrastructure started in earlier performance optimizations. The cache layer existed but was never utilized due to sync/async mismatch.
+
+---
+
 ## Template for New Decisions
 ```
 ## YYYY-MM-DD HH:MM - [Decision Title]

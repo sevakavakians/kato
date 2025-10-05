@@ -21,7 +21,7 @@ from typing import Dict, List, Any
 from unittest.mock import Mock, AsyncMock, patch
 import aiohttp
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from kato.errors.exceptions import SessionNotFoundError
+from kato.exceptions import SessionNotFoundError
 
 
 class TestSessionIsolation:

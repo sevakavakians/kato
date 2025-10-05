@@ -19,6 +19,7 @@ htmlcov/
 dmypy.json
 .pyre/
 .pytype/
+.ruff_cache/
 
 # Virtual environments
 venv/

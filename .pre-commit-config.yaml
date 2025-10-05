@@ -1,0 +1,73 @@
+# Pre-commit hooks for KATO code quality
+# Install: pip install pre-commit && pre-commit install
+# Run manually: pre-commit run --all-files
+
+repos:
+  # Ruff - Fast Python linter (replaces flake8, isort, and more)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.1.9
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+        name: "Ruff linter"
+        description: "Run Ruff linter with auto-fix"
+
+      - id: ruff-format
+        name: "Ruff formatter"
+        description: "Format Python code with Ruff"
+
+  # Bandit - Security linter
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.6
+    hooks:
+      - id: bandit
+        args: ["-c", "pyproject.toml"]
+        additional_dependencies: ["bandit[toml]"]
+        name: "Bandit security check"
+        description: "Check for common security issues"
+
+  # Basic file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+        name: "Trim trailing whitespace"
+
+      - id: end-of-file-fixer
+        name: "Fix end of files"
+
+      - id: check-yaml
+        name: "Check YAML syntax"
+
+      - id: check-json
+        name: "Check JSON syntax"
+
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+        name: "Check for large files"
+
+      - id: check-merge-conflict
+        name: "Check for merge conflicts"
+
+      - id: debug-statements
+        name: "Check for debug statements"
+
+  # Check for common Python issues
+  - repo: https://github.com/pre-commit/pygrep-hooks
+    rev: v1.10.0
+    hooks:
+      - id: python-check-blanket-noqa
+        name: "Check for blanket noqa"
+
+      - id: python-check-blanket-type-ignore
+        name: "Check for blanket type ignore"
+
+      - id: python-no-eval
+        name: "Check for eval() usage"
+
+      - id: python-use-type-annotations
+        name: "Enforce type annotations"
+
+# Skip pre-commit for certain scenarios
+# To skip: SKIP=ruff git commit -m "message"
+# To skip all: git commit --no-verify -m "message"

@@ -9,7 +9,7 @@ from unittest.mock import Mock, AsyncMock
 from fastapi import Request, status
 from fastapi.exceptions import RequestValidationError
 
-from kato.errors.exceptions import (
+from kato.exceptions import (
     KatoV2Exception,
     SessionNotFoundError,
     SessionExpiredError,
@@ -20,7 +20,7 @@ from kato.errors.exceptions import (
     session_not_found,
     validation_failed
 )
-from kato.errors.handlers import (
+from kato.exceptions.handlers import (
     kato_v2_exception_handler,
     get_recovery_suggestions,
     ErrorContext,

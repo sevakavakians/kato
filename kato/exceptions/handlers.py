@@ -6,13 +6,15 @@ consistent response formats and logging.
 """
 
 import logging
+import time
 from typing import Dict, Any, Union
 from fastapi import Request, HTTPException, status
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from .exceptions import (
+# Import from unified exceptions module
+from kato.exceptions import (
     KatoV2Exception,
     SessionNotFoundError,
     SessionExpiredError,
@@ -29,7 +31,7 @@ from .exceptions import (
     TimeoutError
 )
 
-logger = logging.getLogger('kato.errors.handlers')
+logger = logging.getLogger('kato.exceptions.handlers')
 
 
 def create_error_response(
@@ -41,14 +43,14 @@ def create_error_response(
 ) -> JSONResponse:
     """
     Create standardized error response.
-    
+
     Args:
         error_code: Machine-readable error code
         message: Human-readable error message
         status_code: HTTP status code
         details: Additional error details
         context: Error context information
-    
+
     Returns:
         JSONResponse with structured error data
     """
@@ -60,7 +62,7 @@ def create_error_response(
             "context": context or {}
         }
     }
-    
+
     return JSONResponse(
         status_code=status_code,
         content=response_data
@@ -70,22 +72,22 @@ def create_error_response(
 async def kato_v2_exception_handler(request: Request, exc: KatoV2Exception) -> JSONResponse:
     """
     Handle all KATO v2.0 custom exceptions.
-    
+
     Args:
         request: FastAPI request object
         exc: KATO v2.0 exception instance
-    
+
     Returns:
         Structured JSON error response
     """
     # Log the error with appropriate level
     if exc.recoverable:
-        logger.warning(f"Recoverable error in {request.url.path}: {exc.message}", 
+        logger.warning(f"Recoverable error in {request.url.path}: {exc.message}",
                       extra={"error_code": exc.error_code, "context": exc.context})
     else:
-        logger.error(f"Non-recoverable error in {request.url.path}: {exc.message}", 
+        logger.error(f"Non-recoverable error in {request.url.path}: {exc.message}",
                     extra={"error_code": exc.error_code, "context": exc.context})
-    
+
     # Map exception types to HTTP status codes
     status_mapping = {
         SessionNotFoundError: status.HTTP_404_NOT_FOUND,
@@ -102,13 +104,13 @@ async def kato_v2_exception_handler(request: Request, exc: KatoV2Exception) -> J
         ResourceExhaustedError: status.HTTP_507_INSUFFICIENT_STORAGE,
         TimeoutError: status.HTTP_504_GATEWAY_TIMEOUT,
     }
-    
+
     # Get appropriate status code
     http_status = status_mapping.get(type(exc), status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
+
     # Add recovery suggestions for specific error types
     recovery_suggestions = get_recovery_suggestions(exc)
-    
+
     response_data = {
         "error": {
             "type": exc.__class__.__name__,
@@ -119,17 +121,17 @@ async def kato_v2_exception_handler(request: Request, exc: KatoV2Exception) -> J
             "timestamp": exc.timestamp
         }
     }
-    
+
     if recovery_suggestions:
         response_data["error"]["recovery_suggestions"] = recovery_suggestions
-    
+
     # Add specific headers for certain error types
     headers = {}
     if isinstance(exc, RateLimitExceededError) and exc.retry_after:
         headers["Retry-After"] = str(int(exc.retry_after))
     elif isinstance(exc, CircuitBreakerOpenError) and exc.recovery_time:
         headers["Retry-After"] = str(int(exc.recovery_time))
-    
+
     return JSONResponse(
         status_code=http_status,
         content=response_data,
@@ -140,16 +142,16 @@ async def kato_v2_exception_handler(request: Request, exc: KatoV2Exception) -> J
 async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
     """
     Handle FastAPI validation errors.
-    
+
     Args:
         request: FastAPI request object
         exc: Validation error instance
-    
+
     Returns:
         Structured JSON error response
     """
     logger.warning(f"Validation error in {request.url.path}: {exc.errors()}")
-    
+
     # Extract detailed validation errors
     validation_details = []
     for error in exc.errors():
@@ -159,7 +161,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             "type": error["type"],
             "input": error.get("input")
         })
-    
+
     return create_error_response(
         error_code="VALIDATION_ERROR",
         message="Request validation failed",
@@ -171,16 +173,16 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 async def http_exception_handler(request: Request, exc: Union[HTTPException, StarletteHTTPException]) -> JSONResponse:
     """
     Handle standard HTTP exceptions.
-    
+
     Args:
         request: FastAPI request object
         exc: HTTP exception instance
-    
+
     Returns:
         Structured JSON error response
     """
     logger.info(f"HTTP error {exc.status_code} in {request.url.path}: {exc.detail}")
-    
+
     # Map common HTTP status codes to error codes
     error_code_mapping = {
         400: "BAD_REQUEST",
@@ -195,9 +197,9 @@ async def http_exception_handler(request: Request, exc: Union[HTTPException, Sta
         503: "SERVICE_UNAVAILABLE",
         504: "GATEWAY_TIMEOUT"
     }
-    
+
     error_code = error_code_mapping.get(exc.status_code, "HTTP_ERROR")
-    
+
     return create_error_response(
         error_code=error_code,
         message=str(exc.detail),
@@ -208,16 +210,16 @@ async def http_exception_handler(request: Request, exc: Union[HTTPException, Sta
 async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """
     Handle unexpected exceptions.
-    
+
     Args:
         request: FastAPI request object
         exc: Exception instance
-    
+
     Returns:
         Generic error response
     """
     logger.error(f"Unexpected error in {request.url.path}: {str(exc)}", exc_info=True)
-    
+
     return create_error_response(
         error_code="INTERNAL_ERROR",
         message="An unexpected error occurred",
@@ -229,10 +231,10 @@ async def generic_exception_handler(request: Request, exc: Exception) -> JSONRes
 def get_recovery_suggestions(exc: KatoV2Exception) -> Dict[str, Any]:
     """
     Get recovery suggestions for specific error types.
-    
+
     Args:
         exc: KATO v2.0 exception instance
-    
+
     Returns:
         Dictionary with recovery suggestions
     """
@@ -245,7 +247,7 @@ def get_recovery_suggestions(exc: KatoV2Exception) -> Dict[str, Any]:
             ],
             "retry_recommended": False
         }
-    
+
     elif isinstance(exc, SessionExpiredError):
         return {
             "actions": [
@@ -255,7 +257,7 @@ def get_recovery_suggestions(exc: KatoV2Exception) -> Dict[str, Any]:
             ],
             "retry_recommended": False
         }
-    
+
     elif isinstance(exc, ConcurrencyError):
         return {
             "actions": [
@@ -266,7 +268,7 @@ def get_recovery_suggestions(exc: KatoV2Exception) -> Dict[str, Any]:
             "retry_recommended": True,
             "retry_delay_seconds": 1.0
         }
-    
+
     elif isinstance(exc, DatabaseConnectionError):
         return {
             "actions": [
@@ -277,7 +279,7 @@ def get_recovery_suggestions(exc: KatoV2Exception) -> Dict[str, Any]:
             "retry_recommended": True,
             "retry_delay_seconds": 30.0
         }
-    
+
     elif isinstance(exc, RateLimitExceededError):
         return {
             "actions": [
@@ -288,7 +290,7 @@ def get_recovery_suggestions(exc: KatoV2Exception) -> Dict[str, Any]:
             "retry_recommended": True,
             "retry_delay_seconds": exc.retry_after or 60.0
         }
-    
+
     elif isinstance(exc, CircuitBreakerOpenError):
         return {
             "actions": [
@@ -299,7 +301,7 @@ def get_recovery_suggestions(exc: KatoV2Exception) -> Dict[str, Any]:
             "retry_recommended": True,
             "retry_delay_seconds": exc.recovery_time or 60.0
         }
-    
+
     elif isinstance(exc, ValidationError):
         return {
             "actions": [
@@ -309,7 +311,7 @@ def get_recovery_suggestions(exc: KatoV2Exception) -> Dict[str, Any]:
             ],
             "retry_recommended": False
         }
-    
+
     elif isinstance(exc, ResourceExhaustedError):
         return {
             "actions": [
@@ -320,7 +322,7 @@ def get_recovery_suggestions(exc: KatoV2Exception) -> Dict[str, Any]:
             "retry_recommended": True,
             "retry_delay_seconds": 30.0
         }
-    
+
     elif isinstance(exc, TimeoutError):
         return {
             "actions": [
@@ -331,30 +333,30 @@ def get_recovery_suggestions(exc: KatoV2Exception) -> Dict[str, Any]:
             "retry_recommended": True,
             "retry_delay_seconds": 5.0
         }
-    
+
     return {}
 
 
 def setup_error_handlers(app):
     """
     Setup all error handlers for a FastAPI application.
-    
+
     Args:
         app: FastAPI application instance
     """
     # KATO v2.0 custom exceptions
     app.add_exception_handler(KatoV2Exception, kato_v2_exception_handler)
-    
+
     # FastAPI validation errors
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
-    
+
     # Standard HTTP exceptions
     app.add_exception_handler(HTTPException, http_exception_handler)
     app.add_exception_handler(StarletteHTTPException, http_exception_handler)
-    
+
     # Catch-all for unexpected exceptions
     app.add_exception_handler(Exception, generic_exception_handler)
-    
+
     logger.info("Error handlers configured for KATO v2.0")
 
 
@@ -362,17 +364,17 @@ def setup_error_handlers(app):
 
 class ErrorContext:
     """Context manager for enriched error handling"""
-    
+
     def __init__(self, operation: str, resource_id: str = None, **kwargs):
         self.operation = operation
         self.resource_id = resource_id
         self.context = kwargs
         self.start_time = None
-    
+
     def __enter__(self):
         self.start_time = time.time()
         return self
-    
+
     def __exit__(self, exc_type, exc_val, exc_tb):
         if exc_type and issubclass(exc_type, KatoV2Exception):
             # Enrich existing KATO exception with context
@@ -385,9 +387,5 @@ class ErrorContext:
         elif exc_type and not issubclass(exc_type, KatoV2Exception):
             # Wrap non-KATO exceptions
             logger.error(f"Non-KATO exception in {self.operation}: {exc_val}", exc_info=True)
-        
+
         return False  # Don't suppress exceptions
-
-
-# Import time for context manager
-import time

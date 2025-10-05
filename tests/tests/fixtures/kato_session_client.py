@@ -6,7 +6,7 @@ Provides methods to interact with the session-based API.
 import aiohttp
 import asyncio
 from typing import Dict, Any, Optional, List
-from kato.errors.exceptions import SessionNotFoundError
+from kato.exceptions import SessionNotFoundError
 
 
 class KatoSessionClient:

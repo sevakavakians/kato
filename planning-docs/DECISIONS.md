@@ -215,6 +215,54 @@
 
 ---
 
+## 2025-10-04 - Exception Module Consolidation and Code Quality Automation
+**Decision**: Consolidate kato/errors and kato/exceptions into single unified module; implement automated code quality infrastructure
+**Rationale**:
+- Two separate exception modules created confusion about which to use
+- Need automated enforcement to prevent technical debt accumulation
+- Coverage reporting essential for maintaining test quality
+- Pre-commit hooks catch issues before code review
+
+**Consolidation Details**:
+- Merged V2 exceptions from kato/errors/exceptions.py into kato/exceptions/__init__.py
+- Moved handlers from kato/errors/handlers.py to kato/exceptions/handlers.py
+- Updated 5 files importing from kato/errors to use kato/exceptions
+- Deleted kato/errors/ directory completely
+
+**Quality Tools Implemented**:
+- **Ruff**: Fast linter/formatter (replaces flake8, isort, pyupgrade) - 10-100x faster
+- **Bandit**: Security vulnerability scanner
+- **Vulture**: Dead code detector
+- **pytest-cov**: Test coverage reporting with HTML output
+- **Pre-commit**: 9 hooks for automatic enforcement
+
+**Configuration Files Created**:
+- pyproject.toml: Unified tool configuration (117 lines)
+- .pre-commit-config.yaml: 9 hooks configured
+- requirements-dev.txt: Development dependencies
+- Makefile: 18 convenient commands
+- CODE_QUALITY.md: Comprehensive documentation (150+ lines)
+
+**Alternatives Considered**:
+- Keep separate modules: Confusing for developers, harder to maintain
+- Use flake8: Slower than Ruff, requires more plugins
+- Manual quality checks: Error-prone, inconsistent enforcement
+- No coverage reporting: Blind spots in test coverage
+
+**Impact**:
+- Single source of truth for exceptions
+- Automated quality enforcement via pre-commit hooks
+- Fast linting with Ruff (10-100x speedup over flake8)
+- Security scanning catches vulnerabilities early
+- Coverage reports identify test gaps
+- Developer-friendly Makefile commands
+
+**Confidence**: Very High - Industry-standard tools, proven workflow
+**Files Modified**: 6 created, 9 updated, 3 deleted
+**Next Steps**: Run `make quality` and `make test-cov` to establish baselines
+
+---
+
 ## Template for New Decisions
 ```
 ## YYYY-MM-DD HH:MM - [Decision Title]

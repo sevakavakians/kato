@@ -34,7 +34,7 @@ from kato.workers.kato_processor import KatoProcessor
 from kato.config.settings import get_settings
 from kato.config.configuration_service import get_configuration_service
 from kato.monitoring.metrics import get_metrics_collector
-from kato.errors.handlers import setup_error_handlers
+from kato.exceptions.handlers import setup_error_handlers
 from kato.storage.pattern_cache import get_cache_manager
 from kato.exceptions import (
     ObservationError, ValidationError, DatabaseConnectionError,

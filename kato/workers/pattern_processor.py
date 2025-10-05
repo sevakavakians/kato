@@ -64,6 +64,7 @@ class PatternProcessor:
         self.max_predictions = int(kwargs["max_predictions"])
         self.recall_threshold = float(kwargs["recall_threshold"])
         self.stm_mode = kwargs.get("stm_mode", "CLEAR")  # Default to CLEAR for backward compatibility
+        self.calculate_predictive_information = kwargs.get("calculate_predictive_information", False)  # Default to False
         self.superkb = SuperKnowledgeBase(self.kb_id, self.persistence, settings=self.settings)
         self.patterns_searcher = PatternSearcher(kb_id=self.kb_id,
                                              max_predictions=self.max_predictions,
@@ -717,23 +718,17 @@ class PatternProcessor:
                         )
                     except Exception as e:
                         logger.warning(f"Cached metrics calculation failed: {e}, falling back to direct calculation")
-                        hamiltonian_val = hamiltonian(state, total_symbols, state_frequency_vector)
-                        grand_hamiltonian_val = grand_hamiltonian(state, symbol_probability_cache)
+                        hamiltonian_val = hamiltonian(state, total_symbols)
+                        grand_hamiltonian_val = grand_hamiltonian(state, symbol_probability_cache, total_symbols)
                 else:
                     # Fallback to direct calculation
-                    hamiltonian_val = hamiltonian(state, total_symbols, state_frequency_vector)
-                    grand_hamiltonian_val = grand_hamiltonian(state, symbol_probability_cache)
+                    hamiltonian_val = hamiltonian(state, total_symbols)
+                    grand_hamiltonian_val = grand_hamiltonian(state, symbol_probability_cache, total_symbols)
                 
                 if total_ensemble_pattern_frequencies > 0:
                     itfdf_similarity = 1 - (distance * prediction['frequency'] / total_ensemble_pattern_frequencies)
                 else:
                     itfdf_similarity = 0.0
-                
-                # Calculate potential
-                try:
-                    potential = (prediction['evidence'] + prediction['confidence']) * prediction['snr'] + itfdf_similarity + (1/(prediction['fragmentation'] + 1))
-                except ZeroDivisionError:
-                    potential = (prediction['evidence'] + prediction['confidence']) * prediction['snr'] + itfdf_similarity
                 
                 # Calculate confluence with conditional probability caching if available
                 try:
@@ -752,40 +747,51 @@ class PatternProcessor:
                 except Exception as e:
                     logger.debug(f"Error calculating confluence: {e}")
                     confluence_val = 0.0
-                
+
+                # Average emotives (convert from list of dicts to single dict)
+                try:
+                    prediction['emotives'] = average_emotives(prediction['emotives'])
+                except ZeroDivisionError as e:
+                    logger.error(f"ZeroDivisionError in average_emotives: emotives={prediction['emotives']}, error={e}")
+                    raise
+
                 # Update prediction with calculated values
                 prediction.update({
                     'hamiltonian': hamiltonian_val,
                     'grand_hamiltonian': grand_hamiltonian_val,
                     'itfdf_similarity': itfdf_similarity,
-                    'potential': potential,
                     'confluence': confluence_val
                 })
-                
-                # Calculate predictive information if enabled
-                if self.calculate_predictive_information:
-                    try:
-                        prediction['predictive_information'] = calculate_ensemble_predictive_information(
-                            prediction, causal_patterns, state, symbol_probability_cache, self.superkb
-                        )
-                    except Exception as e:
-                        logger.warning(f"Error calculating predictive information: {e}")
+
+                # Remove pattern_data to save bandwidth
+                prediction.pop('pattern_data', None)
+
+            # Calculate ensemble-based predictive information and update potentials
+            try:
+                causal_patterns, future_potentials = calculate_ensemble_predictive_information(causal_patterns)
+                # Store future_potentials for the API response
+                self.future_potentials = future_potentials
+            except Exception as e:
+                logger.error(f"Error in ensemble predictive information calculation: {e}")
+                # Set defaults if calculation fails - use old formula as fallback
+                for prediction in causal_patterns:
+                    if 'predictive_information' not in prediction:
                         prediction['predictive_information'] = 0.0
-                else:
-                    prediction['predictive_information'] = 0.0
-                
-                if 'potential' not in prediction:
-                    prediction['potential'] = prediction.get('similarity', 0.0) * 0.0
-            
-            self.future_potentials = []
-        
+                    if 'potential' not in prediction:
+                        # Use old formula as fallback
+                        try:
+                            prediction['potential'] = (prediction['evidence'] + prediction['confidence']) * prediction['snr'] + prediction.get('itfdf_similarity', 0.0) + (1/(prediction['fragmentation'] + 1))
+                        except ZeroDivisionError:
+                            prediction['potential'] = (prediction['evidence'] + prediction['confidence']) * prediction['snr'] + prediction.get('itfdf_similarity', 0.0)
+                self.future_potentials = []
+
+            try:
+                active_causal_patterns = sorted([x for x in heapq.nlargest(self.max_predictions, causal_patterns, key=itemgetter('potential'))], reverse=True, key=itemgetter('potential'))
+            except Exception as e:
+                raise Exception(f"\nException in PatternProcessor.predictPattern (async): Error in sorting predictions! {self.kb_id}: {e}")
+
+            logger.debug(f" [ PatternProcessor predictPattern (async) ] {len(active_causal_patterns)} active_causal_patterns")
+            return active_causal_patterns
+
         except Exception as e:
             raise Exception(f"\nException in PatternProcessor.predictPattern (async): Error in metrics calculation! {self.kb_id}: {e}")
-        
-        try:
-            active_causal_patterns = sorted([x for x in heapq.nlargest(self.max_predictions, causal_patterns, key=itemgetter('potential'))], reverse=True, key=itemgetter('potential'))
-        except Exception as e:
-            raise Exception(f"\nException in PatternProcessor.predictPattern (async): Error in sorting predictions! {self.kb_id}: {e}")
-
-        logger.debug(f" [ PatternProcessor predictPattern (async) ] {len(active_causal_patterns)} active_causal_patterns")
-        return active_causal_patterns

@@ -82,12 +82,13 @@ class Prediction(dict):
 
         # Calculate event-aligned missing and extras using STM event structure
         if stm_events and len(stm_events) > 0:
-            # Event-by-event comparison - align STM events with pattern present events
+            # Event-by-event comparison - align with STM events (not pattern events)
             self['missing'] = []
             self['extras'] = []
 
-            for i, pattern_event in enumerate(self['present']):
-                stm_event = stm_events[i] if i < len(stm_events) else []
+            for i in range(len(stm_events)):
+                stm_event = stm_events[i]
+                pattern_event = self['present'][i] if i < len(self['present']) else []
 
                 # Missing: symbols in pattern event but not in corresponding STM event
                 event_missing = [s for s in pattern_event if s not in stm_event]

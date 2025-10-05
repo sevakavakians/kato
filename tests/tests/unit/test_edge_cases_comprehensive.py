@@ -61,7 +61,12 @@ def test_all_extra_symbols(kato_fixture):
         if pred.get('frequency', 0) > 0:
             extras = pred.get('extras', [])
             # Should detect all the extra symbols
-            assert len(extras) >= 6, f"Should detect many extras, got {extras}"
+            # Extras is event-structured, count total across all events
+            if extras and isinstance(extras[0], list):
+                total_extras = sum(len(event) for event in extras)
+            else:
+                total_extras = len(extras)
+            assert total_extras >= 6, f"Should detect many extras, got {extras} (total: {total_extras})"
             break
 
 

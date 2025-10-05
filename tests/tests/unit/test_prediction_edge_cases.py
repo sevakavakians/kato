@@ -156,8 +156,13 @@ def test_partial_overlap_multiple_sequences(kato_fixture):
     all_missing = []
     for pred in matching_predictions:
         missing = pred.get('missing', [])
-        all_missing.extend(missing)
-    
+        # Missing is event-structured, flatten it
+        if missing and isinstance(missing[0], list):
+            for event_missing in missing:
+                all_missing.extend(event_missing)
+        else:
+            all_missing.extend(missing)
+
     # Should be missing different unique symbols from different sequences
     assert 'unique1' in all_missing or 'unique2' in all_missing or 'unique3' in all_missing
 
@@ -272,9 +277,15 @@ def test_observation_longer_than_learned(kato_fixture):
             # The learned sequence should match partially
             # Extra observations beyond learned sequence might be in extras
             assert len(present) <= 2, f"Present should not exceed learned length, got {present}"
-            # Additional symbols might be extras
+            # Additional symbols might be extras - flatten if event-structured
             if extras:
-                assert 'c' in extras or 'd' in extras or 'e' in extras
+                flat_extras = []
+                if isinstance(extras[0], list):
+                    for event_extras in extras:
+                        flat_extras.extend(event_extras)
+                else:
+                    flat_extras = extras
+                assert 'c' in flat_extras or 'd' in flat_extras or 'e' in flat_extras, f"Expected c, d, or e in extras, got {extras}"
             break
 
 

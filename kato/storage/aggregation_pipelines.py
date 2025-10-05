@@ -281,10 +281,21 @@ class OptimizedQueryManager:
                 
             return result
     
+    def get_all_symbols_optimized(self, collection: Collection) -> Dict[str, Dict[str, Any]]:
+        """
+        Get all symbols with optimized aggregation.
+
+        Args:
+            collection: MongoDB collection to query
+
+        Returns: Dict mapping symbol names to symbol documents
+        """
+        return self.pipelines.get_all_symbols_optimized(collection)
+
     def get_symbol_frequencies_batch(self, symbols: List[str]) -> Dict[str, int]:
         """
         Get symbol frequencies for multiple symbols using batch aggregation.
-        
+
         Returns: Dict mapping symbol names to frequencies
         """
         try:
@@ -293,16 +304,16 @@ class OptimizedQueryManager:
                     self.superkb.symbols_kb
                 )
                 self._cache_valid = True
-                
+
             result = {}
             for symbol in symbols:
                 if symbol in self._symbol_cache:
                     result[symbol] = self._symbol_cache[symbol].get("frequency", 0)
                 else:
                     result[symbol] = 0
-                    
+
             return result
-            
+
         except Exception as e:
             logger.warning(f"Batch symbol query failed, falling back to individual queries: {e}")
             # Fallback to individual queries

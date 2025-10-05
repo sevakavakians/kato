@@ -814,9 +814,11 @@ class PatternSearcher:
             if target_class_candidates:
                 candidates &= set(target_class_candidates)
             logger.debug(f"Index filtering: {self.patterns_count} -> {len(candidates)} candidates")
+            # Convert set to list for slicing
+            candidates = list(candidates)
         else:
             candidates = target_class_candidates if target_class_candidates else list(self.patterns_cache.keys())
-        
+
         # Split candidates into batches for parallel processing
         candidate_batches = [candidates[i:i + batch_size] for i in range(0, len(candidates), batch_size)]
         

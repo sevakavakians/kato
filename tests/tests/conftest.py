@@ -28,7 +28,7 @@ async def isolated_session(kato_client):
     # Create a unique session for this test
     test_id = str(uuid.uuid4())[:8]
     session = await kato_client.create_session(
-        user_id=f"test_user_{test_id}",
+        node_id=f"test_node_{test_id}",
         ttl_seconds=60,  # Short TTL for tests
         metadata={"test": True, "test_id": test_id}
     )

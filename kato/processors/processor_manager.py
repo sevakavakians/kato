@@ -64,78 +64,78 @@ class ProcessorManager:
             f"max={max_processors}, ttl={eviction_ttl_seconds}s"
         )
     
-    def _get_processor_id(self, user_id: str) -> str:
+    def _get_processor_id(self, node_id: str) -> str:
         """
-        Generate processor ID for a specific user.
-        
+        Generate processor ID for a specific node.
+
         Args:
-            user_id: User identifier
-        
+            node_id: Node identifier
+
         Returns:
-            Processor ID in format "{user_id}_{base_processor_id}"
+            Processor ID in format "{node_id}_{base_processor_id}"
         """
-        # Clean user_id to be MongoDB-safe
+        # Clean node_id to be MongoDB-safe
         # MongoDB doesn't allow: / \ . " $ * < > : | ? in database names
         # Also replace hyphens with underscores
-        safe_user_id = user_id
+        safe_node_id = node_id
         for char in ['/', '\\', '.', '"', '$', '*', '<', '>', ':', '|', '?', '-', ' ']:
-            safe_user_id = safe_user_id.replace(char, '_')
-        
+            safe_node_id = safe_node_id.replace(char, '_')
+
         # Clean base_processor_id too
         safe_base_id = self.base_processor_id.replace('-', '_')
-        
+
         # MongoDB database name limit is 64 characters but we use 60 for absolute safety
         # Calculate the final name and ensure it fits
-        full_name = f"{safe_user_id}_{safe_base_id}"
-        
+        full_name = f"{safe_node_id}_{safe_base_id}"
+
         if len(full_name) > 60:  # Use 60 for extra safety margin
-            # Need to truncate user_id to fit
+            # Need to truncate node_id to fit
             import hashlib
-            user_hash = hashlib.md5(safe_user_id.encode()).hexdigest()[:8]
-            
-            # Calculate exact space available for user_id
-            # Format: {truncated_user}_{hash}_{base_id}
+            node_hash = hashlib.md5(safe_node_id.encode()).hexdigest()[:8]
+
+            # Calculate exact space available for node_id
+            # Format: {truncated_node}_{hash}_{base_id}
             # So we need: len(base_id) + 1 (underscore) + 8 (hash) + 1 (underscore)
-            max_user_length = 60 - len(safe_base_id) - 1 - 8 - 1
-            
-            truncated_user = safe_user_id[:max_user_length]
-            safe_user_id = f"{truncated_user}_{user_hash}"
-            
+            max_node_length = 60 - len(safe_base_id) - 1 - 8 - 1
+
+            truncated_node = safe_node_id[:max_node_length]
+            safe_node_id = f"{truncated_node}_{node_hash}"
+
             # Log for debugging
-            final_name = f"{safe_user_id}_{safe_base_id}"
-            logger.info(f"Truncated user_id for MongoDB: orig={user_id}, final={final_name}, len={len(final_name)}")
-        
-        return f"{safe_user_id}_{safe_base_id}"
+            final_name = f"{safe_node_id}_{safe_base_id}"
+            logger.info(f"Truncated node_id for MongoDB: orig={node_id}, final={final_name}, len={len(final_name)}")
+
+        return f"{safe_node_id}_{safe_base_id}"
     
     async def get_processor_by_id(self, processor_id: Optional[str] = None, session_config: Optional[SessionConfiguration] = None) -> KatoProcessor:
         """
         Get or create a processor by processor ID (v1 API compatibility).
-        
+
         For backward compatibility with v1 API endpoints.
-        If processor_id is None, uses 'default' as user_id.
-        
+        If processor_id is None, uses 'default' as node_id.
+
         Args:
-            processor_id: Processor identifier (used as user_id)
+            processor_id: Processor identifier (used as node_id)
             session_config: Optional session configuration to apply
-        
+
         Returns:
             KatoProcessor instance for this processor_id
         """
-        user_id = processor_id or 'default'
-        return await self.get_processor(user_id, session_config)
+        node_id = processor_id or 'default'
+        return await self.get_processor(node_id, session_config)
 
-    async def get_processor(self, user_id: str, session_config: Optional[SessionConfiguration] = None) -> KatoProcessor:
+    async def get_processor(self, node_id: str, session_config: Optional[SessionConfiguration] = None) -> KatoProcessor:
         """
-        Get or create a processor for a specific user.
-        
+        Get or create a processor for a specific node.
+
         Args:
-            user_id: User identifier
+            node_id: Node identifier
             session_config: Optional session configuration to apply
-        
+
         Returns:
-            KatoProcessor instance for this user
+            KatoProcessor instance for this node
         """
-        processor_id = self._get_processor_id(user_id)
+        processor_id = self._get_processor_id(node_id)
         
         # Check if processor exists and is not expired
         if processor_id in self.processors:
@@ -149,8 +149,8 @@ class ProcessorManager:
             processor = processor_info['processor']
             if session_config:
                 self._apply_config_to_processor(processor, session_config)
-            
-            logger.debug(f"Returning cached processor for user {user_id}")
+
+            logger.debug(f"Returning cached processor for node {node_id}")
             return processor
         
         # Need to create new processor
@@ -166,18 +166,18 @@ class ProcessorManager:
                 return processor_info['processor']
             
             # Create new processor
-            logger.info(f"Creating new processor for user {user_id}")
-            
+            logger.info(f"Creating new processor for node {node_id}")
+
             # Resolve configuration using ConfigurationService
             resolved_config = self.config_service.resolve_configuration(
                 session_config=session_config,
                 session_id=session_config.session_id if session_config else None,
-                user_id=user_id
+                node_id=node_id
             )
-            
+
             # Build genome manifest without processor_id (now passed directly)
             genome_manifest = {
-                'name': f"User-{user_id}",
+                'name': f"Node-{node_id}",
                 **resolved_config.to_genome_manifest()
             }
             
@@ -190,7 +190,7 @@ class ProcessorManager:
             # Store in cache
             self.processors[processor_id] = {
                 'processor': processor,
-                'user_id': user_id,
+                'node_id': node_id,
                 'created_at': datetime.now(timezone.utc),
                 'last_accessed': datetime.now(timezone.utc),
                 'access_count': 1
@@ -273,22 +273,22 @@ class ProcessorManager:
             del self.processor_locks[evicted_id]
         
         logger.info(
-            f"Evicted processor {evicted_id} for user {evicted_info['user_id']} "
+            f"Evicted processor {evicted_id} for node {evicted_info['node_id']} "
             f"(created: {evicted_info['created_at']}, accesses: {evicted_info['access_count']})"
         )
     
-    async def update_processor_config(self, user_id: str, session_config: SessionConfiguration) -> bool:
+    async def update_processor_config(self, node_id: str, session_config: SessionConfiguration) -> bool:
         """
         Update a processor's configuration dynamically.
-        
+
         Args:
-            user_id: User identifier
+            node_id: Node identifier
             session_config: New session configuration
-        
+
         Returns:
             True if successful, False otherwise
         """
-        processor_id = self._get_processor_id(user_id)
+        processor_id = self._get_processor_id(node_id)
         
         if processor_id not in self.processors:
             # Processor doesn't exist, will be created with new config on next access
@@ -303,7 +303,7 @@ class ProcessorManager:
             resolved_config = self.config_service.resolve_configuration(
                 session_config=session_config,
                 session_id=session_config.session_id if session_config else None,
-                user_id=user_id
+                node_id=node_id
             )
             
             # Get the configuration values
@@ -336,24 +336,24 @@ class ProcessorManager:
                     processor.pattern_processor.stm_mode = new_config['stm_mode']
                     logger.debug(f"Updated STM mode to {new_config['stm_mode']} for processor {processor_id}")
             
-            logger.info(f"Updated processor {processor_id} configuration for user {user_id}")
+            logger.info(f"Updated processor {processor_id} configuration for node {node_id}")
             return True
-            
+
         except Exception as e:
-            logger.error(f"Failed to update processor config for {user_id}: {e}")
+            logger.error(f"Failed to update processor config for {node_id}: {e}")
             return False
     
-    async def remove_processor(self, user_id: str) -> bool:
+    async def remove_processor(self, node_id: str) -> bool:
         """
-        Remove a specific user's processor from cache.
-        
+        Remove a specific node's processor from cache.
+
         Args:
-            user_id: User identifier
-        
+            node_id: Node identifier
+
         Returns:
             True if removed, False if not found
         """
-        processor_id = self._get_processor_id(user_id)
+        processor_id = self._get_processor_id(node_id)
         
         if processor_id not in self.processors:
             return False
@@ -369,8 +369,8 @@ class ProcessorManager:
         # Remove lock
         if processor_id in self.processor_locks:
             del self.processor_locks[processor_id]
-        
-        logger.info(f"Removed processor {processor_id} for user {user_id}")
+
+        logger.info(f"Removed processor {processor_id} for node {node_id}")
         return True
     
     async def cleanup_expired_processors(self) -> int:
@@ -402,7 +402,7 @@ class ProcessorManager:
                 del self.processor_locks[processor_id]
             
             logger.info(
-                f"Expired processor {processor_id} for user {processor_info['user_id']} "
+                f"Expired processor {processor_id} for node {processor_info['node_id']} "
                 f"(last accessed: {processor_info['last_accessed']})"
             )
         
@@ -442,7 +442,7 @@ class ProcessorManager:
             idle_seconds = (now - info['last_accessed']).total_seconds()
             stats["processors"].append({
                 "processor_id": processor_id,
-                "user_id": info['user_id'],
+                "node_id": info['node_id'],
                 "created_at": info['created_at'].isoformat(),
                 "last_accessed": info['last_accessed'].isoformat(),
                 "access_count": info['access_count'],

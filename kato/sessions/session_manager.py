@@ -23,14 +23,14 @@ logger = logging.getLogger('kato.sessions.manager')
 
 @dataclass
 class SessionState:
-    """State for a user session with its own configuration"""
+    """State for a node session with its own configuration"""
     session_id: str
-    user_id: str  # User who owns this session
+    node_id: str  # Node that owns this session
     created_at: datetime
     last_accessed: datetime
     expires_at: datetime
     
-    # Session-specific STM state (user's LTM is in their processor)
+    # Session-specific STM state (node's LTM is in their processor)
     stm: List[List[str]] = field(default_factory=list)
     emotives_accumulator: List[Dict[str, float]] = field(default_factory=list)
     time: int = 0
@@ -69,9 +69,9 @@ class SessionState:
 
 class SessionManager:
     """
-    Manages user sessions with complete isolation.
-    
-    This is the core component that enables multiple users to use KATO
+    Manages node sessions with complete isolation.
+
+    This is the core component that enables multiple nodes to use KATO
     simultaneously without data collision.
     """
     
@@ -95,88 +95,88 @@ class SessionManager:
     
     async def get_or_create_session(
         self,
-        user_id: str,
+        node_id: str,
         config: Optional[Dict[str, Any]] = None,
         metadata: Optional[Dict[str, Any]] = None,
         ttl_seconds: Optional[int] = None
     ) -> SessionState:
         """
-        Get existing session for a user or create a new one.
-        
+        Get existing session for a node or create a new one.
+
         Args:
-            user_id: User identifier (required for processor isolation)
+            node_id: Node identifier (required for processor isolation)
             config: Optional session configuration parameters
             metadata: Optional session metadata
             ttl_seconds: Session TTL (uses default if not specified)
-        
+
         Returns:
-            SessionState for this user (existing or newly created)
+            SessionState for this node (existing or newly created)
         """
-        # Look for existing session for this user
+        # Look for existing session for this node
         for session_id, session in self.sessions.items():
-            if session.user_id == user_id and not session.is_expired():
-                # Found existing session for this user
+            if session.node_id == node_id and not session.is_expired():
+                # Found existing session for this node
                 session.update_access()
-                logger.debug(f"Returning existing session {session_id} for user {user_id}")
+                logger.debug(f"Returning existing session {session_id} for node {node_id}")
                 return session
-        
+
         # No existing session, create new one
-        return await self.create_session(user_id, config, metadata, ttl_seconds)
+        return await self.create_session(node_id, config, metadata, ttl_seconds)
     
     async def create_session(
         self,
-        user_id: str,
+        node_id: str,
         config: Optional[Dict[str, Any]] = None,
         metadata: Optional[Dict[str, Any]] = None,
         ttl_seconds: Optional[int] = None
     ) -> SessionState:
         """
         Create a new isolated session with its own configuration.
-        
+
         Args:
-            user_id: User identifier (required for processor isolation)
+            node_id: Node identifier (required for processor isolation)
             config: Optional session configuration parameters
             metadata: Optional session metadata
             ttl_seconds: Session TTL (uses default if not specified)
-        
+
         Returns:
             New SessionState with unique session_id
         """
         # Generate cryptographically secure session ID
         session_id = f"session-{uuid.uuid4().hex}-{int(time.time() * 1000)}"
-        
+
         now = datetime.now(timezone.utc)
         ttl = ttl_seconds or self.default_ttl
-        
+
         # Initialize session configuration
-        session_config = SessionConfiguration(session_id=session_id, user_id=user_id)
-        
+        session_config = SessionConfiguration(session_id=session_id, node_id=node_id)
+
         # Apply config if provided
         if config:
             session_config.update(config)
-        
+
         session = SessionState(
             session_id=session_id,
-            user_id=user_id,
+            node_id=node_id,
             created_at=now,
             last_accessed=now,
             expires_at=now + timedelta(seconds=ttl),
             metadata=metadata or {},
             session_config=session_config
         )
-        
+
         # Store session
         self.sessions[session_id] = session
-        
+
         # Create session-specific lock
         self.session_locks[session_id] = asyncio.Lock()
-        
-        logger.info(f"Created session {session_id} for user {user_id} (user has dedicated processor)")
-        
+
+        logger.info(f"Created session {session_id} for node {node_id} (node has dedicated processor)")
+
         # Start cleanup task if not running
         if not self._cleanup_task:
             self._cleanup_task = asyncio.create_task(self._cleanup_loop())
-        
+
         return session
     
     async def get_session(self, session_id: str) -> Optional[SessionState]:
@@ -332,12 +332,12 @@ class SessionManager:
         """Get statistics about current sessions"""
         now = datetime.now(timezone.utc)
         active_sessions = [s for s in self.sessions.values() if s.expires_at > now]
-        
+
         return {
             "total_sessions": len(self.sessions),
             "active_sessions": len(active_sessions),
             "expired_sessions": len(self.sessions) - len(active_sessions),
-            "users_with_sessions": len(set(s.user_id for s in active_sessions if s.user_id)),
+            "nodes_with_sessions": len(set(s.node_id for s in active_sessions if s.node_id)),
             "average_stm_size": sum(len(s.stm) for s in active_sessions) / max(len(active_sessions), 1),
             "total_stm_events": sum(len(s.stm) for s in active_sessions)
         }

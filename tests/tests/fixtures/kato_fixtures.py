@@ -43,7 +43,7 @@ class KATOFastAPIFixture:
         self.container_name = None
         self.port = None
         self.base_url = None
-        self.processor_id = self._generate_processor_id()  # Now used as user_id
+        self.processor_id = self._generate_processor_id()  # Now used as node_id
         self.services_available = False
         self.session_id = None  # Will be created per test
         self.session_config = {}  # Session-specific configuration
@@ -244,10 +244,10 @@ class KATOFastAPIFixture:
             return  # Session already created
         
         # Create a session with test-specific configuration
-        # IMPORTANT: Direct endpoints use x-test-id header which gets processed by get_user_id_from_request()
+        # IMPORTANT: Direct endpoints use x-test-id header for isolation
         # The processor_id already has the correct "test_" prefix, so we use it directly
         session_data = {
-            'user_id': self.processor_id,  # processor_id already has correct "test_" prefix
+            'node_id': self.processor_id,  # processor_id already has correct "test_" prefix
             'config': self.session_config  # Session-specific configuration
         }
         

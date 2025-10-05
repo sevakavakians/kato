@@ -20,16 +20,16 @@ KATO uses a session-based architecture with a single service that supports multi
 # Start KATO service
 ./start.sh
 
-# Create a session for a specific user
+# Create a session for a specific node
 curl -X POST http://localhost:8000/sessions \
   -H "Content-Type: application/json" \
-  -d '{"user_id": "alice", "config": {"max_predictions": 50}}'
+  -d '{"node_id": "alice", "config": {"max_predictions": 50}}'
 
 # Create session with custom configuration
 curl -X POST http://localhost:8000/sessions \
   -H "Content-Type: application/json" \
   -d '{
-    "user_id": "bob", 
+    "node_id": "bob", 
     "config": {
       "recall_threshold": 0.3,
       "max_pattern_length": 10

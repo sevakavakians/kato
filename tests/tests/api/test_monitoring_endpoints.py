@@ -201,17 +201,17 @@ class TestMonitoringEndpoints:
     
     def test_session_placeholder_endpoint(self):
         """Test current session creation placeholder"""
-        # Sessions endpoint requires a user_id in the request body
-        response = requests.post(f"{self.BASE_URL}/sessions", json={"user_id": "test_user_123"})
-        
+        # Sessions endpoint requires a node_id in the request body
+        response = requests.post(f"{self.BASE_URL}/sessions", json={"node_id": "test_node_123"})
+
         assert response.status_code == 200
         data = response.json()
-        
+
         assert "session_id" in data
-        assert "user_id" in data
+        assert "node_id" in data
         assert "created_at" in data
         assert "expires_at" in data
-        assert data["user_id"] == "test_user_123"
+        assert data["node_id"] == "test_node_123"
     
     def test_metrics_collection_after_requests(self):
         """Test that metrics are properly collected after making requests"""

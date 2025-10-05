@@ -43,7 +43,7 @@ class ResolvedConfiguration:
     
     # Source tracking
     source_session_id: Optional[str] = None
-    source_user_id: Optional[str] = None
+    source_node_id: Optional[str] = None
     overrides_applied: Dict[str, Any] = None
     
     def to_genome_manifest(self) -> Dict[str, Any]:
@@ -125,19 +125,19 @@ class ConfigurationService:
         }
     
     def resolve_configuration(
-        self, 
+        self,
         session_config: Optional[SessionConfiguration] = None,
         session_id: Optional[str] = None,
-        user_id: Optional[str] = None
+        node_id: Optional[str] = None
     ) -> ResolvedConfiguration:
         """
         Resolve final configuration by merging defaults with session overrides.
-        
+
         Args:
             session_config: Optional session-specific configuration
             session_id: Session ID for tracking
-            user_id: User ID for tracking
-        
+            node_id: Node ID for tracking
+
         Returns:
             ResolvedConfiguration with final values and source tracking
         """
@@ -173,13 +173,13 @@ class ConfigurationService:
             sort_symbols=merged['sort'],
             process_predictions=merged['process_predictions'],
             source_session_id=session_id,
-            source_user_id=user_id,
+            source_node_id=node_id,
             overrides_applied=overrides_applied
         )
-        
+
         if overrides_applied:
             logger.debug(
-                f"Configuration resolved for session {session_id}, user {user_id} "
+                f"Configuration resolved for session {session_id}, node {node_id} "
                 f"with {len(overrides_applied)} overrides: {list(overrides_applied.keys())}"
             )
         
@@ -266,7 +266,7 @@ class ConfigurationService:
             'overrides_applied': resolved.overrides_applied or {},
             'has_overrides': bool(resolved.overrides_applied),
             'source_session': resolved.source_session_id,
-            'source_user': resolved.source_user_id
+            'source_node': resolved.source_node_id
         }
 
 

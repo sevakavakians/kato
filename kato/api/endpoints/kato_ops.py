@@ -33,14 +33,14 @@ async def observe_primary(
     through the KATO system, updating short-term memory and triggering 
     auto-learning if configured.
     """
-    from kato.services.kato_fastapi import app_state, get_user_id_from_request
+    from kato.services.kato_fastapi import app_state, get_node_id_from_request
 
     logger.debug("observe_primary function called")
 
     try:
-        # Use header-based user ID if processor_id not provided
+        # Use header-based node ID if processor_id not provided
         if processor_id is None:
-            processor_id = get_user_id_from_request(request)
+            processor_id = get_node_id_from_request(request)
             logger.debug(f"Extracted processor_id from headers: {processor_id}")
         else:
             logger.debug(f"Using provided processor_id: {processor_id}")
@@ -79,11 +79,11 @@ async def get_stm_primary(
     processor_id: Optional[str] = Query(None, description="Processor identifier")
 ):
     """Get short-term memory for the processor"""
-    from kato.services.kato_fastapi import app_state, get_user_id_from_request
-    
-    # Use header-based user ID if processor_id not provided
+    from kato.services.kato_fastapi import app_state, get_node_id_from_request
+
+    # Use header-based node ID if processor_id not provided
     if processor_id is None:
-        processor_id = get_user_id_from_request(request)
+        processor_id = get_node_id_from_request(request)
     
     processor = await app_state.processor_manager.get_processor_by_id(processor_id)
     stm = processor.get_stm()
@@ -106,15 +106,15 @@ async def learn_primary(
     Takes all observations currently in short-term memory and creates
     a persistent pattern that can be used for future predictions.
     """
-    from kato.services.kato_fastapi import app_state, get_user_id_from_request
-    
-    # Use header-based user ID if processor_id not provided
+    from kato.services.kato_fastapi import app_state, get_node_id_from_request
+
+    # Use header-based node ID if processor_id not provided
     if processor_id is None:
-        processor_id = get_user_id_from_request(request)
-    
+        processor_id = get_node_id_from_request(request)
+
     processor = await app_state.processor_manager.get_processor_by_id(processor_id)
     stm = processor.get_stm()
-    
+
     if not stm:
         raise HTTPException(status_code=400, detail="Cannot learn from empty STM")
     
@@ -142,11 +142,11 @@ async def clear_stm_primary(
     processor_id: Optional[str] = Query(None, description="Processor identifier")
 ):
     """Clear the short-term memory"""
-    from kato.services.kato_fastapi import app_state, get_user_id_from_request
-    
-    # Use header-based user ID if processor_id not provided
+    from kato.services.kato_fastapi import app_state, get_node_id_from_request
+
+    # Use header-based node ID if processor_id not provided
     if processor_id is None:
-        processor_id = get_user_id_from_request(request)
+        processor_id = get_node_id_from_request(request)
     
     processor = await app_state.processor_manager.get_processor_by_id(processor_id)
     
@@ -247,11 +247,11 @@ async def update_genes(
     processor_id: Optional[str] = Query(None, description="Processor identifier")
 ):
     """Update processor genes/configuration"""
-    from kato.services.kato_fastapi import app_state, get_user_id_from_request
+    from kato.services.kato_fastapi import app_state, get_node_id_from_request
 
-    # Use header-based user ID if processor_id not provided
+    # Use header-based node ID if processor_id not provided
     if processor_id is None:
-        processor_id = get_user_id_from_request(request)
+        processor_id = get_node_id_from_request(request)
 
     processor = await app_state.processor_manager.get_processor_by_id(processor_id)
 
@@ -301,11 +301,11 @@ async def get_gene(
     processor_id: Optional[str] = Query(None, description="Processor identifier")
 ):
     """Get a specific gene value"""
-    from kato.services.kato_fastapi import app_state, get_user_id_from_request
-    
-    # Use header-based user ID if processor_id not provided
+    from kato.services.kato_fastapi import app_state, get_node_id_from_request
+
+    # Use header-based node ID if processor_id not provided
     if processor_id is None:
-        processor_id = get_user_id_from_request(request)
+        processor_id = get_node_id_from_request(request)
     
     processor = await app_state.processor_manager.get_processor_by_id(processor_id)
     
@@ -330,11 +330,11 @@ async def get_pattern(
     processor_id: Optional[str] = Query(None, description="Processor identifier")
 ):
     """Get a specific pattern by ID"""
-    from kato.services.kato_fastapi import app_state, get_user_id_from_request
-    
-    # Use header-based user ID if processor_id not provided
+    from kato.services.kato_fastapi import app_state, get_node_id_from_request
+
+    # Use header-based node ID if processor_id not provided
     if processor_id is None:
-        processor_id = get_user_id_from_request(request)
+        processor_id = get_node_id_from_request(request)
     
     processor = await app_state.processor_manager.get_processor_by_id(processor_id)
     
@@ -372,11 +372,11 @@ async def get_cognition_data(
     processor_id: Optional[str] = Query(None, description="Processor identifier")
 ):
     """Get current cognition data from processor"""
-    from kato.services.kato_fastapi import app_state, get_user_id_from_request
-    
-    # Use header-based user ID if processor_id not provided
+    from kato.services.kato_fastapi import app_state, get_node_id_from_request
+
+    # Use header-based node ID if processor_id not provided
     if processor_id is None:
-        processor_id = get_user_id_from_request(request)
+        processor_id = get_node_id_from_request(request)
     
     processor = await app_state.processor_manager.get_processor_by_id(processor_id)
     
@@ -403,11 +403,11 @@ async def observe_sequence_primary(
     - Isolated processing where each observation gets fresh STM
     - Auto-learning after the sequence completes
     """
-    from kato.services.kato_fastapi import app_state, get_user_id_from_request
-    
-    # Use header-based user ID if processor_id not provided
+    from kato.services.kato_fastapi import app_state, get_node_id_from_request
+
+    # Use header-based node ID if processor_id not provided
     if processor_id is None:
-        processor_id = get_user_id_from_request(request)
+        processor_id = get_node_id_from_request(request)
 
     if not data.observations:
         # Return a 200 OK with empty results for an empty batch

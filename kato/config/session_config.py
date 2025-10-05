@@ -40,7 +40,7 @@ class SessionConfiguration:
     
     # Metadata
     session_id: str = field(default="")
-    user_id: str = field(default="")
+    node_id: str = field(default="")
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     version: int = field(default=1)
@@ -112,7 +112,7 @@ class SessionConfiguration:
         
         try:
             for key, value in updates.items():
-                if hasattr(self, key) and key not in ['session_id', 'user_id', 'created_at', 'updated_at', 'version']:
+                if hasattr(self, key) and key not in ['session_id', 'node_id', 'created_at', 'updated_at', 'version']:
                     original_values[key] = getattr(self, key)
                     setattr(self, key, value)
             
@@ -152,7 +152,7 @@ class SessionConfiguration:
         
         # Override with session values where set
         for key, value in asdict(self).items():
-            if key not in ['session_id', 'user_id', 'created_at', 'updated_at', 'version']:
+            if key not in ['session_id', 'node_id', 'created_at', 'updated_at', 'version']:
                 if value is not None:
                     merged[key] = value
         
@@ -186,7 +186,7 @@ class SessionConfiguration:
         valid_fields = {
             'max_pattern_length', 'persistence', 'recall_threshold', 'stm_mode',
             'indexer_type', 'max_predictions', 'sort_symbols', 'process_predictions',
-            'session_id', 'user_id', 'version'
+            'session_id', 'node_id', 'version'
         }
         
         filtered_data = {k: v for k, v in data.items() if k in valid_fields}

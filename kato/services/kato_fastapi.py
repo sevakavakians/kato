@@ -235,9 +235,9 @@ async def shutdown_event():
 # Utility Functions for Endpoint Modules
 # ============================================================================
 
-def get_user_id_from_request(request: Request) -> str:
-    """Generate a user ID from request for automatic session management."""
-    logger.debug(f"get_user_id_from_request: headers = {dict(request.headers)}")
+def get_node_id_from_request(request: Request) -> str:
+    """Generate a node ID from request for automatic session management."""
+    logger.debug(f"get_node_id_from_request: headers = {dict(request.headers)}")
 
     # Check for test isolation header first
     test_id = request.headers.get("x-test-id")
@@ -250,20 +250,14 @@ def get_user_id_from_request(request: Request) -> str:
         logger.debug(f"Using test ID: {result}")
         return result
 
-    # Check for explicit user ID header
-    user_id_header = request.headers.get("x-user-id")
-    if user_id_header:
-        logger.debug(f"Using x-user-id: {user_id_header}")
-        return user_id_header
+    # Check for explicit node ID header
+    node_id_header = request.headers.get("x-node-id")
+    if node_id_header:
+        logger.debug(f"Using x-node-id: {node_id_header}")
+        return node_id_header
 
-    # Legacy header support
-    legacy_user_id = request.headers.get('X-User-ID')
-    if legacy_user_id:
-        logger.debug(f"Using legacy X-User-ID: {legacy_user_id}")
-        return legacy_user_id
-
-    logger.debug("Using default_user")
-    return 'default_user'
+    logger.debug("Using default_node")
+    return 'default_node'
 
 
 # ============================================================================

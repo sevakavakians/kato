@@ -1,11 +1,11 @@
 """
-Multi-User Integration Tests for KATO
+Multi-Node Integration Tests for KATO
 
-This test suite validates complex multi-user scenarios to ensure:
-- Complete data isolation between users
+This test suite validates complex multi-node scenarios to ensure:
+- Complete data isolation between nodes
 - Correct behavior under concurrent load
 - Session handoff and migration scenarios
-- Performance with many simultaneous users
+- Performance with many simultaneous nodes
 - Edge cases with session conflicts
 
 These are end-to-end integration tests that use real KATO instances.
@@ -32,76 +32,76 @@ from tests.fixtures.kato_fixtures import KATOFastAPIFixture
 
 
 @dataclass
-class UserScenario:
-    """Represents a user interaction scenario"""
-    user_id: str
+class NodeScenario:
+    """Represents a node interaction scenario"""
+    node_id: str
     session_id: Optional[str]
     actions: List[Dict[str, Any]]
     expected_stm: List[List[str]]
     expected_predictions: Optional[List[str]]
 
 
-class TestMultiUserIsolation:
-    """Test complete isolation between multiple concurrent users"""
-    
-    def test_concurrent_users_no_collision(self):
-        """Test that 10 concurrent users maintain completely isolated sequences"""
-        # Create separate KATO instances for each user
+class TestMultiNodeIsolation:
+    """Test complete isolation between multiple concurrent nodes"""
+
+    def test_concurrent_nodes_no_collision(self):
+        """Test that 10 concurrent nodes maintain completely isolated sequences"""
+        # Create separate KATO instances for each node
         fixtures = []
-        users = []
-        
+        nodes = []
+
         try:
-            # Create 10 users with unique sequences and fixtures
+            # Create 10 nodes with unique sequences and fixtures
             for i in range(10):
-                # Each user gets their own KATO fixture with unique processor_id
-                fixture = KATOFastAPIFixture(processor_name=f"user_{i}", use_docker=False)
+                # Each node gets their own KATO fixture with unique processor_id
+                fixture = KATOFastAPIFixture(processor_name=f"node_{i}", use_docker=False)
                 fixture.setup()
                 fixtures.append(fixture)
-                
-                user = UserScenario(
-                    user_id=f"user_{i}",
+
+                node = NodeScenario(
+                    node_id=f"node_{i}",
                     session_id=None,
                     actions=[
-                        {"type": "observe", "data": {"strings": [f"U{i}_A"]}},
-                        {"type": "observe", "data": {"strings": [f"U{i}_B"]}},
-                        {"type": "observe", "data": {"strings": [f"U{i}_C"]}},
+                        {"type": "observe", "data": {"strings": [f"N{i}_A"]}},
+                        {"type": "observe", "data": {"strings": [f"N{i}_B"]}},
+                        {"type": "observe", "data": {"strings": [f"N{i}_C"]}},
                         {"type": "learn"},
                         {"type": "clear_stm"},
-                        {"type": "observe", "data": {"strings": [f"U{i}_A", f"U{i}_B"]}},
+                        {"type": "observe", "data": {"strings": [f"N{i}_A", f"N{i}_B"]}},
                         {"type": "get_predictions"}
                     ],
-                    expected_stm=[[f"U{i}_A", f"U{i}_B"]],
-                    expected_predictions=[f"U{i}_C"]
+                    expected_stm=[[f"N{i}_A", f"N{i}_B"]],
+                    expected_predictions=[f"N{i}_C"]
                 )
-                users.append(user)
-            
-            # Execute all user scenarios concurrently
-            results = self._execute_concurrent_scenarios(fixtures, users)
-            
-            # Verify each user's results
+                nodes.append(node)
+
+            # Execute all node scenarios concurrently
+            results = self._execute_concurrent_scenarios(fixtures, nodes)
+
+            # Verify each node's results
             for i, result in enumerate(results):
-                user = users[i]
+                node = nodes[i]
                 # Check final STM
-                assert result['final_stm'] == user.expected_stm, \
-                    f"User {i} STM corrupted: expected {user.expected_stm}, got {result['final_stm']}"
-                
+                assert result['final_stm'] == node.expected_stm, \
+                    f"Node {i} STM corrupted: expected {node.expected_stm}, got {result['final_stm']}"
+
                 # Check predictions
-                if user.expected_predictions and result['predictions']:
+                if node.expected_predictions and result['predictions']:
                     future_items = self._extract_future_items(result['predictions'])
                     # Since we learned the pattern, we should get the expected prediction
-                    assert any(expected in future_items for expected in user.expected_predictions), \
-                        f"User {i} didn't get expected predictions {user.expected_predictions}"
-                
+                    assert any(expected in future_items for expected in node.expected_predictions), \
+                        f"Node {i} didn't get expected predictions {node.expected_predictions}"
+
                 # Ensure no cross-contamination
-                for j, other_user in enumerate(users):
+                for j, other_node in enumerate(nodes):
                     if i != j:
-                        # Other user's data should not appear
-                        other_prefix = f"U{j}_"
+                        # Other node's data should not appear
+                        other_prefix = f"N{j}_"
                         assert not any(
                             other_prefix in str(item)
                             for sublist in result['final_stm']
                             for item in sublist
-                        ), f"User {i} has data from User {j}"
+                        ), f"Node {i} has data from Node {j}"
         
         finally:
             # Clean up all fixtures
@@ -109,98 +109,98 @@ class TestMultiUserIsolation:
                 fixture.teardown()
     
     def test_pattern_learning_isolation(self):
-        """Test that patterns learned by one user don't affect another"""
+        """Test that patterns learned by one node don't affect another"""
         # Create two separate KATO fixtures
-        fixture1 = KATOFastAPIFixture(processor_name="user1", use_docker=False)
-        fixture2 = KATOFastAPIFixture(processor_name="user2", use_docker=False)
-        
+        fixture1 = KATOFastAPIFixture(processor_name="node1", use_docker=False)
+        fixture2 = KATOFastAPIFixture(processor_name="node2", use_docker=False)
+
         try:
             fixture1.setup()
             fixture2.setup()
-            
-            # User 1 learns a pattern
+
+            # Node 1 learns a pattern
             fixture1.observe({'strings': ['UNIQUE_A'], 'vectors': [], 'emotives': {}})
             fixture1.observe({'strings': ['UNIQUE_B'], 'vectors': [], 'emotives': {}})
             fixture1.observe({'strings': ['UNIQUE_C'], 'vectors': [], 'emotives': {}})
             fixture1.learn()
-            
-            # User 2 learns a completely different pattern
+
+            # Node 2 learns a completely different pattern
             fixture2.observe({'strings': ['DIFF_X'], 'vectors': [], 'emotives': {}})
             fixture2.observe({'strings': ['DIFF_Y'], 'vectors': [], 'emotives': {}})
             fixture2.observe({'strings': ['DIFF_Z'], 'vectors': [], 'emotives': {}})
             fixture2.learn()
-            
-            # User 1 should predict their pattern
+
+            # Node 1 should predict their pattern
             fixture1.clear_short_term_memory()
             fixture1.observe({'strings': ['UNIQUE_A', 'UNIQUE_B'], 'vectors': [], 'emotives': {}})
             preds1 = fixture1.get_predictions()
-            
-            # User 2 should predict their pattern
+
+            # Node 2 should predict their pattern
             fixture2.clear_short_term_memory()
             fixture2.observe({'strings': ['DIFF_X', 'DIFF_Y'], 'vectors': [], 'emotives': {}})
             preds2 = fixture2.get_predictions()
-            
+
             # Verify isolation
             if preds1:
                 future1 = self._extract_future_items(preds1)
                 assert not any('DIFF' in str(item) for item in future1), \
-                    "User 1 sees User 2's patterns"
-            
+                    "Node 1 sees Node 2's patterns"
+
             if preds2:
                 future2 = self._extract_future_items(preds2)
                 assert not any('UNIQUE' in str(item) for item in future2), \
-                    "User 2 sees User 1's patterns"
+                    "Node 2 sees Node 1's patterns"
         
         finally:
             fixture1.teardown()
             fixture2.teardown()
     
     def test_rapid_context_switching(self):
-        """Test rapid switching between multiple user contexts"""
+        """Test rapid switching between multiple node contexts"""
         fixtures = []
-        
+
         try:
-            # Create 5 users
+            # Create 5 nodes
             for i in range(5):
-                fixture = KATOFastAPIFixture(processor_name=f"rapid_user_{i}", use_docker=False)
+                fixture = KATOFastAPIFixture(processor_name=f"rapid_node_{i}", use_docker=False)
                 fixture.setup()
                 fixtures.append(fixture)
-                
-                # Each user learns their unique pattern
+
+                # Each node learns their unique pattern
                 for j in range(3):
-                    fixture.observe({'strings': [f'USER{i}_EVENT{j}'], 'vectors': [], 'emotives': {}})
+                    fixture.observe({'strings': [f'NODE{i}_EVENT{j}'], 'vectors': [], 'emotives': {}})
                 fixture.learn()
-            
-            # Rapidly switch between users making observations
+
+            # Rapidly switch between nodes making observations
             for _ in range(20):  # 20 rapid switches
-                user_idx = random.randint(0, 4)
-                fixture = fixtures[user_idx]
-                
+                node_idx = random.randint(0, 4)
+                fixture = fixtures[node_idx]
+
                 # Clear and make observation
                 fixture.clear_short_term_memory()
-                fixture.observe({'strings': [f'USER{user_idx}_EVENT0'], 'vectors': [], 'emotives': {}})
-                fixture.observe({'strings': [f'USER{user_idx}_EVENT1'], 'vectors': [], 'emotives': {}})
-                
-                # Verify predictions are user-specific
+                fixture.observe({'strings': [f'NODE{node_idx}_EVENT0'], 'vectors': [], 'emotives': {}})
+                fixture.observe({'strings': [f'NODE{node_idx}_EVENT1'], 'vectors': [], 'emotives': {}})
+
+                # Verify predictions are node-specific
                 preds = fixture.get_predictions()
                 if preds:
                     future = self._extract_future_items(preds)
-                    # Should only predict this user's patterns
+                    # Should only predict this node's patterns
                     for item in future:
-                        if 'USER' in str(item):
-                            assert f'USER{user_idx}' in str(item), \
-                                f"User {user_idx} got contaminated predictions"
+                        if 'NODE' in str(item):
+                            assert f'NODE{node_idx}' in str(item), \
+                                f"Node {node_idx} got contaminated predictions"
         
         finally:
             for fixture in fixtures:
                 fixture.teardown()
     
-    def _execute_concurrent_scenarios(self, fixtures, users):
-        """Execute user scenarios concurrently using ThreadPoolExecutor"""
-        def execute_user_scenario(fixture, user):
+    def _execute_concurrent_scenarios(self, fixtures, nodes):
+        """Execute node scenarios concurrently using ThreadPoolExecutor"""
+        def execute_node_scenario(fixture, node):
             result = {'predictions': None, 'final_stm': None}
-            
-            for action in user.actions:
+
+            for action in node.actions:
                 if action['type'] == 'observe':
                     fixture.observe(action['data'])
                 elif action['type'] == 'learn':
@@ -217,11 +217,11 @@ class TestMultiUserIsolation:
         # Execute all scenarios concurrently
         with ThreadPoolExecutor(max_workers=10) as executor:
             futures = [
-                executor.submit(execute_user_scenario, fixtures[i], users[i])
-                for i in range(len(users))
+                executor.submit(execute_node_scenario, fixtures[i], nodes[i])
+                for i in range(len(nodes))
             ]
             results = [f.result() for f in futures]
-        
+
         return results
     
     def _extract_future_items(self, predictions):
@@ -246,7 +246,7 @@ class TestSessionPerformance:
         try:
             # Create 20 sessions
             for i in range(20):
-                fixture = KATOFastAPIFixture(processor_name=f"perf_user_{i}", use_docker=False)
+                fixture = KATOFastAPIFixture(processor_name=f"perf_node_{i}", use_docker=False)
                 fixture.setup()
                 fixtures.append(fixture)
             
@@ -280,11 +280,11 @@ class TestSessionPerformance:
                 
                 # Make some observations
                 fixture.observe({'strings': ['CLEANUP_TEST'], 'vectors': [], 'emotives': {}})
-                
+
                 # Immediately teardown
                 fixture.teardown()
-                
-                # Create new session with same user - should be fresh
+
+                # Create new session with same node - should be fresh
                 fixture2 = KATOFastAPIFixture(processor_name=f"cleanup_{i}_new", use_docker=False)
                 fixture2.setup()
                 fixtures.append(fixture2)

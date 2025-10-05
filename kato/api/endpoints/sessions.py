@@ -39,14 +39,14 @@ async def create_session(request: CreateSessionRequest):
     
     logger.info(f"Creating session with manager id: {id(app_state.session_manager)}")
     session = await app_state.session_manager.get_or_create_session(
-        user_id=request.user_id,
+        node_id=request.node_id,
         metadata=request.metadata,
         ttl_seconds=request.ttl_seconds
     )
-    
+
     return SessionResponse(
         session_id=session.session_id,
-        user_id=session.user_id,
+        node_id=session.node_id,
         created_at=session.created_at,
         expires_at=session.expires_at,
         ttl_seconds=request.ttl_seconds or 3600,  # Use provided TTL or default
@@ -85,7 +85,7 @@ async def get_session_info(session_id: str):
     
     return SessionResponse(
         session_id=session.session_id,
-        user_id=session.user_id,
+        node_id=session.node_id,
         created_at=session.created_at,
         expires_at=session.expires_at,
         ttl_seconds=max(0, ttl_seconds),  # Ensure non-negative
@@ -140,10 +140,10 @@ async def update_session_config(session_id: str, request_data: Dict[str, Any]):
     # Try to get processor if it exists, otherwise it will be created with new config on next observation
     processor = None
     try:
-        processor = await app_state.processor_manager.get_processor(session.user_id, session.session_config)
+        processor = await app_state.processor_manager.get_processor(session.node_id, session.session_config)
     except Exception as e:
         # Processor doesn't exist yet, will be created with new config on next observation
-        logger.info(f"Processor not yet created for user {session.user_id}, config will be applied on first observation: {e}")
+        logger.info(f"Processor not yet created for node {session.node_id}, config will be applied on first observation: {e}")
     
     if processor:
         # Apply configuration dynamically to processor
@@ -225,10 +225,10 @@ async def observe_in_session(
         if not session:
             raise HTTPException(404, detail=f"Session {session_id} not found or expired")
         
-        # Get user's processor (isolated per user) with session configuration
-        logger.info(f"DEBUG CONCURRENT: Session user_id: {session.user_id}, session_id: {session_id}")
-        logger.info(f"Getting processor for user {session.user_id} with session config: {session.session_config.get_config_only()}")
-        processor = await app_state.processor_manager.get_processor(session.user_id, session.session_config)
+        # Get node's processor (isolated per node) with session configuration
+        logger.info(f"DEBUG CONCURRENT: Session node_id: {session.node_id}, session_id: {session_id}")
+        logger.info(f"Getting processor for node {session.node_id} with session config: {session.session_config.get_config_only()}")
+        processor = await app_state.processor_manager.get_processor(session.node_id, session.session_config)
         logger.info(f"DEBUG CONCURRENT: Got processor with ID: {processor.id}")
         
         # Set processor state to session's state
@@ -263,7 +263,7 @@ async def observe_in_session(
     return ObservationResult(
         status="okay",
         session_id=session_id,
-        processor_id=session.user_id,  # For v1 compatibility
+        processor_id=session.node_id,  # For v1 compatibility
         stm_length=len(session.stm),
         time=session.time,
         unique_id=result.get('unique_id', ''),
@@ -287,7 +287,7 @@ async def get_session_stm(session_id: str):
     # If session STM is empty but processor might have state, sync from processor
     if not session.stm:
         try:
-            processor = await app_state.processor_manager.get_processor(session.user_id, session.session_config)
+            processor = await app_state.processor_manager.get_processor(session.node_id, session.session_config)
             processor_stm = processor.get_stm()
             if processor_stm:
                 logger.info(f"Session STM empty but processor has {len(processor_stm)} events, syncing to session")
@@ -318,9 +318,9 @@ async def learn_in_session(session_id: str):
     
     if not session.stm:
         raise HTTPException(400, detail="Cannot learn from empty STM")
-    
-    # Get user's processor (isolated per user) with session configuration
-    processor = await app_state.processor_manager.get_processor(session.user_id, session.session_config)
+
+    # Get node's processor (isolated per node) with session configuration
+    processor = await app_state.processor_manager.get_processor(session.node_id, session.session_config)
     
     lock = await app_state.session_manager.get_session_lock(session_id)
     
@@ -356,7 +356,7 @@ async def clear_session_stm(session_id: str):
         raise HTTPException(404, detail=f"Session {session_id} not found")
 
     # Also clear the processor's STM
-    processor = await app_state.processor_manager.get_processor(session.user_id, session.session_config)
+    processor = await app_state.processor_manager.get_processor(session.node_id, session.session_config)
     processor.clear_stm()
 
     cleared = await app_state.session_manager.clear_session_stm(session_id)
@@ -398,7 +398,7 @@ async def observe_sequence_in_session(
         if not data.observations:
             return ObservationSequenceResult(
                 status="completed",
-                processor_id=session.user_id,
+                processor_id=session.node_id,
                 observations_processed=0,
                 initial_stm_length=len(session.stm),
                 final_stm_length=len(session.stm),
@@ -409,7 +409,7 @@ async def observe_sequence_in_session(
             )
 
         # Get processor for this session
-        processor = await app_state.processor_manager.get_processor(session.user_id, session.session_config)
+        processor = await app_state.processor_manager.get_processor(session.node_id, session.session_config)
 
         # Set processor state from session
         processor.set_stm(session.stm)
@@ -482,7 +482,7 @@ async def observe_sequence_in_session(
 
         return ObservationSequenceResult(
             status="completed",
-            processor_id=session.user_id,
+            processor_id=session.node_id,
             observations_processed=len(data.observations),
             initial_stm_length=initial_stm_length,
             final_stm_length=final_stm_length,
@@ -503,8 +503,8 @@ async def get_session_predictions(session_id: str):
     if not session:
         raise HTTPException(404, detail=f"Session {session_id} not found or expired")
 
-    # Get user's processor (isolated per user) with session configuration
-    processor = await app_state.processor_manager.get_processor(session.user_id, session.session_config)
+    # Get node's processor (isolated per node) with session configuration
+    processor = await app_state.processor_manager.get_processor(session.node_id, session.session_config)
 
     lock = await app_state.session_manager.get_session_lock(session_id)
 

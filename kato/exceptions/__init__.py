@@ -3,6 +3,7 @@ KATO Exception Hierarchy
 Provides specific exception types for better error handling and debugging.
 """
 
+import time
 from typing import Any, Dict, Optional
 
 
@@ -66,6 +67,61 @@ class KatoBaseException(Exception):
             parts.append(f"Trace ID: {self.trace_id}")
             
         return " | ".join(parts)
+
+
+class KatoV2Exception(KatoBaseException):
+    """Base exception for all KATO v2.0 errors - extends KatoBaseException"""
+
+    def __init__(
+        self,
+        message: str,
+        error_code: str = "KATO_V2_ERROR",
+        context: Optional[Dict[str, Any]] = None,
+        recoverable: bool = True,
+        **kwargs
+    ):
+        """
+        Initialize KATO v2.0 exception.
+
+        Args:
+            message: Human-readable error message
+            error_code: Machine-readable error code
+            context: Additional error context
+            recoverable: Whether this error can be recovered from
+            **kwargs: Additional arguments for base exception
+        """
+        # Call parent constructor with unified interface
+        super().__init__(
+            message=message,
+            error_code=error_code,
+            context=context,
+            **kwargs
+        )
+        self.recoverable = recoverable
+        self.timestamp = time.time()
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert exception to dictionary for API responses - enhanced format"""
+        # Create nested error structure as expected by tests
+        result = {
+            'error': {
+                'type': self.__class__.__name__,
+                'message': self.message,
+                'code': self.error_code,
+                'recoverable': self.recoverable
+            }
+        }
+
+        # Add optional fields
+        if self.context:
+            result['error']['context'] = self.context
+
+        if hasattr(self, 'trace_id') and self.trace_id:
+            result['error']['trace_id'] = self.trace_id
+
+        result['timestamp'] = self.timestamp
+
+        return result
 
 
 class PatternProcessingError(KatoBaseException):
@@ -144,43 +200,49 @@ class VectorDimensionError(KatoBaseException):
         )
 
 
-class DatabaseConnectionError(KatoBaseException):
+class DatabaseConnectionError(KatoV2Exception):
     """
     Raised when database connection or operation fails.
     """
-    
+
     def __init__(
         self,
-        message: str,
-        database_type: Optional[str] = None,
+        database_type: str,
+        connection_string: Optional[str] = None,
         operation: Optional[str] = None,
-        retry_possible: bool = True,
-        **kwargs
+        message: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None
     ):
         """
         Initialize database connection error.
-        
+
         Args:
-            message: Error message
-            database_type: Type of database (mongodb, qdrant, etc.)
+            database_type: Type of database (mongodb, qdrant, redis, etc.)
+            connection_string: Database connection string
             operation: Operation that failed
-            retry_possible: Whether the operation can be retried
-            **kwargs: Additional arguments for base exception
+            message: Optional custom error message
+            context: Additional error context
         """
-        context = kwargs.pop('context', {})
-        
-        if database_type:
-            context['database_type'] = database_type
-        if operation:
-            context['operation'] = operation
-        context['retry_possible'] = retry_possible
-            
+        if message is None:
+            if operation:
+                message = f"Database connection error for {database_type} during {operation}"
+            else:
+                message = f"Failed to connect to {database_type} database"
+
         super().__init__(
             message=message,
             error_code='DATABASE_CONNECTION_ERROR',
-            context=context,
-            **kwargs
+            context={
+                "database_type": database_type,
+                "connection_string": connection_string,
+                "operation": operation,
+                **(context or {})
+            },
+            recoverable=True  # Connection issues are often transient
         )
+        self.database_type = database_type
+        self.connection_string = connection_string
+        self.operation = operation
 
 
 class ConfigurationError(KatoBaseException):
@@ -337,44 +399,49 @@ class LearningError(KatoBaseException):
         )
 
 
-class ValidationError(KatoBaseException):
+class ValidationError(KatoV2Exception):
     """
     Raised when input validation fails.
     """
-    
+
     def __init__(
         self,
-        message: str,
-        field_name: Optional[str] = None,
+        field_name: str,
         field_value: Optional[Any] = None,
         validation_rule: Optional[str] = None,
-        **kwargs
+        message: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None
     ):
         """
         Initialize validation error.
-        
+
         Args:
-            message: Error message
             field_name: Name of the field that failed validation
             field_value: Value that failed validation
             validation_rule: Description of the validation rule
-            **kwargs: Additional arguments for base exception
+            message: Optional custom error message
+            context: Additional error context
         """
-        context = kwargs.pop('context', {})
-        
-        if field_name:
-            context['field_name'] = field_name
-        if field_value is not None:
-            context['field_value'] = str(field_value)[:100]
-        if validation_rule:
-            context['validation_rule'] = validation_rule
-            
+        if message is None:
+            if validation_rule:
+                message = f"Validation failed for field '{field_name}': {validation_rule}"
+            else:
+                message = f"Validation failed for field '{field_name}'"
+
         super().__init__(
             message=message,
             error_code='VALIDATION_ERROR',
-            context=context,
-            **kwargs
+            context={
+                "field_name": field_name,
+                "field_value": str(field_value)[:100] if field_value is not None else None,
+                "validation_rule": validation_rule,
+                **(context or {})
+            },
+            recoverable=True  # Client can fix the input and retry
         )
+        self.field_name = field_name
+        self.field_value = field_value
+        self.validation_rule = validation_rule
 
 
 class ResourceNotFoundError(KatoBaseException):
@@ -568,64 +635,6 @@ class VectorSearchError(KatoBaseException):
 # ============================================================================
 # KATO v2.0 Exception Classes (migrated from kato.errors)
 # ============================================================================
-
-import time
-
-
-class KatoV2Exception(KatoBaseException):
-    """Base exception for all KATO v2.0 errors - extends KatoBaseException"""
-
-    def __init__(
-        self,
-        message: str,
-        error_code: str = "KATO_V2_ERROR",
-        context: Optional[Dict[str, Any]] = None,
-        recoverable: bool = True,
-        **kwargs
-    ):
-        """
-        Initialize KATO v2.0 exception.
-
-        Args:
-            message: Human-readable error message
-            error_code: Machine-readable error code
-            context: Additional error context
-            recoverable: Whether this error can be recovered from
-            **kwargs: Additional arguments for base exception
-        """
-        # Call parent constructor with unified interface
-        super().__init__(
-            message=message,
-            error_code=error_code,
-            context=context,
-            **kwargs
-        )
-        self.recoverable = recoverable
-        self.timestamp = time.time()
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert exception to dictionary for API responses - enhanced format"""
-        # Create nested error structure as expected by tests
-        result = {
-            'error': {
-                'type': self.__class__.__name__,
-                'message': self.message,
-                'code': self.error_code,
-                'recoverable': self.recoverable
-            }
-        }
-
-        # Add optional fields
-        if self.context:
-            result['error']['context'] = self.context
-
-        if hasattr(self, 'trace_id') and self.trace_id:
-            result['error']['trace_id'] = self.trace_id
-
-        result['timestamp'] = self.timestamp
-
-        return result
-
 
 # Session Management Errors
 

@@ -133,83 +133,83 @@ class RedisSessionManager(session_manager_module.SessionManager):
     
     async def get_or_create_session(
         self,
-        user_id: str,
+        node_id: str,
         metadata: Optional[Dict[str, Any]] = None,
         ttl_seconds: Optional[int] = None
     ) -> SessionState:
         """
-        Get existing session for a user or create a new one.
-        
-        This enables session persistence across requests from the same user.
-        
+        Get existing session for a node or create a new one.
+
+        This enables session persistence across requests from the same node.
+
         Args:
-            user_id: User identifier (required for processor isolation)
+            node_id: Node identifier (required for processor isolation)
             metadata: Optional session metadata
             ttl_seconds: Session TTL (uses default if not specified)
-        
+
         Returns:
-            SessionState for this user (existing or newly created)
+            SessionState for this node (existing or newly created)
         """
         if not self._connected:
             await self.initialize()
-        
-        # Use a user-specific key to track their active session
-        user_session_key = f"{self.key_prefix}user:{user_id}:active"
-        
-        # Check if user has an active session
-        session_id = await self.redis_client.get(user_session_key)
-        
+
+        # Use a node-specific key to track their active session
+        node_session_key = f"{self.key_prefix}node:{node_id}:active"
+
+        # Check if node has an active session
+        session_id = await self.redis_client.get(node_session_key)
+
         if session_id:
             # Try to get the existing session
             session = await self.get_session(session_id)
             if session and not session.is_expired():
                 session.update_access()
                 await self.update_session(session)
-                logger.info(f"Returning existing session {session.session_id} for user {user_id}")
+                logger.info(f"Returning existing session {session.session_id} for node {node_id}")
                 return session
             else:
                 # Session expired or not found, clear the reference
-                await self.redis_client.delete(user_session_key)
-        
+                await self.redis_client.delete(node_session_key)
+
         # No existing session, create new one
-        session = await self.create_session(user_id, metadata, ttl_seconds)
-        
-        # Store the session ID for this user
+        session = await self.create_session(node_id, metadata, ttl_seconds)
+
+        # Store the session ID for this node
         ttl = ttl_seconds or self.default_ttl
-        await self.redis_client.setex(user_session_key, ttl, session.session_id)
-        
-        logger.info(f"Created new session {session.session_id} for user {user_id}")
+        await self.redis_client.setex(node_session_key, ttl, session.session_id)
+
+        logger.info(f"Created new session {session.session_id} for node {node_id}")
         return session
     
     async def create_session(
         self,
-        user_id: Optional[str] = None,
+        node_id: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
         ttl_seconds: Optional[int] = None
     ) -> SessionState:
         """
         Create a new session and store in Redis.
-        
+
         Args:
-            user_id: Optional user identifier
+            node_id: Optional node identifier
             metadata: Optional session metadata
             ttl_seconds: Session TTL (uses default if not specified)
-        
+
         Returns:
             New SessionState instance
         """
         if not self._connected:
             await self.initialize()
-        
+
         session_id = f"session-{uuid.uuid4().hex}-{int(datetime.now(timezone.utc).timestamp() * 1000)}"
         ttl = ttl_seconds or self.default_ttl
-        
+
         now = datetime.now(timezone.utc)
         expires_at = now + timedelta(seconds=ttl)
-        
+
         session = SessionState(
             session_id=session_id,
-            user_id=user_id,
+            node_id=node_id,
             created_at=now,
             last_accessed=now,
             expires_at=expires_at,
@@ -219,14 +219,14 @@ class RedisSessionManager(session_manager_module.SessionManager):
             metadata=metadata or {},
             access_count=0
         )
-        
+
         # Store in Redis with TTL
         await self._save_session(session, ttl)
-        
+
         # Create lock for this session
         self.session_locks[session_id] = asyncio.Lock()
-        
-        logger.info(f"Created session {session_id} for user {user_id} with {ttl}s TTL")
+
+        logger.info(f"Created session {session_id} for node {node_id} with {ttl}s TTL")
         return session
     
     async def get_session(self, session_id: str) -> Optional[SessionState]:
@@ -548,7 +548,7 @@ class RedisSessionManager(session_manager_module.SessionManager):
             "total_sessions": len(sessions),
             "active_sessions": len(active_sessions),
             "expired_sessions": len(sessions) - len(active_sessions),
-            "users_with_sessions": len(set(s.user_id for s in active_sessions if s.user_id)),
+            "nodes_with_sessions": len(set(s.node_id for s in active_sessions if s.node_id)),
             "average_stm_size": sum(len(s.stm) for s in active_sessions) / max(len(active_sessions), 1),
             "total_stm_events": sum(len(s.stm) for s in active_sessions),
             "backend": "redis",
@@ -587,7 +587,7 @@ class RedisSessionManager(session_manager_module.SessionManager):
         # Convert session to dict for serialization
         session_dict = {
             'session_id': session.session_id,
-            'user_id': session.user_id,
+            'node_id': session.node_id,
             'created_at': session.created_at.isoformat(),
             'last_accessed': session.last_accessed.isoformat(),
             'expires_at': session.expires_at.isoformat(),

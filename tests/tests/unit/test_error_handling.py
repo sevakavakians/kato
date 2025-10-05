@@ -49,8 +49,8 @@ class TestSessionErrorHandling:
     def test_invalid_observation_payloads(self):
         """Test error handling for invalid observation payloads"""
         base_url = _get_test_base_url()
-        # Create valid session with required user_id
-        response = requests.post(f"{base_url}/sessions", json={"user_id": "test_user"})
+        # Create valid session with required node_id
+        response = requests.post(f"{base_url}/sessions", json={"node_id": "test_node"})
         assert response.status_code == 200, f"Failed to create session: {response.text}"
         session_id = response.json()["session_id"]
         
@@ -94,7 +94,7 @@ class TestSessionErrorHandling:
         """Test error handling for invalid session creation payloads"""
         base_url = _get_test_base_url()
         invalid_payloads = [
-            {"user_id": None},  # Null user_id
+            {"node_id": None},  # Null node_id
             {"ttl_seconds": -1},  # Negative TTL
             {"ttl_seconds": "not_number"},  # Non-numeric TTL
             {"metadata": "not_dict"}  # Invalid metadata format
@@ -109,8 +109,8 @@ class TestSessionErrorHandling:
     def test_session_timeout_behavior(self):
         """Test behavior with very short session timeout"""
         base_url = _get_test_base_url()
-        # Create session with 1 second TTL and required user_id
-        payload = {"user_id": "test_timeout_user", "ttl_seconds": 1}
+        # Create session with 1 second TTL and required node_id
+        payload = {"node_id": "test_timeout_node", "ttl_seconds": 1}
         response = requests.post(f"{base_url}/sessions", json=payload)
         
         if response.status_code != 200:
@@ -132,8 +132,8 @@ class TestSessionErrorHandling:
     def test_malformed_json_handling(self):
         """Test handling of malformed JSON requests"""
         base_url = _get_test_base_url()
-        # Create valid session first with required user_id
-        response = requests.post(f"{base_url}/sessions", json={"user_id": "test_malformed_user"})
+        # Create valid session first with required node_id
+        response = requests.post(f"{base_url}/sessions", json={"node_id": "test_malformed_node"})
         assert response.status_code == 200, f"Failed to create session: {response.text}"
         session_id = response.json()["session_id"]
         
@@ -158,7 +158,7 @@ class TestConcurrencyAndRaceConditions:
         """Test concurrent attempts to delete the same session"""
         base_url = _get_test_base_url()
         # Create session
-        response = requests.post(f"{base_url}/sessions", json={"user_id": f"test_user_{uuid.uuid4().hex[:8]}"})
+        response = requests.post(f"{base_url}/sessions", json={"node_id": f"test_node_{uuid.uuid4().hex[:8]}"})
         session_id = response.json()["session_id"]
         
         # First deletion should succeed
@@ -174,7 +174,7 @@ class TestConcurrencyAndRaceConditions:
         """Test observation attempts after session deletion"""
         base_url = _get_test_base_url()
         # Create session
-        response = requests.post(f"{base_url}/sessions", json={"user_id": f"test_user_{uuid.uuid4().hex[:8]}"})
+        response = requests.post(f"{base_url}/sessions", json={"node_id": f"test_node_{uuid.uuid4().hex[:8]}"})
         session_id = response.json()["session_id"]
         
         # Delete session
@@ -193,7 +193,7 @@ class TestConcurrencyAndRaceConditions:
         """Test rapid succession of operations on same session"""
         base_url = _get_test_base_url()
         # Create session
-        response = requests.post(f"{base_url}/sessions", json={"user_id": f"test_user_{uuid.uuid4().hex[:8]}"})
+        response = requests.post(f"{base_url}/sessions", json={"node_id": f"test_node_{uuid.uuid4().hex[:8]}"})
         session_id = response.json()["session_id"]
         
         try:
@@ -236,7 +236,7 @@ class TestResourceLimits:
         """Test handling of very large observations"""
         base_url = _get_test_base_url()
         # Create session
-        response = requests.post(f"{base_url}/sessions", json={"user_id": f"test_user_{uuid.uuid4().hex[:8]}"})
+        response = requests.post(f"{base_url}/sessions", json={"node_id": f"test_node_{uuid.uuid4().hex[:8]}"})
         session_id = response.json()["session_id"]
         
         try:
@@ -266,7 +266,7 @@ class TestResourceLimits:
         """Test handling of many small observations"""
         base_url = _get_test_base_url()
         # Create session
-        response = requests.post(f"{base_url}/sessions", json={"user_id": f"test_user_{uuid.uuid4().hex[:8]}"})
+        response = requests.post(f"{base_url}/sessions", json={"node_id": f"test_node_{uuid.uuid4().hex[:8]}"})
         session_id = response.json()["session_id"]
         
         try:

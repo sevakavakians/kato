@@ -47,7 +47,7 @@ class TestRedisSessionStore:
         from kato.config.session_config import SessionConfiguration
         session = SessionState(
             session_id="test-session",
-            user_id="test-user",
+            node_id="test-node",
             created_at=now,
             last_accessed=now,
             expires_at=now + timedelta(hours=1),
@@ -69,7 +69,7 @@ class TestRedisSessionStore:
         
         # Check that data survived round trip
         assert deserialized.session_id == session.session_id
-        assert deserialized.user_id == session.user_id
+        assert deserialized.node_id == session.node_id
         assert deserialized.stm == session.stm
         assert deserialized.metadata == session.metadata
         
@@ -84,7 +84,7 @@ class TestRedisSessionStore:
         now = datetime.now(timezone.utc)
         session = SessionState(
             session_id="test-session",
-            user_id="test-user",
+            node_id="test-node",
             created_at=now,
             last_accessed=now,
             expires_at=now + timedelta(hours=1),
@@ -120,12 +120,12 @@ class TestRedisSessionStore:
         now = datetime.now(timezone.utc)
         session = SessionState(
             session_id="test-session",
-            user_id="test-user",
+            node_id="test-node",
             created_at=now,
             last_accessed=now,
             expires_at=now + timedelta(hours=1)
         )
-        
+
         # Store session
         success = await store.store_session(session)
         
@@ -147,29 +147,29 @@ class TestRedisSessionStore:
         now = datetime.now(timezone.utc)
         session = SessionState(
             session_id="test-session",
-            user_id="test-user",
+            node_id="test-node",
             created_at=now,
             last_accessed=now,
             expires_at=now + timedelta(hours=1)
         )
-        
+
         store = RedisSessionStore()
-        
+
         # Mock the internal methods
         store._connected = True  # Skip connection
         store.redis_client = AsyncMock()
-        
+
         # Mock get returning serialized session
         serialized = store._serialize_session(session)
         store.redis_client.get = AsyncMock(return_value=serialized)
-        
+
         # Get session
         retrieved = await store.get_session("test-session")
-        
+
         # Verify
         assert retrieved is not None
         assert retrieved.session_id == session.session_id
-        assert retrieved.user_id == session.user_id
+        assert retrieved.node_id == session.node_id
         
         store.redis_client.get.assert_called_with(f"{store.key_prefix}test-session")
 
@@ -201,13 +201,13 @@ class TestRedisSessionManager:
         
         # Create session
         session = await manager.create_session(
-            user_id="test-user",
+            node_id="test-node",
             metadata={"test": True}
         )
-        
+
         # Verify session properties
         assert session.session_id.startswith("session-")
-        assert session.user_id == "test-user"
+        assert session.node_id == "test-node"
         assert session.metadata == {"test": True}
         assert session.stm == []
         
@@ -223,23 +223,23 @@ class TestRedisSessionManager:
         now = datetime.now(timezone.utc)
         session = SessionState(
             session_id="test-session",
-            user_id="test-user",
+            node_id="test-node",
             created_at=now,
             last_accessed=now - timedelta(minutes=5),
             expires_at=now + timedelta(hours=1)
         )
-        
+
         manager = RedisSessionManager()
-        
+
         # Mock the redis_client
         manager.redis_client = AsyncMock()
         manager._connected = True
-        
+
         # Serialize the session for mock return
         import json
         session_dict = {
             'session_id': session.session_id,
-            'user_id': session.user_id,
+            'node_id': session.node_id,
             'created_at': session.created_at.isoformat(),
             'last_accessed': session.last_accessed.isoformat(),
             'expires_at': session.expires_at.isoformat(),
@@ -262,7 +262,7 @@ class TestRedisSessionManager:
         # Verify
         assert retrieved is not None
         assert retrieved.session_id == "test-session"
-        assert retrieved.user_id == "test-user"
+        assert retrieved.node_id == "test-node"
         
         # Verify access time was updated (or at least not older)
         # Note: The mock returns the same object which gets updated in place

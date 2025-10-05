@@ -30,9 +30,9 @@ class TestSessionIsolation:
     @pytest.mark.asyncio
     async def test_basic_session_isolation(self, kato_client):
         """Test that two sessions maintain separate STMs without collision"""
-        # Create two sessions with auto-generated unique user IDs
-        session1 = await kato_client.create_session()  # Auto-generates unique user_id
-        session2 = await kato_client.create_session()  # Auto-generates unique user_id
+        # Create two sessions with auto-generated unique node IDs
+        session1 = await kato_client.create_session()  # Auto-generates unique node_id
+        session2 = await kato_client.create_session()  # Auto-generates unique node_id
         
         # User 1 builds sequence A, B, C
         await kato_client.observe_in_session(
@@ -81,9 +81,9 @@ class TestSessionIsolation:
         """Test that concurrent operations on different sessions don't interfere"""
         sessions = []
         
-        # Create 10 sessions with auto-generated unique user IDs
+        # Create 10 sessions with auto-generated unique node IDs
         for i in range(10):
-            session = await kato_client.create_session()  # Auto-generates unique user_id
+            session = await kato_client.create_session()  # Auto-generates unique node_id
             sessions.append(session)
         
         # Define async operation for each session
@@ -179,13 +179,13 @@ class TestSessionLifecycle:
         assert 'session_id' in session
         assert session['session_id'] is not None
         
-        # Session with user_id
+        # Session with node_id
         import uuid
-        unique_user_id = f"test_user_{uuid.uuid4().hex[:8]}"
-        session_with_user = await kato_client.create_session(
-            user_id=unique_user_id
+        unique_node_id = f"test_node_{uuid.uuid4().hex[:8]}"
+        session_with_node = await kato_client.create_session(
+            node_id=unique_node_id
         )
-        assert session_with_user['user_id'] == unique_user_id
+        assert session_with_node['node_id'] == unique_node_id
         
         # Session with metadata
         metadata = {"app_version": "2.0", "client": "test_suite"}
@@ -201,7 +201,7 @@ class TestSessionLifecycle:
         assert session_with_ttl['ttl_seconds'] == 7200
         
         # Cleanup all sessions
-        for s in [session, session_with_user, session_with_meta, session_with_ttl]:
+        for s in [session, session_with_node, session_with_meta, session_with_ttl]:
             await kato_client.delete_session(s['session_id'])
     
     @pytest.mark.asyncio
@@ -378,7 +378,7 @@ class TestSessionLoadAndPerformance:
         start_time = time.time()
         for i in range(num_sessions):
             session = await kato_client.create_session(
-                user_id=f"load_test_user_{i}"
+                node_id=f"load_test_node_{i}"
             )
             sessions.append(session)
         
@@ -638,13 +638,13 @@ class MockKatoCurrentClient:
         self.base_url = base_url
         self.sessions: Dict[str, Dict] = {}  # In-memory session store for testing
     
-    async def create_session(self, user_id: str = None, metadata: Dict = None, 
+    async def create_session(self, node_id: str = None, metadata: Dict = None,
                             ttl_seconds: int = 3600) -> Dict:
         """Create a new session"""
         session_id = f"session-{uuid.uuid4()}"
         session = {
             "session_id": session_id,
-            "user_id": user_id,
+            "node_id": node_id,
             "metadata": metadata or {},
             "ttl_seconds": ttl_seconds,
             "stm": [],

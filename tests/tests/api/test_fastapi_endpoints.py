@@ -202,16 +202,16 @@ def test_pattern_endpoint(kato_fixture):
     
     # Pattern retrieval must use the same processor/session that created it
     # Since patterns are stored per-processor, we need to use fixture's processor
-    # For current, patterns are user-specific, so we need to use the same user_id
-    
+    # For current, patterns are node-specific, so we need to use the same node_id
+
     # The pattern was created in kato_fixture's session
-    # Since we can't easily test cross-user pattern access in current,
+    # Since we can't easily test cross-node pattern access in current,
     # we'll just verify the pattern was created successfully
     assert pattern_name is not None
     assert pattern_name.startswith('PTRN|')
-    
-    # Note: In current, patterns are isolated per user. The primary /pattern endpoint
-    # creates a new session with a different user ID, so it won't find patterns
+
+    # Note: In current, patterns are isolated per node. The primary /pattern endpoint
+    # creates a new session with a different node ID, so it won't find patterns
     # created in the test fixture's session. This is expected behavior for current.
 
 

@@ -287,7 +287,7 @@ class TestErrorIntegration:
         """Test that errors can be serialized and maintain structure"""
         exc = SessionNotFoundError(
             session_id="test-123",
-            context={"user_id": "user-456", "attempt": 1}
+            context={"node_id": "node-456", "attempt": 1}
         )
         
         # Convert to dict (like for API responses)
@@ -297,7 +297,7 @@ class TestErrorIntegration:
         assert error_dict["error"]["type"] == "SessionNotFoundError"
         assert error_dict["error"]["code"] == "SESSION_NOT_FOUND"
         assert error_dict["error"]["context"]["session_id"] == "test-123"
-        assert error_dict["error"]["context"]["user_id"] == "user-456"
+        assert error_dict["error"]["context"]["node_id"] == "node-456"
         assert error_dict["error"]["recoverable"] is True
     
     def test_multiple_error_types_handling(self):

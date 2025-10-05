@@ -134,10 +134,10 @@ curl http://localhost:8000/health
 
 #### Option A: Using Sessions (Recommended)
 ```bash
-# Create a session for user isolation
+# Create a session for node isolation
 SESSION=$(curl -s -X POST http://localhost:8000/sessions \
   -H "Content-Type: application/json" \
-  -d '{"user_id": "alice"}' | jq -r '.session_id')
+  -d '{"node_id": "alice"}' | jq -r '.session_id')
 
 # Observe in isolated session
 curl -X POST http://localhost:8000/sessions/$SESSION/observe \

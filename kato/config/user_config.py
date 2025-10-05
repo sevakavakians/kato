@@ -34,7 +34,7 @@ class UserConfiguration:
     process_predictions: Optional[bool] = None
     
     # Metadata
-    user_id: str = field(default="")
+    node_id: str = field(default="")
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     version: int = field(default=1)
@@ -91,7 +91,7 @@ class UserConfiguration:
         
         try:
             for key, value in updates.items():
-                if hasattr(self, key) and key not in ['user_id', 'created_at', 'updated_at', 'version']:
+                if hasattr(self, key) and key not in ['node_id', 'created_at', 'updated_at', 'version']:
                     original_values[key] = getattr(self, key)
                     setattr(self, key, value)
             
@@ -131,7 +131,7 @@ class UserConfiguration:
         
         # Override with user values where set
         for key, value in asdict(self).items():
-            if key not in ['user_id', 'created_at', 'updated_at', 'version']:
+            if key not in ['node_id', 'created_at', 'updated_at', 'version']:
                 if value is not None:
                     merged[key] = value
         
@@ -161,7 +161,7 @@ class UserConfiguration:
         valid_fields = {
             'recall_threshold', 'persistence', 'max_pattern_length',
             'max_predictions', 'sort_symbols',
-            'process_predictions', 'user_id', 'version'
+            'process_predictions', 'node_id', 'version'
         }
         
         filtered_data = {k: v for k, v in data.items() if k in valid_fields}
@@ -191,9 +191,9 @@ class UserConfiguration:
             Dictionary of set parameters only
         """
         updates = {}
-        
+
         for key, value in asdict(self).items():
-            if key not in ['user_id', 'created_at', 'updated_at', 'version']:
+            if key not in ['node_id', 'created_at', 'updated_at', 'version']:
                 if value is not None:
                     updates[key] = value
         

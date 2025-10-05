@@ -40,19 +40,19 @@ class KatoSessionClient:
         if self.session:
             await self.session.close()
             
-    async def create_session(self, user_id: Optional[str] = None, ttl_seconds: int = 3600, 
+    async def create_session(self, node_id: Optional[str] = None, ttl_seconds: int = 3600,
                            metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Create a new session."""
         if not self.session:
             self.session = self._create_session()
-            
-        # Generate a default user_id if none provided (required by API)
-        if user_id is None:
+
+        # Generate a default node_id if none provided (required by API)
+        if node_id is None:
             import uuid
-            user_id = f"test_user_{uuid.uuid4().hex[:8]}"
-            
+            node_id = f"test_node_{uuid.uuid4().hex[:8]}"
+
         payload = {
-            "user_id": user_id,
+            "node_id": node_id,
             "ttl_seconds": ttl_seconds,
             "metadata": metadata or {}
         }

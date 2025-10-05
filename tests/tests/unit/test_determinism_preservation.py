@@ -46,7 +46,7 @@ def compute_pattern_hash(sequence: List[List[str]]) -> str:
     sorted_sequence = [sorted(event) for event in sequence]
     # Flatten and create hash
     flattened = '|'.join(['_'.join(event) for event in sorted_sequence])
-    return hashlib.sha1(flattened.encode()).hexdigest()
+    return hashlib.sha1(flattened.encode(), usedforsecurity=False).hexdigest()
 
 
 def test_pattern_hash_determinism(kato_fixture):

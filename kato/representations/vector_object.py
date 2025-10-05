@@ -36,7 +36,7 @@ class VectorObject:
     def __init__(self, vector):
         self.vector = vector
         self.vector_length = np.sqrt(np.dot(self.vector, self.vector.transpose() if hasattr(self.vector, 'transpose') else self.vector))   # vector_length used for heuristics
-        self.vector_hash = str(sha1(str(self.vector).encode('utf-8')).hexdigest())
+        self.vector_hash = str(sha1(str(self.vector).encode('utf-8'), usedforsecurity=False).hexdigest())
         self.name = "VCTR|%s" %(self.vector_hash)
         return
 

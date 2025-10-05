@@ -90,7 +90,7 @@ class ProcessorManager:
         if len(full_name) > 60:  # Use 60 for extra safety margin
             # Need to truncate node_id to fit
             import hashlib
-            node_hash = hashlib.md5(safe_node_id.encode()).hexdigest()[:8]
+            node_hash = hashlib.md5(safe_node_id.encode(), usedforsecurity=False).hexdigest()[:8]
 
             # Calculate exact space available for node_id
             # Format: {truncated_node}_{hash}_{base_id}

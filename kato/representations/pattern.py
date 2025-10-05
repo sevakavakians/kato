@@ -14,7 +14,7 @@ class Pattern:
     def __init__(self, pattern_data):
         self.pattern_data = list(pattern_data)
         self.length = sum(len(x) for x in self.pattern_data)
-        self.name = sha1(('%s' %self.pattern_data).encode('utf-8')).hexdigest()
+        self.name = sha1(('%s' %self.pattern_data).encode('utf-8'), usedforsecurity=False).hexdigest()
         return
 
     def __repr__(self):

@@ -107,7 +107,7 @@ class BloomFilter:
 
     def _hash(self, item: str, seed: int) -> int:
         """Generate a hash for an item with a given seed."""
-        h = hashlib.md5()
+        h = hashlib.md5(usedforsecurity=False)
         h.update(f"{item}{seed}".encode())
         return int(h.hexdigest(), 16) % self.size
 

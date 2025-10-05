@@ -66,8 +66,8 @@ class BloomFilter:
         key_bytes = key.encode('utf-8')
 
         # Generate two different hash values using different hash algorithms
-        hash1 = int(hashlib.md5(key_bytes).hexdigest(), 16) % self.bit_size
-        hash2 = int(hashlib.sha256(key_bytes).hexdigest(), 16) % self.bit_size
+        hash1 = int(hashlib.md5(key_bytes, usedforsecurity=False).hexdigest(), 16) % self.bit_size
+        hash2 = int(hashlib.sha256(key_bytes, usedforsecurity=False).hexdigest(), 16) % self.bit_size
 
         # Ensure hash2 is odd to avoid common factors with bit_size
         if hash2 % 2 == 0:

@@ -20,7 +20,7 @@ def calculate_pattern_hash(sequence: List[Any]) -> str:
     """
     # Convert sequence to a canonical string representation
     sequence_str = json.dumps(sequence, sort_keys=True)
-    return hashlib.sha1(sequence_str.encode()).hexdigest()
+    return hashlib.sha1(sequence_str.encode(), usedforsecurity=False).hexdigest()
 
 
 def calculate_vector_hash(vector: List[float]) -> str:
@@ -35,7 +35,7 @@ def calculate_vector_hash(vector: List[float]) -> str:
     """
     # Convert vector to a canonical string representation
     vector_str = json.dumps(vector)
-    return hashlib.sha1(vector_str.encode()).hexdigest()
+    return hashlib.sha1(vector_str.encode(), usedforsecurity=False).hexdigest()
 
 
 def format_pattern_name(sequence: List[Any]) -> str:

@@ -27,7 +27,7 @@ def hash_future(future: List[List[str]]) -> str:
     normalized = [sorted(event) for event in future]
     # Convert to JSON for deterministic string representation
     future_str = json.dumps(normalized, sort_keys=True)
-    return hashlib.sha1(future_str.encode()).hexdigest()
+    return hashlib.sha1(future_str.encode(), usedforsecurity=False).hexdigest()
 
 
 def calculate_future_aggregates(predictions: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:

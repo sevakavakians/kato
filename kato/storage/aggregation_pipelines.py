@@ -6,9 +6,8 @@ for better performance and reduced data transfer.
 """
 
 import logging
-from typing import Dict, List, Any, Optional, Tuple
-from collections import Counter, defaultdict
-import itertools
+from typing import Any, Dict, List, Optional
+
 from pymongo.collection import Collection
 
 logger = logging.getLogger(__name__)
@@ -16,9 +15,9 @@ logger = logging.getLogger(__name__)
 
 class AggregationPipelines:
     """Optimized MongoDB aggregation pipelines for KATO pattern processing."""
-    
+
     @staticmethod
-    def get_patterns_with_flattened_data(collection: Collection, 
+    def get_patterns_with_flattened_data(collection: Collection,
                                        limit: Optional[int] = None,
                                        frequency_threshold: int = 1) -> List[Dict[str, Any]]:
         """
@@ -30,7 +29,7 @@ class AggregationPipelines:
         pipeline = [
             # Filter by frequency if specified
             {"$match": {"frequency": {"$gte": frequency_threshold}}},
-            
+
             # Project only needed fields and flatten pattern_data
             {"$project": {
                 "_id": 0,
@@ -45,18 +44,18 @@ class AggregationPipelines:
                     }
                 }
             }},
-            
+
             # Sort by frequency descending for better cache locality
             {"$sort": {"frequency": -1}},
         ]
-        
+
         if limit:
             pipeline.append({"$limit": limit})
-            
+
         return list(collection.aggregate(pipeline))
-    
+
     @staticmethod
-    def get_symbol_statistics_bulk(collection: Collection, 
+    def get_symbol_statistics_bulk(collection: Collection,
                                  symbols: List[str]) -> Dict[str, Dict[str, Any]]:
         """
         Get symbol statistics for multiple symbols in one aggregation.
@@ -66,7 +65,7 @@ class AggregationPipelines:
         """
         if not symbols:
             return {}
-            
+
         pipeline = [
             {"$match": {"name": {"$in": symbols}}},
             {"$project": {
@@ -76,13 +75,13 @@ class AggregationPipelines:
                 "pattern_member_frequency": 1
             }}
         ]
-        
+
         results = {}
         for doc in collection.aggregate(pipeline):
             results[doc["name"]] = doc
-            
+
         return results
-    
+
     @staticmethod
     def get_all_symbols_optimized(collection: Collection) -> Dict[str, Dict[str, Any]]:
         """
@@ -101,13 +100,13 @@ class AggregationPipelines:
             # Sort by frequency for better cache performance
             {"$sort": {"frequency": -1}}
         ]
-        
+
         results = {}
         for doc in collection.aggregate(pipeline):
             results[doc["name"]] = doc
-            
+
         return results
-    
+
     @staticmethod
     def get_pattern_statistics(patterns_collection: Collection,
                              symbols_collection: Collection,
@@ -119,7 +118,7 @@ class AggregationPipelines:
         Performance gain: 60% reduction in query complexity
         """
         results = {}
-        
+
         # Get pattern statistics
         pattern_stats_pipeline = [
             {"$group": {
@@ -131,12 +130,12 @@ class AggregationPipelines:
                 "min_frequency": {"$min": "$frequency"}
             }}
         ]
-        
+
         pattern_stats = list(patterns_collection.aggregate(pattern_stats_pipeline))
         if pattern_stats:
             results["patterns"] = pattern_stats[0]
-        
-        # Get symbol statistics  
+
+        # Get symbol statistics
         symbol_stats_pipeline = [
             {"$group": {
                 "_id": None,
@@ -146,20 +145,20 @@ class AggregationPipelines:
                 "avg_frequency": {"$avg": "$frequency"}
             }}
         ]
-        
+
         symbol_stats = list(symbols_collection.aggregate(symbol_stats_pipeline))
         if symbol_stats:
             results["symbols"] = symbol_stats[0]
-        
+
         # Get metadata totals (fallback to original query if needed)
         metadata_doc = metadata_collection.find_one({"class": "totals"})
         if metadata_doc:
             results["metadata"] = metadata_doc
-        
+
         return results
-    
+
     @staticmethod
-    def get_frequent_patterns_summary(collection: Collection, 
+    def get_frequent_patterns_summary(collection: Collection,
                                     top_n: int = 100) -> List[Dict[str, Any]]:
         """
         Get summary of most frequent patterns with key statistics.
@@ -168,7 +167,7 @@ class AggregationPipelines:
         """
         pipeline = [
             {"$match": {"frequency": {"$gte": 2}}},  # Only patterns seen multiple times
-            
+
             {"$project": {
                 "_id": 0,
                 "name": 1,
@@ -185,13 +184,13 @@ class AggregationPipelines:
                     }
                 }
             }},
-            
+
             {"$sort": {"frequency": -1}},
             {"$limit": top_n}
         ]
-        
+
         return list(collection.aggregate(pipeline))
-    
+
     @staticmethod
     def get_patterns_by_symbol_content(collection: Collection,
                                      target_symbols: List[str],
@@ -204,7 +203,7 @@ class AggregationPipelines:
         """
         if not target_symbols:
             return []
-            
+
         pipeline = [
             {"$match": {
                 "frequency": {"$gte": min_frequency},
@@ -214,7 +213,7 @@ class AggregationPipelines:
                     }
                 }
             }},
-            
+
             {"$project": {
                 "_id": 0,
                 "name": 1,
@@ -228,27 +227,27 @@ class AggregationPipelines:
                     }
                 }
             }},
-            
+
             {"$sort": {"frequency": -1}}
         ]
-        
+
         return list(collection.aggregate(pipeline))
 
 
 class OptimizedQueryManager:
     """Manager class for coordinating optimized MongoDB queries."""
-    
+
     def __init__(self, superkb):
         self.superkb = superkb
         self.pipelines = AggregationPipelines()
         self._symbol_cache = {}
         self._cache_valid = False
-        
+
     def invalidate_caches(self):
         """Invalidate internal caches when data changes."""
         self._symbol_cache = {}
         self._cache_valid = False
-        
+
     def get_patterns_optimized(self, limit: Optional[int] = None) -> Dict[str, List[str]]:
         """
         Get patterns using optimized aggregation pipeline.
@@ -259,14 +258,14 @@ class OptimizedQueryManager:
             patterns_with_data = self.pipelines.get_patterns_with_flattened_data(
                 self.superkb.patterns_kb, limit=limit
             )
-            
+
             result = {}
             for pattern in patterns_with_data:
                 result[pattern["name"]] = pattern["flattened"]
-                
+
             logger.debug(f"Loaded {len(result)} patterns using aggregation pipeline")
             return result
-            
+
         except Exception as e:
             logger.warning(f"Aggregation pipeline failed, falling back to find(): {e}")
             # Fallback to original find() method
@@ -274,13 +273,13 @@ class OptimizedQueryManager:
             query = self.superkb.patterns_kb.find({}, {"name": 1, "pattern_data": 1})
             if limit:
                 query = query.limit(limit)
-                
+
             for p in query:
                 from itertools import chain
                 result[p["name"]] = list(chain(*p["pattern_data"]))
-                
+
             return result
-    
+
     def get_all_symbols_optimized(self, collection: Collection) -> Dict[str, Dict[str, Any]]:
         """
         Get all symbols with optimized aggregation.
@@ -325,7 +324,7 @@ class OptimizedQueryManager:
                 except:
                     result[symbol] = 0
             return result
-    
+
     def get_comprehensive_statistics(self) -> Dict[str, Any]:
         """
         Get comprehensive pattern and symbol statistics using optimized queries.

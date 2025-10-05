@@ -10,8 +10,8 @@ import time
 import uuid
 from contextvars import ContextVar
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional, Union
 from logging import LogRecord
+from typing import Any, Dict, Optional, Union
 
 # Context variable for storing trace ID across async boundaries
 trace_id_var: ContextVar[Optional[str]] = ContextVar('trace_id', default=None)
@@ -22,7 +22,7 @@ class StructuredFormatter(logging.Formatter):
     """
     Custom formatter that outputs structured JSON logs with trace IDs and timing.
     """
-    
+
     def format(self, record: LogRecord) -> str:
         """
         Format log record as structured JSON.
@@ -35,13 +35,13 @@ class StructuredFormatter(logging.Formatter):
         """
         # Get trace ID from context
         trace_id = trace_id_var.get()
-        
+
         # Calculate request duration if available
         duration_ms = None
         request_start = request_start_var.get()
         if request_start:
             duration_ms = round((time.time() - request_start) * 1000, 2)
-        
+
         # Build structured log entry
         log_entry = {
             'timestamp': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
@@ -52,26 +52,26 @@ class StructuredFormatter(logging.Formatter):
             'function': record.funcName,
             'line': record.lineno,
         }
-        
+
         # Add optional fields
         if trace_id:
             log_entry['trace_id'] = trace_id
-            
+
         if duration_ms is not None:
             log_entry['duration_ms'] = duration_ms
-            
+
         # Add processor_id if available
         if hasattr(record, 'processor_id'):
             log_entry['processor_id'] = record.processor_id
-            
+
         # Add any extra fields from the record
         if hasattr(record, 'extra_fields'):
             log_entry.update(record.extra_fields)
-            
+
         # Add exception info if present
         if record.exc_info:
             log_entry['exception'] = self.formatException(record.exc_info)
-            
+
         return json.dumps(log_entry, default=str)
 
 
@@ -79,7 +79,7 @@ class HumanReadableFormatter(logging.Formatter):
     """
     Human-readable formatter with color coding and trace IDs.
     """
-    
+
     # Color codes for different log levels
     COLORS = {
         'DEBUG': '\033[36m',     # Cyan
@@ -89,7 +89,7 @@ class HumanReadableFormatter(logging.Formatter):
         'CRITICAL': '\033[35m',  # Magenta
     }
     RESET = '\033[0m'
-    
+
     def format(self, record: LogRecord) -> str:
         """
         Format log record for human reading with colors.
@@ -103,18 +103,18 @@ class HumanReadableFormatter(logging.Formatter):
         # Get trace ID from context
         trace_id = trace_id_var.get()
         trace_str = f"[{trace_id[:8]}]" if trace_id else ""
-        
+
         # Get processor_id if available
         processor_str = ""
         if hasattr(record, 'processor_id'):
             processor_str = f"[{record.processor_id}]"
-        
+
         # Apply color based on level
         color = self.COLORS.get(record.levelname, '')
-        
+
         # Format the message
         timestamp = datetime.fromtimestamp(record.created).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
-        
+
         formatted = (
             f"{color}{timestamp} "
             f"[{record.levelname:8}] "
@@ -123,11 +123,11 @@ class HumanReadableFormatter(logging.Formatter):
             f"{record.getMessage()}"
             f"{self.RESET}"
         )
-        
+
         # Add exception info if present
         if record.exc_info:
             formatted += f"\n{self.formatException(record.exc_info)}"
-            
+
         return formatted
 
 
@@ -189,7 +189,7 @@ class ProcessorLoggerAdapter(logging.LoggerAdapter):
     """
     Logger adapter that automatically includes processor_id in all log messages.
     """
-    
+
     def __init__(self, logger: logging.Logger, processor_id: str):
         """
         Initialize the adapter with a processor ID.
@@ -199,7 +199,7 @@ class ProcessorLoggerAdapter(logging.LoggerAdapter):
             processor_id: The processor ID to include in logs
         """
         super().__init__(logger, {'processor_id': processor_id})
-        
+
     def process(self, msg: str, kwargs: Dict[str, Any]) -> tuple:
         """
         Process the logging call to add processor_id.
@@ -236,13 +236,13 @@ def configure_logging(
     # Convert string level to logging level
     if isinstance(level, str):
         level = getattr(logging, level.upper(), logging.INFO)
-    
+
     # Choose formatter based on format type
     if format_type == 'json':
         formatter = StructuredFormatter()
     else:
         formatter = HumanReadableFormatter()
-    
+
     # Configure output handler
     if output == 'stdout':
         handler = logging.StreamHandler(sys.stdout)
@@ -251,20 +251,20 @@ def configure_logging(
     else:
         # Assume it's a file path
         handler = logging.FileHandler(output)
-    
+
     handler.setFormatter(formatter)
-    
+
     # Configure root logger
     root_logger = logging.getLogger()
     root_logger.setLevel(level)
     root_logger.handlers = []  # Clear existing handlers
     root_logger.addHandler(handler)
-    
+
     # Set specific log levels for noisy libraries
     logging.getLogger('urllib3').setLevel(logging.WARNING)
     logging.getLogger('requests').setLevel(logging.WARNING)
     logging.getLogger('qdrant_client').setLevel(logging.WARNING)
-    
+
     # Log initial configuration
     logger = logging.getLogger('kato.config.logging')
     logger.info(
@@ -285,15 +285,15 @@ def get_logger(name: str, processor_id: Optional[str] = None) -> Union[logging.L
         Logger instance or ProcessorLoggerAdapter if processor_id provided
     """
     logger = logging.getLogger(name)
-    
+
     if processor_id:
         return ProcessorLoggerAdapter(logger, processor_id)
-    
+
     return logger
 
 
 # Performance logging utilities
-def log_performance(logger: logging.Logger, operation: str, duration_ms: float, 
+def log_performance(logger: logging.Logger, operation: str, duration_ms: float,
                     metadata: Optional[Dict[str, Any]] = None) -> None:
     """
     Log performance metrics for an operation.
@@ -309,10 +309,10 @@ def log_performance(logger: logging.Logger, operation: str, duration_ms: float,
         'duration_ms': round(duration_ms, 2),
         'performance_log': True
     }
-    
+
     if metadata:
         extra_fields.update(metadata)
-    
+
     # Determine log level based on duration
     if duration_ms > 1000:  # > 1 second
         level = logging.WARNING
@@ -323,7 +323,7 @@ def log_performance(logger: logging.Logger, operation: str, duration_ms: float,
     else:
         level = logging.DEBUG
         message = f"Operation '{operation}' completed in {duration_ms:.2f}ms"
-    
+
     logger.log(level, message, extra={'extra_fields': extra_fields})
 
 
@@ -336,8 +336,8 @@ class PerformanceTimer:
             # perform operation
             pass
     """
-    
-    def __init__(self, logger: logging.Logger, operation: str, 
+
+    def __init__(self, logger: logging.Logger, operation: str,
                  metadata: Optional[Dict[str, Any]] = None):
         """
         Initialize the performance timer.
@@ -351,13 +351,13 @@ class PerformanceTimer:
         self.operation = operation
         self.metadata = metadata or {}
         self.start_time = None
-        
+
     def __enter__(self):
         """Start the timer."""
         self.start_time = time.time()
         return self
-        
-    def __exit__(self, exc_type, exc_val, exc_tb):
+
+    def __exit__(self, exc_type, exc_val, _exc_tb):
         """Stop the timer and log performance."""
         if self.start_time:
             duration_ms = (time.time() - self.start_time) * 1000

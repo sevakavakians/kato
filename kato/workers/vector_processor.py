@@ -1,6 +1,6 @@
 import logging
-from os import environ
 from functools import reduce
+from os import environ
 
 from numpy import array
 

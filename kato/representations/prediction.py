@@ -1,9 +1,5 @@
-import copy
 from itertools import chain
-from collections import Counter
-import traceback
-from math import log
-from kato.informatics.metrics import expectation, classic_expectation, confluence, hamiltonian, grand_hamiltonian
+
 
 class Prediction(dict):
     "Pattern prediction."
@@ -47,7 +43,7 @@ class Prediction(dict):
         self['predictive_information'] = float(0)  # Excess entropy / mutual information between past and future
         self['sequence'] = _pattern['pattern_data']
         self['pattern_data'] = _pattern['pattern_data']  # Keep for later popping in pattern_processor
-        
+
         sequence = _pattern['pattern_data']
 
         __c1 = len(self['past'])

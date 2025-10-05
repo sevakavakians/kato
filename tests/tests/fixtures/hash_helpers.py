@@ -5,7 +5,7 @@ Provides utilities for verifying deterministic hashing of patterns and vectors.
 
 import hashlib
 import json
-from typing import List, Dict, Any, Tuple
+from typing import Any, Dict, List
 
 
 def calculate_pattern_hash(sequence: List[Any]) -> str:
@@ -79,7 +79,7 @@ def verify_pattern_name(name: str, expected_sequence: List[Any]) -> bool:
     """
     if not name.startswith("PTRN|"):
         return False
-    
+
     expected_name = format_pattern_name(expected_sequence)
     return name == expected_name
 
@@ -97,7 +97,7 @@ def verify_vector_name(name: str, expected_vector: List[float]) -> bool:
     """
     if not name.startswith("VCTR|"):
         return False
-    
+
     expected_name = format_vector_name(expected_vector)
     return name == expected_name
 
@@ -135,12 +135,12 @@ def verify_hash_consistency(names: List[str], sequences: List[List[Any]]) -> Dic
     """
     results = {}
     hash_map = {}
-    
+
     for name, sequence in zip(names, sequences):
         seq_str = json.dumps(sequence, sort_keys=True)
         expected_hash = calculate_pattern_hash(sequence)
         actual_hash = extract_hash_from_name(name)
-        
+
         if seq_str in hash_map:
             # We've seen this sequence before
             results[name] = (hash_map[seq_str] == actual_hash)
@@ -148,5 +148,5 @@ def verify_hash_consistency(names: List[str], sequences: List[List[Any]]) -> Dic
             # First time seeing this sequence
             hash_map[seq_str] = actual_hash
             results[name] = (expected_hash == actual_hash)
-    
+
     return results

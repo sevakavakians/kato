@@ -2,12 +2,11 @@
 Shared pytest fixtures for KATO tests.
 """
 
-import pytest
-import pytest_asyncio
 import asyncio
 import uuid
-from typing import Dict, Any
 
+import pytest
+import pytest_asyncio
 from fixtures.kato_session_client import KatoSessionClient
 
 
@@ -16,7 +15,7 @@ async def kato_client():
     """Fixture that provides an async KATO session client."""
     # Use single KATO instance on port 8000
     base_url = "http://localhost:8000"
-    
+
     # Create and yield the client
     async with KatoSessionClient(base_url) as client:
         yield client
@@ -32,10 +31,10 @@ async def isolated_session(kato_client):
         ttl_seconds=60,  # Short TTL for tests
         metadata={"test": True, "test_id": test_id}
     )
-    
+
     # Yield the session for the test to use
     yield session
-    
+
     # Cleanup: Try to delete the session
     try:
         await kato_client.delete_session(session["session_id"])

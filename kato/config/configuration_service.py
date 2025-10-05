@@ -11,12 +11,12 @@ This eliminates duplication of default settings extraction across
 ProcessorManager, FastAPI service, and other components.
 """
 
-from typing import Dict, Any, Optional
-from dataclasses import dataclass
 import logging
+from dataclasses import dataclass
+from typing import Any, Dict, Optional
 
-from kato.config.settings import Settings
 from kato.config.session_config import SessionConfiguration
+from kato.config.settings import Settings
 
 logger = logging.getLogger('kato.config.configuration_service')
 
@@ -34,18 +34,18 @@ class ResolvedConfiguration:
     persistence: int
     recall_threshold: float
     stm_mode: str
-    
+
     # Processing Configuration
     indexer_type: str
     max_predictions: int
     sort_symbols: bool
     process_predictions: bool
-    
+
     # Source tracking
     source_session_id: Optional[str] = None
     source_node_id: Optional[str] = None
     overrides_applied: Dict[str, Any] = None
-    
+
     def to_genome_manifest(self) -> Dict[str, Any]:
         """
         Convert to genome manifest format for KatoProcessor.
@@ -63,7 +63,7 @@ class ResolvedConfiguration:
             'sort': self.sort_symbols,
             'process_predictions': self.process_predictions
         }
-    
+
     def to_genes_dict(self) -> Dict[str, Any]:
         """
         Convert to genes dictionary format for API responses.
@@ -92,7 +92,7 @@ class ConfigurationService:
     - Configuration validation and consistency
     - Configuration merging and resolution
     """
-    
+
     def __init__(self, settings: Settings):
         """
         Initialize the configuration service.
@@ -102,7 +102,7 @@ class ConfigurationService:
         """
         self.settings = settings
         logger.info("ConfigurationService initialized")
-    
+
     def get_default_configuration(self) -> Dict[str, Any]:
         """
         Extract default configuration from settings.
@@ -123,7 +123,7 @@ class ConfigurationService:
             'sort': self.settings.processing.sort_symbols,
             'process_predictions': self.settings.processing.process_predictions
         }
-    
+
     def resolve_configuration(
         self,
         session_config: Optional[SessionConfiguration] = None,
@@ -143,14 +143,14 @@ class ConfigurationService:
         """
         # Start with defaults
         defaults = self.get_default_configuration()
-        
+
         # Track which values were overridden
         overrides_applied = {}
-        
+
         # Apply session overrides if provided
         if session_config:
             merged = session_config.merge_with_defaults(defaults)
-            
+
             # Track which values were overridden
             for key, value in merged.items():
                 if key in defaults and defaults[key] != value:
@@ -161,7 +161,7 @@ class ConfigurationService:
                     }
         else:
             merged = defaults
-        
+
         # Create resolved configuration
         resolved = ResolvedConfiguration(
             max_pattern_length=merged['max_pattern_length'],
@@ -182,9 +182,9 @@ class ConfigurationService:
                 f"Configuration resolved for session {session_id}, node {node_id} "
                 f"with {len(overrides_applied)} overrides: {list(overrides_applied.keys())}"
             )
-        
+
         return resolved
-    
+
     def validate_configuration_update(self, updates: Dict[str, Any]) -> Dict[str, str]:
         """
         Validate configuration updates before applying them.
@@ -196,57 +196,57 @@ class ConfigurationService:
             Dictionary of validation errors (empty if all valid)
         """
         errors = {}
-        
+
         # Validate recall_threshold
         if 'recall_threshold' in updates:
             value = updates['recall_threshold']
             if not isinstance(value, (int, float)) or not 0.0 <= value <= 1.0:
                 errors['recall_threshold'] = 'Must be a number between 0.0 and 1.0'
-        
+
         # Validate persistence
         if 'persistence' in updates:
             value = updates['persistence']
             if not isinstance(value, int) or not 1 <= value <= 100:
                 errors['persistence'] = 'Must be an integer between 1 and 100'
-        
+
         # Validate max_pattern_length
         if 'max_pattern_length' in updates:
             value = updates['max_pattern_length']
             if not isinstance(value, int) or value < 0:
                 errors['max_pattern_length'] = 'Must be a non-negative integer'
-        
+
         # Validate max_predictions
         if 'max_predictions' in updates:
             value = updates['max_predictions']
             if not isinstance(value, int) or not 1 <= value <= 10000:
                 errors['max_predictions'] = 'Must be an integer between 1 and 10000'
-        
+
         # Validate indexer_type
         if 'indexer_type' in updates:
             value = updates['indexer_type']
             valid_indexers = ['VI', 'LSH', 'ANNOY', 'FAISS']
             if not isinstance(value, str) or value not in valid_indexers:
                 errors['indexer_type'] = f'Must be one of: {", ".join(valid_indexers)}'
-        
+
         # Normalize and validate stm_mode
         if 'stm_mode' in updates:
             value = updates['stm_mode']
             valid_modes = ['CLEAR', 'ROLLING']
             if not isinstance(value, str):
-                errors['stm_mode'] = f'Must be a string'
+                errors['stm_mode'] = 'Must be a string'
             elif value not in valid_modes:
                 logger.warning(f"Invalid stm_mode '{value}', normalizing to 'CLEAR'")
                 updates['stm_mode'] = 'CLEAR'
-        
+
         # Validate boolean fields
         for bool_field in ['sort', 'process_predictions']:
             if bool_field in updates:
                 value = updates[bool_field]
                 if not isinstance(value, bool):
                     errors[bool_field] = 'Must be a boolean (true/false)'
-        
+
         return errors
-    
+
     def get_configuration_info(self, session_config: Optional[SessionConfiguration] = None) -> Dict[str, Any]:
         """
         Get comprehensive configuration information including defaults and overrides.
@@ -259,7 +259,7 @@ class ConfigurationService:
         """
         defaults = self.get_default_configuration()
         resolved = self.resolve_configuration(session_config)
-        
+
         return {
             'defaults': defaults,
             'resolved': resolved.to_genes_dict(),

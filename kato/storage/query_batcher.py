@@ -7,10 +7,9 @@ round-trip latency and improve throughput in high-traffic scenarios.
 
 import asyncio
 import logging
-from typing import List, Dict, Any, Optional, Callable, TypeVar, Generic
-from dataclasses import dataclass
-from collections import defaultdict
 import time
+from dataclasses import dataclass
+from typing import Any, Callable, Dict, Generic, List, Optional, TypeVar
 
 logger = logging.getLogger('kato.storage.query_batcher')
 
@@ -34,7 +33,7 @@ class QueryBatcher(Generic[T]):
     - Batch pattern retrievals
     - Multiple database writes
     """
-    
+
     def __init__(
         self,
         batch_executor: Callable[[List[str]], Dict[str, T]],
@@ -55,12 +54,12 @@ class QueryBatcher(Generic[T]):
         self.max_batch_size = max_batch_size
         self.max_wait_time = max_wait_time
         self.enable_batching = enable_batching
-        
+
         # Pending requests
         self._pending_requests: List[BatchRequest] = []
         self._batch_lock = asyncio.Lock()
         self._batch_task: Optional[asyncio.Task] = None
-        
+
         # Statistics
         self.stats = {
             'total_requests': 0,
@@ -68,7 +67,7 @@ class QueryBatcher(Generic[T]):
             'average_batch_size': 0.0,
             'total_time_saved_ms': 0.0
         }
-    
+
     async def get(self, key: str) -> Optional[T]:
         """
         Get a single item, potentially batched with other concurrent requests.
@@ -83,7 +82,7 @@ class QueryBatcher(Generic[T]):
             # Bypass batching for debugging or single-threaded scenarios
             result = self.batch_executor([key])
             return result.get(key)
-        
+
         # Create a future for this request
         future = asyncio.Future()
         request = BatchRequest(
@@ -91,22 +90,22 @@ class QueryBatcher(Generic[T]):
             future=future,
             timestamp=time.time()
         )
-        
+
         async with self._batch_lock:
             self._pending_requests.append(request)
             self.stats['total_requests'] += 1
-            
+
             # Start batch timer if this is the first request
             if len(self._pending_requests) == 1:
                 self._batch_task = asyncio.create_task(self._batch_timer())
-            
+
             # Execute immediately if batch is full
             if len(self._pending_requests) >= self.max_batch_size:
                 await self._execute_batch()
-        
+
         # Wait for the result
         return await future
-    
+
     async def get_many(self, keys: List[str]) -> Dict[str, T]:
         """
         Get multiple items efficiently.
@@ -119,17 +118,17 @@ class QueryBatcher(Generic[T]):
         """
         if not keys:
             return {}
-        
+
         if not self.enable_batching or len(keys) >= self.max_batch_size:
             # Execute directly for large requests or when batching is disabled
             return self.batch_executor(keys)
-        
+
         # Use individual gets which will be automatically batched
         tasks = [self.get(key) for key in keys]
         results = await asyncio.gather(*tasks)
-        
+
         return {key: result for key, result in zip(keys, results) if result is not None}
-    
+
     async def _batch_timer(self):
         """Timer that triggers batch execution after max_wait_time."""
         try:
@@ -140,55 +139,55 @@ class QueryBatcher(Generic[T]):
         except asyncio.CancelledError:
             # Timer was cancelled because batch was executed early
             pass
-    
+
     async def _execute_batch(self):
         """Execute the current batch of pending requests."""
         if not self._pending_requests:
             return
-        
+
         # Take all pending requests
         requests = self._pending_requests[:]
         self._pending_requests.clear()
-        
+
         # Cancel the timer if it's running
         if self._batch_task and not self._batch_task.done():
             self._batch_task.cancel()
             self._batch_task = None
-        
+
         # Extract keys and execute batch
         keys = [req.key for req in requests]
         batch_start = time.time()
-        
+
         try:
             logger.debug(f"Executing batch with {len(keys)} items")
             results = self.batch_executor(keys)
             batch_duration = (time.time() - batch_start) * 1000  # Convert to ms
-            
+
             # Update statistics
             self.stats['batches_executed'] += 1
             batch_count = self.stats['batches_executed']
             self.stats['average_batch_size'] = (
                 (self.stats['average_batch_size'] * (batch_count - 1) + len(keys)) / batch_count
             )
-            
+
             # Estimate time saved (rough calculation)
             estimated_individual_time = len(keys) * 2.0  # Assume 2ms per individual query
             time_saved = max(0, estimated_individual_time - batch_duration)
             self.stats['total_time_saved_ms'] += time_saved
-            
+
             # Set results for all futures
             for request in requests:
                 result = results.get(request.key)
                 if not request.future.done():
                     request.future.set_result(result)
-                    
+
         except Exception as e:
             logger.error(f"Batch execution failed: {e}")
             # Set exception for all futures
             for request in requests:
                 if not request.future.done():
                     request.future.set_exception(e)
-    
+
     def get_stats(self) -> Dict[str, Any]:
         """Get batching statistics."""
         return {
@@ -200,7 +199,7 @@ class QueryBatcher(Generic[T]):
 
 class SessionBatcher:
     """Specialized batcher for session operations."""
-    
+
     def __init__(self, session_manager, max_batch_size: int = 20):
         """
         Initialize session batcher.
@@ -210,12 +209,12 @@ class SessionBatcher:
             max_batch_size: Maximum sessions to fetch in one batch
         """
         self.session_manager = session_manager
-        
+
         # Create the actual batch executor function
         async def batch_get_sessions(session_ids: List[str]) -> Dict[str, Any]:
             """Batch fetch multiple sessions."""
             results = {}
-            
+
             # Use Redis pipeline for efficient batch operations if using Redis
             if hasattr(session_manager, 'redis_client'):
                 try:
@@ -223,9 +222,9 @@ class SessionBatcher:
                     for session_id in session_ids:
                         key = f"session:{session_id}"
                         pipe.get(key)
-                    
+
                     redis_results = pipe.execute()
-                    
+
                     for session_id, redis_result in zip(session_ids, redis_results):
                         if redis_result:
                             try:
@@ -234,7 +233,7 @@ class SessionBatcher:
                                 results[session_id] = session_data
                             except (json.JSONDecodeError, AttributeError):
                                 logger.warning(f"Failed to decode session {session_id}")
-                        
+
                 except Exception as e:
                     logger.error(f"Redis batch operation failed: {e}")
                     # Fall back to individual operations
@@ -254,9 +253,9 @@ class SessionBatcher:
                             results[session_id] = session
                     except Exception as e:
                         logger.warning(f"Failed to get session {session_id}: {e}")
-            
+
             return results
-        
+
         # Wrap the async function for the batcher
         def sync_batch_executor(session_ids: List[str]) -> Dict[str, Any]:
             loop = asyncio.get_event_loop()
@@ -265,21 +264,21 @@ class SessionBatcher:
                 return asyncio.create_task(batch_get_sessions(session_ids))
             else:
                 return loop.run_until_complete(batch_get_sessions(session_ids))
-        
+
         self.batcher = QueryBatcher(
             batch_executor=sync_batch_executor,
             max_batch_size=max_batch_size,
             max_wait_time=0.005,  # 5ms for sessions (faster response needed)
         )
-    
+
     async def get_session(self, session_id: str):
         """Get a session with potential batching."""
         return await self.batcher.get(session_id)
-    
+
     async def get_sessions(self, session_ids: List[str]) -> Dict[str, Any]:
         """Get multiple sessions efficiently."""
         return await self.batcher.get_many(session_ids)
-    
+
     def get_stats(self) -> Dict[str, Any]:
         """Get batching statistics."""
         return self.batcher.get_stats()
@@ -292,9 +291,9 @@ _session_batcher: Optional[SessionBatcher] = None
 def get_session_batcher(session_manager) -> SessionBatcher:
     """Get or create a session batcher instance."""
     global _session_batcher
-    
+
     if _session_batcher is None:
         _session_batcher = SessionBatcher(session_manager)
         logger.info("Session batcher initialized")
-    
+
     return _session_batcher

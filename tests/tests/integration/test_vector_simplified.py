@@ -3,9 +3,10 @@
 Simplified vector compatibility test to verify basic functionality.
 """
 
-import requests
-import sys
 import os
+import sys
+
+import requests
 
 # Add path for fixtures
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -21,13 +22,13 @@ def unwrap_response(response):
 
 def test_vector_basic(kato_fixture):
     """Basic test of vector functionality"""
-    
+
     print("1. Testing vector observation...")
-    
+
     # Clear memory
     r = requests.post(f"{kato_fixture.base_url}/clear-all-memory")
     assert r.status_code == 200
-    
+
     # Observe vectors
     obs = {
         'strings': ['vector_test'],
@@ -39,25 +40,25 @@ def test_vector_basic(kato_fixture):
     message = unwrap_response(r)
     assert message['status'] == 'okay'  # FastAPI returns 'okay' not 'observed'
     print("✓ Vector observation works")
-    
+
     # Learn
     r = requests.post(f"{kato_fixture.base_url}/learn", json={})
     assert r.status_code == 200
     print("✓ Learning with vectors works")
-    
+
     # Note: short-term memory gets cleared after learning, which is normal behavior
     print("✓ Vector basic functionality works")
 
 
 def test_mixed_modality(kato_fixture):
     """Test mixed strings and vectors"""
-    
+
     print("\n2. Testing mixed modality...")
-    
+
     # Clear memory
     r = requests.post(f"{kato_fixture.base_url}/clear-all-memory")
     assert r.status_code == 200
-    
+
     # Observe mixed data
     obs = {
         'strings': ['hello', 'world'],
@@ -73,45 +74,45 @@ def test_mixed_modality(kato_fixture):
 
 def test_vector_sequence(kato_fixture):
     """Test sequence learning with vectors"""
-    
+
     print("\n3. Testing vector sequence learning...")
-    
+
     # Clear memory
     r = requests.post(f"{kato_fixture.base_url}/clear-all-memory")
     assert r.status_code == 200
-    
+
     # Create a sequence
     sequence = [
         {'strings': ['a'], 'vectors': [[1, 0]], 'emotives': {}},
         {'strings': ['b'], 'vectors': [[0, 1]], 'emotives': {}},
         {'strings': ['c'], 'vectors': [[1, 1]], 'emotives': {}}
     ]
-    
+
     # Observe sequence
     for obs in sequence:
         r = requests.post(f"{kato_fixture.base_url}/observe", json=obs)
         assert r.status_code == 200
-    
+
     # Learn
     r = requests.post(f"{kato_fixture.base_url}/learn", json={})
     assert r.status_code == 200
-    
+
     # Clear short-term memory (formerly short-term memory)
     r = requests.post(f"{kato_fixture.base_url}/clear-stm", json={})
     assert r.status_code == 200
-    
+
     # Observe first element
     r = requests.post(f"{kato_fixture.base_url}/observe", json=sequence[0])
     assert r.status_code == 200
-    
+
     # Get predictions
     r = requests.get(f"{kato_fixture.base_url}/predictions")
     assert r.status_code == 200
     response = unwrap_response(r)
-    
+
     # FastAPI returns predictions in a 'predictions' key
     predictions = response.get('predictions', response) if isinstance(response, dict) else response
-    
+
     if len(predictions) > 0:
         print(f"✓ Got {len(predictions)} predictions")
         # Check structure
@@ -130,7 +131,7 @@ def test_vector_sequence(kato_fixture):
 if __name__ == "__main__":
     print("Running simplified vector compatibility tests")
     print("=" * 50)
-    
+
     try:
         # Check connection
         r = requests.get(f"{kato_fixture.base_url}/health")
@@ -139,15 +140,15 @@ if __name__ == "__main__":
     except:
         print("ERROR: KATO is not running")
         exit(1)
-    
+
     # Run tests
     all_passed = True
-    
+
     # Create a fixture instance for standalone execution
     from fixtures.kato_fixtures import KATOTestFixture
     fixture = KATOTestFixture()
     fixture.setup()
-    
+
     try:
         test_vector_basic(fixture)
     except AssertionError as e:
@@ -156,7 +157,7 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"✗ Basic vector test error: {e}")
         all_passed = False
-    
+
     try:
         test_mixed_modality(fixture)
     except AssertionError as e:
@@ -165,7 +166,7 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"✗ Mixed modality test error: {e}")
         all_passed = False
-    
+
     try:
         test_vector_sequence(fixture)
     except AssertionError as e:
@@ -174,10 +175,10 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"✗ Vector sequence test error: {e}")
         all_passed = False
-    
+
     # Cleanup
     fixture.teardown()
-    
+
     print("\n" + "=" * 50)
     if all_passed:
         print("✅ ALL VECTOR TESTS PASSED")

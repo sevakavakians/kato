@@ -5,15 +5,20 @@ Core endpoints for observations, learning, predictions, and pattern management.
 These are the main KATO functionality endpoints.
 """
 
-import uuid
 import logging
-from typing import Optional, Dict, Any, List
-from datetime import datetime, timezone
+import uuid
+from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, HTTPException, Request, Query, Path
+from fastapi import APIRouter, HTTPException, Path, Query, Request
+
 from kato.api.schemas import (
-    ObservationData, ObservationResult, STMResponse, LearnResult, 
-    PredictionsResponse, ObservationSequenceRequest, ObservationSequenceResult
+    LearnResult,
+    ObservationData,
+    ObservationResult,
+    ObservationSequenceRequest,
+    ObservationSequenceResult,
+    PredictionsResponse,
+    STMResponse,
 )
 
 router = APIRouter(tags=["kato-ops"])
@@ -47,7 +52,7 @@ async def observe_primary(
 
         logger.debug(f"Processing observation for processor {processor_id}")
         processor = await app_state.processor_manager.get_processor_by_id(processor_id)
-        
+
         observation = {
             'strings': data.strings,
             'vectors': data.vectors,
@@ -58,7 +63,7 @@ async def observe_primary(
 
         result = await processor.observe(observation)
         stm_length = len(processor.get_stm())
-        
+
         return ObservationResult(
             status="okay",
             processor_id=processor.id,
@@ -84,10 +89,10 @@ async def get_stm_primary(
     # Use header-based node ID if processor_id not provided
     if processor_id is None:
         processor_id = get_node_id_from_request(request)
-    
+
     processor = await app_state.processor_manager.get_processor_by_id(processor_id)
     stm = processor.get_stm()
-    
+
     return STMResponse(
         stm=stm,
         processor_id=processor.id,
@@ -117,13 +122,13 @@ async def learn_primary(
 
     if not stm:
         raise HTTPException(status_code=400, detail="Cannot learn from empty STM")
-    
+
     logger.info(f"Learning pattern from {len(stm)} events")
-    
+
     try:
         pattern_name = processor.learn()
         final_stm = processor.get_stm()
-        
+
         return LearnResult(
             status="learned",
             pattern_name=pattern_name,
@@ -147,9 +152,9 @@ async def clear_stm_primary(
     # Use header-based node ID if processor_id not provided
     if processor_id is None:
         processor_id = get_node_id_from_request(request)
-    
+
     processor = await app_state.processor_manager.get_processor_by_id(processor_id)
-    
+
     try:
         processor.clear_stm()
         return {"status": "cleared", "processor_id": processor.id}
@@ -167,9 +172,9 @@ async def clear_all_primary(processor_id: Optional[str] = Query(None, descriptio
     Use with caution in production environments.
     """
     from kato.services.kato_fastapi import app_state
-    
+
     processor = await app_state.processor_manager.get_processor_by_id(processor_id)
-    
+
     try:
         processor.clear_all_memory()
         return {"status": "cleared", "processor_id": processor.id, "message": "All data cleared"}
@@ -187,9 +192,9 @@ async def clear_all_memory_primary(processor_id: Optional[str] = Query(None, des
     Use with caution in production environments.
     """
     from kato.services.kato_fastapi import app_state
-    
+
     processor = await app_state.processor_manager.get_processor_by_id(processor_id)
-    
+
     try:
         processor.clear_all_memory()
         return {"status": "cleared", "processor_id": processor.id, "message": "All data cleared"}
@@ -207,17 +212,17 @@ async def get_predictions_primary(processor_id: Optional[str] = Query(None, desc
     future sequences based on learned patterns.
     """
     from kato.services.kato_fastapi import app_state
-    
+
     processor = await app_state.processor_manager.get_processor_by_id(processor_id)
-    
+
     try:
         predictions = processor.get_predictions()
-        
+
         # Get future_potentials from the pattern processor if available
         future_potentials = None
         if hasattr(processor.pattern_processor, 'future_potentials'):
             future_potentials = processor.pattern_processor.future_potentials
-        
+
         return PredictionsResponse(
             predictions=predictions,
             future_potentials=future_potentials,
@@ -306,15 +311,15 @@ async def get_gene(
     # Use header-based node ID if processor_id not provided
     if processor_id is None:
         processor_id = get_node_id_from_request(request)
-    
+
     processor = await app_state.processor_manager.get_processor_by_id(processor_id)
-    
+
     try:
         if hasattr(processor, 'genome_manifest'):
             value = processor.genome_manifest.get(gene_name.lower())
             if value is not None:
                 return {"gene": gene_name, "value": value, "processor_id": processor.id}
-        
+
         raise HTTPException(status_code=404, detail=f"Gene {gene_name} not found")
     except HTTPException:
         raise
@@ -335,14 +340,14 @@ async def get_pattern(
     # Use header-based node ID if processor_id not provided
     if processor_id is None:
         processor_id = get_node_id_from_request(request)
-    
+
     processor = await app_state.processor_manager.get_processor_by_id(processor_id)
-    
+
     try:
         pattern = processor.get_pattern(pattern_id)
         if not pattern:
             raise HTTPException(status_code=404, detail=f"Pattern {pattern_id} not found")
-        
+
         return {"pattern": pattern, "processor_id": processor.id}
     except HTTPException:
         raise
@@ -355,9 +360,9 @@ async def get_pattern(
 async def get_percept_data(processor_id: Optional[str] = Query(None, description="Processor identifier")):
     """Get current percept data from processor"""
     from kato.services.kato_fastapi import app_state
-    
+
     processor = await app_state.processor_manager.get_processor_by_id(processor_id)
-    
+
     try:
         percept_data = processor.get_percept_data()
         return {"percept_data": percept_data, "processor_id": processor.id}
@@ -377,9 +382,9 @@ async def get_cognition_data(
     # Use header-based node ID if processor_id not provided
     if processor_id is None:
         processor_id = get_node_id_from_request(request)
-    
+
     processor = await app_state.processor_manager.get_processor_by_id(processor_id)
-    
+
     try:
         cognition_data = processor.cognition_data
         return {"cognition_data": cognition_data, "processor_id": processor.id}
@@ -424,20 +429,20 @@ async def observe_sequence_primary(
         )
 
     processor = await app_state.processor_manager.get_processor_by_id(processor_id)
-    
+
     try:
         logger.info(f"Processing sequence of {len(data.observations)} observations")
-        
+
         results = []
         initial_stm_length = len(processor.get_stm())
         auto_learned_patterns = []
-        
+
         for i, obs_data in enumerate(data.observations):
             # Clear STM before each observation if isolation requested
             if data.clear_stm_between and i > 0:
                 processor.clear_stm()
                 logger.debug(f"Cleared STM for isolated observation {i}")
-            
+
             observation = {
                 'strings': obs_data.strings,
                 'vectors': obs_data.vectors,
@@ -447,7 +452,7 @@ async def observe_sequence_primary(
             }
 
             result = await processor.observe(observation)
-            
+
             if data.learn_after_each:
                 if processor.get_stm():
                     pattern_name = processor.learn()
@@ -456,7 +461,7 @@ async def observe_sequence_primary(
             # Track auto-learned patterns
             if result.get('auto_learned_pattern'):
                 auto_learned_patterns.append(result['auto_learned_pattern'])
-            
+
             observation_result = {
                 "status": "okay",
                 "sequence_position": i,
@@ -466,7 +471,7 @@ async def observe_sequence_primary(
                 "auto_learned_pattern": result.get('auto_learned_pattern')
             }
             results.append(observation_result)
-        
+
         # Learn from final STM if requested and STM is not empty
         final_learned_pattern = None
         if data.learn_at_end:
@@ -478,9 +483,9 @@ async def observe_sequence_primary(
                     logger.info(f"Learned final pattern: {final_learned_pattern}")
                 except Exception as learn_error:
                     logger.warning(f"Failed to learn final pattern: {learn_error}")
-        
+
         final_stm_length = len(processor.get_stm())
-        
+
         return ObservationSequenceResult(
             status="completed",
             processor_id=processor.id,
@@ -492,7 +497,7 @@ async def observe_sequence_primary(
             final_learned_pattern=final_learned_pattern,
             isolated=data.clear_stm_between
         )
-        
+
     except Exception as e:
         logger.error(f"Error processing observation sequence: {e}")
         raise HTTPException(status_code=500, detail=f"Sequence processing failed: {str(e)}")

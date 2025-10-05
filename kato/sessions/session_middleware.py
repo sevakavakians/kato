@@ -7,10 +7,11 @@ enabling multi-user support with complete isolation.
 
 import logging
 from typing import Optional
-from fastapi import Request, HTTPException
+
+from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from .session_manager import get_session_manager, SessionState
+from .session_manager import SessionState, get_session_manager
 
 logger = logging.getLogger('kato.sessions.middleware')
 
@@ -25,7 +26,7 @@ class SessionMiddleware:
     - Automatic session creation for v2 endpoints
     - Session attachment to request state
     """
-    
+
     def __init__(self, app, auto_create: bool = False):
         """
         Initialize session middleware.
@@ -37,24 +38,24 @@ class SessionMiddleware:
         self.app = app
         self.auto_create = auto_create
         self.session_manager = get_session_manager()
-    
+
     async def __call__(self, scope, receive, send):
         """ASGI3 middleware interface"""
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
-        
+
         # For HTTP requests, we need to handle them specially
         # But for now, just pass through to the app
         await self.app(scope, receive, send)
         return
-    
+
     async def process_request_old(self, request: Request, call_next):
         """Process request with session management"""
-        
+
         # Extract session ID from header or cookie
         session_id = self._extract_session_id(request)
-        
+
         # Handle v2 endpoints that require sessions
         if request.url.path.startswith('/v2/') and request.url.path != '/v2/sessions':
             if not session_id:
@@ -74,11 +75,11 @@ class SessionMiddleware:
                             }
                         }
                     )
-        
+
         # Validate and attach session if provided
         if session_id:
             session = await self.session_manager.get_session(session_id)
-            
+
             if not session and request.url.path.startswith('/v2/'):
                 # Session not found or expired
                 return JSONResponse(
@@ -91,27 +92,27 @@ class SessionMiddleware:
                         }
                     }
                 )
-            
+
             # Attach session to request state
             if session:
                 request.state.session = session
                 request.state.session_id = session_id
                 request.state.session_lock = await self.session_manager.get_session_lock(session_id)
-        
+
         # Process request
         response = await call_next(request)
-        
+
         # Add session ID to response headers if we have one
         if session_id:
             response.headers['X-Session-ID'] = session_id
-        
+
         # Update session if it was modified
         if hasattr(request.state, 'session') and hasattr(request.state, 'session_modified'):
             if request.state.session_modified:
                 await self.session_manager.update_session(request.state.session)
-        
+
         return response
-    
+
     def _extract_session_id(self, request: Request) -> Optional[str]:
         """
         Extract session ID from request.
@@ -131,17 +132,17 @@ class SessionMiddleware:
         session_id = request.headers.get('X-Session-ID')
         if session_id:
             return session_id
-        
+
         # Check cookie
         session_id = request.cookies.get('session_id')
         if session_id:
             return session_id
-        
+
         # Check query parameter (least preferred)
         session_id = request.query_params.get('session_id')
         if session_id:
             return session_id
-        
+
         return None
 
 
@@ -163,7 +164,7 @@ async def get_session(request: Request) -> SessionState:
             status_code=400,
             detail="Session required for this endpoint"
         )
-    
+
     return request.state.session
 
 
@@ -185,7 +186,7 @@ async def get_session_id(request: Request) -> str:
             status_code=400,
             detail="Session ID required for this endpoint"
         )
-    
+
     return request.state.session_id
 
 

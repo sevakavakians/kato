@@ -7,28 +7,29 @@ consistent response formats and logging.
 
 import logging
 import time
-from typing import Dict, Any, Union
-from fastapi import Request, HTTPException, status
-from fastapi.responses import JSONResponse
+from typing import Any, Dict, Union
+
+from fastapi import HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 # Import from unified exceptions module
 from kato.exceptions import (
+    CircuitBreakerOpenError,
+    ConcurrencyError,
+    ConfigurationError,
+    DatabaseConnectionError,
+    DataConsistencyError,
     KatoV2Exception,
-    SessionNotFoundError,
+    RateLimitExceededError,
+    ResourceExhaustedError,
     SessionExpiredError,
     SessionLimitExceededError,
-    ConcurrencyError,
-    DataConsistencyError,
-    DatabaseConnectionError,
+    SessionNotFoundError,
     StorageError,
-    CircuitBreakerOpenError,
-    RateLimitExceededError,
+    TimeoutError,
     ValidationError,
-    ConfigurationError,
-    ResourceExhaustedError,
-    TimeoutError
 )
 
 logger = logging.getLogger('kato.exceptions.handlers')
@@ -375,7 +376,7 @@ class ErrorContext:
         self.start_time = time.time()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type, exc_val, _exc_tb):
         if exc_type and issubclass(exc_type, KatoV2Exception):
             # Enrich existing KATO exception with context
             exc_val.context.update({

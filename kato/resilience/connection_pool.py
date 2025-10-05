@@ -11,10 +11,11 @@ Provides reliable connection pooling for MongoDB and Qdrant with:
 import asyncio
 import logging
 import time
-from typing import Optional, Dict, Any
+from dataclasses import dataclass
+from typing import Any, Dict, Optional
+
 from pymongo import MongoClient, WriteConcern
 from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError
-from dataclasses import dataclass
 
 logger = logging.getLogger('kato.v2.resilience.connection_pool')
 
@@ -29,13 +30,13 @@ class PoolConfig:
     mongo_max_idle_time_ms: int = 30000
     mongo_wait_queue_timeout_ms: int = 5000
     mongo_server_selection_timeout_ms: int = 5000
-    
+
     # Qdrant settings
     qdrant_host: str = "localhost"
     qdrant_port: int = 6333
     qdrant_pool_size: int = 20
     qdrant_timeout: int = 10
-    
+
     # Health check settings
     health_check_interval: int = 5  # seconds
 
@@ -50,7 +51,7 @@ class MongoConnectionPool:
     - Health checks and automatic reconnection
     - Proper timeouts and error handling
     """
-    
+
     def __init__(self, config: PoolConfig):
         """
         Initialize MongoDB connection pool.
@@ -63,54 +64,54 @@ class MongoConnectionPool:
         self.last_health_check = 0
         self.connection_failures = 0
         self._initialize_client()
-    
+
     def _initialize_client(self):
         """Initialize MongoDB client with production settings"""
         try:
             self.client = MongoClient(
                 self.config.mongo_url,
-                
+
                 # Connection Pool Settings
                 maxPoolSize=self.config.mongo_max_pool_size,
                 minPoolSize=self.config.mongo_min_pool_size,
                 maxIdleTimeMS=self.config.mongo_max_idle_time_ms,
                 waitQueueTimeoutMS=self.config.mongo_wait_queue_timeout_ms,
-                
+
                 # Connection Settings
                 connectTimeoutMS=5000,
                 socketTimeoutMS=10000,
                 serverSelectionTimeoutMS=self.config.mongo_server_selection_timeout_ms,
                 heartbeatFrequencyMS=10000,
-                
+
                 # Retry Settings
                 retryWrites=True,
                 retryReads=True,
-                
+
                 # CRITICAL: Write Concern for data durability
                 w='majority',  # Ensure majority acknowledgment
                 wtimeout=5000,
                 journal=True,  # Ensure write to journal
-                
+
                 # Read Preference
                 readPreference='primaryPreferred',
-                
+
                 # Application identification
                 appname='kato-v2',
-                
+
                 # Compression
                 compressors=['zstd', 'snappy', 'zlib']
             )
-            
+
             # Test connection
             self.client.admin.command('ping')
             self.connection_failures = 0
             logger.info("MongoDB connection pool initialized successfully")
-            
+
         except Exception as e:
             logger.error(f"Failed to initialize MongoDB connection pool: {e}")
             self.connection_failures += 1
             raise
-    
+
     def get_database(self, name: str, ensure_healthy: bool = True):
         """
         Get database instance with optional health check.
@@ -127,20 +128,20 @@ class MongoConnectionPool:
         """
         if ensure_healthy:
             self._ensure_healthy()
-        
+
         if not self.client:
             raise ConnectionFailure("MongoDB client not initialized")
-        
+
         return self.client[name]
-    
+
     def _ensure_healthy(self):
         """Ensure connection is healthy, attempt reconnection if needed"""
         now = time.time()
-        
+
         # Check if we need a health check
         if now - self.last_health_check < self.config.health_check_interval:
             return
-        
+
         try:
             # Ping to check connection
             if self.client:
@@ -150,12 +151,12 @@ class MongoConnectionPool:
         except (ConnectionFailure, ServerSelectionTimeoutError) as e:
             logger.warning(f"MongoDB health check failed: {e}")
             self.connection_failures += 1
-            
+
             # Attempt reconnection
             if self.connection_failures > 3:
                 logger.info("Attempting MongoDB reconnection...")
                 self._reconnect()
-    
+
     def _reconnect(self):
         """Attempt to reconnect to MongoDB"""
         try:
@@ -165,15 +166,15 @@ class MongoConnectionPool:
                     self.client.close()
                 except:
                     pass
-            
+
             # Reinitialize
             self._initialize_client()
             logger.info("MongoDB reconnection successful")
-            
+
         except Exception as e:
             logger.error(f"MongoDB reconnection failed: {e}")
             raise ConnectionFailure(f"Cannot reconnect to MongoDB: {e}")
-    
+
     def get_write_concern(self, level: str = "majority") -> WriteConcern:
         """
         Get appropriate write concern for operation type.
@@ -193,16 +194,16 @@ class MongoConnectionPool:
         else:
             # Metrics/logs - can be fire-and-forget
             return WriteConcern(w=0)
-    
+
     def get_pool_stats(self) -> Dict[str, Any]:
         """Get connection pool statistics"""
         if not self.client:
             return {"status": "disconnected"}
-        
+
         try:
             # Get server info
             server_info = self.client.server_info()
-            
+
             return {
                 "status": "connected",
                 "version": server_info.get('version'),
@@ -215,7 +216,7 @@ class MongoConnectionPool:
             }
         except:
             return {"status": "unhealthy", "failures": self.connection_failures}
-    
+
     def close(self):
         """Close all connections in the pool"""
         if self.client:
@@ -235,7 +236,7 @@ class QdrantConnectionPool:
     - Health checks
     - Automatic reconnection
     """
-    
+
     def __init__(self, config: PoolConfig):
         """
         Initialize Qdrant connection pool.
@@ -247,16 +248,16 @@ class QdrantConnectionPool:
         self.clients = []
         self.available = asyncio.Queue(maxsize=config.qdrant_pool_size)
         self._initialized = False
-    
+
     async def initialize(self):
         """Initialize the connection pool"""
         if self._initialized:
             return
-        
+
         try:
             # Import Qdrant client
             from qdrant_client import QdrantClient
-            
+
             # Create pool of clients
             for i in range(self.config.qdrant_pool_size):
                 client = QdrantClient(
@@ -271,17 +272,17 @@ class QdrantConnectionPool:
                         'grpc.keepalive_permit_without_calls': True,
                     }
                 )
-                
+
                 self.clients.append(client)
                 await self.available.put(client)
-            
+
             self._initialized = True
             logger.info(f"Qdrant connection pool initialized with {self.config.qdrant_pool_size} connections")
-            
+
         except Exception as e:
             logger.error(f"Failed to initialize Qdrant connection pool: {e}")
             raise
-    
+
     async def get_client(self):
         """
         Get a client from the pool.
@@ -294,10 +295,10 @@ class QdrantConnectionPool:
         """
         if not self._initialized:
             await self.initialize()
-        
+
         # Get client from pool (will wait if none available)
         client = await self.available.get()
-        
+
         # Health check the client before returning
         try:
             await self._health_check_client(client)
@@ -312,7 +313,7 @@ class QdrantConnectionPool:
                 # Return client to pool anyway to avoid pool depletion
                 await self.available.put(client)
                 raise ConnectionFailure(f"Qdrant client health check failed and recreation failed: {recreate_error}")
-    
+
     async def return_client(self, client):
         """
         Return a client to the pool.
@@ -321,7 +322,7 @@ class QdrantConnectionPool:
             client: QdrantClient to return
         """
         await self.available.put(client)
-    
+
     async def _health_check_client(self, client):
         """
         Perform health check on a Qdrant client.
@@ -339,7 +340,7 @@ class QdrantConnectionPool:
                 raise Exception("No cluster info returned")
         except Exception as e:
             raise Exception(f"Qdrant health check failed: {e}")
-    
+
     async def _recreate_client(self, old_client):
         """
         Recreate a failed Qdrant client.
@@ -353,7 +354,7 @@ class QdrantConnectionPool:
         try:
             # Import Qdrant client
             from qdrant_client import QdrantClient
-            
+
             # Create new client with same configuration
             new_client = QdrantClient(
                 host=self.config.qdrant_host,
@@ -367,31 +368,31 @@ class QdrantConnectionPool:
                     'grpc.keepalive_permit_without_calls': True,
                 }
             )
-            
+
             # Test new client
             await self._health_check_client(new_client)
-            
+
             # Replace in clients list
             if old_client in self.clients:
                 index = self.clients.index(old_client)
                 self.clients[index] = new_client
-            
+
             logger.info("Successfully recreated Qdrant client")
             return new_client
-            
+
         except Exception as e:
             logger.error(f"Failed to recreate Qdrant client: {e}")
             raise
-    
+
     def get_pool_stats(self) -> Dict[str, Any]:
         """Get connection pool statistics"""
         if not self._initialized:
             return {"status": "not_initialized"}
-        
+
         available_count = self.available.qsize()
         total_count = len(self.clients)
         in_use_count = total_count - available_count
-        
+
         return {
             "status": "initialized",
             "pool_size": self.config.qdrant_pool_size,
@@ -401,13 +402,13 @@ class QdrantConnectionPool:
             "host": self.config.qdrant_host,
             "port": self.config.qdrant_port
         }
-    
+
     async def close(self):
         """Close all connections in the pool"""
         while not self.available.empty():
             client = await self.available.get()
             # Qdrant client doesn't need explicit close, but we can clear references
-            
+
         self.clients.clear()
         self._initialized = False
         logger.info("Qdrant connection pool closed")
@@ -429,12 +430,12 @@ def get_mongo_pool(config: Optional[PoolConfig] = None) -> MongoConnectionPool:
         MongoConnectionPool instance
     """
     global _mongo_pool
-    
+
     if _mongo_pool is None:
         if config is None:
             config = PoolConfig()
         _mongo_pool = MongoConnectionPool(config)
-    
+
     return _mongo_pool
 
 
@@ -449,24 +450,24 @@ async def get_qdrant_pool(config: Optional[PoolConfig] = None) -> QdrantConnecti
         QdrantConnectionPool instance
     """
     global _qdrant_pool
-    
+
     if _qdrant_pool is None:
         if config is None:
             config = PoolConfig()
         _qdrant_pool = QdrantConnectionPool(config)
         await _qdrant_pool.initialize()
-    
+
     return _qdrant_pool
 
 
 def cleanup_connection_pools():
     """Cleanup all connection pools"""
     global _mongo_pool, _qdrant_pool
-    
+
     if _mongo_pool:
         _mongo_pool.close()
         _mongo_pool = None
-    
+
     if _qdrant_pool:
         # Try to close async pool, but don't fail if no event loop
         try:
@@ -480,5 +481,5 @@ def cleanup_connection_pools():
         except:
             pass
         _qdrant_pool = None
-    
+
     logger.info("All connection pools cleaned up")

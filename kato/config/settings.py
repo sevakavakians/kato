@@ -8,15 +8,15 @@ here for easier management and documentation.
 
 import os
 from pathlib import Path
-from typing import Optional, Literal, Dict, Any, List
-from pydantic import Field, field_validator, model_validator, ConfigDict
+from typing import Any, Dict, List, Literal, Optional
+
+from pydantic import ConfigDict, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings
-from pydantic.types import SecretStr
 
 
 class ServiceConfig(BaseSettings):
     """Service-level configuration."""
-    
+
     service_name: str = Field(
         'kato',
         json_schema_extra={'env': 'SERVICE_NAME'},
@@ -27,13 +27,13 @@ class ServiceConfig(BaseSettings):
         json_schema_extra={'env': 'SERVICE_VERSION'},
         description="Service version"
     )
-    
+
     model_config = ConfigDict(env_prefix='')
 
 
 class LoggingConfig(BaseSettings):
     """Logging configuration."""
-    
+
     log_level: Literal['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'] = Field(
         'INFO',
         json_schema_extra={'env': 'LOG_LEVEL'},
@@ -49,13 +49,13 @@ class LoggingConfig(BaseSettings):
         json_schema_extra={'env': 'LOG_OUTPUT'},
         description="Log output destination (stdout, stderr, or file path)"
     )
-    
+
     model_config = ConfigDict(env_prefix='')
 
 
 class DatabaseConfig(BaseSettings):
     """Database configuration for MongoDB and Qdrant."""
-    
+
     # MongoDB settings - field name must match env var for pydantic-settings v2
     MONGO_BASE_URL: str = Field(
         'mongodb://localhost:27017',
@@ -67,17 +67,17 @@ class DatabaseConfig(BaseSettings):
         le=30000,
         description="MongoDB connection timeout in milliseconds"
     )
-    
+
     @property
     def mongo_url(self) -> str:
         """Backward compatibility property."""
         return self.MONGO_BASE_URL
-    
+
     @property
     def mongo_timeout(self) -> int:
         """Backward compatibility property."""
         return self.MONGO_TIMEOUT
-    
+
     # Qdrant settings - field names must match env vars
     QDRANT_HOST: str = Field(
         'localhost',
@@ -99,23 +99,23 @@ class DatabaseConfig(BaseSettings):
         'vectors',
         description="Prefix for Qdrant collection names"
     )
-    
+
     @property
     def qdrant_host(self) -> str:
         return self.QDRANT_HOST
-    
+
     @property
     def qdrant_port(self) -> int:
         return self.QDRANT_PORT
-    
+
     @property
     def qdrant_grpc_port(self) -> int:
         return self.QDRANT_GRPC_PORT
-    
+
     @property
     def qdrant_collection_prefix(self) -> str:
         return self.QDRANT_COLLECTION_PREFIX
-    
+
     # Redis settings (optional, for caching and sessions)
     REDIS_URL: Optional[str] = Field(
         None,
@@ -138,34 +138,34 @@ class DatabaseConfig(BaseSettings):
         json_schema_extra={'env': 'REDIS_ENABLED'},
         description="Enable Redis caching"
     )
-    
+
     @property
     def qdrant_url(self) -> str:
         """Get Qdrant connection URL."""
         return f"http://{self.qdrant_host}:{self.qdrant_port}"
-    
+
     @property
     def qdrant_grpc_url(self) -> str:
         """Get Qdrant gRPC connection URL."""
         return f"{self.qdrant_host}:{self.qdrant_grpc_port}"
-    
+
     @property
     def redis_url(self) -> Optional[str]:
         """Get Redis connection URL if enabled."""
         # Prefer REDIS_URL env var if set
         if self.REDIS_URL:
             return self.REDIS_URL
-        # Fallback to constructing from host/port for backwards compatibility  
+        # Fallback to constructing from host/port for backwards compatibility
         if self.redis_enabled and self.redis_host:
             return f"redis://{self.redis_host}:{self.redis_port}/0"
         return None
-    
+
     model_config = ConfigDict(env_prefix='')
 
 
 class LearningConfig(BaseSettings):
     """Learning and pattern processing configuration."""
-    
+
     max_pattern_length: int = Field(
         0,
         json_schema_extra={'env': 'MAX_PATTERN_LENGTH'},
@@ -202,7 +202,7 @@ class LearningConfig(BaseSettings):
         json_schema_extra={'env': 'STM_MODE'},
         description="Short-term memory mode: CLEAR (reset after auto-learn) or ROLLING (sliding window)"
     )
-    
+
     @field_validator('max_pattern_length')
     @classmethod
     def validate_pattern_length(cls, v):
@@ -210,13 +210,13 @@ class LearningConfig(BaseSettings):
         if v < 0:
             raise ValueError("max_pattern_length must be non-negative")
         return v
-    
+
     model_config = ConfigDict(env_prefix='')
 
 
 class ProcessingConfig(BaseSettings):
     """Processing and prediction configuration."""
-    
+
     indexer_type: str = Field(
         'VI',
         json_schema_extra={'env': 'INDEXER_TYPE'},
@@ -239,13 +239,13 @@ class ProcessingConfig(BaseSettings):
         json_schema_extra={'env': 'PROCESS_PREDICTIONS'},
         description="Enable prediction processing"
     )
-    
+
     model_config = ConfigDict(env_prefix='')
 
 
 class PerformanceConfig(BaseSettings):
     """Performance optimization configuration."""
-    
+
     use_fast_matching: bool = Field(
         True,
         json_schema_extra={'env': 'KATO_USE_FAST_MATCHING'},
@@ -296,13 +296,13 @@ class PerformanceConfig(BaseSettings):
         le=300.0,
         description="Request timeout in seconds"
     )
-    
+
     model_config = ConfigDict(env_prefix='')
 
 
 class SessionConfig(BaseSettings):
     """Session management configuration."""
-    
+
     session_ttl: int = Field(
         3600,
         json_schema_extra={'env': 'SESSION_TTL'},
@@ -310,13 +310,13 @@ class SessionConfig(BaseSettings):
         le=86400,
         description="Session time-to-live in seconds"
     )
-    
+
     model_config = ConfigDict(env_prefix='')
 
 
 class APIConfig(BaseSettings):
     """API service configuration."""
-    
+
     host: str = Field(
         '0.0.0.0',
         json_schema_extra={'env': 'HOST'},
@@ -357,7 +357,7 @@ class APIConfig(BaseSettings):
         ge=1024,
         description="Maximum request size in bytes"
     )
-    
+
     @field_validator('cors_origins', mode='before')
     @classmethod
     def parse_cors_origins(cls, v):
@@ -365,13 +365,13 @@ class APIConfig(BaseSettings):
         if isinstance(v, str):
             return v.split(',')
         return v
-    
+
     model_config = ConfigDict(env_prefix='')
 
 
 class Settings(BaseSettings):
     """Main settings class combining all configuration sections."""
-    
+
     # Configuration sections
     service: ServiceConfig = Field(default_factory=ServiceConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
@@ -381,7 +381,7 @@ class Settings(BaseSettings):
     performance: PerformanceConfig = Field(default_factory=PerformanceConfig)
     session: SessionConfig = Field(default_factory=SessionConfig)
     api: APIConfig = Field(default_factory=APIConfig)
-    
+
     # Environment and deployment
     environment: Literal['development', 'testing', 'production'] = Field(
         'development',
@@ -398,33 +398,34 @@ class Settings(BaseSettings):
         json_schema_extra={'env': 'KATO_CONFIG_FILE'},
         description="Path to configuration file (YAML or JSON)"
     )
-    
+
     @model_validator(mode='before')
     @classmethod
     def load_from_file(cls, values):
         """Load configuration from file if specified."""
         if isinstance(values, dict):
             config_file = values.get('config_file') or os.getenv('KATO_CONFIG_FILE')
-            
+
             if config_file and os.path.exists(config_file):
                 import json
+
                 import yaml
-                
-                with open(config_file, 'r') as f:
+
+                with open(config_file) as f:
                     if config_file.endswith('.json'):
                         file_config = json.load(f)
                     elif config_file.endswith(('.yml', '.yaml')):
                         file_config = yaml.safe_load(f)
                     else:
                         raise ValueError(f"Unsupported config file format: {config_file}")
-                
+
                 # Merge file config with environment variables (env vars take precedence)
                 for key, value in file_config.items():
                     if key not in values or values[key] is None:
                         values[key] = value
-        
+
         return values
-    
+
     @field_validator('debug')
     @classmethod
     def set_debug_from_environment(cls, v, info):
@@ -432,25 +433,25 @@ class Settings(BaseSettings):
         if info.data.get('environment') == 'development':
             return True
         return v
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert settings to dictionary."""
         return self.dict(exclude_unset=False)
-    
+
     def to_yaml(self) -> str:
         """Export settings to YAML format."""
         import yaml
         return yaml.safe_dump(self.to_dict(), default_flow_style=False)
-    
+
     def to_json(self) -> str:
         """Export settings to JSON format."""
         import json
         return json.dumps(self.to_dict(), indent=2)
-    
+
     def save(self, filepath: Path) -> None:
         """Save configuration to file."""
         filepath = Path(filepath)
-        
+
         with open(filepath, 'w') as f:
             if filepath.suffix == '.json':
                 f.write(self.to_json())
@@ -460,11 +461,11 @@ class Settings(BaseSettings):
                 raise ValueError(f"Unsupported file format: {filepath.suffix}")
 
         logging.info(f"Configuration saved to {filepath}")
-    
+
     def validate_configuration(self) -> List[str]:
         """Validate configuration and return any warnings."""
         warnings = []
-        
+
         # Check database connectivity settings
         if self.environment == 'production':
             if self.database.mongo_url == 'mongodb://localhost:27017':
@@ -473,17 +474,17 @@ class Settings(BaseSettings):
                 warnings.append("Debug mode enabled in production environment")
             if self.api.cors_origins == ['*']:
                 warnings.append("CORS allows all origins in production environment")
-        
+
         # Check learning configuration consistency
         if self.learning.auto_learn_enabled and self.learning.max_pattern_length == 0:
             warnings.append("Auto-learning enabled with unlimited pattern length")
-        
+
         # Check performance settings
         if self.performance.batch_size > 10000:
             warnings.append(f"Large batch size ({self.performance.batch_size}) may cause memory issues")
-        
+
         return warnings
-    
+
     model_config = ConfigDict(
         env_prefix='',
         env_file='.env',
@@ -499,10 +500,10 @@ _settings: Optional[Settings] = None
 def get_settings() -> Settings:
     """Get global settings instance (singleton pattern)."""
     global _settings
-    
+
     if _settings is None:
         _settings = Settings()
-        
+
         # Log configuration warnings
         warnings = _settings.validate_configuration()
         if warnings:
@@ -510,7 +511,7 @@ def get_settings() -> Settings:
             logger = logging.getLogger(__name__)
             for warning in warnings:
                 logger.warning(f"Configuration warning: {warning}")
-    
+
     return _settings
 
 

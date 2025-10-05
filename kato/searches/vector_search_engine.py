@@ -5,9 +5,10 @@ This module provides a high-performance vector search engine that leverages
 modern vector databases and optimization techniques.
 """
 
-import logging
 import asyncio
-from typing import List, Dict, Any, Optional, Tuple, Union
+import logging
+from typing import Any, Dict, List, Optional, Tuple, Union
+
 try:
     import numpy as np
     HAS_NUMPY = True
@@ -22,14 +23,13 @@ except (ImportError, AttributeError):
         @staticmethod
         def linalg_norm(x):
             return sum(i**2 for i in x) ** 0.5
-from dataclasses import dataclass
-from functools import lru_cache
 import hashlib
 import time
+from dataclasses import dataclass
 
-from ..storage import VectorStore, VectorSearchResult, VectorBatch, get_vector_store
 from ..config.vectordb_config import VectorDBConfig, get_vector_db_config
 from ..representations.vector_object import VectorObject
+from ..storage import VectorBatch, VectorSearchResult, get_vector_store
 
 logger = logging.getLogger('kato.searches.vector_engine')
 
@@ -41,7 +41,7 @@ class SearchMetrics:
     vectors_scanned: int
     cache_hit: bool
     backend: str
-    
+
     def log_metrics(self):
         """Log search metrics"""
         logger.debug(
@@ -62,7 +62,7 @@ class VectorSearchEngine:
     - Async operations for better concurrency
     - Automatic fallback to legacy search if needed
     """
-    
+
     def __init__(
         self,
         config: Optional[VectorDBConfig] = None,
@@ -82,31 +82,31 @@ class VectorSearchEngine:
         self.config = config or get_vector_db_config()
         self.collection_name = collection_name
         self.enable_cache = enable_cache and self.config.cache.enabled
-        
+
         # Initialize vector store
         self.store = get_vector_store(config=self.config)
-        
+
         # Initialize cache if enabled
         self._cache = {} if self.enable_cache else None
         self.cache_size = cache_size
-        
+
         # Performance tracking
         self.total_searches = 0
         self.cache_hits = 0
         self.total_search_time = 0.0
-        
+
         # Ensure async event loop exists
         try:
             self._loop = asyncio.get_event_loop()
         except RuntimeError:
             self._loop = asyncio.new_event_loop()
             asyncio.set_event_loop(self._loop)
-        
+
         logger.info(
             f"Initialized vector search engine: backend={self.config.backend}, "
             f"collection={collection_name}, cache={self.enable_cache}"
         )
-    
+
     async def initialize(self) -> bool:
         """
         Initialize the search engine and connect to backend.
@@ -119,10 +119,10 @@ class VectorSearchEngine:
             if not await self.store.connect():
                 logger.error("Failed to connect to vector store")
                 return False
-            
+
             # Ensure collection exists
             vector_dim = self.config.vector_dim or 512  # Default dimension
-            
+
             if not await self.store.ensure_collection(
                 self.collection_name,
                 vector_dim,
@@ -130,20 +130,19 @@ class VectorSearchEngine:
             ):
                 logger.error(f"Failed to ensure collection: {self.collection_name}")
                 return False
-            
+
             logger.info("Vector search engine initialized successfully")
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to initialize search engine: {e}")
             return False
-    
+
     def _run_async_in_sync(self, coro):
         """Helper to run async code in sync context, handling event loop issues"""
         import asyncio
         import concurrent.futures
-        import threading
-        
+
         # Check if we're in an async context
         try:
             loop = asyncio.get_running_loop()
@@ -154,11 +153,11 @@ class VectorSearchEngine:
         except RuntimeError:
             # No event loop running, can run directly
             return asyncio.run(coro)
-    
+
     def initialize_sync(self) -> bool:
         """Synchronous wrapper for initialize"""
         return self._run_async_in_sync(self.initialize())
-    
+
     async def add_vector(
         self,
         vector: Union[np.ndarray, VectorObject],
@@ -187,7 +186,7 @@ class VectorSearchEngine:
                     # Generate ID from vector hash
                     vector_hash = hashlib.sha1(str(vector_array).encode()).hexdigest()
                     vector_id = f"VCTR|{vector_hash}"
-            
+
             # Add to vector store
             success = await self.store.add_vector(
                 self.collection_name,
@@ -195,17 +194,17 @@ class VectorSearchEngine:
                 vector_array,
                 metadata
             )
-            
+
             # Invalidate cache for this vector
             if self._cache and vector_id in self._cache:
                 del self._cache[vector_id]
-            
+
             return success
-            
+
         except Exception as e:
             logger.error(f"Failed to add vector: {e}")
             return False
-    
+
     def add_vector_sync(
         self,
         vector: Union[np.ndarray, VectorObject],
@@ -216,7 +215,7 @@ class VectorSearchEngine:
         return self._loop.run_until_complete(
             self.add_vector(vector, vector_id, metadata)
         )
-    
+
     async def add_vectors_batch(
         self,
         vectors: List[Union[np.ndarray, VectorObject]],
@@ -244,7 +243,7 @@ class VectorSearchEngine:
                     else:
                         vector_hash = hashlib.sha1(str(v).encode()).hexdigest()
                         vector_ids.append(f"VCTR|{vector_hash}")
-            
+
             # Convert vectors to numpy arrays
             vector_arrays = []
             for v in vectors:
@@ -252,33 +251,33 @@ class VectorSearchEngine:
                     vector_arrays.append(v.vector)
                 else:
                     vector_arrays.append(v)
-            
+
             # Create batch
             batch = VectorBatch(
                 ids=vector_ids,
                 vectors=np.array(vector_arrays),
                 payloads=metadata
             )
-            
+
             # Add batch to store
             success_count, failed_ids = await self.store.add_vectors(
                 self.collection_name,
                 batch
             )
-            
+
             # Invalidate cache for added vectors
             if self._cache:
                 for vid in vector_ids:
                     if vid in self._cache:
                         del self._cache[vid]
-            
+
             logger.info(f"Added {success_count}/{len(vectors)} vectors to index")
             return success_count, failed_ids
-            
+
         except Exception as e:
             logger.error(f"Failed to add vector batch: {e}")
             return 0, vector_ids if vector_ids else []
-    
+
     def add_vectors_batch_sync(
         self,
         vectors: List[Union[np.ndarray, VectorObject]],
@@ -289,7 +288,7 @@ class VectorSearchEngine:
         return self._loop.run_until_complete(
             self.add_vectors_batch(vectors, vector_ids, metadata)
         )
-    
+
     async def search(
         self,
         query_vector: Union[np.ndarray, VectorObject],
@@ -313,7 +312,7 @@ class VectorSearchEngine:
         """
         start_time = time.time()
         cache_hit = False
-        
+
         try:
             # Convert VectorObject if needed
             if isinstance(query_vector, VectorObject):
@@ -323,7 +322,7 @@ class VectorSearchEngine:
                 query_array = query_vector
                 query_hash = hashlib.sha1(str(query_array).encode()).hexdigest()
                 query_id = f"VCTR|{query_hash}"
-            
+
             # Check cache
             cache_key = None
             if use_cache and self._cache:
@@ -342,7 +341,7 @@ class VectorSearchEngine:
                         filter=filter,
                         include_vectors=include_vectors
                     )
-                    
+
                     # Update cache
                     self._update_cache(cache_key, results)
             else:
@@ -354,12 +353,12 @@ class VectorSearchEngine:
                     filter=filter,
                     include_vectors=include_vectors
                 )
-            
+
             # Update metrics
             search_time = (time.time() - start_time) * 1000  # Convert to ms
             self.total_searches += 1
             self.total_search_time += search_time
-            
+
             # Log metrics
             metrics = SearchMetrics(
                 search_time_ms=search_time,
@@ -368,13 +367,13 @@ class VectorSearchEngine:
                 backend=self.config.backend
             )
             metrics.log_metrics()
-            
+
             return results
-            
+
         except Exception as e:
             logger.error(f"Search failed: {e}")
             return []
-    
+
     def search_sync(
         self,
         query_vector: Union[np.ndarray, VectorObject],
@@ -408,7 +407,7 @@ class VectorSearchEngine:
             return self._loop.run_until_complete(
                 self.search(query_vector, k, filter, include_vectors, use_cache)
         )
-    
+
     async def batch_search(
         self,
         query_vectors: List[Union[np.ndarray, VectorObject]],
@@ -436,7 +435,7 @@ class VectorSearchEngine:
                     query_arrays.append(v.vector)
                 else:
                     query_arrays.append(v)
-            
+
             # Perform batch search
             results = await self.store.batch_search(
                 self.collection_name,
@@ -445,13 +444,13 @@ class VectorSearchEngine:
                 filter=filter,
                 include_vectors=include_vectors
             )
-            
+
             return results
-            
+
         except Exception as e:
             logger.error(f"Batch search failed: {e}")
             return [[] for _ in query_vectors]
-    
+
     def batch_search_sync(
         self,
         query_vectors: List[Union[np.ndarray, VectorObject]],
@@ -463,7 +462,7 @@ class VectorSearchEngine:
         return self._run_async_in_sync(
             self.batch_search(query_vectors, k, filter, include_vectors)
         )
-    
+
     async def find_nearest_neighbors(
         self,
         vector: Union[np.ndarray, VectorObject],
@@ -483,18 +482,18 @@ class VectorSearchEngine:
         """
         # Search for k+1 if excluding self
         search_k = k + 1 if exclude_self else k
-        
+
         results = await self.search(vector, search_k, include_vectors=False)
-        
+
         # Convert to simple format
         neighbors = [(r.id, r.score) for r in results]
-        
+
         # Exclude self if needed
         if exclude_self and isinstance(vector, VectorObject):
             neighbors = [(id, score) for id, score in neighbors if id != vector.name]
-        
+
         return neighbors[:k]
-    
+
     def find_nearest_neighbors_sync(
         self,
         vector: Union[np.ndarray, VectorObject],
@@ -505,7 +504,7 @@ class VectorSearchEngine:
         return self._run_async_in_sync(
             self.find_nearest_neighbors(vector, k, exclude_self)
         )
-    
+
     async def update_vector(
         self,
         vector_id: str,
@@ -519,30 +518,30 @@ class VectorSearchEngine:
             vector,
             metadata
         )
-        
+
         # Invalidate cache
         if self._cache and vector_id in self._cache:
             del self._cache[vector_id]
-        
+
         return success
-    
+
     async def delete_vector(self, vector_id: str) -> bool:
         """Delete a vector from the index"""
         success = await self.store.delete_vector(
             self.collection_name,
             vector_id
         )
-        
+
         # Invalidate cache
         if self._cache and vector_id in self._cache:
             del self._cache[vector_id]
-        
+
         return success
-    
+
     async def get_stats(self) -> Dict[str, Any]:
         """Get search engine statistics"""
         collection_info = await self.store.get_collection_info(self.collection_name)
-        
+
         stats = {
             'backend': self.config.backend,
             'collection': self.collection_name,
@@ -555,34 +554,34 @@ class VectorSearchEngine:
             'cache_size': len(self._cache) if self._cache else 0,
             'collection_info': collection_info
         }
-        
+
         return stats
-    
+
     def get_stats_sync(self) -> Dict[str, Any]:
         """Synchronous wrapper for get_stats"""
         return self._run_async_in_sync(self.get_stats())
-    
+
     async def optimize(self) -> bool:
         """Optimize the vector index for better performance"""
         return await self.store.optimize_collection(self.collection_name)
-    
+
     async def clear_cache(self):
         """Clear the search cache"""
         if self._cache:
             self._cache.clear()
             logger.info("Cleared search cache")
-    
+
     async def close(self):
         """Close the search engine and clean up resources"""
         await self.store.disconnect()
         if self._cache:
             self._cache.clear()
         logger.info("Vector search engine closed")
-    
+
     def close_sync(self):
         """Synchronous wrapper for close"""
         return self._run_async_in_sync(self.close())
-    
+
     # Helper methods
     def _make_cache_key(
         self,
@@ -593,18 +592,18 @@ class VectorSearchEngine:
         """Create a cache key for a search query"""
         filter_str = str(sorted(filter.items())) if filter else ""
         return f"{query_id}:{k}:{filter_str}"
-    
+
     def _update_cache(self, key: str, results: List[VectorSearchResult]):
         """Update the cache with new results"""
         if not self._cache:
             return
-        
+
         # Implement LRU by removing oldest if cache is full
         if len(self._cache) >= self.cache_size:
             # Remove first (oldest) item
             oldest_key = next(iter(self._cache))
             del self._cache[oldest_key]
-        
+
         self._cache[key] = results
 
 
@@ -615,7 +614,7 @@ class VectorIndexer:
     Indexes vectors and performs similarity search using the modern
     vector search engine for better performance.
     """
-    
+
     def __init__(self, procs: int = 1, vectors_kb=None, processor_id: str = None):
         """Initialize Vector Indexer with isolated collection
         
@@ -631,29 +630,29 @@ class VectorIndexer:
         collection_name = f"vectors_{self.processor_id}"
         self.engine = VectorSearchEngine(collection_name=collection_name)
         self.initialized = False
-        
+
         # Compatibility attributes
         self.datasubset = []
-        
+
     def initialize(self):
         """Initialize the search engine"""
         if not self.initialized:
             self.initialized = self.engine.initialize_sync()
             if not self.initialized:
                 logger.error("Failed to initialize Vector Indexer")
-    
+
     def loadMemoryIntoRAM(self, vectors_dict: Dict[str, VectorObject]):
         """Load vectors into the search index"""
         self.initialize()
-        
+
         # Convert to lists for batch addition
         vector_ids = []
         vector_arrays = []
-        
+
         for vector_id, vector_obj in vectors_dict.items():
             vector_ids.append(vector_id)
             vector_arrays.append(vector_obj.vector)
-        
+
         # Add vectors in batch
         if vector_arrays:
             success, failed = self.engine.add_vectors_batch_sync(
@@ -661,15 +660,15 @@ class VectorIndexer:
                 vector_ids
             )
             logger.info(f"Loaded {success}/{len(vector_arrays)} vectors into vector index")
-        
+
         # Update compatibility attribute
         self.datasubset = list(vectors_dict.values())
-    
+
     def clearPatternsFromRAM(self):
         """Clear the search index"""
         self.engine.clear_cache()
         self.datasubset = []
-    
+
     def assignNewlyLearnedToWorkers(self, new_vectors):
         """
         Compatibility method - in the modern architecture, vectors are automatically
@@ -679,21 +678,21 @@ class VectorIndexer:
         # No need to manually assign to workers
         logger.debug(f"Received {len(new_vectors)} new vectors (auto-indexed)")
         pass
-    
+
     def findNearestPoints(self, query_vector: VectorObject) -> List[str]:
         """Find the 3 nearest vectors to the query"""
         self.initialize()
-        
+
         # Perform search
         results = self.engine.search_sync(
             query_vector,
             k=3,
             include_vectors=False
         )
-        
+
         # Return vector IDs
         return [r.id for r in results]
-    
+
     def __del__(self):
         """Cleanup on deletion"""
         # Don't try to close in destructor - causes issues with async event loops

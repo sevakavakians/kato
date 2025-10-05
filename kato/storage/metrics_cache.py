@@ -10,13 +10,11 @@ Performance benefits:
 - TTL-based cache invalidation to handle data changes
 """
 
-import logging
-import json
 import hashlib
-from typing import Dict, List, Any, Optional, Tuple, Set
-from collections import Counter
-import asyncio
+import json
+import logging
 import time
+from typing import Any, Dict, List, Optional
 
 try:
     import redis.asyncio as redis
@@ -32,7 +30,7 @@ _metrics_cache_manager = None
 
 class MetricsCacheManager:
     """Manager for caching expensive KATO metric calculations."""
-    
+
     def __init__(self, redis_url: str = "redis://localhost:6379", ttl: int = 3600):
         """
         Initialize metrics cache manager.
@@ -45,7 +43,7 @@ class MetricsCacheManager:
         self.ttl = ttl
         self.redis = None
         self.cache_prefix = "kato:metrics"
-        
+
         # Cache hit/miss statistics
         self.stats = {
             "hits": 0,
@@ -53,7 +51,7 @@ class MetricsCacheManager:
             "updates": 0,
             "evictions": 0
         }
-        
+
         # Metric calculation counters
         self.calculation_times = {
             "hamiltonian": [],
@@ -62,7 +60,7 @@ class MetricsCacheManager:
             "itfdf_similarity": [],
             "potential": []
         }
-        
+
     async def initialize(self) -> bool:
         """
         Initialize Redis connection.
@@ -73,16 +71,16 @@ class MetricsCacheManager:
         if not REDIS_AVAILABLE:
             logger.warning("redis.asyncio not available, metrics cache disabled")
             return False
-            
+
         try:
             # Use optimized connection manager for Redis
             from kato.storage.connection_manager import get_redis_client
             sync_redis_client = get_redis_client()
-            
+
             if sync_redis_client is None:
                 logger.warning("Redis not available - metrics cache disabled")
                 return False
-            
+
             # Create async Redis client with optimized settings
             self.redis = await redis.from_url(
                 self.redis_url,
@@ -97,7 +95,7 @@ class MetricsCacheManager:
             logger.error(f"Failed to connect to Redis for metrics cache: {e}")
             self.redis = None
             return False
-    
+
     def _generate_cache_key(self, metric_type: str, **kwargs) -> str:
         """
         Generate consistent cache key for metric calculations.
@@ -112,12 +110,12 @@ class MetricsCacheManager:
         # Sort kwargs for consistent key generation
         sorted_params = sorted(kwargs.items())
         params_str = json.dumps(sorted_params, sort_keys=True)
-        
+
         # Generate hash for consistent key length
-        params_hash = hashlib.md5(params_str.encode()).hexdigest()
-        
+        params_hash = hashlib.md5(params_str.encode(), usedforsecurity=False).hexdigest()
+
         return f"{self.cache_prefix}:{metric_type}:{params_hash}"
-    
+
     async def get_cached_metric(self, metric_type: str, **kwargs) -> Optional[float]:
         """
         Retrieve cached metric value.
@@ -131,23 +129,23 @@ class MetricsCacheManager:
         """
         if not self.redis:
             return None
-            
+
         try:
             cache_key = self._generate_cache_key(metric_type, **kwargs)
             cached_value = await self.redis.get(cache_key)
-            
+
             if cached_value is not None:
                 self.stats["hits"] += 1
                 return float(cached_value)
             else:
                 self.stats["misses"] += 1
                 return None
-                
+
         except Exception as e:
             logger.warning(f"Failed to retrieve cached metric {metric_type}: {e}")
             self.stats["misses"] += 1
             return None
-    
+
     async def cache_metric(self, metric_type: str, value: float, **kwargs) -> bool:
         """
         Cache calculated metric value.
@@ -162,17 +160,17 @@ class MetricsCacheManager:
         """
         if not self.redis:
             return False
-            
+
         try:
             cache_key = self._generate_cache_key(metric_type, **kwargs)
             await self.redis.setex(cache_key, self.ttl, str(value))
             self.stats["updates"] += 1
             return True
-            
+
         except Exception as e:
             logger.warning(f"Failed to cache metric {metric_type}: {e}")
             return False
-    
+
     async def invalidate_pattern_metrics(self, pattern_name: str) -> int:
         """
         Invalidate all cached metrics that depend on a specific pattern.
@@ -185,26 +183,26 @@ class MetricsCacheManager:
         """
         if not self.redis:
             return 0
-            
+
         try:
             # Find all keys that might be affected by this pattern
             pattern_keys = await self.redis.keys(f"{self.cache_prefix}:*")
-            
+
             invalidated = 0
             for key in pattern_keys:
                 # For simplicity, invalidate all metrics when any pattern changes
                 # In a more sophisticated implementation, we could track dependencies
                 await self.redis.delete(key)
                 invalidated += 1
-                
+
             self.stats["evictions"] += invalidated
             logger.debug(f"Invalidated {invalidated} metric cache entries for pattern {pattern_name}")
             return invalidated
-            
+
         except Exception as e:
             logger.warning(f"Failed to invalidate metrics cache for pattern {pattern_name}: {e}")
             return 0
-    
+
     async def invalidate_all_metrics(self) -> int:
         """
         Invalidate all cached metrics (useful when data structure changes).
@@ -214,7 +212,7 @@ class MetricsCacheManager:
         """
         if not self.redis:
             return 0
-            
+
         try:
             pattern_keys = await self.redis.keys(f"{self.cache_prefix}:*")
             if pattern_keys:
@@ -223,11 +221,11 @@ class MetricsCacheManager:
                 logger.info(f"Invalidated all {invalidated} metric cache entries")
                 return invalidated
             return 0
-            
+
         except Exception as e:
             logger.warning(f"Failed to invalidate all metrics cache: {e}")
             return 0
-    
+
     def record_calculation_time(self, metric_type: str, duration: float):
         """
         Record calculation time for performance monitoring.
@@ -238,11 +236,11 @@ class MetricsCacheManager:
         """
         if metric_type in self.calculation_times:
             self.calculation_times[metric_type].append(duration)
-            
+
             # Keep only last 100 measurements for memory efficiency
             if len(self.calculation_times[metric_type]) > 100:
                 self.calculation_times[metric_type] = self.calculation_times[metric_type][-100:]
-    
+
     async def get_cache_stats(self) -> Dict[str, Any]:
         """
         Get cache performance statistics.
@@ -251,11 +249,11 @@ class MetricsCacheManager:
             Dictionary with cache statistics
         """
         stats = self.stats.copy()
-        
+
         # Calculate hit rate
         total_requests = stats["hits"] + stats["misses"]
         stats["hit_rate"] = stats["hits"] / total_requests if total_requests > 0 else 0.0
-        
+
         # Add calculation time statistics
         for metric_type, times in self.calculation_times.items():
             if times:
@@ -264,7 +262,7 @@ class MetricsCacheManager:
             else:
                 stats[f"{metric_type}_avg_time"] = 0.0
                 stats[f"{metric_type}_calculations"] = 0
-        
+
         # Add Redis info if available
         if self.redis:
             try:
@@ -273,7 +271,7 @@ class MetricsCacheManager:
                 stats["redis_connected_clients"] = info.get("connected_clients", 0)
             except:
                 pass
-        
+
         return stats
 
 
@@ -284,12 +282,12 @@ class CachedMetricsCalculator:
     This class provides the same interface as the original metrics functions
     but with transparent caching for performance optimization.
     """
-    
+
     def __init__(self, cache_manager: MetricsCacheManager):
         self.cache_manager = cache_manager
-    
-    async def hamiltonian_cached(self, state: List[str], 
-                                total_symbols: int, 
+
+    async def hamiltonian_cached(self, state: List[str],
+                                total_symbols: int,
                                 symbol_probabilities: Dict[str, float]) -> float:
         """
         Calculate hamiltonian with caching.
@@ -304,39 +302,39 @@ class CachedMetricsCalculator:
         """
         # Generate cache key parameters
         cache_params = {
-            "state_hash": hashlib.md5(str(sorted(state)).encode()).hexdigest(),
+            "state_hash": hashlib.md5(str(sorted(state)).encode(), usedforsecurity=False).hexdigest(),
             "total_symbols": total_symbols,
             "probabilities_hash": hashlib.md5(
-                str(sorted(symbol_probabilities.items())).encode()
+                str(sorted(symbol_probabilities.items())).encode(), usedforsecurity=False
             ).hexdigest()
         }
-        
+
         # Try to get cached value
         cached_value = await self.cache_manager.get_cached_metric("hamiltonian", **cache_params)
         if cached_value is not None:
             return cached_value
-        
+
         # Calculate if not cached
         start_time = time.time()
-        
+
         # Import here to avoid circular dependencies
         from kato.informatics.metrics import hamiltonian
-        
+
         try:
             result = hamiltonian(state, total_symbols, symbol_probabilities)
             calculation_time = time.time() - start_time
-            
+
             # Cache the result
             await self.cache_manager.cache_metric("hamiltonian", result, **cache_params)
             self.cache_manager.record_calculation_time("hamiltonian", calculation_time)
-            
+
             return result
-            
+
         except Exception as e:
             logger.warning(f"Hamiltonian calculation failed: {e}")
             return 0.0
-    
-    async def grand_hamiltonian_cached(self, state: List[str], 
+
+    async def grand_hamiltonian_cached(self, state: List[str],
                                      symbol_probability_cache: Dict[str, float]) -> float:
         """
         Calculate grand hamiltonian with caching.
@@ -349,34 +347,34 @@ class CachedMetricsCalculator:
             Grand hamiltonian value
         """
         cache_params = {
-            "state_hash": hashlib.md5(str(sorted(state)).encode()).hexdigest(),
+            "state_hash": hashlib.md5(str(sorted(state)).encode(), usedforsecurity=False).hexdigest(),
             "cache_hash": hashlib.md5(
-                str(sorted(symbol_probability_cache.items())).encode()
+                str(sorted(symbol_probability_cache.items())).encode(), usedforsecurity=False
             ).hexdigest()
         }
-        
+
         cached_value = await self.cache_manager.get_cached_metric("grand_hamiltonian", **cache_params)
         if cached_value is not None:
             return cached_value
-        
+
         start_time = time.time()
-        
+
         from kato.informatics.metrics import grand_hamiltonian
-        
+
         try:
             result = grand_hamiltonian(state, symbol_probability_cache)
             calculation_time = time.time() - start_time
-            
+
             await self.cache_manager.cache_metric("grand_hamiltonian", result, **cache_params)
             self.cache_manager.record_calculation_time("grand_hamiltonian", calculation_time)
-            
+
             return result
-            
+
         except Exception as e:
             logger.warning(f"Grand hamiltonian calculation failed: {e}")
             return 0.0
-    
-    async def conditional_probability_cached(self, present: List[List[str]], 
+
+    async def conditional_probability_cached(self, present: List[List[str]],
                                            symbol_probabilities: Dict[str, float]) -> float:
         """
         Calculate conditional probability with caching.
@@ -389,29 +387,29 @@ class CachedMetricsCalculator:
             Conditional probability value
         """
         cache_params = {
-            "present_hash": hashlib.md5(str(present).encode()).hexdigest(),
+            "present_hash": hashlib.md5(str(present).encode(), usedforsecurity=False).hexdigest(),
             "probabilities_hash": hashlib.md5(
-                str(sorted(symbol_probabilities.items())).encode()
+                str(sorted(symbol_probabilities.items())).encode(), usedforsecurity=False
             ).hexdigest()
         }
-        
+
         cached_value = await self.cache_manager.get_cached_metric("conditional_probability", **cache_params)
         if cached_value is not None:
             return cached_value
-        
+
         start_time = time.time()
-        
+
         from kato.informatics.metrics import conditionalProbability
-        
+
         try:
             result = conditionalProbability(present, symbol_probabilities)
             calculation_time = time.time() - start_time
-            
+
             await self.cache_manager.cache_metric("conditional_probability", result, **cache_params)
             self.cache_manager.record_calculation_time("conditional_probability", calculation_time)
-            
+
             return result
-            
+
         except Exception as e:
             logger.warning(f"Conditional probability calculation failed: {e}")
             return 0.0
@@ -420,7 +418,7 @@ class CachedMetricsCalculator:
 async def get_metrics_cache_manager() -> Optional[MetricsCacheManager]:
     """Get or create global metrics cache manager instance."""
     global _metrics_cache_manager
-    
+
     if _metrics_cache_manager is None:
         import os
         redis_url = os.environ.get('REDIS_URL', 'redis://localhost:6379')
@@ -428,7 +426,7 @@ async def get_metrics_cache_manager() -> Optional[MetricsCacheManager]:
         if not await _metrics_cache_manager.initialize():
             _metrics_cache_manager = None
             logger.error("Failed to initialize global metrics cache manager")
-    
+
     return _metrics_cache_manager
 
 

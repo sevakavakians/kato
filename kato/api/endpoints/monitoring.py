@@ -4,12 +4,13 @@ Monitoring and Metrics Endpoints
 Handles system metrics, cache statistics, and performance monitoring.
 """
 
-import time
 import logging
-from typing import Optional
+import time
 from datetime import datetime, timezone
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException
+
 from kato.storage.pattern_cache import get_cache_manager
 
 router = APIRouter(tags=["monitoring"])
@@ -24,7 +25,7 @@ async def get_cache_stats():
         if cache_manager and cache_manager.is_initialized() and cache_manager.pattern_cache:
             stats = await cache_manager.pattern_cache.get_cache_stats()
             health = await cache_manager.health_check()
-            
+
             return {
                 "cache_performance": stats,
                 "cache_health": health,
@@ -53,7 +54,7 @@ async def invalidate_cache(session_id: Optional[str] = None):
         if cache_manager and cache_manager.is_initialized() and cache_manager.pattern_cache:
             pattern_count = await cache_manager.pattern_cache.invalidate_pattern_cache(session_id)
             symbol_count = await cache_manager.pattern_cache.invalidate_symbol_cache()
-            
+
             return {
                 "status": "success",
                 "patterns_invalidated": pattern_count,
@@ -76,7 +77,7 @@ async def invalidate_cache(session_id: Optional[str] = None):
 async def get_distributed_stm_stats():
     """Get distributed STM performance statistics and health"""
     from kato.services.kato_fastapi import app_state
-    
+
     try:
         # Get a sample processor to check distributed STM status
         if not hasattr(app_state, 'processor_manager') or not app_state.processor_manager:
@@ -85,11 +86,11 @@ async def get_distributed_stm_stats():
                 "reason": "Processor manager not available",
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
-        
+
         # Get sample processor stats
         processor_stats = app_state.processor_manager.get_stats()
         sample_processor = None
-        
+
         # Try to get a sample processor to check distributed STM
         if 'active_processors' in processor_stats and processor_stats['active_processors'] > 0:
             # Get first available processor
@@ -98,11 +99,11 @@ async def get_distributed_stm_stats():
                 if hasattr(processor, 'distributed_stm_manager') and processor.distributed_stm_manager:
                     sample_processor = processor
                     break
-        
+
         if sample_processor and sample_processor.distributed_stm_manager:
             # Get distributed STM performance stats
             stm_stats = await sample_processor.distributed_stm_manager.get_performance_stats()
-            
+
             return {
                 "status": "active",
                 "distributed_stm_enabled": True,
@@ -128,7 +129,7 @@ async def get_distributed_stm_stats():
                 },
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
-            
+
     except Exception as e:
         logger.error(f"Failed to get distributed STM stats: {e}")
         return {
@@ -142,7 +143,7 @@ async def get_distributed_stm_stats():
 async def get_comprehensive_metrics():
     """Get comprehensive v2 metrics including system resources and performance"""
     from kato.services.kato_fastapi import app_state
-    
+
     try:
         if not hasattr(app_state, 'metrics_collector'):
             # Return basic metrics if collector not available
@@ -153,7 +154,7 @@ async def get_comprehensive_metrics():
                 "uptime_seconds": time.time() - app_state.startup_time,
                 "active_sessions": await app_state.session_manager.get_active_session_count_async()
             }
-        
+
         # Get comprehensive metrics from collector
         try:
             summary_metrics = app_state.metrics_collector.get_summary_metrics()
@@ -176,17 +177,17 @@ async def get_comprehensive_metrics():
                 "uptime_seconds": time.time() - app_state.startup_time,
                 "active_sessions": await app_state.session_manager.get_active_session_count_async() or 0
             }
-        
+
         # Enhance with processor-specific and session data
         session_count = await app_state.session_manager.get_active_session_count_async() or 0
-        
+
         # Merge processor manager data into summary
         summary_metrics["processor_manager"] = app_state.processor_manager.get_stats() if app_state.processor_manager else {}
-        
+
         # Add session information
         summary_metrics["sessions"]["active"] = session_count
         summary_metrics["rates"] = rates
-        
+
         return summary_metrics
     except Exception as e:
         logger.error(f"Failed to get v2 metrics: {e}")
@@ -204,7 +205,7 @@ async def get_comprehensive_metrics():
 async def get_stats(minutes: int = 10):
     """Get time-series statistics for the last N minutes"""
     from kato.services.kato_fastapi import app_state
-    
+
     try:
         if not hasattr(app_state, 'metrics_collector'):
             return {
@@ -213,27 +214,27 @@ async def get_stats(minutes: int = 10):
                 "timestamp": time.time(),
                 "processor_manager": app_state.processor_manager.get_stats() if app_state.processor_manager else {}
             }
-        
+
         # Available time series metrics
         available_metrics = [
-            "cpu_percent", "memory_percent", "memory_used_mb", 
-            "disk_percent", "load_average_1m", "requests_total", 
-            "response_time", "errors_total", "sessions_created", 
+            "cpu_percent", "memory_percent", "memory_used_mb",
+            "disk_percent", "load_average_1m", "requests_total",
+            "response_time", "errors_total", "sessions_created",
             "sessions_deleted", "session_operations",
             "mongodb_operations", "mongodb_response_time", "mongodb_errors",
             "qdrant_operations", "qdrant_response_time", "qdrant_errors",
             "redis_operations", "redis_response_time", "redis_errors"
         ]
-        
+
         # Collect time series data for all metrics
         time_series_data = {}
         for metric_name in available_metrics:
             time_series_data[metric_name] = app_state.metrics_collector.get_time_series(metric_name, minutes)
-        
+
         # Summary statistics
         current_status = app_state.metrics_collector.get_health_status()
         summary = app_state.metrics_collector.get_summary_metrics()
-        
+
         return {
             "time_range_minutes": minutes,
             "timestamp": time.time(),
@@ -261,19 +262,19 @@ async def get_stats(minutes: int = 10):
 async def get_specific_metric_history(metric_name: str, minutes: int = 10):
     """Get time series data for a specific metric"""
     from kato.services.kato_fastapi import app_state
-    
+
     try:
         if not hasattr(app_state, 'metrics_collector'):
             raise HTTPException(status_code=503, detail="Metrics collector not available")
-        
+
         time_series_data = app_state.metrics_collector.get_time_series(metric_name, minutes)
-        
+
         if not time_series_data:
             raise HTTPException(
-                status_code=404, 
+                status_code=404,
                 detail=f"No data available for metric '{metric_name}' in the last {minutes} minutes"
             )
-        
+
         # Calculate basic statistics
         values = [point["value"] for point in time_series_data]
         stats = {
@@ -282,7 +283,7 @@ async def get_specific_metric_history(metric_name: str, minutes: int = 10):
             "max": max(values) if values else 0,
             "avg": sum(values) / len(values) if values else 0
         }
-        
+
         return {
             "metric_name": metric_name,
             "time_range_minutes": minutes,
@@ -303,11 +304,11 @@ async def connection_pools_status():
     logger.debug("Connection pools status endpoint called")
     try:
         from kato.storage.connection_manager import get_connection_manager
-        
+
         connection_manager = get_connection_manager()
         health_status = connection_manager.get_health_status()
         pool_stats = connection_manager.get_pool_stats()
-        
+
         return {
             "status": "healthy" if all(h["healthy"] for h in health_status.values()) else "degraded",
             "health": health_status,

@@ -6,7 +6,8 @@ enabling multi-user support with complete isolation.
 """
 
 import logging
-from typing import Optional, Callable
+from typing import Callable, Optional
+
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -25,7 +26,7 @@ class SessionMiddleware(BaseHTTPMiddleware):
     - Session validation
     - Session attachment to request state
     """
-    
+
     def __init__(self, app, auto_create: bool = False):
         """
         Initialize session middleware.
@@ -38,26 +39,26 @@ class SessionMiddleware(BaseHTTPMiddleware):
         self.auto_create = auto_create
         # Don't initialize session_manager here - let it be configured by the app
         self.session_manager = None
-    
+
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         """Process request with session management"""
-        
+
         # Get session manager from app state if not set
         if self.session_manager is None:
             # Access the app state through the app instance
             from kato.services.kato_fastapi import app_state
             self.session_manager = app_state.session_manager
-        
+
         path = str(request.url.path)
         session_id = None
-        
+
         # For session-specific endpoints, extract session ID from path
         # BUT exclude GET /sessions/{session_id} which is for session info retrieval
         if path.startswith('/sessions/') and path != '/sessions':
             parts = path.split('/')
             if len(parts) >= 3 and parts[2]:
                 session_id = parts[2]
-                
+
                 # Skip validation for GET session info endpoint - let the endpoint handle it
                 if len(parts) == 3 and request.method == 'GET':
                     session_id = None  # Don't validate, let endpoint handle it
@@ -75,7 +76,7 @@ class SessionMiddleware(BaseHTTPMiddleware):
                                 }
                             }
                         )
-                
+
                 # Attach session to request state (only if session_id is set)
                 if session_id:
                     request.state.session = session
@@ -90,22 +91,22 @@ class SessionMiddleware(BaseHTTPMiddleware):
                     request.state.session = session
                     request.state.session_id = session_id
                     request.state.session_lock = await self.session_manager.get_session_lock(session_id)
-        
+
         # Process request
         response = await call_next(request)
-        
+
         # Add session ID to response headers if we have one
         if session_id:
             response.headers['X-Session-ID'] = session_id
-        
+
         # Update session if it was modified
         if hasattr(request.state, 'session') and hasattr(request.state, 'session_modified'):
             if request.state.session_modified:
                 await self.session_manager.update_session(request.state.session)
                 logger.debug(f"Updated modified session {session_id}")
-        
+
         return response
-    
+
     def _extract_session_id(self, request: Request) -> Optional[str]:
         """
         Extract session ID from request.
@@ -124,12 +125,12 @@ class SessionMiddleware(BaseHTTPMiddleware):
         session_id = request.headers.get('X-Session-ID')
         if session_id:
             return session_id
-        
+
         # Check cookie
         session_id = request.cookies.get('session_id')
         if session_id:
             return session_id
-        
+
         return None
 
 

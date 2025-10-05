@@ -11,18 +11,15 @@ This test suite validates complex multi-node scenarios to ensure:
 These are end-to-end integration tests that use real KATO instances.
 """
 
-import asyncio
-import pytest
-import time
-import random
-import uuid
-import requests
-from typing import Dict, List, Any, Optional
-from dataclasses import dataclass
-from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta
-import sys
 import os
+import random
+import sys
+import time
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
+
+import pytest
 
 # Add parent directories to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
@@ -102,12 +99,12 @@ class TestMultiNodeIsolation:
                             for sublist in result['final_stm']
                             for item in sublist
                         ), f"Node {i} has data from Node {j}"
-        
+
         finally:
             # Clean up all fixtures
             for fixture in fixtures:
                 fixture.teardown()
-    
+
     def test_pattern_learning_isolation(self):
         """Test that patterns learned by one node don't affect another"""
         # Create two separate KATO fixtures
@@ -150,11 +147,11 @@ class TestMultiNodeIsolation:
                 future2 = self._extract_future_items(preds2)
                 assert not any('UNIQUE' in str(item) for item in future2), \
                     "Node 2 sees Node 1's patterns"
-        
+
         finally:
             fixture1.teardown()
             fixture2.teardown()
-    
+
     def test_rapid_context_switching(self):
         """Test rapid switching between multiple node contexts"""
         fixtures = []
@@ -190,11 +187,11 @@ class TestMultiNodeIsolation:
                         if 'NODE' in str(item):
                             assert f'NODE{node_idx}' in str(item), \
                                 f"Node {node_idx} got contaminated predictions"
-        
+
         finally:
             for fixture in fixtures:
                 fixture.teardown()
-    
+
     def _execute_concurrent_scenarios(self, fixtures, nodes):
         """Execute node scenarios concurrently using ThreadPoolExecutor"""
         def execute_node_scenario(fixture, node):
@@ -209,11 +206,11 @@ class TestMultiNodeIsolation:
                     fixture.clear_short_term_memory()
                 elif action['type'] == 'get_predictions':
                     result['predictions'] = fixture.get_predictions()
-            
+
             # Get final STM
             result['final_stm'] = fixture.get_short_term_memory()
             return result
-        
+
         # Execute all scenarios concurrently
         with ThreadPoolExecutor(max_workers=10) as executor:
             futures = [
@@ -223,7 +220,7 @@ class TestMultiNodeIsolation:
             results = [f.result() for f in futures]
 
         return results
-    
+
     def _extract_future_items(self, predictions):
         """Extract all future items from predictions"""
         items = []
@@ -237,47 +234,47 @@ class TestMultiNodeIsolation:
 
 class TestSessionPerformance:
     """Test session performance under load"""
-    
+
     def test_many_sessions_performance(self):
         """Test system performance with many concurrent sessions"""
         fixtures = []
         start_time = time.time()
-        
+
         try:
             # Create 20 sessions
             for i in range(20):
                 fixture = KATOFastAPIFixture(processor_name=f"perf_node_{i}", use_docker=False)
                 fixture.setup()
                 fixtures.append(fixture)
-            
+
             # Each makes observations
             for fixture in fixtures:
                 for j in range(5):
                     fixture.observe({'strings': [f'PERF_{j}'], 'vectors': [], 'emotives': {}})
-            
+
             # Verify all complete within reasonable time
             elapsed = time.time() - start_time
             assert elapsed < 30, f"Performance test took too long: {elapsed}s"
-            
+
             # Verify all sessions are independent
             for i, fixture in enumerate(fixtures):
                 stm = fixture.get_short_term_memory()
                 assert len(stm) == 5, f"Session {i} has wrong STM length"
-        
+
         finally:
             for fixture in fixtures:
                 fixture.teardown()
-    
+
     def test_session_cleanup(self):
         """Test that sessions are properly cleaned up"""
         fixtures = []
-        
+
         try:
             # Create and destroy sessions
             for i in range(10):
                 fixture = KATOFastAPIFixture(processor_name=f"cleanup_{i}", use_docker=False)
                 fixture.setup()
-                
+
                 # Make some observations
                 fixture.observe({'strings': ['CLEANUP_TEST'], 'vectors': [], 'emotives': {}})
 
@@ -288,10 +285,10 @@ class TestSessionPerformance:
                 fixture2 = KATOFastAPIFixture(processor_name=f"cleanup_{i}_new", use_docker=False)
                 fixture2.setup()
                 fixtures.append(fixture2)
-                
+
                 stm = fixture2.get_short_term_memory()
                 assert len(stm) == 0, f"New session {i} not clean"
-        
+
         finally:
             for fixture in fixtures:
                 fixture.teardown()
@@ -299,54 +296,54 @@ class TestSessionPerformance:
 
 class TestEdgeCases:
     """Test edge cases and error conditions"""
-    
+
     def test_empty_observation_handling(self):
         """Test handling of empty observations"""
         fixture = KATOFastAPIFixture(processor_name="empty_test", use_docker=False)
-        
+
         try:
             fixture.setup()
-            
+
             # Empty strings should be filtered
             fixture.observe({'strings': [], 'vectors': [], 'emotives': {}})
             stm = fixture.get_short_term_memory()
             assert len(stm) == 0, "Empty observation should not affect STM"
-            
+
             # Mixed empty and valid
             fixture.observe({'strings': ['VALID'], 'vectors': [], 'emotives': {}})
             fixture.observe({'strings': [], 'vectors': [], 'emotives': {}})
             fixture.observe({'strings': ['ALSO_VALID'], 'vectors': [], 'emotives': {}})
-            
+
             stm = fixture.get_short_term_memory()
             assert stm == [['VALID'], ['ALSO_VALID']], "Empty events should be filtered"
-        
+
         finally:
             fixture.teardown()
-    
+
     def test_large_observation_handling(self):
         """Test handling of very large observations"""
         fixture = KATOFastAPIFixture(processor_name="large_test", use_docker=False)
-        
+
         try:
             fixture.setup()
-            
+
             # Create large observation
             large_event = [f'SYMBOL_{i}' for i in range(100)]
             fixture.observe({'strings': large_event, 'vectors': [], 'emotives': {}})
-            
+
             stm = fixture.get_short_term_memory()
             assert len(stm) == 1, "Should have one event"
             assert len(stm[0]) == 100, "Should preserve all symbols"
-            
+
             # Learn the large pattern
             fixture.learn()
-            
+
             # Should be able to recall
             fixture.clear_short_term_memory()
             fixture.observe({'strings': large_event[:50], 'vectors': [], 'emotives': {}})
             preds = fixture.get_predictions()
             assert preds is not None, "Should get predictions for large patterns"
-        
+
         finally:
             fixture.teardown()
 

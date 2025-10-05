@@ -4,8 +4,8 @@ Health and Status Endpoints
 Handles system health checks and status reporting.
 """
 
-import time
 import logging
+import time
 from datetime import datetime, timezone
 
 from fastapi import APIRouter
@@ -18,10 +18,10 @@ logger = logging.getLogger('kato.api.health')
 async def get_system_status():
     """Get overall system status including session statistics"""
     from kato.services.kato_fastapi import app_state
-    
+
     session_stats = app_state.session_manager.get_session_stats()
     processor_stats = app_state.processor_manager.get_stats()
-    
+
     return {
         "status": "healthy",
         "base_processor_id": app_state.processor_manager.base_processor_id,
@@ -36,13 +36,13 @@ async def get_system_status():
 async def health_check():
     """Enhanced health check endpoint for v2 with metrics integration"""
     from kato.services.kato_fastapi import app_state
-    
+
     logger.debug("Health check endpoint called")
     try:
         if hasattr(app_state, 'metrics_collector'):
             health_status = app_state.metrics_collector.get_health_status()
             processor_status = "healthy" if app_state.processor_manager else "unhealthy"
-            
+
             return {
                 "status": health_status["status"],
                 "processor_status": processor_status,
@@ -58,7 +58,7 @@ async def health_check():
             # Fallback if metrics collector not available
             return {
                 "status": "healthy",
-                "processor_status": "healthy" if app_state.processor_manager else "unhealthy", 
+                "processor_status": "healthy" if app_state.processor_manager else "unhealthy",
                 "service_name": app_state.settings.service.service_name,
                 "uptime_seconds": time.time() - app_state.startup_time,
                 "issues": [],

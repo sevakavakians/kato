@@ -6,12 +6,13 @@ enabling multi-user support with complete isolation.
 """
 
 import logging
-from typing import Optional, Callable
+from typing import Callable, Optional
+
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from .session_manager import get_session_manager, SessionState
+from .session_manager import SessionState, get_session_manager
 
 logger = logging.getLogger('kato.sessions.middleware')
 
@@ -26,7 +27,7 @@ class SessionMiddleware(BaseHTTPMiddleware):
     - Automatic session creation for v2 endpoints
     - Session attachment to request state
     """
-    
+
     def __init__(self, app, auto_create: bool = False):
         """
         Initialize session middleware.
@@ -38,13 +39,13 @@ class SessionMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self.auto_create = auto_create
         self.session_manager = get_session_manager()
-    
+
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         """Process request with session management"""
-        
+
         # Extract session ID from header or cookie
         session_id = self._extract_session_id(request)
-        
+
         # Handle v2 endpoints that require sessions
         path = str(request.url.path)
         if path.startswith('/v2/sessions/') and path != '/v2/sessions':
@@ -54,7 +55,7 @@ class SessionMiddleware(BaseHTTPMiddleware):
                 path_session_id = parts[3]
                 if path_session_id:
                     session_id = path_session_id
-        
+
         # Handle v2 endpoints that need session validation
         if path.startswith('/v2/') and path != '/v2/sessions' and path != '/v2/health' and path != '/v2/status':
             if not session_id and path.startswith('/v2/sessions/'):
@@ -75,13 +76,13 @@ class SessionMiddleware(BaseHTTPMiddleware):
                     session_id = session.session_id
                     logger.info(f"Auto-created session {session_id} for {path}")
                 # For non-session endpoints, we don't require a session
-        
+
         # Validate and attach session if provided
         if session_id:
             # For session-specific endpoints, validate the session exists
             if path.startswith('/v2/sessions/') and path != '/v2/sessions':
                 session = await self.session_manager.get_session(session_id)
-                
+
                 if not session:
                     # Session not found or expired
                     return JSONResponse(
@@ -94,7 +95,7 @@ class SessionMiddleware(BaseHTTPMiddleware):
                             }
                         }
                     )
-                
+
                 # Attach session to request state
                 request.state.session = session
                 request.state.session_id = session_id
@@ -106,22 +107,22 @@ class SessionMiddleware(BaseHTTPMiddleware):
                     request.state.session = session
                     request.state.session_id = session_id
                     request.state.session_lock = await self.session_manager.get_session_lock(session_id)
-        
+
         # Process request
         response = await call_next(request)
-        
+
         # Add session ID to response headers if we have one
         if session_id:
             response.headers['X-Session-ID'] = session_id
-        
+
         # Update session if it was modified
         if hasattr(request.state, 'session') and hasattr(request.state, 'session_modified'):
             if request.state.session_modified:
                 await self.session_manager.update_session(request.state.session)
                 logger.debug(f"Updated modified session {session_id}")
-        
+
         return response
-    
+
     def _extract_session_id(self, request: Request) -> Optional[str]:
         """
         Extract session ID from request.
@@ -141,12 +142,12 @@ class SessionMiddleware(BaseHTTPMiddleware):
         session_id = request.headers.get('X-Session-ID')
         if session_id:
             return session_id
-        
+
         # Check cookie
         session_id = request.cookies.get('session_id')
         if session_id:
             return session_id
-        
+
         return None
 
 

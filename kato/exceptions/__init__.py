@@ -12,10 +12,10 @@ class KatoBaseException(Exception):
     Base exception class for all KATO-specific exceptions.
     Provides context and trace ID tracking.
     """
-    
+
     def __init__(
-        self, 
-        message: str, 
+        self,
+        message: str,
         error_code: Optional[str] = None,
         context: Optional[Dict[str, Any]] = None,
         trace_id: Optional[str] = None
@@ -34,7 +34,7 @@ class KatoBaseException(Exception):
         self.error_code = error_code or self.__class__.__name__
         self.context = context or {}
         self.trace_id = trace_id
-        
+
     def to_dict(self) -> Dict[str, Any]:
         """
         Convert exception to dictionary for API responses.
@@ -47,25 +47,25 @@ class KatoBaseException(Exception):
             'message': self.message,
             'type': self.__class__.__name__
         }
-        
+
         if self.context:
             result['context'] = self.context
-            
+
         if self.trace_id:
             result['trace_id'] = self.trace_id
-            
+
         return result
-        
+
     def __str__(self) -> str:
         """String representation of the exception."""
         parts = [f"{self.error_code}: {self.message}"]
-        
+
         if self.context:
             parts.append(f"Context: {self.context}")
-            
+
         if self.trace_id:
             parts.append(f"Trace ID: {self.trace_id}")
-            
+
         return " | ".join(parts)
 
 
@@ -128,9 +128,9 @@ class PatternProcessingError(KatoBaseException):
     """
     Raised when pattern processing fails.
     """
-    
+
     def __init__(
-        self, 
+        self,
         message: str,
         pattern_name: Optional[str] = None,
         pattern_data: Optional[Any] = None,
@@ -146,12 +146,12 @@ class PatternProcessingError(KatoBaseException):
             **kwargs: Additional arguments for base exception
         """
         context = kwargs.pop('context', {})
-        
+
         if pattern_name:
             context['pattern_name'] = pattern_name
         if pattern_data is not None:
             context['pattern_data'] = str(pattern_data)[:500]  # Limit size
-            
+
         super().__init__(
             message=message,
             error_code='PATTERN_PROCESSING_ERROR',
@@ -164,7 +164,7 @@ class VectorDimensionError(KatoBaseException):
     """
     Raised when vector dimensions are incorrect or mismatched.
     """
-    
+
     def __init__(
         self,
         message: str,
@@ -184,14 +184,14 @@ class VectorDimensionError(KatoBaseException):
             **kwargs: Additional arguments for base exception
         """
         context = kwargs.pop('context', {})
-        
+
         if expected_dim is not None:
             context['expected_dimension'] = expected_dim
         if actual_dim is not None:
             context['actual_dimension'] = actual_dim
         if vector_name:
             context['vector_name'] = vector_name
-            
+
         super().__init__(
             message=message,
             error_code='VECTOR_DIMENSION_ERROR',
@@ -249,7 +249,7 @@ class ConfigurationError(KatoBaseException):
     """
     Raised when configuration is invalid or missing.
     """
-    
+
     def __init__(
         self,
         message: str,
@@ -269,14 +269,14 @@ class ConfigurationError(KatoBaseException):
             **kwargs: Additional arguments for base exception
         """
         context = kwargs.pop('context', {})
-        
+
         if config_key:
             context['config_key'] = config_key
         if config_value is not None:
             context['config_value'] = str(config_value)
         if valid_values:
             context['valid_values'] = valid_values
-            
+
         super().__init__(
             message=message,
             error_code='CONFIGURATION_ERROR',
@@ -289,7 +289,7 @@ class ObservationError(KatoBaseException):
     """
     Raised when observation processing fails.
     """
-    
+
     def __init__(
         self,
         message: str,
@@ -307,7 +307,7 @@ class ObservationError(KatoBaseException):
             **kwargs: Additional arguments for base exception
         """
         context = kwargs.pop('context', {})
-        
+
         if observation_id:
             context['observation_id'] = observation_id
         if observation_data:
@@ -316,7 +316,7 @@ class ObservationError(KatoBaseException):
                 k: str(v)[:100] if isinstance(v, (list, dict)) else v
                 for k, v in observation_data.items()
             }
-            
+
         super().__init__(
             message=message,
             error_code='OBSERVATION_ERROR',
@@ -329,7 +329,7 @@ class PredictionError(KatoBaseException):
     """
     Raised when prediction generation fails.
     """
-    
+
     def __init__(
         self,
         message: str,
@@ -347,7 +347,7 @@ class PredictionError(KatoBaseException):
             **kwargs: Additional arguments for base exception
         """
         context = kwargs.pop('context', {})
-        
+
         if stm_state is not None:
             context['stm_length'] = len(stm_state)
             # Include limited STM preview
@@ -355,7 +355,7 @@ class PredictionError(KatoBaseException):
                 context['stm_preview'] = str(stm_state[:2])[:200]
         if recall_threshold is not None:
             context['recall_threshold'] = recall_threshold
-            
+
         super().__init__(
             message=message,
             error_code='PREDICTION_ERROR',
@@ -368,7 +368,7 @@ class LearningError(KatoBaseException):
     """
     Raised when pattern learning fails.
     """
-    
+
     def __init__(
         self,
         message: str,
@@ -386,11 +386,11 @@ class LearningError(KatoBaseException):
             **kwargs: Additional arguments for base exception
         """
         context = kwargs.pop('context', {})
-        
+
         if stm_state is not None:
             context['stm_length'] = len(stm_state)
         context['auto_learn'] = auto_learn
-            
+
         super().__init__(
             message=message,
             error_code='LEARNING_ERROR',
@@ -448,7 +448,7 @@ class ResourceNotFoundError(KatoBaseException):
     """
     Raised when a requested resource cannot be found.
     """
-    
+
     def __init__(
         self,
         message: str,
@@ -466,12 +466,12 @@ class ResourceNotFoundError(KatoBaseException):
             **kwargs: Additional arguments for base exception
         """
         context = kwargs.pop('context', {})
-        
+
         if resource_type:
             context['resource_type'] = resource_type
         if resource_id:
             context['resource_id'] = resource_id
-            
+
         super().__init__(
             message=message,
             error_code='RESOURCE_NOT_FOUND',
@@ -484,7 +484,7 @@ class MemoryError(KatoBaseException):
     """
     Raised when memory operations fail (STM/LTM).
     """
-    
+
     def __init__(
         self,
         message: str,
@@ -502,12 +502,12 @@ class MemoryError(KatoBaseException):
             **kwargs: Additional arguments for base exception
         """
         context = kwargs.pop('context', {})
-        
+
         if memory_type:
             context['memory_type'] = memory_type
         if operation:
             context['operation'] = operation
-            
+
         super().__init__(
             message=message,
             error_code='MEMORY_ERROR',
@@ -524,7 +524,7 @@ class MetricCalculationError(KatoBaseException):
     """
     Raised when metric calculations fail.
     """
-    
+
     def __init__(
         self,
         message: str,
@@ -542,12 +542,12 @@ class MetricCalculationError(KatoBaseException):
             **kwargs: Additional arguments for base exception
         """
         context = kwargs.pop('context', {})
-        
+
         if metric_name:
             context['metric_name'] = metric_name
         if calculation_context:
             context['calculation_context'] = calculation_context
-            
+
         super().__init__(
             message=message,
             error_code='METRIC_CALCULATION_ERROR',
@@ -560,7 +560,7 @@ class PatternHashingError(KatoBaseException):
     """
     Raised when pattern hashing or identification fails.
     """
-    
+
     def __init__(
         self,
         message: str,
@@ -578,12 +578,12 @@ class PatternHashingError(KatoBaseException):
             **kwargs: Additional arguments for base exception
         """
         context = kwargs.pop('context', {})
-        
+
         if pattern_data is not None:
             context['pattern_data'] = str(pattern_data)[:500]  # Limit size
         if hash_value:
             context['hash_value'] = hash_value
-            
+
         super().__init__(
             message=message,
             error_code='PATTERN_HASHING_ERROR',

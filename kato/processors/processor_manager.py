@@ -10,15 +10,14 @@ that survives across sessions.
 
 import asyncio
 import logging
-import time
 from collections import OrderedDict
-from typing import Dict, Optional, Any
 from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, Optional
 
-from kato.workers.kato_processor import KatoProcessor
-from kato.config.settings import get_settings
-from kato.config.session_config import SessionConfiguration
 from kato.config.configuration_service import get_configuration_service
+from kato.config.session_config import SessionConfiguration
+from kato.config.settings import get_settings
+from kato.workers.kato_processor import KatoProcessor
 
 logger = logging.getLogger('kato.processors.manager')
 
@@ -30,7 +29,7 @@ class ProcessorManager:
     This is the core component that enables true multi-user support in KATO.
     Each user gets their own MongoDB database and Qdrant collection.
     """
-    
+
     def __init__(
         self,
         base_processor_id: str,
@@ -48,22 +47,22 @@ class ProcessorManager:
         self.base_processor_id = base_processor_id
         self.max_processors = max_processors
         self.eviction_ttl = eviction_ttl_seconds
-        
+
         # OrderedDict for LRU cache behavior
         self.processors: OrderedDict[str, Dict[str, Any]] = OrderedDict()
         self.processor_locks: Dict[str, asyncio.Lock] = {}
         self.settings = get_settings()
         self.config_service = get_configuration_service(self.settings)
-        
+
         # Background cleanup task
         self._cleanup_task = None
         self._cleanup_interval = 300  # 5 minutes
-        
+
         logger.info(
             f"ProcessorManager initialized with base_id={base_processor_id}, "
             f"max={max_processors}, ttl={eviction_ttl_seconds}s"
         )
-    
+
     def _get_processor_id(self, node_id: str) -> str:
         """
         Generate processor ID for a specific node.
@@ -106,7 +105,7 @@ class ProcessorManager:
             logger.info(f"Truncated node_id for MongoDB: orig={node_id}, final={final_name}, len={len(final_name)}")
 
         return f"{safe_node_id}_{safe_base_id}"
-    
+
     async def get_processor_by_id(self, processor_id: Optional[str] = None, session_config: Optional[SessionConfiguration] = None) -> KatoProcessor:
         """
         Get or create a processor by processor ID (v1 API compatibility).
@@ -136,15 +135,15 @@ class ProcessorManager:
             KatoProcessor instance for this node
         """
         processor_id = self._get_processor_id(node_id)
-        
+
         # Check if processor exists and is not expired
         if processor_id in self.processors:
             processor_info = self.processors[processor_id]
             processor_info['last_accessed'] = datetime.now(timezone.utc)
-            
+
             # Move to end for LRU
             self.processors.move_to_end(processor_id)
-            
+
             # Apply dynamic configuration updates to cached processor
             processor = processor_info['processor']
             if session_config:
@@ -152,11 +151,11 @@ class ProcessorManager:
 
             logger.debug(f"Returning cached processor for node {node_id}")
             return processor
-        
+
         # Need to create new processor
         if processor_id not in self.processor_locks:
             self.processor_locks[processor_id] = asyncio.Lock()
-        
+
         async with self.processor_locks[processor_id]:
             # Double-check after acquiring lock
             if processor_id in self.processors:
@@ -164,7 +163,7 @@ class ProcessorManager:
                 processor_info['last_accessed'] = datetime.now(timezone.utc)
                 self.processors.move_to_end(processor_id)
                 return processor_info['processor']
-            
+
             # Create new processor
             logger.info(f"Creating new processor for node {node_id}")
 
@@ -180,13 +179,13 @@ class ProcessorManager:
                 'name': f"Node-{node_id}",
                 **resolved_config.to_genome_manifest()
             }
-            
+
             # Create processor instance with direct processor_id parameter
             processor = KatoProcessor(genome_manifest, processor_id=processor_id, settings=self.settings)
-            
+
             # Initialize async components
             await processor.initialize_async_components()
-            
+
             # Store in cache
             self.processors[processor_id] = {
                 'processor': processor,
@@ -195,17 +194,17 @@ class ProcessorManager:
                 'last_accessed': datetime.now(timezone.utc),
                 'access_count': 1
             }
-            
+
             # Enforce max processors limit (LRU eviction)
             if len(self.processors) > self.max_processors:
                 self._evict_oldest()
-            
+
             # Start cleanup task if not running
             if not self._cleanup_task:
                 self._cleanup_task = asyncio.create_task(self._cleanup_loop())
-            
+
             return processor
-    
+
     def _apply_config_to_processor(self, processor: 'KatoProcessor', session_config: SessionConfiguration):
         """
         Apply dynamic configuration updates to an existing processor.
@@ -223,7 +222,7 @@ class ProcessorManager:
                 if hasattr(processor.pattern_processor, 'patterns_searcher'):
                     processor.pattern_processor.patterns_searcher.recall_threshold = session_config.recall_threshold
                     logger.debug(f"Updated recall_threshold to {session_config.recall_threshold}")
-        
+
         if session_config.max_pattern_length is not None:
             if hasattr(processor, 'max_pattern_length'):
                 processor.max_pattern_length = session_config.max_pattern_length
@@ -233,19 +232,19 @@ class ProcessorManager:
                 processor.observation_processor.max_pattern_length = session_config.max_pattern_length
                 logger.debug(f"Updated observation_processor.max_pattern_length to {session_config.max_pattern_length}")
             logger.debug(f"Updated max_pattern_length to {session_config.max_pattern_length}")
-        
+
         if session_config.persistence is not None:
             if hasattr(processor, 'pattern_processor'):
                 processor.pattern_processor.persistence = session_config.persistence
                 logger.debug(f"Updated persistence to {session_config.persistence}")
-        
+
         if session_config.stm_mode is not None:
             if hasattr(processor, 'pattern_processor'):
                 processor.pattern_processor.stm_mode = session_config.stm_mode
                 logger.debug(f"Updated pattern_processor.stm_mode to {session_config.stm_mode} for processor {processor.id}")
             else:
-                logger.warning(f"Processor does not have pattern_processor attribute!")
-        
+                logger.warning("Processor does not have pattern_processor attribute!")
+
         # Update other configurable parameters
         if session_config.max_predictions is not None:
             if hasattr(processor, 'pattern_processor'):
@@ -253,30 +252,30 @@ class ProcessorManager:
                 if hasattr(processor.pattern_processor, 'patterns_searcher'):
                     processor.pattern_processor.patterns_searcher.max_predictions = session_config.max_predictions
                 logger.debug(f"Updated max_predictions to {session_config.max_predictions}")
-    
+
     def _evict_oldest(self):
         """Evict the least recently used processor."""
         if not self.processors:
             return
-        
+
         # OrderedDict pops first item (oldest)
         evicted_id, evicted_info = self.processors.popitem(last=False)
-        
+
         # Clean up the processor
         try:
             evicted_info['processor'].pattern_processor.superkb.close()
         except Exception as e:
             logger.error(f"Error closing processor {evicted_id}: {e}")
-        
+
         # Remove lock
         if evicted_id in self.processor_locks:
             del self.processor_locks[evicted_id]
-        
+
         logger.info(
             f"Evicted processor {evicted_id} for node {evicted_info['node_id']} "
             f"(created: {evicted_info['created_at']}, accesses: {evicted_info['access_count']})"
         )
-    
+
     async def update_processor_config(self, node_id: str, session_config: SessionConfiguration) -> bool:
         """
         Update a processor's configuration dynamically.
@@ -289,15 +288,15 @@ class ProcessorManager:
             True if successful, False otherwise
         """
         processor_id = self._get_processor_id(node_id)
-        
+
         if processor_id not in self.processors:
             # Processor doesn't exist, will be created with new config on next access
             logger.debug(f"Processor {processor_id} doesn't exist yet, will be created with new config")
             return True
-        
+
         processor_info = self.processors[processor_id]
         processor = processor_info['processor']
-        
+
         try:
             # Resolve configuration using ConfigurationService
             resolved_config = self.config_service.resolve_configuration(
@@ -305,44 +304,44 @@ class ProcessorManager:
                 session_id=session_config.session_id if session_config else None,
                 node_id=node_id
             )
-            
+
             # Get the configuration values
             new_config = resolved_config.to_genome_manifest()
-            
+
             # Update processor attributes directly
             # These are the safe runtime-updateable parameters
             if 'recall_threshold' in new_config:
                 processor.recall_threshold = new_config['recall_threshold']
                 if hasattr(processor, 'pattern_processor'):
                     processor.pattern_processor.recall_threshold = new_config['recall_threshold']
-            
+
             if 'persistence' in new_config:
                 processor.persistence = new_config['persistence']
-            
+
             if 'max_pattern_length' in new_config:
                 processor.max_pattern_length = new_config['max_pattern_length']
-            
+
             if 'max_predictions' in new_config:
                 processor.max_predictions = new_config['max_predictions']
-            
+
             if 'sort' in new_config:
                 processor.sort = new_config['sort']
-            
+
             if 'process_predictions' in new_config:
                 processor.process_predictions = new_config['process_predictions']
-            
+
             if 'stm_mode' in new_config:
                 if hasattr(processor, 'pattern_processor'):
                     processor.pattern_processor.stm_mode = new_config['stm_mode']
                     logger.debug(f"Updated STM mode to {new_config['stm_mode']} for processor {processor_id}")
-            
+
             logger.info(f"Updated processor {processor_id} configuration for node {node_id}")
             return True
 
         except Exception as e:
             logger.error(f"Failed to update processor config for {node_id}: {e}")
             return False
-    
+
     async def remove_processor(self, node_id: str) -> bool:
         """
         Remove a specific node's processor from cache.
@@ -354,25 +353,25 @@ class ProcessorManager:
             True if removed, False if not found
         """
         processor_id = self._get_processor_id(node_id)
-        
+
         if processor_id not in self.processors:
             return False
-        
+
         processor_info = self.processors.pop(processor_id)
-        
+
         # Clean up the processor
         try:
             processor_info['processor'].pattern_processor.superkb.close()
         except Exception as e:
             logger.error(f"Error closing processor {processor_id}: {e}")
-        
+
         # Remove lock
         if processor_id in self.processor_locks:
             del self.processor_locks[processor_id]
 
         logger.info(f"Removed processor {processor_id} for node {node_id}")
         return True
-    
+
     async def cleanup_expired_processors(self) -> int:
         """
         Remove processors that haven't been accessed within TTL.
@@ -382,35 +381,35 @@ class ProcessorManager:
         """
         now = datetime.now(timezone.utc)
         expired_threshold = now - timedelta(seconds=self.eviction_ttl)
-        
+
         expired_ids = [
             pid for pid, info in self.processors.items()
             if info['last_accessed'] < expired_threshold
         ]
-        
+
         for processor_id in expired_ids:
             processor_info = self.processors.pop(processor_id)
-            
+
             # Clean up the processor
             try:
                 processor_info['processor'].pattern_processor.superkb.close()
             except Exception as e:
                 logger.error(f"Error closing processor {processor_id}: {e}")
-            
+
             # Remove lock
             if processor_id in self.processor_locks:
                 del self.processor_locks[processor_id]
-            
+
             logger.info(
                 f"Expired processor {processor_id} for node {processor_info['node_id']} "
                 f"(last accessed: {processor_info['last_accessed']})"
             )
-        
+
         if expired_ids:
             logger.info(f"Cleaned up {len(expired_ids)} expired processors")
-        
+
         return len(expired_ids)
-    
+
     async def _cleanup_loop(self):
         """Background task to periodically cleanup expired processors."""
         while True:
@@ -421,7 +420,7 @@ class ProcessorManager:
                 break
             except Exception as e:
                 logger.error(f"Error in cleanup loop: {e}")
-    
+
     def get_stats(self) -> Dict[str, Any]:
         """
         Get statistics about cached processors.
@@ -430,14 +429,14 @@ class ProcessorManager:
             Dictionary with processor cache statistics
         """
         now = datetime.now(timezone.utc)
-        
+
         stats = {
             "total_processors": len(self.processors),
             "max_processors": self.max_processors,
             "eviction_ttl_seconds": self.eviction_ttl,
             "processors": []
         }
-        
+
         for processor_id, info in self.processors.items():
             idle_seconds = (now - info['last_accessed']).total_seconds()
             stats["processors"].append({
@@ -448,9 +447,9 @@ class ProcessorManager:
                 "access_count": info['access_count'],
                 "idle_seconds": idle_seconds
             })
-        
+
         return stats
-    
+
     async def shutdown(self):
         """Cleanup all processors on shutdown."""
         if self._cleanup_task:
@@ -459,17 +458,17 @@ class ProcessorManager:
                 await self._cleanup_task
             except asyncio.CancelledError:
                 pass
-        
+
         # Close all processors
         for processor_id, processor_info in self.processors.items():
             try:
                 processor_info['processor'].pattern_processor.superkb.close()
             except Exception as e:
                 logger.error(f"Error closing processor {processor_id}: {e}")
-        
+
         self.processors.clear()
         self.processor_locks.clear()
-        
+
         logger.info("ProcessorManager shutdown complete")
 
 

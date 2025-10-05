@@ -9,12 +9,12 @@ sequences without any data collision.
 """
 
 import asyncio
+import logging
 import time
 import uuid
-from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
-import logging
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Optional
 
 from kato.config.session_config import SessionConfiguration
 
@@ -29,39 +29,39 @@ class SessionState:
     created_at: datetime
     last_accessed: datetime
     expires_at: datetime
-    
+
     # Session-specific STM state (node's LTM is in their processor)
     stm: List[List[str]] = field(default_factory=list)
     emotives_accumulator: List[Dict[str, float]] = field(default_factory=list)
     time: int = 0
-    
+
     # Session-specific configuration (replaces user_config)
     session_config: SessionConfiguration = field(default_factory=lambda: SessionConfiguration())
-    
+
     # Metadata
     metadata: Dict[str, Any] = field(default_factory=dict)
     access_count: int = 0
-    
+
     # Resource limits
     max_stm_size: int = 1000
     max_emotives_size: int = 1000
-    
+
     def is_expired(self) -> bool:
         """Check if session has expired"""
         return datetime.now(timezone.utc) > self.expires_at
-    
+
     def update_access(self):
         """Update last access time and count"""
         self.last_accessed = datetime.now(timezone.utc)
         self.access_count += 1
-    
+
     def enforce_limits(self):
         """Enforce resource limits on session data"""
         # Trim STM if too large (keep most recent)
         if len(self.stm) > self.max_stm_size:
             self.stm = self.stm[-self.max_stm_size:]
             logger.warning(f"Session {self.session_id} STM trimmed to {self.max_stm_size} events")
-        
+
         # Trim emotives if too large
         if len(self.emotives_accumulator) > self.max_emotives_size:
             self.emotives_accumulator = self.emotives_accumulator[-self.max_emotives_size:]
@@ -74,7 +74,7 @@ class SessionManager:
     This is the core component that enables multiple nodes to use KATO
     simultaneously without data collision.
     """
-    
+
     def __init__(self, default_ttl_seconds: int = 3600):
         """
         Initialize session manager.
@@ -88,11 +88,11 @@ class SessionManager:
         self.session_locks: Dict[str, asyncio.Lock] = {}
         self._cleanup_task = None
         self._cleanup_interval = 300  # 5 minutes
-        
+
         logger.info(f"SessionManager initialized with {default_ttl_seconds}s default TTL")
         # Debug: log where this is being called from
         logger.debug(f"SessionManager created from:\n{''.join(traceback.format_stack()[-5:-1])}")
-    
+
     async def get_or_create_session(
         self,
         node_id: str,
@@ -122,7 +122,7 @@ class SessionManager:
 
         # No existing session, create new one
         return await self.create_session(node_id, config, metadata, ttl_seconds)
-    
+
     async def create_session(
         self,
         node_id: str,
@@ -178,7 +178,7 @@ class SessionManager:
             self._cleanup_task = asyncio.create_task(self._cleanup_loop())
 
         return session
-    
+
     async def get_session(self, session_id: str) -> Optional[SessionState]:
         """
         Retrieve session by ID.
@@ -190,21 +190,21 @@ class SessionManager:
             SessionState if found and not expired, None otherwise
         """
         session = self.sessions.get(session_id)
-        
+
         if not session:
             logger.debug(f"Session {session_id} not found")
             return None
-        
+
         if session.is_expired():
             logger.info(f"Session {session_id} has expired")
             await self.delete_session(session_id)
             return None
-        
+
         # Update access time
         session.update_access()
-        
+
         return session
-    
+
     async def get_session_lock(self, session_id: str) -> Optional[asyncio.Lock]:
         """
         Get the lock for a specific session.
@@ -217,12 +217,12 @@ class SessionManager:
         """
         if session_id not in self.sessions:
             return None
-        
+
         if session_id not in self.session_locks:
             self.session_locks[session_id] = asyncio.Lock()
-        
+
         return self.session_locks[session_id]
-    
+
     async def update_session(self, session: SessionState) -> bool:
         """
         Update session state.
@@ -235,13 +235,13 @@ class SessionManager:
         """
         if session.session_id not in self.sessions:
             return False
-        
+
         # Enforce limits before saving
         session.enforce_limits()
-        
+
         self.sessions[session.session_id] = session
         return True
-    
+
     async def delete_session(self, session_id: str) -> bool:
         """
         Delete a session and cleanup resources.
@@ -254,17 +254,17 @@ class SessionManager:
         """
         if session_id not in self.sessions:
             return False
-        
+
         # Remove session
         del self.sessions[session_id]
-        
+
         # Remove lock
         if session_id in self.session_locks:
             del self.session_locks[session_id]
-        
+
         logger.info(f"Deleted session {session_id}")
         return True
-    
+
     async def extend_session(self, session_id: str, ttl_seconds: int) -> bool:
         """
         Extend session expiration.
@@ -279,11 +279,11 @@ class SessionManager:
         session = await self.get_session(session_id)
         if not session:
             return False
-        
+
         session.expires_at = datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)
         logger.info(f"Extended session {session_id} by {ttl_seconds}s")
         return True
-    
+
     async def cleanup_expired_sessions(self) -> int:
         """
         Remove all expired sessions.
@@ -296,15 +296,15 @@ class SessionManager:
             sid for sid, session in self.sessions.items()
             if session.expires_at < now
         ]
-        
+
         for session_id in expired_ids:
             await self.delete_session(session_id)
-        
+
         if expired_ids:
             logger.info(f"Cleaned up {len(expired_ids)} expired sessions")
-        
+
         return len(expired_ids)
-    
+
     async def _cleanup_loop(self):
         """Background task to periodically cleanup expired sessions"""
         while True:
@@ -315,7 +315,7 @@ class SessionManager:
                 break
             except Exception as e:
                 logger.error(f"Error in cleanup loop: {e}")
-    
+
     def get_active_session_count(self) -> int:
         """Get count of active (non-expired) sessions"""
         now = datetime.now(timezone.utc)
@@ -323,11 +323,11 @@ class SessionManager:
             1 for session in self.sessions.values()
             if session.expires_at > now
         )
-    
+
     async def get_active_session_count_async(self) -> int:
         """Async version of get_active_session_count for compatibility with Redis manager"""
         return self.get_active_session_count()
-    
+
     def get_session_stats(self) -> Dict[str, Any]:
         """Get statistics about current sessions"""
         now = datetime.now(timezone.utc)
@@ -341,7 +341,7 @@ class SessionManager:
             "average_stm_size": sum(len(s.stm) for s in active_sessions) / max(len(active_sessions), 1),
             "total_stm_events": sum(len(s.stm) for s in active_sessions)
         }
-    
+
     async def clear_session_stm(self, session_id: str) -> bool:
         """
         Clear the STM for a specific session.
@@ -355,12 +355,12 @@ class SessionManager:
         session = await self.get_session(session_id)
         if not session:
             return False
-        
+
         session.stm = []
         session.emotives_accumulator = []
         logger.info(f"Cleared STM for session {session_id}")
         return True
-    
+
     async def shutdown(self):
         """Cleanup resources on shutdown"""
         if self._cleanup_task:
@@ -369,11 +369,11 @@ class SessionManager:
                 await self._cleanup_task
             except asyncio.CancelledError:
                 pass
-        
+
         # Clear all sessions
         self.sessions.clear()
         self.session_locks.clear()
-        
+
         logger.info("SessionManager shutdown complete")
 
 

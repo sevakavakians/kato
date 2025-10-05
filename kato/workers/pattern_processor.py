@@ -1,35 +1,30 @@
+import asyncio
 import heapq
 import itertools
 import logging
-from kato.utils.logging import get_logger
-from os import environ
-from collections import deque
+from collections import Counter, deque
 from itertools import chain
 from operator import itemgetter
-from typing import Dict, List, Any, Optional, Deque, Set, Tuple, Union
-import asyncio
+from os import environ
+from typing import Any, Deque, Dict, List, Optional
 
-import pymongo
 import numpy as np
+import pymongo
 from pymongo import ReturnDocument
 
 from kato.informatics.knowledge_base import SuperKnowledgeBase
-from kato.informatics.metrics import average_emotives, \
-                                            classic_expectation, \
-                                            grand_hamiltonian, \
-                                            hamiltonian, \
-                                            conditionalProbability, \
-                                            confluence, \
-                                            expectation
-from kato.informatics.predictive_information import (
-    calculate_ensemble_predictive_information
+from kato.informatics.metrics import (
+    average_emotives,
+    confluence,
+    grand_hamiltonian,
+    hamiltonian,
 )
+from kato.informatics.predictive_information import calculate_ensemble_predictive_information
 from kato.representations.pattern import Pattern
 from kato.searches.pattern_search import PatternSearcher
 from kato.storage.aggregation_pipelines import OptimizedQueryManager
-from kato.storage.metrics_cache import get_metrics_cache_manager, CachedMetricsCalculator
-
-from collections import Counter
+from kato.storage.metrics_cache import CachedMetricsCalculator, get_metrics_cache_manager
+from kato.utils.logging import get_logger
 
 # Use enhanced logger with trace ID support
 kato_logger = get_logger('kato.pattern_processor')
@@ -69,14 +64,14 @@ class PatternProcessor:
         self.patterns_searcher = PatternSearcher(kb_id=self.kb_id,
                                              max_predictions=self.max_predictions,
                                              recall_threshold=self.recall_threshold)
-        
+
         # Initialize optimized query manager for aggregation pipelines
         self.query_manager = OptimizedQueryManager(self.superkb)
-        
+
         # Initialize metrics cache
         self.metrics_cache_manager = None
         self.cached_calculator = None
-        
+
         self.initiateDefaults()
         self.predict = True
         self.predictions_kb = self.superkb.predictions_kb
@@ -116,16 +111,16 @@ class PatternProcessor:
         self.clear_stm()
         self.last_learned_pattern_name: Optional[str] = None
         self.patterns_searcher.clearPatternsFromRAM()
-        
+
         # CRITICAL: Delete all patterns from MongoDB for this processor
         # This ensures test isolation and prevents pattern contamination
         deleted = self.superkb.patterns_kb.delete_many({})
         logger.info(f"Deleted {deleted.deleted_count} patterns from MongoDB for processor {self.kb_id}")
-        
+
         # Also clear symbols and predictions
         self.superkb.symbols_kb.delete_many({})
         self.superkb.predictions_kb.delete_many({})
-        
+
         self.superkb.patterns_observation_count = 0
         self.superkb.symbols_observation_count = 0
         self.initiateDefaults()
@@ -171,26 +166,26 @@ class PatternProcessor:
         """
         pattern = Pattern(self.STM)  # Create pattern from short-term memory data
         self.STM.clear()  # Reset short-term memory after learning
-        
+
         if len(pattern) > 1:  # Only learn multi-event patterns
             # Store pattern with averaged emotives from all events
             x = self.patterns_kb.learnPattern(pattern, emotives=average_emotives(self.emotives))
-            
+
             if x:
                 # Add newly learned pattern to the searcher
                 # Index parameter kept for backward compatibility but ignored by optimized version
                 self.patterns_searcher.assignNewlyLearnedToWorkers(
                     0,  # Index parameter ignored in optimized implementation
-                    pattern.name, 
+                    pattern.name,
                     list(chain(*pattern.pattern_data))
                 )
-                
+
                 # Invalidate metrics cache since patterns have changed
                 if self.metrics_cache_manager:
                     asyncio.create_task(
                         self.metrics_cache_manager.invalidate_pattern_metrics(pattern.name)
                     )
-                    
+
             self.last_learned_pattern_name = pattern.name
             del(pattern)
             self.emotives = []
@@ -302,7 +297,7 @@ class PatternProcessor:
             logger.debug(f"Rolling window: removed oldest event {removed_event}")
         logger.debug(f"Rolling window: STM maintained at length {len(self.STM)}")
         return
-    
+
     def symbolFrequency(self, symbol: str) -> int:
         """Get the frequency count for a symbol.
         
@@ -362,221 +357,6 @@ class PatternProcessor:
         """
         return float(freq/total_pattern_frequencies) if total_pattern_frequencies > 0 else 0.0
 
-    def predictPatternSync(self, state: List[str], stm_events: Optional[List[List[str]]] = None) -> List[Dict[str, Any]]:
-        """Synchronous version of predictPattern for backward compatibility.
-
-        Searches for patterns that match the current state and calculates
-        various metrics including hamiltonian, ITFDF similarity, potential,
-        and confluence for ranking predictions.
-
-        Note: This sync version cannot use cached_calculator (requires async).
-        Use the async predictPattern() method for better performance with caching.
-
-        Args:
-            state: Flattened list of symbols representing current STM state.
-            stm_events: Original event-structured STM for calculating event-aligned missing/extras.
-
-        Returns:
-            List of prediction dictionaries sorted by potential, containing
-            pattern information and calculated metrics.
-
-        Raises:
-            Exception: If causalBelief search fails.
-            ValueError: If predictions are missing required fields.
-        """
-        logger.info(f"*** {self.name} [ PatternProcessor predictPattern called with state={state} ]")
-        total_symbols = self.superkb.symbols_kb.count_documents({})
-        metadata_doc = self.superkb.metadata.find_one({"class": "totals"})
-        if metadata_doc:
-            total_symbols_in_patterns_frequencies = metadata_doc.get('total_symbols_in_patterns_frequencies', 0)
-            total_pattern_frequencies = metadata_doc.get('total_pattern_frequencies', 0)
-        else:
-            total_symbols_in_patterns_frequencies = 0
-            total_pattern_frequencies = 0
-        try:
-            causal_patterns = self.patterns_searcher.causalBelief(state, self.target_class_candidates, stm_events=stm_events)
-        except Exception as e:
-            raise Exception("\nException in PatternProcessor.predictPattern: Error in causalBelief! %s: %s" %(self.kb_id, e))
-        
-        # Early return if no patterns found
-        if not causal_patterns:
-            logger.debug(f" {self.name} [ PatternProcessor predictPattern ] No causal patterns found, returning empty list")
-            return []
-        
-        # Validate all predictions have required fields
-        for idx, prediction in enumerate(causal_patterns):
-            required_fields = ['frequency', 'matches', 'missing', 'evidence', 
-                              'confidence', 'snr', 'fragmentation', 'emotives', 'present']
-            missing_fields = []
-            for field in required_fields:
-                if field not in prediction:
-                    missing_fields.append(field)
-            if missing_fields:
-                pred_name = prediction.get('name', f'prediction_{idx}')
-                raise ValueError(f"Prediction '{pred_name}' missing required fields: {missing_fields}")
-        
-        try:
-            # Fetch and pre-calculate the probability (for the union of symbols in matches and missing) exactly once, to
-            # be used in the calculations that follow
-            symbol_probability_cache = {}
-            symbol_frequency_cache = Counter()
-            total_ensemble_pattern_frequencies = 0
-            
-            # Use optimized aggregation pipeline to load all symbols
-            try:
-                symbol_cache = self.query_manager.get_all_symbols_optimized(
-                    self.superkb.symbols_kb
-                )
-                logger.debug(f"Loaded {len(symbol_cache)} symbols using optimized aggregation pipeline")
-            except Exception as e:
-                logger.warning(f"Aggregation pipeline failed for symbols, falling back to find(): {e}")
-                # Fallback to original method
-                symbol_cache = {}
-                all_symbols = self.superkb.symbols_kb.find({}, {'_id': False}, cursor_type=pymongo.CursorType.EXHAUST)
-                for symbol in all_symbols:
-                    symbol_cache[symbol['name']] = symbol
-            for prediction in causal_patterns:
-                total_ensemble_pattern_frequencies += prediction['frequency']
-                # Flatten missing if it's event-structured (list of lists)
-                missing_symbols = prediction['missing']
-                if missing_symbols and isinstance(missing_symbols[0], list):
-                    missing_symbols = [s for event in missing_symbols for s in event]
-                for symbol in itertools.chain(prediction['matches'], missing_symbols):
-                    if symbol not in symbol_probability_cache or symbol not in symbol_frequency_cache:
-                        # Check if symbol exists in cache, skip if not (new/unknown symbol)
-                        if symbol not in symbol_cache:
-                            symbol_probability_cache[symbol] = 0
-                            symbol_frequency_cache[symbol] = 0
-                            continue
-                        symbol_data = symbol_cache[symbol]
-                        if total_symbols_in_patterns_frequencies > 0:
-                            symbol_probability = float(symbol_data['pattern_member_frequency'] / total_symbols_in_patterns_frequencies)
-                        else:
-                            symbol_probability = 0.0
-                        symbol_probability_cache[symbol] = symbol_probability
-                        symbol_frequency_cache[symbol] += symbol_data['frequency']
-            symbol_frequency_in_state = Counter(state)
-            # We need to account for new symbols that appear in state that have never been observed before, therefore would fail on key error in symbol_probability_cache.
-            for symbol in symbol_frequency_in_state.keys():
-                if symbol not in symbol_frequency_cache:
-                    symbol_frequency_cache[symbol] = 0
-            
-            # Check if we have valid pattern frequencies before proceeding
-            if total_ensemble_pattern_frequencies == 0:
-                logger.warning(f" {self.name} [ PatternProcessor predictPattern ] total_ensemble_pattern_frequencies is 0, all predictions have 0 frequency")
-                # Still proceed but be careful with divisions
-            
-            for prediction in causal_patterns:
-                _present = list(chain(*prediction.present)) #list(chain(*prediction['present']))
-                all_symbols = set(_present + state)
-                symbol_frequency_in_pattern = Counter(_present)
-                state_frequency_vector = [(symbol_probability_cache.get(symbol, 0) * symbol_frequency_in_state.get(symbol, 0)) for symbol in all_symbols]
-                pattern_frequency_vector = [(symbol_probability_cache.get(symbol, 0) * symbol_frequency_in_pattern.get(symbol, 0)) for symbol in all_symbols]
-                _p_e_h = float(self.patternProbability(prediction['frequency'], total_pattern_frequencies)) # p(e|h)
-                # Calculate cosine distance using numpy
-                # Cosine distance = 1 - cosine similarity
-                # Cosine similarity = dot(a, b) / (norm(a) * norm(b))
-                if all(v == 0 for v in state_frequency_vector) or all(v == 0 for v in pattern_frequency_vector):
-                    distance = 1.0  # Maximum distance for zero vectors
-                else:
-                    try:
-                        # Convert to numpy arrays
-                        a = np.array(state_frequency_vector)
-                        b = np.array(pattern_frequency_vector)
-                        
-                        # Calculate cosine similarity
-                        dot_product = np.dot(a, b)
-                        norm_a = np.linalg.norm(a)
-                        norm_b = np.linalg.norm(b)
-                        
-                        if norm_a == 0 or norm_b == 0:
-                            distance = 1.0
-                        else:
-                            cosine_similarity = dot_product / (norm_a * norm_b)
-                            distance = float(1 - cosine_similarity)
-                            
-                        # Handle NaN case
-                        if distance != distance:  # NaN check
-                            distance = 1.0
-                    except:
-                        distance = 1.0
-                if total_ensemble_pattern_frequencies > 0:
-                    itfdf_similarity = round(float(1 - (distance * prediction['frequency'] / total_ensemble_pattern_frequencies)), 12)
-                else:
-                    itfdf_similarity = 0.0
-                prediction['itfdf_similarity'] = itfdf_similarity
-                prediction['entropy'] = round(float(sum([classic_expectation(symbol_probability_cache.get(symbol, 0)) for symbol in _present])), 12)
-                # Protect hamiltonian calculation from empty _present
-                if len(_present) > 0:
-                    try:
-                        # Use cached calculations if available
-                        if self.cached_calculator:
-                            # Note: cached calculator requires async, so for now use fallback
-                            # TODO: Convert this method to async for full cache integration
-                            prediction['hamiltonian'] = round(float(hamiltonian(_present, total_symbols)), 12)
-                            prediction['grand_hamiltonian'] = round(float(grand_hamiltonian(_present, symbol_probability_cache, total_symbols)), 12)
-                        else:
-                            prediction['hamiltonian'] = round(float(hamiltonian(_present, total_symbols)), 12)
-                            prediction['grand_hamiltonian'] = round(float(grand_hamiltonian(_present, symbol_probability_cache, total_symbols)), 12)
-                    except ZeroDivisionError as e:
-                        logger.error(f"ZeroDivisionError in metrics calculation: _present={_present}, total_symbols={total_symbols}, error={e}")
-                        raise
-                else:
-                    # If present is empty, set default values
-                    prediction['hamiltonian'] = 0.0
-                    prediction['grand_hamiltonian'] = 0.0
-                # Calculate confluence - conditionalProbability returns 0 for empty state which is safe
-                try:
-                    prediction['confluence'] = round(float(_p_e_h * (1 - conditionalProbability(_present, symbol_probability_cache) ) ), 12) # = probability of sequence occurring in observations * ( 1 - probability of sequence occurring randomly)
-                except ZeroDivisionError as e:
-                    logger.error(f"ZeroDivisionError in confluence calculation: _p_e_h={_p_e_h}, _present={_present}, symbol_probability_cache={symbol_probability_cache}, error={e}")
-                    raise
-                # Temporarily set placeholder values - will be calculated ensemble-wide
-                prediction['predictive_information'] = 0.0
-                prediction['potential'] = 0.0
-                
-                try:
-                    prediction['emotives'] = average_emotives(prediction['emotives'])
-                except ZeroDivisionError as e:
-                    logger.error(f"ZeroDivisionError in average_emotives: emotives={prediction['emotives']}, error={e}")
-                    raise
-                prediction.pop('pattern_data')
-
-        except KeyError as e:
-            raise Exception(f"\nException in PatternProcessor.predictPattern: Missing required field in prediction! {self.kb_id}: {e}")
-        except ZeroDivisionError as e:
-            import traceback
-            tb = traceback.format_exc()
-            logger.error(f"Division by zero in predictPattern: state={state}, total_symbols={total_symbols}, total_symbols_in_patterns_frequencies={total_symbols_in_patterns_frequencies}, total_pattern_frequencies={total_pattern_frequencies}")
-            logger.error(f"Full traceback: {tb}")
-            raise Exception(f"\nException in PatternProcessor.predictPattern: Division by zero error! {self.kb_id}: {e}")
-        except Exception as e:
-            import traceback
-            tb = traceback.format_exc()
-            raise Exception(f"\nException in PatternProcessor.predictPattern: Error in potential calculation! {self.kb_id}: {e}\nTraceback: {tb}")
-        
-        # Calculate ensemble-based predictive information and update potentials
-        try:
-            causal_patterns, future_potentials = calculate_ensemble_predictive_information(causal_patterns)
-            # Store future_potentials for the API response
-            self.future_potentials = future_potentials
-        except Exception as e:
-            logger.error(f"Error in ensemble predictive information calculation: {e}")
-            # Set defaults if calculation fails
-            for prediction in causal_patterns:
-                if 'predictive_information' not in prediction:
-                    prediction['predictive_information'] = 0.0
-                if 'potential' not in prediction:
-                    prediction['potential'] = prediction.get('similarity', 0.0) * 0.0
-            self.future_potentials = []
-        
-        try:
-            active_causal_patterns = sorted([x for x in heapq.nlargest(self.max_predictions,causal_patterns,key=itemgetter('potential'))], reverse=True, key=itemgetter('potential'))
-        except Exception as e:
-            raise Exception("\nException in PatternProcessor.predictPattern: Error in sorting predictions! %s: %s" %(self.kb_id, e))
-        logger.debug(" [ PatternProcessor predictPattern ] %s active_causal_patterns" %(len(active_causal_patterns)))
-        return active_causal_patterns
-    
     async def predictPattern(self, state: List[str], stm_events: Optional[List[List[str]]] = None, max_workers: Optional[int] = None, batch_size: int = 100) -> List[Dict[str, Any]]:
         """Predict patterns matching the given state (async with caching support).
 
@@ -600,7 +380,7 @@ class PatternProcessor:
             ValueError: If predictions are missing required fields.
         """
         logger.info(f"*** {self.name} [ PatternProcessor predictPattern (async) called with state={state} ]")
-        
+
         # Fetch metadata concurrently
         total_symbols = self.superkb.symbols_kb.count_documents({})
         metadata_doc = self.superkb.metadata.find_one({"class": "totals"})
@@ -610,22 +390,22 @@ class PatternProcessor:
         else:
             total_symbols_in_patterns_frequencies = 0
             total_pattern_frequencies = 0
-        
+
         try:
             # Use async parallel pattern matching
             causal_patterns = await self.patterns_searcher.causalBeliefAsync(
                 state, self.target_class_candidates, stm_events, max_workers, batch_size)
         except Exception as e:
             raise Exception(f"\nException in PatternProcessor.predictPattern: Error in causalBeliefAsync! {self.kb_id}: {e}")
-        
+
         # Early return if no patterns found
         if not causal_patterns:
             logger.debug(f" {self.name} [ PatternProcessor predictPattern (async) ] No causal patterns found, returning empty list")
             return []
-        
+
         # Validate all predictions have required fields (same validation as sync version)
         for idx, prediction in enumerate(causal_patterns):
-            required_fields = ['frequency', 'matches', 'missing', 'evidence', 
+            required_fields = ['frequency', 'matches', 'missing', 'evidence',
                               'confidence', 'snr', 'fragmentation', 'emotives', 'present']
             missing_fields = []
             for field in required_fields:
@@ -634,13 +414,13 @@ class PatternProcessor:
             if missing_fields:
                 pred_name = prediction.get('name', f'prediction_{idx}')
                 raise ValueError(f"Prediction '{pred_name}' missing required fields: {missing_fields}")
-        
+
         try:
             # Pre-calculate symbol probability cache using optimized aggregation pipeline
             symbol_probability_cache = {}
             symbol_frequency_cache = Counter()
             total_ensemble_pattern_frequencies = 0
-            
+
             # Use optimized aggregation pipeline to load all symbols
             try:
                 symbol_cache = self.query_manager.get_all_symbols_optimized(
@@ -654,7 +434,7 @@ class PatternProcessor:
                 all_symbols = self.superkb.symbols_kb.find({}, {'_id': False}, cursor_type=pymongo.CursorType.EXHAUST)
                 for symbol in all_symbols:
                     symbol_cache[symbol['name']] = symbol
-            
+
             # Calculate totals and caches
             for prediction in causal_patterns:
                 total_ensemble_pattern_frequencies += prediction['frequency']
@@ -675,15 +455,15 @@ class PatternProcessor:
                             symbol_probability = 0.0
                         symbol_probability_cache[symbol] = symbol_probability
                         symbol_frequency_cache[symbol] += symbol_data['frequency']
-            
+
             symbol_frequency_in_state = Counter(state)
             for symbol in symbol_frequency_in_state.keys():
                 if symbol not in symbol_frequency_cache:
                     symbol_frequency_cache[symbol] = 0
-            
+
             if total_ensemble_pattern_frequencies == 0:
                 logger.warning(f" {self.name} [ PatternProcessor predictPattern (async) ] total_ensemble_pattern_frequencies is 0")
-            
+
             # Process predictions with metrics calculations (same logic as sync version)
             for prediction in causal_patterns:
                 _present = list(chain(*prediction.present))
@@ -692,7 +472,7 @@ class PatternProcessor:
                 state_frequency_vector = [(symbol_probability_cache.get(symbol, 0) * symbol_frequency_in_state.get(symbol, 0)) for symbol in all_symbols]
                 pattern_frequency_vector = [(symbol_probability_cache.get(symbol, 0) * symbol_frequency_in_pattern.get(symbol, 0)) for symbol in all_symbols]
                 _p_e_h = float(self.patternProbability(prediction['frequency'], total_pattern_frequencies))
-                
+
                 # Calculate cosine distance using numpy (same as sync version)
                 if all(v == 0 for v in state_frequency_vector) or all(v == 0 for v in pattern_frequency_vector):
                     distance = 1.0
@@ -705,7 +485,7 @@ class PatternProcessor:
                     except Exception as e:
                         logger.warning(f"Error calculating cosine distance: {e}, using default")
                         distance = 1.0
-                
+
                 # Calculate all metrics with caching if available
                 if self.cached_calculator and len(state) > 0:
                     try:
@@ -724,12 +504,12 @@ class PatternProcessor:
                     # Fallback to direct calculation
                     hamiltonian_val = hamiltonian(state, total_symbols)
                     grand_hamiltonian_val = grand_hamiltonian(state, symbol_probability_cache, total_symbols)
-                
+
                 if total_ensemble_pattern_frequencies > 0:
                     itfdf_similarity = 1 - (distance * prediction['frequency'] / total_ensemble_pattern_frequencies)
                 else:
                     itfdf_similarity = 0.0
-                
+
                 # Calculate confluence with conditional probability caching if available
                 try:
                     if self.cached_calculator and len(_present) > 0:

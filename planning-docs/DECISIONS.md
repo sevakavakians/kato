@@ -263,6 +263,58 @@
 
 ---
 
+## 2025-10-05 - Dead Code Removal and Quality Baseline Establishment
+**Decision**: Remove obsolete predictPatternSync method and establish code quality monitoring baselines
+**Rationale**:
+- predictPatternSync (214 lines) is dead code - replaced by async predictPattern with Redis caching
+- Build artifacts (__pycache__) creating repository bloat and potential runtime issues
+- Documentation drift causing confusion about actual system state
+- Need quality baselines for tracking technical debt reduction
+
+**Dead Code Removal Details**:
+- Removed predictPatternSync method from kato/workers/pattern_processor.py (lines 365-579)
+- Verified method not called anywhere in codebase or tests
+- Eliminated confusing TODO comment about async conversion (already completed)
+- Cleaned 419 __pycache__ directories across project
+
+**Documentation Synchronization**:
+- Updated PROJECT_OVERVIEW.md to reflect Session Architecture Phase 2 completion
+- Corrected test metrics (17/17 session tests, 42/42 API tests passing)
+- Documented user_id → node_id migration completion
+- Revised Current Focus Areas to maintenance phase
+
+**Quality Baselines Established**:
+- Ruff linting: 6,315 issues identified (4,506 auto-fixable)
+- Bandit security: 25 issues (16 high-severity MD5 warnings)
+- Vulture dead code: ~20 unused imports/variables found
+- Coverage: Pending - recommend `make test-cov` for baseline
+
+**Alternatives Considered**:
+- Keep predictPatternSync for backward compatibility: No external users, safe to remove
+- Manual quality checks: Automated tools provide consistent, repeatable baselines
+- Fix all issues immediately: Better to establish baseline first, then iterate
+
+**Impact**:
+- Code reduction: 214 lines removed
+- Repository cleanup: 419 directories removed
+- Documentation accuracy: Planning docs now match reality
+- Quality visibility: Clear roadmap for improvements via automated tools
+
+**Next Steps**:
+1. Run `ruff check --fix` to auto-fix 4,506 style issues
+2. Add `usedforsecurity=False` to MD5 hash calls (eliminates 16 warnings)
+3. Review and remove vulture findings (unused imports/variables)
+4. Run `make test-cov` to establish coverage baseline
+5. Schedule monthly quality checks to track progress
+
+**Confidence**: Very High - Dead code removal verified safe, automated tools provide reliable metrics
+**Files Modified**:
+- kato/workers/pattern_processor.py (214 lines removed)
+- planning-docs/PROJECT_OVERVIEW.md (status and metrics updated)
+**Archived**: planning-docs/completed/refactors/2025-10-05-technical-debt-phase3-cleanup.md
+
+---
+
 ## Template for New Decisions
 ```
 ## YYYY-MM-DD HH:MM - [Decision Title]

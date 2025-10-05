@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import os
 import re
 from pathlib import Path
 
@@ -10,16 +9,16 @@ emotives_tests = []
 all_tests = []
 
 for test_file in test_dir.rglob('test_*.py'):
-    with open(test_file, 'r') as f:
+    with open(test_file) as f:
         content = f.read()
         matches = re.findall(r'def (test_\w+)', content)
-        
+
         for test_name in matches:
             all_tests.append((test_file.name, test_name))
-            
+
             if 'vector' in test_name.lower():
                 vector_tests.append((test_file.name, test_name))
-            
+
             if 'emotive' in test_name.lower():
                 emotives_tests.append((test_file.name, test_name))
 

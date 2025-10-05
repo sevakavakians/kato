@@ -1,12 +1,10 @@
 import logging
-
-from numpy import array
-from pymongo import ASCENDING, DESCENDING, MongoClient
-from kato.config.settings import get_settings
-
-
 from collections import Counter
 from itertools import chain
+
+from pymongo import ASCENDING, DESCENDING
+
+from kato.config.settings import get_settings
 
 logger = logging.getLogger('kato.informatics.knowledge-base')
 # Configure logging lazily
@@ -54,24 +52,24 @@ class SuperKnowledgeBase:
         "Provide the primitive's ID."
         self.id = primitive_id
         self.persistence = int(persistence)
-        
+
         # Accept settings via dependency injection, fallback to get_settings() for compatibility
         if settings is None:
             settings = get_settings()
-        
+
         # Configure logger level if not already set
         if logger.level == 0:  # Logger level not set
             logger.setLevel(getattr(logging, settings.logging.log_level))
-        
+
         logger.info(f" Attaching knowledgebase for {self.id} using optimized connection manager ...")
         try:
             # Use optimized connection manager for improved performance and reliability
             from kato.storage.connection_manager import get_mongodb_client
             self.connection = get_mongodb_client()
-            
+
             # Test the connection
             self.connection.admin.command('ping')
-            logger.info(f" MongoDB connection successful via optimized connection manager")
+            logger.info(" MongoDB connection successful via optimized connection manager")
             # CRITICAL FIX: Changed from w=0 (fire-and-forget) to w="majority" for data durability
             self.write_concern = {"w": "majority", "j": True}  # v2.0: Ensure write acknowledgment
             self.knowledge = self.connection[self.id]
@@ -88,7 +86,7 @@ class SuperKnowledgeBase:
             self.symbols_kb.create_index( [("name", ASCENDING)], background=1, unique=1 )
             # Actions associated with symbols
             self.associative_action_kb.create_index( [("symbol", ASCENDING)], background=1 )
-            
+
             # Compound indexes for optimized queries
             # For finding high-frequency patterns quickly
             self.patterns_kb.create_index([("frequency", DESCENDING), ("name", ASCENDING)], background=1)
@@ -99,18 +97,18 @@ class SuperKnowledgeBase:
             # For retrieving predictions by observation ID
             self.predictions_kb.create_index([("unique_id", ASCENDING), ("time", DESCENDING)], background=1)
 
-            setattr(self.patterns_kb, "learnPattern", self.learnPattern)
-            setattr(self.associative_action_kb, "learnAssociation", self.learnAssociation)
+            self.patterns_kb.learnPattern = self.learnPattern
+            self.associative_action_kb.learnAssociation = self.learnAssociation
 
-            setattr(self.patterns_kb, "__pkb_repr__", self.__pkb_repr__)
-            setattr(self.associative_action_kb, "__akb_repr__", self.__akb_repr__)
+            self.patterns_kb.__pkb_repr__ = self.__pkb_repr__
+            self.associative_action_kb.__akb_repr__ = self.__akb_repr__
 
             self.total_utility = None
             self.emotives_available = set()
             self.total_information = None
             self.entropy = None
             self.histogram = None
-            
+
             if not self.metadata.find_one({"class": "totals"}):
                 self.metadata.insert_one({"class": "totals",
                                     "total_pattern_frequencies": 0,
@@ -128,7 +126,7 @@ class SuperKnowledgeBase:
         Used only if there is a need to clear out the entire knowledgebase.
         """
         self.connection.drop_database(self.id)
-        
+
         self.patterns_kb.drop()
         self.symbols_kb.drop()
         self.associative_action_kb.drop()
@@ -142,7 +140,7 @@ class SuperKnowledgeBase:
         self.patterns_kb.create_index([("name", ASCENDING)], background=1, unique=1)
         self.symbols_kb.create_index([("name", ASCENDING)], background=1, unique=1)
         self.associative_action_kb.create_index([("symbol", ASCENDING)], background=1)
-        
+
         # Compound indexes
         self.patterns_kb.create_index([("frequency", DESCENDING), ("name", ASCENDING)], background=1)
         self.patterns_kb.create_index([("pattern_data", ASCENDING), ("name", ASCENDING)], background=1)
@@ -187,7 +185,7 @@ class SuperKnowledgeBase:
         Core machine learning function.
         Use this to learn patterns by passing a Pattern object.  Optional keywords available.
         """
-        
+
         try:
             if emotives:
                 self.emotives_available.update(emotives.keys())
@@ -204,28 +202,28 @@ class SuperKnowledgeBase:
                                                         "length": pattern_object.length,
                                                         "emotives": {} }},
                                       upsert=True)
-            
+
             # Update symbol statistics for all symbols in this pattern
             # Count occurrences of each symbol across the entire pattern data
             symbols = Counter(list(chain(*pattern_object.pattern_data)))
-            
+
             # Prepare emotive updates for MongoDB dot notation
             __s = {}
             for emotive, value in emotives.items():
                 __s["emotives.%s" %emotive] = value
-            
+
             # Track symbol statistics:
             # - pattern_member_frequency: how many patterns contain this symbol
             # - frequency: total occurrences of this symbol
             __x = {"pattern_member_frequency": 1}
             total_symbols_in_patterns_frequencies = len(symbols)
             total_pattern_frequencies = 1
-            
+
             # Update each symbol's statistics in the database
             for symbol, c in symbols.items():
                 __x["frequency"] = c  # How many times symbol appears in this pattern
                 __x.update(__s)  # Add emotive values
-                
+
                 # Atomic upsert: increment counters or create new entry
                 self.symbols_kb.update_one({ "name": symbol},
                                         {"$inc": {**__x},  # Increment all counters
@@ -251,14 +249,14 @@ class SuperKnowledgeBase:
             #                             upsert=True)
 
             ## Update totals in metadata:
-            
+
             total_symbol_frequencies = sum(symbols.values())
 
             self.metadata.update_one({"class": "totals"},
                                       {"$inc": {"total_pattern_frequencies": total_pattern_frequencies,
                                                 "total_symbol_frequencies": total_symbol_frequencies,
                                                 "total_symbols_in_patterns_frequencies": total_symbols_in_patterns_frequencies}})
-            
+
             return not result.matched_count ### If 1, then this was known, so return False to be "new"
 
         except Exception as e:
@@ -273,7 +271,7 @@ class SuperKnowledgeBase:
             return self.patterns_kb.find_one({by: pattern})
         except Exception as e:
             raise Exception("\nException in getPattern (%s): %s" %(pattern, e))
-    
+
     def getTargetedPatternNames(self, target_class):
         """
         Returns a list of pattern names that are classified by the target_class, i.e. target_class symbol is in the last event.

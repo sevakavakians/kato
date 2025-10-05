@@ -1,20 +1,14 @@
 # cimport cython
 import logging
 import os
-import traceback
-from typing import Counter
-from multiprocessing import cpu_count, Lock
+from multiprocessing import Lock, cpu_count
 
-from kato.workers.vector_processor import VectorProcessor
-from kato.workers.pattern_processor import PatternProcessor
+from kato.config.settings import get_settings
 from kato.workers.memory_manager import MemoryManager
 from kato.workers.observation_processor import ObservationProcessor
 from kato.workers.pattern_operations import PatternOperations
-from kato.informatics.metrics import average_emotives
-from kato.config.settings import get_settings
-
-
-
+from kato.workers.pattern_processor import PatternProcessor
+from kato.workers.vector_processor import VectorProcessor
 
 logger = logging.getLogger('kato.workers.kato-processor')
 # Logger level will be set when first instance is created
@@ -28,11 +22,11 @@ class KatoProcessor:
         if settings is None:
             settings = get_settings()
         self.settings = settings
-        
+
         # Configure logger level if not already set
         if logger.level == 0:  # Logger level not set
             logger.setLevel(getattr(logging, settings.logging.log_level))
-        
+
         self.genome_manifest = genome_manifest
         self.id = processor_id  # Direct processor ID parameter instead of from genome_manifest
         self.name = self.genome_manifest["name"]
@@ -53,7 +47,7 @@ class KatoProcessor:
         self.knowledge = self.pattern_processor.superkb.knowledge
         self.pattern_processor.patterns_kb = self.pattern_processor.superkb.patterns_kb
         self.predictions_kb = self.knowledge.predictions_kb
-        
+
         # Mark components that need async initialization
         self._metrics_cache_initialized = False
         self.distributed_stm_manager = None
@@ -68,14 +62,14 @@ class KatoProcessor:
             self.memory_manager
         )
         self.observation_processor = ObservationProcessor(
-            self.vector_processor, self.pattern_processor, 
+            self.vector_processor, self.pattern_processor,
             self.memory_manager, self.pattern_operations,
             self.SORT, self.pattern_processor.max_pattern_length
         )
-        
+
         # Initialize state through memory manager
         self.memory_manager.reset_primitive_variables()
-        
+
         # Expose commonly accessed attributes for backward compatibility
         self.symbols = self.memory_manager.symbols
         self.current_emotives = self.memory_manager.current_emotives
@@ -93,7 +87,7 @@ class KatoProcessor:
         """
         if not self._async_initialization_pending:
             return  # Already initialized
-        
+
         try:
             # Initialize metrics cache for pattern processor
             if not self._metrics_cache_initialized:
@@ -102,7 +96,7 @@ class KatoProcessor:
                 logger.info(f"Metrics cache initialized for processor {self.id}")
         except Exception as e:
             logger.warning(f"Failed to initialize metrics cache for processor {self.id}: {e}")
-        
+
         try:
             # Initialize distributed STM if Redis is available
             from kato.storage.redis_streams import get_distributed_stm_manager
@@ -114,7 +108,7 @@ class KatoProcessor:
         except Exception as e:
             logger.warning(f"Failed to initialize distributed STM for processor {self.id}: {e}")
             self.distributed_stm_manager = None
-        
+
         self._async_initialization_pending = False
         logger.info(f"Async initialization completed for processor {self.id}")
 
@@ -151,7 +145,7 @@ class KatoProcessor:
         self.predictions = []
         # Update local references
         self.symbols = self.memory_manager.symbols
-        
+
         # Publish clear event to distributed STM if available
         if self.distributed_stm_manager:
             try:
@@ -197,21 +191,21 @@ class KatoProcessor:
         """
         # Process observation through the observation processor
         result = await self.observation_processor.process_observation(data)
-        
+
         # Update local state from result
         self.predictions = result.get('predictions', [])
         self.symbols = self.memory_manager.symbols
         self.current_emotives = self.memory_manager.current_emotives
         self.percept_data = self.memory_manager.percept_data
         self.time = self.memory_manager.time
-        
+
         # Publish to distributed STM if available
         if self.distributed_stm_manager and data:
             try:
                 asyncio.run(self.distributed_stm_manager.observe_distributed(data))
             except Exception as e:
                 logger.warning(f"Failed to publish observation to distributed STM: {e}")
-        
+
         # Return format expected by callers
         return {
             'status': 'observed',
@@ -221,7 +215,7 @@ class KatoProcessor:
             'time': self.time,
             'instance_id': self.id
         }
-            
+
     def get_predictions(self, unique_id={}):
         """
         Retrieve predictions - delegates to pattern operations.
@@ -232,7 +226,7 @@ class KatoProcessor:
         uid = None
         if unique_id:
             uid = unique_id.get('unique_id')
-        
+
         if not uid:
             # Return cached predictions from last observe() call
             return self.predictions
@@ -251,7 +245,7 @@ class KatoProcessor:
         stm_data = self.memory_manager.get_stm_state()
         logger.debug(f"get_stm returning: {stm_data}")
         return stm_data
-    
+
     def get_percept_data(self):
         """Return percept data"""
         return self.memory_manager.percept_data
@@ -282,11 +276,11 @@ class KatoProcessor:
                     self.observation_processor.max_pattern_length = value
                 # No need to update stm_mode in observation_processor - it reads from pattern_processor
         return "genes-updated"
-    
+
     # ========================================================================
     # v2.0 Session State Management Methods
     # ========================================================================
-    
+
     def set_stm(self, stm):
         """
         Set the short-term memory to a specific state.
@@ -300,7 +294,7 @@ class KatoProcessor:
         # Fix: Convert list to deque to maintain type consistency
         self.pattern_processor.STM = deque(stm) if stm else deque()
         return
-    
+
     def set_emotives_accumulator(self, emotives_acc):
         """
         Set the emotives accumulator to a specific state.
@@ -311,7 +305,7 @@ class KatoProcessor:
         """
         self.memory_manager.emotives_accumulator = emotives_acc.copy() if emotives_acc else []
         return
-    
+
     def get_emotives_accumulator(self):
         """
         Get the current emotives accumulator state.

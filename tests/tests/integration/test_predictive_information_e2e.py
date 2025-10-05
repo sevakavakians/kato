@@ -3,7 +3,6 @@ End-to-end integration tests for predictive information in predictions.
 """
 
 import pytest
-from tests.fixtures.kato_fixtures import kato_fixture
 
 
 class TestPredictiveInformationE2E:
@@ -30,7 +29,7 @@ class TestPredictiveInformationE2E:
             assert isinstance(pred['predictive_information'], float)
             assert pred['predictive_information'] >= 0.0
             assert pred['predictive_information'] <= 1.0  # Normalized value
-    
+
     def test_potential_uses_pi_formula(self, kato_fixture):
         """Verify potential is calculated as similarity * predictive_information."""
         # Learn a pattern
@@ -55,7 +54,7 @@ class TestPredictiveInformationE2E:
             expected_potential = similarity * pi
             assert abs(potential - expected_potential) < 0.0001, \
                 f"Potential {potential} != similarity {similarity} * PI {pi}"
-    
+
     def test_pi_increases_with_pattern_repetition(self, kato_fixture):
         """Test that PI increases when patterns are learned multiple times."""
         # Learn the same pattern multiple times
@@ -77,7 +76,7 @@ class TestPredictiveInformationE2E:
         # (as co-occurrence statistics build up)
         max_pi = max(p['predictive_information'] for p in predictions)
         assert max_pi >= 0.0  # Should have some predictive information
-    
+
     def test_different_patterns_have_different_pi(self, kato_fixture):
         """Test that different patterns have different PI values."""
         # Learn first pattern (highly predictable)

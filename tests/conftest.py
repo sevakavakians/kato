@@ -3,8 +3,8 @@ Pytest configuration and shared fixtures.
 This file is automatically loaded by pytest.
 """
 
-import sys
 import os
+import sys
 
 # Get the absolute path to the tests directory
 test_root = os.path.dirname(os.path.abspath(__file__))

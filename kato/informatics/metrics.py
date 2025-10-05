@@ -1,15 +1,9 @@
-import math
-import statistics
-import tempfile
-import traceback
-from collections import Counter, OrderedDict
-from functools import reduce
-from itertools import chain
-from math import ceil, log, log10
-from operator import mul, add, attrgetter
-from os import environ
 import logging
-from typing import Dict, List, Any, Optional, Union, Tuple, Set
+from functools import reduce
+from math import log, log10
+from operator import add
+from os import environ
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 logger = logging.getLogger('kato.informatics.metrics')
 logger.setLevel(getattr(logging, environ.get('LOG_LEVEL', 'INFO')))
@@ -192,16 +186,16 @@ def hamiltonian(state: List[str], total_symbols: int) -> float:
         raise
 
 
-def confluence(state: List[str], symbols_kb: Dict[str, float], P1: Optional[float] = None) -> float:
+def confluence(state: List[str], symbols_kb: Dict[str, float], _P1: Optional[float] = None) -> float:
     """Calculate the confluence of a pattern.
-    
+
     Confluence measures the probability of a pattern occurring vs random chance.
     Formula: P(pattern in observations) * (1 - P(pattern occurring randomly))
-    
+
     Args:
         state: List of symbols in the pattern.
         symbols_kb: Dictionary of symbol probabilities from knowledge base.
-        P1: Optional probability of sequence occurring in observations.
+        _P1: Optional probability of sequence occurring in observations (reserved for future use).
         
     Returns:
         The conditional probability of the pattern.

@@ -12,8 +12,9 @@ Functions:
 """
 
 from collections import namedtuple as _namedtuple
+from collections.abc import Generator, Sequence
 from functools import reduce
-from typing import List, Tuple, Optional, Dict, Any, Sequence, Callable, Generator, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 __all__ = ['get_close_matches', 'ndiff', 'restore', 'SequenceMatcher',
            'Differ','IS_CHARACTER_JUNK', 'IS_LINE_JUNK', 'context_diff',
@@ -129,7 +130,7 @@ class SequenceMatcher:
         """
         b = self.b
         self.b2j = b2j = {}
-        
+
         for i, elt in enumerate(b):
             indices = b2j.setdefault(elt, [])
             indices.append(i)
@@ -162,15 +163,15 @@ class SequenceMatcher:
         """
         a, b, b2j = self.a, self.b, self.b2j
         besti, bestj, bestsize = alo, blo, 0
-        
+
         # Find longest junk-free match
         j2len: Dict[int, int] = {}
         nothing: List[int] = []
-        
+
         for i in range(alo, ahi):
             j2lenget = j2len.get
             newj2len: Dict[int, int] = {}
-            
+
             for j in b2j.get(a[i], nothing):
                 if j < blo:
                     continue
@@ -203,30 +204,30 @@ class SequenceMatcher:
         """
         if self.matching_blocks is not None:
             return list(map(Match._make, self.matching_blocks))
-            
+
         la, lb = len(self.a), len(self.b)
-        
+
         # Maintain a queue of blocks to examine
         queue: List[Tuple[int, int, int, int]] = [(0, la, 0, lb)]
         matching_blocks: List[Tuple[int, int, int]] = []
-        
+
         while queue:
             alo, ahi, blo, bhi = queue.pop()
             i, j, k = x = self.find_longest_match(alo, ahi, blo, bhi)
-            
+
             if k:  # If k is 0, there was no matching block
                 matching_blocks.append(x)
                 if alo < i and blo < j:
                     queue.append((alo, i, blo, j))
                 if i+k < ahi and j+k < bhi:
                     queue.append((i+k, ahi, j+k, bhi))
-                    
+
         matching_blocks.sort()
-        
+
         # Collapse adjacent equal blocks
         i1 = j1 = k1 = 0
         non_adjacent: List[Tuple[int, int, int]] = []
-        
+
         for i2, j2, k2 in matching_blocks:
             if i1 + k1 == i2 and j1 + k1 == j2:
                 # Adjacent blocks - collapse them
@@ -236,10 +237,10 @@ class SequenceMatcher:
                 if k1:
                     non_adjacent.append((i1, j1, k1))
                 i1, j1, k1 = i2, j2, k2
-                
+
         if k1:
             non_adjacent.append((i1, j1, k1))
-            
+
         non_adjacent.append((la, lb, 0))
         self.matching_blocks = non_adjacent
         return list(map(Match._make, self.matching_blocks))
@@ -267,10 +268,10 @@ class SequenceMatcher:
         """
         if self.opcodes is not None:
             return self.opcodes
-            
+
         i = j = 0
         self.opcodes = answer = []
-        
+
         for ai, bj, size in self.get_matching_blocks():
             tag = ''
             if i < ai and j < bj:
@@ -279,15 +280,15 @@ class SequenceMatcher:
                 tag = 'delete'
             elif j < bj:
                 tag = 'insert'
-                
+
             if tag:
                 answer.append((tag, i, ai, j, bj))
-                
+
             i, j = ai+size, bj+size
-            
+
             if size:
                 answer.append(('equal', ai, i, bj, j))
-                
+
         return answer
 
     def get_grouped_opcodes(self, n: int = 3) -> Generator[List[Tuple[str, int, int, int, int]], None, None]:
@@ -305,7 +306,7 @@ class SequenceMatcher:
         codes = self.get_opcodes()
         if not codes:
             codes = [("equal", 0, 1, 0, 1)]
-            
+
         # Fixup leading and trailing groups if they show no changes
         if codes[0][0] == 'equal':
             tag, i1, i2, j1, j2 = codes[0]
@@ -316,7 +317,7 @@ class SequenceMatcher:
 
         nn = n + n
         group: List[Tuple[str, int, int, int, int]] = []
-        
+
         for tag, i1, i2, j1, j2 in codes:
             # End current group and start new one for large unchanged ranges
             if tag == 'equal' and i2-i1 > nn:
@@ -325,7 +326,7 @@ class SequenceMatcher:
                 group = []
                 i1, j1 = max(i1, i2-n), max(j1, j2-n)
             group.append((tag, i1, i2, j1, j2))
-            
+
         if group and not (len(group)==1 and group[0][0] == 'equal'):
             yield group
 
@@ -360,10 +361,10 @@ class SequenceMatcher:
             for elt in self.b:
                 fullbcount[elt] = fullbcount.get(elt, 0) + 1
         fullbcount = self.fullbcount
-        
+
         avail: Dict[Any, int] = {}
         availhas, matches = avail.__contains__, 0
-        
+
         for elt in self.a:
             if availhas(elt):
                 numb = avail[elt]
@@ -372,7 +373,7 @@ class SequenceMatcher:
             avail[elt] = numb - 1
             if numb > 0:
                 matches = matches + 1
-                
+
         return _calculate_ratio(matches, len(self.a) + len(self.b))
 
     def real_quick_ratio(self) -> float:
@@ -401,7 +402,7 @@ class SequenceMatcher:
                 g = self._dump('+', self.b, blo, bhi)
             else:
                 continue
-                
+
             for line in g:
                 yield line
 
@@ -420,7 +421,7 @@ class SequenceMatcher:
         for i in range(lo, hi):
             yield '%s %s' % (tag, x[i])
 
-    def _plain_replace(self, a: Sequence[Any], alo: int, ahi: int, 
+    def _plain_replace(self, a: Sequence[Any], alo: int, ahi: int,
                        b: Sequence[Any], blo: int, bhi: int) -> Generator[str, None, None]:
         """Generate replacement diff for two blocks.
         
@@ -436,7 +437,7 @@ class SequenceMatcher:
             Diff lines showing the replacement.
         """
         assert alo < ahi and blo < bhi
-        
+
         # Dump shorter block first to reduce memory burden
         if bhi - blo < ahi - alo:
             first = self._dump('+', b, blo, bhi)

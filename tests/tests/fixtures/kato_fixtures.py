@@ -3,16 +3,17 @@ FastAPI-based fixtures for KATO tests.
 Supports the new FastAPI architecture with direct container access.
 """
 
+import json
 import os
+import subprocess
 import sys
 import time
-import json
-import subprocess
-import requests
-import pytest
-from typing import Dict, Any, Optional, List
 import uuid
 from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import pytest
+import requests
 
 # Try to import docker, but don't fail if it's not available
 try:
@@ -28,7 +29,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../.
 
 class KATOFastAPIFixture:
     """Test fixture for FastAPI-based KATO architecture."""
-    
+
     def __init__(self, processor_name: str = "test", use_docker: bool = True):
         """Initialize KATO FastAPI test fixture.
         
@@ -47,7 +48,7 @@ class KATOFastAPIFixture:
         self.services_available = False
         self.session_id = None  # Will be created per test
         self.session_config = {}  # Session-specific configuration
-        
+
         if use_docker and HAS_DOCKER_PACKAGE:
             try:
                 self.docker_client = docker.from_env()
@@ -57,19 +58,19 @@ class KATOFastAPIFixture:
         elif use_docker and not HAS_DOCKER_PACKAGE:
             print("Warning: docker Python package not installed, will use existing service")
             self.use_docker = False
-                
+
     def _generate_processor_id(self) -> str:
         """Generate a unique processor ID for complete test isolation."""
         timestamp = int(time.time() * 1000)
         unique = str(uuid.uuid4())[:8]
         clean_name = self.processor_name.replace(' ', '_').replace('-', '_').lower()
-        
+
         # If the processor_name already starts with "test_", don't add another prefix
         if clean_name.startswith("test_"):
             return f"{clean_name}_{timestamp}_{unique}"
         else:
             return f"test_{clean_name}_{timestamp}_{unique}"
-    
+
     def _find_available_port(self) -> int:
         """Find an available port for the container."""
         import socket
@@ -78,14 +79,14 @@ class KATOFastAPIFixture:
             s.listen(1)
             port = s.getsockname()[1]
         return port
-    
+
     def _discover_dynamic_port(self) -> Optional[int]:
         """Discover dynamically assigned port from saved port mappings or Docker."""
         # First try to read from saved ports file
         ports_file = Path(os.path.dirname(__file__)).parent.parent.parent / '.kato-ports.json'
         if ports_file.exists():
             try:
-                with open(ports_file, 'r') as f:
+                with open(ports_file) as f:
                     port_data = json.load(f)
                 # Try to use testing service first, then primary
                 for service_name in ['testing', 'primary']:
@@ -101,7 +102,7 @@ class KATOFastAPIFixture:
                                 continue
             except (json.JSONDecodeError, KeyError):
                 pass
-        
+
         # Try to discover using docker port command
         if HAS_DOCKER_PACKAGE:
             for container_name in ['kato-testing', 'kato-primary']:
@@ -122,15 +123,15 @@ class KATOFastAPIFixture:
                             return port
                 except (subprocess.TimeoutExpired, ValueError, requests.exceptions.RequestException):
                     continue
-        
+
         return None
-    
-    
-    
+
+
+
     def _wait_for_ready(self, timeout: int = 30) -> bool:
         """Wait for the KATO service to be ready."""
         start_time = time.time()
-        
+
         while time.time() - start_time < timeout:
             try:
                 response = requests.get(f"{self.base_url}/health", timeout=2)
@@ -142,9 +143,9 @@ class KATOFastAPIFixture:
             except requests.exceptions.RequestException:
                 pass
             time.sleep(1)
-        
+
         return False
-    
+
     def setup(self):
         """Set up KATO service for testing."""
         if self.use_docker and self.docker_client:
@@ -152,7 +153,7 @@ class KATOFastAPIFixture:
             self.port = self._find_available_port()
             self.container_name = f"kato-test-{self.processor_id}"
             self.base_url = f"http://localhost:{self.port}"
-            
+
             try:
                 # Check if kato:fastapi image exists
                 try:
@@ -167,7 +168,7 @@ class KATOFastAPIFixture:
                         tag='kato:fastapi',
                         rm=True
                     )
-                
+
                 # Create and start container
                 self.container = self.docker_client.containers.run(
                     'kato:fastapi',
@@ -185,19 +186,19 @@ class KATOFastAPIFixture:
                     auto_remove=False,
                     network_mode='bridge'  # Use bridge network for host.docker.internal support
                 )
-                
+
                 # Wait for service to be ready
                 if self._wait_for_ready():
                     self.services_available = True
                     print(f"KATO container {self.container_name} ready at {self.base_url}")
                 else:
-                    raise TimeoutError(f"KATO container did not start within timeout")
-                    
+                    raise TimeoutError("KATO container did not start within timeout")
+
             except Exception as e:
                 print(f"Failed to create Docker container: {e}")
                 # Fall back to using existing service
                 self.use_docker = False
-                
+
         if not self.use_docker:
             # Use existing KATO service (for local development)
             # First try to discover dynamic ports
@@ -225,7 +226,7 @@ class KATOFastAPIFixture:
                             break
                     except requests.exceptions.RequestException:
                         continue
-            
+
             if not self.services_available:
                 print("\n" + "="*60)
                 print("WARNING: No KATO services found!")
@@ -234,15 +235,15 @@ class KATOFastAPIFixture:
                 print("Or run locally with:")
                 print("  PROCESSOR_ID=testing uvicorn kato.services.kato_fastapi:app")
                 print("="*60 + "\n")
-        
+
         # Primary endpoints use automatic session management
         # No need to explicitly create sessions
-    
+
     def _ensure_session(self):
         """Create a session for testing with session-based configuration."""
         if self.session_id:
             return  # Session already created
-        
+
         # Create a session with test-specific configuration
         # IMPORTANT: Direct endpoints use x-test-id header for isolation
         # The processor_id already has the correct "test_" prefix, so we use it directly
@@ -250,23 +251,23 @@ class KATOFastAPIFixture:
             'node_id': self.processor_id,  # processor_id already has correct "test_" prefix
             'config': self.session_config  # Session-specific configuration
         }
-        
+
         response = requests.post(f"{self.base_url}/sessions", json=session_data)
         response.raise_for_status()
         result = response.json()
         self.session_id = result['session_id']
         self.session_created = True
-    
-                
+
+
     def teardown(self):
         """Clean up KATO service after testing."""
         # No explicit session cleanup needed
         pass
-        
+
         # With primary endpoints using automatic session management,
         # each test automatically gets isolated per-user databases.
         # No explicit cleanup needed.
-        
+
         if self.use_docker and self.container:
             try:
                 self.container.stop()
@@ -274,27 +275,27 @@ class KATOFastAPIFixture:
                 print(f"Removed container {self.container_name}")
             except Exception as e:
                 print(f"Error removing container: {e}")
-                
+
     def observe(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Send an observation to KATO using session endpoint for consistency."""
         if not self.services_available:
             pytest.skip("KATO services not available")
-        
+
         # Ensure session exists
         self._ensure_session()
-        
+
         # Use session-based endpoint to match learn method
         response = requests.post(f"{self.base_url}/sessions/{self.session_id}/observe", json=data)
-        
+
         response.raise_for_status()
         result = response.json()
-        
+
         # Transform response to match expected format for tests
         # V2 returns 'ok' but tests expect 'observed'
         status = result.get('status', 'observed')
         if status == 'ok' or status == 'okay':
             status = 'observed'
-        
+
         return {
             'status': status,
             'auto_learned_pattern': result.get('auto_learned_pattern'),
@@ -302,56 +303,56 @@ class KATOFastAPIFixture:
             'time': result.get('time'),
             'unique_id': result.get('unique_id')
         }
-    
+
     def get_stm(self) -> List[List[str]]:
         """Get the current short-term memory using session endpoint for consistency."""
         if not self.services_available:
             pytest.skip("KATO services not available")
-        
+
         # Ensure session exists
         self._ensure_session()
-        
+
         # Use session-based endpoint to match learn method
         response = requests.get(f"{self.base_url}/sessions/{self.session_id}/stm")
-        
+
         response.raise_for_status()
         result = response.json()
         return result.get('stm', [])
-    
+
     def get_short_term_memory(self) -> List[List[str]]:
         """Alias for get_stm for backward compatibility."""
         return self.get_stm()
-    
+
     def get_predictions(self, unique_id: Optional[str] = None) -> List[Dict]:
         """Get predictions using session endpoint for consistency."""
         if not self.services_available:
             pytest.skip("KATO services not available")
-        
+
         # Ensure session exists
         self._ensure_session()
-        
+
         # Use session-based endpoint to match other methods
         params = {}
         if unique_id:
             params['unique_id'] = unique_id
-        
+
         response = requests.get(f"{self.base_url}/sessions/{self.session_id}/predictions", params=params)
-        
+
         response.raise_for_status()
         result = response.json()
         return result.get('predictions', [])
-    
+
     def learn(self) -> str:
         """Force learning of current short-term memory."""
         if not self.services_available:
             pytest.skip("KATO services not available")
-        
+
         # Ensure session exists
         self._ensure_session()
-        
+
         # Use session-based endpoint
         response = requests.post(f"{self.base_url}/sessions/{self.session_id}/learn", json={})
-        
+
         # Handle insufficient data case (API returns 400 for empty STM)
         if response.status_code == 400:
             # Check if it's due to insufficient data
@@ -367,39 +368,39 @@ class KATOFastAPIFixture:
                 pass
             # Re-raise if it's a different error
             response.raise_for_status()
-        
+
         # Normal case - expect 200 OK
         response.raise_for_status()
         result = response.json()
-        
+
         # Check if learning was successful or had insufficient data
         if result.get('status') == 'insufficient_data':
             return ''  # Return empty string for insufficient STM
-        
+
         return result.get('pattern_name', '')
-    
+
     def clear_stm(self) -> str:
         """Clear short-term memory using session endpoint for consistency."""
         if not self.services_available:
             pytest.skip("KATO services not available")
-        
+
         # Ensure session exists
         self._ensure_session()
-        
+
         # Use session-based endpoint to match other methods
         response = requests.post(f"{self.base_url}/sessions/{self.session_id}/clear-stm", json={})
-        
+
         response.raise_for_status()
         result = response.json()
         # Modern API returns {"status": "cleared"}
         if result.get('status') == 'cleared':
             return 'stm-cleared'
         return result.get('message', '')
-    
+
     def clear_short_term_memory(self) -> str:
         """Alias for clear_stm for backward compatibility."""
         return self.clear_stm()
-    
+
     def clear_all_memory(self, reset_genes: bool = True) -> str:
         """Clear all memory and optionally reset genes.
         
@@ -408,7 +409,7 @@ class KATOFastAPIFixture:
         """
         if not self.services_available:
             pytest.skip("KATO services not available")
-        
+
         # Delete current session if it exists
         if self.session_id:
             try:
@@ -419,27 +420,27 @@ class KATOFastAPIFixture:
                 if response.status_code != 200:
                     # Try legacy endpoint
                     response = requests.post(f"{self.base_url}/clear-all")
-                
+
                 # Then delete the session
                 response = requests.delete(f"{self.base_url}/sessions/{self.session_id}")
             except:
                 pass  # Ignore errors during cleanup
-            
+
             # Reset session tracking
             self.session_id = None
             self.session_created = False
-        
+
         # Generate a new processor_id for complete isolation
         self.processor_id = self._generate_processor_id()
-        
+
         # Create a new session with the new processor_id
         self._ensure_session()
-        
+
         if reset_genes:
             self.reset_genes_to_defaults()
-        
+
         return 'all-cleared'
-    
+
     def update_genes(self, genes: Dict[str, Any]) -> str:
         """Update gene values using session endpoint.
 
@@ -467,7 +468,7 @@ class KATOFastAPIFixture:
         # Log the error but don't fail - some tests may expect this
         print(f"Warning: Failed to update genes: {response.status_code} - {response.text if hasattr(response, 'text') else ''}")
         return {'status': 'error', 'message': 'genes-update-failed'}
-    
+
     def reset_genes_to_defaults(self) -> str:
         """Reset genes to default values."""
         default_genes = {
@@ -477,7 +478,7 @@ class KATOFastAPIFixture:
         }
         self.session_config = {}  # Clear session config to use defaults
         return self.update_genes(default_genes)
-    
+
     def set_recall_threshold(self, threshold: float) -> str:
         """Set the recall_threshold parameter.
         
@@ -485,16 +486,16 @@ class KATOFastAPIFixture:
         """
         if not 0.0 <= threshold <= 1.0:
             raise ValueError(f"recall_threshold must be between 0.0 and 1.0, got {threshold}")
-        
+
         # V2 supports dynamic threshold changes via the API
         self._attempted_threshold = threshold
         return self.update_genes({"recall_threshold": threshold})
-    
+
     def supports_dynamic_threshold(self) -> bool:
         """Check if the service supports dynamic recall threshold changes."""
         # V2 now supports dynamic threshold changes
         return True
-    
+
     def get_genes(self) -> Dict[str, Any]:
         """Get current gene/configuration values.
         
@@ -502,10 +503,10 @@ class KATOFastAPIFixture:
         """
         if not self.services_available:
             pytest.skip("KATO services not available")
-        
+
         # Ensure session exists
         self._ensure_session()
-        
+
         # For session-based configuration, return current session config
         # with defaults for missing values
         genes = {
@@ -516,9 +517,9 @@ class KATOFastAPIFixture:
             'max_predictions': self.session_config.get('max_predictions', 100),
             'sort': self.session_config.get('sort_symbols', True),
         }
-        
+
         return genes
-    
+
     def observe_sequence(self, observations: List[Dict[str, Any]],
                         learn_after_each: bool = False,
                         learn_at_end: bool = False,
@@ -555,47 +556,47 @@ class KATOFastAPIFixture:
         )
         response.raise_for_status()
         return response.json()
-    
+
     def get_status(self) -> Dict[str, Any]:
         """Get processor status."""
         if not self.services_available:
             pytest.skip("KATO services not available")
-            
+
         # Use x-test-id header for isolation
         headers = {'x-test-id': self.processor_id}
         response = requests.get(f"{self.base_url}/status", headers=headers)
         response.raise_for_status()
         return response.json()
-    
+
     def get_cognition_data(self) -> Dict[str, Any]:
         """Get cognition data."""
         if not self.services_available:
             pytest.skip("KATO services not available")
-            
+
         # Use x-test-id header for isolation
         headers = {'x-test-id': self.processor_id}
         response = requests.get(f"{self.base_url}/cognition-data", headers=headers)
         response.raise_for_status()
         result = response.json()
         return result.get('cognition_data', {})
-    
+
     def get_percept_data(self) -> Dict[str, Any]:
         """Get percept data."""
         if not self.services_available:
             pytest.skip("KATO services not available")
-            
+
         # Use x-test-id header for isolation
         headers = {'x-test-id': self.processor_id}
         response = requests.get(f"{self.base_url}/percept-data", headers=headers)
         response.raise_for_status()
         result = response.json()
         return result.get('percept_data', {})
-    
+
     def get_pattern(self, pattern_id: str) -> Optional[Dict]:
         """Get pattern by ID."""
         if not self.services_available:
             pytest.skip("KATO services not available")
-            
+
         # Use x-test-id header for isolation
         headers = {'x-test-id': self.processor_id}
         response = requests.get(f"{self.base_url}/pattern/{pattern_id}", headers=headers)
@@ -604,12 +605,12 @@ class KATOFastAPIFixture:
         response.raise_for_status()
         result = response.json()
         return result.get('pattern')
-    
+
     def get_metrics(self) -> Dict[str, Any]:
         """Get processor metrics."""
         if not self.services_available:
             pytest.skip("KATO services not available")
-            
+
         # Use x-test-id header for isolation
         headers = {'x-test-id': self.processor_id}
         response = requests.get(f"{self.base_url}/metrics", headers=headers)
@@ -640,11 +641,11 @@ def kato_fastapi_existing(request):
     test_name = request.node.name if hasattr(request, 'node') else 'unknown'
     fixture = KATOFastAPIFixture(processor_name=test_name, use_docker=False)
     fixture.setup()
-    
+
     # Clear memory before test
     if fixture.services_available:
         fixture.clear_all_memory()
-    
+
     yield fixture
     # No teardown needed for existing service
 
@@ -660,12 +661,12 @@ def kato_fixture(request):
     test_name = request.node.name if hasattr(request, 'node') else 'unknown'
     fixture = KATOFastAPIFixture(processor_name=test_name, use_docker=False)
     fixture.setup()
-    
+
     # Clear memory before test
     if fixture.services_available:
         fixture.clear_all_memory()
-    
+
     yield fixture
-    
+
     # Teardown - critical for test isolation
     fixture.teardown()

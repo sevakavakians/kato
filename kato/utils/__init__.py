@@ -8,7 +8,7 @@ from .logging import get_logger, get_standard_logger, log_execution_time, log_me
 
 __all__ = [
     'get_logger',
-    'get_standard_logger', 
+    'get_standard_logger',
     'log_execution_time',
     'log_method_calls'
 ]

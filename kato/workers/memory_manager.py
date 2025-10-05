@@ -5,11 +5,10 @@ Extracted from KatoProcessor for better modularity.
 """
 
 import logging
-from typing import List, Dict, Any, Optional
-from collections import deque
+from typing import Any, Dict, List, Optional
 
-from kato.informatics.metrics import average_emotives
 from kato.exceptions import MemoryOperationError
+from kato.informatics.metrics import average_emotives
 
 logger = logging.getLogger('kato.workers.memory_manager')
 
@@ -24,7 +23,7 @@ class MemoryManager:
     - Memory clearing operations
     - Emotives accumulation and averaging
     """
-    
+
     def __init__(self, pattern_processor, vector_processor):
         """
         Initialize memory manager with references to processors.
@@ -35,7 +34,7 @@ class MemoryManager:
         """
         self.pattern_processor = pattern_processor
         self.vector_processor = vector_processor
-        
+
         # Initialize state variables
         self.symbols: List[str] = []
         self.current_emotives: Dict[str, float] = {}
@@ -44,9 +43,9 @@ class MemoryManager:
         self.percept_data: Dict[str, Any] = {}
         self.percept_data_vector: Optional[List[float]] = None
         self.time: int = 0
-        
+
         logger.debug("MemoryManager initialized")
-    
+
     def reset_primitive_variables(self) -> None:
         """
         Reset primitive variables to their initial state.
@@ -69,7 +68,7 @@ class MemoryManager:
                 memory_type="STM",
                 operation="reset_variables"
             )
-    
+
     def clear_stm(self) -> None:
         """
         Clear Short-Term Memory.
@@ -80,13 +79,13 @@ class MemoryManager:
         try:
             # Reset primitive variables
             self.reset_primitive_variables()
-            
+
             # Clear symbols list
             self.symbols = []
-            
+
             # Clear STM in pattern processor
             self.pattern_processor.clear_stm()
-            
+
             logger.info("STM cleared successfully")
         except Exception as e:
             raise MemoryOperationError(
@@ -94,7 +93,7 @@ class MemoryManager:
                 memory_type="STM",
                 operation="clear"
             )
-    
+
     def clear_all_memory(self) -> None:
         """
         Clear all memory (both STM and LTM).
@@ -111,23 +110,23 @@ class MemoryManager:
         try:
             # Reset time counter
             self.time = 0
-            
+
             # Clear command history
             self.last_command = ""
-            
+
             # Clear emotives
             self.current_emotives = {}
-            
+
             # Clear STM
             self.clear_stm()
-            
+
             # Clear pattern processor memory (includes database operations)
             self.pattern_processor.superkb.clear_all_memory()
             self.pattern_processor.clear_all_memory()
-            
+
             # Clear vector processor memory
             self.vector_processor.clear_all_memory()
-            
+
             logger.info("All memory cleared successfully (STM and LTM)")
         except Exception as e:
             raise MemoryOperationError(
@@ -135,7 +134,7 @@ class MemoryManager:
                 memory_type="ALL",
                 operation="clear"
             )
-    
+
     def increment_time(self) -> None:
         """
         Increment the internal time counter.
@@ -144,7 +143,7 @@ class MemoryManager:
         """
         self.time += 1
         logger.debug(f"Time incremented to {self.time}")
-    
+
     def process_emotives(self, emotives: Dict[str, float]) -> None:
         """
         Process and accumulate emotives data.
@@ -160,10 +159,10 @@ class MemoryManager:
             if emotives:
                 # Add to pattern processor's emotives list
                 self.pattern_processor.emotives += [emotives]
-                
+
                 # Calculate average of all accumulated emotives
                 self.current_emotives = average_emotives(self.pattern_processor.emotives)
-                
+
                 logger.debug(f"Processed emotives: {len(emotives)} values, "
                            f"current average: {len(self.current_emotives)} dimensions")
         except Exception as e:
@@ -173,9 +172,9 @@ class MemoryManager:
                 operation="process_emotives",
                 context={"emotives_count": len(emotives) if emotives else 0}
             )
-    
-    def update_percept_data(self, strings: List[str], vectors: List[List[float]], 
-                           emotives: Dict[str, float], path: List[str], 
+
+    def update_percept_data(self, strings: List[str], vectors: List[List[float]],
+                           emotives: Dict[str, float], path: List[str],
                            metadata: Dict[str, Any]) -> None:
         """
         Update the current percept data.
@@ -196,7 +195,7 @@ class MemoryManager:
         }
         logger.debug(f"Percept data updated with {len(strings)} strings, "
                     f"{len(vectors)} vectors")
-    
+
     def get_stm_state(self) -> List[List[str]]:
         """
         Get the current STM state.
@@ -205,7 +204,7 @@ class MemoryManager:
             Current STM as list of symbol lists
         """
         return list(self.pattern_processor.STM)
-    
+
     def get_stm_length(self) -> int:
         """
         Get the current length of STM.
@@ -214,7 +213,7 @@ class MemoryManager:
             Number of events in STM
         """
         return len(self.pattern_processor.STM)
-    
+
     def set_stm_tail_context(self, tail_event: List[str]) -> None:
         """
         Set STM with a tail event for context continuity.

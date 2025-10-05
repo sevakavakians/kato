@@ -1,15 +1,15 @@
+import logging
 import traceback
 from functools import partial, wraps
 from time import sleep
-from typing import Type, Union, Tuple, Callable, Any, Optional, Dict, List
-import logging
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
 
 
 def retry(
-    ExceptionToCheck: Union[Type[Exception], Tuple[Type[Exception], ...]], 
-    tries: int = 4, 
-    delay: int = 3, 
-    backoff: int = 2, 
+    ExceptionToCheck: Union[Type[Exception], Tuple[Type[Exception], ...]],
+    tries: int = 4,
+    delay: int = 3,
+    backoff: int = 2,
     logger: Optional[logging.Logger] = None
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Retry calling the decorated function using an exponential backoff.
@@ -63,7 +63,7 @@ class memoized:
         func: The function being memoized.
         cache: Dictionary storing cached results.
     """
-    
+
     def __init__(self, func: Callable[..., Any]) -> None:
         """Initialize the memoized decorator.
         
@@ -98,7 +98,7 @@ class memoized:
             The wrapped function's docstring or empty string.
         """
         return self.func.__doc__ or ""
-    def __get__(self, obj: Any, objtype: Optional[type] = None) -> Callable[..., Any]:
+    def __get__(self, obj: Any, _objtype: Optional[type] = None) -> Callable[..., Any]:
         """Support instance methods.
         
         Args:
@@ -120,7 +120,7 @@ class tracebackMessage:
     Attributes:
         func: The function being wrapped.
     """
-    
+
     def __init__(self, func: Callable[..., Any]) -> None:
         """Initialize the traceback decorator.
         

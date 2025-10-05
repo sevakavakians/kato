@@ -3,11 +3,9 @@ Tests for bulk observation endpoints (observe-sequence).
 Tests batch processing capabilities and isolation features.
 """
 
-import pytest
 import time
+
 import requests
-from typing import List, Dict, Any
-from tests.fixtures.kato_fixtures import kato_fixture
 
 
 def test_observe_sequence_basic(kato_fixture):
@@ -194,7 +192,7 @@ def test_observe_sequence_empty_batch(kato_fixture):
 
 def test_observe_sequence_large_batch(kato_fixture):
     """Test processing a large batch of observations."""
-    
+
     # Create 50 observations
     observations = []
     for i in range(50):
@@ -203,27 +201,27 @@ def test_observe_sequence_large_batch(kato_fixture):
             'vectors': [],
             'emotives': {}
         })
-    
+
     batch_data = {
         'observations': observations
     }
-    
+
     response = requests.post(
         f"{kato_fixture.base_url}/observe-sequence",
         json=batch_data
     )
     assert response.status_code == 200
     result = response.json()
-    
+
     assert result['observations_processed'] == 50
     assert len(result['results']) == 50
-    
+
     # Verify all observations are in STM
     stm_response = requests.get(
         f"{kato_fixture.base_url}/stm"
     )
     stm = stm_response.json()['stm']
-    
+
     # Default persistence is 5, so only last 5 should be in STM
     # unless configured differently
     assert len(stm) <= 50  # Could be limited by persistence setting
@@ -279,12 +277,12 @@ def test_observe_sequence_predictions_available(kato_fixture):
 
 def test_observe_sequence_error_handling(kato_fixture):
     """Test error handling in batch processing."""
-    
+
     # Test with completely invalid structure (observations should be a list)
     batch_data = {
         'observations': "not_a_list"  # Invalid type - should be a list
     }
-    
+
     response = requests.post(
         f"{kato_fixture.base_url}/observe-sequence",
         json=batch_data
@@ -295,13 +293,13 @@ def test_observe_sequence_error_handling(kato_fixture):
 
 def test_observe_sequence_performance(kato_fixture):
     """Test batch processing performance advantages."""
-    
+
     # Prepare 20 observations
     observations = [
         {'strings': [f'perf_test_{i}'], 'vectors': [], 'emotives': {}}
         for i in range(20)
     ]
-    
+
     # Time batch processing
     start_batch = time.time()
     response = requests.post(
@@ -310,10 +308,10 @@ def test_observe_sequence_performance(kato_fixture):
     )
     batch_time = time.time() - start_batch
     assert response.status_code == 200
-    
+
     # Clear STM for fair comparison
     requests.post(f"{kato_fixture.base_url}/clear-stm")
-    
+
     # Time individual processing
     start_individual = time.time()
     for obs in observations:
@@ -323,7 +321,7 @@ def test_observe_sequence_performance(kato_fixture):
         )
         assert response.status_code == 200
     individual_time = time.time() - start_individual
-    
+
     # Batch should be faster due to reduced overhead
     # Though the difference might be small in testing
     print(f"Batch time: {batch_time:.3f}s, Individual time: {individual_time:.3f}s")

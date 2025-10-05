@@ -6,14 +6,15 @@ Supports Prometheus-format metrics and custom metrics tracking.
 """
 
 import asyncio
-import time
-import psutil
 import logging
-from typing import Dict, List, Optional, Any, Callable
-from datetime import datetime, timedelta, timezone
-from collections import defaultdict, deque
-from dataclasses import dataclass, field
 import threading
+import time
+from collections import deque
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
+
+import psutil
 
 logger = logging.getLogger('kato.monitoring.metrics')
 
@@ -26,7 +27,7 @@ class MetricValue:
     labels: Dict[str, str] = field(default_factory=dict)
 
 
-@dataclass 
+@dataclass
 class Metric:
     """Metric definition with time-series data"""
     name: str
@@ -34,7 +35,7 @@ class Metric:
     description: str
     unit: str = ""
     values: deque = field(default_factory=lambda: deque(maxlen=1000))
-    
+
     def add_value(self, value: float, labels: Dict[str, str] = None):
         """Add a value to the metric"""
         self.values.append(MetricValue(
@@ -42,40 +43,40 @@ class Metric:
             timestamp=time.time(),
             labels=labels or {}
         ))
-    
+
     def get_current(self) -> Optional[float]:
         """Get most recent value"""
         if self.values:
             return self.values[-1].value
         return None
-    
+
     def get_average(self, window_seconds: int = 60) -> float:
         """Get average over time window"""
         if not self.values:
             return 0.0
-        
+
         cutoff = time.time() - window_seconds
         recent_values = [v.value or 0 for v in self.values if v.timestamp > cutoff and v.value is not None]
-        
+
         if recent_values:
             return sum(recent_values) / len(recent_values)
         return 0.0
-    
+
     def get_rate(self, window_seconds: int = 60) -> float:
         """Get rate of change per second"""
         if len(self.values) < 2:
             return 0.0
-        
+
         cutoff = time.time() - window_seconds
         recent_values = [(v.value or 0, v.timestamp) for v in self.values if v.timestamp > cutoff and v.value is not None]
-        
+
         if len(recent_values) < 2:
             return 0.0
-        
+
         # Calculate rate based on first and last values in window
         value_diff = recent_values[-1][0] - recent_values[0][0]
         time_diff = recent_values[-1][1] - recent_values[0][1]
-        
+
         if time_diff > 0:
             return value_diff / time_diff
         return 0.0
@@ -88,7 +89,7 @@ class MetricsCollector:
     Collects and exposes metrics in Prometheus format and
     provides APIs for custom metric tracking.
     """
-    
+
     def __init__(self):
         """Initialize metrics collector"""
         self.metrics: Dict[str, Metric] = {}
@@ -96,15 +97,15 @@ class MetricsCollector:
         self._collection_task = None
         self._collection_interval = 10  # seconds
         self._initialized = False
-        
+
         # Initialize core metrics
         self._init_core_metrics()
-        
+
         logger.info("MetricsCollector initialized")
-    
+
     def _init_core_metrics(self):
         """Initialize core system metrics"""
-        
+
         # Session metrics
         self.register_metric(
             "kato_sessions_total",
@@ -121,7 +122,7 @@ class MetricsCollector:
             "counter",
             "Total number of expired sessions"
         )
-        
+
         # Request metrics
         self.register_metric(
             "kato_requests_total",
@@ -139,7 +140,7 @@ class MetricsCollector:
             "counter",
             "Total number of failed requests"
         )
-        
+
         # Performance metrics
         self.register_metric(
             "kato_observations_per_second",
@@ -153,7 +154,7 @@ class MetricsCollector:
             "Current predictions processing rate",
             unit="ops"
         )
-        
+
         # Resource metrics
         self.register_metric(
             "kato_cpu_usage_percent",
@@ -173,7 +174,7 @@ class MetricsCollector:
             "Memory usage percentage",
             unit="percent"
         )
-        
+
         # Database metrics
         self.register_metric(
             "kato_mongodb_connections",
@@ -190,7 +191,7 @@ class MetricsCollector:
             "gauge",
             "Number of Redis connections"
         )
-        
+
         # Error metrics
         self.register_metric(
             "kato_errors_total",
@@ -202,7 +203,7 @@ class MetricsCollector:
             "counter",
             "Number of circuit breaker open events"
         )
-    
+
     def register_metric(
         self,
         name: str,
@@ -233,7 +234,7 @@ class MetricsCollector:
                 self.metrics[name] = metric
                 logger.debug(f"Registered metric: {name}")
             return self.metrics[name]
-    
+
     def increment(self, name: str, value: float = 1.0, labels: Dict[str, str] = None):
         """Increment a counter metric"""
         with self._lock:
@@ -241,24 +242,24 @@ class MetricsCollector:
                 metric = self.metrics[name]
                 current = metric.get_current() or 0
                 metric.add_value(current + value, labels)
-    
+
     def set(self, name: str, value: float, labels: Dict[str, str] = None):
         """Set a gauge metric"""
         with self._lock:
             if name in self.metrics:
                 self.metrics[name].add_value(value, labels)
-    
+
     def observe(self, name: str, value: float, labels: Dict[str, str] = None):
         """Observe a value for histogram/summary"""
         with self._lock:
             if name in self.metrics:
                 self.metrics[name].add_value(value, labels)
-    
+
     def get_metric(self, name: str) -> Optional[Metric]:
         """Get a specific metric"""
         with self._lock:
             return self.metrics.get(name)
-    
+
     def get_all_metrics(self) -> Dict[str, Dict[str, Any]]:
         """
         Get all metrics as a dictionary.
@@ -278,7 +279,7 @@ class MetricsCollector:
                     "rate_1m": metric.get_rate(60) if metric.type == "counter" else None
                 }
             return result
-    
+
     def get_prometheus_format(self) -> str:
         """
         Get metrics in Prometheus text format.
@@ -287,13 +288,13 @@ class MetricsCollector:
             Prometheus-formatted metrics string
         """
         lines = []
-        
+
         with self._lock:
             for name, metric in self.metrics.items():
                 # Add HELP and TYPE comments
                 lines.append(f"# HELP {name} {metric.description}")
                 lines.append(f"# TYPE {name} {metric.type}")
-                
+
                 # Add metric value
                 current_value = metric.get_current()
                 if current_value is not None:
@@ -305,23 +306,23 @@ class MetricsCollector:
                         lines.append(f"{name}{{{labels_str}}} {current_value}")
                     else:
                         lines.append(f"{name} {current_value}")
-                
+
                 lines.append("")  # Empty line between metrics
-        
+
         return "\n".join(lines)
-    
+
     async def collect_system_metrics(self):
         """Collect system resource metrics"""
         try:
             # CPU metrics
             cpu_percent = psutil.cpu_percent(interval=1)
             self.set("kato_cpu_usage_percent", cpu_percent)
-            
+
             # Memory metrics
             memory = psutil.virtual_memory()
             self.set("kato_memory_usage_bytes", memory.used)
             self.set("kato_memory_usage_percent", memory.percent)
-            
+
             # Disk metrics (optional)
             disk = psutil.disk_usage('/')
             self.register_metric(
@@ -331,7 +332,7 @@ class MetricsCollector:
                 unit="percent"
             )
             self.set("kato_disk_usage_percent", disk.percent)
-            
+
             # Network metrics (optional)
             net_io = psutil.net_io_counters()
             self.register_metric(
@@ -348,10 +349,10 @@ class MetricsCollector:
             )
             self.set("kato_network_bytes_sent", net_io.bytes_sent)
             self.set("kato_network_bytes_recv", net_io.bytes_recv)
-            
+
         except Exception as e:
             logger.error(f"Error collecting system metrics: {e}")
-    
+
     async def start_collection(self, interval: int = 10):
         """
         Start background metrics collection.
@@ -360,11 +361,11 @@ class MetricsCollector:
             interval: Collection interval in seconds
         """
         self._collection_interval = interval
-        
+
         if not self._collection_task:
             self._collection_task = asyncio.create_task(self._collection_loop())
             logger.info(f"Started metrics collection with {interval}s interval")
-    
+
     async def stop_collection(self):
         """Stop background metrics collection"""
         if self._collection_task:
@@ -375,7 +376,7 @@ class MetricsCollector:
                 pass
             self._collection_task = None
             logger.info("Stopped metrics collection")
-    
+
     async def _collection_loop(self):
         """Background collection loop"""
         while True:
@@ -387,7 +388,7 @@ class MetricsCollector:
             except Exception as e:
                 logger.error(f"Error in collection loop: {e}")
                 await asyncio.sleep(self._collection_interval)
-    
+
     def _get_metric_value(self, all_metrics: Dict, metric_name: str, value_type: str = "current") -> float:
         """Safely get a metric value, returning 0 if None or missing"""
         try:
@@ -404,17 +405,17 @@ class MetricsCollector:
         try:
             errors = self._get_metric_value(all_metrics, "kato_errors_total")
             requests = self._get_metric_value(all_metrics, "kato_requests_total")
-            
+
             # Ensure both values are numbers
             if errors is None or requests is None:
                 return 0.0
-            
+
             errors = float(errors) if errors is not None else 0.0
             requests = float(requests) if requests is not None else 0.0
-            
+
             if requests == 0:
                 return 0.0
-            
+
             return errors / requests
         except (TypeError, ValueError, ZeroDivisionError):
             return 0.0
@@ -422,10 +423,10 @@ class MetricsCollector:
     def get_summary_metrics(self) -> Dict[str, Any]:
         """Get comprehensive summary of all metrics"""
         current_time = time.time()
-        
+
         # Get all current metrics
         all_metrics = self.get_all_metrics()
-        
+
         # Organize into categories
         summary = {
             "timestamp": current_time,
@@ -464,38 +465,38 @@ class MetricsCollector:
                 }
             }
         }
-        
+
         return summary
-    
+
     def calculate_rates(self) -> Dict[str, float]:
         """Calculate rate metrics over different time windows"""
         rates = {}
-        
+
         # Request rates
         if "kato_requests_total" in self.metrics:
             rate = self.metrics["kato_requests_total"].get_rate(60) or 0
             rates["requests_per_second"] = rate
             rates["requests_per_minute"] = rate * 60
-        
+
         # Error rates
         if "kato_errors_total" in self.metrics:
             rate = self.metrics["kato_errors_total"].get_rate(60) or 0
             rates["errors_per_minute"] = rate * 60
-        
+
         # Session rates
         if "sessions_created" in self.metrics:
             rate = self.metrics["sessions_created"].get_rate(60) or 0
             rates["sessions_per_minute"] = rate * 60
-        
+
         # Database operation rates
         for db in ["mongodb", "qdrant", "redis"]:
             metric_name = f"{db}_operations"
             if metric_name in self.metrics:
                 rate = self.metrics[metric_name].get_rate(60) or 0
                 rates[f"{db}_ops_per_second"] = rate
-        
+
         return rates
-    
+
     def get_health_status(self) -> Dict[str, Any]:
         """
         Get system health status based on metrics.
@@ -507,27 +508,27 @@ class MetricsCollector:
             cpu_usage = self.metrics.get("kato_cpu_usage_percent")
             memory_usage = self.metrics.get("kato_memory_usage_percent")
             error_rate = self.metrics.get("kato_errors_total")
-            
+
             # Determine health status
             issues = []
             status = "healthy"
-            
+
             cpu_current = cpu_usage.get_current() if cpu_usage else None
             memory_current = memory_usage.get_current() if memory_usage else None
             error_rate_current = error_rate.get_rate(60) if error_rate else None
-            
+
             if cpu_current is not None and cpu_current > 80:
                 issues.append("High CPU usage")
                 status = "degraded"
-            
+
             if memory_current is not None and memory_current > 90:
                 issues.append("High memory usage")
                 status = "unhealthy"
-            
+
             if error_rate_current is not None and error_rate_current > 10:
                 issues.append("High error rate")
                 status = "degraded"
-            
+
             return {
                 "status": status,
                 "issues": issues,
@@ -538,7 +539,7 @@ class MetricsCollector:
                 },
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
-    
+
     def get_time_series(
         self,
         metric_name: str,
@@ -558,10 +559,10 @@ class MetricsCollector:
             metric = self.metrics.get(metric_name)
             if not metric:
                 return []
-            
+
             cutoff = time.time() - window_seconds
             result = []
-            
+
             for value in metric.values:
                 if value.timestamp > cutoff:
                     result.append({
@@ -569,9 +570,9 @@ class MetricsCollector:
                         "value": value.value,
                         "labels": value.labels
                     })
-            
+
             return result
-    
+
     def record_request(
         self,
         method: str,
@@ -592,14 +593,14 @@ class MetricsCollector:
         """
         # Increment total requests counter
         self.increment("kato_requests_total", labels={"method": method, "path": path})
-        
+
         # Record request duration
         self.observe("kato_request_duration_seconds", duration, labels={
             "method": method,
             "path": path,
             "status": str(status_code)
         })
-        
+
         # Increment failed requests if status indicates error
         if status_code >= 400:
             self.increment("kato_requests_failed", labels={
@@ -621,10 +622,10 @@ def get_metrics_collector() -> MetricsCollector:
         MetricsCollector singleton instance
     """
     global _metrics_collector
-    
+
     if _metrics_collector is None:
         _metrics_collector = MetricsCollector()
-    
+
     return _metrics_collector
 
 
@@ -647,7 +648,7 @@ def timed_metric(metric_name: str = None):
                 collector = get_metrics_collector()
                 name = metric_name or f"kato_function_{func.__name__}_duration"
                 collector.observe(name, duration)
-        
+
         def sync_wrapper(*args, **kwargs):
             start_time = time.time()
             try:
@@ -658,10 +659,10 @@ def timed_metric(metric_name: str = None):
                 collector = get_metrics_collector()
                 name = metric_name or f"kato_function_{func.__name__}_duration"
                 collector.observe(name, duration)
-        
+
         if asyncio.iscoroutinefunction(func):
             return async_wrapper
         else:
             return sync_wrapper
-    
+
     return decorator

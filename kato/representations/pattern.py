@@ -1,5 +1,6 @@
 from hashlib import sha1
 
+
 class Pattern:
     """
     Pattern Objects represent learned structures that can be:

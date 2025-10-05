@@ -3,23 +3,22 @@ API tests for KATO FastAPI endpoints.
 Tests all FastAPI endpoints for correct behavior and error handling.
 """
 
+import os
+import sys
+
 import pytest
 import requests
-import json
-import sys
-import os
-import time
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from fixtures.kato_fixtures import kato_fixture as kato_fixture
-from fixtures.test_helpers import sort_event_strings
 
 
 def test_health_endpoint(kato_fixture):
     """Test the health check endpoint."""
     response = requests.get(f"{kato_fixture.base_url}/health")
     assert response.status_code == 200
-    
+
     data = response.json()
     assert data['status'] == 'healthy'
     # Current uses 'uptime_seconds', legacy uses 'uptime'
@@ -32,7 +31,7 @@ def test_status_endpoint(kato_fixture):
     """Test the status endpoint."""
     response = requests.get(f"{kato_fixture.base_url}/status")
     assert response.status_code == 200
-    
+
     data = response.json()
     # Current uses 'base_processor_id', legacy uses 'processor_id'
     assert 'processor_id' in data or 'base_processor_id' in data
@@ -50,10 +49,10 @@ def test_observe_endpoint(kato_fixture):
         'vectors': [],
         'emotives': {}
     }
-    
+
     response = requests.post(f"{kato_fixture.base_url}/observe", json=observation)
     assert response.status_code == 200
-    
+
     data = response.json()
     # Current returns 'ok', legacy returns 'okay', KatoProcessor returns 'observed'
     assert data['status'] in ['ok', 'okay', 'observed']
@@ -74,10 +73,10 @@ def test_observe_with_vectors(kato_fixture):
         'vectors': [[0.1, 0.2, 0.3]],
         'emotives': {'confidence': 0.8}
     }
-    
+
     response = requests.post(f"{kato_fixture.base_url}/observe", json=observation)
     assert response.status_code == 200
-    
+
     data = response.json()
     assert data['status'] == 'okay'
 
@@ -86,15 +85,15 @@ def test_short_term_memory_endpoints(kato_fixture):
     """Test both STM endpoint aliases."""
     # Clear memory first
     kato_fixture.clear_all_memory()
-    
+
     # Add some observations
     kato_fixture.observe({'strings': ['stm1', 'stm2'], 'vectors': [], 'emotives': {}})
     kato_fixture.observe({'strings': ['stm3'], 'vectors': [], 'emotives': {}})
-    
+
     # Get STM using fixture's method (which uses sessions)
     stm_data = kato_fixture.get_stm()
     assert len(stm_data) == 2
-    
+
     # Also test the raw endpoints with session IDs
     if kato_fixture.session_id:
         # Test /sessions/{session_id}/stm endpoint directly (without /current prefix)
@@ -112,10 +111,10 @@ def test_learn_endpoint(kato_fixture):
     kato_fixture.clear_all_memory()
     kato_fixture.observe({'strings': ['learn1', 'learn2'], 'vectors': [], 'emotives': {}})
     kato_fixture.observe({'strings': ['learn3'], 'vectors': [], 'emotives': {}})
-    
+
     # Learn the pattern using the fixture's session-based learn method
     pattern_name = kato_fixture.learn()
-    
+
     # Verify pattern was learned successfully
     assert pattern_name is not None
     assert pattern_name != ''
@@ -126,19 +125,19 @@ def test_clear_stm_endpoints(kato_fixture):
     """Test both clear STM endpoint aliases."""
     # Add observations
     kato_fixture.observe({'strings': ['clear1'], 'vectors': [], 'emotives': {}})
-    
+
     # Test /clear-stm
     response = requests.post(f"{kato_fixture.base_url}/clear-stm", json={})
     assert response.status_code == 200
     assert response.json()['status'] == 'cleared'
-    
+
     # Verify STM is cleared
     stm_response = requests.get(f"{kato_fixture.base_url}/stm")
     assert len(stm_response.json()['stm']) == 0
-    
+
     # Add more observations
     kato_fixture.observe({'strings': ['clear2'], 'vectors': [], 'emotives': {}})
-    
+
     # Test /clear-short-term-memory (alias)
     response2 = requests.post(f"{kato_fixture.base_url}/clear-short-term-memory", json={})
     assert response2.status_code == 200
@@ -150,16 +149,16 @@ def test_clear_all_memory_endpoints(kato_fixture):
     # Add and learn a pattern
     kato_fixture.observe({'strings': ['mem1', 'mem2'], 'vectors': [], 'emotives': {}})
     kato_fixture.learn()
-    
+
     # Test /clear-all
     response = requests.post(f"{kato_fixture.base_url}/clear-all", json={})
     assert response.status_code == 200
     assert response.json()['status'] == 'cleared'
-    
+
     # Add and learn another pattern
     kato_fixture.observe({'strings': ['mem3', 'mem4'], 'vectors': [], 'emotives': {}})
     kato_fixture.learn()
-    
+
     # Test /clear-all-memory (alias)
     response2 = requests.post(f"{kato_fixture.base_url}/clear-all-memory", json={})
     assert response2.status_code == 200
@@ -173,17 +172,17 @@ def test_predictions_endpoints(kato_fixture):
     kato_fixture.observe({'strings': ['pred1', 'pred2'], 'vectors': [], 'emotives': {}})
     kato_fixture.observe({'strings': ['pred3'], 'vectors': [], 'emotives': {}})
     pattern_name = kato_fixture.learn()
-    
+
     # Clear STM and observe partial pattern
     # Need at least 2 strings in STM for predictions
     kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': ['pred1'], 'vectors': [], 'emotives': {}})
     kato_fixture.observe({'strings': ['pred2'], 'vectors': [], 'emotives': {}})
-    
+
     # Get predictions using fixture method (which uses sessions)
     predictions = kato_fixture.get_predictions()
     assert len(predictions) > 0
-    
+
     # Also test the raw endpoint with session ID
     if kato_fixture.session_id:
         response = requests.get(f"{kato_fixture.base_url}/sessions/{kato_fixture.session_id}/predictions")
@@ -199,7 +198,7 @@ def test_pattern_endpoint(kato_fixture):
     kato_fixture.clear_all_memory()
     kato_fixture.observe({'strings': ['pat1', 'pat2'], 'vectors': [], 'emotives': {}})
     pattern_name = kato_fixture.learn()
-    
+
     # Pattern retrieval must use the same processor/session that created it
     # Since patterns are stored per-processor, we need to use fixture's processor
     # For current, patterns are node-specific, so we need to use the same node_id
@@ -220,7 +219,7 @@ def test_gene_endpoints(kato_fixture):
     # Get a specific gene value (gene names are case-sensitive)
     response = requests.get(f"{kato_fixture.base_url}/gene/recall_threshold")
     assert response.status_code in [200, 404]  # Gene endpoint might not be fully implemented
-    
+
     # Update gene value (if gene exists)
     if response.status_code == 200:
         data = response.json()
@@ -241,12 +240,12 @@ def test_gene_endpoints(kato_fixture):
     response = requests.post(f"{kato_fixture.base_url}/genes/update", json=update_data)
     assert response.status_code == 200
     assert response.json()['status'] == 'okay'
-    
+
     # Verify update
     response = requests.get(f"{kato_fixture.base_url}/gene/recall_threshold")
     # Current returns 'value' instead of 'gene_value'
     assert response.json()['value'] == 0.5
-    
+
     # Restore original value
     update_data['genes']['recall_threshold'] = original_value
     requests.post(f"{kato_fixture.base_url}/genes/update", json=update_data)
@@ -258,10 +257,10 @@ def test_percept_data_endpoint(kato_fixture):
     kato_fixture.clear_all_memory()
     kato_fixture.observe({'strings': ['percept1'], 'vectors': [], 'emotives': {'joy': 0.8}})
     kato_fixture.observe({'strings': ['percept2'], 'vectors': [], 'emotives': {'fear': 0.3}})
-    
+
     response = requests.get(f"{kato_fixture.base_url}/percept-data")
     assert response.status_code == 200
-    
+
     data = response.json()
     assert 'percept_data' in data
     # Current might return empty percept_data or different structure
@@ -276,13 +275,13 @@ def test_cognition_data_endpoint(kato_fixture):
     kato_fixture.observe({'strings': ['cog1', 'cog2'], 'vectors': [], 'emotives': {}})
     kato_fixture.observe({'strings': ['cog3'], 'vectors': [], 'emotives': {}})
     kato_fixture.learn()
-    
+
     kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': ['cog1'], 'vectors': [], 'emotives': {}})
-    
+
     response = requests.get(f"{kato_fixture.base_url}/cognition-data")
     assert response.status_code == 200
-    
+
     data = response.json()
     assert 'cognition_data' in data
     # Current might have different cognition_data structure
@@ -294,7 +293,7 @@ def test_metrics_endpoint(kato_fixture):
     """Test metrics endpoint."""
     response = requests.get(f"{kato_fixture.base_url}/metrics")
     assert response.status_code == 200
-    
+
     data = response.json()
     # Current has different metrics structure
     # Just verify we got some metrics data
@@ -310,7 +309,7 @@ def test_error_handling_missing_fields(kato_fixture):
         'strings': ['test']
         # Missing vectors and emotives
     }
-    
+
     response = requests.post(f"{kato_fixture.base_url}/observe", json=incomplete_data)
     # Current might require all fields or handle defaults differently
     # Accept either 200 (with defaults) or 422/400 (validation error)
@@ -322,7 +321,7 @@ def test_error_handling_invalid_pattern(kato_fixture):
     response = requests.get(f"{kato_fixture.base_url}/pattern/invalid_pattern_id")
     # Current returns 200 with None/null pattern, legacy returns 404
     assert response.status_code in [200, 404]
-    
+
     if response.status_code == 404:
         data = response.json()
         # Current might use 'detail' or 'error' for error messages
@@ -338,7 +337,7 @@ def test_error_handling_invalid_gene(kato_fixture):
     response = requests.get(f"{kato_fixture.base_url}/gene/INVALID_GENE")
     # Current might return 400 or 404 for invalid gene
     assert response.status_code in [400, 404]
-    
+
     data = response.json()
     # Current might use 'detail' or 'error' for error messages
     assert 'error' in data or 'detail' in data
@@ -353,16 +352,16 @@ def test_websocket_endpoint(kato_fixture):
     except ImportError:
         pytest.skip("websocket-client not installed")
         return
-    
+
     # Extract host and port from base_url
     base_url = kato_fixture.base_url
     ws_url = base_url.replace("http://", "ws://") + "/ws"
-    
+
     try:
         ws = websocket.create_connection(ws_url)
         ws.close()
         assert True  # Connection successful
-    except Exception as e:
+    except Exception:
         # WebSocket might not be fully configured, but endpoint should exist
         # This is okay for basic testing
         pass

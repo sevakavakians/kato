@@ -5,10 +5,10 @@ This module implements ensemble-based predictive information calculations
 for ranking predictions based on their statistical relationships.
 """
 
-import logging
-from typing import List, Dict, Any, Tuple
 import hashlib
 import json
+import logging
+from typing import Any, Dict, List, Tuple
 
 logger = logging.getLogger('kato.informatics.predictive_information')
 
@@ -41,14 +41,14 @@ def calculate_future_aggregates(predictions: List[Dict[str, Any]]) -> Dict[str, 
         Dictionary mapping future hashes to aggregate information
     """
     future_aggregates = {}
-    
+
     for pattern in predictions:
         future = pattern.get('future', [])
         if not future:
             continue
-            
+
         future_key = hash_future(future)
-        
+
         if future_key not in future_aggregates:
             future_aggregates[future_key] = {
                 'future': future,
@@ -56,19 +56,19 @@ def calculate_future_aggregates(predictions: List[Dict[str, Any]]) -> Dict[str, 
                 'pattern_count': 0,
                 'patterns': []
             }
-        
+
         # Weight frequency by similarity (how well pattern matches observation)
         similarity = pattern.get('similarity', 1.0)
         frequency = pattern.get('frequency', 1)
         weighted_freq = frequency * similarity
-        
+
         future_aggregates[future_key]['total_weighted_frequency'] += weighted_freq
         future_aggregates[future_key]['pattern_count'] += 1
         future_aggregates[future_key]['patterns'].append(pattern.get('name', 'unknown'))
-    
+
     # Calculate aggregate potentials
     total_weighted = sum(fa['total_weighted_frequency'] for fa in future_aggregates.values())
-    
+
     if total_weighted > 0:
         for fa in future_aggregates.values():
             fa['aggregate_potential'] = fa['total_weighted_frequency'] / total_weighted
@@ -76,7 +76,7 @@ def calculate_future_aggregates(predictions: List[Dict[str, Any]]) -> Dict[str, 
         # No valid futures found
         for fa in future_aggregates.values():
             fa['aggregate_potential'] = 0.0
-    
+
     return future_aggregates
 
 
@@ -95,26 +95,26 @@ def calculate_ensemble_predictive_information(
     """
     if not predictions:
         return predictions, []
-    
+
     # Calculate ensemble-wide statistics
     sum_ensemble_frequencies = sum(p.get('frequency', 1) for p in predictions)
-    
+
     if sum_ensemble_frequencies == 0:
         # No valid frequencies, return as-is
         for p in predictions:
             p['predictive_information'] = 0.0
             p['potential'] = 0.0
         return predictions, []
-    
+
     # Phase 1: Calculate pattern probabilities
     for pattern in predictions:
         frequency = pattern.get('frequency', 1)
         pattern['pattern_probability'] = frequency / sum_ensemble_frequencies
         pattern['weighted_strength'] = pattern.get('similarity', 1.0) * pattern['pattern_probability']
-    
+
     # Phase 2: Aggregate by futures
     future_aggregates = calculate_future_aggregates(predictions)
-    
+
     # Phase 3: Calculate predictive information and potential for each pattern
     for pattern in predictions:
         future = pattern.get('future', [])
@@ -122,11 +122,11 @@ def calculate_ensemble_predictive_information(
             pattern['predictive_information'] = 0.0
             pattern['potential'] = 0.0
             continue
-        
+
         future_key = hash_future(future)
         future_aggregate = future_aggregates.get(future_key, {})
         future_potential = future_aggregate.get('aggregate_potential', 0.0)
-        
+
         # Predictive information: How much this specific pattern contributes
         # to the prediction of its future relative to other patterns
         if future_potential > 0:
@@ -134,11 +134,11 @@ def calculate_ensemble_predictive_information(
             pattern['predictive_information'] = pattern['weighted_strength'] / future_potential
         else:
             pattern['predictive_information'] = 0.0
-        
+
         # Final potential: similarity * predictive_information
         # As requested: new simplified formula for potential
         pattern['potential'] = pattern.get('similarity', 1.0) * pattern['predictive_information']
-    
+
     # Prepare future potentials for response
     future_potentials = [
         {
@@ -148,10 +148,10 @@ def calculate_ensemble_predictive_information(
             'total_weighted_frequency': fa['total_weighted_frequency']
         }
         for fa in sorted(
-            future_aggregates.values(), 
-            key=lambda x: x['aggregate_potential'], 
+            future_aggregates.values(),
+            key=lambda x: x['aggregate_potential'],
             reverse=True
         )
     ]
-    
+
     return predictions, future_potentials

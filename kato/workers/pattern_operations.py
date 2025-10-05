@@ -5,12 +5,9 @@ Extracted from KatoProcessor for better modularity.
 """
 
 import logging
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, List, Optional
 
-from kato.exceptions import (
-    PatternProcessingError, ResourceNotFoundError, 
-    LearningError, ValidationError
-)
+from kato.exceptions import LearningError, PatternProcessingError, ResourceNotFoundError, ValidationError
 
 logger = logging.getLogger('kato.workers.pattern_operations')
 
@@ -26,7 +23,7 @@ class PatternOperations:
     - Pattern deletion
     - Vector retrieval
     """
-    
+
     def __init__(self, pattern_processor, vector_processor, memory_manager):
         """
         Initialize pattern operations with references to processors.
@@ -39,14 +36,14 @@ class PatternOperations:
         self.pattern_processor = pattern_processor
         self.vector_processor = vector_processor
         self.memory_manager = memory_manager
-        
+
         # Quick access to knowledge base
         self.knowledge = pattern_processor.superkb.knowledge
         self.patterns_kb = pattern_processor.superkb.patterns_kb
         self.predictions_kb = self.knowledge.predictions_kb
-        
+
         logger.debug("PatternOperations initialized")
-    
+
     def learn_pattern(self, keep_tail=False, keep_stm_for_rolling=False) -> str:
         """
         Learn a new pattern from current STM.
@@ -68,19 +65,19 @@ class PatternOperations:
         try:
             # Save tail event if needed BEFORE learning (which normally clears STM)
             tail_event = None
-            
+
             if keep_tail and not keep_stm_for_rolling:
                 # For tail mode: only save the last event
                 stm_state = self.memory_manager.get_stm_state()
                 if len(stm_state) > 1:
                     tail_event = stm_state[-1]
-            
+
             # Learn vectors first (if any)
             self.vector_processor.learn()
-            
+
             # Learn pattern from STM (this clears STM)
             pattern_name = self.pattern_processor.learn()
-            
+
             # Handle STM restoration based on mode
             if keep_stm_for_rolling:
                 # Rolling mode: DON'T restore full STM - that's handled by maintain_rolling_window
@@ -89,16 +86,16 @@ class PatternOperations:
             elif tail_event:
                 # Tail mode: only restore the last event
                 self.memory_manager.set_stm_tail_context(tail_event)
-            
+
             if pattern_name:
                 full_name = f"PTRN|{pattern_name}"
                 logger.info(f"Learned new pattern: {full_name}")
                 return full_name
-            
+
             # Return empty string for empty/single patterns (no pattern created)
             logger.debug("No pattern learned (STM empty or single event)")
             return ""
-            
+
         except Exception as e:
             stm_state = self.memory_manager.get_stm_state()
             raise LearningError(
@@ -106,7 +103,7 @@ class PatternOperations:
                 stm_state=stm_state,
                 auto_learn=False
             )
-    
+
     def get_pattern(self, pattern_id: str) -> Dict[str, Any]:
         """
         Retrieve pattern information by pattern ID.
@@ -132,19 +129,19 @@ class PatternOperations:
                 clean_name = pattern_id[5:]  # Remove 'PTRN|'
             else:
                 clean_name = pattern_id
-            
+
             # Query MongoDB with clean hash
             pattern = self.pattern_processor.superkb.getPattern(clean_name)
-            
+
             if pattern is not None:
                 # Remove MongoDB _id for JSON serialization
                 if '_id' in pattern:
                     pattern.pop('_id')
-                    
+
                 # Add PTRN| prefix to name field for consistency
                 if 'name' in pattern and not pattern['name'].startswith('PTRN|'):
                     pattern['name'] = f"PTRN|{pattern['name']}"
-                    
+
                 logger.debug(f"Retrieved pattern: {pattern_id}")
                 return {'status': 'okay', 'pattern': pattern}
             else:
@@ -153,13 +150,13 @@ class PatternOperations:
                     'status': 'error',
                     'message': f'Pattern {pattern_id} not found'
                 }
-                
+
         except Exception as e:
             raise PatternProcessingError(
                 f"Failed to retrieve pattern {pattern_id}: {str(e)}",
                 pattern_name=pattern_id
             )
-    
+
     def delete_pattern(self, name: str) -> str:
         """
         Delete pattern with the given name from both RAM and database.
@@ -180,13 +177,13 @@ class PatternOperations:
                 clean_name = name[5:]
             else:
                 clean_name = name
-            
+
             # Delete from pattern processor (RAM and DB)
             result = self.pattern_processor.delete_pattern(clean_name)
-            
+
             logger.info(f"Deleted pattern: {name}")
             return result
-            
+
         except Exception as e:
             if "Unable to find" in str(e):
                 raise ResourceNotFoundError(
@@ -199,7 +196,7 @@ class PatternOperations:
                     f"Failed to delete pattern {name}: {str(e)}",
                     pattern_name=name
                 )
-    
+
     def update_pattern(self, name: str, frequency: Optional[int] = None,
                       emotives: Optional[Dict[str, List[float]]] = None) -> Dict[str, Any]:
         """
@@ -223,7 +220,7 @@ class PatternOperations:
                 clean_name = name[5:]
             else:
                 clean_name = name
-            
+
             # Validate parameters
             if frequency is not None and frequency < 0:
                 raise ValidationError(
@@ -232,14 +229,14 @@ class PatternOperations:
                     field_value=frequency,
                     validation_rule="Must be >= 0"
                 )
-            
+
             # Update pattern
             result = self.pattern_processor.update_pattern(clean_name, frequency, emotives)
-            
+
             logger.info(f"Updated pattern: {name} (frequency={frequency}, "
                        f"emotives={len(emotives) if emotives else 0} dimensions)")
             return result
-            
+
         except ValidationError:
             raise
         except Exception as e:
@@ -247,7 +244,7 @@ class PatternOperations:
                 f"Failed to update pattern {name}: {str(e)}",
                 pattern_name=name
             )
-    
+
     def get_vector(self, name: str) -> Optional[List[float]]:
         """
         Retrieve vector values by vector name.
@@ -263,17 +260,17 @@ class PatternOperations:
         """
         try:
             vector = self.pattern_processor.superkb.getVector(name)
-            
+
             if vector is None:
                 raise ResourceNotFoundError(
                     f"Vector {name} not found",
                     resource_type="vector",
                     resource_id=name
                 )
-            
+
             logger.debug(f"Retrieved vector: {name}")
             return vector
-            
+
         except ResourceNotFoundError:
             raise
         except Exception as e:
@@ -283,7 +280,7 @@ class PatternOperations:
                 resource_type="vector",
                 resource_id=name
             )
-    
+
     def get_predictions(self, unique_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Retrieve predictions for a specific observation ID.
@@ -298,7 +295,7 @@ class PatternOperations:
             List of prediction dictionaries
         """
         predictions = []
-        
+
         if not unique_id:
             # Return current predictions from memory
             predictions = self.pattern_processor.predictions
@@ -309,11 +306,11 @@ class PatternOperations:
                 if '_id' in pred:
                     pred.pop('_id')
                 predictions.append(pred)
-        
+
         logger.debug(f"Retrieved {len(predictions)} predictions for "
                     f"{'current state' if not unique_id else f'ID {unique_id}'}")
         return predictions
-    
+
     def get_pattern_count(self) -> int:
         """
         Get the total count of patterns in the database.

@@ -6,31 +6,42 @@ Qdrant is a high-performance vector database written in Rust with excellent
 support for filtering, GPU acceleration, and various quantization methods.
 """
 
-import logging
-from typing import List, Dict, Any, Optional, Tuple
-import numpy as np
-from uuid import uuid4
 import asyncio
+import logging
+from typing import Any, Dict, List, Optional, Tuple
+
+import numpy as np
 
 try:
     from qdrant_client import QdrantClient
     from qdrant_client.models import (
-        Distance, VectorParams, PointStruct, Filter, FieldCondition,
-        SearchRequest, ScoredPoint, UpdateStatus, CollectionInfo,
-        OptimizersConfig, OptimizersConfigDiff, HnswConfig, HnswConfigDiff,
+        BinaryQuantization,
+        BinaryQuantizationConfig,
+        CompressionRatio,
+        Distance,
+        FieldCondition,
+        Filter,
+        HnswConfigDiff,
+        OptimizersConfigDiff,
+        PointStruct,
+        ProductQuantization,
+        ProductQuantizationConfig,
         QuantizationConfig,
-        ScalarQuantization, ProductQuantization, BinaryQuantization,
-        ScalarQuantizationConfig, ProductQuantizationConfig,
-        BinaryQuantizationConfig, ScalarType, CompressionRatio
+        ScalarQuantization,
+        ScalarQuantizationConfig,
+        ScalarType,
+        SearchRequest,
+        UpdateStatus,
+        VectorParams,
     )
-    from qdrant_client.http.exceptions import UnexpectedResponse
     QDRANT_AVAILABLE = True
 except ImportError:
     QDRANT_AVAILABLE = False
     logging.warning("Qdrant client not installed. Install with: pip install qdrant-client")
 
-from .vector_store_interface import VectorStore, VectorSearchResult, VectorBatch
-from ..config.vectordb_config import QdrantConfig, QuantizationConfig as KatoQuantConfig
+from ..config.vectordb_config import QdrantConfig
+from ..config.vectordb_config import QuantizationConfig as KatoQuantConfig
+from .vector_store_interface import VectorBatch, VectorSearchResult, VectorStore
 
 logger = logging.getLogger('kato.storage.qdrant')
 
@@ -46,33 +57,33 @@ class QdrantStore(VectorStore):
     - GPU acceleration support (with appropriate Docker image)
     - Automatic index optimization
     """
-    
+
     def __init__(self, config: Dict[str, Any]):
         """Initialize Qdrant store with configuration"""
         super().__init__(config)
-        
+
         if not QDRANT_AVAILABLE:
             raise ImportError("Qdrant client not available. Install with: pip install qdrant-client")
-        
+
         # Extract Qdrant-specific config
         if isinstance(config.get('qdrant'), QdrantConfig):
             self.qdrant_config = config['qdrant']
         else:
             self.qdrant_config = QdrantConfig(**config.get('qdrant', {}))
-        
+
         # Extract quantization config
         if isinstance(config.get('quantization'), KatoQuantConfig):
             self.quant_config = config['quantization']
         else:
             self.quant_config = KatoQuantConfig(**config.get('quantization', {}))
-        
+
         # Initialize client
         self.client = QdrantClient(
             host=self.qdrant_config.host,
             port=self.qdrant_config.port,
             timeout=config.get('search_timeout', 10.0)
         )
-        
+
         # Distance metric mapping
         self.distance_map = {
             'euclidean': Distance.EUCLID,
@@ -80,9 +91,9 @@ class QdrantStore(VectorStore):
             'dot': Distance.DOT,
             'manhattan': Distance.MANHATTAN
         }
-        
+
         logger.info(f"Initialized Qdrant store: {self.qdrant_config.get_url()}")
-    
+
     async def connect(self) -> bool:
         """Establish connection to Qdrant"""
         try:
@@ -95,7 +106,7 @@ class QdrantStore(VectorStore):
             logger.error(f"Failed to connect to Qdrant: {e}")
             self._is_connected = False
             return False
-    
+
     async def disconnect(self) -> bool:
         """Close connection to Qdrant"""
         try:
@@ -106,7 +117,7 @@ class QdrantStore(VectorStore):
         except Exception as e:
             logger.error(f"Error during disconnect: {e}")
             return False
-    
+
     async def create_collection(
         self,
         collection_name: str,
@@ -120,14 +131,14 @@ class QdrantStore(VectorStore):
                 kwargs.get('distance', self.qdrant_config.distance),
                 Distance.EUCLID
             )
-            
+
             # Configure HNSW index
             hnsw_config = HnswConfigDiff(
                 m=kwargs.get('hnsw_m', 16),
                 ef_construct=kwargs.get('hnsw_ef_construct', 128),
                 full_scan_threshold=kwargs.get('full_scan_threshold', 10000)
             )
-            
+
             # Configure optimizers
             optimizers_config = OptimizersConfigDiff(
                 deleted_threshold=self.qdrant_config.optimizers.get('deleted_threshold', 0.2),
@@ -138,7 +149,7 @@ class QdrantStore(VectorStore):
                 indexing_threshold=self.qdrant_config.optimizers.get('indexing_threshold', 10000),
                 flush_interval_sec=self.qdrant_config.optimizers.get('flush_interval_sec', 5),
             )
-            
+
             # Configure quantization if enabled
             quantization_config = None
             if self.quant_config.enabled:
@@ -159,7 +170,7 @@ class QdrantStore(VectorStore):
                         'x32': CompressionRatio.X32,
                         'x64': CompressionRatio.X64
                     }.get(compression, CompressionRatio.X16)
-                    
+
                     quantization_config = ProductQuantization(
                         product=ProductQuantizationConfig(
                             compression=compression_ratio,
@@ -172,7 +183,7 @@ class QdrantStore(VectorStore):
                             always_ram=self.quant_config.parameters.get('always_ram', True)
                         )
                     )
-            
+
             # Create collection
             success = await self._async_wrapper(
                 self.client.create_collection,
@@ -186,16 +197,16 @@ class QdrantStore(VectorStore):
                 quantization_config=quantization_config,
                 on_disk_payload=self.qdrant_config.on_disk_payload
             )
-            
+
             if success:
                 logger.info(f"Created collection '{collection_name}' with dim={vector_dim}, distance={distance}")
-            
+
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to create collection '{collection_name}': {e}")
             return False
-    
+
     async def delete_collection(self, collection_name: str) -> bool:
         """Delete a Qdrant collection"""
         try:
@@ -208,7 +219,7 @@ class QdrantStore(VectorStore):
         except Exception as e:
             logger.error(f"Failed to delete collection '{collection_name}': {e}")
             return False
-    
+
     async def collection_exists(self, collection_name: str) -> bool:
         """Check if a collection exists"""
         try:
@@ -217,7 +228,7 @@ class QdrantStore(VectorStore):
         except Exception as e:
             logger.error(f"Failed to check collection existence: {e}")
             return False
-    
+
     async def add_vector(
         self,
         collection_name: str,
@@ -232,19 +243,19 @@ class QdrantStore(VectorStore):
                 vector=vector.tolist(),
                 payload=payload or {}
             )
-            
+
             result = await self._async_wrapper(
                 self.client.upsert,
                 collection_name=collection_name,
                 points=[point]
             )
-            
+
             return result.status == UpdateStatus.COMPLETED
-            
+
         except Exception as e:
             logger.error(f"Failed to add vector {vector_id}: {e}")
             return False
-    
+
     async def add_vectors(
         self,
         collection_name: str,
@@ -260,7 +271,7 @@ class QdrantStore(VectorStore):
                     vector=batch.vectors[i].tolist(),
                     payload=payload
                 ))
-            
+
             # Qdrant handles batching internally
             result = await self._async_wrapper(
                 self.client.upsert,
@@ -268,17 +279,17 @@ class QdrantStore(VectorStore):
                 points=points,
                 wait=True
             )
-            
+
             if result.status == UpdateStatus.COMPLETED:
                 return batch.size, []
             else:
                 # Partial failure - need to check which ones failed
                 return 0, batch.ids  # Conservative: assume all failed
-                
+
         except Exception as e:
             logger.error(f"Failed to add batch of {batch.size} vectors: {e}")
             return 0, batch.ids
-    
+
     async def get_vector(
         self,
         collection_name: str,
@@ -294,10 +305,10 @@ class QdrantStore(VectorStore):
                 with_vectors=include_vector,
                 with_payload=True
             )
-            
+
             if not points:
                 return None
-            
+
             point = points[0]
             return VectorSearchResult(
                 id=str(point.id),
@@ -305,11 +316,11 @@ class QdrantStore(VectorStore):
                 vector=np.array(point.vector) if include_vector and point.vector else None,
                 payload=point.payload
             )
-            
+
         except Exception as e:
             logger.error(f"Failed to get vector {vector_id}: {e}")
             return None
-    
+
     async def get_vectors(
         self,
         collection_name: str,
@@ -325,7 +336,7 @@ class QdrantStore(VectorStore):
                 with_vectors=include_vectors,
                 with_payload=True
             )
-            
+
             results = []
             for point in points:
                 results.append(VectorSearchResult(
@@ -334,13 +345,13 @@ class QdrantStore(VectorStore):
                     vector=np.array(point.vector) if include_vectors and point.vector else None,
                     payload=point.payload
                 ))
-            
+
             return results
-            
+
         except Exception as e:
             logger.error(f"Failed to get vectors: {e}")
             return []
-    
+
     async def update_vector(
         self,
         collection_name: str,
@@ -363,7 +374,7 @@ class QdrantStore(VectorStore):
                     points=[point]
                 )
                 return result.status == UpdateStatus.COMPLETED
-                
+
             elif payload is not None:
                 # Update only payload
                 result = await self._async_wrapper(
@@ -373,13 +384,13 @@ class QdrantStore(VectorStore):
                     points=[vector_id]
                 )
                 return result.status == UpdateStatus.COMPLETED
-                
+
             return True  # Nothing to update
-            
+
         except Exception as e:
             logger.error(f"Failed to update vector {vector_id}: {e}")
             return False
-    
+
     async def delete_vector(
         self,
         collection_name: str,
@@ -393,11 +404,11 @@ class QdrantStore(VectorStore):
                 points_selector=[vector_id]
             )
             return result.status == UpdateStatus.COMPLETED
-            
+
         except Exception as e:
             logger.error(f"Failed to delete vector {vector_id}: {e}")
             return False
-    
+
     async def delete_vectors(
         self,
         collection_name: str,
@@ -410,16 +421,16 @@ class QdrantStore(VectorStore):
                 collection_name=collection_name,
                 points_selector=vector_ids
             )
-            
+
             if result.status == UpdateStatus.COMPLETED:
                 return len(vector_ids), []
             else:
                 return 0, vector_ids  # Conservative: assume all failed
-                
+
         except Exception as e:
             logger.error(f"Failed to delete {len(vector_ids)} vectors: {e}")
             return 0, vector_ids
-    
+
     async def search(
         self,
         collection_name: str,
@@ -443,7 +454,7 @@ class QdrantStore(VectorStore):
                     ))
                 if conditions:
                     qdrant_filter = Filter(must=conditions)
-            
+
             # Perform search
             results = await self._async_wrapper(
                 self.client.search,
@@ -455,7 +466,7 @@ class QdrantStore(VectorStore):
                 with_payload=True,
                 score_threshold=kwargs.get('score_threshold')
             )
-            
+
             # Convert to our format
             search_results = []
             for point in results:
@@ -465,13 +476,13 @@ class QdrantStore(VectorStore):
                     vector=np.array(point.vector) if include_vectors and point.vector else None,
                     payload=point.payload
                 ))
-            
+
             return search_results
-            
+
         except Exception as e:
             logger.error(f"Search failed: {e}")
             return []
-    
+
     async def batch_search(
         self,
         collection_name: str,
@@ -486,7 +497,7 @@ class QdrantStore(VectorStore):
             # Build search requests
             requests = []
             qdrant_filter = None
-            
+
             if filter:
                 conditions = []
                 for key, value in filter.items():
@@ -496,7 +507,7 @@ class QdrantStore(VectorStore):
                     ))
                 if conditions:
                     qdrant_filter = Filter(must=conditions)
-            
+
             for query_vector in query_vectors:
                 requests.append(SearchRequest(
                     vector=query_vector.tolist(),
@@ -506,14 +517,14 @@ class QdrantStore(VectorStore):
                     with_payload=True,
                     score_threshold=kwargs.get('score_threshold')
                 ))
-            
+
             # Perform batch search
             batch_results = await self._async_wrapper(
                 self.client.search_batch,
                 collection_name=collection_name,
                 requests=requests
             )
-            
+
             # Convert results
             all_results = []
             for results in batch_results:
@@ -526,13 +537,13 @@ class QdrantStore(VectorStore):
                         payload=point.payload
                     ))
                 all_results.append(query_results)
-            
+
             return all_results
-            
+
         except Exception as e:
             logger.error(f"Batch search failed: {e}")
             return [[] for _ in range(len(query_vectors))]
-    
+
     async def count_vectors(
         self,
         collection_name: str,
@@ -549,7 +560,7 @@ class QdrantStore(VectorStore):
                         match={"value": value}
                     ))
                 qdrant_filter = Filter(must=conditions) if conditions else None
-                
+
                 # Use scroll to count filtered results
                 count = 0
                 offset = None
@@ -566,7 +577,7 @@ class QdrantStore(VectorStore):
                     count += len(records)
                     if offset is None:
                         break
-                
+
                 return count
             else:
                 # Get collection info for total count
@@ -575,11 +586,11 @@ class QdrantStore(VectorStore):
                     collection_name=collection_name
                 )
                 return info.vectors_count
-                
+
         except Exception as e:
             logger.error(f"Failed to count vectors: {e}")
             return 0
-    
+
     async def get_collection_info(
         self,
         collection_name: str
@@ -590,7 +601,7 @@ class QdrantStore(VectorStore):
                 self.client.get_collection,
                 collection_name=collection_name
             )
-            
+
             return {
                 'name': collection_name,
                 'vector_dim': info.config.params.vectors.size,
@@ -603,11 +614,11 @@ class QdrantStore(VectorStore):
                 'optimizer_status': info.optimizer_status,
                 'config': info.config.dict() if hasattr(info.config, 'dict') else str(info.config)
             }
-            
+
         except Exception as e:
             logger.error(f"Failed to get collection info: {e}")
             return {}
-    
+
     async def list_collections(self) -> List[str]:
         """List all collections"""
         try:
@@ -616,7 +627,7 @@ class QdrantStore(VectorStore):
         except Exception as e:
             logger.error(f"Failed to list collections: {e}")
             return []
-    
+
     async def optimize_collection(
         self,
         collection_name: str,
@@ -631,21 +642,21 @@ class QdrantStore(VectorStore):
                     collection_name=collection_name,
                     optimizer_config=OptimizersConfigDiff(**kwargs)
                 )
-            
+
             # Trigger optimization
             # Note: Qdrant optimizes automatically, but we can force it
             info = await self._async_wrapper(
                 self.client.get_collection,
                 collection_name=collection_name
             )
-            
+
             logger.info(f"Collection '{collection_name}' optimization status: {info.optimizer_status}")
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to optimize collection: {e}")
             return False
-    
+
     async def backup_collection(
         self,
         collection_name: str,
@@ -658,13 +669,13 @@ class QdrantStore(VectorStore):
                 self.client.create_snapshot,
                 collection_name=collection_name
             )
-            
+
             # Download snapshot to file
             # Note: This is a simplified version. In production, you'd want to
             # actually download the snapshot file from Qdrant's storage
-            
+
             logger.info(f"Created snapshot for '{collection_name}': {snapshot_info}")
-            
+
             # For now, just save the snapshot info
             import json
             with open(backup_path, 'w') as f:
@@ -673,13 +684,13 @@ class QdrantStore(VectorStore):
                     'snapshot': snapshot_info.name if hasattr(snapshot_info, 'name') else str(snapshot_info),
                     'timestamp': str(snapshot_info)
                 }, f)
-            
+
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to backup collection: {e}")
             return False
-    
+
     async def restore_collection(
         self,
         collection_name: str,
@@ -691,11 +702,11 @@ class QdrantStore(VectorStore):
             # For now, this is a placeholder
             logger.warning("Collection restore not fully implemented for Qdrant")
             return False
-            
+
         except Exception as e:
             logger.error(f"Failed to restore collection: {e}")
             return False
-    
+
     # Helper methods
     async def _async_wrapper(self, func, *args, **kwargs):
         """Wrap synchronous Qdrant client calls for async compatibility"""

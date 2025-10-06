@@ -283,6 +283,12 @@ The codebase has comprehensive test coverage with 287 test functions across mult
 - `SORT`: Sort symbols alphabetically within events (default: true)
 - `PROCESS_PREDICTIONS`: Enable prediction processing (default: true)
 
+#### Middleware Configuration
+- `ENABLE_AUTO_SESSION_MIDDLEWARE`: Enable automatic session creation for deprecated endpoints (default: true)
+  - When enabled: Deprecated endpoints automatically create sessions (Phase 2 backward compatibility)
+  - When disabled: Deprecated endpoints fail with migration errors
+  - **Recommendation**: Keep enabled during migration period, monitor metrics to track usage
+
 ### Session-Based Configuration
 The system uses Redis-based session management for configuration:
 - **Session Isolation**: Each session gets unique configuration
@@ -292,6 +298,7 @@ The system uses Redis-based session management for configuration:
 
 ## Recent Modernizations
 
+- **API Endpoint Deprecation Phase 2** (2025-10): Auto-session middleware for transparent backward compatibility
 - **FastAPI Migration**: Replaced REST/ZMQ with direct FastAPI embedding (2025-09)
 - **Vector Database**: Migrated from linear search to Qdrant (10-100x faster)
 - **Simplified Architecture**: Removed connection pooling complexity
@@ -308,12 +315,14 @@ The system uses Redis-based session management for configuration:
 ## Important Files and Locations
 
 - Main service: `kato/services/kato_fastapi.py`
+- Auto-session middleware: `kato/middleware/auto_session.py` (Phase 2 backward compatibility)
 - Processing logic: `kato/workers/kato_processor.py`
 - Vector operations: `kato/storage/qdrant_manager.py`
 - Pattern representations: `kato/representations/pattern.py`
 - Pattern processing: `kato/workers/pattern_processor.py`
 - Pattern search: `kato/searches/pattern_search.py`
 - Metrics calculations: `kato/informatics/metrics.py`
+- Monitoring metrics: `kato/monitoring/metrics.py`
 - Test fixtures: `tests/tests/fixtures/kato_fixtures.py`
 - Startup script: `start.sh`
 

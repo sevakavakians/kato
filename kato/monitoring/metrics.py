@@ -205,6 +205,18 @@ class MetricsCollector:
             "Number of circuit breaker open events"
         )
 
+        # Deprecation metrics (Phase 2: Auto-Session Middleware)
+        self.register_metric(
+            "kato_deprecated_endpoint_calls_total",
+            "counter",
+            "Total calls to deprecated direct endpoints (by endpoint path)"
+        )
+        self.register_metric(
+            "kato_auto_session_created_total",
+            "counter",
+            "Total auto-sessions created by middleware for backward compatibility"
+        )
+
     def register_metric(
         self,
         name: str,

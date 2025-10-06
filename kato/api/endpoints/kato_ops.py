@@ -34,12 +34,27 @@ async def observe_primary(
     """
     Process a new observation.
 
+    ⚠️  DEPRECATED: This direct endpoint is deprecated. Use session-based endpoints instead:
+        POST /sessions/{session_id}/observe
+
     Accepts multi-modal input (strings, vectors, emotives) and processes it
     through the KATO system, updating short-term memory and triggering
     auto-learning if configured.
+
+    Session-based endpoints provide:
+    - Better state persistence with Redis
+    - Explicit session locking for thread safety
+    - Proper TTL and lifecycle management
+    - Stronger multi-user isolation guarantees
     """
     from kato.services.kato_fastapi import app_state, get_node_id_from_request
 
+    # Check if auto-session middleware was used
+    auto_session_used = request.headers.get('x-auto-session-created') == 'true'
+    if auto_session_used:
+        logger.info("DEPRECATED: /observe called via auto-session middleware (transparent migration)")
+    else:
+        logger.warning("DEPRECATED: /observe endpoint called directly. Use /sessions/{session_id}/observe instead.")
     logger.debug("observe_primary function called")
 
     try:
@@ -83,8 +98,20 @@ async def get_stm_primary(
     request: Request,
     processor_id: Optional[str] = Query(None, description="Processor identifier")
 ):
-    """Get short-term memory for the processor"""
+    """
+    Get short-term memory for the processor.
+
+    ⚠️  DEPRECATED: This direct endpoint is deprecated. Use session-based endpoints instead:
+        GET /sessions/{session_id}/stm
+    """
     from kato.services.kato_fastapi import app_state, get_node_id_from_request
+
+    # Check if auto-session middleware was used
+    auto_session_used = request.headers.get('x-auto-session-created') == 'true'
+    if auto_session_used:
+        logger.info("DEPRECATED: /stm called via auto-session middleware (transparent migration)")
+    else:
+        logger.warning("DEPRECATED: /stm endpoint called directly. Use /sessions/{session_id}/stm instead.")
 
     # Use header-based node ID if processor_id not provided
     if processor_id is None:
@@ -108,10 +135,20 @@ async def learn_primary(
     """
     Learn a pattern from the current STM.
 
+    ⚠️  DEPRECATED: This direct endpoint is deprecated. Use session-based endpoints instead:
+        POST /sessions/{session_id}/learn
+
     Takes all observations currently in short-term memory and creates
     a persistent pattern that can be used for future predictions.
     """
     from kato.services.kato_fastapi import app_state, get_node_id_from_request
+
+    # Check if auto-session middleware was used
+    auto_session_used = request.headers.get('x-auto-session-created') == 'true'
+    if auto_session_used:
+        logger.info("DEPRECATED: /learn called via auto-session middleware (transparent migration)")
+    else:
+        logger.warning("DEPRECATED: /learn endpoint called directly. Use /sessions/{session_id}/learn instead.")
 
     # Use header-based node ID if processor_id not provided
     if processor_id is None:
@@ -145,8 +182,20 @@ async def clear_stm_primary(
     request: Request,
     processor_id: Optional[str] = Query(None, description="Processor identifier")
 ):
-    """Clear the short-term memory"""
+    """
+    Clear the short-term memory.
+
+    ⚠️  DEPRECATED: This direct endpoint is deprecated. Use session-based endpoints instead:
+        POST /sessions/{session_id}/clear-stm
+    """
     from kato.services.kato_fastapi import app_state, get_node_id_from_request
+
+    # Check if auto-session middleware was used
+    auto_session_used = request.headers.get('x-auto-session-created') == 'true'
+    if auto_session_used:
+        logger.info("DEPRECATED: /clear-stm called via auto-session middleware (transparent migration)")
+    else:
+        logger.warning("DEPRECATED: /clear-stm endpoint called directly. Use /sessions/{session_id}/clear-stm instead.")
 
     # Use header-based node ID if processor_id not provided
     if processor_id is None:
@@ -207,10 +256,16 @@ async def get_predictions_primary(processor_id: Optional[str] = Query(None, desc
     """
     Get predictions based on current STM.
 
+    ⚠️  DEPRECATED: This direct endpoint is deprecated. Use session-based endpoints instead:
+        GET /sessions/{session_id}/predictions
+
     Analyzes the current short-term memory and returns potential
     future sequences based on learned patterns.
     """
     from kato.services.kato_fastapi import app_state
+
+    # Note: predictions endpoint doesn't have Request parameter, so can't check auto-session header
+    logger.warning("DEPRECATED: /predictions endpoint called. Use /sessions/{session_id}/predictions instead.")
 
     processor = await app_state.processor_manager.get_processor_by_id(processor_id)
 
@@ -238,9 +293,13 @@ async def post_predictions_primary(processor_id: Optional[str] = Query(None, des
     """
     Get predictions based on current STM. (POST version)
 
+    ⚠️  DEPRECATED: This direct endpoint is deprecated. Use session-based endpoints instead:
+        GET /sessions/{session_id}/predictions
+
     Analyzes the current short-term memory and returns potential
     future sequences based on learned patterns.
     """
+    logger.warning("DEPRECATED: POST /predictions endpoint called. Use /sessions/{session_id}/predictions instead.")
     return await get_predictions_primary(processor_id)
 
 
@@ -399,12 +458,22 @@ async def observe_sequence_primary(
     """
     Process multiple observations in sequence with optional isolation.
 
+    ⚠️  DEPRECATED: This direct endpoint is deprecated. Use session-based endpoints instead:
+        POST /sessions/{session_id}/observe-sequence
+
     Provides bulk processing capabilities with options for:
     - Sequential processing with shared STM context
     - Isolated processing where each observation gets fresh STM
     - Auto-learning after the sequence completes
     """
     from kato.services.kato_fastapi import app_state, get_node_id_from_request
+
+    # Check if auto-session middleware was used
+    auto_session_used = request.headers.get('x-auto-session-created') == 'true'
+    if auto_session_used:
+        logger.info("DEPRECATED: /observe-sequence called via auto-session middleware (transparent migration)")
+    else:
+        logger.warning("DEPRECATED: /observe-sequence endpoint called directly. Use /sessions/{session_id}/observe-sequence instead.")
 
     # Use header-based node ID if processor_id not provided
     if processor_id is None:

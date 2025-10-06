@@ -25,6 +25,7 @@ from kato.api.endpoints import health_router, kato_ops_router, monitoring_router
 from kato.config.configuration_service import get_configuration_service
 from kato.config.settings import get_settings
 from kato.exceptions.handlers import setup_error_handlers
+from kato.middleware.auto_session import AutoSessionMiddleware
 from kato.monitoring.metrics import get_metrics_collector
 from kato.processors.processor_manager import ProcessorManager
 from kato.sessions.redis_session_manager import get_redis_session_manager
@@ -57,6 +58,9 @@ app.add_middleware(
 
 # Add session middleware
 app.add_middleware(SessionMiddleware, auto_create=False)
+
+# Auto-session middleware will be added conditionally after AppState is initialized
+# (see middleware registration code below, after AppState definition)
 
 # Add metrics collection middleware
 @app.middleware("http")
@@ -155,6 +159,27 @@ class AppState:
 
 
 app_state = AppState()
+
+# Add Auto-Session Middleware for backward compatibility (Phase 2)
+# Note: Middleware is added at module level but accesses app_state dynamically
+auto_session_enabled = os.environ.get('ENABLE_AUTO_SESSION_MIDDLEWARE', 'true').lower() == 'true'
+if auto_session_enabled:
+    from starlette.middleware.base import BaseHTTPMiddleware
+
+    class AutoSessionMiddlewareWrapper(BaseHTTPMiddleware):
+        """Wrapper that lazily accesses app_state for dependencies"""
+        async def dispatch(self, request, call_next):
+            # Import and instantiate the actual middleware
+            middleware = AutoSessionMiddleware(
+                app=self.app,
+                session_manager=app_state.session_manager,
+                metrics_collector=getattr(app_state, 'metrics_collector', None),
+                enabled=True
+            )
+            return await middleware.dispatch(request, call_next)
+
+    app.add_middleware(AutoSessionMiddlewareWrapper)
+    logger.info("Auto-Session Middleware registered for backward compatibility")
 
 
 @app.on_event("startup")

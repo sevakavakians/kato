@@ -209,7 +209,7 @@ Each prediction includes:
 - **similarity**: Match quality measure
 - **frequency**: Times this pattern was learned
 - **emotives**: Emotional context if learned with pattern
-- **hamiltonian/entropy**: Energy and uncertainty measures
+- **normalized_entropy/entropy**: Energy and uncertainty measures
 
 ### 5. Special Behaviors
 

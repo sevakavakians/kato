@@ -160,8 +160,8 @@ Returns predictions based on current STM or specific observation.
       "emotives": {"joy": 0.5},      // Averaged emotives from learned pattern
       "predictive_information": 0.75,  // Information-theoretic predictive value
       "potential": 0.6375,             // similarity * predictive_information
-      "hamiltonian": 0.3,
-      "grand_hamiltonian": 0.4,
+      "normalized_entropy": 0.3,
+      "global_normalized_entropy": 0.4,
       "confluence": 0.6
     }
   ],
@@ -496,8 +496,8 @@ Common HTTP status codes:
 - `emotives`: Emotional/utility values
 - `predictive_information`: Information-theoretic predictive value (0-1)
 - `potential`: Information-theoretic ranking metric (similarity × predictive_information)
-- `hamiltonian`: Entropy-like complexity measure
-- `grand_hamiltonian`: Extended hamiltonian
+- `normalized_entropy`: Entropy-like complexity measure
+- `global_normalized_entropy`: Extended normalized entropy
 - `confluence`: Probability vs random chance
 
 ### Future Potentials Fields (Optional Response)

@@ -37,8 +37,8 @@ class Prediction(dict):
         else:
             self['snr'] = float(0)  # Default to 0 when no matches or extras
         self['entropy'] = float(0)
-        self['hamiltonian'] = float(0)
-        self['grand_hamiltonian'] = float(0)
+        self['normalized_entropy'] = float(0)
+        self['global_normalized_entropy'] = float(0)
         self['confluence'] = float(0)
         self['predictive_information'] = float(0)  # Excess entropy / mutual information between past and future
         self['sequence'] = _pattern['pattern_data']

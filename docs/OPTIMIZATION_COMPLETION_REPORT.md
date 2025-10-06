@@ -45,7 +45,7 @@ The KATO performance optimization project has been successfully completed with a
 #### 5. Incremental Metric Calculations
 - **Implementation**: `kato/storage/metrics_cache.py`
 - **Features**: Redis-based metric caching with incremental updates
-- **Result**: Cached hamiltonian, confluence, and other metric calculations
+- **Result**: Cached normalized entropy, confluence, and other metric calculations
 - **Performance Gain**: 70-90% reduction in computation time
 
 #### 6. Connection Pool Optimization

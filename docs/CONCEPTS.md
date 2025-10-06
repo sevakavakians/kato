@@ -174,8 +174,8 @@ Each prediction includes:
 - `confidence`: Confidence score (0-1)
 - `similarity`: How closely the observation matches the pattern
 - `frequency`: How many times this pattern has been learned
-- `hamiltonian`: Energy measure
-- `grand_hamiltonian`: Combined energy measure
+- `normalized_entropy`: Energy measure
+- `global_normalized_entropy`: Combined energy measure
 - `entropy`: Uncertainty measure
 - `matches`: Symbols that matched
 - `emotives`: Dictionary of emotive values (if learned with the pattern)

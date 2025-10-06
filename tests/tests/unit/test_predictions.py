@@ -1,6 +1,6 @@
 """
 Unit tests for KATO predictions.
-Tests prediction generation, Hamiltonian calculations, and confidence scores.
+Tests prediction generation, normalized entropy calculations, and confidence scores.
 """
 
 import os
@@ -40,8 +40,8 @@ def test_predictions_after_observation(kato_fixture):
     for pred in predictions:
         assert 'name' in pred
         assert 'confidence' in pred
-        assert 'hamiltonian' in pred
-        assert 'grand_hamiltonian' in pred
+        assert 'normalized_entropy' in pred
+        assert 'global_normalized_entropy' in pred
         assert 'entropy' in pred
         assert 'similarity' in pred
         assert 'frequency' in pred
@@ -203,8 +203,8 @@ def test_prediction_entropy(kato_fixture):
         assert pred['entropy'] >= 0
 
 
-def test_prediction_hamiltonian(kato_fixture):
-    """Test Hamiltonian and grand Hamiltonian calculations."""
+def test_prediction_normalized_entropy(kato_fixture):
+    """Test normalized entropy and global normalized entropy calculations."""
     kato_fixture.clear_all_memory()
 
     # Learn a sequence
@@ -219,10 +219,10 @@ def test_prediction_hamiltonian(kato_fixture):
     predictions = kato_fixture.get_predictions()
 
     for pred in predictions:
-        assert 'hamiltonian' in pred
-        assert 'grand_hamiltonian' in pred
-        assert isinstance(pred['hamiltonian'], (int, float))
-        assert isinstance(pred['grand_hamiltonian'], (int, float))
+        assert 'normalized_entropy' in pred
+        assert 'global_normalized_entropy' in pred
+        assert isinstance(pred['normalized_entropy'], (int, float))
+        assert isinstance(pred['global_normalized_entropy'], (int, float))
 
 
 def test_prediction_with_emotives(kato_fixture):

@@ -188,14 +188,14 @@ class MetricsCache:
         self.redis = redis_client
         self.cache_ttl = 300  # 5 minutes
     
-    async def get_cached_hamiltonian(self, state_hash: str):
-        """Get cached hamiltonian calculation"""
-        key = f"metrics:hamiltonian:{state_hash}"
+    async def get_cached_normalized_entropy(self, state_hash: str):
+        """Get cached normalized entropy calculation"""
+        key = f"metrics:normalized_entropy:{state_hash}"
         return await self.redis.get(key)
-    
-    async def cache_hamiltonian(self, state_hash: str, value: float):
-        """Cache hamiltonian calculation"""
-        key = f"metrics:hamiltonian:{state_hash}"
+
+    async def cache_normalized_entropy(self, state_hash: str, value: float):
+        """Cache normalized entropy calculation"""
+        key = f"metrics:normalized_entropy:{state_hash}"
         await self.redis.setex(key, self.cache_ttl, str(value))
     
     async def update_symbol_frequencies_incremental(self, new_symbols: List[str]):

@@ -319,7 +319,7 @@ But maintain complete isolation through:
 3. STM context used to search MongoDB patterns
 4. Vector similarity search in Qdrant
 5. Temporal segmentation applied (past/present/future)
-6. Prediction metrics calculated (hamiltonian, confidence, etc.)
+6. Prediction metrics calculated (normalized entropy, confidence, etc.)
 7. Structured prediction returned with missing/extras/matches fields
 
 ### Learning Flow

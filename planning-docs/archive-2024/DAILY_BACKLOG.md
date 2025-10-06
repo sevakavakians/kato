@@ -70,7 +70,7 @@
 - **Key Results**:
   - Fixed pattern fragmentation division by zero (fragmentation = -1 case)
   - Fixed ITFDF similarity calculation when total_frequency = 0
-  - Fixed hamiltonian calculation for empty states
+  - Fixed normalized entropy calculation for empty states
   - Enhanced error handling philosophy: explicit failures vs masking
   - Fixed test_threshold_zero_no_filtering test
   - Updated CLAUDE.md and README.md with bug fix documentation

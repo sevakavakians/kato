@@ -144,7 +144,7 @@ Confirmed all fields remain in predictions:
 - `snr`: Signal-to-noise ratio
 - `potential`: Overall prediction score
 - `emotives`: Emotional/utility values
-- `entropy`, `hamiltonian`, `grand_hamiltonian`, `confluence`: Advanced metrics
+- `entropy`, `normalized_entropy`, `global_normalized_entropy`, `confluence`: Advanced metrics
 
 ## Known Issues & Limitations
 

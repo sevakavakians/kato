@@ -2,7 +2,7 @@
 Incremental Metrics Calculations Cache for KATO
 
 This module provides Redis-backed caching for expensive metric calculations
-like hamiltonian, grand_hamiltonian, and conditional probabilities.
+like normalized_entropy, global_normalized_entropy, and conditional probabilities.
 
 Performance benefits:
 - 70-90% reduction in metric calculation time for repeated queries
@@ -54,8 +54,8 @@ class MetricsCacheManager:
 
         # Metric calculation counters
         self.calculation_times = {
-            "hamiltonian": [],
-            "grand_hamiltonian": [],
+            "normalized_entropy": [],
+            "global_normalized_entropy": [],
             "conditional_probability": [],
             "itfdf_similarity": [],
             "potential": []
@@ -101,7 +101,7 @@ class MetricsCacheManager:
         Generate consistent cache key for metric calculations.
 
         Args:
-            metric_type: Type of metric (e.g., 'hamiltonian', 'grand_hamiltonian')
+            metric_type: Type of metric (e.g., 'normalized_entropy', 'global_normalized_entropy')
             **kwargs: Parameters used in metric calculation
 
         Returns:
@@ -286,11 +286,11 @@ class CachedMetricsCalculator:
     def __init__(self, cache_manager: MetricsCacheManager):
         self.cache_manager = cache_manager
 
-    async def hamiltonian_cached(self, state: list[str],
+    async def normalized_entropy_cached(self, state: list[str],
                                 total_symbols: int,
                                 symbol_probabilities: dict[str, float]) -> float:
         """
-        Calculate hamiltonian with caching.
+        Calculate normalized entropy with caching.
 
         Args:
             state: Current state symbols
@@ -298,7 +298,7 @@ class CachedMetricsCalculator:
             symbol_probabilities: Probability mapping for symbols
 
         Returns:
-            Hamiltonian value
+            Normalized entropy value
         """
         # Generate cache key parameters
         cache_params = {
@@ -310,7 +310,7 @@ class CachedMetricsCalculator:
         }
 
         # Try to get cached value
-        cached_value = await self.cache_manager.get_cached_metric("hamiltonian", **cache_params)
+        cached_value = await self.cache_manager.get_cached_metric("normalized_entropy", **cache_params)
         if cached_value is not None:
             return cached_value
 
@@ -318,33 +318,33 @@ class CachedMetricsCalculator:
         start_time = time.time()
 
         # Import here to avoid circular dependencies
-        from kato.informatics.metrics import hamiltonian
+        from kato.informatics.metrics import normalized_entropy
 
         try:
-            result = hamiltonian(state, total_symbols, symbol_probabilities)
+            result = normalized_entropy(state, total_symbols, symbol_probabilities)
             calculation_time = time.time() - start_time
 
             # Cache the result
-            await self.cache_manager.cache_metric("hamiltonian", result, **cache_params)
-            self.cache_manager.record_calculation_time("hamiltonian", calculation_time)
+            await self.cache_manager.cache_metric("normalized_entropy", result, **cache_params)
+            self.cache_manager.record_calculation_time("normalized_entropy", calculation_time)
 
             return result
 
         except Exception as e:
-            logger.warning(f"Hamiltonian calculation failed: {e}")
+            logger.warning(f"Normalized entropy calculation failed: {e}")
             return 0.0
 
-    async def grand_hamiltonian_cached(self, state: list[str],
+    async def global_normalized_entropy_cached(self, state: list[str],
                                      symbol_probability_cache: dict[str, float]) -> float:
         """
-        Calculate grand hamiltonian with caching.
+        Calculate global normalized entropy with caching.
 
         Args:
             state: Current state symbols
             symbol_probability_cache: Cached symbol probabilities
 
         Returns:
-            Grand hamiltonian value
+            Global normalized entropy value
         """
         cache_params = {
             "state_hash": hashlib.md5(str(sorted(state)).encode(), usedforsecurity=False).hexdigest(),
@@ -353,25 +353,25 @@ class CachedMetricsCalculator:
             ).hexdigest()
         }
 
-        cached_value = await self.cache_manager.get_cached_metric("grand_hamiltonian", **cache_params)
+        cached_value = await self.cache_manager.get_cached_metric("global_normalized_entropy", **cache_params)
         if cached_value is not None:
             return cached_value
 
         start_time = time.time()
 
-        from kato.informatics.metrics import grand_hamiltonian
+        from kato.informatics.metrics import global_normalized_entropy
 
         try:
-            result = grand_hamiltonian(state, symbol_probability_cache)
+            result = global_normalized_entropy(state, symbol_probability_cache)
             calculation_time = time.time() - start_time
 
-            await self.cache_manager.cache_metric("grand_hamiltonian", result, **cache_params)
-            self.cache_manager.record_calculation_time("grand_hamiltonian", calculation_time)
+            await self.cache_manager.cache_metric("global_normalized_entropy", result, **cache_params)
+            self.cache_manager.record_calculation_time("global_normalized_entropy", calculation_time)
 
             return result
 
         except Exception as e:
-            logger.warning(f"Grand hamiltonian calculation failed: {e}")
+            logger.warning(f"Global normalized entropy calculation failed: {e}")
             return 0.0
 
     async def conditional_probability_cached(self, present: list[list[str]],

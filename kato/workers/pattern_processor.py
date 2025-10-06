@@ -16,8 +16,8 @@ from kato.informatics.knowledge_base import SuperKnowledgeBase
 from kato.informatics.metrics import (
     average_emotives,
     confluence,
-    grand_hamiltonian,
-    hamiltonian,
+    global_normalized_entropy,
+    normalized_entropy,
 )
 from kato.informatics.predictive_information import calculate_ensemble_predictive_information
 from kato.representations.pattern import Pattern
@@ -490,20 +490,20 @@ class PatternProcessor:
                 if self.cached_calculator and len(state) > 0:
                     try:
                         # Use cached metrics calculations
-                        hamiltonian_val = await self.cached_calculator.hamiltonian_cached(
+                        normalized_entropy_val = await self.cached_calculator.normalized_entropy_cached(
                             state, total_symbols, symbol_probability_cache
                         )
-                        grand_hamiltonian_val = await self.cached_calculator.grand_hamiltonian_cached(
+                        global_normalized_entropy_val = await self.cached_calculator.global_normalized_entropy_cached(
                             state, symbol_probability_cache
                         )
                     except Exception as e:
                         logger.warning(f"Cached metrics calculation failed: {e}, falling back to direct calculation")
-                        hamiltonian_val = hamiltonian(state, total_symbols)
-                        grand_hamiltonian_val = grand_hamiltonian(state, symbol_probability_cache, total_symbols)
+                        normalized_entropy_val = normalized_entropy(state, total_symbols)
+                        global_normalized_entropy_val = global_normalized_entropy(state, symbol_probability_cache, total_symbols)
                 else:
                     # Fallback to direct calculation
-                    hamiltonian_val = hamiltonian(state, total_symbols)
-                    grand_hamiltonian_val = grand_hamiltonian(state, symbol_probability_cache, total_symbols)
+                    normalized_entropy_val = normalized_entropy(state, total_symbols)
+                    global_normalized_entropy_val = global_normalized_entropy(state, symbol_probability_cache, total_symbols)
 
                 if total_ensemble_pattern_frequencies > 0:
                     itfdf_similarity = 1 - (distance * prediction['frequency'] / total_ensemble_pattern_frequencies)
@@ -537,8 +537,8 @@ class PatternProcessor:
 
                 # Update prediction with calculated values
                 prediction.update({
-                    'hamiltonian': hamiltonian_val,
-                    'grand_hamiltonian': grand_hamiltonian_val,
+                    'normalized_entropy': normalized_entropy_val,
+                    'global_normalized_entropy': global_normalized_entropy_val,
                     'itfdf_similarity': itfdf_similarity,
                     'confluence': confluence_val
                 })

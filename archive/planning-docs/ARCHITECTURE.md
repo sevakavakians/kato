@@ -152,7 +152,7 @@ class VectorStorageInterface:
 2. STM context used to search MongoDB patterns
 3. Vector similarity search in Qdrant
 4. Temporal segmentation applied (past/present/future)
-5. Prediction metrics calculated (hamiltonian, confidence, etc.)
+5. Prediction metrics calculated (normalized entropy, confidence, etc.)
 6. Structured prediction returned with missing/extras/matches fields
 
 ### Learning Flow

@@ -819,7 +819,7 @@ Like GAIuS before it, KATO adheres to [ExCITE AI](https://medium.com/@sevakavaki
 - **Fixed Division by Zero Errors**: Resolved edge cases in metric calculations when:
   - Pattern fragmentation equals -1
   - Total ensemble pattern frequencies equal 0 (when no patterns match)
-  - State is empty in hamiltonian calculations
+  - State is empty in normalized entropy calculations
   - MongoDB metadata documents are missing
 - **Improved Error Handling**: Errors now provide detailed context instead of being masked with defaults
 - **Enhanced Recall Threshold**: Better handling of threshold=0.0 for comprehensive pattern matching

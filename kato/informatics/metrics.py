@@ -126,10 +126,10 @@ def expectation(p: float, num_symbols: int) -> float:
         return 0
 
 
-def grand_hamiltonian(state: list[str], symbol_probabilities: dict[str, float], total_symbols: int) -> float:
-    """Calculate the grand Hamiltonian using global symbol probabilities.
+def global_normalized_entropy(state: list[str], symbol_probabilities: dict[str, float], total_symbols: int) -> float:
+    """Calculate the global normalized entropy using global symbol probabilities.
 
-    Extended Hamiltonian calculation that uses cached symbol probabilities
+    Extended normalized entropy calculation that uses cached symbol probabilities
     from the knowledge base rather than local state frequencies.
 
     Args:
@@ -138,10 +138,10 @@ def grand_hamiltonian(state: list[str], symbol_probabilities: dict[str, float], 
         total_symbols: Total number of unique symbols in the system.
 
     Returns:
-        The grand Hamiltonian entropy value.
+        The global normalized entropy value.
 
     Example:
-        >>> grand_hamiltonian(['a', 'b', 'a'], {'a': 0.5, 'b': 0.3, 'c': 0.2}, 3)
+        >>> global_normalized_entropy(['a', 'b', 'a'], {'a': 0.5, 'b': 0.3, 'c': 0.2}, 3)
         0.3918295834173894
     """
     symbols: set[str] = set(state)
@@ -150,8 +150,8 @@ def grand_hamiltonian(state: list[str], symbol_probabilities: dict[str, float], 
          symbol in symbols])
 
 
-def hamiltonian(state: list[str], total_symbols: int) -> float:
-    """Calculate the Hamiltonian (entropy) of a state.
+def normalized_entropy(state: list[str], total_symbols: int) -> float:
+    """Calculate the normalized entropy of a state.
 
     Measures the complexity/entropy of a pattern based on symbol distribution.
     Protected against empty states and division by zero.
@@ -161,15 +161,15 @@ def hamiltonian(state: list[str], total_symbols: int) -> float:
         total_symbols: Total number of unique symbols in the system.
 
     Returns:
-        The Hamiltonian entropy value. Returns 0.0 for empty states.
+        The normalized entropy value. Returns 0.0 for empty states.
 
     Raises:
         ZeroDivisionError: If an unexpected division by zero occurs.
 
     Example:
-        >>> hamiltonian(['a', 'b', 'a', 'c'], 4)
+        >>> normalized_entropy(['a', 'b', 'a', 'c'], 4)
         0.8112781244591328
-        >>> hamiltonian([], 4)
+        >>> normalized_entropy([], 4)
         0.0
     """
     if not state or len(state) == 0:
@@ -182,7 +182,7 @@ def hamiltonian(state: list[str], total_symbols: int) -> float:
     except ZeroDivisionError as e:
         import logging
         logger = logging.getLogger(__name__)
-        logger.error(f"ZeroDivisionError in hamiltonian: state={state}, len(state)={len(state) if state else 'N/A'}, total_symbols={total_symbols}, error={e}")
+        logger.error(f"ZeroDivisionError in normalized_entropy: state={state}, len(state)={len(state) if state else 'N/A'}, total_symbols={total_symbols}, error={e}")
         raise
 
 

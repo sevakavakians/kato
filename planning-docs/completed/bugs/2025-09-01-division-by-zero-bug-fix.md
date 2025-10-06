@@ -11,7 +11,7 @@ Multiple division operations throughout the codebase lacked proper zero-checking
 
 1. **Pattern Fragmentation**: When fragmentation equals -1, the potential calculation `1/fragmentation` caused division by zero
 2. **ITFDF Similarity**: When total ensemble pattern frequencies equal 0, similarity calculations failed
-3. **Hamiltonian Calculations**: Empty states caused division by zero in energy calculations
+3. **Normalized Entropy Calculations**: Empty states caused division by zero in energy calculations
 4. **Recall Threshold**: Zero-frequency patterns weren't handled properly in threshold filtering
 
 ## Key Findings
@@ -34,9 +34,9 @@ Multiple division operations throughout the codebase lacked proper zero-checking
 **Fix**: Added zero-checking with explicit error context
 **Impact**: Prevents crashes during similarity calculations
 
-### 3. Hamiltonian Energy Calculations
+### 3. Normalized Entropy Energy Calculations
 **File**: Multiple pattern processing functions
-**Issue**: Empty states causing division by zero in energy calculations  
+**Issue**: Empty states causing division by zero in energy calculations
 **Fix**: Added state validation before energy calculations
 **Impact**: Prevents crashes during empty state processing
 

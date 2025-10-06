@@ -103,16 +103,16 @@ A Prediction Object is generated when KATO's pattern recognition engine identifi
 **Range**: 0.0 to log2(n) where n is vocabulary size  
 **Purpose**: Measures the information content or uncertainty in the present context.
 
-### 16. **hamiltonian** (float)
-**Description**: Local entropy considering symbol distribution within the present state.  
-**Formula**: `hamiltonian = Σ(expectation(count(symbol)/len(state), total_symbols))` for each symbol  
-**Range**: 0.0 to theoretical maximum based on symbol distribution  
+### 16. **normalized_entropy** (float)
+**Description**: Local entropy considering symbol distribution within the present state.
+**Formula**: `normalized_entropy = Σ(expectation(count(symbol)/len(state), total_symbols))` for each symbol
+**Range**: 0.0 to theoretical maximum based on symbol distribution
 **Purpose**: Measures the "energy" or disorder of the local symbol configuration.
 
-### 17. **grand_hamiltonian** (float)
-**Description**: Global entropy considering symbol probabilities across the entire knowledge base.  
-**Formula**: `grand_hamiltonian = Σ(expectation(global_probability(symbol), total_symbols))` for unique symbols  
-**Range**: 0.0 to theoretical maximum  
+### 17. **global_normalized_entropy** (float)
+**Description**: Global entropy considering symbol probabilities across the entire knowledge base.
+**Formula**: `global_normalized_entropy = Σ(expectation(global_probability(symbol), total_symbols))` for unique symbols
+**Range**: 0.0 to theoretical maximum
 **Purpose**: Measures information content relative to global symbol distributions.
 
 ### 18. **confluence** (float)
@@ -162,7 +162,7 @@ A Prediction Object is generated when KATO's pattern recognition engine identifi
 
 ### Information Theory Metrics
 - **entropy**: Local information content
-- **hamiltonian, grand_hamiltonian**: Energy/disorder measures
+- **normalized_entropy, global_normalized_entropy**: Energy/disorder measures
 - **confluence**: Meaningfulness of patterns
 - **predictive_information**: Pattern's contribution to future prediction
 
@@ -182,14 +182,14 @@ A Prediction Object is generated when KATO's pattern recognition engine identifi
 
 4. **Symbol Sets**: The matches/missing/extras fields provide detailed diagnostics about prediction quality and help identify partial matches.
 
-5. **Information Metrics**: Entropy, hamiltonian, and confluence provide theoretical grounding in information theory, useful for advanced analysis of prediction quality.
+5. **Information Metrics**: Entropy, normalized entropy, and confluence provide theoretical grounding in information theory, useful for advanced analysis of prediction quality.
 
 ## Mathematical Foundations
 
 The Prediction Object incorporates several mathematical concepts:
 
 - **Information Theory**: Entropy calculations based on Shannon's information theory
-- **Statistical Mechanics**: Hamiltonian as an energy function
+- **Statistical Mechanics**: Normalized entropy as an energy function
 - **Information Retrieval**: TF-IDF adapted for pattern prediction
 - **Signal Processing**: Signal-to-Noise Ratio for match quality
 - **Probability Theory**: Confluence as conditional probability

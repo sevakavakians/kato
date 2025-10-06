@@ -94,11 +94,11 @@ A value between 0.0 and 1.0 controlling pattern matching sensitivity:
 
 ## Metrics
 
-### Hamiltonian
+### Normalized Entropy
 An entropy-like measure of pattern complexity. Calculates the information content based on symbol distribution within the state. Requires non-empty state to compute.
 
-### Grand Hamiltonian
-Extended version of the Hamiltonian using global symbol probability cache. Provides a more comprehensive entropy calculation considering the entire knowledge base.
+### Global Normalized Entropy
+Extended version of the normalized entropy using global symbol probability cache. Provides a more comprehensive entropy calculation considering the entire knowledge base.
 
 ### Confluence
 The probability of a pattern occurring versus random chance. Calculated as: `p(e|h) * (1 - conditionalProbability)`. Returns 0 for empty state.
@@ -240,7 +240,7 @@ Patterns require at least 2 strings total across all events to be valid for pred
 
 ### Division by Zero Protection
 Various metrics include protection against division by zero:
-- Hamiltonian calculations check for empty state
+- Normalized entropy calculations check for empty state
 - SNR calculations handle zero denominators
 - Confidence calculations check for zero present length
 

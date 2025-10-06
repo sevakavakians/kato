@@ -227,7 +227,7 @@ Client Request → FastAPI Service (Port 8000) → Embedded KATO Processor
 11. **Edge Cases and Boundaries**:
    - **Fragmentation**: Can be -1, causing division by zero in potential calculations
    - **Pattern Frequencies**: All patterns have frequency ≥ 1 (no zero-frequency patterns exist)
-   - **Empty State**: Hamiltonian calculations require non-empty state
+   - **Empty State**: Normalized entropy calculations require non-empty state
    - **Missing Metadata**: MongoDB metadata documents may be missing, causing None values
    - **Total Ensemble Frequencies**: Can be 0 if no patterns match (even though each pattern has frequency ≥ 1)
 
@@ -314,12 +314,12 @@ The system uses Redis-based session management for configuration:
 ## Prediction Metrics and Calculations
 
 ### Core Metrics
-1. **Hamiltonian**: Entropy-like measure of pattern complexity
+1. **Normalized Entropy**: Entropy-like measure of pattern complexity
    - Requires non-empty state
    - Formula: `sum([expectation(state.count(symbol) / len(state), total_symbols) for symbol in state])`
    - Protected against division by zero when state is empty
 
-2. **Grand Hamiltonian**: Extended hamiltonian using symbol probability cache
+2. **Global Normalized Entropy**: Extended normalized entropy using symbol probability cache
    - Calculates entropy using global symbol probabilities
    - Also requires non-empty state
 

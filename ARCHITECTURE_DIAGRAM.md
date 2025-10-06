@@ -76,7 +76,7 @@ graph TB
 
     %% Middleware Components
     subgraph "Middleware & Utils"
-        METRICS[Metrics Calculator<br/>Hamiltonian, ITFDF, etc.]
+        METRICS[Metrics Calculator<br/>Normalized Entropy, ITFDF, etc.]
         LOGGING[Structured Logging<br/>Trace IDs]
         EXCEPTION[Exception Handlers<br/>KatoBaseException]
         CACHE[Result Caching<br/>LRU Cache]
@@ -290,8 +290,8 @@ Comprehensive configuration management:
 
 ### 7. Middleware & Utilities
 
-- **Metrics Calculator**: 
-  - Hamiltonian entropy calculations
+- **Metrics Calculator**:
+  - Normalized entropy calculations
   - ITFDF similarity metrics
   - Confidence and evidence scoring
   - Confluence probability

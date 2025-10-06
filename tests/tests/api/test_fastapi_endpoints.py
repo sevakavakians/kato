@@ -1,6 +1,17 @@
 """
 API tests for KATO FastAPI endpoints.
 Tests all FastAPI endpoints for correct behavior and error handling.
+
+NOTE: Many tests in this file test DEPRECATED direct endpoints (e.g., /observe, /stm, /learn).
+These endpoints are maintained for backward compatibility but will be removed in a future version.
+
+RECOMMENDED: New code should use session-based endpoints:
+- POST /sessions/{session_id}/observe
+- GET /sessions/{session_id}/stm
+- POST /sessions/{session_id}/learn
+- etc.
+
+See docs/API_MIGRATION_GUIDE.md for migration instructions.
 """
 
 import os
@@ -43,7 +54,12 @@ def test_status_endpoint(kato_fixture):
 
 
 def test_observe_endpoint(kato_fixture):
-    """Test basic observation endpoint."""
+    """
+    Test basic observation endpoint.
+
+    NOTE: This tests the DEPRECATED /observe endpoint.
+    New code should use /sessions/{session_id}/observe instead.
+    """
     observation = {
         'strings': ['test1', 'test2'],
         'vectors': [],
@@ -122,23 +138,28 @@ def test_learn_endpoint(kato_fixture):
 
 
 def test_clear_stm_endpoints(kato_fixture):
-    """Test both clear STM endpoint aliases."""
+    """
+    Test both clear STM endpoint aliases.
+
+    NOTE: This tests DEPRECATED direct endpoints (/clear-stm, /stm).
+    New code should use /sessions/{session_id}/clear-stm instead.
+    """
     # Add observations
     kato_fixture.observe({'strings': ['clear1'], 'vectors': [], 'emotives': {}})
 
-    # Test /clear-stm
+    # Test /clear-stm (DEPRECATED)
     response = requests.post(f"{kato_fixture.base_url}/clear-stm", json={})
     assert response.status_code == 200
     assert response.json()['status'] == 'cleared'
 
-    # Verify STM is cleared
+    # Verify STM is cleared (DEPRECATED endpoint)
     stm_response = requests.get(f"{kato_fixture.base_url}/stm")
     assert len(stm_response.json()['stm']) == 0
 
     # Add more observations
     kato_fixture.observe({'strings': ['clear2'], 'vectors': [], 'emotives': {}})
 
-    # Test /clear-short-term-memory (alias)
+    # Test /clear-short-term-memory alias (DEPRECATED)
     response2 = requests.post(f"{kato_fixture.base_url}/clear-short-term-memory", json={})
     assert response2.status_code == 200
     assert response2.json()['status'] == 'cleared'

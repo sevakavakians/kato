@@ -315,6 +315,57 @@
 
 ---
 
+## 2025-10-06 - API Endpoint Deprecation: Direct to Session-Based Architecture
+**Decision**: Migrate all API access to session-based endpoints through 3-phase deprecation
+**Rationale**:
+- KATO had duplicate API paths (direct/header-based + session-based) causing confusion and maintenance burden
+- Session-based endpoints provide superior state management:
+  - Redis-backed persistence (survives processor cache evictions)
+  - Explicit session locking for thread safety
+  - Proper TTL and lifecycle management
+  - Stronger multi-user isolation guarantees
+- Direct endpoints rely only on processor cache (no persistence layer)
+
+**Alternatives Considered**:
+- Keep both APIs: Ongoing maintenance burden, user confusion about which to use
+- Immediate removal: Breaking change without migration path
+- Make direct endpoints primary: Session-based architecture is superior design
+
+**Implementation Phases**:
+- **Phase 1 (COMPLETED 2025-10-06)**: Add deprecation warnings to all direct endpoints
+  - Modified: `kato/api/endpoints/kato_ops.py`, `sample-kato-client.py`, test docs
+  - Created: `docs/API_MIGRATION_GUIDE.md`
+  - Impact: No breaking changes, backward compatible
+  - Effort: 1 hour
+- **Phase 2 (Planned)**: Auto-session middleware for transparent backward compatibility
+  - Automatically create sessions for direct endpoint calls
+  - Map processor_id → session_id in Redis with TTL
+  - Add metrics: `deprecated_endpoint_calls_total`, `auto_session_created_total`
+  - Estimated: 3-4 hours
+- **Phase 3 (Future)**: Remove direct endpoints entirely after 2-3 releases
+  - Proceed only if metrics show <1% usage
+  - Remove direct handlers, auto-session middleware
+  - Clean up sample client and tests
+  - Estimated: 2-3 hours
+
+**Impact**:
+- **Phase 1**: 4 files modified, 1 file created, zero breaking changes
+- **Phase 2**: New middleware, metrics tracking, automatic migration
+- **Phase 3**: Major code reduction, single API path, cleaner architecture
+
+**Consequences**:
+- **Positive**: Single robust API path, better state management, clearer architecture
+- **Negative**: Breaking change for users after Phase 3 (mitigated by long deprecation cycle + auto-migration)
+- **Neutral**: Requires user migration effort (comprehensive documentation provided)
+
+**Related Work**: Complements "Session Architecture Transformation Phase 1" (2025-09-26)
+
+**Confidence**: Very High - Session-based architecture is proven superior, phased approach minimizes risk
+
+**Key Architectural Principle**: All future KATO endpoints must be session-based from the start. Direct processor access without sessions is an anti-pattern.
+
+---
+
 ## Template for New Decisions
 ```
 ## YYYY-MM-DD HH:MM - [Decision Title]

@@ -1,3 +1,0 @@
-"""
-Middleware tests for KATO
-"""

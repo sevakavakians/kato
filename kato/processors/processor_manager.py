@@ -107,23 +107,6 @@ class ProcessorManager:
 
         return f"{safe_node_id}_{safe_base_id}"
 
-    async def get_processor_by_id(self, processor_id: Optional[str] = None, session_config: Optional[SessionConfiguration] = None) -> KatoProcessor:
-        """
-        Get or create a processor by processor ID (v1 API compatibility).
-
-        For backward compatibility with v1 API endpoints.
-        If processor_id is None, uses 'default' as node_id.
-
-        Args:
-            processor_id: Processor identifier (used as node_id)
-            session_config: Optional session configuration to apply
-
-        Returns:
-            KatoProcessor instance for this processor_id
-        """
-        node_id = processor_id or 'default'
-        return await self.get_processor(node_id, session_config)
-
     async def get_processor(self, node_id: str, session_config: Optional[SessionConfiguration] = None) -> KatoProcessor:
         """
         Get or create a processor for a specific node.

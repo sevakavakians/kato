@@ -1,8 +1,16 @@
 # KATO API Migration Guide: Direct to Session-Based Endpoints
 
+**🗂️ HISTORICAL DOCUMENT - MIGRATION COMPLETE**
+
+As of Phase 3 (2025-10-06), all deprecated direct endpoints have been **permanently removed**.
+This document is kept for historical reference and to help understand the migration path that was provided.
+
+---
+
 ## Overview
 
-KATO is deprecating direct (header-based) API endpoints in favor of session-based endpoints. This guide will help you migrate your applications to use the recommended session-based architecture.
+KATO has completed the migration from direct (header-based) API endpoints to session-based endpoints.
+All core operations now **require** session-based endpoints.
 
 ## Why Migrate?
 
@@ -21,9 +29,27 @@ Direct endpoints (now deprecated):
 
 ## Migration Timeline
 
-- **Phase 1** (✅ Complete): Deprecation warnings added, both APIs functional
-- **Phase 2** (✅ Complete): Auto-session middleware for transparent backward compatibility
-- **Phase 3** (Future, 2-3 releases): Direct endpoints removed entirely
+- **Phase 1** (✅ Complete - 2025-10-06): Deprecation warnings added, both APIs functional
+- **Phase 2** (✅ Complete - 2025-10-06): Auto-session middleware for transparent backward compatibility
+- **Phase 3** (✅ **COMPLETE - 2025-10-06**): **Direct endpoints removed entirely**
+
+## ⚠️ Breaking Changes (Phase 3)
+
+The following endpoints have been **permanently removed** and will return `404 Not Found`:
+
+- `POST /observe` ❌
+- `GET /stm` ❌
+- `GET /short-term-memory` ❌
+- `POST /learn` ❌
+- `POST /clear-stm` ❌
+- `POST /clear-short-term-memory` ❌
+- `POST /clear-all` ❌
+- `POST /clear-all-memory` ❌
+- `GET /predictions` ❌
+- `POST /predictions` ❌
+- `POST /observe-sequence` ❌
+
+**All code must now use session-based endpoints.**
 
 ## Phase 2: Automatic Migration (No Code Changes Required!)
 

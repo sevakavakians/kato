@@ -270,6 +270,47 @@ rm ~/.kato/instances.json
 ./kato-manager.sh list  # Recreates clean registry
 ```
 
+## Connecting Instances in Network Topologies
+
+Once you have multiple KATO instances running, you can connect them in various network topologies by writing orchestration code in your application. This allows you to build complex data processing pipelines, distributed systems, and multi-stage workflows.
+
+**See the complete guide**: [Network Topology Patterns Guide](NETWORK_TOPOLOGY_GUIDE.md)
+
+The Network Topology Guide covers:
+- 7 common topology patterns (Linear Pipeline, Branching, Merging, Mesh, Hub-and-Spoke, Cyclic, Hierarchical)
+- Complete Python implementation examples for each pattern
+- Generic orchestration framework (`KatoOrchestrator`)
+- Best practices for error handling, monitoring, and performance
+- Troubleshooting common topology issues
+
+**Quick Example - Linear Pipeline**:
+```python
+import requests
+
+# Connect three KATO instances in a pipeline
+nodes = [
+    "http://localhost:8001",  # Input processor
+    "http://localhost:8002",  # Analysis processor
+    "http://localhost:8003"   # Output processor
+]
+
+def pipeline_process(observation):
+    current_data = observation
+    for node_url in nodes:
+        requests.post(f"{node_url}/observe", json=current_data)
+        predictions = requests.get(f"{node_url}/predictions").json()
+        # Transform predictions into next observation
+        if predictions:
+            current_data = {
+                "strings": predictions[0]["future"][0] if predictions[0]["future"] else [],
+                "vectors": [],
+                "emotives": {}
+            }
+    return current_data
+```
+
+For detailed patterns and complete examples, see [NETWORK_TOPOLOGY_GUIDE.md](NETWORK_TOPOLOGY_GUIDE.md).
+
 ## Best Practices
 
 1. **Use Descriptive IDs**: Choose meaningful processor IDs (e.g., `sentiment-analyzer` not `p1`)

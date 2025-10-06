@@ -264,6 +264,7 @@ See [Testing Guide](docs/TESTING.md) for complete details.
 - [Configuration Guide](docs/CONFIGURATION.md) - All environment variables
 - [Glossary](docs/GLOSSARY.md) - Terms and concepts defined
 - [Multi-Instance Guide](docs/MULTI_INSTANCE_GUIDE.md) - Run multiple KATO processors
+- [Network Topology Patterns](docs/NETWORK_TOPOLOGY_GUIDE.md) - Connect instances in various topologies
 - [System Overview](docs/SYSTEM_OVERVIEW.md) - Understand the architecture
 - [Core Concepts](docs/CONCEPTS.md) - Learn KATO's behavior
 
@@ -292,6 +293,7 @@ docs/
 ├── CONCEPTS.md              # Core behavior reference
 ├── GETTING_STARTED.md       # Quick start guide
 ├── MULTI_INSTANCE_GUIDE.md  # Multi-instance management
+├── NETWORK_TOPOLOGY_GUIDE.md # Connecting instances in topologies
 ├── API_REFERENCE.md         # Complete API docs
 ├── SYSTEM_OVERVIEW.md       # End-to-end behavior
 ├── TESTING.md               # Complete testing guide

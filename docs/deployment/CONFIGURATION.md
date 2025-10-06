@@ -201,19 +201,73 @@ EOF
 
 ### Available Environment Variables
 
-| Variable | Maps to Parameter |
-|----------|-------------------|
-| `KATO_PROCESSOR_ID` | `--id` |
-| `KATO_PROCESSOR_NAME` | `--name` |
-| `KATO_API_PORT` | `--port` |
-| `KATO_LOG_LEVEL` | `--log-level` |
-| `KATO_INDEXER_TYPE` | `--indexer-type` |
-| `KATO_MAX_PREDICTIONS` | `--max-predictions` |
-| `KATO_RECALL_THRESHOLD` | `--recall-threshold` |
-| `KATO_MAX_SEQ_LENGTH` | `--max-seq-length` |
-| `KATO_PERSISTENCE` | `--persistence` |
-| `KATO_SMOOTHNESS` | `--smoothness` |
-| `KATO_QUIESCENCE` | `--quiescence` |
+| Variable | Maps to Parameter | Notes |
+|----------|-------------------|-------|
+| `KATO_PROCESSOR_ID` | `--id` | |
+| `KATO_PROCESSOR_NAME` | `--name` | |
+| `KATO_API_PORT` | `--port` | |
+| `KATO_LOG_LEVEL` | `--log-level` | |
+| `KATO_INDEXER_TYPE` | `--indexer-type` | |
+| `KATO_MAX_PREDICTIONS` | `--max-predictions` | |
+| `KATO_RECALL_THRESHOLD` | `--recall-threshold` | |
+| `KATO_MAX_SEQ_LENGTH` | `--max-seq-length` | |
+| `KATO_PERSISTENCE` | `--persistence` | |
+| `KATO_SMOOTHNESS` | `--smoothness` | |
+| `KATO_QUIESCENCE` | `--quiescence` | |
+
+### Critical Environment Variables
+
+#### `SERVICE_NAME` - Database Namespace
+
+**Default**: `kato`
+
+**Purpose**: Part of the database naming convention for MongoDB and Qdrant isolation.
+
+**⚠️ CRITICAL WARNING**: **Never change `SERVICE_NAME` in production!**
+
+The `SERVICE_NAME` environment variable is used in the database naming formula:
+```
+database_name = {node_id}_{SERVICE_NAME}
+```
+
+**Example:**
+```bash
+# Default SERVICE_NAME='kato'
+node_id: "alice"
+→ MongoDB database: "alice_kato"
+→ Qdrant collection: "vectors_alice_kato"
+
+# If you change SERVICE_NAME to 'production'
+node_id: "alice"
+→ MongoDB database: "alice_production"  # DIFFERENT DATABASE!
+→ Previous training in "alice_kato" is NO LONGER ACCESSIBLE!
+```
+
+**Impact of Changing SERVICE_NAME:**
+- ❌ All previously trained data becomes inaccessible
+- ❌ Users cannot reconnect to their trained nodes
+- ❌ Requires manual database migration to recover data
+- ❌ Breaking change for all existing deployments
+
+**Best Practice:**
+```yaml
+# docker-compose.yml - Set once, never change
+environment:
+  - SERVICE_NAME=kato  # ✅ Use default, lock this value forever
+```
+
+**If You Must Change:**
+You'll need to manually migrate all databases:
+```bash
+# For each node_id, rename MongoDB databases
+mongo
+use alice_kato
+db.copyDatabase("alice_kato", "alice_newname")
+# Repeat for every node...
+# Also requires Qdrant collection migration
+```
+
+For complete details on database persistence, see [Database Persistence Guide](../DATABASE_PERSISTENCE.md).
 
 ## JSON Manifest
 

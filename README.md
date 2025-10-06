@@ -148,6 +148,11 @@ curl -X POST http://localhost:8000/sessions/$SESSION/observe \
 curl http://localhost:8000/sessions/$SESSION/stm
 ```
 
+**💾 Data Persistence Note:**
+- Your `node_id` ("alice") is your **persistent identifier** - using the same `node_id` later will reconnect to all trained patterns
+- Sessions (STM, emotives) are temporary and expire, but learned patterns in MongoDB persist forever
+- See [Database Persistence Guide](docs/DATABASE_PERSISTENCE.md) for complete details
+
 #### Option B: Default Session API (backwards compatible)
 ```bash
 # Send observation (backward compatible)

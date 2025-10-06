@@ -136,12 +136,40 @@ observe({'strings': ['second']})
   - Auto-learn ROLLING mode: STM maintained as sliding window (continuous learning)
 
 ### Long-Term Memory
-- Stores learned patterns with deterministic hashes
+
+Long-Term Memory (LTM) is KATO's **permanent knowledge storage** that persists across sessions and service restarts.
+
+**Storage Architecture:**
+- Stored in MongoDB database (named by `node_id`)
 - Patterns identified by `PTRN|<sha1_hash>` format
 - Same pattern always produces same hash
 - Persists across short-term memory clears
 - Used for generating predictions
 - Frequency tracking for repeated patterns
+
+**Database Isolation:**
+Each `node_id` gets its own isolated MongoDB database:
+```
+node_id: "alice"
+→ MongoDB database: "alice_kato" (default SERVICE_NAME)
+→ All of Alice's learned patterns stored here permanently
+```
+
+**Key Differences from STM:**
+- **STM**: Temporary (expires with session), stored in Redis
+- **LTM**: Permanent (until explicitly deleted), stored in MongoDB
+
+**Reconnecting to Trained Data:**
+Using the same `node_id` in a new session automatically accesses all previously learned patterns:
+```bash
+# Day 1: Train with node_id="alice"
+# Patterns stored in MongoDB database "alice_kato"
+
+# Day 7: Create new session with node_id="alice"
+# KATO immediately has access to all Day 1 patterns!
+```
+
+For complete details, see [Database Persistence Guide](DATABASE_PERSISTENCE.md).
 
 ## Prediction System
 

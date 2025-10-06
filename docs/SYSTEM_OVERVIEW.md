@@ -37,7 +37,7 @@ Client Request → FastAPI Service (Ports 8001-8003) → Embedded KATO Processor
 **Key Components:**
 - **FastAPI Service**: Modern async web framework with automatic API documentation
 - **Embedded Processor**: Each container runs one KATO processor instance
-- **Database Isolation**: Each processor has isolated data via session_id
+- **Database Isolation**: Each node has isolated data via `node_id` (stored in MongoDB as `{node_id}_{SERVICE_NAME}`)
 - **Async Processing**: Non-blocking I/O for high performance
 
 ## End-to-End Behavior
@@ -99,7 +99,18 @@ observe({'strings': ['m']})
   - Patterns identified by `PTRN|<sha1_hash>` format
   - Deterministic hashing ensures consistency
   - Frequency tracking for repeated patterns
-- **Persistence**: Survives short-term memory clears
+- **Storage**: MongoDB database per `node_id` (e.g., "alice_kato")
+- **Persistence**: Survives short-term memory clears and service restarts
+
+**Database Naming:**
+Each `node_id` maps to its own isolated MongoDB database:
+```
+node_id = "alice"
+→ MongoDB database = "alice_kato" (default SERVICE_NAME)
+→ All patterns for this node stored permanently
+```
+
+**Important**: Using the same `node_id` in future sessions accesses the same trained database. See [Database Persistence Guide](DATABASE_PERSISTENCE.md) for details.
 
 ### 3. Learning Process
 

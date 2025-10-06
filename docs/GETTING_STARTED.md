@@ -42,10 +42,25 @@ You should see:
 
 ## Your First KATO Session
 
-### 1. Send an Observation
+### 1. Create a Session
+
+First, create a session with a `node_id` to identify your workspace:
 
 ```bash
-curl -X POST http://localhost:8000/p46b6b076c/observe \
+# Create session
+SESSION=$(curl -s -X POST http://localhost:8000/sessions \
+  -H "Content-Type: application/json" \
+  -d '{"node_id": "my_first_kato"}' | jq -r '.session_id')
+
+echo "Session ID: $SESSION"
+```
+
+**Important**: The `node_id` ("my_first_kato") is your **persistent identifier**. Using the same `node_id` later will reconnect to all trained patterns!
+
+### 2. Send an Observation
+
+```bash
+curl -X POST http://localhost:8000/sessions/$SESSION/observe \
   -H "Content-Type: application/json" \
   -d '{
     "strings": ["hello", "world"],
@@ -54,48 +69,83 @@ curl -X POST http://localhost:8000/p46b6b076c/observe \
   }'
 ```
 
-### 2. Check Short-Term Memory
+### 3. Check Short-Term Memory
 
 ```bash
-curl http://localhost:8000/p46b6b076c/short-term-memory
+curl http://localhost:8000/sessions/$SESSION/stm
 ```
 
 Response shows the sorted observation:
 ```json
 {
-  "short_term_memory": [["hello", "world"]]
+  "stm": [["hello", "world"]],
+  "session_id": "session-abc123..."
 }
 ```
 
-### 3. Learn a Pattern
+### 4. Learn a Pattern
 
 ```bash
 # Add more observations
-curl -X POST http://localhost:8000/p46b6b076c/observe \
+curl -X POST http://localhost:8000/sessions/$SESSION/observe \
+  -H "Content-Type: application/json" \
   -d '{"strings": ["how"], "vectors": [], "emotives": {}}'
 
-curl -X POST http://localhost:8000/p46b6b076c/observe \
+curl -X POST http://localhost:8000/sessions/$SESSION/observe \
+  -H "Content-Type: application/json" \
   -d '{"strings": ["are", "you"], "vectors": [], "emotives": {}}'
 
 # Trigger learning
-curl -X POST http://localhost:8000/p46b6b076c/learn
+curl -X POST http://localhost:8000/sessions/$SESSION/learn
 ```
 
-### 4. Get Predictions
+### 5. Get Predictions
 
 ```bash
-# Clear short-term memory
-curl -X POST http://localhost:8000/p46b6b076c/short-term-memory/clear
+# Clear short-term memory (patterns remain in long-term memory)
+curl -X POST http://localhost:8000/sessions/$SESSION/clear-stm
 
 # Observe the start of the learned pattern
-curl -X POST http://localhost:8000/p46b6b076c/observe \
+curl -X POST http://localhost:8000/sessions/$SESSION/observe \
+  -H "Content-Type: application/json" \
   -d '{"strings": ["hello"], "vectors": [], "emotives": {}}'
 
 # Get predictions
-curl http://localhost:8000/p46b6b076c/predictions
+curl http://localhost:8000/sessions/$SESSION/predictions
 ```
 
 KATO will predict the rest of the pattern!
+
+### 6. Understanding Data Persistence
+
+**What just happened?**
+- Your **session** (STM, emotives) is temporary - expires after 1 hour by default
+- Your **learned patterns** are permanent - stored in MongoDB forever
+- Your `node_id` ("my_first_kato") links to a specific MongoDB database
+
+**Reconnecting Later:**
+
+```bash
+# Day 1: You trained patterns (above)
+# Session expires...
+
+# Day 7: Reconnect to same training
+NEW_SESSION=$(curl -s -X POST http://localhost:8000/sessions \
+  -H "Content-Type: application/json" \
+  -d '{"node_id": "my_first_kato"}' | jq -r '.session_id')
+
+# Different session ID, but SAME trained patterns!
+curl -X POST http://localhost:8000/sessions/$NEW_SESSION/observe \
+  -H "Content-Type: application/json" \
+  -d '{"strings": ["hello"], "vectors": [], "emotives": {}}'
+
+curl http://localhost:8000/sessions/$NEW_SESSION/predictions
+# Returns predictions from Day 1 training!
+```
+
+**Key Takeaway:** Same `node_id` = Same trained database (always)
+
+For complete details, see [Database Persistence Guide](DATABASE_PERSISTENCE.md).
 
 ## Understanding KATO's Behavior
 
@@ -280,6 +330,7 @@ docker-compose build
 
 ## Next Steps
 
+- **Important**: Read [Database Persistence Guide](DATABASE_PERSISTENCE.md) to understand how data persists
 - Read [Core Concepts](CONCEPTS.md) to understand KATO's behavior
 - Learn [Multi-Instance Management](MULTI_INSTANCE_GUIDE.md) to run multiple processors
 - Explore the [API Reference](API_REFERENCE.md) for all endpoints

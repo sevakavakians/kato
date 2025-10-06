@@ -3,6 +3,7 @@ Shared pytest fixtures for KATO tests.
 """
 
 import asyncio
+import contextlib
 import uuid
 
 import pytest
@@ -36,10 +37,8 @@ async def isolated_session(kato_client):
     yield session
 
     # Cleanup: Try to delete the session
-    try:
+    with contextlib.suppress(Exception):
         await kato_client.delete_session(session["session_id"])
-    except:
-        pass  # Ignore cleanup errors
 
 
 @pytest.fixture(scope="session")

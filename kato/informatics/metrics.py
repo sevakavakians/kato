@@ -261,8 +261,7 @@ def filterRange(x: Optional[tuple[float, Any]], range_floor: float, range_ceil: 
         >>> filterRange((15, 'data'), 0, 10)
         None
     """
-    if x is not None:
-        if x[0] >= range_floor and x[0] <= range_ceil:
-            return x
+    if x is not None and x[0] >= range_floor and x[0] <= range_ceil:
+        return x
     return None
 

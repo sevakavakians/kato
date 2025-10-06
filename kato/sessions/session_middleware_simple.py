@@ -100,10 +100,9 @@ class SessionMiddleware(BaseHTTPMiddleware):
             response.headers['X-Session-ID'] = session_id
 
         # Update session if it was modified
-        if hasattr(request.state, 'session') and hasattr(request.state, 'session_modified'):
-            if request.state.session_modified:
-                await self.session_manager.update_session(request.state.session)
-                logger.debug(f"Updated modified session {session_id}")
+        if hasattr(request.state, 'session') and hasattr(request.state, 'session_modified') and request.state.session_modified:
+            await self.session_manager.update_session(request.state.session)
+            logger.debug(f"Updated modified session {session_id}")
 
         return response
 

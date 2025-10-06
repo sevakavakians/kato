@@ -269,8 +269,8 @@ class MetricsCacheManager:
                 info = await self.redis.info()
                 stats["redis_used_memory"] = info.get("used_memory_human", "unknown")
                 stats["redis_connected_clients"] = info.get("connected_clients", 0)
-            except:
-                pass
+            except Exception as e:
+                logger.debug(f"Could not get Redis info: {e}")
 
         return stats
 

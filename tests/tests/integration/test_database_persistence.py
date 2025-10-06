@@ -449,14 +449,14 @@ def test_multimodal_pattern_persistence(kato_fixture):
 
         # Test vector pattern (index 0)
         # Vectors should create VCTR| symbols that persist
-        preds2 = get_predictions_for_session(
+        get_predictions_for_session(
             base_url, session2_id,
             observed_events=[['vec0_a']]
         )
         # We can at least verify the session works
 
         # Test emotive pattern (index 0)
-        preds3 = get_predictions_for_session(
+        get_predictions_for_session(
             base_url, session2_id,
             observed_events=[['emot0_a']]
         )

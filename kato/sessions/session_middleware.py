@@ -57,14 +57,13 @@ class SessionMiddleware:
         session_id = self._extract_session_id(request)
 
         # Handle v2 endpoints that require sessions
-        if request.url.path.startswith('/v2/') and request.url.path != '/v2/sessions':
-            if not session_id:
-                if self.auto_create and request.method in ['POST', 'PUT']:
-                    # Auto-create session for v2 endpoints
-                    session = await self.session_manager.create_session()
-                    session_id = session.session_id
-                    logger.info(f"Auto-created session {session_id} for {request.url.path}")
-                else:
+        if request.url.path.startswith('/v2/') and request.url.path != '/v2/sessions' and not session_id:
+            if self.auto_create and request.method in ['POST', 'PUT']:
+                # Auto-create session for v2 endpoints
+                session = await self.session_manager.create_session()
+                session_id = session.session_id
+                logger.info(f"Auto-created session {session_id} for {request.url.path}")
+            else:
                     # Session required but not provided
                     return JSONResponse(
                         status_code=400,
@@ -107,9 +106,8 @@ class SessionMiddleware:
             response.headers['X-Session-ID'] = session_id
 
         # Update session if it was modified
-        if hasattr(request.state, 'session') and hasattr(request.state, 'session_modified'):
-            if request.state.session_modified:
-                await self.session_manager.update_session(request.state.session)
+        if hasattr(request.state, 'session') and hasattr(request.state, 'session_modified') and request.state.session_modified:
+            await self.session_manager.update_session(request.state.session)
 
         return response
 

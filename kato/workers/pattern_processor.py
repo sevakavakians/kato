@@ -457,7 +457,7 @@ class PatternProcessor:
                         symbol_frequency_cache[symbol] += symbol_data['frequency']
 
             symbol_frequency_in_state = Counter(state)
-            for symbol in symbol_frequency_in_state.keys():
+            for symbol in symbol_frequency_in_state:
                 if symbol not in symbol_frequency_cache:
                     symbol_frequency_cache[symbol] = 0
 
@@ -566,7 +566,7 @@ class PatternProcessor:
                 self.future_potentials = []
 
             try:
-                active_causal_patterns = sorted([x for x in heapq.nlargest(self.max_predictions, causal_patterns, key=itemgetter('potential'))], reverse=True, key=itemgetter('potential'))
+                active_causal_patterns = sorted(list(heapq.nlargest(self.max_predictions, causal_patterns, key=itemgetter('potential'))), reverse=True, key=itemgetter('potential'))
             except Exception as e:
                 raise Exception(f"\nException in PatternProcessor.predictPattern (async): Error in sorting predictions! {self.kb_id}: {e}")
 

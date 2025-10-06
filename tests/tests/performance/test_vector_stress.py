@@ -245,32 +245,32 @@ def test_vector_edge_cases(kato_fixture):
     try:
         observe_vector(kato_fixture, [], "empty_vector")
         print("  ✓ Empty vector handled")
-    except:
-        print("  ✗ Empty vector failed")
+    except Exception as e:
+        print(f"  ✗ Empty vector failed: {e}")
 
     # Test 2: Very large vector
     try:
         large_vector = generate_random_vector(1000)
         observe_vector(kato_fixture, large_vector, "large_vector")
         print("  ✓ 1000-dim vector handled")
-    except:
-        print("  ✗ Large vector failed")
+    except Exception as e:
+        print(f"  ✗ Large vector failed: {e}")
 
     # Test 3: Zero vector
     try:
         zero_vector = [0.0] * 10
         observe_vector(kato_fixture, zero_vector, "zero_vector")
         print("  ✓ Zero vector handled")
-    except:
-        print("  ✗ Zero vector failed")
+    except Exception as e:
+        print(f"  ✗ Zero vector failed: {e}")
 
     # Test 4: Negative values
     try:
         neg_vector = [-1.0, 0.5, -0.5, 1.0]
         observe_vector(kato_fixture, neg_vector, "negative_vector")
         print("  ✓ Negative values handled")
-    except:
-        print("  ✗ Negative values failed")
+    except Exception as e:
+        print(f"  ✗ Negative values failed: {e}")
 
     # Test 5: Multiple vectors in one observation
     try:
@@ -285,8 +285,8 @@ def test_vector_edge_cases(kato_fixture):
         }
         kato_fixture.observe(obs)
         print("  ✓ Multiple vectors handled")
-    except:
-        print("  ✗ Multiple vectors failed")
+    except Exception as e:
+        print(f"  ✗ Multiple vectors failed: {e}")
 
 
 if __name__ == "__main__":

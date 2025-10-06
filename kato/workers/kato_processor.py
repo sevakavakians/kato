@@ -1,4 +1,5 @@
 # cimport cython
+import asyncio
 import logging
 import os
 from multiprocessing import Lock, cpu_count
@@ -33,7 +34,7 @@ class KatoProcessor:
         self.vector_indexer_type = self.genome_manifest["indexer_type"]
         # Get service name from environment
         self.agent_name = os.environ.get('SERVICE_NAME', 'kato')
-        logger.info(" Starting KatoProcessor ID: %s" %self.id)
+        logger.info(" Starting KatoProcessor ID: {}".format(self.id))
 
         self.SORT = self.genome_manifest["sort"]
         self.time = 0
@@ -216,13 +217,15 @@ class KatoProcessor:
             'instance_id': self.id
         }
 
-    def get_predictions(self, unique_id={}):
+    def get_predictions(self, unique_id=None):
         """
         Retrieve predictions - delegates to pattern operations.
 
         If no ID provided, returns the most recent predictions from memory.
         Otherwise queries the database for stored predictions.
         """
+        if unique_id is None:
+            unique_id = {}
         uid = None
         if unique_id:
             uid = unique_id.get('unique_id')

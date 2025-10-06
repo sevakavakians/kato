@@ -431,10 +431,10 @@ class PatternCache:
             pattern_keys = 0
             symbol_keys = 0
 
-            async for key in self.redis.scan_iter(match=f"{self.config.pattern_prefix}:*", count=100):
+            async for _key in self.redis.scan_iter(match=f"{self.config.pattern_prefix}:*", count=100):
                 pattern_keys += 1
 
-            async for key in self.redis.scan_iter(match=f"{self.config.symbol_prefix}:*", count=100):
+            async for _key in self.redis.scan_iter(match=f"{self.config.symbol_prefix}:*", count=100):
                 symbol_keys += 1
 
             uptime = time.time() - self.stats['last_reset']

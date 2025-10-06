@@ -79,7 +79,7 @@ class TestSessionIsolation:
         sessions = []
 
         # Create 10 sessions with auto-generated unique node IDs
-        for i in range(10):
+        for _i in range(10):
             session = await kato_client.create_session()  # Auto-generates unique node_id
             sessions.append(session)
 
@@ -503,7 +503,7 @@ class TestSessionLoadAndPerformance:
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         success_count = sum(1 for r in results if r is True)
-        error_count = sum(1 for r in results if r is False or isinstance(r, Exception))
+        sum(1 for r in results if r is False or isinstance(r, Exception))
 
         success_rate = success_count / iterations
         assert success_rate > 0.95, \

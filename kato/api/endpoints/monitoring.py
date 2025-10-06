@@ -94,7 +94,7 @@ async def get_distributed_stm_stats():
         # Try to get a sample processor to check distributed STM
         if 'active_processors' in processor_stats and processor_stats['active_processors'] > 0:
             # Get first available processor
-            for processor_id, processor_info in app_state.processor_manager.processors.items():
+            for _processor_id, processor_info in app_state.processor_manager.processors.items():
                 processor = processor_info['processor']
                 if hasattr(processor, 'distributed_stm_manager') and processor.distributed_stm_manager:
                     sample_processor = processor

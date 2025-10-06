@@ -220,7 +220,7 @@ class TestMonitoringEndpoints:
 
         # Make some requests
         test_requests = 5
-        for i in range(test_requests):
+        for _i in range(test_requests):
             requests.get(f"{self.BASE_URL}/health")
 
         # Wait a moment for metrics to update

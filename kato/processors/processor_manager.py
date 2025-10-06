@@ -18,6 +18,7 @@ from kato.config.configuration_service import get_configuration_service
 from kato.config.session_config import SessionConfiguration
 from kato.config.settings import get_settings
 from kato.workers.kato_processor import KatoProcessor
+import contextlib
 
 logger = logging.getLogger('kato.processors.manager')
 
@@ -214,14 +215,13 @@ class ProcessorManager:
             session_config: Session configuration with updates
         """
         # Update critical parameters that can be changed dynamically
-        if session_config.recall_threshold is not None:
+        if session_config.recall_threshold is not None and hasattr(processor, 'pattern_processor'):
             # Update the pattern processor's recall threshold
-            if hasattr(processor, 'pattern_processor'):
-                processor.pattern_processor.recall_threshold = session_config.recall_threshold
-                # Also update the pattern searcher's threshold
-                if hasattr(processor.pattern_processor, 'patterns_searcher'):
-                    processor.pattern_processor.patterns_searcher.recall_threshold = session_config.recall_threshold
-                    logger.debug(f"Updated recall_threshold to {session_config.recall_threshold}")
+            processor.pattern_processor.recall_threshold = session_config.recall_threshold
+            # Also update the pattern searcher's threshold
+            if hasattr(processor.pattern_processor, 'patterns_searcher'):
+                processor.pattern_processor.patterns_searcher.recall_threshold = session_config.recall_threshold
+            logger.debug(f"Updated recall_threshold to {session_config.recall_threshold}")
 
         if session_config.max_pattern_length is not None:
             if hasattr(processor, 'max_pattern_length'):
@@ -233,10 +233,9 @@ class ProcessorManager:
                 logger.debug(f"Updated observation_processor.max_pattern_length to {session_config.max_pattern_length}")
             logger.debug(f"Updated max_pattern_length to {session_config.max_pattern_length}")
 
-        if session_config.persistence is not None:
-            if hasattr(processor, 'pattern_processor'):
-                processor.pattern_processor.persistence = session_config.persistence
-                logger.debug(f"Updated persistence to {session_config.persistence}")
+        if session_config.persistence is not None and hasattr(processor, 'pattern_processor'):
+            processor.pattern_processor.persistence = session_config.persistence
+            logger.debug(f"Updated persistence to {session_config.persistence}")
 
         if session_config.stm_mode is not None:
             if hasattr(processor, 'pattern_processor'):
@@ -246,12 +245,11 @@ class ProcessorManager:
                 logger.warning("Processor does not have pattern_processor attribute!")
 
         # Update other configurable parameters
-        if session_config.max_predictions is not None:
-            if hasattr(processor, 'pattern_processor'):
-                processor.pattern_processor.max_predictions = session_config.max_predictions
-                if hasattr(processor.pattern_processor, 'patterns_searcher'):
-                    processor.pattern_processor.patterns_searcher.max_predictions = session_config.max_predictions
-                logger.debug(f"Updated max_predictions to {session_config.max_predictions}")
+        if session_config.max_predictions is not None and hasattr(processor, 'pattern_processor'):
+            processor.pattern_processor.max_predictions = session_config.max_predictions
+            if hasattr(processor.pattern_processor, 'patterns_searcher'):
+                processor.pattern_processor.patterns_searcher.max_predictions = session_config.max_predictions
+            logger.debug(f"Updated max_predictions to {session_config.max_predictions}")
 
     def _evict_oldest(self):
         """Evict the least recently used processor."""
@@ -330,10 +328,9 @@ class ProcessorManager:
             if 'process_predictions' in new_config:
                 processor.process_predictions = new_config['process_predictions']
 
-            if 'stm_mode' in new_config:
-                if hasattr(processor, 'pattern_processor'):
-                    processor.pattern_processor.stm_mode = new_config['stm_mode']
-                    logger.debug(f"Updated STM mode to {new_config['stm_mode']} for processor {processor_id}")
+            if 'stm_mode' in new_config and hasattr(processor, 'pattern_processor'):
+                processor.pattern_processor.stm_mode = new_config['stm_mode']
+                logger.debug(f"Updated STM mode to {new_config['stm_mode']} for processor {processor_id}")
 
             logger.info(f"Updated processor {processor_id} configuration for node {node_id}")
             return True
@@ -454,10 +451,8 @@ class ProcessorManager:
         """Cleanup all processors on shutdown."""
         if self._cleanup_task:
             self._cleanup_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._cleanup_task
-            except asyncio.CancelledError:
-                pass
 
         # Close all processors
         for processor_id, processor_info in self.processors.items():

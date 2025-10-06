@@ -4,7 +4,7 @@ Provides specific exception types for better error handling and debugging.
 """
 
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 
 class KatoBaseException(Exception):

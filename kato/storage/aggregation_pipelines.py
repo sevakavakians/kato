@@ -321,7 +321,8 @@ class OptimizedQueryManager:
                 try:
                     doc = self.superkb.symbols_kb.find_one({"name": symbol})
                     result[symbol] = doc.get("frequency", 0) if doc else 0
-                except:
+                except Exception as e:
+                    logger.warning(f"Error getting symbol frequency for {symbol}: {e}")
                     result[symbol] = 0
             return result
 

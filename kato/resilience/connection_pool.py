@@ -164,8 +164,8 @@ class MongoConnectionPool:
             if self.client:
                 try:
                     self.client.close()
-                except:
-                    pass
+                except Exception as e:
+                    logger.warning(f"Error closing MongoDB connection: {e}")
 
             # Reinitialize
             self._initialize_client()
@@ -214,7 +214,8 @@ class MongoConnectionPool:
                 "failures": self.connection_failures,
                 "last_health_check": self.last_health_check
             }
-        except:
+        except Exception as e:
+            logger.warning(f"Error getting pool stats: {e}")
             return {"status": "unhealthy", "failures": self.connection_failures}
 
     def close(self):
@@ -259,7 +260,7 @@ class QdrantConnectionPool:
             from qdrant_client import QdrantClient
 
             # Create pool of clients
-            for i in range(self.config.qdrant_pool_size):
+            for _i in range(self.config.qdrant_pool_size):
                 client = QdrantClient(
                     host=self.config.qdrant_host,
                     port=self.config.qdrant_port,
@@ -406,7 +407,7 @@ class QdrantConnectionPool:
     async def close(self):
         """Close all connections in the pool"""
         while not self.available.empty():
-            client = await self.available.get()
+            _ = await self.available.get()
             # Qdrant client doesn't need explicit close, but we can clear references
 
         self.clients.clear()
@@ -473,13 +474,13 @@ def cleanup_connection_pools():
         try:
             # Check if there's an event loop running
             try:
-                loop = asyncio.get_running_loop()
+                asyncio.get_running_loop()
                 asyncio.create_task(_qdrant_pool.close())
             except RuntimeError:
                 # No event loop running, just clear the reference
                 pass
-        except:
-            pass
+        except Exception as e:
+            logger.warning(f"Error cleaning up Qdrant pool: {e}")
         _qdrant_pool = None
 
     logger.info("All connection pools cleaned up")

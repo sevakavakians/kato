@@ -90,7 +90,7 @@ class TestMultiNodeIsolation:
                         f"Node {i} didn't get expected predictions {node.expected_predictions}"
 
                 # Ensure no cross-contamination
-                for j, other_node in enumerate(nodes):
+                for j, _other_node in enumerate(nodes):
                     if i != j:
                         # Other node's data should not appear
                         other_prefix = f"N{j}_"

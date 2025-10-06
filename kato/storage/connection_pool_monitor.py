@@ -12,6 +12,7 @@ import time
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Optional
+import contextlib
 
 logger = logging.getLogger('kato.storage.connection_pool_monitor')
 
@@ -94,10 +95,8 @@ class ConnectionPoolMonitor:
 
         if self._monitor_task:
             self._monitor_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._monitor_task
-            except asyncio.CancelledError:
-                pass
             self._monitor_task = None
 
         logger.info("Connection pool monitoring stopped")

@@ -16,9 +16,7 @@ from collections.abc import Generator, Sequence
 from functools import reduce
 from typing import Any, Optional
 
-__all__ = ['get_close_matches', 'ndiff', 'restore', 'SequenceMatcher',
-           'Differ','IS_CHARACTER_JUNK', 'IS_LINE_JUNK', 'context_diff',
-           'unified_diff', 'Match']
+__all__ = ['SequenceMatcher', 'Match']
 
 Match = _namedtuple('Match', 'a b size')
 
@@ -161,7 +159,7 @@ class SequenceMatcher:
             >>> s.find_longest_match(0, 5, 0, 9)
             Match(a=0, b=4, size=5)
         """
-        a, b, b2j = self.a, self.b, self.b2j
+        a, _, b2j = self.a, self.b, self.b2j
         besti, bestj, bestsize = alo, blo, 0
 
         # Find longest junk-free match
@@ -366,10 +364,7 @@ class SequenceMatcher:
         availhas, matches = avail.__contains__, 0
 
         for elt in self.a:
-            if availhas(elt):
-                numb = avail[elt]
-            else:
-                numb = fullbcount.get(elt, 0)
+            numb = avail[elt] if availhas(elt) else fullbcount.get(elt, 0)
             avail[elt] = numb - 1
             if numb > 0:
                 matches = matches + 1
@@ -403,8 +398,7 @@ class SequenceMatcher:
             else:
                 continue
 
-            for line in g:
-                yield line
+            yield from g
 
     def _dump(self, tag: str, x: Sequence[Any], lo: int, hi: int) -> Generator[str, None, None]:
         """Generate comparison results for a same-tagged range.
@@ -419,7 +413,7 @@ class SequenceMatcher:
             Tagged lines from the sequence.
         """
         for i in range(lo, hi):
-            yield '%s %s' % (tag, x[i])
+            yield '{} {}'.format(tag, x[i])
 
     def _plain_replace(self, a: Sequence[Any], alo: int, ahi: int,
                        b: Sequence[Any], blo: int, bhi: int) -> Generator[str, None, None]:
@@ -447,5 +441,4 @@ class SequenceMatcher:
             second = self._dump('+', b, blo, bhi)
 
         for g in first, second:
-            for line in g:
-                yield line
+            yield from g

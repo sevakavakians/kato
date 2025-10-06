@@ -98,7 +98,7 @@ class KATOFastAPIFixture:
                                 response = requests.get(f"http://localhost:{port}/health", timeout=1)
                                 if response.status_code == 200:
                                     return port
-                            except:
+                            except Exception:
                                 continue
             except (json.JSONDecodeError, KeyError):
                 pass
@@ -217,7 +217,7 @@ class KATOFastAPIFixture:
                         # Check if service is running
                         response = requests.get(f"{self.base_url}/health", timeout=2)
                         if response.status_code == 200:
-                            health_data = response.json()
+                            response.json()
                             self.services_available = True
                             self.port = port
                             print(f"Using existing KATO service at {self.base_url}")
@@ -364,7 +364,7 @@ class KATOFastAPIFixture:
                    'empty stm' in detail or \
                    'cannot learn' in detail:
                     return ''  # Return empty string for insufficient STM
-            except:
+            except Exception:
                 pass
             # Re-raise if it's a different error
             response.raise_for_status()
@@ -423,7 +423,7 @@ class KATOFastAPIFixture:
 
                 # Then delete the session
                 response = requests.delete(f"{self.base_url}/sessions/{self.session_id}")
-            except:
+            except Exception:
                 pass  # Ignore errors during cleanup
 
             # Reset session tracking

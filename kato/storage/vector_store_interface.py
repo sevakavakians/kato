@@ -517,15 +517,13 @@ class VectorStore(ABC):
         Returns:
             True if collection exists or was created successfully
         """
-        if recreate and await self.collection_exists(collection_name):
-            if not await self.delete_collection(collection_name):
-                logger.error(f"Failed to delete existing collection: {collection_name}")
-                return False
+        if recreate and await self.collection_exists(collection_name) and not await self.delete_collection(collection_name):
+            logger.error(f"Failed to delete existing collection: {collection_name}")
+            return False
 
-        if not await self.collection_exists(collection_name):
-            if not await self.create_collection(collection_name, vector_dim, **kwargs):
-                logger.error(f"Failed to create collection: {collection_name}")
-                return False
+        if not await self.collection_exists(collection_name) and not await self.create_collection(collection_name, vector_dim, **kwargs):
+            logger.error(f"Failed to create collection: {collection_name}")
+            return False
 
         return True
 

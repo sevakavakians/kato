@@ -125,10 +125,7 @@ class PatternOperations:
         """
         try:
             # Strip PTRN| prefix if present for MongoDB query
-            if pattern_id.startswith('PTRN|'):
-                clean_name = pattern_id[5:]  # Remove 'PTRN|'
-            else:
-                clean_name = pattern_id
+            clean_name = pattern_id[5:] if pattern_id.startswith('PTRN|') else pattern_id
 
             # Query MongoDB with clean hash
             pattern = self.pattern_processor.superkb.getPattern(clean_name)
@@ -173,10 +170,7 @@ class PatternOperations:
         """
         try:
             # Strip PTRN| prefix if present
-            if name.startswith('PTRN|'):
-                clean_name = name[5:]
-            else:
-                clean_name = name
+            clean_name = name[5:] if name.startswith('PTRN|') else name
 
             # Delete from pattern processor (RAM and DB)
             result = self.pattern_processor.delete_pattern(clean_name)
@@ -216,10 +210,7 @@ class PatternOperations:
         """
         try:
             # Strip PTRN| prefix if present
-            if name.startswith('PTRN|'):
-                clean_name = name[5:]
-            else:
-                clean_name = name
+            clean_name = name[5:] if name.startswith('PTRN|') else name
 
             # Validate parameters
             if frequency is not None and frequency < 0:

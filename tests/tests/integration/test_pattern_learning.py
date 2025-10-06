@@ -112,11 +112,10 @@ def test_sequence_completion(kato_fixture):
 
         # KATO requires 2+ strings for predictions
         actually_observed = list(observed)  # Make a copy to track what we observed
-        if len(observed) < 2:
+        if len(observed) < 2 and expected:
             # Observe one more item from expected to get predictions
-            if expected:
-                kato_fixture.observe({'strings': [expected[0]], 'vectors': [], 'emotives': {}})
-                actually_observed.append(expected[0])
+            kato_fixture.observe({'strings': [expected[0]], 'vectors': [], 'emotives': {}})
+            actually_observed.append(expected[0])
 
         predictions = kato_fixture.get_predictions()
 
@@ -243,7 +242,7 @@ def test_context_switching(kato_fixture):
         'question': ['what', 'is', 'your', 'name']
     }
 
-    for context, sequence in contexts.items():
+    for _context, sequence in contexts.items():
         for item in sequence:
             kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
         kato_fixture.learn()

@@ -116,7 +116,7 @@ def test_time_series_pattern_learning(kato_fixture):
     cycles = 3  # Repeat pattern 3 times
 
     learned_patterns = []
-    for cycle in range(cycles):
+    for _cycle in range(cycles):
         for event in pattern:
             result = kato_fixture.observe({'strings': [event], 'vectors': [], 'emotives': {}})
             if result.get('auto_learned_pattern'):

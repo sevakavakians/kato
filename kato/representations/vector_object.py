@@ -37,32 +37,20 @@ class VectorObject:
         self.vector = vector
         self.vector_length = np.sqrt(np.dot(self.vector, self.vector.transpose() if hasattr(self.vector, 'transpose') else self.vector))   # vector_length used for heuristics
         self.vector_hash = str(sha1(str(self.vector).encode('utf-8'), usedforsecurity=False).hexdigest())
-        self.name = "VCTR|%s" %(self.vector_hash)
+        self.name = "VCTR|{}".format(self.vector_hash)
         return
 
     def __lt__(self, other):
-        if isinstance(other, VectorObject):
-            if self.vector_length < other.vector_length:
-                return True
-        return False
+        return bool(isinstance(other, VectorObject) and self.vector_length < other.vector_length)
 
     def __gt__(self, other):
-        if isinstance(other, VectorObject):
-            if self.vector_length > other.vector_length:
-                return True
-        return False
+        return bool(isinstance(other, VectorObject) and self.vector_length > other.vector_length)
 
     def __eq__(self, other):
-        if isinstance(other, VectorObject):
-            if self.vector.all == other.vector.all:
-                return True
-        return False
+        return bool(isinstance(other, VectorObject) and self.vector.all == other.vector.all)
 
     def eqHS(self, other):
-        if self.vector == other.vector:
-            return True
-        else:
-            return False
+        return self.vector == other.vector
 
     def __repr__(self):
         return self.name
@@ -101,17 +89,15 @@ class VectorObject:
         return vector
 
     def isNull(self):
-        if self.vector_length == 0: # This works when using DVC since all values must be positive.
-            return True
-        else:
-            return False
+        # This works when using DVC since all values must be positive.
+        return self.vector_length == 0
 
     def isLessThanZero(self):
         "Return True if any value is less than zero."
-        return any(signbit(self.vector))
+        return any(np.signbit(self.vector))
 
     def transpose(self):
-        return transpose(array([self.vector]))
+        return np.transpose(np.array([self.vector]))
 
     #===========================================================================
     # # numpy arrays must be encoded and decoded as strings

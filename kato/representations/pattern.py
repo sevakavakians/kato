@@ -14,11 +14,11 @@ class Pattern:
     def __init__(self, pattern_data):
         self.pattern_data = list(pattern_data)
         self.length = sum(len(x) for x in self.pattern_data)
-        self.name = sha1(('%s' %self.pattern_data).encode('utf-8'), usedforsecurity=False).hexdigest()
+        self.name = sha1(('{}'.format(self.pattern_data)).encode('utf-8'), usedforsecurity=False).hexdigest()
         return
 
     def __repr__(self):
-        return """<PTRN|%s>""" %(self.name)
+        return """<PTRN|{}>""".format(self.name)
 
     def __len__(self):
         "Number of symbols in the pattern."

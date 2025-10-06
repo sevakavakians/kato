@@ -20,7 +20,7 @@ import yaml
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
 
-from load_generator import BurstLoadGenerator, LoadGenerator, LoadPattern, LoadProfile, VirtualUser
+from load_generator import BurstLoadGenerator, DataGenerator, LoadGenerator, LoadPattern, LoadProfile, VirtualUser
 from performance_monitor import PerformanceMonitor
 
 # Import test fixtures
@@ -181,7 +181,7 @@ class StressTestRunner:
         self.monitor.start()
 
         # Create test data generator
-        data_generator = TestDataGenerator(self.config['test_data'])
+        data_generator = DataGenerator(self.config['test_data'])
 
         # Create virtual users
         users = []
@@ -298,7 +298,7 @@ class StressTestRunner:
         self.monitor.start()
 
         # Create burst generator
-        data_generator = TestDataGenerator(self.config['test_data'])
+        data_generator = DataGenerator(self.config['test_data'])
         burst_generator = BurstLoadGenerator(
             request_func=self._make_request,
             data_generator=data_generator,
@@ -455,7 +455,7 @@ class StressTestRunner:
 
         # Phase 1: Normal load
         logger.info("Phase 1: Establishing baseline...")
-        data_generator = TestDataGenerator(self.config['test_data'])
+        data_generator = DataGenerator(self.config['test_data'])
 
         users = []
         for i in range(10):
@@ -486,7 +486,7 @@ class StressTestRunner:
                     timeout=5
                 )
                 return response.status_code
-            except:
+            except Exception:
                 return 0
 
         # Send burst of invalid requests

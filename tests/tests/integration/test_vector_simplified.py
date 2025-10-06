@@ -137,8 +137,8 @@ if __name__ == "__main__":
         r = requests.get(f"{kato_fixture.base_url}/health")
         assert r.status_code == 200
         print("✓ KATO is running\n")
-    except:
-        print("ERROR: KATO is not running")
+    except Exception as e:
+        print(f"ERROR: KATO is not running: {e}")
         exit(1)
 
     # Run tests

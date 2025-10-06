@@ -152,7 +152,7 @@ def test_cross_session_determinism(kato_fixture):
 
     session_results = []
 
-    for session in range(3):  # Run 3 sessions
+    for _session in range(3):  # Run 3 sessions
         session_predictions = []
 
         for test_case in test_cases:

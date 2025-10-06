@@ -336,7 +336,7 @@ class OptimizedConnectionManager:
             self._qdrant_client = QdrantClient(**client_config)
 
             # Test the connection
-            collections = self._qdrant_client.get_collections()
+            self._qdrant_client.get_collections()
 
             response_time = (time.time() - start_time) * 1000
             self._health_status['qdrant'] = ConnectionHealth(

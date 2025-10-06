@@ -4,7 +4,7 @@ from itertools import chain
 class Prediction(dict):
     "Pattern prediction."
     def __init__(self, _pattern, matching_intersection, past, present, missing, extras, similarity, number_of_blocks, stm_events=None):
-        super(Prediction, self).__init__(self)
+        super().__init__(self)
         self['type'] = 'prototypical'
         self['name'] = _pattern['name']
         self['frequency'] = _pattern['frequency']
@@ -74,7 +74,7 @@ class Prediction(dict):
                     self['present'].insert(0, self['past'][-1])
                     self['past'] = self['past'][:-1]
             except Exception as e:
-                raise Exception("Error matching events in predictions! CODE-55 %s" %e)
+                raise Exception("Error matching events in predictions! CODE-55 {}".format(e))
 
         # Calculate event-aligned missing and extras using STM event structure
         if stm_events and len(stm_events) > 0:

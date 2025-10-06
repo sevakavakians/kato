@@ -10,6 +10,7 @@ import string
 import threading
 import time
 from dataclasses import dataclass
+from enum import Enum
 from typing import Any, Callable
 
 
@@ -34,7 +35,6 @@ def poisson_sample(mean):
             k += 1
             p *= rand.random()
         return k - 1
-from enum import Enum
 
 
 class LoadPattern(Enum):
@@ -453,7 +453,7 @@ class LoadGenerator:
 
         if target_users > current_users:
             # Add users
-            for i in range(target_users - current_users):
+            for _i in range(target_users - current_users):
                 user = VirtualUser(
                     user_id=len(self.users),
                     request_func=self.request_func,

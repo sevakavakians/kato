@@ -238,10 +238,7 @@ def configure_logging(
         level = getattr(logging, level.upper(), logging.INFO)
 
     # Choose formatter based on format type
-    if format_type == 'json':
-        formatter = StructuredFormatter()
-    else:
-        formatter = HumanReadableFormatter()
+    formatter = StructuredFormatter() if format_type == 'json' else HumanReadableFormatter()
 
     # Configure output handler
     if output == 'stdout':

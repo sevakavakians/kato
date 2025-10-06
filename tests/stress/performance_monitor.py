@@ -11,6 +11,7 @@ import subprocess
 import threading
 import time
 from collections import defaultdict, deque
+from dataclasses import asdict, dataclass, field
 from typing import Any, Optional
 
 
@@ -26,7 +27,6 @@ def calculate_percentile(data, p):
     if ceil >= len(data_sorted):
         return data_sorted[floor]
     return data_sorted[floor] * (ceil - k) + data_sorted[ceil] * (k - floor)
-from dataclasses import asdict, dataclass, field
 
 
 @dataclass

@@ -319,7 +319,6 @@ class IndexManager:
             return False
 
         # Remove from pattern data
-        pattern_sequence = self.pattern_data.get(pattern_id, [])
         del self.pattern_data[pattern_id]
 
         # Remove from inverted index

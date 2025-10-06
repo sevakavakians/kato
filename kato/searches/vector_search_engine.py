@@ -145,7 +145,7 @@ class VectorSearchEngine:
 
         # Check if we're in an async context
         try:
-            loop = asyncio.get_running_loop()
+            asyncio.get_running_loop()
             # We're already in an event loop, need to run in thread
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(asyncio.run, coro)

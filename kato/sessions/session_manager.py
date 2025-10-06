@@ -17,6 +17,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from kato.config.session_config import SessionConfiguration
+import contextlib
 
 logger = logging.getLogger('kato.sessions.manager')
 
@@ -337,7 +338,7 @@ class SessionManager:
             "total_sessions": len(self.sessions),
             "active_sessions": len(active_sessions),
             "expired_sessions": len(self.sessions) - len(active_sessions),
-            "nodes_with_sessions": len(set(s.node_id for s in active_sessions if s.node_id)),
+            "nodes_with_sessions": len({s.node_id for s in active_sessions if s.node_id}),
             "average_stm_size": sum(len(s.stm) for s in active_sessions) / max(len(active_sessions), 1),
             "total_stm_events": sum(len(s.stm) for s in active_sessions)
         }
@@ -365,10 +366,8 @@ class SessionManager:
         """Cleanup resources on shutdown"""
         if self._cleanup_task:
             self._cleanup_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._cleanup_task
-            except asyncio.CancelledError:
-                pass
 
         # Clear all sessions
         self.sessions.clear()

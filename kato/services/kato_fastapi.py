@@ -15,7 +15,7 @@ import sys
 import time
 from typing import Optional
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
@@ -224,10 +224,7 @@ def get_node_id_from_request(request: Request) -> str:
     test_id = request.headers.get("x-test-id")
     if test_id:
         # If test_id already starts with "test_", don't add another prefix
-        if test_id.startswith("test_"):
-            result = test_id
-        else:
-            result = f"test_{test_id}"
+        result = test_id if test_id.startswith("test_") else f"test_{test_id}"
         logger.debug(f"Using test ID: {result}")
         return result
 
@@ -281,8 +278,6 @@ async def root():
 # ============================================================================
 # WebSocket Support (if needed)
 # ============================================================================
-
-from fastapi import WebSocket, WebSocketDisconnect
 
 
 @app.websocket("/ws")

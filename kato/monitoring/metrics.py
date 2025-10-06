@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 import psutil
+import contextlib
 
 logger = logging.getLogger('kato.monitoring.metrics')
 
@@ -370,10 +371,8 @@ class MetricsCollector:
         """Stop background metrics collection"""
         if self._collection_task:
             self._collection_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._collection_task
-            except asyncio.CancelledError:
-                pass
             self._collection_task = None
             logger.info("Stopped metrics collection")
 

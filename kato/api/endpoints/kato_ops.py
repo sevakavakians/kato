@@ -127,7 +127,6 @@ async def learn_primary(
 
     try:
         pattern_name = processor.learn()
-        final_stm = processor.get_stm()
 
         return LearnResult(
             status="learned",
@@ -262,10 +261,7 @@ async def update_genes(
 
     try:
         # Extract genes from request body (handles both direct and nested formats)
-        if 'genes' in genes_data:
-            genes = genes_data['genes']
-        else:
-            genes = genes_data
+        genes = genes_data.get('genes', genes_data)
 
         # Update genome manifest
         for key, value in genes.items():
@@ -453,10 +449,9 @@ async def observe_sequence_primary(
 
             result = await processor.observe(observation)
 
-            if data.learn_after_each:
-                if processor.get_stm():
-                    pattern_name = processor.learn()
-                    auto_learned_patterns.append(pattern_name)
+            if data.learn_after_each and processor.get_stm():
+                pattern_name = processor.learn()
+                auto_learned_patterns.append(pattern_name)
 
             # Track auto-learned patterns
             if result.get('auto_learned_pattern'):

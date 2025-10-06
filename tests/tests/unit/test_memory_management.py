@@ -117,7 +117,7 @@ def test_manual_learning(kato_fixture):
             break
     else:
         # If no matching prediction found, fail with informative message
-        assert False, f"No prediction found with 'x' and 'y' in matches. Got predictions: {predictions}"
+        raise AssertionError(f"No prediction found with 'x' and 'y' in matches. Got predictions: {predictions}")
 
 
 def test_memory_persistence(kato_fixture):
@@ -283,7 +283,7 @@ def test_interleaved_memory_operations(kato_fixture):
     # First sequence
     kato_fixture.observe({'strings': ['seq1_a'], 'vectors': [], 'emotives': {}})
     kato_fixture.observe({'strings': ['seq1_b'], 'vectors': [], 'emotives': {}})
-    model1 = kato_fixture.learn()
+    kato_fixture.learn()
 
     # Second sequence
     kato_fixture.observe({'strings': ['seq2_x'], 'vectors': [], 'emotives': {}})

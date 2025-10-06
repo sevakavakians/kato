@@ -64,10 +64,7 @@ class MongoDBConfig(BaseSettings):
     @property
     def connection_string(self) -> str:
         """Build MongoDB connection string."""
-        if self.username and self.password:
-            auth = f"{self.username}:{self.password.get_secret_value()}@"
-        else:
-            auth = ""
+        auth = f"{self.username}:{self.password.get_secret_value()}@" if self.username and self.password else ""
 
         base_url = f"mongodb://{auth}{self.host}:{self.port}"
 
@@ -221,10 +218,7 @@ class RedisConfig(BaseSettings):
     @property
     def url(self) -> str:
         """Get Redis connection URL."""
-        if self.password:
-            auth = f":{self.password.get_secret_value()}@"
-        else:
-            auth = ""
+        auth = f":{self.password.get_secret_value()}@" if self.password else ""
         return f"redis://{auth}{self.host}:{self.port}/{self.db}"
 
     def get_connection_pool_config(self) -> dict[str, Any]:

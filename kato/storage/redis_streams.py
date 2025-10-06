@@ -209,10 +209,9 @@ class DistributedSTMManager:
 
         success = await self.publish_stm_event(STMEventType.OBSERVE, event_data)
 
-        if success:
+        if success and event_data["strings"]:
             # Update local cache immediately for performance
-            if event_data["strings"]:
-                self._local_stm_cache.append(event_data["strings"])
+            self._local_stm_cache.append(event_data["strings"])
 
         return success
 
@@ -259,7 +258,7 @@ class DistributedSTMManager:
             )
 
             events = []
-            for stream_name, messages in streams:
+            for _stream_name, messages in streams:
                 for msg_id, fields in messages:
                     try:
                         event = STMEvent.from_dict(fields)

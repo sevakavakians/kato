@@ -238,7 +238,7 @@ class TestErrorContext:
     def test_error_context_with_kato_exception(self):
         """Test ErrorContext enriching KATO exceptions"""
         try:
-            with ErrorContext("test_operation", "resource-123") as ctx:
+            with ErrorContext("test_operation", "resource-123"):
                 raise SessionNotFoundError("test-session")
         except SessionNotFoundError as e:
             # Context should be enriched
@@ -250,7 +250,7 @@ class TestErrorContext:
         """Test ErrorContext with standard Python exceptions"""
         # This should not raise an exception in the context manager
         # but the exception should still propagate
-        with pytest.raises(ValueError), ErrorContext("test_operation") as ctx:
+        with pytest.raises(ValueError), ErrorContext("test_operation"):
             raise ValueError("Standard Python exception")
 
 
@@ -312,7 +312,7 @@ class TestErrorIntegration:
 
         # In a real integration test, you'd test these against actual FastAPI endpoints
         # Here we verify the exceptions have the expected properties
-        for exception, expected_status in error_status_mapping:
+        for exception, _expected_status in error_status_mapping:
             assert isinstance(exception, KatoV2Exception)
             assert exception.error_code is not None
             assert exception.message is not None

@@ -106,10 +106,7 @@ def test_mixed_modality_processing(kato_fixture):
     assert response.status_code == 200
     result = response.json()
     # Extract message if wrapped
-    if isinstance(result, dict) and 'message' in result:
-        message = result['message']
-    else:
-        message = result
+    message = result['message'] if isinstance(result, dict) and 'message' in result else result
     assert message['status'] == 'okay'  # FastAPI response format
 
     # Check short-term memory
@@ -209,10 +206,7 @@ def test_large_vector_handling(kato_fixture):
     assert response.status_code == 200
     result = response.json()
     # Extract message if wrapped
-    if isinstance(result, dict) and 'message' in result:
-        message = result['message']
-    else:
-        message = result
+    message = result['message'] if isinstance(result, dict) and 'message' in result else result
     assert message['status'] == 'okay'  # FastAPI response format
 
     # Learn it

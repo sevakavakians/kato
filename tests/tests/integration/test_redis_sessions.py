@@ -319,7 +319,7 @@ class TestRedisSessionManager:
         with patch('redis.asyncio.from_url', side_effect=Exception("Connection failed")):
             try:
                 await manager.initialize()
-                assert False, "Should have raised exception"
+                raise AssertionError("Should have raised exception")
             except Exception as e:
                 assert "Connection failed" in str(e)
 

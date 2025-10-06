@@ -26,7 +26,6 @@ try:
         PointStruct,
         ProductQuantization,
         ProductQuantizationConfig,
-        QuantizationConfig,
         ScalarQuantization,
         ScalarQuantizationConfig,
         ScalarType,
@@ -210,7 +209,7 @@ class QdrantStore(VectorStore):
     async def delete_collection(self, collection_name: str) -> bool:
         """Delete a Qdrant collection"""
         try:
-            success = await self._async_wrapper(
+            await self._async_wrapper(
                 self.client.delete_collection,
                 collection_name=collection_name
             )

@@ -171,7 +171,7 @@ def test_predictions_endpoints(kato_fixture):
     kato_fixture.clear_all_memory()
     kato_fixture.observe({'strings': ['pred1', 'pred2'], 'vectors': [], 'emotives': {}})
     kato_fixture.observe({'strings': ['pred3'], 'vectors': [], 'emotives': {}})
-    pattern_name = kato_fixture.learn()
+    kato_fixture.learn()
 
     # Clear STM and observe partial pattern
     # Need at least 2 strings in STM for predictions

@@ -291,7 +291,7 @@ def test_sequence_length_adaptive_threshold(kato_fixture):
         'long': [f'l{i}' for i in range(15)]
     }
 
-    for name, seq in sequences.items():
+    for _name, seq in sequences.items():
         for item in seq:
             kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
         kato_fixture.learn()

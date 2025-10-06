@@ -6,6 +6,7 @@ and type safety. All environment variables and configuration options are consoli
 here for easier management and documentation.
 """
 
+import logging
 import os
 from pathlib import Path
 from typing import Any, Literal, Optional

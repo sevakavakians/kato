@@ -47,7 +47,7 @@ class RollingHash:
             return self._hash_cache[seq_key]
 
         hash_value = 0
-        for i, symbol in enumerate(sequence):
+        for _i, symbol in enumerate(sequence):
             # Use deterministic string hash
             symbol_hash = hash(symbol) & 0x7FFFFFFF  # Ensure positive
             hash_value = (hash_value * self.prime + symbol_hash) % self.modulo

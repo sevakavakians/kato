@@ -69,12 +69,11 @@ class SessionMiddleware(BaseHTTPMiddleware):
                         }
                     }
                 )
-            elif not session_id:
-                if self.auto_create and request.method in ['POST', 'PUT']:
-                    # Auto-create session for v2 endpoints
-                    session = await self.session_manager.create_session()
-                    session_id = session.session_id
-                    logger.info(f"Auto-created session {session_id} for {path}")
+            elif not session_id and self.auto_create and request.method in ['POST', 'PUT']:
+                # Auto-create session for v2 endpoints
+                session = await self.session_manager.create_session()
+                session_id = session.session_id
+                logger.info(f"Auto-created session {session_id} for {path}")
                 # For non-session endpoints, we don't require a session
 
         # Validate and attach session if provided
@@ -116,10 +115,9 @@ class SessionMiddleware(BaseHTTPMiddleware):
             response.headers['X-Session-ID'] = session_id
 
         # Update session if it was modified
-        if hasattr(request.state, 'session') and hasattr(request.state, 'session_modified'):
-            if request.state.session_modified:
-                await self.session_manager.update_session(request.state.session)
-                logger.debug(f"Updated modified session {session_id}")
+        if hasattr(request.state, 'session') and hasattr(request.state, 'session_modified') and request.state.session_modified:
+            await self.session_manager.update_session(request.state.session)
+            logger.debug(f"Updated modified session {session_id}")
 
         return response
 

@@ -170,7 +170,7 @@ def test_prediction_frequency(kato_fixture):
             assert True
             break
     else:
-        assert False, "Should have prediction with frequency >= 3"
+        raise AssertionError("Should have prediction with frequency >= 3")
 
 
 def test_prediction_entropy(kato_fixture):

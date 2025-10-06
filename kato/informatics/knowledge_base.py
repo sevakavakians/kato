@@ -26,7 +26,7 @@ class KnowledgeBase(dict):
         return len(list(self.keys()))
 
     def __repr__(self):
-        return "{KB| objects: %s}" %(len(list(self.keys())))
+        return "{{KB| objects: {}}}".format(len(list(self.keys())))
 
     def learnObject(self, object, utility=None, affinity=None):
         if object.name in list(self.keys()):
@@ -116,8 +116,8 @@ class SuperKnowledgeBase:
                                     "total_symbols_in_patterns_frequencies": 0})
             logger.info("done.")
         except Exception as e:
-            logger.error("FAILED! Exception: %s" %(e))
-            raise Exception("\nFAILED! KnowledgeBase Exception: %s" %(e))
+            logger.error("FAILED! Exception: {}".format(e))
+            raise Exception("\nFAILED! KnowledgeBase Exception: {}".format(e))
         return
 
     def clear_all_memory(self):
@@ -150,13 +150,13 @@ class SuperKnowledgeBase:
         return
 
     def __repr__(self):
-        return "{Patterns: %s, information: %s, entropy: %s}" %(self.patterns_kb.count_documents({}), self.total_information, self.entropy)
+        return "{{Patterns: {}, information: {}, entropy: {}}}".format(self.patterns_kb.count_documents({}), self.total_information, self.entropy)
 
     def __pkb_repr__(self):
-        return "{KB| objects: %s }" %(self.patterns_kb.count_documents({}))
+        return "{{KB| objects: {} }}".format(self.patterns_kb.count_documents({}))
 
     def __akb_repr__(self):
-        return "{KB| objects: %s }" %(self.associative_action_kb.count_documents({}))
+        return "{{KB| objects: {} }}".format(self.associative_action_kb.count_documents({}))
 
     def __vkb_repr__(self):
         return "{KB| vectors: 0 }"  # Vectors now handled by modern vector store
@@ -180,11 +180,13 @@ class SuperKnowledgeBase:
                                          upsert=True)
         return r
 
-    def learnPattern(self, pattern_object, emotives={}):
+    def learnPattern(self, pattern_object, emotives=None):
         """
         Core machine learning function.
         Use this to learn patterns by passing a Pattern object.  Optional keywords available.
         """
+        if emotives is None:
+            emotives = {}
 
         try:
             if emotives:
@@ -210,7 +212,7 @@ class SuperKnowledgeBase:
             # Prepare emotive updates for MongoDB dot notation
             __s = {}
             for emotive, value in emotives.items():
-                __s["emotives.%s" %emotive] = value
+                __s["emotives.{}".format(emotive)] = value
 
             # Track symbol statistics:
             # - pattern_member_frequency: how many patterns contain this symbol
@@ -260,7 +262,7 @@ class SuperKnowledgeBase:
             return not result.matched_count ### If 1, then this was known, so return False to be "new"
 
         except Exception as e:
-            raise Exception("\nException in learnPattern: %s, \n%s" %(pattern_object.name, e))
+            raise Exception("\nException in learnPattern: {}, \n{}".format(pattern_object.name, e))
 
     def getPattern(self, pattern, by="name"):
         """
@@ -270,7 +272,7 @@ class SuperKnowledgeBase:
         try:
             return self.patterns_kb.find_one({by: pattern})
         except Exception as e:
-            raise Exception("\nException in getPattern (%s): %s" %(pattern, e))
+            raise Exception("\nException in getPattern ({}): {}".format(pattern, e))
 
     def getTargetedPatternNames(self, target_class):
         """

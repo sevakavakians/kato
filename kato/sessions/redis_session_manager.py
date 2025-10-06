@@ -21,6 +21,7 @@ import kato.sessions.session_manager as session_manager_module
 from kato.config.session_config import SessionConfiguration
 
 from .session_manager import SessionState
+import contextlib
 
 logger = logging.getLogger('kato.sessions.redis')
 
@@ -70,12 +71,10 @@ class RedisSessionManager(session_manager_module.SessionManager):
         """
         config_dict = session_config.to_dict()
         # Convert datetime fields to ISO strings
-        if 'created_at' in config_dict and config_dict['created_at']:
-            if hasattr(config_dict['created_at'], 'isoformat'):
-                config_dict['created_at'] = config_dict['created_at'].isoformat()
-        if 'updated_at' in config_dict and config_dict['updated_at']:
-            if hasattr(config_dict['updated_at'], 'isoformat'):
-                config_dict['updated_at'] = config_dict['updated_at'].isoformat()
+        if 'created_at' in config_dict and config_dict['created_at'] and hasattr(config_dict['created_at'], 'isoformat'):
+            config_dict['created_at'] = config_dict['created_at'].isoformat()
+        if 'updated_at' in config_dict and config_dict['updated_at'] and hasattr(config_dict['updated_at'], 'isoformat'):
+            config_dict['updated_at'] = config_dict['updated_at'].isoformat()
         return config_dict
 
     def _deserialize_session(self, session_dict: dict[str, Any]) -> SessionState:
@@ -548,7 +547,7 @@ class RedisSessionManager(session_manager_module.SessionManager):
             "total_sessions": len(sessions),
             "active_sessions": len(active_sessions),
             "expired_sessions": len(sessions) - len(active_sessions),
-            "nodes_with_sessions": len(set(s.node_id for s in active_sessions if s.node_id)),
+            "nodes_with_sessions": len({s.node_id for s in active_sessions if s.node_id}),
             "average_stm_size": sum(len(s.stm) for s in active_sessions) / max(len(active_sessions), 1),
             "total_stm_events": sum(len(s.stm) for s in active_sessions),
             "backend": "redis",
@@ -562,10 +561,8 @@ class RedisSessionManager(session_manager_module.SessionManager):
         # Cancel cleanup task
         if self._cleanup_task:
             self._cleanup_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._cleanup_task
-            except asyncio.CancelledError:
-                pass
 
         # Close Redis connection
         if self.redis_client:

@@ -446,10 +446,9 @@ async def observe_sequence_in_session(
             result = await processor.observe(observation)
 
             # Learn after each if requested
-            if data.learn_after_each:
-                if processor.get_stm():
-                    pattern_name = processor.learn()
-                    auto_learned_patterns.append(pattern_name)
+            if data.learn_after_each and processor.get_stm():
+                pattern_name = processor.learn()
+                auto_learned_patterns.append(pattern_name)
 
             # Track auto-learned patterns from auto-learning
             if result.get('auto_learned_pattern'):

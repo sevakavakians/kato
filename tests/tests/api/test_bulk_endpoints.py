@@ -28,7 +28,7 @@ def test_observe_sequence_basic(kato_fixture):
     assert len(result['results']) == 3
 
     # Each observation should have succeeded
-    for idx, obs_result in enumerate(result['results']):
+    for _idx, obs_result in enumerate(result['results']):
         assert obs_result['status'] == 'okay'
         assert 'unique_id' in obs_result
         assert 'time' in obs_result
@@ -170,7 +170,7 @@ def test_observe_sequence_alphanumeric_sorting(kato_fixture):
         {'strings': ['Z', 'A', 'M'], 'vectors': [], 'emotives': {}}
     ]
 
-    result = kato_fixture.observe_sequence(observations)
+    kato_fixture.observe_sequence(observations)
 
     # Verify STM has sorted strings
     stm = kato_fixture.get_stm()
@@ -254,7 +254,7 @@ def test_observe_sequence_predictions_available(kato_fixture):
         {'strings': ['pattern', 'C'], 'vectors': [], 'emotives': {}}
     ]
 
-    result = kato_fixture.observe_sequence(observations, learn_at_end=True)
+    kato_fixture.observe_sequence(observations, learn_at_end=True)
 
     # Clear STM
     kato_fixture.clear_stm()
@@ -341,7 +341,7 @@ def test_observe_sequence_isolation_verification(kato_fixture):
     kato_fixture.observe_sequence(observations_no_isolation, clear_stm_between=False)
 
     # Get predictions - should see context from all observations
-    predictions_no_isolation = kato_fixture.get_predictions()
+    kato_fixture.get_predictions()
 
     # Clear STM
     kato_fixture.clear_stm()

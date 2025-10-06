@@ -123,7 +123,7 @@ class InformationExtractor:
         elif num_actual_blocks == 1:
             # Only one matching block
             (i0, j0, n0) = tuple(matching_blocks[0])
-            (i1, j1, n1) = (i0, j0, n0)  # Use same values for consistency
+            (i1, _, _) = (i0, j0, n0)  # Use same values for consistency
             past = pattern[:i0]
             present = pattern[i0:i0+n0]  # Just the matching portion
         else:
@@ -578,7 +578,7 @@ class PatternSearcher:
                                 filtered_candidates.add(pattern_name)
 
                     original_count = len(candidates)
-                    candidates = list(c for c in candidates if c in filtered_candidates)
+                    candidates = [c for c in candidates if c in filtered_candidates]
 
                     logger.info(f"Bloom filter pre-screening: {original_count} -> {len(candidates)} candidates")
                 else:
@@ -668,7 +668,7 @@ class PatternSearcher:
             )
 
             # Process matches above threshold
-            for choice_str, score, pattern_id in matches:
+            for _choice_str, score, pattern_id in matches:
                 similarity = score / 100.0
                 if similarity >= self.recall_threshold:
                     pattern_seq = self.patterns_cache[pattern_id]
@@ -722,9 +722,7 @@ class PatternSearcher:
                             past = pattern_seq[:i0]
                             present = pattern_seq[i0:i0+n0]
 
-                            # For single block, use the same length as present for state_segment
-                            state_segment = state[j0:min(j0+len(present), len(state))]
-
+                            # For single block, set values for consistency
                             (i1, j1, n1) = (i0, j0, n0)  # Set for consistency
                         else:
                             # Multiple matching blocks (2+)
@@ -886,7 +884,7 @@ class PatternSearcher:
                 limit=None
             )
 
-            for choice_str, score, pattern_id in matches:
+            for _choice_str, score, pattern_id in matches:
                 similarity = score / 100.0
                 if similarity >= self.recall_threshold:
                     pattern_seq = self.patterns_cache[pattern_id]

@@ -18,10 +18,10 @@ def test_empty_events_ignored(kato_fixture):
 
     # Get initial state
     initial_stm = kato_fixture.get_short_term_memory()
-    initial_predictions = kato_fixture.get_predictions()
+    kato_fixture.get_predictions()
 
     # Observe empty event
-    result = kato_fixture.observe({'strings': [], 'vectors': [], 'emotives': {}})
+    kato_fixture.observe({'strings': [], 'vectors': [], 'emotives': {}})
 
     # short-term memory should not change
     stm_after_empty = kato_fixture.get_short_term_memory()
@@ -121,7 +121,7 @@ def test_all_extras_no_matches(kato_fixture):
         for pred in predictions:
             if pred.get('frequency', 0) > 0:
                 # If there's a prediction, extras should contain the unknown symbols
-                extras = pred.get('extras', [])
+                pred.get('extras', [])
                 matches = pred.get('matches', [])
                 # Low or no matches expected
                 assert len(matches) == 0 or pred.get('similarity', 0) < 0.5
@@ -308,7 +308,7 @@ def test_single_symbol_sequences(kato_fixture):
     # Find matching prediction
     for pred in predictions:
         if 'x' in pred.get('matches', []) and 'y' in pred.get('matches', []):
-            past = pred.get('past', [])
+            pred.get('past', [])
             present = pred.get('present', [])
             future = pred.get('future', [])
 

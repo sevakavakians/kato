@@ -54,28 +54,24 @@ class SessionConfiguration:
         """
         try:
             # Validate recall_threshold
-            if self.recall_threshold is not None:
-                if not 0.0 <= self.recall_threshold <= 1.0:
-                    logger.error(f"Invalid recall_threshold: {self.recall_threshold}")
-                    return False
+            if self.recall_threshold is not None and not 0.0 <= self.recall_threshold <= 1.0:
+                logger.error(f"Invalid recall_threshold: {self.recall_threshold}")
+                return False
 
             # Validate persistence
-            if self.persistence is not None:
-                if not 1 <= self.persistence <= 100:
-                    logger.error(f"Invalid persistence: {self.persistence}")
-                    return False
+            if self.persistence is not None and not 1 <= self.persistence <= 100:
+                logger.error(f"Invalid persistence: {self.persistence}")
+                return False
 
             # Validate max_pattern_length
-            if self.max_pattern_length is not None:
-                if self.max_pattern_length < 0:
-                    logger.error(f"Invalid max_pattern_length: {self.max_pattern_length}")
-                    return False
+            if self.max_pattern_length is not None and self.max_pattern_length < 0:
+                logger.error(f"Invalid max_pattern_length: {self.max_pattern_length}")
+                return False
 
             # Validate max_predictions
-            if self.max_predictions is not None:
-                if not 1 <= self.max_predictions <= 10000:
-                    logger.error(f"Invalid max_predictions: {self.max_predictions}")
-                    return False
+            if self.max_predictions is not None and not 1 <= self.max_predictions <= 10000:
+                logger.error(f"Invalid max_predictions: {self.max_predictions}")
+                return False
 
             # Validate indexer_type
             if self.indexer_type is not None:
@@ -152,9 +148,8 @@ class SessionConfiguration:
 
         # Override with session values where set
         for key, value in asdict(self).items():
-            if key not in ['session_id', 'node_id', 'created_at', 'updated_at', 'version']:
-                if value is not None:
-                    merged[key] = value
+            if key not in ['session_id', 'node_id', 'created_at', 'updated_at', 'version'] and value is not None:
+                merged[key] = value
 
         return merged
 

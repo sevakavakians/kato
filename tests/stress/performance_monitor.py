@@ -11,7 +11,7 @@ import subprocess
 import threading
 import time
 from collections import defaultdict, deque
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 
 # Use pure Python statistics for compatibility
@@ -39,7 +39,7 @@ class PerformanceMetrics:
     error_message: str = ""
     status_code: int = 200
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return asdict(self)
 
@@ -55,7 +55,7 @@ class ResourceMetrics:
     network_bytes_recv: int = 0
     active_connections: int = 0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return asdict(self)
 
@@ -63,7 +63,7 @@ class ResourceMetrics:
 class PerformanceMonitor:
     """
     Monitors and analyzes performance metrics during stress tests.
-    
+
     Features:
     - Real-time metric collection
     - Statistical analysis (percentiles, throughput, error rates)
@@ -76,7 +76,7 @@ class PerformanceMonitor:
                  container_name: Optional[str] = None):
         """
         Initialize the performance monitor.
-        
+
         Args:
             sample_interval: Seconds between metric samples
             window_size: Size of sliding window for metrics
@@ -134,7 +134,7 @@ class PerformanceMonitor:
                        error_message: str = "", status_code: int = 200):
         """
         Record a request metric.
-        
+
         Args:
             response_time_ms: Response time in milliseconds
             success: Whether the request succeeded
@@ -315,7 +315,7 @@ class PerformanceMonitor:
         """Add an alert callback function."""
         self.alert_callbacks.append(callback)
 
-    def get_current_statistics(self) -> Dict[str, Any]:
+    def get_current_statistics(self) -> dict[str, Any]:
         """Get current performance statistics."""
         with self.lock:
             if not self.performance_metrics:
@@ -385,7 +385,7 @@ class PerformanceMonitor:
                 'duration_seconds': (self.end_time or time.time()) - self.start_time if self.start_time else 0
             }
 
-    def _empty_statistics(self) -> Dict[str, Any]:
+    def _empty_statistics(self) -> dict[str, Any]:
         """Return empty statistics structure."""
         return {
             'total_requests': 0,
@@ -408,7 +408,7 @@ class PerformanceMonitor:
     def export_metrics(self, filepath: str, format: str = 'json'):
         """
         Export collected metrics to file.
-        
+
         Args:
             filepath: Output file path
             format: Export format (json, csv)

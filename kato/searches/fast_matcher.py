@@ -6,7 +6,7 @@ Implements optimized deterministic algorithms for improved performance.
 import logging
 from collections import defaultdict
 from os import environ
-from typing import Any, Dict, List, Set, Tuple
+from typing import Any
 
 logger = logging.getLogger('kato.searches.fast_matcher')
 logger.setLevel(getattr(logging, environ.get('LOG_LEVEL', 'INFO')))
@@ -21,7 +21,7 @@ class RollingHash:
     def __init__(self, prime: int = 101, modulo: int = 2**31 - 1):
         """
         Initialize rolling hash with fixed parameters for determinism.
-        
+
         Args:
             prime: Prime number for polynomial rolling hash
             modulo: Modulo value to prevent overflow
@@ -30,14 +30,14 @@ class RollingHash:
         self.modulo = modulo
         self._hash_cache = {}
 
-    def compute_hash(self, sequence: List[str]) -> int:
+    def compute_hash(self, sequence: list[str]) -> int:
         """
         Compute hash for a sequence of symbols.
         Deterministic - same sequence always produces same hash.
-        
+
         Args:
             sequence: List of symbols to hash
-            
+
         Returns:
             Integer hash value
         """
@@ -60,13 +60,13 @@ class RollingHash:
         """
         Update hash by removing old symbol and adding new one.
         O(1) operation for sliding window.
-        
+
         Args:
             old_hash: Previous hash value
             old_symbol: Symbol being removed
             new_symbol: Symbol being added
             window_size: Size of the window
-            
+
         Returns:
             Updated hash value
         """
@@ -89,10 +89,10 @@ class SuffixArray:
     Provides O(n log n) construction and O(m log n) search.
     """
 
-    def __init__(self, sequence: List[str]):
+    def __init__(self, sequence: list[str]):
         """
         Build suffix array for the given sequence.
-        
+
         Args:
             sequence: List of symbols to index
         """
@@ -101,10 +101,10 @@ class SuffixArray:
         self.suffix_array = self._build_suffix_array()
         self.lcp = self._build_lcp_array()
 
-    def _build_suffix_array(self) -> List[int]:
+    def _build_suffix_array(self) -> list[int]:
         """
         Build suffix array using deterministic sorting.
-        
+
         Returns:
             List of indices representing sorted suffixes
         """
@@ -120,10 +120,10 @@ class SuffixArray:
         # Extract indices
         return [idx for _, idx in suffixes]
 
-    def _build_lcp_array(self) -> List[int]:
+    def _build_lcp_array(self) -> list[int]:
         """
         Build Longest Common Prefix array for enhanced searching.
-        
+
         Returns:
             LCP array
         """
@@ -147,13 +147,13 @@ class SuffixArray:
 
         return lcp
 
-    def search(self, pattern: List[str]) -> List[int]:
+    def search(self, pattern: list[str]) -> list[int]:
         """
         Search for pattern in the sequence using binary search.
-        
+
         Args:
             pattern: Pattern to search for
-            
+
         Returns:
             List of starting positions where pattern occurs
         """
@@ -175,7 +175,7 @@ class SuffixArray:
 
         return sorted(positions)  # Return in sequence order
 
-    def _binary_search_left(self, pattern: List[str]) -> int:
+    def _binary_search_left(self, pattern: list[str]) -> int:
         """Find leftmost suffix that matches pattern."""
         left, right = 0, self.n - 1
         result = -1
@@ -196,7 +196,7 @@ class SuffixArray:
 
         return result
 
-    def _binary_search_right(self, pattern: List[str]) -> int:
+    def _binary_search_right(self, pattern: list[str]) -> int:
         """Find rightmost suffix that matches pattern."""
         left, right = 0, self.n - 1
         result = -1
@@ -217,10 +217,10 @@ class SuffixArray:
 
         return result
 
-    def _compare_pattern(self, pattern: List[str], suffix_start: int) -> int:
+    def _compare_pattern(self, pattern: list[str], suffix_start: int) -> int:
         """
         Compare pattern with suffix starting at suffix_start.
-        
+
         Returns:
             -1 if pattern < suffix, 0 if match, 1 if pattern > suffix
         """
@@ -246,7 +246,7 @@ class NGramIndex:
     def __init__(self, n: int = 3):
         """
         Initialize n-gram index.
-        
+
         Args:
             n: Size of n-grams
         """
@@ -254,10 +254,10 @@ class NGramIndex:
         self.index = defaultdict(set)
         self.pattern_ngrams = {}
 
-    def index_pattern(self, pattern_id: str, sequence: List[str]):
+    def index_pattern(self, pattern_id: str, sequence: list[str]):
         """
         Index a pattern's sequence using n-grams.
-        
+
         Args:
             pattern_id: Unique identifier for the pattern
             sequence: Flattened sequence of symbols
@@ -268,14 +268,14 @@ class NGramIndex:
         for ngram in ngrams:
             self.index[ngram].add(pattern_id)
 
-    def search(self, query: List[str], threshold: float = 0.5) -> List[Tuple[str, float]]:
+    def search(self, query: list[str], threshold: float = 0.5) -> list[tuple[str, float]]:
         """
         Search for patterns similar to query using n-gram overlap.
-        
+
         Args:
             query: Query sequence
             threshold: Minimum similarity threshold (0-1)
-            
+
         Returns:
             List of (pattern_id, similarity) tuples
         """
@@ -306,13 +306,13 @@ class NGramIndex:
 
         return results
 
-    def _extract_ngrams(self, sequence: List[str]) -> Set[tuple]:
+    def _extract_ngrams(self, sequence: list[str]) -> set[tuple]:
         """
         Extract n-grams from a sequence.
-        
+
         Args:
             sequence: List of symbols
-            
+
         Returns:
             Set of n-gram tuples
         """
@@ -339,7 +339,7 @@ class FastSequenceMatcher:
                  ngram_size: int = 3):
         """
         Initialize fast matcher with configurable algorithms.
-        
+
         Args:
             use_rolling_hash: Enable Rabin-Karp rolling hash
             use_suffix_array: Enable suffix array (memory intensive)
@@ -361,10 +361,10 @@ class FastSequenceMatcher:
                    f"suffix_array={use_suffix_array}, "
                    f"ngram_index={use_ngram_index}")
 
-    def add_pattern(self, pattern_id: str, sequence: List[str]):
+    def add_pattern(self, pattern_id: str, sequence: list[str]):
         """
         Add a pattern to the matcher's index.
-        
+
         Args:
             pattern_id: Unique identifier for the pattern
             sequence: Flattened sequence of symbols
@@ -380,15 +380,15 @@ class FastSequenceMatcher:
         if self.use_ngram_index:
             self.ngram_index.index_pattern(pattern_id, sequence)
 
-    def find_matches(self, query: List[str],
-                    threshold: float = 0.5) -> List[Dict[str, Any]]:
+    def find_matches(self, query: list[str],
+                    threshold: float = 0.5) -> list[dict[str, Any]]:
         """
         Find patterns matching the query sequence.
-        
+
         Args:
             query: Query sequence to match
             threshold: Minimum similarity threshold
-            
+
         Returns:
             List of match dictionaries with pattern_id, similarity, and match info
         """
@@ -427,15 +427,15 @@ class FastSequenceMatcher:
 
         return matches
 
-    def _calculate_similarity(self, seq1: List[str], seq2: List[str]) -> float:
+    def _calculate_similarity(self, seq1: list[str], seq2: list[str]) -> float:
         """
         Calculate similarity between two sequences.
         Uses simple ratio for now, can be enhanced with edit distance.
-        
+
         Args:
             seq1: First sequence
             seq2: Second sequence
-            
+
         Returns:
             Similarity score (0-1)
         """

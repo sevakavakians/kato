@@ -17,12 +17,12 @@ class KatoBaseException(Exception):
         self,
         message: str,
         error_code: Optional[str] = None,
-        context: Optional[Dict[str, Any]] = None,
+        context: Optional[dict[str, Any]] = None,
         trace_id: Optional[str] = None
     ):
         """
         Initialize a KATO exception with context.
-        
+
         Args:
             message: Human-readable error message
             error_code: Machine-readable error code for categorization
@@ -35,10 +35,10 @@ class KatoBaseException(Exception):
         self.context = context or {}
         self.trace_id = trace_id
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Convert exception to dictionary for API responses.
-        
+
         Returns:
             Dictionary representation of the exception
         """
@@ -76,7 +76,7 @@ class KatoV2Exception(KatoBaseException):
         self,
         message: str,
         error_code: str = "KATO_V2_ERROR",
-        context: Optional[Dict[str, Any]] = None,
+        context: Optional[dict[str, Any]] = None,
         recoverable: bool = True,
         **kwargs
     ):
@@ -100,7 +100,7 @@ class KatoV2Exception(KatoBaseException):
         self.recoverable = recoverable
         self.timestamp = time.time()
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert exception to dictionary for API responses - enhanced format"""
         # Create nested error structure as expected by tests
         result = {
@@ -138,7 +138,7 @@ class PatternProcessingError(KatoBaseException):
     ):
         """
         Initialize pattern processing error.
-        
+
         Args:
             message: Error message
             pattern_name: Name of the pattern that failed
@@ -175,7 +175,7 @@ class VectorDimensionError(KatoBaseException):
     ):
         """
         Initialize vector dimension error.
-        
+
         Args:
             message: Error message
             expected_dim: Expected vector dimension
@@ -211,7 +211,7 @@ class DatabaseConnectionError(KatoV2Exception):
         connection_string: Optional[str] = None,
         operation: Optional[str] = None,
         message: Optional[str] = None,
-        context: Optional[Dict[str, Any]] = None
+        context: Optional[dict[str, Any]] = None
     ):
         """
         Initialize database connection error.
@@ -260,7 +260,7 @@ class ConfigurationError(KatoBaseException):
     ):
         """
         Initialize configuration error.
-        
+
         Args:
             message: Error message
             config_key: Configuration key that has the error
@@ -294,12 +294,12 @@ class ObservationError(KatoBaseException):
         self,
         message: str,
         observation_id: Optional[str] = None,
-        observation_data: Optional[Dict[str, Any]] = None,
+        observation_data: Optional[dict[str, Any]] = None,
         **kwargs
     ):
         """
         Initialize observation error.
-        
+
         Args:
             message: Error message
             observation_id: ID of the observation
@@ -339,7 +339,7 @@ class PredictionError(KatoBaseException):
     ):
         """
         Initialize prediction error.
-        
+
         Args:
             message: Error message
             stm_state: Current STM state
@@ -378,7 +378,7 @@ class LearningError(KatoBaseException):
     ):
         """
         Initialize learning error.
-        
+
         Args:
             message: Error message
             stm_state: Current STM state when learning failed
@@ -410,7 +410,7 @@ class ValidationError(KatoV2Exception):
         field_value: Optional[Any] = None,
         validation_rule: Optional[str] = None,
         message: Optional[str] = None,
-        context: Optional[Dict[str, Any]] = None
+        context: Optional[dict[str, Any]] = None
     ):
         """
         Initialize validation error.
@@ -458,7 +458,7 @@ class ResourceNotFoundError(KatoBaseException):
     ):
         """
         Initialize resource not found error.
-        
+
         Args:
             message: Error message
             resource_type: Type of resource (pattern, vector, etc.)
@@ -494,7 +494,7 @@ class MemoryError(KatoBaseException):
     ):
         """
         Initialize memory error.
-        
+
         Args:
             message: Error message
             memory_type: Type of memory (STM or LTM)
@@ -529,12 +529,12 @@ class MetricCalculationError(KatoBaseException):
         self,
         message: str,
         metric_name: Optional[str] = None,
-        calculation_context: Optional[Dict[str, Any]] = None,
+        calculation_context: Optional[dict[str, Any]] = None,
         **kwargs
     ):
         """
         Initialize metric calculation error.
-        
+
         Args:
             message: Error message
             metric_name: Name of the metric that failed
@@ -570,7 +570,7 @@ class PatternHashingError(KatoBaseException):
     ):
         """
         Initialize pattern hashing error.
-        
+
         Args:
             message: Error message
             pattern_data: Pattern data that caused the error
@@ -645,7 +645,7 @@ class SessionNotFoundError(KatoV2Exception):
         self,
         session_id: str,
         message: Optional[str] = None,
-        context: Optional[Dict[str, Any]] = None
+        context: Optional[dict[str, Any]] = None
     ):
         if message is None:
             message = f"Session '{session_id}' not found or has expired"
@@ -670,7 +670,7 @@ class SessionExpiredError(KatoV2Exception):
         session_id: str,
         expired_at: Optional[float] = None,
         message: Optional[str] = None,
-        context: Optional[Dict[str, Any]] = None
+        context: Optional[dict[str, Any]] = None
     ):
         if message is None:
             message = f"Session '{session_id}' has expired"
@@ -698,7 +698,7 @@ class SessionLimitExceededError(KatoV2Exception):
         current_value: int,
         limit_value: int,
         message: Optional[str] = None,
-        context: Optional[Dict[str, Any]] = None
+        context: Optional[dict[str, Any]] = None
     ):
         if message is None:
             message = f"{limit_type} limit exceeded: {current_value} > {limit_value}"
@@ -729,7 +729,7 @@ class ConcurrencyError(KatoV2Exception):
         resource_id: str,
         operation: str,
         message: Optional[str] = None,
-        context: Optional[Dict[str, Any]] = None
+        context: Optional[dict[str, Any]] = None
     ):
         if message is None:
             message = f"Concurrent access conflict for {resource_id} during {operation}"
@@ -758,7 +758,7 @@ class DataConsistencyError(KatoV2Exception):
         expected_value: Any = None,
         actual_value: Any = None,
         message: Optional[str] = None,
-        context: Optional[Dict[str, Any]] = None
+        context: Optional[dict[str, Any]] = None
     ):
         if message is None:
             message = f"Data consistency violation for {resource_id}: {consistency_type}"
@@ -793,7 +793,7 @@ class CircuitBreakerOpenError(KatoV2Exception):
         failure_threshold: int,
         recovery_time: Optional[float] = None,
         message: Optional[str] = None,
-        context: Optional[Dict[str, Any]] = None
+        context: Optional[dict[str, Any]] = None
     ):
         if message is None:
             message = f"Circuit breaker open for {service_name} ({failure_count}/{failure_threshold} failures)"
@@ -827,7 +827,7 @@ class RateLimitExceededError(KatoV2Exception):
         window_seconds: int,
         retry_after: Optional[float] = None,
         message: Optional[str] = None,
-        context: Optional[Dict[str, Any]] = None
+        context: Optional[dict[str, Any]] = None
     ):
         if message is None:
             message = f"Rate limit exceeded for {resource_type}: {current_rate}/{rate_limit} per {window_seconds}s"
@@ -863,7 +863,7 @@ class ResourceExhaustedError(KatoV2Exception):
         current_usage: float,
         max_capacity: float,
         message: Optional[str] = None,
-        context: Optional[Dict[str, Any]] = None
+        context: Optional[dict[str, Any]] = None
     ):
         if message is None:
             message = f"Resource exhausted: {resource_type} ({current_usage}/{max_capacity})"
@@ -894,7 +894,7 @@ class TimeoutError(KatoV2Exception):
         timeout_seconds: float,
         elapsed_seconds: Optional[float] = None,
         message: Optional[str] = None,
-        context: Optional[Dict[str, Any]] = None
+        context: Optional[dict[str, Any]] = None
     ):
         if message is None:
             message = f"Operation '{operation}' timed out after {timeout_seconds}s"
@@ -926,7 +926,7 @@ class StorageError(KatoV2Exception):
         operation: str,
         resource_id: Optional[str] = None,
         message: Optional[str] = None,
-        context: Optional[Dict[str, Any]] = None
+        context: Optional[dict[str, Any]] = None
     ):
         if message is None:
             message = f"Storage operation failed: {operation} on {storage_type}"
@@ -949,7 +949,7 @@ class StorageError(KatoV2Exception):
 
 # Convenience functions for common error patterns
 
-def session_not_found(session_id: str, additional_context: Optional[Dict[str, Any]] = None):
+def session_not_found(session_id: str, additional_context: Optional[dict[str, Any]] = None):
     """Create a SessionNotFoundError with standard context"""
     return SessionNotFoundError(
         session_id=session_id,

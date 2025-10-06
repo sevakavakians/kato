@@ -20,7 +20,7 @@ logger = logging.getLogger('kato.sessions.middleware')
 class SessionMiddleware(BaseHTTPMiddleware):
     """
     FastAPI middleware for session management.
-    
+
     Handles:
     - Session extraction from headers
     - Session validation
@@ -31,7 +31,7 @@ class SessionMiddleware(BaseHTTPMiddleware):
     def __init__(self, app, auto_create: bool = False):
         """
         Initialize session middleware.
-        
+
         Args:
             app: FastAPI application
             auto_create: Automatically create sessions for requests without one
@@ -126,15 +126,15 @@ class SessionMiddleware(BaseHTTPMiddleware):
     def _extract_session_id(self, request: Request) -> Optional[str]:
         """
         Extract session ID from request.
-        
+
         Checks:
         1. X-Session-ID header
         2. session_id cookie
         3. Path parameter for /v2/sessions/{session_id}/* endpoints
-        
+
         Args:
             request: FastAPI request
-            
+
         Returns:
             Session ID if found, None otherwise
         """
@@ -155,7 +155,7 @@ class SessionMiddleware(BaseHTTPMiddleware):
 async def get_session(request: Request) -> SessionState:
     """
     Get the current session from request state.
-    
+
     Raises HTTPException if no session.
     """
     if not hasattr(request.state, 'session'):

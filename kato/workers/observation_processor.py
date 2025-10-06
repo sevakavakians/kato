@@ -6,7 +6,7 @@ Extracted from KatoProcessor for better modularity.
 
 import logging
 from multiprocessing import Lock
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from kato.exceptions import ObservationError, ValidationError
 
@@ -16,7 +16,7 @@ logger = logging.getLogger('kato.workers.observation_processor')
 class ObservationProcessor:
     """
     Processes incoming observations for KATO.
-    
+
     This class handles:
     - String symbol processing
     - Vector processing through vector processor
@@ -29,7 +29,7 @@ class ObservationProcessor:
                  pattern_operations, sort_symbols, max_pattern_length):
         """
         Initialize observation processor with references to other components.
-        
+
         Args:
             vector_processor: Reference to vector processor for vector operations
             pattern_processor: Reference to pattern processor for STM operations
@@ -52,13 +52,13 @@ class ObservationProcessor:
 
         logger.debug("ObservationProcessor initialized")
 
-    def validate_observation(self, data: Dict[str, Any]) -> None:
+    def validate_observation(self, data: dict[str, Any]) -> None:
         """
         Validate incoming observation data.
-        
+
         Args:
             data: Observation data to validate
-            
+
         Raises:
             ValidationError: If validation fails
         """
@@ -138,16 +138,16 @@ class ObservationProcessor:
                         validation_rule="Value must be int or float"
                     )
 
-    def process_vectors(self, vector_data: List[List[float]]) -> List[str]:
+    def process_vectors(self, vector_data: list[list[float]]) -> list[str]:
         """
         Process vectors through vector processor to get symbolic representations.
-        
+
         Args:
             vector_data: List of vector embeddings
-            
+
         Returns:
             List of vector-derived symbols (e.g., ['VCTR|hash1', 'VCTR|hash2'])
-            
+
         Raises:
             VectorDimensionError: If vector dimensions are invalid
             ObservationError: If vector processing fails
@@ -172,13 +172,13 @@ class ObservationProcessor:
                 observation_data={"vector_count": len(vector_data)}
             )
 
-    def process_strings(self, string_data: List[str]) -> List[str]:
+    def process_strings(self, string_data: list[str]) -> list[str]:
         """
         Process string symbols.
-        
+
         Args:
             string_data: List of string symbols
-            
+
         Returns:
             Processed list of string symbols (possibly sorted)
         """
@@ -195,10 +195,10 @@ class ObservationProcessor:
         logger.debug(f"Processed {len(string_data)} string symbols")
         return symbols
 
-    def process_emotives(self, emotives_data: Dict[str, float]) -> None:
+    def process_emotives(self, emotives_data: dict[str, float]) -> None:
         """
         Process emotional/utility values.
-        
+
         Args:
             emotives_data: Dictionary of emotive values
         """
@@ -209,11 +209,11 @@ class ObservationProcessor:
     def check_auto_learning(self) -> Optional[str]:
         """
         Check if auto-learning should be triggered and perform it if needed.
-        
+
         Supports two modes:
         - CLEAR mode: Learn pattern and completely clear STM (original behavior)
         - ROLLING mode: Learn pattern and maintain STM as a rolling window
-        
+
         Returns:
             Pattern name if auto-learning occurred, None otherwise
         """
@@ -268,10 +268,10 @@ class ObservationProcessor:
 
         return None
 
-    async def process_observation(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    async def process_observation(self, data: dict[str, Any]) -> dict[str, Any]:
         """
         Process a complete observation including strings, vectors, and emotives.
-        
+
         This is the main entry point for processing observations. It:
         1. Validates the input data
         2. Processes vectors to get symbolic representations
@@ -280,7 +280,7 @@ class ObservationProcessor:
         5. Updates STM with combined symbols
         6. Triggers predictions
         7. Checks for auto-learning
-        
+
         Args:
             data: Observation data containing:
                 - unique_id: Unique identifier for the observation
@@ -289,14 +289,14 @@ class ObservationProcessor:
                 - emotives: Dictionary of emotional values
                 - path: Processing path (optional)
                 - metadata: Additional metadata (optional)
-                
+
         Returns:
             Dictionary containing:
                 - unique_id: The observation's unique ID
                 - auto_learned_pattern: Pattern name if auto-learning occurred
                 - symbols: Combined list of processed symbols
                 - predictions: Generated predictions (if any)
-                
+
         Raises:
             ObservationError: If observation processing fails
             ValidationError: If input validation fails

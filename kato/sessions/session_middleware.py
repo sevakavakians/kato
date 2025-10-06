@@ -19,7 +19,7 @@ logger = logging.getLogger('kato.sessions.middleware')
 class SessionMiddleware:
     """
     FastAPI middleware for session management.
-    
+
     Handles:
     - Session extraction from headers
     - Session validation
@@ -30,7 +30,7 @@ class SessionMiddleware:
     def __init__(self, app, auto_create: bool = False):
         """
         Initialize session middleware.
-        
+
         Args:
             app: FastAPI application
             auto_create: Automatically create sessions for requests without one
@@ -116,15 +116,15 @@ class SessionMiddleware:
     def _extract_session_id(self, request: Request) -> Optional[str]:
         """
         Extract session ID from request.
-        
+
         Checks in order:
         1. X-Session-ID header
         2. session_id cookie
         3. session_id query parameter
-        
+
         Args:
             request: FastAPI request
-        
+
         Returns:
             Session ID if found, None otherwise
         """
@@ -149,13 +149,13 @@ class SessionMiddleware:
 async def get_session(request: Request) -> SessionState:
     """
     FastAPI dependency to get session from request.
-    
+
     Args:
         request: FastAPI request
-    
+
     Returns:
         SessionState from request
-    
+
     Raises:
         HTTPException: If session not found in request
     """
@@ -171,13 +171,13 @@ async def get_session(request: Request) -> SessionState:
 async def get_session_id(request: Request) -> str:
     """
     FastAPI dependency to get session ID from request.
-    
+
     Args:
         request: FastAPI request
-    
+
     Returns:
         Session ID from request
-    
+
     Raises:
         HTTPException: If session ID not found in request
     """
@@ -193,10 +193,10 @@ async def get_session_id(request: Request) -> str:
 async def get_optional_session(request: Request) -> Optional[SessionState]:
     """
     FastAPI dependency to get optional session from request.
-    
+
     Args:
         request: FastAPI request
-    
+
     Returns:
         SessionState if present, None otherwise
     """
@@ -206,7 +206,7 @@ async def get_optional_session(request: Request) -> Optional[SessionState]:
 def mark_session_modified(request: Request):
     """
     Mark session as modified so it will be saved.
-    
+
     Args:
         request: FastAPI request
     """

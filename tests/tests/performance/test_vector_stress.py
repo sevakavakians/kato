@@ -9,14 +9,13 @@ import random
 import statistics
 import sys
 import time
-from typing import List
 
 # Add path for fixtures
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from fixtures.kato_fixtures import kato_fixture
 
 
-def generate_random_vector(dim: int = 4) -> List[float]:
+def generate_random_vector(dim: int = 4) -> list[float]:
     """Generate a random vector of specified dimensions"""
     return [random.random() for _ in range(dim)]
 
@@ -29,7 +28,7 @@ def timed(method, *args, **kwargs):
     return result, elapsed
 
 
-def observe_vector(kato_fixture, vector: List[float], label: str):
+def observe_vector(kato_fixture, vector: list[float], label: str):
     """Observe a vector with timing"""
     observation = {
         'strings': [label],

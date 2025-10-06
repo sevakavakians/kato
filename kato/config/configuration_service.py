@@ -3,7 +3,7 @@ Configuration Service for KATO
 
 This service provides centralized configuration management, handling:
 - Default configuration extraction from settings
-- Session-level configuration overrides  
+- Session-level configuration overrides
 - Validation and consistency across components
 - Configuration merging and resolution
 
@@ -13,7 +13,7 @@ ProcessorManager, FastAPI service, and other components.
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from kato.config.session_config import SessionConfiguration
 from kato.config.settings import Settings
@@ -25,7 +25,7 @@ logger = logging.getLogger('kato.config.configuration_service')
 class ResolvedConfiguration:
     """
     Resolved configuration combining defaults with session overrides.
-    
+
     This represents the final configuration that should be applied
     to a processor or operation.
     """
@@ -44,12 +44,12 @@ class ResolvedConfiguration:
     # Source tracking
     source_session_id: Optional[str] = None
     source_node_id: Optional[str] = None
-    overrides_applied: Dict[str, Any] = None
+    overrides_applied: dict[str, Any] = None
 
-    def to_genome_manifest(self) -> Dict[str, Any]:
+    def to_genome_manifest(self) -> dict[str, Any]:
         """
         Convert to genome manifest format for KatoProcessor.
-        
+
         Returns:
             Dictionary in the format expected by KatoProcessor
         """
@@ -64,10 +64,10 @@ class ResolvedConfiguration:
             'process_predictions': self.process_predictions
         }
 
-    def to_genes_dict(self) -> Dict[str, Any]:
+    def to_genes_dict(self) -> dict[str, Any]:
         """
         Convert to genes dictionary format for API responses.
-        
+
         Returns:
             Dictionary in the format expected by gene APIs
         """
@@ -85,7 +85,7 @@ class ResolvedConfiguration:
 class ConfigurationService:
     """
     Centralized configuration management for KATO.
-    
+
     This service provides a single source of truth for:
     - Default configuration values from settings
     - Session-specific configuration overrides
@@ -96,20 +96,20 @@ class ConfigurationService:
     def __init__(self, settings: Settings):
         """
         Initialize the configuration service.
-        
+
         Args:
             settings: KATO settings instance
         """
         self.settings = settings
         logger.info("ConfigurationService initialized")
 
-    def get_default_configuration(self) -> Dict[str, Any]:
+    def get_default_configuration(self) -> dict[str, Any]:
         """
         Extract default configuration from settings.
-        
+
         This is the single source of truth for default values,
         eliminating duplication across components.
-        
+
         Returns:
             Dictionary with default configuration values
         """
@@ -185,13 +185,13 @@ class ConfigurationService:
 
         return resolved
 
-    def validate_configuration_update(self, updates: Dict[str, Any]) -> Dict[str, str]:
+    def validate_configuration_update(self, updates: dict[str, Any]) -> dict[str, str]:
         """
         Validate configuration updates before applying them.
-        
+
         Args:
             updates: Dictionary of configuration updates
-        
+
         Returns:
             Dictionary of validation errors (empty if all valid)
         """
@@ -247,13 +247,13 @@ class ConfigurationService:
 
         return errors
 
-    def get_configuration_info(self, session_config: Optional[SessionConfiguration] = None) -> Dict[str, Any]:
+    def get_configuration_info(self, session_config: Optional[SessionConfiguration] = None) -> dict[str, Any]:
         """
         Get comprehensive configuration information including defaults and overrides.
-        
+
         Args:
             session_config: Optional session configuration
-        
+
         Returns:
             Dictionary with configuration details, defaults, and overrides
         """
@@ -277,10 +277,10 @@ _configuration_service: Optional[ConfigurationService] = None
 def get_configuration_service(settings: Optional[Settings] = None) -> ConfigurationService:
     """
     Get or create the global configuration service instance.
-    
+
     Args:
         settings: Optional settings instance (required for first call)
-    
+
     Returns:
         ConfigurationService instance
     """

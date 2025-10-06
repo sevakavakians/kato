@@ -6,7 +6,7 @@ based on configuration.
 """
 
 import logging
-from typing import Dict, Optional
+from typing import Optional
 
 from ..config.vectordb_config import VectorDBConfig, get_vector_db_config
 from .vector_store_interface import VectorStore
@@ -17,14 +17,14 @@ logger = logging.getLogger('kato.storage.factory')
 class VectorStoreFactory:
     """Factory for creating vector store instances"""
 
-    _stores: Dict[str, type] = {}
-    _instances: Dict[str, VectorStore] = {}
+    _stores: dict[str, type] = {}
+    _instances: dict[str, VectorStore] = {}
 
     @classmethod
     def register_store(cls, backend: str, store_class: type):
         """
         Register a vector store implementation.
-        
+
         Args:
             backend: Name of the backend (e.g., 'qdrant', 'mongodb')
             store_class: Class implementing VectorStore interface
@@ -40,14 +40,14 @@ class VectorStoreFactory:
     ) -> VectorStore:
         """
         Create a vector store instance.
-        
+
         Args:
             config: Vector database configuration (uses global if None)
             backend: Override backend selection
-        
+
         Returns:
             VectorStore instance
-        
+
         Raises:
             ValueError: If backend is not supported
         """
@@ -83,12 +83,12 @@ class VectorStoreFactory:
     ) -> VectorStore:
         """
         Get or create a named vector store instance (singleton pattern).
-        
+
         Args:
             name: Name for the store instance
             config: Vector database configuration
             backend: Override backend selection
-        
+
         Returns:
             VectorStore instance
         """
@@ -151,12 +151,12 @@ def get_vector_store(
 ) -> VectorStore:
     """
     Convenience function to get a vector store instance.
-    
+
     Args:
         name: Name for the store instance
         config: Vector database configuration
         backend: Override backend selection
-    
+
     Returns:
         VectorStore instance
     """
@@ -169,11 +169,11 @@ def create_vector_store(
 ) -> VectorStore:
     """
     Convenience function to create a new vector store instance.
-    
+
     Args:
         config: Vector database configuration
         backend: Override backend selection
-    
+
     Returns:
         VectorStore instance
     """

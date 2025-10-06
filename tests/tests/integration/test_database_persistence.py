@@ -19,14 +19,12 @@ These tests verify production scenarios:
 import os
 import sys
 import uuid
-from typing import Dict, List, Tuple
 
 import pytest
 import requests
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from fixtures.kato_fixtures import kato_fixture
 
 
 # ============================================================================
@@ -70,9 +68,9 @@ def delete_session(base_url: str, session_id: str) -> bool:
 def learn_pattern_in_session(
     base_url: str,
     session_id: str,
-    pattern_events: List[List[str]],
-    vectors: List[List[float]] = None,
-    emotives: Dict[str, float] = None
+    pattern_events: list[list[str]],
+    vectors: list[list[float]] = None,
+    emotives: dict[str, float] = None
 ) -> str:
     """
     Learn a pattern in a specific session.
@@ -110,8 +108,8 @@ def learn_pattern_in_session(
 def get_predictions_for_session(
     base_url: str,
     session_id: str,
-    observed_events: List[List[str]]
-) -> List[Dict]:
+    observed_events: list[list[str]]
+) -> list[dict]:
     """
     Get predictions for a specific session after observing events.
 

@@ -6,7 +6,7 @@ Simplified and optimized for KATO's pattern matching needs.
 
 Classes:
     SequenceMatcher: Flexible class for comparing pairs of sequences.
-    
+
 Functions:
     _calculate_ratio: Calculate similarity ratio between sequences.
 """
@@ -14,7 +14,7 @@ Functions:
 from collections import namedtuple as _namedtuple
 from collections.abc import Generator, Sequence
 from functools import reduce
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional
 
 __all__ = ['get_close_matches', 'ndiff', 'restore', 'SequenceMatcher',
            'Differ','IS_CHARACTER_JUNK', 'IS_LINE_JUNK', 'context_diff',
@@ -25,11 +25,11 @@ Match = _namedtuple('Match', 'a b size')
 
 def _calculate_ratio(matches: int, length: int) -> float:
     """Calculate the similarity ratio between sequences.
-    
+
     Args:
         matches: Number of matching elements.
         length: Total length of both sequences.
-        
+
     Returns:
         Ratio between 0.0 and 1.0, where 1.0 means identical sequences.
     """
@@ -40,14 +40,14 @@ def _calculate_ratio(matches: int, length: int) -> float:
 
 class SequenceMatcher:
     """Flexible class for comparing pairs of sequences of any type.
-    
+
     The basic algorithm finds the longest contiguous matching subsequence
     that contains no "junk" elements. This is applied recursively to the
     pieces of the sequences to the left and right of the matching subsequence.
-    
+
     This does not yield minimal edit sequences, but tends to yield matches
     that "look right" to people.
-    
+
     Attributes:
         a: First sequence to compare.
         b: Second sequence to compare.
@@ -59,26 +59,26 @@ class SequenceMatcher:
 
     def __init__(self, a: Sequence[Any] = '', b: Sequence[Any] = '') -> None:
         """Construct a SequenceMatcher.
-        
+
         Args:
             a: First sequence to compare (elements must be hashable).
             b: Second sequence to compare (elements must be hashable).
         """
         self.a: Optional[Sequence[Any]] = None
         self.b: Optional[Sequence[Any]] = None
-        self.b2j: Dict[Any, List[int]] = {}
-        self.fullbcount: Optional[Dict[Any, int]] = None
-        self.matching_blocks: Optional[List[Tuple[int, int, int]]] = None
-        self.opcodes: Optional[List[Tuple[str, int, int, int, int]]] = None
+        self.b2j: dict[Any, list[int]] = {}
+        self.fullbcount: Optional[dict[Any, int]] = None
+        self.matching_blocks: Optional[list[tuple[int, int, int]]] = None
+        self.opcodes: Optional[list[tuple[str, int, int, int, int]]] = None
         self.set_seqs(a, b)
 
     def set_seqs(self, a: Sequence[Any], b: Sequence[Any]) -> None:
         """Set the two sequences to be compared.
-        
+
         Args:
             a: First sequence to compare.
             b: Second sequence to compare.
-            
+
         Example:
             >>> s = SequenceMatcher()
             >>> s.set_seqs("abcd", "bcde")
@@ -90,12 +90,12 @@ class SequenceMatcher:
 
     def set_seq1(self, a: Sequence[Any]) -> None:
         """Set the first sequence to be compared.
-        
+
         The second sequence to be compared is not changed.
         SequenceMatcher caches detailed information about the second sequence,
         so if comparing one sequence against many, use set_seq2() once
         and call set_seq1() repeatedly.
-        
+
         Args:
             a: First sequence to compare.
         """
@@ -106,12 +106,12 @@ class SequenceMatcher:
 
     def set_seq2(self, b: Sequence[Any]) -> None:
         """Set the second sequence to be compared.
-        
+
         The first sequence to be compared is not changed.
         SequenceMatcher caches detailed information about the second sequence,
         so if comparing one sequence against many, use set_seq2() once
         and call set_seq1() repeatedly.
-        
+
         Args:
             b: Second sequence to compare.
         """
@@ -124,7 +124,7 @@ class SequenceMatcher:
 
     def __chain_b(self) -> None:
         """Build b2j mapping for fast lookups.
-        
+
         For each element x in b, set b2j[x] to a list of indices in b
         where x appears. The indices are in increasing order.
         """
@@ -137,7 +137,7 @@ class SequenceMatcher:
 
     def find_longest_match(self, alo: int, ahi: int, blo: int, bhi: int) -> Match:
         """Find longest matching block in a[alo:ahi] and b[blo:bhi].
-        
+
         Return (i,j,k) such that a[i:i+k] is equal to b[j:j+k], where
             alo <= i <= i+k <= ahi
             blo <= j <= j+k <= bhi
@@ -145,17 +145,17 @@ class SequenceMatcher:
             k >= k'
             i <= i'
             and if i == i', j <= j'
-            
+
         Args:
             alo: Start index in sequence a.
             ahi: End index in sequence a.
             blo: Start index in sequence b.
             bhi: End index in sequence b.
-            
+
         Returns:
             Match namedtuple with (a, b, size) of the longest match.
             If no blocks match, returns (alo, blo, 0).
-            
+
         Example:
             >>> s = SequenceMatcher(None, " abcd", "abcd abcd")
             >>> s.find_longest_match(0, 5, 0, 9)
@@ -165,12 +165,12 @@ class SequenceMatcher:
         besti, bestj, bestsize = alo, blo, 0
 
         # Find longest junk-free match
-        j2len: Dict[int, int] = {}
-        nothing: List[int] = []
+        j2len: dict[int, int] = {}
+        nothing: list[int] = []
 
         for i in range(alo, ahi):
             j2lenget = j2len.get
-            newj2len: Dict[int, int] = {}
+            newj2len: dict[int, int] = {}
 
             for j in b2j.get(a[i], nothing):
                 if j < blo:
@@ -184,19 +184,19 @@ class SequenceMatcher:
 
         return Match(besti, bestj, bestsize)
 
-    def get_matching_blocks(self) -> List[Match]:
+    def get_matching_blocks(self) -> list[Match]:
         """Return list of triples describing matching subsequences.
-        
+
         Each triple is of the form (i, j, n), and means that
         a[i:i+n] == b[j:j+n]. The triples are monotonically increasing
         in i and j.
-        
+
         The last triple is a dummy, (len(a), len(b), 0), and is the only
         triple with n==0.
-        
+
         Returns:
             List of Match namedtuples describing matching blocks.
-            
+
         Example:
             >>> s = SequenceMatcher(None, "abxcd", "abcd")
             >>> s.get_matching_blocks()
@@ -208,8 +208,8 @@ class SequenceMatcher:
         la, lb = len(self.a), len(self.b)
 
         # Maintain a queue of blocks to examine
-        queue: List[Tuple[int, int, int, int]] = [(0, la, 0, lb)]
-        matching_blocks: List[Tuple[int, int, int]] = []
+        queue: list[tuple[int, int, int, int]] = [(0, la, 0, lb)]
+        matching_blocks: list[tuple[int, int, int]] = []
 
         while queue:
             alo, ahi, blo, bhi = queue.pop()
@@ -226,7 +226,7 @@ class SequenceMatcher:
 
         # Collapse adjacent equal blocks
         i1 = j1 = k1 = 0
-        non_adjacent: List[Tuple[int, int, int]] = []
+        non_adjacent: list[tuple[int, int, int]] = []
 
         for i2, j2, k2 in matching_blocks:
             if i1 + k1 == i2 and j1 + k1 == j2:
@@ -245,19 +245,19 @@ class SequenceMatcher:
         self.matching_blocks = non_adjacent
         return list(map(Match._make, self.matching_blocks))
 
-    def get_opcodes(self) -> List[Tuple[str, int, int, int, int]]:
+    def get_opcodes(self) -> list[tuple[str, int, int, int, int]]:
         """Return list of 5-tuples describing how to turn a into b.
-        
+
         Each tuple is of the form (tag, i1, i2, j1, j2).
         The tags are:
             'replace': a[i1:i2] should be replaced by b[j1:j2]
             'delete': a[i1:i2] should be deleted
             'insert': b[j1:j2] should be inserted at a[i1:i1]
             'equal': a[i1:i2] == b[j1:j2]
-            
+
         Returns:
             List of operation tuples.
-            
+
         Example:
             >>> s = SequenceMatcher(None, "abcd", "bcde")
             >>> for tag, i1, i2, j1, j2 in s.get_opcodes():
@@ -291,15 +291,15 @@ class SequenceMatcher:
 
         return answer
 
-    def get_grouped_opcodes(self, n: int = 3) -> Generator[List[Tuple[str, int, int, int, int]], None, None]:
+    def get_grouped_opcodes(self, n: int = 3) -> Generator[list[tuple[str, int, int, int, int]], None, None]:
         """Isolate change clusters by eliminating ranges with no changes.
-        
+
         Return a generator of groups with up to n lines of context.
         Each group is in the same format as returned by get_opcodes().
-        
+
         Args:
             n: Number of context lines to include.
-            
+
         Yields:
             Groups of opcodes with context.
         """
@@ -316,7 +316,7 @@ class SequenceMatcher:
             codes[-1] = tag, i1, min(i2, i1+n), j1, min(j2, j1+n)
 
         nn = n + n
-        group: List[Tuple[str, int, int, int, int]] = []
+        group: list[tuple[str, int, int, int, int]] = []
 
         for tag, i1, i2, j1, j2 in codes:
             # End current group and start new one for large unchanged ranges
@@ -332,13 +332,13 @@ class SequenceMatcher:
 
     def ratio(self) -> float:
         """Return a measure of the sequences' similarity (float in [0,1]).
-        
+
         Where T is the total number of elements in both sequences, and
         M is the number of matches, this is 2.0*M / T.
-        
+
         Returns:
             1.0 if sequences are identical, 0.0 if they have nothing in common.
-            
+
         Example:
             >>> s = SequenceMatcher(None, "abcd", "bcde")
             >>> s.ratio()
@@ -350,9 +350,9 @@ class SequenceMatcher:
 
     def quick_ratio(self) -> float:
         """Return an upper bound on ratio() relatively quickly.
-        
+
         This is faster to compute than ratio() but only provides an upper bound.
-        
+
         Returns:
             Upper bound on the similarity ratio.
         """
@@ -362,7 +362,7 @@ class SequenceMatcher:
                 fullbcount[elt] = fullbcount.get(elt, 0) + 1
         fullbcount = self.fullbcount
 
-        avail: Dict[Any, int] = {}
+        avail: dict[Any, int] = {}
         availhas, matches = avail.__contains__, 0
 
         for elt in self.a:
@@ -378,9 +378,9 @@ class SequenceMatcher:
 
     def real_quick_ratio(self) -> float:
         """Return an upper bound on ratio() very quickly.
-        
+
         This is the fastest ratio computation but least accurate.
-        
+
         Returns:
             Very rough upper bound on the similarity ratio.
         """
@@ -389,7 +389,7 @@ class SequenceMatcher:
 
     def compare(self) -> Generator[str, None, None]:
         """Compare two sequences; generate the resulting delta.
-        
+
         Yields:
             Delta lines showing differences between sequences.
         """
@@ -408,13 +408,13 @@ class SequenceMatcher:
 
     def _dump(self, tag: str, x: Sequence[Any], lo: int, hi: int) -> Generator[str, None, None]:
         """Generate comparison results for a same-tagged range.
-        
+
         Args:
             tag: Tag character to prefix lines with.
             x: Sequence to dump.
             lo: Start index.
             hi: End index.
-            
+
         Yields:
             Tagged lines from the sequence.
         """
@@ -424,7 +424,7 @@ class SequenceMatcher:
     def _plain_replace(self, a: Sequence[Any], alo: int, ahi: int,
                        b: Sequence[Any], blo: int, bhi: int) -> Generator[str, None, None]:
         """Generate replacement diff for two blocks.
-        
+
         Args:
             a: First sequence.
             alo: Start index in a.
@@ -432,7 +432,7 @@ class SequenceMatcher:
             b: Second sequence.
             blo: Start index in b.
             bhi: End index in b.
-            
+
         Yields:
             Diff lines showing the replacement.
         """

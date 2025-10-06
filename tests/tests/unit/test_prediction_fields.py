@@ -14,7 +14,7 @@ from fixtures.test_helpers import sort_event_strings
 
 def test_prediction_past_field(kato_fixture):
     """Test that the past field correctly shows events before the present matching portion.
-    
+
     IMPORTANT: The 'present' field includes ALL events containing matching symbols,
     from the first match to the last match, not just explicitly "middle" events.
     """

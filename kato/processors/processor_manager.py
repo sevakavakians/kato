@@ -12,7 +12,7 @@ import asyncio
 import logging
 from collections import OrderedDict
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from kato.config.configuration_service import get_configuration_service
 from kato.config.session_config import SessionConfiguration
@@ -25,7 +25,7 @@ logger = logging.getLogger('kato.processors.manager')
 class ProcessorManager:
     """
     Manages KatoProcessor instances per user with complete database isolation.
-    
+
     This is the core component that enables true multi-user support in KATO.
     Each user gets their own MongoDB database and Qdrant collection.
     """
@@ -38,7 +38,7 @@ class ProcessorManager:
     ):
         """
         Initialize the processor manager.
-        
+
         Args:
             base_processor_id: Base ID for processors (e.g., "primary-v2")
             max_processors: Maximum number of cached processors (LRU eviction)
@@ -49,8 +49,8 @@ class ProcessorManager:
         self.eviction_ttl = eviction_ttl_seconds
 
         # OrderedDict for LRU cache behavior
-        self.processors: OrderedDict[str, Dict[str, Any]] = OrderedDict()
-        self.processor_locks: Dict[str, asyncio.Lock] = {}
+        self.processors: OrderedDict[str, dict[str, Any]] = OrderedDict()
+        self.processor_locks: dict[str, asyncio.Lock] = {}
         self.settings = get_settings()
         self.config_service = get_configuration_service(self.settings)
 
@@ -208,7 +208,7 @@ class ProcessorManager:
     def _apply_config_to_processor(self, processor: 'KatoProcessor', session_config: SessionConfiguration):
         """
         Apply dynamic configuration updates to an existing processor.
-        
+
         Args:
             processor: The KatoProcessor instance to update
             session_config: Session configuration with updates
@@ -375,7 +375,7 @@ class ProcessorManager:
     async def cleanup_expired_processors(self) -> int:
         """
         Remove processors that haven't been accessed within TTL.
-        
+
         Returns:
             Number of processors cleaned up
         """
@@ -421,10 +421,10 @@ class ProcessorManager:
             except Exception as e:
                 logger.error(f"Error in cleanup loop: {e}")
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """
         Get statistics about cached processors.
-        
+
         Returns:
             Dictionary with processor cache statistics
         """

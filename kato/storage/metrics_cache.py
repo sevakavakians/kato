@@ -14,7 +14,7 @@ import hashlib
 import json
 import logging
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 try:
     import redis.asyncio as redis
@@ -34,7 +34,7 @@ class MetricsCacheManager:
     def __init__(self, redis_url: str = "redis://localhost:6379", ttl: int = 3600):
         """
         Initialize metrics cache manager.
-        
+
         Args:
             redis_url: Redis connection URL
             ttl: Time-to-live for cached metrics in seconds
@@ -64,7 +64,7 @@ class MetricsCacheManager:
     async def initialize(self) -> bool:
         """
         Initialize Redis connection.
-        
+
         Returns:
             True if initialization successful, False otherwise
         """
@@ -99,11 +99,11 @@ class MetricsCacheManager:
     def _generate_cache_key(self, metric_type: str, **kwargs) -> str:
         """
         Generate consistent cache key for metric calculations.
-        
+
         Args:
             metric_type: Type of metric (e.g., 'hamiltonian', 'grand_hamiltonian')
             **kwargs: Parameters used in metric calculation
-            
+
         Returns:
             Redis cache key
         """
@@ -119,11 +119,11 @@ class MetricsCacheManager:
     async def get_cached_metric(self, metric_type: str, **kwargs) -> Optional[float]:
         """
         Retrieve cached metric value.
-        
+
         Args:
             metric_type: Type of metric to retrieve
             **kwargs: Parameters that identify the specific calculation
-            
+
         Returns:
             Cached metric value or None if not found
         """
@@ -149,12 +149,12 @@ class MetricsCacheManager:
     async def cache_metric(self, metric_type: str, value: float, **kwargs) -> bool:
         """
         Cache calculated metric value.
-        
+
         Args:
             metric_type: Type of metric being cached
             value: Calculated metric value
             **kwargs: Parameters that identify the specific calculation
-            
+
         Returns:
             True if caching successful, False otherwise
         """
@@ -174,10 +174,10 @@ class MetricsCacheManager:
     async def invalidate_pattern_metrics(self, pattern_name: str) -> int:
         """
         Invalidate all cached metrics that depend on a specific pattern.
-        
+
         Args:
             pattern_name: Name of the pattern that was updated
-            
+
         Returns:
             Number of keys invalidated
         """
@@ -206,7 +206,7 @@ class MetricsCacheManager:
     async def invalidate_all_metrics(self) -> int:
         """
         Invalidate all cached metrics (useful when data structure changes).
-        
+
         Returns:
             Number of keys invalidated
         """
@@ -229,7 +229,7 @@ class MetricsCacheManager:
     def record_calculation_time(self, metric_type: str, duration: float):
         """
         Record calculation time for performance monitoring.
-        
+
         Args:
             metric_type: Type of metric calculated
             duration: Time taken for calculation in seconds
@@ -241,10 +241,10 @@ class MetricsCacheManager:
             if len(self.calculation_times[metric_type]) > 100:
                 self.calculation_times[metric_type] = self.calculation_times[metric_type][-100:]
 
-    async def get_cache_stats(self) -> Dict[str, Any]:
+    async def get_cache_stats(self) -> dict[str, Any]:
         """
         Get cache performance statistics.
-        
+
         Returns:
             Dictionary with cache statistics
         """
@@ -278,7 +278,7 @@ class MetricsCacheManager:
 class CachedMetricsCalculator:
     """
     Wrapper for metric calculations with automatic caching.
-    
+
     This class provides the same interface as the original metrics functions
     but with transparent caching for performance optimization.
     """
@@ -286,17 +286,17 @@ class CachedMetricsCalculator:
     def __init__(self, cache_manager: MetricsCacheManager):
         self.cache_manager = cache_manager
 
-    async def hamiltonian_cached(self, state: List[str],
+    async def hamiltonian_cached(self, state: list[str],
                                 total_symbols: int,
-                                symbol_probabilities: Dict[str, float]) -> float:
+                                symbol_probabilities: dict[str, float]) -> float:
         """
         Calculate hamiltonian with caching.
-        
+
         Args:
             state: Current state symbols
             total_symbols: Total number of symbols in dataset
             symbol_probabilities: Probability mapping for symbols
-            
+
         Returns:
             Hamiltonian value
         """
@@ -334,15 +334,15 @@ class CachedMetricsCalculator:
             logger.warning(f"Hamiltonian calculation failed: {e}")
             return 0.0
 
-    async def grand_hamiltonian_cached(self, state: List[str],
-                                     symbol_probability_cache: Dict[str, float]) -> float:
+    async def grand_hamiltonian_cached(self, state: list[str],
+                                     symbol_probability_cache: dict[str, float]) -> float:
         """
         Calculate grand hamiltonian with caching.
-        
+
         Args:
             state: Current state symbols
             symbol_probability_cache: Cached symbol probabilities
-            
+
         Returns:
             Grand hamiltonian value
         """
@@ -374,15 +374,15 @@ class CachedMetricsCalculator:
             logger.warning(f"Grand hamiltonian calculation failed: {e}")
             return 0.0
 
-    async def conditional_probability_cached(self, present: List[List[str]],
-                                           symbol_probabilities: Dict[str, float]) -> float:
+    async def conditional_probability_cached(self, present: list[list[str]],
+                                           symbol_probabilities: dict[str, float]) -> float:
         """
         Calculate conditional probability with caching.
-        
+
         Args:
             present: Present state events
             symbol_probabilities: Symbol probability mapping
-            
+
         Returns:
             Conditional probability value
         """

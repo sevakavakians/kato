@@ -5,7 +5,7 @@ Provides specialized database configurations with connection management,
 pooling, and optimization settings for MongoDB, Qdrant, and Redis.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from pydantic import Field, SecretStr, validator
 
@@ -59,7 +59,7 @@ class MongoDBConfig(BaseSettings):
     tls_ca_file: Optional[str] = Field(None, env='MONGO_TLS_CA_FILE')
 
     # Compression
-    compressors: List[str] = Field(['snappy', 'zlib'], env='MONGO_COMPRESSORS')
+    compressors: list[str] = Field(['snappy', 'zlib'], env='MONGO_COMPRESSORS')
 
     @property
     def connection_string(self) -> str:
@@ -86,7 +86,7 @@ class MongoDBConfig(BaseSettings):
             return f"{base_url}/?{'&'.join(params)}"
         return base_url
 
-    def get_client_options(self) -> Dict[str, Any]:
+    def get_client_options(self) -> dict[str, Any]:
         """Get PyMongo client options."""
         options = {
             'minPoolSize': self.min_pool_size,
@@ -159,7 +159,7 @@ class QdrantConfig(BaseSettings):
         """Get Qdrant gRPC URL."""
         return f"{self.host}:{self.grpc_port}"
 
-    def get_client_config(self) -> Dict[str, Any]:
+    def get_client_config(self) -> dict[str, Any]:
         """Get Qdrant client configuration."""
         config = {
             'host': self.host,
@@ -174,7 +174,7 @@ class QdrantConfig(BaseSettings):
 
         return config
 
-    def get_collection_config(self) -> Dict[str, Any]:
+    def get_collection_config(self) -> dict[str, Any]:
         """Get Qdrant collection configuration."""
         return {
             'size': self.vector_size,
@@ -227,7 +227,7 @@ class RedisConfig(BaseSettings):
             auth = ""
         return f"redis://{auth}{self.host}:{self.port}/{self.db}"
 
-    def get_connection_pool_config(self) -> Dict[str, Any]:
+    def get_connection_pool_config(self) -> dict[str, Any]:
         """Get Redis connection pool configuration."""
         config = {
             'host': self.host,
@@ -251,15 +251,15 @@ class DatabaseCluster(BaseSettings):
     """Database cluster configuration for high availability."""
 
     # MongoDB cluster
-    mongodb_nodes: List[str] = Field([], env='MONGODB_NODES')
+    mongodb_nodes: list[str] = Field([], env='MONGODB_NODES')
     mongodb_read_preference: str = Field('primaryPreferred', env='MONGODB_READ_PREFERENCE')
 
     # Qdrant cluster
-    qdrant_nodes: List[str] = Field([], env='QDRANT_NODES')
+    qdrant_nodes: list[str] = Field([], env='QDRANT_NODES')
     qdrant_load_balancing: str = Field('round_robin', env='QDRANT_LOAD_BALANCING')
 
     # Redis cluster
-    redis_nodes: List[str] = Field([], env='REDIS_NODES')
+    redis_nodes: list[str] = Field([], env='REDIS_NODES')
     redis_cluster_enabled: bool = Field(False, env='REDIS_CLUSTER_ENABLED')
 
     @validator('mongodb_nodes', 'qdrant_nodes', 'redis_nodes', pre=True)
@@ -340,7 +340,7 @@ class DatabaseManager:
                 logger.warning("Redis client not installed")
         return self._redis_client
 
-    def health_check(self) -> Dict[str, bool]:
+    def health_check(self) -> dict[str, bool]:
         """Check health of all database connections."""
         health = {}
 

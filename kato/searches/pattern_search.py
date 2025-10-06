@@ -11,7 +11,7 @@ from itertools import chain
 from operator import itemgetter
 from os import environ
 from queue import Queue
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional
 
 # MongoDB is required for KATO
 # Import original components for compatibility
@@ -41,10 +41,10 @@ logger.setLevel(getattr(logging, environ.get('LOG_LEVEL', 'INFO')))
 class InformationExtractor:
     """
     Optimized information extraction using fast matching algorithms.
-    
+
     Maintains exact same output format as original for compatibility.
     Uses RapidFuzz when available for ~10x faster similarity calculations.
-    
+
     Attributes:
         use_fast_matcher: Whether to use optimized matching algorithms.
         fast_matcher: FastSequenceMatcher instance for optimized matching.
@@ -53,23 +53,23 @@ class InformationExtractor:
     def __init__(self, use_fast_matcher: bool = True) -> None:
         """
         Initialize optimized extractor.
-        
+
         Args:
             use_fast_matcher: Use fast matching algorithms for better performance.
         """
         self.use_fast_matcher = use_fast_matcher
         self.fast_matcher = FastSequenceMatcher() if use_fast_matcher else None
 
-    def extract_prediction_info(self, pattern: List[str], state: List[str],
-                               cutoff: float) -> Optional[Tuple[List[str], List[str], List[str], List[str], List[str], List[str], float, int]]:
+    def extract_prediction_info(self, pattern: list[str], state: list[str],
+                               cutoff: float) -> Optional[tuple[list[str], list[str], list[str], list[str], list[str], list[str], float, int]]:
         """
         Extract prediction information using optimized algorithms.
-        
+
         Args:
             pattern: Pattern data as list of symbols.
             state: Current state sequence to match against.
             cutoff: Similarity threshold (0.0 to 1.0).
-            
+
         Returns:
             Tuple containing:
                 - pattern: Original pattern data
@@ -158,10 +158,10 @@ class InformationExtractor:
 class PatternSearcher:
     """
     Optimized pattern searcher using fast matching and indexing.
-    
+
     Drop-in replacement for PatternSearcher with ~300x performance improvements.
     Uses MongoDB for pattern storage and optional fast indexing/matching.
-    
+
     Attributes:
         kb_id: Knowledge base identifier.
         patterns_cache: In-memory cache of patterns.
@@ -175,13 +175,13 @@ class PatternSearcher:
     def __init__(self, **kwargs: Any) -> None:
         """
         Initialize optimized pattern searcher.
-        
+
         Args:
             **kwargs: Configuration parameters including:
                 - kb_id: Knowledge base identifier
                 - max_predictions: Max predictions to return
                 - recall_threshold: Minimum similarity threshold
-        
+
         Raises:
             ValueError: If MONGO_BASE_URL is not set.
             RuntimeError: If MongoDB connection fails.
@@ -244,10 +244,10 @@ class PatternSearcher:
     async def initialize_redis_cache(self, session_id: Optional[str] = None) -> bool:
         """
         Initialize Redis cache for pattern caching.
-        
+
         Args:
             session_id: Optional session identifier for cache isolation
-            
+
         Returns:
             True if cache initialized successfully
         """
@@ -281,11 +281,11 @@ class PatternSearcher:
     def getPatterns(self) -> None:
         """
         Load patterns from database using optimized aggregation pipelines.
-        
+
         Uses server-side aggregation for better performance and reduced data transfer.
         Fetches all patterns from MongoDB and populates fast matching
         structures if enabled. Builds indices for efficient lookup.
-        
+
         Raises:
             RuntimeError: If MongoDB connection is not available.
         """
@@ -353,7 +353,7 @@ class PatternSearcher:
     async def getPatternsAsync(self, session_id: Optional[str] = None, limit: int = 1000) -> None:
         """
         Async version of getPatterns with Redis caching support.
-        
+
         Args:
             session_id: Session identifier for cache isolation
             limit: Maximum number of patterns to load
@@ -430,10 +430,10 @@ class PatternSearcher:
         logger.debug(f"Loaded {self.patterns_count} patterns from MongoDB")
 
     def assignNewlyLearnedToWorkers(self, index: int, pattern_name: str,
-                                   new_pattern: List[str]) -> None:
+                                   new_pattern: list[str]) -> None:
         """
         Add newly learned pattern to indices.
-        
+
         Args:
             index: Worker index (kept for backward compatibility, not used).
             pattern_name: Unique pattern identifier (e.g., 'PTRN|<hash>').
@@ -467,10 +467,10 @@ class PatternSearcher:
     def delete_pattern(self, name: str) -> bool:
         """
         Delete pattern from all indices.
-        
+
         Args:
             name: Pattern name to delete
-            
+
         Returns:
             True if pattern was found and deleted
         """
@@ -491,7 +491,7 @@ class PatternSearcher:
     def clearPatternsFromRAM(self) -> None:
         """
         Clear all patterns from memory.
-        
+
         Removes all cached patterns and resets indices. Used when
         clearing all memory or switching knowledge bases.
         """
@@ -505,9 +505,9 @@ class PatternSearcher:
             # Recreate clean index manager
             self.index_manager = IndexManager()
 
-    def causalBelief(self, state: List[str],
-                    target_class_candidates: Optional[List[str]] = None,
-                    stm_events: Optional[List[List[str]]] = None) -> List[Dict[str, Any]]:
+    def causalBelief(self, state: list[str],
+                    target_class_candidates: Optional[list[str]] = None,
+                    stm_events: Optional[list[list[str]]] = None) -> list[dict[str, Any]]:
         """
         Find matching patterns and generate predictions.
 
@@ -637,11 +637,11 @@ class PatternSearcher:
 
         return filtered_list
 
-    def _process_with_rapidfuzz(self, state: List[str],
-                               candidates: List[str], results: List):
+    def _process_with_rapidfuzz(self, state: list[str],
+                               candidates: list[str], results: list):
         """
         Process candidates using RapidFuzz for fast matching.
-        
+
         Args:
             state: Current state
             candidates: Candidate pattern IDs
@@ -680,11 +680,11 @@ class PatternSearcher:
                     if info:
                         results.append((pattern_id,) + info)
 
-    def _process_with_original(self, state: List[str],
-                              candidates: List[str], results: List):
+    def _process_with_original(self, state: list[str],
+                              candidates: list[str], results: list):
         """
         Process candidates using original SequenceMatcher.
-        
+
         Args:
             state: Current state
             candidates: Candidate pattern IDs
@@ -772,26 +772,26 @@ class PatternSearcher:
                             similarity, number_of_blocks
                         ))
 
-    async def causalBeliefAsync(self, state: List[str],
-                               target_class_candidates: Optional[List[str]] = None,
-                               stm_events: Optional[List[List[str]]] = None,
+    async def causalBeliefAsync(self, state: list[str],
+                               target_class_candidates: Optional[list[str]] = None,
+                               stm_events: Optional[list[list[str]]] = None,
                                max_workers: Optional[int] = None,
-                               batch_size: int = 100) -> List[Dict[str, Any]]:
+                               batch_size: int = 100) -> list[dict[str, Any]]:
         """
         Async parallel version of causalBelief for high-performance pattern matching.
-        
+
         Provides 3-10x performance improvement by:
         - Parallel processing of pattern matching using ThreadPoolExecutor
         - Batched candidate processing to optimize memory usage
         - Async database queries for pattern data retrieval
         - Concurrent similarity calculations using asyncio.gather
-        
+
         Args:
             state: Current state sequence (flattened STM).
             target_class_candidates: Optional list of specific pattern names
             max_workers: Max thread pool workers (defaults to CPU count)
             batch_size: Number of patterns per batch for parallel processing
-            
+
         Returns:
             List of prediction dictionaries sorted by potential/relevance.
         """
@@ -856,14 +856,14 @@ class PatternSearcher:
             # Fallback if potential is missing
             return sorted(filtered_list, key=lambda x: x.get('similarity', 0), reverse=True)
 
-    def _process_batch_rapidfuzz(self, state: List[str], candidates: List[str]) -> List:
+    def _process_batch_rapidfuzz(self, state: list[str], candidates: list[str]) -> list:
         """
         Process a batch of candidates using RapidFuzz (thread-safe).
-        
+
         Args:
             state: Current state
             candidates: Batch of candidate pattern IDs
-            
+
         Returns:
             List of match results for this batch
         """
@@ -904,14 +904,14 @@ class PatternSearcher:
 
         return batch_results
 
-    def _process_batch_original(self, state: List[str], candidates: List[str]) -> List:
+    def _process_batch_original(self, state: list[str], candidates: list[str]) -> list:
         """
         Process a batch of candidates using original algorithm (thread-safe).
-        
+
         Args:
             state: Current state
             candidates: Batch of candidate pattern IDs
-            
+
         Returns:
             List of match results for this batch
         """
@@ -936,7 +936,7 @@ class PatternSearcher:
 
         return batch_results
 
-    async def _build_predictions_async(self, results: List, max_workers: int, stm_events: Optional[List[List[str]]] = None) -> List[Dict[str, Any]]:
+    async def _build_predictions_async(self, results: list, max_workers: int, stm_events: Optional[list[list[str]]] = None) -> list[dict[str, Any]]:
         """
         Build Prediction objects from results asynchronously.
 
@@ -974,7 +974,7 @@ class PatternSearcher:
 
         return active_list
 
-    async def _build_predictions_batch(self, batch: List, stm_events: Optional[List[List[str]]] = None) -> List[Dict[str, Any]]:
+    async def _build_predictions_batch(self, batch: list, stm_events: Optional[list[list[str]]] = None) -> list[dict[str, Any]]:
         """
         Build predictions for a batch of results.
 
@@ -1016,7 +1016,7 @@ class PatternSearcher:
     def close(self):
         """
         DEPRECATED: Do not close shared database connections.
-        
+
         PatternSearcher uses a MongoDB connection managed by OptimizedConnectionManager.
         Closing the connection from one searcher would break all other processors.
         Connection lifecycle is managed centrally by the connection manager.

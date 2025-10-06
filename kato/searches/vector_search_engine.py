@@ -7,7 +7,7 @@ modern vector databases and optimization techniques.
 
 import asyncio
 import logging
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 try:
     import numpy as np
@@ -54,7 +54,7 @@ class SearchMetrics:
 class VectorSearchEngine:
     """
     Modern vector search engine with caching, batching, and optimization.
-    
+
     Features:
     - Automatic backend selection based on configuration
     - Result caching for frequently searched vectors
@@ -72,7 +72,7 @@ class VectorSearchEngine:
     ):
         """
         Initialize vector search engine.
-        
+
         Args:
             config: Vector database configuration
             collection_name: Name of the vector collection
@@ -110,7 +110,7 @@ class VectorSearchEngine:
     async def initialize(self) -> bool:
         """
         Initialize the search engine and connect to backend.
-        
+
         Returns:
             True if initialization successful
         """
@@ -162,16 +162,16 @@ class VectorSearchEngine:
         self,
         vector: Union[np.ndarray, VectorObject],
         vector_id: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[dict[str, Any]] = None
     ) -> bool:
         """
         Add a vector to the search index.
-        
+
         Args:
             vector: Vector to add (numpy array or VectorObject)
             vector_id: Optional ID for the vector
             metadata: Optional metadata to store with vector
-        
+
         Returns:
             True if addition successful
         """
@@ -209,7 +209,7 @@ class VectorSearchEngine:
         self,
         vector: Union[np.ndarray, VectorObject],
         vector_id: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[dict[str, Any]] = None
     ) -> bool:
         """Synchronous wrapper for add_vector"""
         return self._loop.run_until_complete(
@@ -218,18 +218,18 @@ class VectorSearchEngine:
 
     async def add_vectors_batch(
         self,
-        vectors: List[Union[np.ndarray, VectorObject]],
-        vector_ids: Optional[List[str]] = None,
-        metadata: Optional[List[Dict[str, Any]]] = None
-    ) -> Tuple[int, List[str]]:
+        vectors: list[Union[np.ndarray, VectorObject]],
+        vector_ids: Optional[list[str]] = None,
+        metadata: Optional[list[dict[str, Any]]] = None
+    ) -> tuple[int, list[str]]:
         """
         Add multiple vectors in batch.
-        
+
         Args:
             vectors: List of vectors to add
             vector_ids: Optional list of IDs
             metadata: Optional list of metadata dicts
-        
+
         Returns:
             Tuple of (number added successfully, list of failed IDs)
         """
@@ -280,10 +280,10 @@ class VectorSearchEngine:
 
     def add_vectors_batch_sync(
         self,
-        vectors: List[Union[np.ndarray, VectorObject]],
-        vector_ids: Optional[List[str]] = None,
-        metadata: Optional[List[Dict[str, Any]]] = None
-    ) -> Tuple[int, List[str]]:
+        vectors: list[Union[np.ndarray, VectorObject]],
+        vector_ids: Optional[list[str]] = None,
+        metadata: Optional[list[dict[str, Any]]] = None
+    ) -> tuple[int, list[str]]:
         """Synchronous wrapper for add_vectors_batch"""
         return self._loop.run_until_complete(
             self.add_vectors_batch(vectors, vector_ids, metadata)
@@ -293,20 +293,20 @@ class VectorSearchEngine:
         self,
         query_vector: Union[np.ndarray, VectorObject],
         k: int = 3,
-        filter: Optional[Dict[str, Any]] = None,
+        filter: Optional[dict[str, Any]] = None,
         include_vectors: bool = False,
         use_cache: bool = True
-    ) -> List[VectorSearchResult]:
+    ) -> list[VectorSearchResult]:
         """
         Search for similar vectors.
-        
+
         Args:
             query_vector: Query vector
             k: Number of results to return
             filter: Optional metadata filter
             include_vectors: Whether to include vector data in results
             use_cache: Whether to use cache for this search
-        
+
         Returns:
             List of search results
         """
@@ -378,10 +378,10 @@ class VectorSearchEngine:
         self,
         query_vector: Union[np.ndarray, VectorObject],
         k: int = 3,
-        filter: Optional[Dict[str, Any]] = None,
+        filter: Optional[dict[str, Any]] = None,
         include_vectors: bool = False,
         use_cache: bool = True
-    ) -> List[VectorSearchResult]:
+    ) -> list[VectorSearchResult]:
         """Synchronous wrapper for search"""
         import asyncio
         try:
@@ -410,20 +410,20 @@ class VectorSearchEngine:
 
     async def batch_search(
         self,
-        query_vectors: List[Union[np.ndarray, VectorObject]],
+        query_vectors: list[Union[np.ndarray, VectorObject]],
         k: int = 3,
-        filter: Optional[Dict[str, Any]] = None,
+        filter: Optional[dict[str, Any]] = None,
         include_vectors: bool = False
-    ) -> List[List[VectorSearchResult]]:
+    ) -> list[list[VectorSearchResult]]:
         """
         Search for multiple query vectors in batch.
-        
+
         Args:
             query_vectors: List of query vectors
             k: Number of results per query
             filter: Optional metadata filter
             include_vectors: Whether to include vector data
-        
+
         Returns:
             List of result lists, one per query
         """
@@ -453,11 +453,11 @@ class VectorSearchEngine:
 
     def batch_search_sync(
         self,
-        query_vectors: List[Union[np.ndarray, VectorObject]],
+        query_vectors: list[Union[np.ndarray, VectorObject]],
         k: int = 3,
-        filter: Optional[Dict[str, Any]] = None,
+        filter: Optional[dict[str, Any]] = None,
         include_vectors: bool = False
-    ) -> List[List[VectorSearchResult]]:
+    ) -> list[list[VectorSearchResult]]:
         """Synchronous wrapper for batch_search"""
         return self._run_async_in_sync(
             self.batch_search(query_vectors, k, filter, include_vectors)
@@ -468,15 +468,15 @@ class VectorSearchEngine:
         vector: Union[np.ndarray, VectorObject],
         k: int = 3,
         exclude_self: bool = True
-    ) -> List[Tuple[str, float]]:
+    ) -> list[tuple[str, float]]:
         """
         Find k nearest neighbors for a vector.
-        
+
         Args:
             vector: Query vector
             k: Number of neighbors
             exclude_self: Whether to exclude the query vector itself
-        
+
         Returns:
             List of (vector_id, distance) tuples
         """
@@ -499,7 +499,7 @@ class VectorSearchEngine:
         vector: Union[np.ndarray, VectorObject],
         k: int = 3,
         exclude_self: bool = True
-    ) -> List[Tuple[str, float]]:
+    ) -> list[tuple[str, float]]:
         """Synchronous wrapper for find_nearest_neighbors"""
         return self._run_async_in_sync(
             self.find_nearest_neighbors(vector, k, exclude_self)
@@ -509,7 +509,7 @@ class VectorSearchEngine:
         self,
         vector_id: str,
         vector: Optional[np.ndarray] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[dict[str, Any]] = None
     ) -> bool:
         """Update a vector and/or its metadata"""
         success = await self.store.update_vector(
@@ -538,7 +538,7 @@ class VectorSearchEngine:
 
         return success
 
-    async def get_stats(self) -> Dict[str, Any]:
+    async def get_stats(self) -> dict[str, Any]:
         """Get search engine statistics"""
         collection_info = await self.store.get_collection_info(self.collection_name)
 
@@ -557,7 +557,7 @@ class VectorSearchEngine:
 
         return stats
 
-    def get_stats_sync(self) -> Dict[str, Any]:
+    def get_stats_sync(self) -> dict[str, Any]:
         """Synchronous wrapper for get_stats"""
         return self._run_async_in_sync(self.get_stats())
 
@@ -587,13 +587,13 @@ class VectorSearchEngine:
         self,
         query_id: str,
         k: int,
-        filter: Optional[Dict[str, Any]]
+        filter: Optional[dict[str, Any]]
     ) -> str:
         """Create a cache key for a search query"""
         filter_str = str(sorted(filter.items())) if filter else ""
         return f"{query_id}:{k}:{filter_str}"
 
-    def _update_cache(self, key: str, results: List[VectorSearchResult]):
+    def _update_cache(self, key: str, results: list[VectorSearchResult]):
         """Update the cache with new results"""
         if not self._cache:
             return
@@ -610,14 +610,14 @@ class VectorSearchEngine:
 class VectorIndexer:
     """
     Modern implementation of Vector Indexer.
-    
+
     Indexes vectors and performs similarity search using the modern
     vector search engine for better performance.
     """
 
     def __init__(self, procs: int = 1, vectors_kb=None, processor_id: str = None):
         """Initialize Vector Indexer with isolated collection
-        
+
         Args:
             procs: Number of processors (kept for compatibility but not used)
             vectors_kb: Vector knowledge base (kept for compatibility)
@@ -641,7 +641,7 @@ class VectorIndexer:
             if not self.initialized:
                 logger.error("Failed to initialize Vector Indexer")
 
-    def loadMemoryIntoRAM(self, vectors_dict: Dict[str, VectorObject]):
+    def loadMemoryIntoRAM(self, vectors_dict: dict[str, VectorObject]):
         """Load vectors into the search index"""
         self.initialize()
 
@@ -679,7 +679,7 @@ class VectorIndexer:
         logger.debug(f"Received {len(new_vectors)} new vectors (auto-indexed)")
         pass
 
-    def findNearestPoints(self, query_vector: VectorObject) -> List[str]:
+    def findNearestPoints(self, query_vector: VectorObject) -> list[str]:
         """Find the 3 nearest vectors to the query"""
         self.initialize()
 

@@ -12,7 +12,7 @@ import time
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import psutil
 
@@ -24,7 +24,7 @@ class MetricValue:
     """Single metric value with timestamp"""
     value: float
     timestamp: float
-    labels: Dict[str, str] = field(default_factory=dict)
+    labels: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -36,7 +36,7 @@ class Metric:
     unit: str = ""
     values: deque = field(default_factory=lambda: deque(maxlen=1000))
 
-    def add_value(self, value: float, labels: Dict[str, str] = None):
+    def add_value(self, value: float, labels: dict[str, str] = None):
         """Add a value to the metric"""
         self.values.append(MetricValue(
             value=value,
@@ -85,14 +85,14 @@ class Metric:
 class MetricsCollector:
     """
     Centralized metrics collector for KATO v2.0.
-    
+
     Collects and exposes metrics in Prometheus format and
     provides APIs for custom metric tracking.
     """
 
     def __init__(self):
         """Initialize metrics collector"""
-        self.metrics: Dict[str, Metric] = {}
+        self.metrics: dict[str, Metric] = {}
         self._lock = threading.RLock()
         self._collection_task = None
         self._collection_interval = 10  # seconds
@@ -213,13 +213,13 @@ class MetricsCollector:
     ) -> Metric:
         """
         Register a new metric.
-        
+
         Args:
             name: Metric name (should follow Prometheus naming)
             metric_type: Type of metric (counter, gauge, histogram, summary)
             description: Human-readable description
             unit: Unit of measurement
-        
+
         Returns:
             Registered Metric object
         """
@@ -235,7 +235,7 @@ class MetricsCollector:
                 logger.debug(f"Registered metric: {name}")
             return self.metrics[name]
 
-    def increment(self, name: str, value: float = 1.0, labels: Dict[str, str] = None):
+    def increment(self, name: str, value: float = 1.0, labels: dict[str, str] = None):
         """Increment a counter metric"""
         with self._lock:
             if name in self.metrics:
@@ -243,13 +243,13 @@ class MetricsCollector:
                 current = metric.get_current() or 0
                 metric.add_value(current + value, labels)
 
-    def set(self, name: str, value: float, labels: Dict[str, str] = None):
+    def set(self, name: str, value: float, labels: dict[str, str] = None):
         """Set a gauge metric"""
         with self._lock:
             if name in self.metrics:
                 self.metrics[name].add_value(value, labels)
 
-    def observe(self, name: str, value: float, labels: Dict[str, str] = None):
+    def observe(self, name: str, value: float, labels: dict[str, str] = None):
         """Observe a value for histogram/summary"""
         with self._lock:
             if name in self.metrics:
@@ -260,10 +260,10 @@ class MetricsCollector:
         with self._lock:
             return self.metrics.get(name)
 
-    def get_all_metrics(self) -> Dict[str, Dict[str, Any]]:
+    def get_all_metrics(self) -> dict[str, dict[str, Any]]:
         """
         Get all metrics as a dictionary.
-        
+
         Returns:
             Dictionary of metric data
         """
@@ -283,7 +283,7 @@ class MetricsCollector:
     def get_prometheus_format(self) -> str:
         """
         Get metrics in Prometheus text format.
-        
+
         Returns:
             Prometheus-formatted metrics string
         """
@@ -356,7 +356,7 @@ class MetricsCollector:
     async def start_collection(self, interval: int = 10):
         """
         Start background metrics collection.
-        
+
         Args:
             interval: Collection interval in seconds
         """
@@ -389,7 +389,7 @@ class MetricsCollector:
                 logger.error(f"Error in collection loop: {e}")
                 await asyncio.sleep(self._collection_interval)
 
-    def _get_metric_value(self, all_metrics: Dict, metric_name: str, value_type: str = "current") -> float:
+    def _get_metric_value(self, all_metrics: dict, metric_name: str, value_type: str = "current") -> float:
         """Safely get a metric value, returning 0 if None or missing"""
         try:
             metric_data = all_metrics.get(metric_name, {})
@@ -400,7 +400,7 @@ class MetricsCollector:
         except (TypeError, ValueError):
             return 0.0
 
-    def _calculate_error_rate(self, all_metrics: Dict) -> float:
+    def _calculate_error_rate(self, all_metrics: dict) -> float:
         """Safely calculate error rate, handling None values"""
         try:
             errors = self._get_metric_value(all_metrics, "kato_errors_total")
@@ -420,7 +420,7 @@ class MetricsCollector:
         except (TypeError, ValueError, ZeroDivisionError):
             return 0.0
 
-    def get_summary_metrics(self) -> Dict[str, Any]:
+    def get_summary_metrics(self) -> dict[str, Any]:
         """Get comprehensive summary of all metrics"""
         current_time = time.time()
 
@@ -468,7 +468,7 @@ class MetricsCollector:
 
         return summary
 
-    def calculate_rates(self) -> Dict[str, float]:
+    def calculate_rates(self) -> dict[str, float]:
         """Calculate rate metrics over different time windows"""
         rates = {}
 
@@ -497,10 +497,10 @@ class MetricsCollector:
 
         return rates
 
-    def get_health_status(self) -> Dict[str, Any]:
+    def get_health_status(self) -> dict[str, Any]:
         """
         Get system health status based on metrics.
-        
+
         Returns:
             Health status dictionary
         """
@@ -544,14 +544,14 @@ class MetricsCollector:
         self,
         metric_name: str,
         window_seconds: int = 3600
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Get time series data for a metric.
-        
+
         Args:
             metric_name: Name of the metric
             window_seconds: Time window in seconds
-        
+
         Returns:
             List of time-series data points
         """
@@ -583,7 +583,7 @@ class MetricsCollector:
     ):
         """
         Record HTTP request metrics.
-        
+
         Args:
             method: HTTP method (GET, POST, etc.)
             path: Request path
@@ -617,7 +617,7 @@ _metrics_collector: Optional[MetricsCollector] = None
 def get_metrics_collector() -> MetricsCollector:
     """
     Get or create the singleton metrics collector.
-    
+
     Returns:
         MetricsCollector singleton instance
     """
@@ -633,7 +633,7 @@ def get_metrics_collector() -> MetricsCollector:
 def timed_metric(metric_name: str = None):
     """
     Decorator to time function execution.
-    
+
     Args:
         metric_name: Optional metric name (defaults to function name)
     """

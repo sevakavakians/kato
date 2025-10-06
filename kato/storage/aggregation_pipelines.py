@@ -6,7 +6,7 @@ for better performance and reduced data transfer.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from pymongo.collection import Collection
 
@@ -19,10 +19,10 @@ class AggregationPipelines:
     @staticmethod
     def get_patterns_with_flattened_data(collection: Collection,
                                        limit: Optional[int] = None,
-                                       frequency_threshold: int = 1) -> List[Dict[str, Any]]:
+                                       frequency_threshold: int = 1) -> list[dict[str, Any]]:
         """
         Get patterns with server-side flattening of pattern_data.
-        
+
         Replaces: collection.find({}, {"name": 1, "pattern_data": 1})
         Performance gain: 30-50% reduction in data transfer and client processing
         """
@@ -56,10 +56,10 @@ class AggregationPipelines:
 
     @staticmethod
     def get_symbol_statistics_bulk(collection: Collection,
-                                 symbols: List[str]) -> Dict[str, Dict[str, Any]]:
+                                 symbols: list[str]) -> dict[str, dict[str, Any]]:
         """
         Get symbol statistics for multiple symbols in one aggregation.
-        
+
         Replaces: Multiple find_one({"name": symbol}) calls
         Performance gain: 90% reduction in database round trips
         """
@@ -83,10 +83,10 @@ class AggregationPipelines:
         return results
 
     @staticmethod
-    def get_all_symbols_optimized(collection: Collection) -> Dict[str, Dict[str, Any]]:
+    def get_all_symbols_optimized(collection: Collection) -> dict[str, dict[str, Any]]:
         """
         Get all symbols with optimized server-side processing.
-        
+
         Replaces: collection.find({}, {'_id': False})
         Performance gain: 20-30% reduction in data transfer
         """
@@ -110,10 +110,10 @@ class AggregationPipelines:
     @staticmethod
     def get_pattern_statistics(patterns_collection: Collection,
                              symbols_collection: Collection,
-                             metadata_collection: Collection) -> Dict[str, Any]:
+                             metadata_collection: Collection) -> dict[str, Any]:
         """
         Get comprehensive pattern and symbol statistics in optimized queries.
-        
+
         Replaces: Multiple separate queries for totals
         Performance gain: 60% reduction in query complexity
         """
@@ -159,10 +159,10 @@ class AggregationPipelines:
 
     @staticmethod
     def get_frequent_patterns_summary(collection: Collection,
-                                    top_n: int = 100) -> List[Dict[str, Any]]:
+                                    top_n: int = 100) -> list[dict[str, Any]]:
         """
         Get summary of most frequent patterns with key statistics.
-        
+
         Performance gain: 40-60% reduction in data transfer for pattern analysis
         """
         pipeline = [
@@ -193,11 +193,11 @@ class AggregationPipelines:
 
     @staticmethod
     def get_patterns_by_symbol_content(collection: Collection,
-                                     target_symbols: List[str],
-                                     min_frequency: int = 1) -> List[Dict[str, Any]]:
+                                     target_symbols: list[str],
+                                     min_frequency: int = 1) -> list[dict[str, Any]]:
         """
         Find patterns containing specific symbols using server-side filtering.
-        
+
         Replaces: Client-side pattern filtering after full data transfer
         Performance gain: 70-90% reduction in data transfer for targeted searches
         """
@@ -248,10 +248,10 @@ class OptimizedQueryManager:
         self._symbol_cache = {}
         self._cache_valid = False
 
-    def get_patterns_optimized(self, limit: Optional[int] = None) -> Dict[str, List[str]]:
+    def get_patterns_optimized(self, limit: Optional[int] = None) -> dict[str, list[str]]:
         """
         Get patterns using optimized aggregation pipeline.
-        
+
         Returns: Dict mapping pattern names to flattened pattern data
         """
         try:
@@ -280,7 +280,7 @@ class OptimizedQueryManager:
 
             return result
 
-    def get_all_symbols_optimized(self, collection: Collection) -> Dict[str, Dict[str, Any]]:
+    def get_all_symbols_optimized(self, collection: Collection) -> dict[str, dict[str, Any]]:
         """
         Get all symbols with optimized aggregation.
 
@@ -291,7 +291,7 @@ class OptimizedQueryManager:
         """
         return self.pipelines.get_all_symbols_optimized(collection)
 
-    def get_symbol_frequencies_batch(self, symbols: List[str]) -> Dict[str, int]:
+    def get_symbol_frequencies_batch(self, symbols: list[str]) -> dict[str, int]:
         """
         Get symbol frequencies for multiple symbols using batch aggregation.
 
@@ -325,10 +325,10 @@ class OptimizedQueryManager:
                     result[symbol] = 0
             return result
 
-    def get_comprehensive_statistics(self) -> Dict[str, Any]:
+    def get_comprehensive_statistics(self) -> dict[str, Any]:
         """
         Get comprehensive pattern and symbol statistics using optimized queries.
-        
+
         Returns: Combined statistics from patterns, symbols, and metadata
         """
         try:

@@ -8,7 +8,7 @@ Part of the performance optimization suite.
 import hashlib
 import math
 from collections import defaultdict
-from typing import Any, Dict, List, Set, Tuple
+from typing import Any
 
 
 class InvertedIndex:
@@ -18,11 +18,11 @@ class InvertedIndex:
     """
 
     def __init__(self):
-        self.index: Dict[str, Set[str]] = defaultdict(set)
+        self.index: dict[str, set[str]] = defaultdict(set)
         self.document_count = 0
-        self.term_frequencies: Dict[str, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
+        self.term_frequencies: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
 
-    def add_document(self, doc_id: str, terms: List[str]):
+    def add_document(self, doc_id: str, terms: list[str]):
         """Add a document (pattern) to the index."""
         self.document_count += 1
         term_counts = defaultdict(int)
@@ -34,14 +34,14 @@ class InvertedIndex:
         for term, count in term_counts.items():
             self.term_frequencies[term][doc_id] = count
 
-    def search(self, terms: List[str], mode: str = 'AND') -> Set[str]:
+    def search(self, terms: list[str], mode: str = 'AND') -> set[str]:
         """
         Search for documents containing the given terms.
-        
+
         Args:
             terms: List of terms to search for
             mode: 'AND' for intersection, 'OR' for union
-        
+
         Returns:
             Set of document IDs matching the query
         """
@@ -88,7 +88,7 @@ class InvertedIndex:
         """Return the number of unique terms in the index."""
         return len(self.index)
 
-    def get_posting_list(self, term: str) -> Set[str]:
+    def get_posting_list(self, term: str) -> set[str]:
         """Get the posting list (set of documents) for a term."""
         return self.index.get(term, set())
 
@@ -121,7 +121,7 @@ class BloomFilter:
     def contains(self, item: str) -> bool:
         """
         Check if an item might be in the set.
-        
+
         Returns:
             False if item is definitely not in the set
             True if item might be in the set (probabilistic)
@@ -156,22 +156,22 @@ class LengthPartitionedIndex:
 
     def __init__(self, partition_size: int = 10):
         self.partition_size = partition_size
-        self.partitions: Dict[int, List[Tuple[str, Any]]] = defaultdict(list)
+        self.partitions: dict[int, list[tuple[str, Any]]] = defaultdict(list)
 
-    def add(self, doc_id: str, sequence: List[str], data: Any = None):
+    def add(self, doc_id: str, sequence: list[str], data: Any = None):
         """Add a sequence to the appropriate partition."""
         length = len(sequence)
         partition_key = length // self.partition_size
         self.partitions[partition_key].append((doc_id, data or sequence))
 
-    def get_candidates(self, target_length: int, tolerance: int = 1) -> List[Tuple[str, Any]]:
+    def get_candidates(self, target_length: int, tolerance: int = 1) -> list[tuple[str, Any]]:
         """
         Get candidate sequences that could match the target length.
-        
+
         Args:
             target_length: The length of the target sequence
             tolerance: Number of partitions to check on either side
-        
+
         Returns:
             List of (doc_id, data) tuples that could match
         """
@@ -203,12 +203,12 @@ class IndexManager:
         self.inverted_index = InvertedIndex()
         self.bloom_filter = BloomFilter()
         self.length_index = LengthPartitionedIndex()
-        self.pattern_data: Dict[str, Any] = {}
+        self.pattern_data: dict[str, Any] = {}
 
-    def index_pattern(self, pattern_id: str, sequence: List[str], data: Any = None):
+    def index_pattern(self, pattern_id: str, sequence: list[str], data: Any = None):
         """
         Index a pattern across all index structures.
-        
+
         Args:
             pattern_id: Unique identifier for the pattern
             sequence: The sequence of symbols in the pattern
@@ -227,17 +227,17 @@ class IndexManager:
         # Store pattern data
         self.pattern_data[pattern_id] = data or sequence
 
-    def search(self, query: List[str], mode: str = 'AND',
-               use_bloom: bool = True, length_tolerance: int = 1) -> List[Tuple[str, float]]:
+    def search(self, query: list[str], mode: str = 'AND',
+               use_bloom: bool = True, length_tolerance: int = 1) -> list[tuple[str, float]]:
         """
         Search for patterns matching the query.
-        
+
         Args:
             query: List of symbols to search for
             mode: 'AND' or 'OR' search mode
             use_bloom: Whether to use bloom filter for pre-filtering
             length_tolerance: Tolerance for length-based filtering
-        
+
         Returns:
             List of (pattern_id, score) tuples sorted by relevance
         """
@@ -269,7 +269,7 @@ class IndexManager:
 
         return scored_results
 
-    def _score_candidate(self, doc_id: str, query: List[str]) -> float:
+    def _score_candidate(self, doc_id: str, query: list[str]) -> float:
         """Calculate relevance score for a candidate."""
         score = 0.0
         for term in query:
@@ -283,7 +283,7 @@ class IndexManager:
         self.length_index.clear()
         self.pattern_data.clear()
 
-    def get_statistics(self) -> Dict[str, Any]:
+    def get_statistics(self) -> dict[str, Any]:
         """Get statistics about the indices."""
         return {
             'inverted_index_terms': self.inverted_index.size(),
@@ -294,10 +294,10 @@ class IndexManager:
             'total_patterns': len(self.pattern_data)
         }
 
-    def add_pattern(self, pattern_id: str, sequence: List[str], data: Any = None):
+    def add_pattern(self, pattern_id: str, sequence: list[str], data: Any = None):
         """
         Add a pattern to the index (wrapper for index_pattern).
-        
+
         Args:
             pattern_id: Unique identifier for the pattern
             sequence: The sequence of symbols in the pattern
@@ -308,10 +308,10 @@ class IndexManager:
     def remove_pattern(self, pattern_id: str) -> bool:
         """
         Remove a pattern from all indices.
-        
+
         Args:
             pattern_id: Pattern identifier to remove
-            
+
         Returns:
             True if pattern was found and removed, False otherwise
         """
@@ -332,14 +332,14 @@ class IndexManager:
 
         return True
 
-    def search_candidates(self, query: List[str], length_tolerance: float = 0.5) -> Set[str]:
+    def search_candidates(self, query: list[str], length_tolerance: float = 0.5) -> set[str]:
         """
         Search for candidate patterns that could match the query.
-        
+
         Args:
             query: List of symbols to search for
             length_tolerance: Fraction of length difference to tolerate (0.5 = 50%)
-            
+
         Returns:
             Set of pattern IDs that are potential matches
         """

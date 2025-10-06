@@ -10,7 +10,7 @@ import string
 import threading
 import time
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable
 
 
 # Simple math utilities for load patterns
@@ -67,10 +67,10 @@ class LoadProfile:
 class DataGenerator:
     """Generates realistic test data for KATO operations."""
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         """
         Initialize test data generator.
-        
+
         Args:
             config: Test data configuration from stress_config.yaml
         """
@@ -86,7 +86,7 @@ class DataGenerator:
             "confusion", "excitement", "calm", "stress"
         ]
 
-    def _generate_vocabulary(self) -> List[str]:
+    def _generate_vocabulary(self) -> list[str]:
         """Generate a vocabulary of test strings."""
         vocab = []
         vocab_size = self.config.get('string_vocabulary_size', 1000)
@@ -108,7 +108,7 @@ class DataGenerator:
 
         return vocab[:vocab_size]
 
-    def generate_observation_data(self) -> Dict[str, Any]:
+    def generate_observation_data(self) -> dict[str, Any]:
         """Generate random observation data."""
         data = {
             "strings": [],
@@ -168,7 +168,7 @@ class DataGenerator:
 
         return data
 
-    def generate_sequence(self, length: int) -> List[Dict[str, Any]]:
+    def generate_sequence(self, length: int) -> list[dict[str, Any]]:
         """Generate a sequence of observations."""
         sequence = []
 
@@ -217,12 +217,12 @@ class VirtualUser:
 
     def __init__(self, user_id: int, request_func: Callable,
                  data_generator: DataGenerator,
-                 operations_mix: Dict[str, float],
+                 operations_mix: dict[str, float],
                  requests_per_second: float = 1.0,
                  think_time_ms: float = 1000):
         """
         Initialize virtual user.
-        
+
         Args:
             user_id: Unique user identifier
             request_func: Function to make requests
@@ -326,11 +326,11 @@ class LoadGenerator:
 
     def __init__(self, profile: LoadProfile,
                  request_func: Callable,
-                 data_config: Dict[str, Any],
-                 operations_mix: Dict[str, float]):
+                 data_config: dict[str, Any],
+                 operations_mix: dict[str, float]):
         """
         Initialize load generator.
-        
+
         Args:
             profile: Load profile configuration
             request_func: Function to make requests
@@ -342,7 +342,7 @@ class LoadGenerator:
         self.data_generator = DataGenerator(data_config)
         self.operations_mix = operations_mix
 
-        self.users: List[VirtualUser] = []
+        self.users: list[VirtualUser] = []
         self.active = False
         self.start_time = None
         self.control_thread = None
@@ -471,7 +471,7 @@ class LoadGenerator:
                 user = self.users.pop()
                 user.stop()
 
-    def get_statistics(self) -> Dict[str, Any]:
+    def get_statistics(self) -> dict[str, Any]:
         """Get current load generation statistics."""
         total_requests = sum(user.request_count for user in self.users)
         total_errors = sum(user.error_count for user in self.users)
@@ -494,7 +494,7 @@ class BurstLoadGenerator:
                  burst_duration_ms: int = 100):
         """
         Initialize burst load generator.
-        
+
         Args:
             request_func: Function to make requests
             data_generator: Test data generator

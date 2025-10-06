@@ -9,7 +9,7 @@ approach of having multiple Docker containers with different configurations.
 import logging
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 logger = logging.getLogger('kato.config.session_config')
 
@@ -18,11 +18,11 @@ logger = logging.getLogger('kato.config.session_config')
 class SessionConfiguration:
     """
     Session-specific configuration that can be dynamically modified.
-    
+
     All parameters default to None, which means "use system default".
     When a value is set, it overrides the system default for that session.
-    
-    This enables users to create sessions with different processing 
+
+    This enables users to create sessions with different processing
     characteristics.
     """
 
@@ -48,7 +48,7 @@ class SessionConfiguration:
     def validate(self) -> bool:
         """
         Validate all configuration parameters are within acceptable ranges.
-        
+
         Returns:
             True if all parameters are valid, False otherwise
         """
@@ -97,13 +97,13 @@ class SessionConfiguration:
             logger.error(f"Validation error: {e}")
             return False
 
-    def update(self, updates: Dict[str, Any]) -> bool:
+    def update(self, updates: dict[str, Any]) -> bool:
         """
         Update configuration with new values.
-        
+
         Args:
             updates: Dictionary of parameter updates
-        
+
         Returns:
             True if update was successful, False if validation failed
         """
@@ -136,15 +136,15 @@ class SessionConfiguration:
                 setattr(self, key, value)
             return False
 
-    def merge_with_defaults(self, defaults: Dict[str, Any]) -> Dict[str, Any]:
+    def merge_with_defaults(self, defaults: dict[str, Any]) -> dict[str, Any]:
         """
         Merge session configuration with system defaults.
-        
+
         Session values override defaults where set (not None).
-        
+
         Args:
             defaults: System default configuration
-        
+
         Returns:
             Merged configuration dictionary
         """
@@ -158,10 +158,10 @@ class SessionConfiguration:
 
         return merged
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Convert configuration to dictionary for serialization.
-        
+
         Returns:
             Dictionary representation of configuration
         """
@@ -172,13 +172,13 @@ class SessionConfiguration:
         return data
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'SessionConfiguration':
+    def from_dict(cls, data: dict[str, Any]) -> 'SessionConfiguration':
         """
         Create SessionConfiguration from dictionary.
-        
+
         Args:
             data: Dictionary with configuration values
-        
+
         Returns:
             SessionConfiguration instance
         """
@@ -206,10 +206,10 @@ class SessionConfiguration:
 
         return cls(**filtered_data)
 
-    def get_config_only(self) -> Dict[str, Any]:
+    def get_config_only(self) -> dict[str, Any]:
         """
         Get only the configuration parameters (exclude metadata and topology).
-        
+
         Returns:
             Dictionary of configuration parameters only
         """

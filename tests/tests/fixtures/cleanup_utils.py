@@ -14,7 +14,7 @@ from qdrant_client import QdrantClient
 def clear_mongodb_for_processor(processor_id: str, mongo_url: Optional[str] = None):
     """
     Clear all MongoDB collections for a specific processor.
-    
+
     Args:
         processor_id: The processor ID whose data to clear
         mongo_url: MongoDB connection URL (defaults to environment variable)
@@ -45,7 +45,7 @@ def clear_mongodb_for_processor(processor_id: str, mongo_url: Optional[str] = No
 def clear_qdrant_for_processor(processor_id: str, qdrant_host: str = "localhost", qdrant_port: int = 6333):
     """
     Clear Qdrant collections for a specific processor.
-    
+
     Args:
         processor_id: The processor ID whose vectors to clear
         qdrant_host: Qdrant host
@@ -77,7 +77,7 @@ def clear_qdrant_for_processor(processor_id: str, qdrant_host: str = "localhost"
 def clear_redis_for_processor(processor_id: str, redis_host: str = "localhost", redis_port: int = 6379):
     """
     Clear Redis keys for a specific processor.
-    
+
     Args:
         processor_id: The processor ID whose cache to clear
         redis_host: Redis host
@@ -110,7 +110,7 @@ def clear_redis_for_processor(processor_id: str, redis_host: str = "localhost", 
 def clear_all_databases_for_processor(processor_id: str):
     """
     Clear all databases (MongoDB, Qdrant, Redis) for a specific processor.
-    
+
     Args:
         processor_id: The processor ID to clear
     """
@@ -131,10 +131,10 @@ def clear_all_databases_for_processor(processor_id: str):
 def verify_isolation(processor_id: str) -> bool:
     """
     Verify that databases are properly isolated for a processor.
-    
+
     Args:
         processor_id: The processor ID to check
-        
+
     Returns:
         True if properly isolated (no data found), False otherwise
     """

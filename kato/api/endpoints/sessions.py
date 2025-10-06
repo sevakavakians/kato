@@ -7,7 +7,7 @@ Handles session creation, management, and session-scoped KATO operations.
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 
@@ -38,7 +38,7 @@ async def test_endpoint(test_id: str):
 async def create_session(request: CreateSessionRequest):
     """
     Create a new isolated session for a user.
-    
+
     This enables multiple users to use KATO simultaneously
     without any data collision.
     """
@@ -115,7 +115,7 @@ async def delete_session(session_id: str):
 
 
 @router.post("/{session_id}/config")
-async def update_session_config(session_id: str, request_data: Dict[str, Any]):
+async def update_session_config(session_id: str, request_data: dict[str, Any]):
     """Update session configuration (genes/parameters)"""
     from kato.services.kato_fastapi import app_state
 
@@ -215,7 +215,7 @@ async def observe_in_session(
 ):
     """
     Process an observation in a specific session context.
-    
+
     This is the core endpoint that enables multi-user support.
     Each session maintains its own isolated STM.
     """

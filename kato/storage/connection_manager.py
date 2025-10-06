@@ -13,7 +13,7 @@ import threading
 import time
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 import redis
 from pymongo import MongoClient
@@ -55,7 +55,7 @@ class PoolStats:
 class OptimizedConnectionManager:
     """
     Centralized connection manager with optimized pooling and health monitoring.
-    
+
     Features:
     - Single instance pattern for connection reuse
     - Health monitoring with automatic recovery
@@ -91,14 +91,14 @@ class OptimizedConnectionManager:
         self._connections_closed = False
 
         # Health monitoring
-        self._health_status: Dict[str, ConnectionHealth] = {
+        self._health_status: dict[str, ConnectionHealth] = {
             'mongodb': ConnectionHealth(),
             'redis': ConnectionHealth(),
             'qdrant': ConnectionHealth()
         }
 
         # Pool statistics
-        self._pool_stats: Dict[str, PoolStats] = {
+        self._pool_stats: dict[str, PoolStats] = {
             'mongodb': PoolStats(),
             'redis': PoolStats(),
             'qdrant': PoolStats()
@@ -461,7 +461,7 @@ class OptimizedConnectionManager:
         finally:
             session.end_session()
 
-    def get_health_status(self) -> Dict[str, Dict[str, Any]]:
+    def get_health_status(self) -> dict[str, dict[str, Any]]:
         """Get health status of all connections."""
         return {
             service: {
@@ -474,7 +474,7 @@ class OptimizedConnectionManager:
             for service, health in self._health_status.items()
         }
 
-    def get_pool_stats(self) -> Dict[str, Dict[str, Any]]:
+    def get_pool_stats(self) -> dict[str, dict[str, Any]]:
         """Get connection pool statistics."""
         stats = {}
 

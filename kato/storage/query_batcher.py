@@ -9,7 +9,7 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Generic, List, Optional, TypeVar
+from typing import Any, Callable, Generic, Optional, TypeVar
 
 logger = logging.getLogger('kato.storage.query_batcher')
 
@@ -27,7 +27,7 @@ class BatchRequest:
 class QueryBatcher(Generic[T]):
     """
     Generic query batcher that accumulates requests and executes them in batches.
-    
+
     Useful for operations like:
     - Multiple session lookups
     - Batch pattern retrievals
@@ -36,14 +36,14 @@ class QueryBatcher(Generic[T]):
 
     def __init__(
         self,
-        batch_executor: Callable[[List[str]], Dict[str, T]],
+        batch_executor: Callable[[list[str]], dict[str, T]],
         max_batch_size: int = 50,
         max_wait_time: float = 0.01,  # 10ms
         enable_batching: bool = True
     ):
         """
         Initialize the query batcher.
-        
+
         Args:
             batch_executor: Function that takes a list of keys and returns a dict of results
             max_batch_size: Maximum number of requests to batch together
@@ -56,7 +56,7 @@ class QueryBatcher(Generic[T]):
         self.enable_batching = enable_batching
 
         # Pending requests
-        self._pending_requests: List[BatchRequest] = []
+        self._pending_requests: list[BatchRequest] = []
         self._batch_lock = asyncio.Lock()
         self._batch_task: Optional[asyncio.Task] = None
 
@@ -71,10 +71,10 @@ class QueryBatcher(Generic[T]):
     async def get(self, key: str) -> Optional[T]:
         """
         Get a single item, potentially batched with other concurrent requests.
-        
+
         Args:
             key: The key to retrieve
-            
+
         Returns:
             The retrieved item or None if not found
         """
@@ -106,13 +106,13 @@ class QueryBatcher(Generic[T]):
         # Wait for the result
         return await future
 
-    async def get_many(self, keys: List[str]) -> Dict[str, T]:
+    async def get_many(self, keys: list[str]) -> dict[str, T]:
         """
         Get multiple items efficiently.
-        
+
         Args:
             keys: List of keys to retrieve
-            
+
         Returns:
             Dictionary mapping keys to their values
         """
@@ -188,7 +188,7 @@ class QueryBatcher(Generic[T]):
                 if not request.future.done():
                     request.future.set_exception(e)
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get batching statistics."""
         return {
             **self.stats,
@@ -203,7 +203,7 @@ class SessionBatcher:
     def __init__(self, session_manager, max_batch_size: int = 20):
         """
         Initialize session batcher.
-        
+
         Args:
             session_manager: The session manager instance
             max_batch_size: Maximum sessions to fetch in one batch
@@ -211,7 +211,7 @@ class SessionBatcher:
         self.session_manager = session_manager
 
         # Create the actual batch executor function
-        async def batch_get_sessions(session_ids: List[str]) -> Dict[str, Any]:
+        async def batch_get_sessions(session_ids: list[str]) -> dict[str, Any]:
             """Batch fetch multiple sessions."""
             results = {}
 
@@ -257,7 +257,7 @@ class SessionBatcher:
             return results
 
         # Wrap the async function for the batcher
-        def sync_batch_executor(session_ids: List[str]) -> Dict[str, Any]:
+        def sync_batch_executor(session_ids: list[str]) -> dict[str, Any]:
             loop = asyncio.get_event_loop()
             if loop.is_running():
                 # We're in an async context, need to handle this carefully
@@ -275,11 +275,11 @@ class SessionBatcher:
         """Get a session with potential batching."""
         return await self.batcher.get(session_id)
 
-    async def get_sessions(self, session_ids: List[str]) -> Dict[str, Any]:
+    async def get_sessions(self, session_ids: list[str]) -> dict[str, Any]:
         """Get multiple sessions efficiently."""
         return await self.batcher.get_many(session_ids)
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get batching statistics."""
         return self.batcher.get_stats()
 

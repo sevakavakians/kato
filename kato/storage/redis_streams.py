@@ -22,7 +22,7 @@ import logging
 import time
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 try:
     import redis.asyncio as redis
@@ -48,10 +48,10 @@ class STMEvent:
     event_type: STMEventType
     processor_id: str
     timestamp: float
-    data: Dict[str, Any]
+    data: dict[str, Any]
     sequence_id: Optional[str] = None
 
-    def to_dict(self) -> Dict[str, str]:
+    def to_dict(self) -> dict[str, str]:
         """Convert to Redis Stream format (all string values)."""
         return {
             'event_type': self.event_type.value,
@@ -62,7 +62,7 @@ class STMEvent:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, str]) -> 'STMEvent':
+    def from_dict(cls, data: dict[str, str]) -> 'STMEvent':
         """Create from Redis Stream data."""
         return cls(
             event_type=STMEventType(data['event_type']),
@@ -79,7 +79,7 @@ class DistributedSTMManager:
     def __init__(self, processor_id: str, redis_url: str = "redis://localhost:6379"):
         """
         Initialize distributed STM manager.
-        
+
         Args:
             processor_id: Unique identifier for this KATO processor
             redis_url: Redis connection URL
@@ -95,7 +95,7 @@ class DistributedSTMManager:
         self.consumer_name = f"consumer_{processor_id}_{int(time.time())}"
 
         # Local STM state cache
-        self._local_stm_cache: List[List[str]] = []
+        self._local_stm_cache: list[list[str]] = []
         self._last_processed_id = "0-0"
 
         # Performance tracking
@@ -153,16 +153,16 @@ class DistributedSTMManager:
             logger.error(f"Failed to initialize distributed STM: {e}")
             return False
 
-    async def publish_stm_event(self, event_type: STMEventType, data: Dict[str, Any],
+    async def publish_stm_event(self, event_type: STMEventType, data: dict[str, Any],
                               sequence_id: Optional[str] = None) -> bool:
         """
         Publish STM event to Redis Stream.
-        
+
         Args:
             event_type: Type of STM event
             data: Event data
             sequence_id: Optional sequence identifier for grouping
-            
+
         Returns:
             True if event published successfully
         """
@@ -190,13 +190,13 @@ class DistributedSTMManager:
             logger.warning(f"Failed to publish STM event: {e}")
             return False
 
-    async def observe_distributed(self, observation: Dict[str, Any]) -> bool:
+    async def observe_distributed(self, observation: dict[str, Any]) -> bool:
         """
         Add observation to distributed STM.
-        
+
         Args:
             observation: Observation data with strings, vectors, emotives
-            
+
         Returns:
             True if observation added successfully
         """
@@ -225,7 +225,7 @@ class DistributedSTMManager:
 
         return success
 
-    async def trigger_autolearn_distributed(self, pattern_data: List[List[str]]) -> bool:
+    async def trigger_autolearn_distributed(self, pattern_data: list[list[str]]) -> bool:
         """Trigger distributed auto-learning."""
         event_data = {
             "pattern_data": pattern_data,
@@ -234,14 +234,14 @@ class DistributedSTMManager:
 
         return await self.publish_stm_event(STMEventType.AUTOLEARN, event_data)
 
-    async def consume_stm_events(self, count: int = 10, block: int = 1000) -> List[STMEvent]:
+    async def consume_stm_events(self, count: int = 10, block: int = 1000) -> list[STMEvent]:
         """
         Consume STM events from Redis Stream.
-        
+
         Args:
             count: Maximum number of events to consume
             block: Block time in milliseconds
-            
+
         Returns:
             List of consumed STM events
         """
@@ -283,10 +283,10 @@ class DistributedSTMManager:
             logger.warning(f"Failed to consume STM events: {e}")
             return []
 
-    async def get_distributed_stm_state(self) -> List[List[str]]:
+    async def get_distributed_stm_state(self) -> list[list[str]]:
         """
         Get current distributed STM state by consuming recent events.
-        
+
         Returns:
             Current STM state as list of events
         """
@@ -328,7 +328,7 @@ class DistributedSTMManager:
     async def sync_with_distributed_stm(self) -> bool:
         """
         Synchronize local STM with distributed state.
-        
+
         Returns:
             True if synchronization successful
         """
@@ -347,10 +347,10 @@ class DistributedSTMManager:
     async def cleanup_old_events(self, max_age_seconds: int = 3600) -> int:
         """
         Clean up old events from Redis Stream.
-        
+
         Args:
             max_age_seconds: Maximum age of events to keep
-            
+
         Returns:
             Number of events removed
         """
@@ -372,7 +372,7 @@ class DistributedSTMManager:
             logger.warning(f"Failed to cleanup old events: {e}")
             return 0
 
-    async def get_performance_stats(self) -> Dict[str, Any]:
+    async def get_performance_stats(self) -> dict[str, Any]:
         """Get performance statistics for distributed STM."""
         stats = self.stats.copy()
 

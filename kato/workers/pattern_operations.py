@@ -5,7 +5,7 @@ Extracted from KatoProcessor for better modularity.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from kato.exceptions import LearningError, PatternProcessingError, ResourceNotFoundError, ValidationError
 
@@ -15,7 +15,7 @@ logger = logging.getLogger('kato.workers.pattern_operations')
 class PatternOperations:
     """
     Manages pattern CRUD operations for KATO.
-    
+
     This class handles:
     - Pattern learning and creation
     - Pattern retrieval by ID
@@ -27,7 +27,7 @@ class PatternOperations:
     def __init__(self, pattern_processor, vector_processor, memory_manager):
         """
         Initialize pattern operations with references to processors.
-        
+
         Args:
             pattern_processor: Reference to pattern processor for pattern operations
             vector_processor: Reference to vector processor for vector operations
@@ -47,18 +47,18 @@ class PatternOperations:
     def learn_pattern(self, keep_tail=False, keep_stm_for_rolling=False) -> str:
         """
         Learn a new pattern from current STM.
-        
+
         Creates a pattern from the current short-term memory state.
         The pattern is stored in both RAM (for fast search) and database (for persistence).
-        
+
         Args:
             keep_tail: If True, keeps the last event in STM after learning (for auto-learning)
             keep_stm_for_rolling: If True, preserves STM for rolling window mode (new feature)
-        
+
         Returns:
             Pattern name in format "PTRN|<hash>" if pattern was created,
             empty string if STM was empty or had only one event
-            
+
         Raises:
             LearningError: If pattern learning fails
         """
@@ -104,22 +104,22 @@ class PatternOperations:
                 auto_learn=False
             )
 
-    def get_pattern(self, pattern_id: str) -> Dict[str, Any]:
+    def get_pattern(self, pattern_id: str) -> dict[str, Any]:
         """
         Retrieve pattern information by pattern ID.
-        
+
         Pattern IDs can be provided with or without the PTRN| prefix.
         MongoDB stores just the hash, so we strip the prefix before querying.
-        
+
         Args:
             pattern_id: Pattern ID (with or without PTRN| prefix)
-            
+
         Returns:
             Dictionary containing:
                 - status: 'okay' or 'error'
                 - pattern: Pattern data if found
                 - message: Error message if not found
-                
+
         Raises:
             PatternProcessingError: If pattern retrieval fails
         """
@@ -160,13 +160,13 @@ class PatternOperations:
     def delete_pattern(self, name: str) -> str:
         """
         Delete pattern with the given name from both RAM and database.
-        
+
         Args:
             name: Pattern name (hash without PTRN| prefix)
-            
+
         Returns:
             'deleted' on success
-            
+
         Raises:
             ResourceNotFoundError: If pattern not found
             PatternProcessingError: If deletion fails
@@ -198,18 +198,18 @@ class PatternOperations:
                 )
 
     def update_pattern(self, name: str, frequency: Optional[int] = None,
-                      emotives: Optional[Dict[str, List[float]]] = None) -> Dict[str, Any]:
+                      emotives: Optional[dict[str, list[float]]] = None) -> dict[str, Any]:
         """
         Update the frequency and/or emotives of a pattern.
-        
+
         Args:
             name: Pattern name (hash without PTRN| prefix)
             frequency: New frequency value (optional)
             emotives: New emotives values (optional)
-            
+
         Returns:
             Updated pattern document
-            
+
         Raises:
             ValidationError: If update parameters are invalid
             PatternProcessingError: If update fails
@@ -245,16 +245,16 @@ class PatternOperations:
                 pattern_name=name
             )
 
-    def get_vector(self, name: str) -> Optional[List[float]]:
+    def get_vector(self, name: str) -> Optional[list[float]]:
         """
         Retrieve vector values by vector name.
-        
+
         Args:
             name: Vector name (e.g., 'VCTR|hash')
-            
+
         Returns:
             Vector values as list of floats, or None if not found
-            
+
         Raises:
             ResourceNotFoundError: If vector not found
         """
@@ -281,16 +281,16 @@ class PatternOperations:
                 resource_id=name
             )
 
-    def get_predictions(self, unique_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    def get_predictions(self, unique_id: Optional[str] = None) -> list[dict[str, Any]]:
         """
         Retrieve predictions for a specific observation ID.
-        
+
         If no ID provided, returns the most recent predictions from memory.
         Otherwise queries the database for stored predictions.
-        
+
         Args:
             unique_id: Observation unique ID (optional)
-            
+
         Returns:
             List of prediction dictionaries
         """
@@ -314,7 +314,7 @@ class PatternOperations:
     def get_pattern_count(self) -> int:
         """
         Get the total count of patterns in the database.
-        
+
         Returns:
             Number of patterns in database
         """

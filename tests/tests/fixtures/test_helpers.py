@@ -6,13 +6,13 @@ Provides utilities for handling KATO's specific behaviors.
 def sort_event_strings(event):
     """
     Sort strings within an event alphanumerically as KATO does.
-    
+
     KATO sorts strings alphanumerically within each event/observation,
     but preserves the order of events in a sequence.
-    
+
     Args:
         event: A list of strings representing a single event
-        
+
     Returns:
         The same list with strings sorted alphanumerically
     """
@@ -24,10 +24,10 @@ def sort_event_strings(event):
 def sort_events_strings(events):
     """
     Sort strings within each event in a list of events.
-    
+
     Args:
         events: A list of events, where each event is a list of strings
-        
+
     Returns:
         The same structure with strings sorted within each event
     """
@@ -39,7 +39,7 @@ def sort_events_strings(events):
 def assert_short_term_memory_equals(actual_stm, expected_events):
     """
     Assert that short-term memory matches expected events, accounting for KATO's sorting.
-    
+
     Args:
         actual_stm: The actual short-term memory from KATO
         expected_events: The expected events (will be sorted for comparison)

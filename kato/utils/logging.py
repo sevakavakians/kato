@@ -52,7 +52,7 @@ class KatoLogger:
     def __init__(self, name: str, level: Optional[str] = None):
         """
         Initialize logger with consistent formatting.
-        
+
         Args:
             name: Logger name (usually module name)
             level: Optional log level override
@@ -116,11 +116,11 @@ class KatoLogger:
 def get_logger(name: str, level: Optional[str] = None) -> KatoLogger:
     """
     Get a standardized logger instance.
-    
+
     Args:
         name: Logger name (usually __name__)
         level: Optional log level override
-        
+
     Returns:
         KatoLogger instance
     """
@@ -130,7 +130,7 @@ def get_logger(name: str, level: Optional[str] = None) -> KatoLogger:
 def log_execution_time(logger: Optional[KatoLogger] = None):
     """
     Decorator to log execution time of functions.
-    
+
     Args:
         logger: Optional logger instance
     """
@@ -164,7 +164,7 @@ def log_execution_time(logger: Optional[KatoLogger] = None):
 def log_method_calls(logger: Optional[KatoLogger] = None):
     """
     Decorator to log method entry/exit with arguments.
-    
+
     Args:
         logger: Optional logger instance
     """
@@ -199,10 +199,10 @@ def log_method_calls(logger: Optional[KatoLogger] = None):
 def get_standard_logger(module_name: str) -> logging.Logger:
     """
     Get a standard Python logger with consistent formatting.
-    
+
     Args:
         module_name: Usually __name__
-        
+
     Returns:
         Standard logging.Logger instance
     """

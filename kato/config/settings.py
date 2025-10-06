@@ -8,7 +8,7 @@ here for easier management and documentation.
 
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import ConfigDict, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings
@@ -341,7 +341,7 @@ class APIConfig(BaseSettings):
         json_schema_extra={'env': 'CORS_ENABLED'},
         description="Enable CORS support"
     )
-    cors_origins: List[str] = Field(
+    cors_origins: list[str] = Field(
         ['*'],
         json_schema_extra={'env': 'CORS_ORIGINS'},
         description="Allowed CORS origins"
@@ -434,7 +434,7 @@ class Settings(BaseSettings):
             return True
         return v
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert settings to dictionary."""
         return self.dict(exclude_unset=False)
 
@@ -462,7 +462,7 @@ class Settings(BaseSettings):
 
         logging.info(f"Configuration saved to {filepath}")
 
-    def validate_configuration(self) -> List[str]:
+    def validate_configuration(self) -> list[str]:
         """Validate configuration and return any warnings."""
         warnings = []
 

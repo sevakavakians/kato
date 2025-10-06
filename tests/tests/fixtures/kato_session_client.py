@@ -3,7 +3,7 @@ Async client for testing KATO session management endpoints.
 Provides methods to interact with the session-based API.
 """
 
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 import aiohttp
 
@@ -42,7 +42,7 @@ class KatoSessionClient:
             await self.session.close()
 
     async def create_session(self, node_id: Optional[str] = None, ttl_seconds: int = 3600,
-                           metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+                           metadata: Optional[dict[str, Any]] = None) -> dict[str, Any]:
         """Create a new session."""
         if not self.session:
             self.session = self._create_session()
@@ -62,7 +62,7 @@ class KatoSessionClient:
             resp.raise_for_status()
             return await resp.json()
 
-    async def get_session_info(self, session_id: str) -> Dict[str, Any]:
+    async def get_session_info(self, session_id: str) -> dict[str, Any]:
         """Get information about a session."""
         if not self.session:
             self.session = self._create_session()
@@ -81,7 +81,7 @@ class KatoSessionClient:
         async with self.session.delete(f"{self.base_url}/sessions/{session_id}") as resp:
             resp.raise_for_status()
 
-    async def observe_in_session(self, session_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    async def observe_in_session(self, session_id: str, data: dict[str, Any]) -> dict[str, Any]:
         """Make an observation in a session."""
         if not self.session:
             self.session = self._create_session()
@@ -103,7 +103,7 @@ class KatoSessionClient:
             resp.raise_for_status()
             return await resp.json()
 
-    async def get_session_stm(self, session_id: str) -> Dict[str, Any]:
+    async def get_session_stm(self, session_id: str) -> dict[str, Any]:
         """Get the STM for a session."""
         if not self.session:
             self.session = self._create_session()
@@ -114,7 +114,7 @@ class KatoSessionClient:
             resp.raise_for_status()
             return await resp.json()
 
-    async def learn_in_session(self, session_id: str) -> Dict[str, Any]:
+    async def learn_in_session(self, session_id: str) -> dict[str, Any]:
         """Learn a pattern in a session."""
         if not self.session:
             self.session = self._create_session()
@@ -125,7 +125,7 @@ class KatoSessionClient:
             resp.raise_for_status()
             return await resp.json()
 
-    async def clear_session_stm(self, session_id: str) -> Dict[str, Any]:
+    async def clear_session_stm(self, session_id: str) -> dict[str, Any]:
         """Clear the STM for a session."""
         if not self.session:
             self.session = self._create_session()
@@ -136,7 +136,7 @@ class KatoSessionClient:
             resp.raise_for_status()
             return await resp.json()
 
-    async def get_session_predictions(self, session_id: str) -> Dict[str, Any]:
+    async def get_session_predictions(self, session_id: str) -> dict[str, Any]:
         """Get predictions for a session."""
         if not self.session:
             self.session = self._create_session()
@@ -147,7 +147,7 @@ class KatoSessionClient:
             resp.raise_for_status()
             return await resp.json()
 
-    async def extend_session(self, session_id: str, ttl_seconds: int = 3600) -> Dict[str, Any]:
+    async def extend_session(self, session_id: str, ttl_seconds: int = 3600) -> dict[str, Any]:
         """Extend a session's TTL."""
         if not self.session:
             self.session = self._create_session()
@@ -163,7 +163,7 @@ class KatoSessionClient:
             return await resp.json()
 
     # Legacy compatibility methods
-    async def observe_legacy(self, observation: Dict[str, Any], headers: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+    async def observe_legacy(self, observation: dict[str, Any], headers: Optional[dict[str, str]] = None) -> dict[str, Any]:
         """Legacy observe method for backward compatibility tests."""
         if not self.session:
             self.session = self._create_session()
@@ -188,7 +188,7 @@ class KatoSessionClient:
                 resp.raise_for_status()
                 return await resp.json()
 
-    async def update_session_config(self, session_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
+    async def update_session_config(self, session_id: str, config: dict[str, Any]) -> dict[str, Any]:
         """Update session configuration."""
         if not self.session:
             self.session = self._create_session()
@@ -202,7 +202,7 @@ class KatoSessionClient:
             resp.raise_for_status()
             return await resp.json()
 
-    async def get_stm_legacy(self, headers: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+    async def get_stm_legacy(self, headers: Optional[dict[str, str]] = None) -> dict[str, Any]:
         """Get STM using legacy endpoint for backward compatibility tests."""
         if not self.session:
             self.session = self._create_session()
@@ -214,7 +214,7 @@ class KatoSessionClient:
             resp.raise_for_status()
             return await resp.json()
 
-    async def clear_stm_legacy(self, headers: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+    async def clear_stm_legacy(self, headers: Optional[dict[str, str]] = None) -> dict[str, Any]:
         """Clear STM using legacy endpoint for backward compatibility tests."""
         if not self.session:
             self.session = self._create_session()

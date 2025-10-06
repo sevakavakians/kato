@@ -15,7 +15,6 @@ Tests cover:
 import asyncio
 import time
 import uuid
-from typing import Dict
 
 import pytest
 
@@ -634,10 +633,10 @@ class MockKatoCurrentClient:
 
     def __init__(self, base_url: str = "http://localhost:8000"):
         self.base_url = base_url
-        self.sessions: Dict[str, Dict] = {}  # In-memory session store for testing
+        self.sessions: dict[str, dict] = {}  # In-memory session store for testing
 
-    async def create_session(self, node_id: str = None, metadata: Dict = None,
-                            ttl_seconds: int = 3600) -> Dict:
+    async def create_session(self, node_id: str = None, metadata: dict = None,
+                            ttl_seconds: int = 3600) -> dict:
         """Create a new session"""
         session_id = f"session-{uuid.uuid4()}"
         session = {
@@ -652,7 +651,7 @@ class MockKatoCurrentClient:
         self.sessions[session_id] = session
         return session
 
-    async def observe_in_session(self, session_id: str, observation: Dict) -> Dict:
+    async def observe_in_session(self, session_id: str, observation: dict) -> dict:
         """Process observation in session context"""
         if session_id not in self.sessions:
             raise SessionNotFoundError(f"Session {session_id} not found")
@@ -672,7 +671,7 @@ class MockKatoCurrentClient:
             "stm_length": len(session["stm"])
         }
 
-    async def get_session_stm(self, session_id: str) -> Dict:
+    async def get_session_stm(self, session_id: str) -> dict:
         """Get STM for session"""
         if session_id not in self.sessions:
             raise SessionNotFoundError(f"Session {session_id} not found")
@@ -698,7 +697,7 @@ class MockKatoCurrentClient:
             raise SessionNotFoundError(f"Session {session_id} not found")
         self.sessions[session_id]["stm"] = []
 
-    async def learn_in_session(self, session_id: str) -> Dict:
+    async def learn_in_session(self, session_id: str) -> dict:
         """Learn pattern from session STM"""
         if session_id not in self.sessions:
             raise SessionNotFoundError(f"Session {session_id} not found")
@@ -710,7 +709,7 @@ class MockKatoCurrentClient:
             "session_id": session_id
         }
 
-    async def get_session_predictions(self, session_id: str) -> Dict:
+    async def get_session_predictions(self, session_id: str) -> dict:
         """Get predictions for session"""
         if session_id not in self.sessions:
             raise SessionNotFoundError(f"Session {session_id} not found")
@@ -749,7 +748,7 @@ class MockKatoCurrentClient:
         self.sessions[session_id]["expires_at"] = time.time() + ttl_seconds
 
     # legacy.0 compatibility methods
-    async def observe_legacy(self, observation: Dict, headers: Dict = None) -> Dict:
+    async def observe_legacy(self, observation: dict, headers: dict = None) -> dict:
         """legacy.0 compatible observe"""
         session_id = None
         if headers and "X-Session-ID" in headers:
@@ -764,7 +763,7 @@ class MockKatoCurrentClient:
 
         return await self.observe_in_session(session_id, observation)
 
-    async def get_stm_legacy(self) -> Dict:
+    async def get_stm_legacy(self) -> dict:
         """legacy.0 compatible get STM"""
         if "default-session" in self.sessions:
             return {"stm": self.sessions["default-session"]["stm"]}

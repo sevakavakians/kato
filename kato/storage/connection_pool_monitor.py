@@ -11,7 +11,7 @@ import threading
 import time
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 logger = logging.getLogger('kato.storage.connection_pool_monitor')
 
@@ -44,7 +44,7 @@ class PoolOptimizationSettings:
 class ConnectionPoolMonitor:
     """
     Advanced connection pool monitor with auto-tuning capabilities.
-    
+
     Features:
     - Real-time pool metrics collection
     - Automatic pool size optimization
@@ -57,14 +57,14 @@ class ConnectionPoolMonitor:
         self.settings = optimization_settings or PoolOptimizationSettings()
 
         # Metrics storage (keep last 1000 data points)
-        self._metrics_history: Dict[str, deque] = {
+        self._metrics_history: dict[str, deque] = {
             'mongodb': deque(maxlen=1000),
             'redis': deque(maxlen=1000),
             'qdrant': deque(maxlen=1000)
         }
 
         # Current metrics
-        self._current_metrics: Dict[str, ConnectionMetrics] = {}
+        self._current_metrics: dict[str, ConnectionMetrics] = {}
 
         # Monitoring state
         self._monitoring_active = False
@@ -72,7 +72,7 @@ class ConnectionPoolMonitor:
         self._lock = threading.Lock()
 
         # Performance baselines
-        self._performance_baselines: Dict[str, Dict[str, float]] = {
+        self._performance_baselines: dict[str, dict[str, float]] = {
             'mongodb': {'response_time_ms': 5.0, 'throughput_ops_per_second': 100.0},
             'redis': {'response_time_ms': 1.0, 'throughput_ops_per_second': 1000.0},
             'qdrant': {'response_time_ms': 10.0, 'throughput_ops_per_second': 50.0}
@@ -111,12 +111,12 @@ class ConnectionPoolMonitor:
         # Check for performance anomalies
         self._check_performance_anomalies(db_type, metrics)
 
-    def get_current_metrics(self) -> Dict[str, ConnectionMetrics]:
+    def get_current_metrics(self) -> dict[str, ConnectionMetrics]:
         """Get current metrics for all database types."""
         with self._lock:
             return self._current_metrics.copy()
 
-    def get_metrics_history(self, db_type: str, minutes: int = 60) -> List[ConnectionMetrics]:
+    def get_metrics_history(self, db_type: str, minutes: int = 60) -> list[ConnectionMetrics]:
         """Get metrics history for a specific database type."""
         cutoff_time = time.time() - (minutes * 60)
 
@@ -126,7 +126,7 @@ class ConnectionPoolMonitor:
                 if metric.timestamp >= cutoff_time
             ]
 
-    def get_performance_summary(self, db_type: str, minutes: int = 60) -> Dict[str, Any]:
+    def get_performance_summary(self, db_type: str, minutes: int = 60) -> dict[str, Any]:
         """Get performance summary for a database type."""
         history = self.get_metrics_history(db_type, minutes)
 
@@ -306,7 +306,7 @@ class ConnectionPoolMonitor:
                 f"{metrics.active_connections}/{metrics.total_connections} connections in use"
             )
 
-    def _identify_optimization_opportunities(self, db_type: str, history: List[ConnectionMetrics]) -> List[str]:
+    def _identify_optimization_opportunities(self, db_type: str, history: list[ConnectionMetrics]) -> list[str]:
         """Identify optimization opportunities based on metrics history."""
         opportunities = []
 

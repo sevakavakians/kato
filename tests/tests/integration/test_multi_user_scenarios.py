@@ -17,7 +17,7 @@ import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import pytest
 
@@ -33,9 +33,9 @@ class NodeScenario:
     """Represents a node interaction scenario"""
     node_id: str
     session_id: Optional[str]
-    actions: List[Dict[str, Any]]
-    expected_stm: List[List[str]]
-    expected_predictions: Optional[List[str]]
+    actions: list[dict[str, Any]]
+    expected_stm: list[list[str]]
+    expected_predictions: Optional[list[str]]
 
 
 class TestMultiNodeIsolation:

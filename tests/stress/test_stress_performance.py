@@ -11,7 +11,7 @@ import os
 import sys
 import time
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 import requests
 import yaml
@@ -40,7 +40,7 @@ class StressTestRunner:
     def __init__(self, config_file: str = "stress_config.yaml"):
         """
         Initialize the stress test runner.
-        
+
         Args:
             config_file: Path to configuration file
         """
@@ -96,14 +96,14 @@ class StressTestRunner:
         """Handle performance alerts."""
         logger.warning(f"Performance Alert: {message}")
 
-    def _make_request(self, operation: str, data: Optional[Dict] = None) -> Dict[str, Any]:
+    def _make_request(self, operation: str, data: Optional[dict] = None) -> dict[str, Any]:
         """
         Make a request to KATO and record metrics.
-        
+
         Args:
             operation: Operation type (observe, learn, predictions, etc.)
             data: Request data
-            
+
         Returns:
             Response data
         """
@@ -170,7 +170,7 @@ class StressTestRunner:
     def test_concurrent_requests(self, num_users: int = 100, duration: int = 60):
         """
         Test concurrent requests from multiple users.
-        
+
         Args:
             num_users: Number of concurrent users
             duration: Test duration in seconds
@@ -222,7 +222,7 @@ class StressTestRunner:
     def test_sustained_load(self, profile_name: str = "moderate"):
         """
         Test sustained load with a specific profile.
-        
+
         Args:
             profile_name: Load profile name from config
         """
@@ -286,7 +286,7 @@ class StressTestRunner:
                           interval_seconds: int = 10):
         """
         Test burst traffic patterns.
-        
+
         Args:
             burst_size: Number of requests per burst
             burst_count: Number of bursts
@@ -374,7 +374,7 @@ class StressTestRunner:
     def test_memory_leak(self, duration_minutes: int = 10):
         """
         Test for memory leaks under sustained load.
-        
+
         Args:
             duration_minutes: Test duration in minutes
         """
@@ -578,7 +578,7 @@ class StressTestRunner:
 
         return test_results
 
-    def _save_results(self, results: Dict[str, Any]):
+    def _save_results(self, results: dict[str, Any]):
         """Save test results to file."""
         output_dir = self.config['reporting']['output_directory']
         os.makedirs(output_dir, exist_ok=True)
@@ -598,7 +598,7 @@ class StressTestRunner:
             self.monitor.export_metrics(metrics_file, format='json')
             self.monitor.export_metrics(metrics_file, format='csv')
 
-    def _print_summary(self, results: Dict[str, Any]):
+    def _print_summary(self, results: dict[str, Any]):
         """Print test summary."""
         print("\n" + "="*80)
         print("STRESS TEST SUMMARY")
@@ -624,7 +624,7 @@ class StressTestRunner:
         # Check against thresholds
         self._check_thresholds(results)
 
-    def _check_thresholds(self, results: Dict[str, Any]):
+    def _check_thresholds(self, results: dict[str, Any]):
         """Check results against performance thresholds."""
         thresholds = self.config['performance_thresholds']
         violations = []

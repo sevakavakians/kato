@@ -7,7 +7,7 @@ consistent response formats and logging.
 
 import logging
 import time
-from typing import Any, Dict, Union
+from typing import Any, Union
 
 from fastapi import HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
@@ -39,8 +39,8 @@ def create_error_response(
     error_code: str,
     message: str,
     status_code: int,
-    details: Dict[str, Any] = None,
-    context: Dict[str, Any] = None
+    details: dict[str, Any] = None,
+    context: dict[str, Any] = None
 ) -> JSONResponse:
     """
     Create standardized error response.
@@ -229,7 +229,7 @@ async def generic_exception_handler(request: Request, exc: Exception) -> JSONRes
     )
 
 
-def get_recovery_suggestions(exc: KatoV2Exception) -> Dict[str, Any]:
+def get_recovery_suggestions(exc: KatoV2Exception) -> dict[str, Any]:
     """
     Get recovery suggestions for specific error types.
 

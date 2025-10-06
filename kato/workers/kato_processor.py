@@ -219,7 +219,7 @@ class KatoProcessor:
     def get_predictions(self, unique_id={}):
         """
         Retrieve predictions - delegates to pattern operations.
-        
+
         If no ID provided, returns the most recent predictions from memory.
         Otherwise queries the database for stored predictions.
         """
@@ -285,7 +285,7 @@ class KatoProcessor:
         """
         Set the short-term memory to a specific state.
         Used for session isolation in v2.0.
-        
+
         Args:
             stm: List of event lists representing the STM state
         """
@@ -299,7 +299,7 @@ class KatoProcessor:
         """
         Set the emotives accumulator to a specific state.
         Used for session isolation in v2.0.
-        
+
         Args:
             emotives_acc: List of emotive dictionaries
         """
@@ -310,7 +310,7 @@ class KatoProcessor:
         """
         Get the current emotives accumulator state.
         Used for session persistence in v2.0.
-        
+
         Returns:
             List of emotive dictionaries
         """

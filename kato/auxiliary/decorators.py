@@ -2,18 +2,18 @@ import logging
 import traceback
 from functools import partial, wraps
 from time import sleep
-from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
+from typing import Any, Callable, Optional, Union
 
 
 def retry(
-    ExceptionToCheck: Union[Type[Exception], Tuple[Type[Exception], ...]],
+    ExceptionToCheck: Union[type[Exception], tuple[type[Exception], ...]],
     tries: int = 4,
     delay: int = 3,
     backoff: int = 2,
     logger: Optional[logging.Logger] = None
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Retry calling the decorated function using an exponential backoff.
-    
+
     Args:
         ExceptionToCheck: The exception(s) to check. May be a single exception
             class or a tuple of exception classes.
@@ -22,10 +22,10 @@ def retry(
         backoff: Backoff multiplier. E.g., value of 2 will double the delay
             each retry.
         logger: Logger to use for messages. If None, uses print.
-        
+
     Returns:
         Decorator function that adds retry logic to the wrapped function.
-        
+
     Example:
         >>> @retry(ConnectionError, tries=3, delay=1)
         ... def connect_to_db():
@@ -55,10 +55,10 @@ def retry(
 
 class memoized:
     """Decorator that caches a function's return value each time it is called.
-    
+
     If called later with the same arguments, the cached value is returned,
     and not re-evaluated. Useful for expensive computations.
-    
+
     Attributes:
         func: The function being memoized.
         cache: Dictionary storing cached results.
@@ -66,18 +66,18 @@ class memoized:
 
     def __init__(self, func: Callable[..., Any]) -> None:
         """Initialize the memoized decorator.
-        
+
         Args:
             func: Function to be memoized.
         """
         self.func: Callable[..., Any] = func
-        self.cache: Dict[Tuple[Any, ...], Any] = {}
+        self.cache: dict[tuple[Any, ...], Any] = {}
     def __call__(self, *args: Any) -> Any:
         """Call the memoized function.
-        
+
         Args:
             *args: Arguments to pass to the function.
-            
+
         Returns:
             Cached result if available, otherwise computes and caches result.
         """
@@ -93,18 +93,18 @@ class memoized:
             return self.func(*args)
     def __repr__(self) -> str:
         """Return the function's docstring.
-        
+
         Returns:
             The wrapped function's docstring or empty string.
         """
         return self.func.__doc__ or ""
     def __get__(self, obj: Any, _objtype: Optional[type] = None) -> Callable[..., Any]:
         """Support instance methods.
-        
+
         Args:
             obj: Instance object.
             objtype: Type of the instance.
-            
+
         Returns:
             Partial function bound to the instance.
         """
@@ -113,17 +113,17 @@ class memoized:
 
 class tracebackMessage:
     """Decorator that enhances exception messages with full traceback.
-    
+
     Wraps a function to catch exceptions and re-raise them with detailed
     traceback information for better debugging.
-    
+
     Attributes:
         func: The function being wrapped.
     """
 
     def __init__(self, func: Callable[..., Any]) -> None:
         """Initialize the traceback decorator.
-        
+
         Args:
             func: Function to wrap with traceback handling.
         """
@@ -131,13 +131,13 @@ class tracebackMessage:
 
     def __call__(self, *args: Any) -> Any:
         """Call the wrapped function with traceback handling.
-        
+
         Args:
             *args: Arguments to pass to the function.
-            
+
         Returns:
             Result of the wrapped function.
-            
+
         Raises:
             Exception: Re-raises any exception with full traceback.
         """
@@ -149,7 +149,7 @@ class tracebackMessage:
 
 
 # First 430 prime numbers
-primes: List[int] = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73,
+primes: list[int] = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73,
             79, 83, 89, 97, 101, 103, 107, 109, 113, 127, 131, 137, 139, 149, 151, 157, 163,
             167, 173, 179, 181, 191, 193, 197, 199, 211, 223, 227, 229, 233, 239, 241, 251,
             257, 263, 269, 271, 277, 281, 283, 293, 307, 311, 313, 317, 331, 337, 347, 349,
@@ -179,7 +179,7 @@ primes: List[int] = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53,
             2789, 2791,2797, 2801, 2803, 2819, 2833, 2837, 2843, 2851, 2857, 2861, 2879, 2887,
             2897, 2903, 2909, 2917, 2927, 2939, 2953, 2957, 2963, 2969, 2971, 2999]
 
-special_primes: List[int] = [0] + primes[1:]
+special_primes: list[int] = [0] + primes[1:]
 # Distances between special primes are such that the difference is never a summation of any previous special primes.
 
 ## The following companding laws are from pg.363 in The Scientists and Engineer's Guide to Digital Signal Processing, Steve W. Smith
@@ -187,20 +187,20 @@ special_primes: List[int] = [0] + primes[1:]
 # compandingFunction=lambda a,l:min(l,key=lambda x:abs(x-a))
 # toCollection is like valueLock below, but finds the closest match, rather than the lower closest match.
 
-def compandingFunction(target: Union[int, float], collection: List[Union[int, float]]) -> Union[int, float]:
+def compandingFunction(target: Union[int, float], collection: list[Union[int, float]]) -> Union[int, float]:
     """Reduces the data rate of signals by making the quantization levels unequal.
-    
+
     Given a target number and a collection of numbers, finds the closest match
     of the target to numbers in the collection. Helps create vectors that are
     canonical in their values by locking a range of values to a single value.
-    
+
     Args:
         target: The target number to match.
         collection: List of numbers to match against.
-        
+
     Returns:
         The closest number from the collection to the target.
-        
+
     Example:
         >>> compandingFunction(10, [0, 3, 5, 7, 11])
         7

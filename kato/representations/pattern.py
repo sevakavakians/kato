@@ -6,7 +6,7 @@ class Pattern:
     Pattern Objects represent learned structures that can be:
     1. Temporal patterns (sequences) - time-ordered with temporal dependency
     2. Profile patterns - collections without temporal dependency or ordering
-    
+
     Pattern data is stored as a list of event groups.
     ex:
         pattern = [['A'],['B'],['c1', c2'],['D']]

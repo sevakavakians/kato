@@ -14,7 +14,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from kato.config.session_config import SessionConfiguration
 
@@ -31,15 +31,15 @@ class SessionState:
     expires_at: datetime
 
     # Session-specific STM state (node's LTM is in their processor)
-    stm: List[List[str]] = field(default_factory=list)
-    emotives_accumulator: List[Dict[str, float]] = field(default_factory=list)
+    stm: list[list[str]] = field(default_factory=list)
+    emotives_accumulator: list[dict[str, float]] = field(default_factory=list)
     time: int = 0
 
     # Session-specific configuration (replaces user_config)
     session_config: SessionConfiguration = field(default_factory=lambda: SessionConfiguration())
 
     # Metadata
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
     access_count: int = 0
 
     # Resource limits
@@ -78,14 +78,14 @@ class SessionManager:
     def __init__(self, default_ttl_seconds: int = 3600):
         """
         Initialize session manager.
-        
+
         Args:
             default_ttl_seconds: Default session TTL (1 hour)
         """
         import traceback
-        self.sessions: Dict[str, SessionState] = {}
+        self.sessions: dict[str, SessionState] = {}
         self.default_ttl = default_ttl_seconds
-        self.session_locks: Dict[str, asyncio.Lock] = {}
+        self.session_locks: dict[str, asyncio.Lock] = {}
         self._cleanup_task = None
         self._cleanup_interval = 300  # 5 minutes
 
@@ -96,8 +96,8 @@ class SessionManager:
     async def get_or_create_session(
         self,
         node_id: str,
-        config: Optional[Dict[str, Any]] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        config: Optional[dict[str, Any]] = None,
+        metadata: Optional[dict[str, Any]] = None,
         ttl_seconds: Optional[int] = None
     ) -> SessionState:
         """
@@ -126,8 +126,8 @@ class SessionManager:
     async def create_session(
         self,
         node_id: str,
-        config: Optional[Dict[str, Any]] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        config: Optional[dict[str, Any]] = None,
+        metadata: Optional[dict[str, Any]] = None,
         ttl_seconds: Optional[int] = None
     ) -> SessionState:
         """
@@ -182,10 +182,10 @@ class SessionManager:
     async def get_session(self, session_id: str) -> Optional[SessionState]:
         """
         Retrieve session by ID.
-        
+
         Args:
             session_id: Session identifier
-        
+
         Returns:
             SessionState if found and not expired, None otherwise
         """
@@ -208,10 +208,10 @@ class SessionManager:
     async def get_session_lock(self, session_id: str) -> Optional[asyncio.Lock]:
         """
         Get the lock for a specific session.
-        
+
         Args:
             session_id: Session identifier
-        
+
         Returns:
             asyncio.Lock for the session, None if session doesn't exist
         """
@@ -226,10 +226,10 @@ class SessionManager:
     async def update_session(self, session: SessionState) -> bool:
         """
         Update session state.
-        
+
         Args:
             session: Updated SessionState
-        
+
         Returns:
             True if updated, False if session not found
         """
@@ -245,10 +245,10 @@ class SessionManager:
     async def delete_session(self, session_id: str) -> bool:
         """
         Delete a session and cleanup resources.
-        
+
         Args:
             session_id: Session identifier
-        
+
         Returns:
             True if deleted, False if not found
         """
@@ -268,11 +268,11 @@ class SessionManager:
     async def extend_session(self, session_id: str, ttl_seconds: int) -> bool:
         """
         Extend session expiration.
-        
+
         Args:
             session_id: Session identifier
             ttl_seconds: New TTL from now
-        
+
         Returns:
             True if extended, False if session not found
         """
@@ -287,7 +287,7 @@ class SessionManager:
     async def cleanup_expired_sessions(self) -> int:
         """
         Remove all expired sessions.
-        
+
         Returns:
             Number of sessions cleaned up
         """
@@ -328,7 +328,7 @@ class SessionManager:
         """Async version of get_active_session_count for compatibility with Redis manager"""
         return self.get_active_session_count()
 
-    def get_session_stats(self) -> Dict[str, Any]:
+    def get_session_stats(self) -> dict[str, Any]:
         """Get statistics about current sessions"""
         now = datetime.now(timezone.utc)
         active_sessions = [s for s in self.sessions.values() if s.expires_at > now]
@@ -345,10 +345,10 @@ class SessionManager:
     async def clear_session_stm(self, session_id: str) -> bool:
         """
         Clear the STM for a specific session.
-        
+
         Args:
             session_id: Session identifier
-        
+
         Returns:
             True if cleared, False if session not found
         """

@@ -11,7 +11,7 @@ import uuid
 from contextvars import ContextVar
 from datetime import datetime, timezone
 from logging import LogRecord
-from typing import Any, Dict, Optional, Union
+from typing import Any, Optional, Union
 
 # Context variable for storing trace ID across async boundaries
 trace_id_var: ContextVar[Optional[str]] = ContextVar('trace_id', default=None)
@@ -26,10 +26,10 @@ class StructuredFormatter(logging.Formatter):
     def format(self, record: LogRecord) -> str:
         """
         Format log record as structured JSON.
-        
+
         Args:
             record: The log record to format
-            
+
         Returns:
             JSON-formatted log string
         """
@@ -93,10 +93,10 @@ class HumanReadableFormatter(logging.Formatter):
     def format(self, record: LogRecord) -> str:
         """
         Format log record for human reading with colors.
-        
+
         Args:
             record: The log record to format
-            
+
         Returns:
             Formatted log string with colors
         """
@@ -134,7 +134,7 @@ class HumanReadableFormatter(logging.Formatter):
 def generate_trace_id() -> str:
     """
     Generate a unique trace ID for request tracking.
-    
+
     Returns:
         A unique trace ID string
     """
@@ -144,10 +144,10 @@ def generate_trace_id() -> str:
 def set_trace_id(trace_id: Optional[str] = None) -> str:
     """
     Set a trace ID in the context.
-    
+
     Args:
         trace_id: Optional trace ID to set. If None, generates a new one.
-        
+
     Returns:
         The trace ID that was set
     """
@@ -160,7 +160,7 @@ def set_trace_id(trace_id: Optional[str] = None) -> str:
 def get_trace_id() -> Optional[str]:
     """
     Get the current trace ID from context.
-    
+
     Returns:
         The current trace ID or None
     """
@@ -175,7 +175,7 @@ def start_request_timer() -> None:
 def get_request_duration() -> Optional[float]:
     """
     Get the duration of the current request in milliseconds.
-    
+
     Returns:
         Duration in milliseconds or None if timer not started
     """
@@ -193,21 +193,21 @@ class ProcessorLoggerAdapter(logging.LoggerAdapter):
     def __init__(self, logger: logging.Logger, processor_id: str):
         """
         Initialize the adapter with a processor ID.
-        
+
         Args:
             logger: The underlying logger
             processor_id: The processor ID to include in logs
         """
         super().__init__(logger, {'processor_id': processor_id})
 
-    def process(self, msg: str, kwargs: Dict[str, Any]) -> tuple:
+    def process(self, msg: str, kwargs: dict[str, Any]) -> tuple:
         """
         Process the logging call to add processor_id.
-        
+
         Args:
             msg: The log message
             kwargs: Additional keyword arguments
-            
+
         Returns:
             Processed message and kwargs
         """
@@ -226,7 +226,7 @@ def configure_logging(
 ) -> None:
     """
     Configure the logging system with structured output.
-    
+
     Args:
         level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         format_type: Output format ('json' or 'human')
@@ -276,11 +276,11 @@ def configure_logging(
 def get_logger(name: str, processor_id: Optional[str] = None) -> Union[logging.Logger, ProcessorLoggerAdapter]:
     """
     Get a logger instance with optional processor_id adapter.
-    
+
     Args:
         name: Logger name (typically __name__)
         processor_id: Optional processor ID to include in logs
-        
+
     Returns:
         Logger instance or ProcessorLoggerAdapter if processor_id provided
     """
@@ -294,10 +294,10 @@ def get_logger(name: str, processor_id: Optional[str] = None) -> Union[logging.L
 
 # Performance logging utilities
 def log_performance(logger: logging.Logger, operation: str, duration_ms: float,
-                    metadata: Optional[Dict[str, Any]] = None) -> None:
+                    metadata: Optional[dict[str, Any]] = None) -> None:
     """
     Log performance metrics for an operation.
-    
+
     Args:
         logger: Logger to use
         operation: Name of the operation
@@ -330,7 +330,7 @@ def log_performance(logger: logging.Logger, operation: str, duration_ms: float,
 class PerformanceTimer:
     """
     Context manager for timing operations.
-    
+
     Usage:
         with PerformanceTimer(logger, 'database_query'):
             # perform operation
@@ -338,10 +338,10 @@ class PerformanceTimer:
     """
 
     def __init__(self, logger: logging.Logger, operation: str,
-                 metadata: Optional[Dict[str, Any]] = None):
+                 metadata: Optional[dict[str, Any]] = None):
         """
         Initialize the performance timer.
-        
+
         Args:
             logger: Logger to use
             operation: Name of the operation

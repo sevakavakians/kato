@@ -5,7 +5,7 @@ Provides comprehensive API service configuration including endpoints,
 middleware, security, rate limiting, and service discovery.
 """
 
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import Field, HttpUrl, validator
 
@@ -20,11 +20,11 @@ class CORSConfig(BaseSettings):
     """CORS (Cross-Origin Resource Sharing) configuration."""
 
     enabled: bool = Field(True, env='CORS_ENABLED')
-    allow_origins: List[str] = Field(['*'], env='CORS_ALLOW_ORIGINS')
-    allow_methods: List[str] = Field(['*'], env='CORS_ALLOW_METHODS')
-    allow_headers: List[str] = Field(['*'], env='CORS_ALLOW_HEADERS')
+    allow_origins: list[str] = Field(['*'], env='CORS_ALLOW_ORIGINS')
+    allow_methods: list[str] = Field(['*'], env='CORS_ALLOW_METHODS')
+    allow_headers: list[str] = Field(['*'], env='CORS_ALLOW_HEADERS')
     allow_credentials: bool = Field(True, env='CORS_ALLOW_CREDENTIALS')
-    expose_headers: List[str] = Field([], env='CORS_EXPOSE_HEADERS')
+    expose_headers: list[str] = Field([], env='CORS_EXPOSE_HEADERS')
     max_age: int = Field(3600, env='CORS_MAX_AGE')
 
     @validator('allow_origins', 'allow_methods', 'allow_headers', 'expose_headers', pre=True)
@@ -70,7 +70,7 @@ class AuthenticationConfig(BaseSettings):
 
     # API Key authentication
     api_key_header: str = Field('X-API-Key', env='AUTH_API_KEY_HEADER')
-    api_keys: List[str] = Field([], env='AUTH_API_KEYS')
+    api_keys: list[str] = Field([], env='AUTH_API_KEYS')
 
     # JWT authentication
     jwt_secret: Optional[str] = Field(None, env='AUTH_JWT_SECRET')
@@ -227,7 +227,7 @@ class ServiceDiscoveryConfig(BaseSettings):
     # Service registration
     service_name: str = Field('kato-api', env='SERVICE_NAME')
     service_id: Optional[str] = Field(None, env='SERVICE_ID')
-    service_tags: List[str] = Field(['kato', 'api'], env='SERVICE_TAGS')
+    service_tags: list[str] = Field(['kato', 'api'], env='SERVICE_TAGS')
 
     # Consul configuration
     consul_host: str = Field('localhost', env='CONSUL_HOST')
@@ -289,7 +289,7 @@ class APIServiceConfig(BaseSettings):
         """Get API service URL."""
         return f"http://{self.host}:{self.port}"
 
-    def get_uvicorn_config(self) -> Dict[str, Any]:
+    def get_uvicorn_config(self) -> dict[str, Any]:
         """Get Uvicorn server configuration."""
         return {
             'host': self.host,
@@ -302,7 +302,7 @@ class APIServiceConfig(BaseSettings):
             'timeout_keep_alive': self.keep_alive,
         }
 
-    def validate_security(self) -> List[str]:
+    def validate_security(self) -> list[str]:
         """Validate security configuration."""
         warnings = []
 

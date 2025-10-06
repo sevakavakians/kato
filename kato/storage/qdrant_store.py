@@ -8,7 +8,7 @@ support for filtering, GPU acceleration, and various quantization methods.
 
 import asyncio
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional
 
 import numpy as np
 
@@ -49,7 +49,7 @@ logger = logging.getLogger('kato.storage.qdrant')
 class QdrantStore(VectorStore):
     """
     Qdrant vector store implementation.
-    
+
     Features:
     - High-performance vector similarity search
     - Rich filtering capabilities
@@ -58,7 +58,7 @@ class QdrantStore(VectorStore):
     - Automatic index optimization
     """
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         """Initialize Qdrant store with configuration"""
         super().__init__(config)
 
@@ -234,7 +234,7 @@ class QdrantStore(VectorStore):
         collection_name: str,
         vector_id: str,
         vector: np.ndarray,
-        payload: Optional[Dict[str, Any]] = None
+        payload: Optional[dict[str, Any]] = None
     ) -> bool:
         """Add a single vector to Qdrant"""
         try:
@@ -260,7 +260,7 @@ class QdrantStore(VectorStore):
         self,
         collection_name: str,
         batch: VectorBatch
-    ) -> Tuple[int, List[str]]:
+    ) -> tuple[int, list[str]]:
         """Add multiple vectors in batch"""
         try:
             points = []
@@ -324,9 +324,9 @@ class QdrantStore(VectorStore):
     async def get_vectors(
         self,
         collection_name: str,
-        vector_ids: List[str],
+        vector_ids: list[str],
         include_vectors: bool = True
-    ) -> List[VectorSearchResult]:
+    ) -> list[VectorSearchResult]:
         """Retrieve multiple vectors by IDs"""
         try:
             points = await self._async_wrapper(
@@ -357,7 +357,7 @@ class QdrantStore(VectorStore):
         collection_name: str,
         vector_id: str,
         vector: Optional[np.ndarray] = None,
-        payload: Optional[Dict[str, Any]] = None
+        payload: Optional[dict[str, Any]] = None
     ) -> bool:
         """Update a vector and/or its payload"""
         try:
@@ -412,8 +412,8 @@ class QdrantStore(VectorStore):
     async def delete_vectors(
         self,
         collection_name: str,
-        vector_ids: List[str]
-    ) -> Tuple[int, List[str]]:
+        vector_ids: list[str]
+    ) -> tuple[int, list[str]]:
         """Delete multiple vectors"""
         try:
             result = await self._async_wrapper(
@@ -436,10 +436,10 @@ class QdrantStore(VectorStore):
         collection_name: str,
         query_vector: np.ndarray,
         limit: int = 10,
-        filter: Optional[Dict[str, Any]] = None,
+        filter: Optional[dict[str, Any]] = None,
         include_vectors: bool = False,
         **kwargs
-    ) -> List[VectorSearchResult]:
+    ) -> list[VectorSearchResult]:
         """Search for similar vectors"""
         try:
             # Build Qdrant filter from dict
@@ -488,10 +488,10 @@ class QdrantStore(VectorStore):
         collection_name: str,
         query_vectors: np.ndarray,
         limit: int = 10,
-        filter: Optional[Dict[str, Any]] = None,
+        filter: Optional[dict[str, Any]] = None,
         include_vectors: bool = False,
         **kwargs
-    ) -> List[List[VectorSearchResult]]:
+    ) -> list[list[VectorSearchResult]]:
         """Batch search for multiple query vectors"""
         try:
             # Build search requests
@@ -547,7 +547,7 @@ class QdrantStore(VectorStore):
     async def count_vectors(
         self,
         collection_name: str,
-        filter: Optional[Dict[str, Any]] = None
+        filter: Optional[dict[str, Any]] = None
     ) -> int:
         """Count vectors in a collection"""
         try:
@@ -594,7 +594,7 @@ class QdrantStore(VectorStore):
     async def get_collection_info(
         self,
         collection_name: str
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Get information about a collection"""
         try:
             info = await self._async_wrapper(
@@ -619,7 +619,7 @@ class QdrantStore(VectorStore):
             logger.error(f"Failed to get collection info: {e}")
             return {}
 
-    async def list_collections(self) -> List[str]:
+    async def list_collections(self) -> list[str]:
         """List all collections"""
         try:
             collections = await self._async_wrapper(self.client.get_collections)

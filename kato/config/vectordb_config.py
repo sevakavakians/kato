@@ -9,7 +9,7 @@ import json
 import logging
 import os
 from dataclasses import asdict, dataclass, field
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Literal, Optional
 
 logger = logging.getLogger('kato.config.vectordb')
 
@@ -25,7 +25,7 @@ class QuantizationConfig:
     """Configuration for vector quantization"""
     enabled: bool = False
     type: QuantizationType = "scalar"
-    parameters: Dict[str, Any] = field(default_factory=dict)
+    parameters: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
         # Set default parameters based on quantization type
@@ -50,7 +50,7 @@ class QuantizationConfig:
 class IndexConfig:
     """Configuration for vector index"""
     type: IndexType = "hnsw"
-    parameters: Dict[str, Any] = field(default_factory=dict)
+    parameters: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
         # Set default parameters based on index type
@@ -105,7 +105,7 @@ class QdrantConfig:
     vector_size: int = 512
     distance: SimilarityMetric = "euclidean"
     on_disk_payload: bool = True
-    optimizers: Dict[str, Any] = field(default_factory=lambda: {
+    optimizers: dict[str, Any] = field(default_factory=lambda: {
         "deleted_threshold": 0.2,
         "vacuum_min_vector_number": 1000,
         "default_segment_number": 4,
@@ -153,12 +153,12 @@ class VectorDBConfig:
     enable_async: bool = True  # Use async operations where possible
     auto_create_collection: bool = True  # Auto-create collections if missing
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert configuration to dictionary"""
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, config_dict: Dict[str, Any]) -> 'VectorDBConfig':
+    def from_dict(cls, config_dict: dict[str, Any]) -> 'VectorDBConfig':
         """Create configuration from dictionary"""
         # Handle nested dataclass fields
         if 'qdrant' in config_dict and isinstance(config_dict['qdrant'], dict):
@@ -244,10 +244,10 @@ class VectorDBConfig:
 
     def save(self, filepath: str) -> None:
         """Save configuration to file.
-        
+
         Args:
             filepath: Path to save configuration file (JSON or YAML).
-            
+
         Raises:
             ValueError: If file format is not supported.
         """
@@ -333,10 +333,10 @@ def get_vector_db_config() -> VectorDBConfig:
 
 def set_vector_db_config(config: VectorDBConfig) -> None:
     """Set global vector database configuration.
-    
+
     Args:
         config: Vector database configuration to set globally.
-        
+
     Raises:
         ValueError: If configuration validation fails.
     """

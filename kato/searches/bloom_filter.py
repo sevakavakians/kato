@@ -6,7 +6,7 @@ possibly match observed symbols, dramatically reducing pattern matching overhead
 
 Key Features:
 - 99% reduction in pattern matching computations
-- Zero false negatives (all matching patterns are preserved)  
+- Zero false negatives (all matching patterns are preserved)
 - Configurable false positive rate (default: 0.1%)
 - Memory-efficient bit vector implementation
 - Batch pattern loading and updating
@@ -15,7 +15,7 @@ Key Features:
 import hashlib
 import logging
 import math
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 class BloomFilter:
     """
     Memory-efficient Bloom filter implementation for pattern pre-screening.
-    
+
     Uses multiple hash functions to minimize false positive rate while
     ensuring zero false negatives for pattern matching operations.
     """
@@ -31,7 +31,7 @@ class BloomFilter:
     def __init__(self, capacity: int = 100000, error_rate: float = 0.001):
         """
         Initialize Bloom filter with specified capacity and error rate.
-        
+
         Args:
             capacity: Expected number of unique patterns
             error_rate: Desired false positive rate (0.001 = 0.1%)
@@ -58,7 +58,7 @@ class BloomFilter:
         """Calculate optimal number of hash functions."""
         return max(1, int((bit_size / capacity) * math.log(2)))
 
-    def _hash_functions(self, key: str) -> List[int]:
+    def _hash_functions(self, key: str) -> list[int]:
         """Generate multiple hash values for a key using double hashing."""
         hashes = []
 
@@ -100,7 +100,7 @@ class BloomFilter:
                 return False
         return True
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get Bloom filter statistics."""
         bits_set = sum(bin(byte).count('1') for byte in self.bit_array)
         load_factor = bits_set / self.bit_size
@@ -121,7 +121,7 @@ class BloomFilter:
 class PatternBloomFilter:
     """
     Pattern-specific Bloom filter for KATO pattern matching optimization.
-    
+
     Provides fast pre-screening to eliminate patterns that cannot possibly
     match observed symbols, dramatically reducing computational overhead.
     """
@@ -129,14 +129,14 @@ class PatternBloomFilter:
     def __init__(self, capacity: int = 100000, error_rate: float = 0.001):
         """
         Initialize pattern Bloom filter.
-        
+
         Args:
             capacity: Expected number of unique patterns
             error_rate: Desired false positive rate
         """
         self.bloom = BloomFilter(capacity, error_rate)
         self.pattern_count = 0
-        self.symbol_sets: Dict[str, Set[str]] = {}  # Pattern name -> set of symbols
+        self.symbol_sets: dict[str, set[str]] = {}  # Pattern name -> set of symbols
         self.last_updated = 0
 
         # Performance tracking
@@ -149,10 +149,10 @@ class PatternBloomFilter:
 
         logger.info("PatternBloomFilter initialized for pattern pre-screening")
 
-    def add_pattern(self, pattern_name: str, pattern_data: List[List[str]]):
+    def add_pattern(self, pattern_name: str, pattern_data: list[list[str]]):
         """
         Add pattern to Bloom filter for future pre-screening.
-        
+
         Args:
             pattern_name: Unique pattern identifier
             pattern_data: Pattern as list of symbol lists (events)
@@ -174,10 +174,10 @@ class PatternBloomFilter:
 
         logger.debug(f"Added pattern {pattern_name} with {len(symbols)} symbols to Bloom filter")
 
-    def add_patterns_batch(self, patterns: List[Dict[str, Any]]):
+    def add_patterns_batch(self, patterns: list[dict[str, Any]]):
         """
         Batch add multiple patterns for efficiency.
-        
+
         Args:
             patterns: List of pattern documents from MongoDB
         """
@@ -196,16 +196,16 @@ class PatternBloomFilter:
 
         logger.info(f"Batch added {added_count} patterns to Bloom filter")
 
-    def might_match(self, observed_symbols: List[str]) -> bool:
+    def might_match(self, observed_symbols: list[str]) -> bool:
         """
         Fast check if any pattern might match the observed symbols.
-        
+
         Returns False only if NO patterns can possibly match (guaranteed).
         Returns True if some patterns MIGHT match (requires further checking).
-        
+
         Args:
             observed_symbols: List of symbols from current observation
-            
+
         Returns:
             True if patterns might match, False if definitely no matches
         """
@@ -218,15 +218,15 @@ class PatternBloomFilter:
         # Check if any pattern with these exact symbols exists
         return observed_key in self.bloom
 
-    def prescreen_patterns(self, patterns: List[Dict[str, Any]],
-                          observed_symbols: List[str]) -> List[Dict[str, Any]]:
+    def prescreen_patterns(self, patterns: list[dict[str, Any]],
+                          observed_symbols: list[str]) -> list[dict[str, Any]]:
         """
         Filter patterns using Bloom filter before expensive calculations.
-        
+
         Args:
             patterns: List of pattern documents to screen
             observed_symbols: Symbols from current observation
-            
+
         Returns:
             Filtered list of patterns that might match
         """
@@ -274,10 +274,10 @@ class PatternBloomFilter:
 
         return candidates
 
-    def rebuild_from_patterns(self, patterns: List[Dict[str, Any]]):
+    def rebuild_from_patterns(self, patterns: list[dict[str, Any]]):
         """
         Rebuild Bloom filter from current pattern database.
-        
+
         Args:
             patterns: All patterns from database
         """
@@ -291,7 +291,7 @@ class PatternBloomFilter:
 
         logger.info(f"Rebuilt Bloom filter with {self.pattern_count} patterns")
 
-    def get_performance_stats(self) -> Dict[str, Any]:
+    def get_performance_stats(self) -> dict[str, Any]:
         """Get comprehensive performance statistics."""
         bloom_stats = self.bloom.get_stats()
 

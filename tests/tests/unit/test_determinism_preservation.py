@@ -6,7 +6,6 @@ deterministic behavior and full traceability of predictions.
 import hashlib
 import os
 import sys
-from typing import List
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
@@ -40,7 +39,7 @@ class DeterminismTestCases:
         ]
 
 
-def compute_pattern_hash(sequence: List[List[str]]) -> str:
+def compute_pattern_hash(sequence: list[list[str]]) -> str:
     """Compute deterministic hash for a sequence (mimics Pattern class behavior)."""
     # Sort symbols within each event alphanumerically
     sorted_sequence = [sorted(event) for event in sequence]

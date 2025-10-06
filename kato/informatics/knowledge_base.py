@@ -290,7 +290,7 @@ class SuperKnowledgeBase:
     def close(self):
         """
         DEPRECATED: Do not close shared database connections.
-        
+
         Individual processors share a MongoDB connection managed by OptimizedConnectionManager.
         Closing the connection from one processor would break all other processors.
         Connection lifecycle is managed centrally by the connection manager.

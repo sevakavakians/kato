@@ -23,7 +23,7 @@ import json
 import logging
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import redis.asyncio as redis
 from pymongo.collection import Collection
@@ -58,7 +58,7 @@ class CacheConfig:
 class PatternCache:
     """
     Redis-based caching layer for KATO patterns and symbols.
-    
+
     Provides high-performance caching with automatic fallback to MongoDB
     when cache misses occur. Implements intelligent cache warming and
     invalidation strategies.
@@ -67,7 +67,7 @@ class PatternCache:
     def __init__(self, redis_client: Redis, config: Optional[CacheConfig] = None):
         """
         Initialize pattern cache.
-        
+
         Args:
             redis_client: Async Redis client instance
             config: Cache configuration (uses defaults if not provided)
@@ -91,15 +91,15 @@ class PatternCache:
         session_id: str,
         limit: int = 100,
         mongo_collection: Optional[Collection] = None
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Get top patterns for a session with caching.
-        
+
         Args:
             session_id: Session identifier for cache isolation
             limit: Maximum number of patterns to return
             mongo_collection: MongoDB collection to fallback to on cache miss
-            
+
         Returns:
             List of pattern documents sorted by frequency
         """
@@ -143,14 +143,14 @@ class PatternCache:
         self,
         pattern_name: str,
         mongo_collection: Optional[Collection] = None
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Optional[dict[str, Any]]:
         """
         Get specific pattern by name with caching.
-        
+
         Args:
             pattern_name: Unique pattern identifier (e.g., 'PTRN|<hash>')
             mongo_collection: MongoDB collection to fallback to
-            
+
         Returns:
             Pattern document or None if not found
         """
@@ -197,15 +197,15 @@ class PatternCache:
         session_id: Optional[str] = None,
         mongo_metadata_collection: Optional[Collection] = None,
         mongo_symbols_collection: Optional[Collection] = None
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """
         Get cached symbol probabilities with fallback calculation.
-        
+
         Args:
             session_id: Optional session for cache isolation
             mongo_metadata_collection: MongoDB metadata collection for totals
             mongo_symbols_collection: MongoDB symbols collection for frequencies
-            
+
         Returns:
             Dictionary mapping symbol names to probability values
         """
@@ -246,16 +246,16 @@ class PatternCache:
 
     async def cache_pattern_batch(
         self,
-        patterns: List[Dict[str, Any]],
+        patterns: list[dict[str, Any]],
         session_id: Optional[str] = None
     ) -> int:
         """
         Cache multiple patterns in a batch operation.
-        
+
         Args:
             patterns: List of pattern documents to cache
             session_id: Optional session for cache organization
-            
+
         Returns:
             Number of patterns successfully cached
         """
@@ -307,10 +307,10 @@ class PatternCache:
     async def invalidate_pattern_cache(self, session_id: Optional[str] = None) -> int:
         """
         Invalidate pattern cache entries.
-        
+
         Args:
             session_id: If provided, only invalidate cache for this session
-            
+
         Returns:
             Number of cache entries invalidated
         """
@@ -340,7 +340,7 @@ class PatternCache:
     async def invalidate_symbol_cache(self) -> int:
         """
         Invalidate symbol probability cache.
-        
+
         Returns:
             Number of cache entries invalidated
         """
@@ -368,17 +368,17 @@ class PatternCache:
         symbols_collection: Collection,
         metadata_collection: Collection,
         pattern_limit: int = 500
-    ) -> Dict[str, int]:
+    ) -> dict[str, int]:
         """
         Pre-populate cache with frequently accessed data.
-        
+
         Args:
             session_id: Session to warm cache for
             patterns_collection: MongoDB patterns collection
             symbols_collection: MongoDB symbols collection
             metadata_collection: MongoDB metadata collection
             pattern_limit: Maximum patterns to pre-cache
-            
+
         Returns:
             Dictionary with counts of cached items
         """
@@ -413,10 +413,10 @@ class PatternCache:
             logger.error(f"Error in warm_cache: {e}")
             return {'patterns_cached': 0, 'symbol_probabilities_cached': 0, 'top_patterns_cached': 0}
 
-    async def get_cache_stats(self) -> Dict[str, Any]:
+    async def get_cache_stats(self) -> dict[str, Any]:
         """
         Get cache performance statistics.
-        
+
         Returns:
             Dictionary with cache hit rates, sizes, and performance metrics
         """
@@ -471,7 +471,7 @@ class PatternCache:
         self,
         collection: Collection,
         limit: int
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Load top patterns from MongoDB sorted by frequency."""
         try:
             cursor = collection.find(
@@ -496,7 +496,7 @@ class PatternCache:
         self,
         metadata_collection: Optional[Collection],
         symbols_collection: Optional[Collection]
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """Calculate symbol probabilities from MongoDB collections."""
         try:
             if not metadata_collection or not symbols_collection:
@@ -533,7 +533,7 @@ class PatternCache:
 class CacheManager:
     """
     Manager for multiple cache instances and cache lifecycle.
-    
+
     Provides centralized cache management for KATO with automatic
     initialization, cleanup, and monitoring.
     """
@@ -541,7 +541,7 @@ class CacheManager:
     def __init__(self, redis_url: str = "redis://localhost:6379"):
         """
         Initialize cache manager.
-        
+
         Args:
             redis_url: Redis connection URL (deprecated - now uses connection manager)
         """
@@ -553,10 +553,10 @@ class CacheManager:
     async def initialize(self, config: Optional[CacheConfig] = None) -> bool:
         """
         Initialize Redis connection and cache instances.
-        
+
         Args:
             config: Cache configuration
-            
+
         Returns:
             True if initialization successful
         """
@@ -604,10 +604,10 @@ class CacheManager:
         """Check if cache manager is initialized."""
         return self._initialized and self.redis_client is not None
 
-    async def health_check(self) -> Dict[str, Any]:
+    async def health_check(self) -> dict[str, Any]:
         """
         Perform health check on cache system.
-        
+
         Returns:
             Health status and metrics
         """

@@ -12,7 +12,7 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from pymongo import MongoClient, WriteConcern
 from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError
@@ -44,7 +44,7 @@ class PoolConfig:
 class MongoConnectionPool:
     """
     Production-grade MongoDB connection pool with reliability features.
-    
+
     Key improvements over v1.0:
     - Connection pooling instead of single connection
     - Write concern = majority (not 0)
@@ -55,7 +55,7 @@ class MongoConnectionPool:
     def __init__(self, config: PoolConfig):
         """
         Initialize MongoDB connection pool.
-        
+
         Args:
             config: Pool configuration
         """
@@ -115,14 +115,14 @@ class MongoConnectionPool:
     def get_database(self, name: str, ensure_healthy: bool = True):
         """
         Get database instance with optional health check.
-        
+
         Args:
             name: Database name
             ensure_healthy: Whether to check health before returning
-        
+
         Returns:
             MongoDB database instance
-        
+
         Raises:
             ConnectionFailure: If connection is unhealthy
         """
@@ -178,10 +178,10 @@ class MongoConnectionPool:
     def get_write_concern(self, level: str = "majority") -> WriteConcern:
         """
         Get appropriate write concern for operation type.
-        
+
         Args:
             level: Write concern level ('majority', 'acknowledged', 'unacknowledged')
-        
+
         Returns:
             WriteConcern object
         """
@@ -195,7 +195,7 @@ class MongoConnectionPool:
             # Metrics/logs - can be fire-and-forget
             return WriteConcern(w=0)
 
-    def get_pool_stats(self) -> Dict[str, Any]:
+    def get_pool_stats(self) -> dict[str, Any]:
         """Get connection pool statistics"""
         if not self.client:
             return {"status": "disconnected"}
@@ -230,7 +230,7 @@ class MongoConnectionPool:
 class QdrantConnectionPool:
     """
     Connection pool for Qdrant vector database.
-    
+
     Provides:
     - Connection pooling
     - Health checks
@@ -240,7 +240,7 @@ class QdrantConnectionPool:
     def __init__(self, config: PoolConfig):
         """
         Initialize Qdrant connection pool.
-        
+
         Args:
             config: Pool configuration
         """
@@ -286,10 +286,10 @@ class QdrantConnectionPool:
     async def get_client(self):
         """
         Get a client from the pool.
-        
+
         Returns:
             QdrantClient instance
-        
+
         Raises:
             ConnectionFailure: If client fails health check
         """
@@ -317,7 +317,7 @@ class QdrantConnectionPool:
     async def return_client(self, client):
         """
         Return a client to the pool.
-        
+
         Args:
             client: QdrantClient to return
         """
@@ -326,10 +326,10 @@ class QdrantConnectionPool:
     async def _health_check_client(self, client):
         """
         Perform health check on a Qdrant client.
-        
+
         Args:
             client: QdrantClient to check
-        
+
         Raises:
             Exception: If health check fails
         """
@@ -344,10 +344,10 @@ class QdrantConnectionPool:
     async def _recreate_client(self, old_client):
         """
         Recreate a failed Qdrant client.
-        
+
         Args:
             old_client: Failed QdrantClient to replace
-        
+
         Returns:
             New QdrantClient instance
         """
@@ -384,7 +384,7 @@ class QdrantConnectionPool:
             logger.error(f"Failed to recreate Qdrant client: {e}")
             raise
 
-    def get_pool_stats(self) -> Dict[str, Any]:
+    def get_pool_stats(self) -> dict[str, Any]:
         """Get connection pool statistics"""
         if not self._initialized:
             return {"status": "not_initialized"}
@@ -422,10 +422,10 @@ _qdrant_pool: Optional[QdrantConnectionPool] = None
 def get_mongo_pool(config: Optional[PoolConfig] = None) -> MongoConnectionPool:
     """
     Get or create the global MongoDB connection pool.
-    
+
     Args:
         config: Optional configuration (uses defaults if not provided)
-    
+
     Returns:
         MongoConnectionPool instance
     """
@@ -442,10 +442,10 @@ def get_mongo_pool(config: Optional[PoolConfig] = None) -> MongoConnectionPool:
 async def get_qdrant_pool(config: Optional[PoolConfig] = None) -> QdrantConnectionPool:
     """
     Get or create the global Qdrant connection pool.
-    
+
     Args:
         config: Optional configuration (uses defaults if not provided)
-    
+
     Returns:
         QdrantConnectionPool instance
     """

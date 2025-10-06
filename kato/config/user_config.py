@@ -9,7 +9,7 @@ complete isolation between users.
 import logging
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 logger = logging.getLogger('kato.v2.config.user_config')
 
@@ -18,7 +18,7 @@ logger = logging.getLogger('kato.v2.config.user_config')
 class UserConfiguration:
     """
     User-specific configuration that can be dynamically modified.
-    
+
     All parameters default to None, which means "use system default".
     When a value is set, it overrides the system default for that user.
     """
@@ -42,7 +42,7 @@ class UserConfiguration:
     def validate(self) -> bool:
         """
         Validate all configuration parameters are within acceptable ranges.
-        
+
         Returns:
             True if all parameters are valid, False otherwise
         """
@@ -76,13 +76,13 @@ class UserConfiguration:
             logger.error(f"Validation error: {e}")
             return False
 
-    def update(self, updates: Dict[str, Any]) -> bool:
+    def update(self, updates: dict[str, Any]) -> bool:
         """
         Update configuration with new values.
-        
+
         Args:
             updates: Dictionary of parameter updates
-        
+
         Returns:
             True if update was successful, False if validation failed
         """
@@ -115,15 +115,15 @@ class UserConfiguration:
                 setattr(self, key, value)
             return False
 
-    def merge_with_defaults(self, defaults: Dict[str, Any]) -> Dict[str, Any]:
+    def merge_with_defaults(self, defaults: dict[str, Any]) -> dict[str, Any]:
         """
         Merge user configuration with system defaults.
-        
+
         User values override defaults where set (not None).
-        
+
         Args:
             defaults: System default configuration
-        
+
         Returns:
             Merged configuration dictionary
         """
@@ -137,23 +137,23 @@ class UserConfiguration:
 
         return merged
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Convert configuration to dictionary for serialization.
-        
+
         Returns:
             Dictionary representation of configuration
         """
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'UserConfiguration':
+    def from_dict(cls, data: dict[str, Any]) -> 'UserConfiguration':
         """
         Create UserConfiguration from dictionary.
-        
+
         Args:
             data: Dictionary with configuration values
-        
+
         Returns:
             UserConfiguration instance
         """
@@ -183,10 +183,10 @@ class UserConfiguration:
 
         return cls(**filtered_data)
 
-    def get_updates_only(self) -> Dict[str, Any]:
+    def get_updates_only(self) -> dict[str, Any]:
         """
         Get only the parameters that have been set (not None).
-        
+
         Returns:
             Dictionary of set parameters only
         """

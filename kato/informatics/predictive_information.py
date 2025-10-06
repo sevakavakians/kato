@@ -8,18 +8,18 @@ for ranking predictions based on their statistical relationships.
 import hashlib
 import json
 import logging
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 logger = logging.getLogger('kato.informatics.predictive_information')
 
 
-def hash_future(future: List[List[str]]) -> str:
+def hash_future(future: list[list[str]]) -> str:
     """
     Create a deterministic hash for a future segment.
-    
+
     Args:
         future: List of events representing the future
-        
+
     Returns:
         SHA1 hash of the future for efficient comparison
     """
@@ -30,13 +30,13 @@ def hash_future(future: List[List[str]]) -> str:
     return hashlib.sha1(future_str.encode(), usedforsecurity=False).hexdigest()
 
 
-def calculate_future_aggregates(predictions: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+def calculate_future_aggregates(predictions: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     """
     Aggregate predictions by unique futures and calculate their collective potentials.
-    
+
     Args:
         predictions: List of prediction dictionaries from pattern matching
-        
+
     Returns:
         Dictionary mapping future hashes to aggregate information
     """
@@ -81,15 +81,15 @@ def calculate_future_aggregates(predictions: List[Dict[str, Any]]) -> Dict[str, 
 
 
 def calculate_ensemble_predictive_information(
-    predictions: List[Dict[str, Any]]
-) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    predictions: list[dict[str, Any]]
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """
     Calculate predictive information for each prediction in an ensemble
     using dual-level scoring (pattern-level and future-level).
-    
+
     Args:
         predictions: List of prediction dictionaries from pattern matching
-        
+
     Returns:
         Tuple of (updated predictions with PI and potential, future potentials list)
     """

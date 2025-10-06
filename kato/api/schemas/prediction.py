@@ -2,7 +2,7 @@
 Prediction-related Pydantic models for KATO API
 """
 
-from typing import Dict, List, Optional
+from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -18,8 +18,8 @@ class LearnResult(BaseModel):
 
 class PredictionsResponse(BaseModel):
     """Predictions response"""
-    predictions: List[Dict] = Field(default_factory=list, description="List of predictions")
-    future_potentials: Optional[List[Dict]] = Field(None, description="Aggregated future potentials")
+    predictions: list[dict] = Field(default_factory=list, description="List of predictions")
+    future_potentials: Optional[list[dict]] = Field(None, description="Aggregated future potentials")
     session_id: Optional[str] = Field(None, description="Session ID")
     processor_id: Optional[str] = Field(None, description="Processor ID for v1 compatibility")
     count: int = Field(..., description="Number of predictions")

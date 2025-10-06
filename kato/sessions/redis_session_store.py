@@ -10,7 +10,7 @@ import logging
 import pickle
 from dataclasses import asdict
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import redis.asyncio as redis
 from redis.asyncio import Redis
@@ -23,7 +23,7 @@ logger = logging.getLogger('kato.sessions.redis_store')
 class RedisSessionStore:
     """
     Redis-based persistent session storage.
-    
+
     Features:
     - Automatic serialization/deserialization of SessionState objects
     - TTL-based expiration aligned with session expiration
@@ -41,7 +41,7 @@ class RedisSessionStore:
     ):
         """
         Initialize Redis session store.
-        
+
         Args:
             redis_url: Redis connection URL
             key_prefix: Prefix for session keys in Redis
@@ -162,10 +162,10 @@ class RedisSessionStore:
     async def store_session(self, session: SessionState) -> bool:
         """
         Store session in Redis with TTL.
-        
+
         Args:
             session: SessionState to store
-            
+
         Returns:
             True if stored successfully
         """
@@ -193,10 +193,10 @@ class RedisSessionStore:
     async def get_session(self, session_id: str) -> Optional[SessionState]:
         """
         Retrieve session from Redis.
-        
+
         Args:
             session_id: Session identifier
-            
+
         Returns:
             SessionState if found and not expired, None otherwise
         """
@@ -228,10 +228,10 @@ class RedisSessionStore:
     async def delete_session(self, session_id: str) -> bool:
         """
         Delete session from Redis.
-        
+
         Args:
             session_id: Session identifier
-            
+
         Returns:
             True if deleted or didn't exist, False on error
         """
@@ -252,11 +252,11 @@ class RedisSessionStore:
     async def extend_session(self, session_id: str, ttl_seconds: int) -> bool:
         """
         Extend session TTL in Redis.
-        
+
         Args:
             session_id: Session identifier
             ttl_seconds: New TTL from now
-            
+
         Returns:
             True if extended, False if session not found or error
         """
@@ -284,10 +284,10 @@ class RedisSessionStore:
             logger.error(f"Failed to extend session {session_id}: {e}")
             return False
 
-    async def list_active_sessions(self) -> List[str]:
+    async def list_active_sessions(self) -> list[str]:
         """
         Get list of active session IDs.
-        
+
         Returns:
             List of session IDs currently in Redis
         """
@@ -323,7 +323,7 @@ class RedisSessionStore:
     async def get_session_count(self) -> int:
         """
         Get count of active sessions.
-        
+
         Returns:
             Number of sessions currently in Redis
         """
@@ -333,7 +333,7 @@ class RedisSessionStore:
     async def cleanup_expired_sessions(self) -> int:
         """
         Cleanup expired sessions (Redis should handle this automatically via TTL).
-        
+
         Returns:
             Number of sessions cleaned up (usually 0 since Redis handles TTL)
         """
@@ -365,7 +365,7 @@ class RedisSessionStore:
     async def health_check(self) -> bool:
         """
         Check Redis connection health.
-        
+
         Returns:
             True if Redis is accessible, False otherwise
         """
@@ -380,10 +380,10 @@ class RedisSessionStore:
             logger.error(f"Redis health check failed: {e}")
             return False
 
-    async def get_redis_info(self) -> Dict[str, Any]:
+    async def get_redis_info(self) -> dict[str, Any]:
         """
         Get Redis server information for monitoring.
-        
+
         Returns:
             Dictionary with Redis server stats
         """

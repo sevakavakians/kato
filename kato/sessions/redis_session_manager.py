@@ -12,7 +12,7 @@ import json
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import redis.asyncio as redis
 
@@ -28,7 +28,7 @@ logger = logging.getLogger('kato.sessions.redis')
 class RedisSessionManager(session_manager_module.SessionManager):
     """
     Redis-backed session manager for persistent, scalable session storage.
-    
+
     This manager stores sessions in Redis instead of memory, providing:
     - Persistence across service restarts
     - Shared state across multiple KATO instances
@@ -44,7 +44,7 @@ class RedisSessionManager(session_manager_module.SessionManager):
     ):
         """
         Initialize Redis session manager.
-        
+
         Args:
             redis_url: Redis connection URL
             default_ttl_seconds: Default session TTL
@@ -58,13 +58,13 @@ class RedisSessionManager(session_manager_module.SessionManager):
 
         logger.info(f"RedisSessionManager initialized with URL: {redis_url}")
 
-    def _serialize_session_config(self, session_config: SessionConfiguration) -> Dict[str, Any]:
+    def _serialize_session_config(self, session_config: SessionConfiguration) -> dict[str, Any]:
         """
         Serialize SessionConfiguration for JSON storage.
-        
+
         Args:
             session_config: SessionConfiguration instance
-        
+
         Returns:
             Dictionary with JSON-serializable values
         """
@@ -78,13 +78,13 @@ class RedisSessionManager(session_manager_module.SessionManager):
                 config_dict['updated_at'] = config_dict['updated_at'].isoformat()
         return config_dict
 
-    def _deserialize_session(self, session_dict: Dict[str, Any]) -> SessionState:
+    def _deserialize_session(self, session_dict: dict[str, Any]) -> SessionState:
         """
         Deserialize a session from a dictionary.
-        
+
         Args:
             session_dict: Dictionary representation of session
-        
+
         Returns:
             SessionState instance
         """
@@ -134,7 +134,7 @@ class RedisSessionManager(session_manager_module.SessionManager):
     async def get_or_create_session(
         self,
         node_id: str,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: Optional[dict[str, Any]] = None,
         ttl_seconds: Optional[int] = None
     ) -> SessionState:
         """
@@ -184,7 +184,7 @@ class RedisSessionManager(session_manager_module.SessionManager):
     async def create_session(
         self,
         node_id: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: Optional[dict[str, Any]] = None,
         ttl_seconds: Optional[int] = None
     ) -> SessionState:
         """
@@ -232,10 +232,10 @@ class RedisSessionManager(session_manager_module.SessionManager):
     async def get_session(self, session_id: str) -> Optional[SessionState]:
         """
         Get session from Redis.
-        
+
         Args:
             session_id: Session identifier
-        
+
         Returns:
             SessionState if found and not expired, None otherwise
         """
@@ -307,10 +307,10 @@ class RedisSessionManager(session_manager_module.SessionManager):
     async def update_session(self, session: SessionState) -> bool:
         """
         Update session in Redis.
-        
+
         Args:
             session: SessionState to update
-        
+
         Returns:
             True if updated successfully
         """
@@ -341,10 +341,10 @@ class RedisSessionManager(session_manager_module.SessionManager):
     async def delete_session(self, session_id: str) -> bool:
         """
         Delete session from Redis.
-        
+
         Args:
             session_id: Session identifier
-        
+
         Returns:
             True if deleted, False if not found
         """
@@ -369,11 +369,11 @@ class RedisSessionManager(session_manager_module.SessionManager):
     async def extend_session(self, session_id: str, ttl_seconds: int) -> bool:
         """
         Extend session TTL in Redis.
-        
+
         Args:
             session_id: Session identifier
             ttl_seconds: New TTL from now
-        
+
         Returns:
             True if extended, False if session not found
         """
@@ -404,10 +404,10 @@ class RedisSessionManager(session_manager_module.SessionManager):
     async def clear_session_stm(self, session_id: str) -> bool:
         """
         Clear STM for a session.
-        
+
         Args:
             session_id: Session identifier
-        
+
         Returns:
             True if cleared, False if session not found
         """
@@ -423,7 +423,7 @@ class RedisSessionManager(session_manager_module.SessionManager):
     def get_active_session_count(self) -> int:
         """
         Get count of active sessions.
-        
+
         Note: This is an approximation in Redis-backed mode.
         For exact count, use get_all_sessions().
         """
@@ -441,7 +441,7 @@ class RedisSessionManager(session_manager_module.SessionManager):
     async def get_active_session_count_async(self) -> int:
         """
         Async version - Get count of active sessions.
-        
+
         Note: This is an approximation in Redis-backed mode.
         For exact count, use get_all_sessions().
         """
@@ -463,10 +463,10 @@ class RedisSessionManager(session_manager_module.SessionManager):
     async def get_session_lock(self, session_id: str) -> Optional[asyncio.Lock]:
         """
         Get the lock for a specific session.
-        
+
         Args:
             session_id: Session identifier
-        
+
         Returns:
             asyncio.Lock for the session, None if session doesn't exist
         """
@@ -486,10 +486,10 @@ class RedisSessionManager(session_manager_module.SessionManager):
 
         return self.session_locks[session_id]
 
-    async def get_all_sessions(self) -> List[SessionState]:
+    async def get_all_sessions(self) -> list[SessionState]:
         """
         Get all sessions from Redis.
-        
+
         Returns:
             List of all non-expired sessions
         """
@@ -518,10 +518,10 @@ class RedisSessionManager(session_manager_module.SessionManager):
 
         return sessions
 
-    def get_session_stats(self) -> Dict[str, Any]:
+    def get_session_stats(self) -> dict[str, Any]:
         """
         Get session statistics.
-        
+
         Note: This is synchronous for compatibility but returns
         approximate values in Redis mode.
         """
@@ -534,10 +534,10 @@ class RedisSessionManager(session_manager_module.SessionManager):
             "redis_url": self.redis_url
         }
 
-    async def get_session_stats_async(self) -> Dict[str, Any]:
+    async def get_session_stats_async(self) -> dict[str, Any]:
         """
         Get detailed session statistics (async version).
-        
+
         Returns:
             Detailed statistics about sessions
         """
@@ -577,7 +577,7 @@ class RedisSessionManager(session_manager_module.SessionManager):
     async def _save_session(self, session: SessionState, ttl_seconds: int):
         """
         Save session to Redis with TTL.
-        
+
         Args:
             session: Session to save
             ttl_seconds: TTL in seconds
@@ -610,7 +610,7 @@ class RedisSessionManager(session_manager_module.SessionManager):
     async def _cleanup_loop(self):
         """
         Background cleanup task.
-        
+
         Note: Redis handles expiration automatically, but this can
         clean up local locks for expired sessions.
         """
@@ -641,11 +641,11 @@ def get_redis_session_manager(
 ) -> RedisSessionManager:
     """
     Get or create the singleton Redis session manager.
-    
+
     Args:
         redis_url: Redis connection URL
         **kwargs: Additional arguments for RedisSessionManager
-    
+
     Returns:
         RedisSessionManager singleton instance
     """

@@ -7,7 +7,7 @@ These are the main KATO functionality endpoints.
 
 import logging
 import uuid
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Path, Query, Request
 
@@ -33,9 +33,9 @@ async def observe_primary(
 ):
     """
     Process a new observation.
-    
+
     Accepts multi-modal input (strings, vectors, emotives) and processes it
-    through the KATO system, updating short-term memory and triggering 
+    through the KATO system, updating short-term memory and triggering
     auto-learning if configured.
     """
     from kato.services.kato_fastapi import app_state, get_node_id_from_request
@@ -107,7 +107,7 @@ async def learn_primary(
 ):
     """
     Learn a pattern from the current STM.
-    
+
     Takes all observations currently in short-term memory and creates
     a persistent pattern that can be used for future predictions.
     """
@@ -167,7 +167,7 @@ async def clear_stm_primary(
 async def clear_all_primary(processor_id: Optional[str] = Query(None, description="Processor identifier")):
     """
     Clear all processor state including STM, patterns, and symbols.
-    
+
     WARNING: This will delete all learned knowledge for this processor.
     Use with caution in production environments.
     """
@@ -187,7 +187,7 @@ async def clear_all_primary(processor_id: Optional[str] = Query(None, descriptio
 async def clear_all_memory_primary(processor_id: Optional[str] = Query(None, description="Processor identifier")):
     """
     Alias for /clear-all - Clear all processor state including STM, patterns, and symbols.
-    
+
     WARNING: This will delete all learned knowledge for this processor.
     Use with caution in production environments.
     """
@@ -207,7 +207,7 @@ async def clear_all_memory_primary(processor_id: Optional[str] = Query(None, des
 async def get_predictions_primary(processor_id: Optional[str] = Query(None, description="Processor identifier")):
     """
     Get predictions based on current STM.
-    
+
     Analyzes the current short-term memory and returns potential
     future sequences based on learned patterns.
     """
@@ -238,7 +238,7 @@ async def get_predictions_primary(processor_id: Optional[str] = Query(None, desc
 async def post_predictions_primary(processor_id: Optional[str] = Query(None, description="Processor identifier")):
     """
     Get predictions based on current STM. (POST version)
-    
+
     Analyzes the current short-term memory and returns potential
     future sequences based on learned patterns.
     """
@@ -247,7 +247,7 @@ async def post_predictions_primary(processor_id: Optional[str] = Query(None, des
 
 @router.post("/genes/update")
 async def update_genes(
-    genes_data: Dict[str, Any],
+    genes_data: dict[str, Any],
     request: Request,
     processor_id: Optional[str] = Query(None, description="Processor identifier")
 ):
@@ -402,7 +402,7 @@ async def observe_sequence_primary(
 ):
     """
     Process multiple observations in sequence with optional isolation.
-    
+
     Provides bulk processing capabilities with options for:
     - Sequential processing with shared STM context
     - Isolated processing where each observation gets fresh STM

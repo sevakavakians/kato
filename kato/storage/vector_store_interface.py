@@ -7,7 +7,7 @@ All vector database implementations must conform to this interface.
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional
 
 try:
     import numpy as np
@@ -28,7 +28,7 @@ class VectorSearchResult:
     id: str  # Vector ID
     score: float  # Similarity score (distance or similarity depending on metric)
     vector: Optional[np.ndarray] = None  # The vector itself (optional)
-    payload: Optional[Dict[str, Any]] = None  # Additional metadata
+    payload: Optional[dict[str, Any]] = None  # Additional metadata
 
     def __lt__(self, other):
         """For sorting by score"""
@@ -38,9 +38,9 @@ class VectorSearchResult:
 @dataclass
 class VectorBatch:
     """Batch of vectors for bulk operations"""
-    ids: List[str]
+    ids: list[str]
     vectors: np.ndarray  # Shape: (n_vectors, vector_dim)
-    payloads: Optional[List[Dict[str, Any]]] = None
+    payloads: Optional[list[dict[str, Any]]] = None
 
     def __post_init__(self):
         """Validate batch consistency"""
@@ -64,15 +64,15 @@ class VectorBatch:
 class VectorStore(ABC):
     """
     Abstract base class for vector storage backends.
-    
+
     This interface provides a unified API for different vector database
     implementations, allowing seamless switching between backends.
     """
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         """
         Initialize vector store with configuration.
-        
+
         Args:
             config: Backend-specific configuration dictionary
         """
@@ -83,7 +83,7 @@ class VectorStore(ABC):
     async def connect(self) -> bool:
         """
         Establish connection to the vector store.
-        
+
         Returns:
             True if connection successful, False otherwise
         """
@@ -93,7 +93,7 @@ class VectorStore(ABC):
     async def disconnect(self) -> bool:
         """
         Close connection to the vector store.
-        
+
         Returns:
             True if disconnection successful, False otherwise
         """
@@ -108,12 +108,12 @@ class VectorStore(ABC):
     ) -> bool:
         """
         Create a new vector collection/index.
-        
+
         Args:
             collection_name: Name of the collection
             vector_dim: Dimension of vectors to be stored
             **kwargs: Additional backend-specific parameters
-        
+
         Returns:
             True if creation successful, False otherwise
         """
@@ -123,10 +123,10 @@ class VectorStore(ABC):
     async def delete_collection(self, collection_name: str) -> bool:
         """
         Delete a vector collection/index.
-        
+
         Args:
             collection_name: Name of the collection to delete
-        
+
         Returns:
             True if deletion successful, False otherwise
         """
@@ -136,10 +136,10 @@ class VectorStore(ABC):
     async def collection_exists(self, collection_name: str) -> bool:
         """
         Check if a collection exists.
-        
+
         Args:
             collection_name: Name of the collection
-        
+
         Returns:
             True if collection exists, False otherwise
         """
@@ -151,17 +151,17 @@ class VectorStore(ABC):
         collection_name: str,
         vector_id: str,
         vector: np.ndarray,
-        payload: Optional[Dict[str, Any]] = None
+        payload: Optional[dict[str, Any]] = None
     ) -> bool:
         """
         Add a single vector to the store.
-        
+
         Args:
             collection_name: Name of the collection
             vector_id: Unique identifier for the vector
             vector: The vector to store
             payload: Optional metadata to store with the vector
-        
+
         Returns:
             True if addition successful, False otherwise
         """
@@ -172,14 +172,14 @@ class VectorStore(ABC):
         self,
         collection_name: str,
         batch: VectorBatch
-    ) -> Tuple[int, List[str]]:
+    ) -> tuple[int, list[str]]:
         """
         Add multiple vectors in batch.
-        
+
         Args:
             collection_name: Name of the collection
             batch: Batch of vectors to add
-        
+
         Returns:
             Tuple of (number of successful additions, list of failed IDs)
         """
@@ -194,12 +194,12 @@ class VectorStore(ABC):
     ) -> Optional[VectorSearchResult]:
         """
         Retrieve a vector by ID.
-        
+
         Args:
             collection_name: Name of the collection
             vector_id: ID of the vector to retrieve
             include_vector: Whether to include the vector data
-        
+
         Returns:
             VectorSearchResult if found, None otherwise
         """
@@ -209,17 +209,17 @@ class VectorStore(ABC):
     async def get_vectors(
         self,
         collection_name: str,
-        vector_ids: List[str],
+        vector_ids: list[str],
         include_vectors: bool = True
-    ) -> List[VectorSearchResult]:
+    ) -> list[VectorSearchResult]:
         """
         Retrieve multiple vectors by IDs.
-        
+
         Args:
             collection_name: Name of the collection
             vector_ids: List of vector IDs to retrieve
             include_vectors: Whether to include vector data
-        
+
         Returns:
             List of VectorSearchResults (may be shorter than input if some not found)
         """
@@ -231,17 +231,17 @@ class VectorStore(ABC):
         collection_name: str,
         vector_id: str,
         vector: Optional[np.ndarray] = None,
-        payload: Optional[Dict[str, Any]] = None
+        payload: Optional[dict[str, Any]] = None
     ) -> bool:
         """
         Update a vector and/or its payload.
-        
+
         Args:
             collection_name: Name of the collection
             vector_id: ID of the vector to update
             vector: New vector data (if None, vector is not updated)
             payload: New payload (if None, payload is not updated)
-        
+
         Returns:
             True if update successful, False otherwise
         """
@@ -255,11 +255,11 @@ class VectorStore(ABC):
     ) -> bool:
         """
         Delete a vector from the store.
-        
+
         Args:
             collection_name: Name of the collection
             vector_id: ID of the vector to delete
-        
+
         Returns:
             True if deletion successful, False otherwise
         """
@@ -269,15 +269,15 @@ class VectorStore(ABC):
     async def delete_vectors(
         self,
         collection_name: str,
-        vector_ids: List[str]
-    ) -> Tuple[int, List[str]]:
+        vector_ids: list[str]
+    ) -> tuple[int, list[str]]:
         """
         Delete multiple vectors.
-        
+
         Args:
             collection_name: Name of the collection
             vector_ids: List of vector IDs to delete
-        
+
         Returns:
             Tuple of (number of successful deletions, list of failed IDs)
         """
@@ -289,13 +289,13 @@ class VectorStore(ABC):
         collection_name: str,
         query_vector: np.ndarray,
         limit: int = 10,
-        filter: Optional[Dict[str, Any]] = None,
+        filter: Optional[dict[str, Any]] = None,
         include_vectors: bool = False,
         **kwargs
-    ) -> List[VectorSearchResult]:
+    ) -> list[VectorSearchResult]:
         """
         Search for similar vectors.
-        
+
         Args:
             collection_name: Name of the collection
             query_vector: Query vector for similarity search
@@ -303,7 +303,7 @@ class VectorStore(ABC):
             filter: Optional filter conditions for metadata
             include_vectors: Whether to include vector data in results
             **kwargs: Additional backend-specific search parameters
-        
+
         Returns:
             List of search results ordered by similarity
         """
@@ -315,13 +315,13 @@ class VectorStore(ABC):
         collection_name: str,
         query_vectors: np.ndarray,
         limit: int = 10,
-        filter: Optional[Dict[str, Any]] = None,
+        filter: Optional[dict[str, Any]] = None,
         include_vectors: bool = False,
         **kwargs
-    ) -> List[List[VectorSearchResult]]:
+    ) -> list[list[VectorSearchResult]]:
         """
         Search for multiple query vectors in batch.
-        
+
         Args:
             collection_name: Name of the collection
             query_vectors: Array of query vectors
@@ -329,7 +329,7 @@ class VectorStore(ABC):
             filter: Optional filter conditions
             include_vectors: Whether to include vector data
             **kwargs: Additional search parameters
-        
+
         Returns:
             List of result lists, one per query vector
         """
@@ -339,15 +339,15 @@ class VectorStore(ABC):
     async def count_vectors(
         self,
         collection_name: str,
-        filter: Optional[Dict[str, Any]] = None
+        filter: Optional[dict[str, Any]] = None
     ) -> int:
         """
         Count vectors in a collection.
-        
+
         Args:
             collection_name: Name of the collection
             filter: Optional filter conditions
-        
+
         Returns:
             Number of vectors matching the filter
         """
@@ -357,23 +357,23 @@ class VectorStore(ABC):
     async def get_collection_info(
         self,
         collection_name: str
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Get information about a collection.
-        
+
         Args:
             collection_name: Name of the collection
-        
+
         Returns:
             Dictionary with collection information (backend-specific)
         """
         pass
 
     @abstractmethod
-    async def list_collections(self) -> List[str]:
+    async def list_collections(self) -> list[str]:
         """
         List all available collections.
-        
+
         Returns:
             List of collection names
         """
@@ -387,16 +387,16 @@ class VectorStore(ABC):
     ) -> bool:
         """
         Optimize a collection for better performance.
-        
+
         This might include operations like:
         - Rebuilding indexes
         - Compacting storage
         - Rebalancing shards
-        
+
         Args:
             collection_name: Name of the collection
             **kwargs: Backend-specific optimization parameters
-        
+
         Returns:
             True if optimization successful, False otherwise
         """
@@ -410,11 +410,11 @@ class VectorStore(ABC):
     ) -> bool:
         """
         Backup a collection to a file.
-        
+
         Args:
             collection_name: Name of the collection
             backup_path: Path to save the backup
-        
+
         Returns:
             True if backup successful, False otherwise
         """
@@ -428,11 +428,11 @@ class VectorStore(ABC):
     ) -> bool:
         """
         Restore a collection from a backup.
-        
+
         Args:
             collection_name: Name of the collection
             backup_path: Path to the backup file
-        
+
         Returns:
             True if restore successful, False otherwise
         """
@@ -444,7 +444,7 @@ class VectorStore(ABC):
         collection_name: str,
         vector_id: str,
         vector: np.ndarray,
-        payload: Optional[Dict[str, Any]] = None
+        payload: Optional[dict[str, Any]] = None
     ) -> bool:
         """Synchronous wrapper for add_vector"""
         import asyncio
@@ -455,10 +455,10 @@ class VectorStore(ABC):
         collection_name: str,
         query_vector: np.ndarray,
         limit: int = 10,
-        filter: Optional[Dict[str, Any]] = None,
+        filter: Optional[dict[str, Any]] = None,
         include_vectors: bool = False,
         **kwargs
-    ) -> List[VectorSearchResult]:
+    ) -> list[VectorSearchResult]:
         """Synchronous wrapper for search"""
         import asyncio
         return asyncio.run(self.search(
@@ -479,10 +479,10 @@ class VectorStore(ABC):
     async def clear_collection(self, collection_name: str) -> bool:
         """
         Clear all vectors from a collection without deleting it.
-        
+
         Args:
             collection_name: Name of the collection
-        
+
         Returns:
             True if clearing successful, False otherwise
         """
@@ -507,13 +507,13 @@ class VectorStore(ABC):
     ) -> bool:
         """
         Ensure a collection exists, creating it if necessary.
-        
+
         Args:
             collection_name: Name of the collection
             vector_dim: Dimension of vectors
             recreate: If True, delete existing collection first
             **kwargs: Additional creation parameters
-        
+
         Returns:
             True if collection exists or was created successfully
         """

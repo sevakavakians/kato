@@ -21,6 +21,7 @@ KATO processes multi-modal observations (text, vectors, emotions) and makes temp
 
 ### Infrastructure
 - **FastAPI Service**: Ports 8001-8003 (Primary/Testing/Analytics)
+- **Session Management**: Redis-based with persistence and locking
 - **Vector DB**: Qdrant (Docker container)
 - **MongoDB**: Pattern and metadata storage
 - **Deployment**: Docker Compose orchestration
@@ -44,7 +45,8 @@ KATO processes multi-modal observations (text, vectors, emotions) and makes temp
 - **Docker**: Container orchestration and deployment
 
 ### Internal Interfaces
-- **FastAPI Endpoints**: `/observe`, `/predictions`, `/learn`, `/health`, `/observe-sequence`
+- **Session Endpoints**: `/sessions/{session_id}/observe`, `/sessions/{session_id}/predictions`, etc.
+- **Utility Endpoints**: `/genes/update`, `/gene/{name}`, `/pattern/{id}`, `/health`
 - **WebSocket**: Real-time communication at `/ws`
 - **Vector Operations**: 768-dimensional embeddings support
 
@@ -65,6 +67,15 @@ KATO processes multi-modal observations (text, vectors, emotions) and makes temp
 - **Error Recovery**: Automatic reconnection and retry logic
 
 ## Recent Achievements
+- **API Endpoint Deprecation COMPLETED** (2025-10-06): Complete migration to session-only architecture
+  - All 3 phases completed in single day (7 hours total, 93% estimate accuracy)
+  - Phase 1: Deprecation warnings with comprehensive migration guide
+  - Phase 2: Auto-session middleware for transparent backward compatibility
+  - Phase 3: Complete removal of deprecated endpoints and middleware
+  - Code reduction: ~900+ lines of deprecated code removed (-436 net lines)
+  - Architecture: Clean session-only API with Redis persistence
+  - Breaking change: Direct endpoints now return 404 (expected and documented)
+  - All utility endpoints preserved and functional
 - **Technical Debt Phase 5 COMPLETED** (2025-10-06): Final cleanup sprint achieving 96% overall debt reduction
   - Systematic execution of 5 sub-phases (5A-5E) across all modules
   - Phase 5 reduction: 211 → 67 ruff issues (68% reduction)
@@ -111,10 +122,15 @@ KATO processes multi-modal observations (text, vectors, emotions) and makes temp
   - **Migration**: user_id → node_id terminology complete across all code and tests
 - **Phase 3**: Session persistence and advanced management (Future)
 
-### Phase 2: COMPLETED ✅ - API Feature Development
+### Phase 2: COMPLETED ✅ - API Feature Development & Session-Only Migration
 - **Focus**: observe-sequence endpoint for bulk processing and session-aware API endpoints
-- **Status**: All objectives achieved
-- **Achievements**: Efficient batch operations, multi-user session support, full test coverage
+- **Status**: All objectives achieved including complete migration to session-only architecture
+- **Achievements**:
+  - Efficient batch operations
+  - Multi-user session support with Redis persistence
+  - Full test coverage
+  - Complete removal of deprecated direct endpoints
+  - Clean session-only API architecture
 - **Test Results**: 14/14 bulk endpoint tests passing, all isolation and performance tests passing
 
 ### Phase 3: CURRENT - Advanced Features & Optimization

@@ -25,25 +25,22 @@ def test_vector_basic(kato_fixture):
 
     print("1. Testing vector observation...")
 
-    # Clear memory
-    r = requests.post(f"{kato_fixture.base_url}/clear-all-memory")
-    assert r.status_code == 200
+    # Clear memory using fixture method
+    kato_fixture.clear_all_memory()
 
-    # Observe vectors
+    # Observe vectors using fixture method
     obs = {
         'strings': ['vector_test'],
         'vectors': [[1.0, 2.0, 3.0, 4.0]],
         'emotives': {}
     }
-    r = requests.post(f"{kato_fixture.base_url}/observe", json=obs)
-    assert r.status_code == 200
-    message = unwrap_response(r)
-    assert message['status'] == 'okay'  # FastAPI returns 'okay' not 'observed'
+    result = kato_fixture.observe(obs)
+    assert result['status'] in ['ok', 'okay', 'observed']
     print("✓ Vector observation works")
 
-    # Learn
-    r = requests.post(f"{kato_fixture.base_url}/learn", json={})
-    assert r.status_code == 200
+    # Learn using fixture method
+    pattern_name = kato_fixture.learn()
+    assert pattern_name is not None
     print("✓ Learning with vectors works")
 
     # Note: short-term memory gets cleared after learning, which is normal behavior
@@ -55,20 +52,17 @@ def test_mixed_modality(kato_fixture):
 
     print("\n2. Testing mixed modality...")
 
-    # Clear memory
-    r = requests.post(f"{kato_fixture.base_url}/clear-all-memory")
-    assert r.status_code == 200
+    # Clear memory using fixture method
+    kato_fixture.clear_all_memory()
 
-    # Observe mixed data
+    # Observe mixed data using fixture method
     obs = {
         'strings': ['hello', 'world'],
         'vectors': [[0.1, 0.2], [0.3, 0.4]],
         'emotives': {'confidence': 0.8}
     }
-    r = requests.post(f"{kato_fixture.base_url}/observe", json=obs)
-    assert r.status_code == 200
-    message = unwrap_response(r)
-    assert message['status'] == 'okay'  # FastAPI returns 'okay' not 'observed'
+    result = kato_fixture.observe(obs)
+    assert result['status'] in ['ok', 'okay', 'observed']
     print("✓ Mixed modality observation works")
 
 
@@ -77,9 +71,8 @@ def test_vector_sequence(kato_fixture):
 
     print("\n3. Testing vector sequence learning...")
 
-    # Clear memory
-    r = requests.post(f"{kato_fixture.base_url}/clear-all-memory")
-    assert r.status_code == 200
+    # Clear memory using fixture method
+    kato_fixture.clear_all_memory()
 
     # Create a sequence
     sequence = [
@@ -88,30 +81,22 @@ def test_vector_sequence(kato_fixture):
         {'strings': ['c'], 'vectors': [[1, 1]], 'emotives': {}}
     ]
 
-    # Observe sequence
+    # Observe sequence using fixture method
     for obs in sequence:
-        r = requests.post(f"{kato_fixture.base_url}/observe", json=obs)
-        assert r.status_code == 200
+        kato_fixture.observe(obs)
 
-    # Learn
-    r = requests.post(f"{kato_fixture.base_url}/learn", json={})
-    assert r.status_code == 200
+    # Learn using fixture method
+    pattern_name = kato_fixture.learn()
+    assert pattern_name is not None
 
-    # Clear short-term memory (formerly short-term memory)
-    r = requests.post(f"{kato_fixture.base_url}/clear-stm", json={})
-    assert r.status_code == 200
+    # Clear short-term memory using fixture method
+    kato_fixture.clear_stm()
 
-    # Observe first element
-    r = requests.post(f"{kato_fixture.base_url}/observe", json=sequence[0])
-    assert r.status_code == 200
+    # Observe first element using fixture method
+    kato_fixture.observe(sequence[0])
 
-    # Get predictions
-    r = requests.get(f"{kato_fixture.base_url}/predictions")
-    assert r.status_code == 200
-    response = unwrap_response(r)
-
-    # FastAPI returns predictions in a 'predictions' key
-    predictions = response.get('predictions', response) if isinstance(response, dict) else response
+    # Get predictions using fixture method
+    predictions = kato_fixture.get_predictions()
 
     if len(predictions) > 0:
         print(f"✓ Got {len(predictions)} predictions")

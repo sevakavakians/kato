@@ -305,40 +305,5 @@ class TestResourceLimits:
             requests.delete(f"{base_url}/sessions/{session_id}")
 
 
-class TestLegacyCurrentInteraction:
-    """Test interactions between legacy and current endpoints"""
-
-    def test_legacy_without_session_header(self):
-        """Test legacy endpoints without session header (should use default behavior)"""
-        base_url = _get_test_base_url()
-        # Use legacy observe without session header
-        response = requests.post(
-            f"{base_url}/observe",
-            json={"strings": ["legacy_default"]}
-        )
-        assert response.status_code == 200, "legacy observe should work without session header"
-
-        # Get legacy STM
-        response = requests.get(f"{base_url}/stm")
-        assert response.status_code == 200, "legacy STM should be accessible"
-
-    def test_invalid_session_header(self):
-        """Test legacy endpoints with invalid X-Session-ID header"""
-        base_url = _get_test_base_url()
-        fake_session_id = f"invalid-{uuid.uuid4()}"
-        headers = {"X-Session-ID": fake_session_id}
-
-        response = requests.post(
-            f"{base_url}/observe",
-            json={"strings": ["test"]},
-            headers=headers
-        )
-
-        # Should either create the session, return error, or fall back to default
-        # The exact behavior depends on implementation
-        assert response.status_code in [200, 400, 404], \
-            "Invalid session header should be handled appropriately"
-
-
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

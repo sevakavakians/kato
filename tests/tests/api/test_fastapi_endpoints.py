@@ -53,48 +53,49 @@ def test_status_endpoint(kato_fixture):
         assert isinstance(data['stm_length'], int)
 
 
-def test_observe_endpoint(kato_fixture):
-    """
-    Test basic observation endpoint.
-
-    NOTE: This tests the DEPRECATED /observe endpoint.
-    New code should use /sessions/{session_id}/observe instead.
-    """
+def test_session_observe_endpoint(kato_fixture):
+    """Test basic observation endpoint using session-based API (Phase 3 replacement)."""
     observation = {
         'strings': ['test1', 'test2'],
         'vectors': [],
         'emotives': {}
     }
 
-    response = requests.post(f"{kato_fixture.base_url}/observe", json=observation)
+    # Ensure we have a session
+    assert kato_fixture.session_id is not None
+
+    # Test session-based observe endpoint
+    response = requests.post(
+        f"{kato_fixture.base_url}/sessions/{kato_fixture.session_id}/observe",
+        json=observation
+    )
     assert response.status_code == 200
 
     data = response.json()
-    # Current returns 'ok', legacy returns 'okay', KatoProcessor returns 'observed'
     assert data['status'] in ['ok', 'okay', 'observed']
-    # Current doesn't always include processor_id in observe response
-    # Check for session_id or processor_id
-    assert 'processor_id' in data or 'session_id' in data or 'status' in data
-    # Current uses 'uptime_seconds', legacy uses 'time' or 'timestamp'
-    assert 'time' in data or 'timestamp' in data or 'uptime_seconds' in data
-    # unique_id is optional in current
-    if 'unique_id' in data:
-        assert isinstance(data['unique_id'], str)
+    assert 'time' in data or 'timestamp' in data
 
 
-def test_observe_with_vectors(kato_fixture):
-    """Test observation with vector data."""
+def test_session_observe_with_vectors(kato_fixture):
+    """Test observation with vector data using session-based API (Phase 3 replacement)."""
     observation = {
         'strings': ['test_vec'],
         'vectors': [[0.1, 0.2, 0.3]],
         'emotives': {'confidence': 0.8}
     }
 
-    response = requests.post(f"{kato_fixture.base_url}/observe", json=observation)
+    # Ensure we have a session
+    assert kato_fixture.session_id is not None
+
+    # Test session-based observe endpoint with vectors
+    response = requests.post(
+        f"{kato_fixture.base_url}/sessions/{kato_fixture.session_id}/observe",
+        json=observation
+    )
     assert response.status_code == 200
 
     data = response.json()
-    assert data['status'] == 'okay'
+    assert data['status'] in ['ok', 'okay', 'observed']
 
 
 def test_short_term_memory_endpoints(kato_fixture):
@@ -137,53 +138,53 @@ def test_learn_endpoint(kato_fixture):
     assert pattern_name.startswith('PTRN|')
 
 
-def test_clear_stm_endpoints(kato_fixture):
-    """
-    Test both clear STM endpoint aliases.
-
-    NOTE: This tests DEPRECATED direct endpoints (/clear-stm, /stm).
-    New code should use /sessions/{session_id}/clear-stm instead.
-    """
+def test_session_clear_stm_endpoint(kato_fixture):
+    """Test clear STM endpoint using session-based API (Phase 3 replacement)."""
     # Add observations
     kato_fixture.observe({'strings': ['clear1'], 'vectors': [], 'emotives': {}})
 
-    # Test /clear-stm (DEPRECATED)
-    response = requests.post(f"{kato_fixture.base_url}/clear-stm", json={})
+    # Verify STM has data
+    stm = kato_fixture.get_stm()
+    assert len(stm) == 1
+
+    # Ensure we have a session
+    assert kato_fixture.session_id is not None
+
+    # Test session-based clear-stm endpoint
+    response = requests.post(
+        f"{kato_fixture.base_url}/sessions/{kato_fixture.session_id}/clear-stm",
+        json={}
+    )
     assert response.status_code == 200
     assert response.json()['status'] == 'cleared'
 
-    # Verify STM is cleared (DEPRECATED endpoint)
-    stm_response = requests.get(f"{kato_fixture.base_url}/stm")
-    assert len(stm_response.json()['stm']) == 0
-
-    # Add more observations
-    kato_fixture.observe({'strings': ['clear2'], 'vectors': [], 'emotives': {}})
-
-    # Test /clear-short-term-memory alias (DEPRECATED)
-    response2 = requests.post(f"{kato_fixture.base_url}/clear-short-term-memory", json={})
-    assert response2.status_code == 200
-    assert response2.json()['status'] == 'cleared'
+    # Verify STM is cleared
+    stm = kato_fixture.get_stm()
+    assert len(stm) == 0
 
 
-def test_clear_all_memory_endpoints(kato_fixture):
-    """Test both clear all memory endpoint aliases."""
+def test_session_clear_all_memory_endpoint(kato_fixture):
+    """Test clear all memory endpoint using session-based API (Phase 3 replacement)."""
     # Add and learn a pattern
     kato_fixture.observe({'strings': ['mem1', 'mem2'], 'vectors': [], 'emotives': {}})
-    kato_fixture.learn()
+    pattern_name = kato_fixture.learn()
+    assert pattern_name is not None
 
-    # Test /clear-all
-    response = requests.post(f"{kato_fixture.base_url}/clear-all", json={})
+    # Ensure we have a session
+    assert kato_fixture.session_id is not None
+
+    # Test session-based clear-all endpoint
+    response = requests.post(
+        f"{kato_fixture.base_url}/sessions/{kato_fixture.session_id}/clear-all",
+        json={}
+    )
     assert response.status_code == 200
     assert response.json()['status'] == 'cleared'
+    assert response.json()['scope'] == 'all'
 
-    # Add and learn another pattern
-    kato_fixture.observe({'strings': ['mem3', 'mem4'], 'vectors': [], 'emotives': {}})
-    kato_fixture.learn()
-
-    # Test /clear-all-memory (alias)
-    response2 = requests.post(f"{kato_fixture.base_url}/clear-all-memory", json={})
-    assert response2.status_code == 200
-    assert response2.json()['status'] == 'cleared'
+    # Verify STM is cleared
+    stm = kato_fixture.get_stm()
+    assert len(stm) == 0
 
 
 def test_predictions_endpoints(kato_fixture):
@@ -323,18 +324,29 @@ def test_metrics_endpoint(kato_fixture):
     assert len(data) > 0
 
 
-def test_error_handling_missing_fields(kato_fixture):
-    """Test error handling for missing required fields."""
-    # Observation without required fields
+def test_session_error_handling_missing_fields(kato_fixture):
+    """Test error handling for missing required fields using session-based API (Phase 3 replacement)."""
+    # Observation without required fields - but actually this should work because vectors/emotives have defaults
     incomplete_data = {
         'strings': ['test']
-        # Missing vectors and emotives
+        # Missing vectors and emotives - these should default to [] and {}
     }
 
-    response = requests.post(f"{kato_fixture.base_url}/observe", json=incomplete_data)
-    # Current might require all fields or handle defaults differently
-    # Accept either 200 (with defaults) or 422/400 (validation error)
-    assert response.status_code in [200, 400, 422, 500]  # 500 is unfortunately what current returns
+    # Ensure we have a session
+    assert kato_fixture.session_id is not None
+
+    # Test session-based observe endpoint with incomplete data
+    response = requests.post(
+        f"{kato_fixture.base_url}/sessions/{kato_fixture.session_id}/observe",
+        json=incomplete_data
+    )
+    # Should accept the data with defaults or return validation error
+    assert response.status_code in [200, 400, 422]
+
+    if response.status_code == 200:
+        # If accepted, should have returned valid response
+        data = response.json()
+        assert data['status'] in ['ok', 'okay', 'observed']
 
 
 def test_error_handling_invalid_pattern(kato_fixture):

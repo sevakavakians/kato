@@ -429,8 +429,9 @@ class RedisSessionManager(session_manager_module.SessionManager):
         # In Redis mode, count all session keys
         if self.redis_client:
             try:
-                # Count all keys matching the session pattern (sync version)
-                keys = self.redis_client.keys(f"{self.key_prefix}*")
+                # Count only actual session keys (not node tracking keys)
+                # Actual sessions have pattern: kato:session:session-{uuid}-{timestamp}
+                keys = self.redis_client.keys(f"{self.key_prefix}session-*")
                 return len(keys)
             except Exception:
                 # Fallback to local locks count
@@ -450,8 +451,9 @@ class RedisSessionManager(session_manager_module.SessionManager):
         # In Redis mode, count all session keys
         if self.redis_client:
             try:
-                # Count all keys matching the session pattern (async version)
-                keys = await self.redis_client.keys(f"{self.key_prefix}*")
+                # Count only actual session keys (not node tracking keys)
+                # Actual sessions have pattern: kato:session:session-{uuid}-{timestamp}
+                keys = await self.redis_client.keys(f"{self.key_prefix}session-*")
                 return len(keys)
             except Exception as e:
                 logger.warning(f"Failed to count Redis keys, using fallback: {e}")

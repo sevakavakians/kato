@@ -202,25 +202,14 @@ def test_observe_sequence_large_batch(kato_fixture):
             'emotives': {}
         })
 
-    batch_data = {
-        'observations': observations
-    }
-
-    response = requests.post(
-        f"{kato_fixture.base_url}/observe-sequence",
-        json=batch_data
-    )
-    assert response.status_code == 200
-    result = response.json()
+    # Use fixture method which uses session-based endpoint
+    result = kato_fixture.observe_sequence(observations)
 
     assert result['observations_processed'] == 50
     assert len(result['results']) == 50
 
-    # Verify all observations are in STM
-    stm_response = requests.get(
-        f"{kato_fixture.base_url}/stm"
-    )
-    stm = stm_response.json()['stm']
+    # Verify all observations are in STM using fixture method
+    stm = kato_fixture.get_stm()
 
     # Default persistence is 5, so only last 5 should be in STM
     # unless configured differently
@@ -278,13 +267,17 @@ def test_observe_sequence_predictions_available(kato_fixture):
 def test_observe_sequence_error_handling(kato_fixture):
     """Test error handling in batch processing."""
 
+    # Ensure we have a session
+    assert kato_fixture.session_id is not None
+
     # Test with completely invalid structure (observations should be a list)
     batch_data = {
         'observations': "not_a_list"  # Invalid type - should be a list
     }
 
+    # Use session-based endpoint for error testing
     response = requests.post(
-        f"{kato_fixture.base_url}/observe-sequence",
+        f"{kato_fixture.base_url}/sessions/{kato_fixture.session_id}/observe-sequence",
         json=batch_data
     )
     # Should fail with validation error
@@ -294,32 +287,28 @@ def test_observe_sequence_error_handling(kato_fixture):
 def test_observe_sequence_performance(kato_fixture):
     """Test batch processing performance advantages."""
 
+    # Ensure we have a session
+    assert kato_fixture.session_id is not None
+
     # Prepare 20 observations
     observations = [
         {'strings': [f'perf_test_{i}'], 'vectors': [], 'emotives': {}}
         for i in range(20)
     ]
 
-    # Time batch processing
+    # Time batch processing using fixture method
     start_batch = time.time()
-    response = requests.post(
-        f"{kato_fixture.base_url}/observe-sequence",
-        json={'observations': observations}
-    )
+    result = kato_fixture.observe_sequence(observations)
     batch_time = time.time() - start_batch
-    assert response.status_code == 200
+    assert result['observations_processed'] == 20
 
     # Clear STM for fair comparison
-    requests.post(f"{kato_fixture.base_url}/clear-stm")
+    kato_fixture.clear_stm()
 
-    # Time individual processing
+    # Time individual processing using fixture method
     start_individual = time.time()
     for obs in observations:
-        response = requests.post(
-            f"{kato_fixture.base_url}/observe",
-            json=obs
-        )
-        assert response.status_code == 200
+        kato_fixture.observe(obs)
     individual_time = time.time() - start_individual
 
     # Batch should be faster due to reduced overhead

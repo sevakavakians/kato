@@ -374,6 +374,28 @@ async def clear_session_stm(session_id: str):
     return {"status": "cleared", "session_id": session_id}
 
 
+@router.post("/{session_id}/clear-all")
+async def clear_session_all_memory(session_id: str):
+    """Clear all memory (STM and learned patterns) for a specific session"""
+    from kato.services.kato_fastapi import app_state
+
+    session = await app_state.session_manager.get_session(session_id)
+    if not session:
+        raise HTTPException(404, detail=f"Session {session_id} not found")
+
+    # Clear the processor's all memory (STM + learned patterns)
+    processor = await app_state.processor_manager.get_processor(session.node_id, session.session_config)
+    processor.clear_all_memory()
+
+    # Clear session STM and emotives
+    cleared = await app_state.session_manager.clear_session_stm(session_id)
+
+    if not cleared:
+        raise HTTPException(404, detail=f"Session {session_id} not found")
+
+    return {"status": "cleared", "session_id": session_id, "scope": "all"}
+
+
 @router.post("/{session_id}/observe-sequence", response_model=ObservationSequenceResult)
 async def observe_sequence_in_session(
     session_id: str,

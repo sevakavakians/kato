@@ -18,11 +18,8 @@ from fixtures.kato_fixtures import kato_fixture as kato_fixture
 def test_vector_observation_and_learning(kato_fixture):
     """Test that vectors can be observed and learned"""
 
-    # Clear all memory first
-    response = requests.post(f"{kato_fixture.base_url}/clear-all-memory")
-    assert response.status_code == 200
-    result = response.json()
-    assert result.get('status') == "cleared"  # FastAPI response format
+    # Clear all memory first using fixture method (uses session-based endpoint)
+    kato_fixture.clear_all_memory()
 
     # Create a sequence with vectors
     observations = [
@@ -81,11 +78,8 @@ def test_vector_observation_and_learning(kato_fixture):
 def test_mixed_modality_processing(kato_fixture):
     """Test processing of mixed strings, vectors, and emotives"""
 
-    # Clear all memory
-    response = requests.post(f"{kato_fixture.base_url}/clear-all-memory")
-    assert response.status_code == 200
-    result = response.json()
-    assert result.get('status') == "cleared"  # FastAPI response format
+    # Clear all memory using fixture method (uses session-based endpoint)
+    kato_fixture.clear_all_memory()
 
     # Observe mixed modality data
     observation = {
@@ -102,25 +96,12 @@ def test_mixed_modality_processing(kato_fixture):
         }
     }
 
-    response = requests.post(f"{kato_fixture.base_url}/observe", json=observation)
-    assert response.status_code == 200
-    result = response.json()
-    # Extract message if wrapped
-    message = result['message'] if isinstance(result, dict) and 'message' in result else result
-    assert message['status'] == 'okay'  # FastAPI response format
+    # Observe mixed modality data using fixture method (uses session-based endpoint)
+    result = kato_fixture.observe(observation)
+    assert result['status'] in ['ok', 'okay', 'observed']
 
-    # Check short-term memory
-    response = requests.get(f"{kato_fixture.base_url}/stm")
-    assert response.status_code == 200
-    stm_resp = response.json()
-
-    # Extract short-term memory from response (FastAPI returns it in 'stm' key)
-    if isinstance(stm_resp, dict) and 'stm' in stm_resp:
-        short_term_memory = stm_resp['stm']
-    elif isinstance(stm_resp, dict) and 'message' in stm_resp:
-        short_term_memory = stm_resp['message']
-    else:
-        short_term_memory = stm_resp
+    # Check short-term memory using fixture method
+    short_term_memory = kato_fixture.get_stm()
 
     # Note: Short-term memory may be cleared after observation in some cases
     if len(short_term_memory) > 0:
@@ -139,11 +120,8 @@ def test_mixed_modality_processing(kato_fixture):
 def test_vector_similarity_search(kato_fixture):
     """Test vector similarity search functionality"""
 
-    # Clear all memory
-    response = requests.post(f"{kato_fixture.base_url}/clear-all-memory")
-    assert response.status_code == 200
-    result = response.json()
-    assert result.get('status') == "cleared"  # FastAPI response format
+    # Clear all memory using fixture method
+    kato_fixture.clear_all_memory()
 
     # Create and observe several vectors
     base_vectors = [
@@ -154,28 +132,26 @@ def test_vector_similarity_search(kato_fixture):
         [0.5, 0.5, 0.0, 0.0],  # Mixed vector
     ]
 
-    # Observe each vector with a label
+    # Observe each vector with a label using fixture method
     for i, vec in enumerate(base_vectors):
         obs = {
             'strings': [f'vector_{i}'],
             'vectors': [vec],
             'emotives': {}
         }
-        response = requests.post(f"{kato_fixture.base_url}/observe", json=obs)
-        assert response.status_code == 200
+        kato_fixture.observe(obs)
 
-    # Learn the vectors
-    response = requests.post(f"{kato_fixture.base_url}/learn", json={})
-    assert response.status_code == 200
+    # Learn the vectors using fixture method
+    pattern_name = kato_fixture.learn()
+    assert pattern_name is not None
 
-    # Now observe a similar vector
+    # Now observe a similar vector using fixture method
     similar_vector = [0.9, 0.1, 0.0, 0.0]  # Similar to first vector
-    response = requests.post(f"{kato_fixture.base_url}/observe", json={
+    kato_fixture.observe({
         'strings': [],
         'vectors': [similar_vector],
         'emotives': {}
     })
-    assert response.status_code == 200
 
     # The system should recognize this as similar to vector_0
     # This tests the CVC classifier's nearest neighbor functionality
@@ -185,33 +161,26 @@ def test_vector_similarity_search(kato_fixture):
 def test_large_vector_handling(kato_fixture):
     """Test handling of larger dimensional vectors"""
 
-    # Clear all memory
-    response = requests.post(f"{kato_fixture.base_url}/clear-all-memory")
-    assert response.status_code == 200
-    result = response.json()
-    assert result.get('status') == "cleared"  # FastAPI response format
+    # Clear all memory using fixture method
+    kato_fixture.clear_all_memory()
 
     # Create a large dimensional vector
     large_dim = 128
     large_vector = [random.random() for _ in range(large_dim)]
 
-    # Observe the large vector
+    # Observe the large vector using fixture method
     observation = {
         'strings': ['large_vector'],
         'vectors': [large_vector],
         'emotives': {}
     }
 
-    response = requests.post(f"{kato_fixture.base_url}/observe", json=observation)
-    assert response.status_code == 200
-    result = response.json()
-    # Extract message if wrapped
-    message = result['message'] if isinstance(result, dict) and 'message' in result else result
-    assert message['status'] == 'okay'  # FastAPI response format
+    result = kato_fixture.observe(observation)
+    assert result['status'] in ['ok', 'okay', 'observed']
 
-    # Learn it
-    response = requests.post(f"{kato_fixture.base_url}/learn", json={})
-    assert response.status_code == 200
+    # Learn it using fixture method
+    pattern_name = kato_fixture.learn()
+    assert pattern_name is not None
 
     print(f"✓ Successfully handled {large_dim}-dimensional vector")
 
@@ -219,11 +188,8 @@ def test_large_vector_handling(kato_fixture):
 def test_vector_persistence(kato_fixture):
     """Test that vectors are persisted across learning cycles"""
 
-    # Clear all memory
-    response = requests.post(f"{kato_fixture.base_url}/clear-all-memory")
-    assert response.status_code == 200
-    result = response.json()
-    assert result.get('status') == "cleared"  # FastAPI response format
+    # Clear all memory using fixture method
+    kato_fixture.clear_all_memory()
 
     # First learning cycle
     obs1 = {
@@ -231,14 +197,10 @@ def test_vector_persistence(kato_fixture):
         'vectors': [[1.0, 2.0, 3.0]],
         'emotives': {}
     }
-    response = requests.post(f"{kato_fixture.base_url}/observe", json=obs1)
-    assert response.status_code == 200
+    kato_fixture.observe(obs1)
 
-    response = requests.post(f"{kato_fixture.base_url}/learn", json={})
-    assert response.status_code == 200
-    model1_resp = response.json()
-    # Extract model name from response (Current uses 'pattern_name', Legacy uses 'message')
-    model1 = model1_resp.get('pattern_name') or model1_resp.get('message', model1_resp)
+    model1 = kato_fixture.learn()
+    assert model1 is not None
 
     # Second learning cycle with different vector
     obs2 = {
@@ -246,14 +208,10 @@ def test_vector_persistence(kato_fixture):
         'vectors': [[4.0, 5.0, 6.0]],
         'emotives': {}
     }
-    response = requests.post(f"{kato_fixture.base_url}/observe", json=obs2)
-    assert response.status_code == 200
+    kato_fixture.observe(obs2)
 
-    response = requests.post(f"{kato_fixture.base_url}/learn", json={})
-    assert response.status_code == 200
-    model2_resp = response.json()
-    # Extract model name from response (Current uses 'pattern_name', Legacy uses 'message')
-    model2 = model2_resp.get('pattern_name') or model2_resp.get('message', model2_resp)
+    model2 = kato_fixture.learn()
+    assert model2 is not None
 
     # Models should be different
     assert model1 != model2, f"Models should be different: {model1} vs {model2}"

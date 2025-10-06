@@ -512,60 +512,6 @@ class TestSessionLoadAndPerformance:
         print(f"Stress test completed: {success_count}/{iterations} successful")
 
 
-class TestBackwardCompatibility:
-    """Test backward compatibility with legacy.0 API"""
-
-    @pytest.mark.asyncio
-    async def test_default_session_mode(self, kato_client):
-        """Test that legacy.0 endpoints work with default session"""
-        # Use legacy.0 endpoint without session ID
-        result = await kato_client.observe_legacy(
-            {"strings": ["backward_compatible"]}
-        )
-
-        assert result['status'] == "okay"
-
-        # Get STM using legacy endpoint
-        stm = await kato_client.get_stm_legacy()
-
-        # Should have the observation
-        assert any(
-            "backward_compatible" in event
-            for event in stm.get('stm', [])
-        )
-
-        # Clear using legacy endpoint
-        await kato_client.clear_stm_legacy()
-
-        # Verify cleared
-        stm = await kato_client.get_stm_legacy()
-        # Note: legacy mode might persist some state
-
-    @pytest.mark.asyncio
-    async def test_header_based_session_routing(self, kato_client):
-        """Test X-Session-ID header routing"""
-        # Create session
-        session = await kato_client.create_session()
-        session_id = session['session_id']
-
-        # Use legacy endpoint with session header
-        headers = {"X-Session-ID": session_id}
-
-        result = await kato_client.observe_legacy(
-            {"strings": ["header_routed"]},
-            headers=headers
-        )
-
-        assert result['status'] == "okay"
-
-        # Get STM for specific session
-        stm = await kato_client.get_session_stm(session_id)
-        assert stm['stm'] == [["header_routed"]]
-
-        # Cleanup
-        await kato_client.delete_session(session_id)
-
-
 class TestSessionErrorHandling:
     """Test error handling for session operations"""
 

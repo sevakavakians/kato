@@ -17,6 +17,7 @@ RUN pip install --no-cache-dir -r requirements.lock
 
 # Cache bust for code changes
 ARG CACHE_BUST=7
+RUN echo "Cache bust: $CACHE_BUST"
 
 # Copy the KATO package
 COPY kato/ ./kato/

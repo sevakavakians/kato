@@ -261,12 +261,20 @@ class KATOFastAPIFixture:
 
     def teardown(self):
         """Clean up KATO service after testing."""
-        # No explicit session cleanup needed
-        pass
+        # Delete current session if it exists to prevent accumulation
+        if self.session_id:
+            try:
+                # Clear all memory in the session
+                response = requests.post(
+                    f"{self.base_url}/sessions/{self.session_id}/clear-all"
+                )
+                response.raise_for_status()
 
-        # With primary endpoints using automatic session management,
-        # each test automatically gets isolated per-user databases.
-        # No explicit cleanup needed.
+                # Then delete the session
+                response = requests.delete(f"{self.base_url}/sessions/{self.session_id}")
+                response.raise_for_status()
+            except Exception:
+                pass  # Ignore errors during cleanup
 
         if self.use_docker and self.container:
             try:
@@ -417,9 +425,7 @@ class KATOFastAPIFixture:
                 response = requests.post(
                     f"{self.base_url}/sessions/{self.session_id}/clear-all"
                 )
-                if response.status_code != 200:
-                    # Try legacy endpoint
-                    response = requests.post(f"{self.base_url}/clear-all")
+                response.raise_for_status()
 
                 # Then delete the session
                 response = requests.delete(f"{self.base_url}/sessions/{self.session_id}")

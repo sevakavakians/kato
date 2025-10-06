@@ -685,97 +685,6 @@ class KATOClient:
         """
         return self._request('GET', '/status')
 
-    # ========================================================================
-    # Helper Methods - Common Workflows
-    # ========================================================================
-
-    def create_and_observe(
-        self,
-        node_id: str,
-        strings: List[str],
-        vectors: Optional[List[List[float]]] = None,
-        emotives: Optional[Dict[str, float]] = None,
-        config: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
-        """
-        Helper: Create session and immediately observe.
-
-        Args:
-            node_id: Node identifier
-            strings: String symbols to observe
-            vectors: Optional vector embeddings
-            emotives: Optional emotional values
-            config: Optional session configuration
-
-        Returns:
-            Dict with 'session' and 'observation' results
-
-        Example:
-            >>> result = client.create_and_observe(
-            ...     node_id="user123",
-            ...     strings=["hello", "world"],
-            ...     config={"max_pattern_length": 5}
-            ... )
-            >>> session_id = result['session']['session_id']
-        """
-        session = self.create_session(node_id=node_id, config=config)
-        observation = self.observe(
-            session['session_id'],
-            strings=strings,
-            vectors=vectors,
-            emotives=emotives
-        )
-
-        return {
-            'session': session,
-            'observation': observation
-        }
-
-    def observe_learn_predict(
-        self,
-        session_id: str,
-        observations: List[List[str]],
-        learn: bool = True
-    ) -> Dict[str, Any]:
-        """
-        Helper: Complete workflow - observe sequence, learn, predict.
-
-        Args:
-            session_id: Session identifier
-            observations: List of observation string lists
-            learn: Whether to learn from observations (default: True)
-
-        Returns:
-            Dict with 'observations', 'learn_result', and 'predictions'
-
-        Example:
-            >>> result = client.observe_learn_predict(
-            ...     session_id,
-            ...     observations=[['A', 'B'], ['C', 'D'], ['E', 'F']],
-            ...     learn=True
-            ... )
-            >>> print(result['predictions']['count'])
-        """
-        results = {
-            'observations': [],
-            'learn_result': None,
-            'predictions': None
-        }
-
-        # Observe each
-        for obs_strings in observations:
-            obs_result = self.observe(session_id, strings=obs_strings)
-            results['observations'].append(obs_result)
-
-        # Learn if requested
-        if learn:
-            results['learn_result'] = self.learn(session_id)
-
-        # Get predictions
-        results['predictions'] = self.get_predictions(session_id)
-
-        return results
-
     def __enter__(self):
         """Context manager entry."""
         return self
@@ -848,27 +757,6 @@ if __name__ == "__main__":
 
     # Cleanup
     client.delete_session(session2['session_id'])
-
-    # Example 3: Helper method
-    print("\n=== Example 3: Helper Methods ===")
-    result = client.create_and_observe(
-        node_id="user789",
-        strings=["test", "pattern"],
-        config={"max_pattern_length": 3}
-    )
-    session3_id = result['session']['session_id']
-    print(f"Created and observed in session: {session3_id}")
-
-    # Complete workflow
-    workflow_result = client.observe_learn_predict(
-        session3_id,
-        observations=[['A', 'B'], ['C', 'D']],
-        learn=True
-    )
-    print(f"Workflow completed with {workflow_result['predictions']['count']} predictions")
-
-    # Cleanup
-    client.delete_session(session3_id)
 
     # Example 4: Monitoring
     print("\n=== Example 4: Monitoring ===")

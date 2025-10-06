@@ -7,8 +7,7 @@ This directory contains planning and design documentation for the KATO (Knowledg
 
 ### Essential Files (Read First)
 1. **PROJECT_OVERVIEW.md** - Core project information and current status
-2. **ARCHITECTURE.md** - Technical architecture and design decisions
-3. **DECISIONS.md** - Important architectural and design decisions with rationale
+2. **DECISIONS.md** - Important architectural and design decisions with rationale
 
 ### Reference Files
 - **FUTURE_FEATURES.md** - Aspirational features and research ideas
@@ -75,8 +74,8 @@ docker-compose up -d --build
 ```
 
 #### Adding New Features
-1. Check **ARCHITECTURE.md** for design patterns
-2. Implement following existing patterns
+1. Review existing code patterns for consistency
+2. Implement following established patterns
 3. Add comprehensive tests
 4. Update documentation if needed
 5. Document decisions in **DECISIONS.md** if architectural
@@ -89,23 +88,25 @@ docker-compose up -d --build
 
 ## Current System State
 
-**Status**: Stable and production-ready
+**Status**: Stable and production-ready (maintenance mode)
 **Architecture**: FastAPI with direct processor embedding
-**Test Coverage**: 276 tests with high pass rate
+**Test Coverage**: 276+ tests with high pass rate
 **Performance**: ~10ms average response time
-**Last Major Update**: Session-based architecture with observe-sequence endpoint  
+**Code Quality**: 96% technical debt reduction achieved (6,315 → 67 ruff issues)
+**Last Major Update**: Technical Debt Phase 5 cleanup completed (2025-10-06)  
 
 ## Directory Structure
 ```
 planning-docs/
 ├── README.md              # This file
 ├── PROJECT_OVERVIEW.md    # Core project information
-├── ARCHITECTURE.md       # Technical architecture
-├── DECISIONS.md          # Design decisions log
-├── FUTURE_FEATURES.md    # Aspirational features
-├── ARCHIVE_SUMMARY.md    # Completed milestone summary
-├── completed/            # Detailed completed work docs
-└── archive-2024/         # Archived planning documents
+├── DECISIONS.md           # Design decisions log
+├── FUTURE_FEATURES.md     # Aspirational features
+├── ARCHIVE_SUMMARY.md     # Completed milestone summary
+├── completed/             # Detailed completed work docs
+├── sessions/              # Session logs
+├── project-manager/       # Agent workspace and logs
+└── archive-2024/          # Archived planning documents
 ```
 
 ## Documentation Philosophy

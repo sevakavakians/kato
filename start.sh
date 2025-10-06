@@ -148,6 +148,48 @@ case "$COMMAND" in
         fi
         ;;
 
+    clean-data)
+        print_warn "⚠️  This will DELETE ALL DATA in MongoDB, Qdrant, and Redis!"
+        print_warn "Services will remain running but all databases will be cleared."
+        echo -e "${RED}Are you absolutely sure? (yes/N)${NC}"
+        read -r response
+        if [[ "$response" == "yes" ]]; then
+            print_info "Clearing all database data..."
+
+            # Clear MongoDB - drop all non-system databases
+            print_info "Clearing MongoDB databases..."
+            docker exec kato-mongodb mongo --eval "
+                db.getMongo().getDBNames().forEach(function(dbName) {
+                    if (dbName !== 'admin' && dbName !== 'config' && dbName !== 'local') {
+                        print('Dropping database: ' + dbName);
+                        db.getSiblingDB(dbName).dropDatabase();
+                    }
+                });
+            " || print_error "Failed to clear MongoDB"
+
+            # Clear Qdrant - delete all collections
+            print_info "Clearing Qdrant collections..."
+            COLLECTIONS=$(curl -s -m 10 http://localhost:6333/collections 2>/dev/null | grep -o '"name":"[^"]*"' | cut -d'"' -f4)
+            if [ -n "$COLLECTIONS" ]; then
+                for collection in $COLLECTIONS; do
+                    print_info "Deleting collection: $collection"
+                    curl -X DELETE "http://localhost:6333/collections/$collection" 2>/dev/null
+                done
+            else
+                print_info "No Qdrant collections to delete"
+            fi
+
+            # Clear Redis - flush all data
+            print_info "Clearing Redis data..."
+            docker exec kato-redis redis-cli FLUSHALL || print_error "Failed to clear Redis"
+
+            print_info "✓ All database data has been cleared!"
+            print_warn "Services are still running. Use './start.sh restart' if needed."
+        else
+            print_info "Data cleanup cancelled"
+        fi
+        ;;
+
     clean)
         print_warn "This will remove all containers and volumes. Are you sure? (y/N)"
         read -r response
@@ -157,6 +199,40 @@ case "$COMMAND" in
             print_info "Cleanup complete"
         else
             print_info "Cleanup cancelled"
+        fi
+        ;;
+
+    clean-all)
+        print_error "⚠️  NUCLEAR OPTION: This will COMPLETELY RESET KATO!"
+        print_warn "This will:"
+        print_warn "  1. Stop all services"
+        print_warn "  2. Remove all containers"
+        print_warn "  3. Delete all volumes (mongo-data, qdrant-data, redis-data)"
+        print_warn "  4. Restart services from clean state"
+        echo -e "${RED}Type 'DELETE EVERYTHING' to confirm:${NC}"
+        read -r response
+        if [[ "$response" == "DELETE EVERYTHING" ]]; then
+            print_info "Stopping all services..."
+            docker-compose down
+
+            print_info "Removing all volumes..."
+            docker volume rm kato_mongo-data kato_qdrant-data kato_redis-data 2>/dev/null || print_warn "Some volumes may not exist"
+
+            print_info "Starting fresh services..."
+            docker-compose up -d
+
+            print_info "Waiting for services to be ready..."
+            sleep 5
+
+            # Check health
+            if curl -s http://localhost:8000/health > /dev/null; then
+                print_info "✓ KATO has been completely reset and is now running clean"
+                print_info "Access KATO at: http://localhost:8000"
+            else
+                print_warn "Services may still be starting up..."
+            fi
+        else
+            print_info "Complete reset cancelled"
         fi
         ;;
 
@@ -173,7 +249,9 @@ case "$COMMAND" in
         echo "  logs [SERVICE] [N] - Show last N lines of logs (default: kato, 50 lines)"
         echo "  follow [SERVICE]   - Follow logs in real-time (default: kato)"
         echo "  status             - Check all service status"
+        echo "  clean-data         - Delete all data in MongoDB, Qdrant, and Redis (services keep running)"
         echo "  clean              - Remove all containers and volumes"
+        echo "  clean-all          - NUCLEAR: Complete reset - stops services, removes volumes, restarts clean"
         echo "  help               - Show this help message"
         echo ""
         echo "Services: $ALL_SERVICES"
@@ -187,5 +265,7 @@ case "$COMMAND" in
         echo "  ./start.sh follow kato        # Follow KATO logs in real-time"
         echo "  ./start.sh build kato         # Rebuild only KATO image"
         echo "  ./start.sh status             # Check all services"
+        echo "  ./start.sh clean-data         # Clear all database data (soft reset)"
+        echo "  ./start.sh clean-all          # Complete reset with volume removal (hard reset)"
         ;;
 esac

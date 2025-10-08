@@ -1,27 +1,35 @@
 """
-KATO Python Client - Comprehensive API Wrapper
+KATO Python Client - Simple API Wrapper with Transparent Session Management
 
 This is a complete Python client for the KATO API that can be copied into any project.
-It covers all KATO API endpoints including session management, observations,
-learning, predictions, monitoring, and more.
+Sessions are handled automatically - one client instance equals one isolated KATO session.
 
 USAGE:
     from sample_kato_client import KATOClient
 
-    # Create client
-    client = KATOClient(base_url="http://localhost:8000")
+    # Create client with auto-session creation
+    client = KATOClient(
+        base_url="http://localhost:8000",
+        node_id="user123",
+        max_pattern_length=10,
+        stm_mode="ROLLING"
+    )
 
-    # Create a session
-    session = client.create_session(node_id="user123")
-    session_id = session['session_id']
+    # Observe, learn, and predict (no session_id needed)
+    client.observe(strings=["hello", "world"])
+    client.learn()
+    predictions = client.get_predictions()
 
-    # Observe, learn, and predict
-    client.observe(session_id, strings=["hello", "world"])
-    client.learn(session_id)
-    predictions = client.get_predictions(session_id)
+    # Cleanup
+    client.close()
+
+    # Or use as context manager for auto-cleanup
+    with KATOClient(base_url="http://localhost:8000", node_id="user123") as client:
+        client.observe(strings=["hello", "world"])
+        predictions = client.get_predictions()
 
 Author: KATO Team
-Version: 2.0.0
+Version: 3.0.0
 """
 
 import json
@@ -33,17 +41,12 @@ import requests
 
 class KATOClient:
     """
-    Comprehensive Python client for KATO API.
+    Python client for KATO API with transparent session management.
 
-    Provides access to all KATO endpoints including:
-    - Session Management (multi-user support)
-    - Observations and Learning
-    - Predictions and Pattern Retrieval
-    - Configuration Management
-    - Monitoring and Metrics
-    - Health Checks
+    This client provides a simple interface to KATO where sessions are handled
+    automatically. One client instance = one isolated KATO session.
 
-    Configuration Parameters (all optional, use system defaults if not set):
+    Configuration Parameters:
         max_pattern_length: int (0+, default=0)
             - 0 = manual learning only
             - N > 0 = auto-learn after N observations
@@ -69,19 +72,99 @@ class KATOClient:
 
         process_predictions: bool (default=True)
             - Whether to process predictions
+
+    Example:
+        >>> client = KATOClient(
+        ...     base_url="http://localhost:8000",
+        ...     node_id="level0_token_node",
+        ...     max_pattern_length=10,
+        ...     stm_mode="ROLLING"
+        ... )
+        >>> client.observe(strings=["hello", "world"])
+        >>> client.learn()
+        >>> predictions = client.get_predictions()
+        >>> client.close()
     """
 
-    def __init__(self, base_url: str = "http://localhost:8000", timeout: int = 30):
+    def __init__(
+        self,
+        base_url: str = "http://localhost:8000",
+        node_id: str = None,
+        timeout: int = 30,
+        metadata: Optional[Dict[str, Any]] = None,
+        ttl_seconds: Optional[int] = None,
+        # Configuration parameters with defaults from KATO settings
+        max_pattern_length: int = 0,
+        persistence: int = 5,
+        recall_threshold: float = 0.1,
+        stm_mode: str = 'CLEAR',
+        indexer_type: str = 'VI',
+        max_predictions: int = 100,
+        sort_symbols: bool = True,
+        process_predictions: bool = True
+    ):
         """
-        Initialize KATO client.
+        Initialize KATO client with automatic session creation.
 
         Args:
-            base_url: Base URL of KATO service (default: http://localhost:8000)
+            base_url: Base URL of KATO service
+            node_id: Node identifier (required for processor isolation)
             timeout: Request timeout in seconds (default: 30)
+            metadata: Optional session metadata
+            ttl_seconds: Session TTL in seconds (default: 3600)
+            max_pattern_length: Auto-learn after N observations (0=manual, default: 0)
+            persistence: Rolling window size for emotives (1-100, default: 5)
+            recall_threshold: Pattern matching threshold (0.0-1.0, default: 0.1)
+            stm_mode: STM mode 'CLEAR' or 'ROLLING' (default: 'CLEAR')
+            indexer_type: Vector indexer type (default: 'VI')
+            max_predictions: Max predictions to return (1-10000, default: 100)
+            sort_symbols: Sort symbols alphabetically (default: True)
+            process_predictions: Enable prediction processing (default: True)
+
+        Raises:
+            ValueError: If node_id is not provided
         """
+        if node_id is None:
+            raise ValueError("node_id is required for KATO client initialization")
+
         self.base_url = base_url.rstrip('/')
         self.timeout = timeout
-        self.session = requests.Session()
+        self.node_id = node_id
+        self._http_session = requests.Session()
+
+        # Build configuration
+        config = {}
+        if max_pattern_length != 0:
+            config['max_pattern_length'] = max_pattern_length
+        if persistence != 5:
+            config['persistence'] = persistence
+        if recall_threshold != 0.1:
+            config['recall_threshold'] = recall_threshold
+        if stm_mode != 'CLEAR':
+            config['stm_mode'] = stm_mode
+        if indexer_type != 'VI':
+            config['indexer_type'] = indexer_type
+        if max_predictions != 100:
+            config['max_predictions'] = max_predictions
+        if sort_symbols is not True:
+            config['sort_symbols'] = sort_symbols
+        if process_predictions is not True:
+            config['process_predictions'] = process_predictions
+
+        # Auto-create session
+        session_data = {
+            'node_id': node_id,
+            'metadata': metadata or {},
+        }
+        if ttl_seconds is not None:
+            session_data['ttl_seconds'] = ttl_seconds
+
+        session_response = self._request('POST', '/sessions', data=session_data)
+        self._session_id = session_response['session_id']
+
+        # Update config if any non-default values provided
+        if config:
+            self._request('POST', f'/sessions/{self._session_id}/config', data={'config': config})
 
     def _request(
         self,
@@ -115,7 +198,7 @@ class KATOClient:
         if params is not None:
             kwargs['params'] = params
 
-        response = self.session.request(method, url, **kwargs)
+        response = self._http_session.request(method, url, **kwargs)
         response.raise_for_status()
 
         return response.json()
@@ -140,153 +223,41 @@ class KATOClient:
         return self._request('GET', '/')
 
     # ========================================================================
-    # Session Management
+    # Session Management (Internal)
     # ========================================================================
 
-    def create_session(
-        self,
-        node_id: str,
-        metadata: Optional[Dict[str, Any]] = None,
-        ttl_seconds: Optional[int] = None,
-        config: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
-        """
-        Create a new isolated session.
-
-        Args:
-            node_id: Node identifier (required for processor isolation)
-            metadata: Optional session metadata
-            ttl_seconds: Session TTL in seconds (default: 3600)
-            config: Optional session configuration (see class docstring for params)
-
-        Returns:
-            Session response with session_id, node_id, created_at, expires_at, etc.
-
-        Example:
-            >>> client = KATOClient()
-            >>> session = client.create_session(
-            ...     node_id="user123",
-            ...     metadata={"user": "Alice"},
-            ...     config={"max_pattern_length": 5, "recall_threshold": 0.5}
-            ... )
-            >>> session_id = session['session_id']
-        """
-        data = {
-            'node_id': node_id,
-            'metadata': metadata or {},
-        }
-        if ttl_seconds is not None:
-            data['ttl_seconds'] = ttl_seconds
-
-        session = self._request('POST', '/sessions', data=data)
-
-        # Update config if provided
-        if config:
-            self.update_config(session['session_id'], config)
-
-        return session
-
-    def get_session(self, session_id: str) -> Dict[str, Any]:
-        """
-        Get information about a session.
-
-        Args:
-            session_id: Session identifier
-
-        Returns:
-            Session information
-
-        Example:
-            >>> info = client.get_session(session_id)
-            >>> print(info['node_id'])
-        """
-        return self._request('GET', f'/sessions/{session_id}')
-
-    def delete_session(self, session_id: str) -> Dict[str, Any]:
-        """
-        Delete a session and cleanup resources.
-
-        Args:
-            session_id: Session identifier
-
-        Returns:
-            Status response
-
-        Example:
-            >>> result = client.delete_session(session_id)
-            >>> print(result['status'])
-            'deleted'
-        """
-        return self._request('DELETE', f'/sessions/{session_id}')
-
-    def get_session_count(self) -> int:
-        """
-        Get count of active sessions.
-
-        Returns:
-            Number of active sessions
-
-        Example:
-            >>> count = client.get_session_count()
-            >>> print(f"{count} active sessions")
-        """
-        result = self._request('GET', '/sessions/count')
-        return result['active_session_count']
-
-    def update_config(
-        self,
-        session_id: str,
-        config: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """
-        Update session configuration.
-
-        Args:
-            session_id: Session identifier
-            config: Configuration parameters to update (see class docstring)
-
-        Returns:
-            Status response
-
-        Example:
-            >>> result = client.update_config(
-            ...     session_id,
-            ...     {
-            ...         "max_pattern_length": 5,
-            ...         "recall_threshold": 0.5,
-            ...         "stm_mode": "ROLLING"
-            ...     }
-            ... )
-        """
-        return self._request('POST', f'/sessions/{session_id}/config', data={'config': config})
-
-    def extend_session(self, session_id: str, ttl_seconds: int = 3600) -> Dict[str, Any]:
+    def extend_session(self, ttl_seconds: int = 3600) -> Dict[str, Any]:
         """
         Extend session expiration time.
 
         Args:
-            session_id: Session identifier
             ttl_seconds: New TTL in seconds (default: 3600)
 
         Returns:
             Status response
 
         Example:
-            >>> result = client.extend_session(session_id, ttl_seconds=7200)
+            >>> result = client.extend_session(ttl_seconds=7200)
         """
-        return self._request('POST', f'/sessions/{session_id}/extend', params={'ttl_seconds': ttl_seconds})
+        return self._request('POST', f'/sessions/{self._session_id}/extend', params={'ttl_seconds': ttl_seconds})
 
-    def test_endpoint(self, test_id: str) -> Dict[str, Any]:
+    def close(self) -> None:
         """
-        Test endpoint to verify session routing works.
+        Close the client and delete the session.
 
-        Args:
-            test_id: Test identifier
+        This is called automatically when using the client as a context manager.
 
-        Returns:
-            Test response
+        Example:
+            >>> client = KATOClient(node_id="user123")
+            >>> # ... use client ...
+            >>> client.close()
         """
-        return self._request('GET', f'/sessions/test/{test_id}')
+        try:
+            self._request('DELETE', f'/sessions/{self._session_id}')
+        except Exception:
+            pass  # Ignore errors during cleanup
+        finally:
+            self._http_session.close()
 
     # ========================================================================
     # Core KATO Operations
@@ -294,7 +265,6 @@ class KATOClient:
 
     def observe(
         self,
-        session_id: str,
         strings: Optional[List[str]] = None,
         vectors: Optional[List[List[float]]] = None,
         emotives: Optional[Dict[str, float]] = None
@@ -303,7 +273,6 @@ class KATOClient:
         Process an observation.
 
         Args:
-            session_id: Session identifier
             strings: List of string symbols to observe
             vectors: List of vector embeddings (768-dim recommended)
             emotives: Emotional values as {emotion_name: value} (values -1.0 to 1.0)
@@ -313,7 +282,6 @@ class KATOClient:
 
         Example:
             >>> result = client.observe(
-            ...     session_id,
             ...     strings=["hello", "world"],
             ...     emotives={"happiness": 0.8, "arousal": 0.5}
             ... )
@@ -325,62 +293,52 @@ class KATOClient:
             'vectors': vectors or [],
             'emotives': emotives or {}
         }
-        return self._request('POST', f'/sessions/{session_id}/observe', data=data)
+        return self._request('POST', f'/sessions/{self._session_id}/observe', data=data)
 
-    def get_stm(self, session_id: str) -> Dict[str, Any]:
+    def get_stm(self) -> Dict[str, Any]:
         """
         Get short-term memory.
-
-        Args:
-            session_id: Session identifier
 
         Returns:
             STM response with stm list and length
 
         Example:
-            >>> stm_data = client.get_stm(session_id)
+            >>> stm_data = client.get_stm()
             >>> print(stm_data['stm'])
             [['hello', 'world'], ['foo', 'bar']]
         """
-        return self._request('GET', f'/sessions/{session_id}/stm')
+        return self._request('GET', f'/sessions/{self._session_id}/stm')
 
-    def learn(self, session_id: str) -> Dict[str, Any]:
+    def learn(self) -> Dict[str, Any]:
         """
         Learn a pattern from the current STM.
-
-        Args:
-            session_id: Session identifier
 
         Returns:
             Learn result with pattern_name and status
 
         Example:
-            >>> result = client.learn(session_id)
+            >>> result = client.learn()
             >>> print(result['pattern_name'])
             'PTRN|a1b2c3...'
         """
-        return self._request('POST', f'/sessions/{session_id}/learn')
+        return self._request('POST', f'/sessions/{self._session_id}/learn')
 
-    def clear_stm(self, session_id: str) -> Dict[str, Any]:
+    def clear_stm(self) -> Dict[str, Any]:
         """
         Clear the short-term memory.
-
-        Args:
-            session_id: Session identifier
 
         Returns:
             Status response
 
         Example:
-            >>> result = client.clear_stm(session_id)
+            >>> result = client.clear_stm()
             >>> print(result['status'])
             'cleared'
         """
-        return self._request('POST', f'/sessions/{session_id}/clear-stm')
+        return self._request('POST', f'/sessions/{self._session_id}/clear-stm')
 
     def observe_sequence(
         self,
-        session_id: str,
         observations: List[Dict[str, Any]],
         learn_after_each: bool = False,
         learn_at_end: bool = False,
@@ -390,7 +348,6 @@ class KATOClient:
         Process multiple observations in sequence.
 
         Args:
-            session_id: Session identifier
             observations: List of observation dicts with strings/vectors/emotives
             learn_after_each: Whether to learn after each observation
             learn_at_end: Whether to learn from final STM state
@@ -401,7 +358,6 @@ class KATOClient:
 
         Example:
             >>> result = client.observe_sequence(
-            ...     session_id,
             ...     observations=[
             ...         {'strings': ['A', 'B']},
             ...         {'strings': ['C', 'D']},
@@ -418,24 +374,21 @@ class KATOClient:
             'learn_at_end': learn_at_end,
             'clear_stm_between': clear_stm_between
         }
-        return self._request('POST', f'/sessions/{session_id}/observe-sequence', data=data)
+        return self._request('POST', f'/sessions/{self._session_id}/observe-sequence', data=data)
 
-    def get_predictions(self, session_id: str) -> Dict[str, Any]:
+    def get_predictions(self) -> Dict[str, Any]:
         """
         Get predictions based on the current STM.
-
-        Args:
-            session_id: Session identifier
 
         Returns:
             Predictions response with predictions list, future_potentials, count
 
         Example:
-            >>> result = client.get_predictions(session_id)
+            >>> result = client.get_predictions()
             >>> for pred in result['predictions']:
             ...     print(pred['future'])
         """
-        return self._request('GET', f'/sessions/{session_id}/predictions')
+        return self._request('GET', f'/sessions/{self._session_id}/predictions')
 
     # ========================================================================
     # Gene and Pattern Management
@@ -690,8 +643,8 @@ class KATOClient:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit - close session."""
-        self.session.close()
+        """Context manager exit - close session and cleanup."""
+        self.close()
 
 
 # ============================================================================
@@ -699,52 +652,62 @@ class KATOClient:
 # ============================================================================
 
 if __name__ == "__main__":
-    # Example 1: Basic workflow
-    print("=== Example 1: Basic Workflow ===")
-    client = KATOClient(base_url="http://localhost:8000")
-
-    # Create session with configuration
-    session = client.create_session(
+    # Example 1: Basic workflow with context manager
+    print("=== Example 1: Basic Workflow (Context Manager) ===")
+    with KATOClient(
+        base_url="http://localhost:8000",
         node_id="user123",
-        metadata={"user": "Alice", "app": "demo"},
-        config={
-            "max_pattern_length": 5,
-            "recall_threshold": 0.5,
-            "stm_mode": "ROLLING"
-        }
+        max_pattern_length=5,
+        recall_threshold=0.5,
+        stm_mode="ROLLING",
+        metadata={"user": "Alice", "app": "demo"}
+    ) as client:
+        print(f"Created session: {client._session_id}")
+
+        # Observe
+        obs1 = client.observe(strings=["hello", "world"])
+        print(f"Observed: {obs1['stm_length']} events in STM")
+
+        obs2 = client.observe(strings=["foo", "bar"])
+        print(f"Observed: {obs2['stm_length']} events in STM")
+
+        # Learn pattern
+        learn_result = client.learn()
+        print(f"Learned pattern: {learn_result['pattern_name']}")
+
+        # Clear and observe again
+        client.clear_stm()
+        obs3 = client.observe(strings=["hello", "world"])
+
+        # Get predictions
+        predictions = client.get_predictions()
+        print(f"Got {predictions['count']} predictions")
+
+    print("Session auto-deleted on exit\n")
+
+    # Example 2: Manual cleanup
+    print("=== Example 2: Manual Cleanup ===")
+    client = KATOClient(
+        base_url="http://localhost:8000",
+        node_id="user456"
     )
-    session_id = session['session_id']
-    print(f"Created session: {session_id}")
 
-    # Observe
-    obs1 = client.observe(session_id, strings=["hello", "world"])
-    print(f"Observed: {obs1['stm_length']} events in STM")
+    client.observe(strings=["A", "B"])
+    client.observe(strings=["C", "D"])
+    client.learn()
 
-    obs2 = client.observe(session_id, strings=["foo", "bar"])
-    print(f"Observed: {obs2['stm_length']} events in STM")
+    # Manual cleanup
+    client.close()
+    print("Session manually deleted\n")
 
-    # Learn pattern
-    learn_result = client.learn(session_id)
-    print(f"Learned pattern: {learn_result['pattern_name']}")
-
-    # Clear and observe again
-    client.clear_stm(session_id)
-    obs3 = client.observe(session_id, strings=["hello", "world"])
-
-    # Get predictions
-    predictions = client.get_predictions(session_id)
-    print(f"Got {predictions['count']} predictions")
-
-    # Cleanup
-    client.delete_session(session_id)
-    print("Session deleted\n")
-
-    # Example 2: Bulk sequence processing
-    print("=== Example 2: Bulk Sequence Processing ===")
-    session2 = client.create_session(node_id="user456")
+    # Example 3: Bulk sequence processing
+    print("=== Example 3: Bulk Sequence Processing ===")
+    client = KATOClient(
+        base_url="http://localhost:8000",
+        node_id="user789"
+    )
 
     result = client.observe_sequence(
-        session2['session_id'],
         observations=[
             {'strings': ['A', 'B']},
             {'strings': ['C', 'D']},
@@ -755,15 +718,21 @@ if __name__ == "__main__":
     print(f"Processed {result['observations_processed']} observations")
     print(f"Final STM length: {result['final_stm_length']}")
 
-    # Cleanup
-    client.delete_session(session2['session_id'])
+    client.close()
 
     # Example 4: Monitoring
     print("\n=== Example 4: Monitoring ===")
+    client = KATOClient(
+        base_url="http://localhost:8000",
+        node_id="monitor_node"
+    )
+
     health = client.health_check()
     print(f"Health: {health['status']}")
 
     metrics = client.get_metrics()
-    print(f"Active sessions: {metrics.get('active_sessions', 0)}")
+    print(f"Total requests: {metrics.get('performance', {}).get('total_requests', 0)}")
+
+    client.close()
 
     print("\nAll examples completed!")

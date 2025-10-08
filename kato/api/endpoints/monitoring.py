@@ -217,9 +217,9 @@ async def get_stats(minutes: int = 10):
 
         # Available time series metrics
         available_metrics = [
-            "cpu_percent", "memory_percent", "memory_used_mb",
-            "disk_percent", "load_average_1m", "requests_total",
-            "response_time", "errors_total", "sessions_created",
+            "kato_cpu_usage_percent", "kato_memory_usage_percent", "kato_memory_usage_bytes",
+            "kato_disk_usage_percent", "load_average_1m", "kato_requests_total",
+            "kato_request_duration_seconds", "kato_errors_total", "sessions_created",
             "sessions_deleted", "session_operations",
             "mongodb_operations", "mongodb_response_time", "mongodb_errors",
             "qdrant_operations", "qdrant_response_time", "qdrant_errors",
@@ -228,8 +228,9 @@ async def get_stats(minutes: int = 10):
 
         # Collect time series data for all metrics
         time_series_data = {}
+        window_seconds = minutes * 60  # Convert minutes to seconds
         for metric_name in available_metrics:
-            time_series_data[metric_name] = app_state.metrics_collector.get_time_series(metric_name, minutes)
+            time_series_data[metric_name] = app_state.metrics_collector.get_time_series(metric_name, window_seconds)
 
         # Summary statistics
         current_status = app_state.metrics_collector.get_health_status()

@@ -120,9 +120,9 @@ class TestMonitoringEndpoints:
         # Default range should be 10 minutes
         assert data["time_range_minutes"] == 10
 
-        # Time series should contain expected metrics
+        # Time series should contain expected metrics (using full metric names)
         time_series = data["time_series"]
-        expected_metrics = ["cpu_percent", "memory_percent", "requests_total", "response_time"]
+        expected_metrics = ["kato_cpu_usage_percent", "kato_memory_usage_percent", "kato_requests_total", "kato_request_duration_seconds"]
         for metric in expected_metrics:
             assert metric in time_series, f"Missing time series metric: {metric}"
             assert isinstance(time_series[metric], list)

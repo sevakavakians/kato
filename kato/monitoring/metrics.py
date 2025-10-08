@@ -315,8 +315,10 @@ class MetricsCollector:
     async def collect_system_metrics(self):
         """Collect system resource metrics"""
         try:
-            # CPU metrics
-            cpu_percent = psutil.cpu_percent(interval=1)
+            # CPU metrics - call twice because first call returns 0.0
+            psutil.cpu_percent(interval=0.1)  # Prime the pump
+            await asyncio.sleep(0.1)
+            cpu_percent = psutil.cpu_percent(interval=0.1)
             self.set("kato_cpu_usage_percent", cpu_percent)
 
             # Memory metrics
@@ -364,7 +366,11 @@ class MetricsCollector:
         self._collection_interval = interval
 
         if not self._collection_task:
+            logger.info(f"Creating metrics collection task with {interval}s interval")
             self._collection_task = asyncio.create_task(self._collection_loop())
+            logger.info(f"Metrics collection task created: {self._collection_task}")
+            # Give the task a chance to start
+            await asyncio.sleep(0.1)
             logger.info(f"Started metrics collection with {interval}s interval")
 
     async def stop_collection(self):
@@ -378,14 +384,17 @@ class MetricsCollector:
 
     async def _collection_loop(self):
         """Background collection loop"""
+        logger.info("Metrics collection loop started")
         while True:
             try:
                 await self.collect_system_metrics()
+                logger.debug(f"Metrics collected - CPU: {self.get_metric('kato_cpu_usage_percent').get_current() if self.get_metric('kato_cpu_usage_percent') else 'None'}")
                 await asyncio.sleep(self._collection_interval)
             except asyncio.CancelledError:
+                logger.info("Metrics collection loop cancelled")
                 break
             except Exception as e:
-                logger.error(f"Error in collection loop: {e}")
+                logger.error(f"Error in collection loop: {e}", exc_info=True)
                 await asyncio.sleep(self._collection_interval)
 
     def _get_metric_value(self, all_metrics: dict, metric_name: str, value_type: str = "current") -> float:
@@ -442,9 +451,9 @@ class MetricsCollector:
                 "average_response_time": self._get_metric_value(all_metrics, "kato_request_duration_seconds", "average_1m")
             },
             "resources": {
-                "cpu_percent": self._get_metric_value(all_metrics, "cpu_percent"),
-                "memory_percent": self._get_metric_value(all_metrics, "memory_percent"),
-                "disk_percent": self._get_metric_value(all_metrics, "disk_percent")
+                "cpu_percent": self._get_metric_value(all_metrics, "kato_cpu_usage_percent"),
+                "memory_percent": self._get_metric_value(all_metrics, "kato_memory_usage_percent"),
+                "disk_percent": self._get_metric_value(all_metrics, "kato_disk_usage_percent")
             },
             "databases": {
                 "mongodb": {

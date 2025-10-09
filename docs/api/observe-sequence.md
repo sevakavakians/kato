@@ -25,11 +25,12 @@ Each "observation" in the array represents:
       "strings": ["string1", "string2"],
       "vectors": [[0.1, 0.2, ...]],  // 768-dimensional vectors
       "emotives": {"joy": 0.8},
+      "metadata": {"source": "user_input", "category": "action"},  // Contextual tags
       "unique_id": "optional-custom-id"
     }
   ],
   "learn_after_each": false,    // Learn pattern after each single event
-  "learn_at_end": false,         // Learn pattern from accumulated sequence  
+  "learn_at_end": false,         // Learn pattern from accumulated sequence
   "clear_stm_between": false    // Clear STM between events for isolation
 }
 ```
@@ -174,6 +175,28 @@ observations = [
 # to learn each document independently
 ```
 
+### 5. Document Tracking with Metadata
+Track patterns across document sources using metadata:
+```python
+observations = [
+  {
+    "strings": ["alice", "rabbit", "hole"],
+    "metadata": {"book": "Alice in Wonderland", "chapter": "1", "page": "5"}
+  },
+  {
+    "strings": ["pool", "tears"],
+    "metadata": {"book": "Alice in Wonderland", "chapter": "2", "page": "15"}
+  },
+  {
+    "strings": ["mock", "turtle"],
+    "metadata": {"book": "Alice in Wonderland", "chapter": "9", "page": "85"}
+  }
+]
+# Process with learn_at_end=true to learn the pattern
+# Result: Pattern metadata will contain:
+# {"book": ["Alice in Wonderland"], "chapter": ["1", "2", "9"], "page": ["15", "5", "85"]}
+```
+
 ## Performance Considerations
 
 1. **Batch Size**: Optimal batch size is 10-100 observations
@@ -186,9 +209,10 @@ observations = [
 1. **Alphanumeric Sorting**: Strings within each event are automatically sorted alphanumerically
 2. **Vector Processing**: Vectors are converted to symbolic names (VCTR|hash) in STM
 3. **Emotive Persistence**: Default emotive rolling window is 5 entries per pattern (configurable via PERSISTENCE)
-4. **Pattern Naming**: Learned patterns follow the format PTRN|<sha1_hash>
-5. **Deterministic**: Same inputs always produce same outputs
-6. **Learning Clears STM**: Any learning operation (learn_after_each or learn_at_end) always clears STM
+4. **Metadata Accumulation**: Metadata from all events is accumulated with set-union (unique string lists)
+5. **Pattern Naming**: Learned patterns follow the format PTRN|<sha1_hash>
+6. **Deterministic**: Same inputs always produce same outputs
+7. **Learning Clears STM**: Any learning operation (learn_after_each or learn_at_end) always clears STM
 
 ## Error Handling
 

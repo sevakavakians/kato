@@ -64,6 +64,7 @@ Processes an observation and adds it to short-term memory.
   "strings": ["hello", "world"],      // Required: String symbols to observe
   "vectors": [[0.1, 0.2, ...]],      // Optional: 768-dim vectors
   "emotives": {"joy": 0.8},          // Optional: Dict[str, float] - emotional/utility values
+  "metadata": {"book": "Alice"},     // Optional: Dict[str, Any] - contextual tags/attributes
   "unique_id": "obs-123"              // Optional: Tracking identifier
 }
 ```
@@ -125,6 +126,8 @@ Learns a pattern from current short-term memory.
 - Emotives accumulated in STM are averaged and stored with the pattern
 - Pattern emotives are maintained as rolling window arrays (size = PERSISTENCE)
 - When patterns are re-learned, oldest emotive values drop off
+- Metadata accumulated in STM is merged with unique string lists (set-union)
+- Pattern metadata persists indefinitely and accumulates across re-learning
 - Returns empty pattern_name if STM has < 2 strings
 - Pattern name format: `PTRN|<sha1_hash>`
 - Clears STM after learning
@@ -158,6 +161,7 @@ Returns predictions based on current STM or specific observation.
       "snr": 0.9,
       "fragmentation": 1,
       "emotives": {"joy": 0.5},      // Averaged emotives from learned pattern
+      "metadata": {"book": ["Alice", "Wonderland"]},  // Accumulated metadata from pattern
       "predictive_information": 0.75,  // Information-theoretic predictive value
       "potential": 0.6375,             // similarity * predictive_information
       "normalized_entropy": 0.3,
@@ -234,6 +238,7 @@ Retrieves a specific pattern by ID.
     "pattern_data": [["a"], ["b", "c"]],
     "frequency": 3,
     "emotives": {"confidence": [0.8, 0.7, 0.9]},  // Rolling window arrays per emotive
+    "metadata": {"book": ["Alice", "Wonderland"], "chapter": ["1", "2"]},  // Unique string lists
     "length": 3
   },
   "session_id": "primary"
@@ -381,7 +386,8 @@ Establishes WebSocket connection for real-time bidirectional communication.
   "payload": {
     "strings": ["hello"],
     "vectors": [],
-    "emotives": {}
+    "emotives": {},
+    "metadata": {"source": "chat"}
   }
 }
 ```
@@ -477,6 +483,7 @@ Common HTTP status codes:
 - `strings`: List[str] - String symbols to observe
 - `vectors`: List[List[float]] - Optional 768-dim vectors
 - `emotives`: Dict[str, float] - Optional emotional values
+- `metadata`: Dict[str, Any] - Optional contextual tags/attributes (stored as unique string lists)
 - `unique_id`: Optional[str] - Tracking identifier
 
 ### Prediction Fields
@@ -493,7 +500,8 @@ Common HTTP status codes:
 - `similarity`: Overall pattern similarity (0-1)
 - `snr`: Signal-to-noise ratio
 - `fragmentation`: Pattern cohesion measure
-- `emotives`: Emotional/utility values
+- `emotives`: Emotional/utility values (averaged from pattern)
+- `metadata`: Contextual tags/attributes (unique string lists from pattern)
 - `predictive_information`: Information-theoretic predictive value (0-1)
 - `potential`: Information-theoretic ranking metric (similarity × predictive_information)
 - `normalized_entropy`: Entropy-like complexity measure

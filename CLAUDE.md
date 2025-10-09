@@ -200,8 +200,9 @@ Client Request → FastAPI Service (Port 8000) → Embedded KATO Processor
 5. **Empty Event Handling**: Empty events are NOT supported per spec
    - Empty events should be filtered BEFORE observation
    - STM only processes non-empty event sequences
-6. **Multi-Modal Processing**: Handles strings, vectors (768-dim), and emotional context
+6. **Multi-Modal Processing**: Handles strings, vectors (768-dim), emotional context, and pattern metadata
    - Vectors always produce name strings (e.g., 'VCTR|<hash>') for STM
+   - Metadata provides contextual tags stored as unique string lists per pattern
 7. **Deterministic**: Same inputs always produce same outputs
 8. **Variable Pattern Lengths**: Supports patterns of arbitrary length (2+ strings total)
    - Events can have varying numbers of symbols
@@ -406,6 +407,74 @@ kato.observe({'strings': ['A', 'B']})
 predictions = kato.get_predictions()
 # predictions[0]['emotives'] will have averaged values
 ```
+
+## Pattern Metadata
+
+### Quick Reference
+- **Input Format**: `Dict[str, Any]` - e.g., `{"book": "Alice in Wonderland", "chapter": "1"}`
+- **Storage**: Unique string lists per pattern (set-union behavior)
+- **Purpose**: Contextual tags for patterns (sources, categories, attributes)
+- **Accumulation**: Values accumulate across re-learning, duplicates auto-filtered
+- **Critical**: Metadata accumulates from all observations that form the pattern
+
+### Data Flow
+1. Observation includes metadata dict
+2. Added to STM metadata accumulator list
+3. Merged when learning pattern (unique string lists per key)
+4. Stored with MongoDB `$addToSet` operation
+5. Retrieved with pattern data in predictions
+
+### Rolling Window Behavior
+Unlike emotives (which use rolling windows), metadata uses **set-union** accumulation:
+```python
+# Observation 1
+{'book': 'title1'}
+# MongoDB: {'book': ['title1']}
+
+# Observation 2 (same pattern re-learned)
+{'book': 'title2', 'chapter': '1'}
+# MongoDB: {'book': ['title1', 'title2'], 'chapter': ['1']}
+
+# Observation 3 (duplicate value)
+{'book': 'title1', 'chapter': '2'}
+# MongoDB: {'book': ['title1', 'title2'], 'chapter': ['1', '2']}
+# Note: 'title1' not duplicated, '2' added to chapter
+```
+
+### Type Conversion
+All metadata values are automatically converted to strings:
+```python
+# Input
+{'count': 123, 'flag': True, 'price': 45.67}
+# Stored as
+{'count': ['123'], 'flag': ['True'], 'price': ['45.67']}
+```
+
+### Testing Metadata
+```python
+# 1. Learn pattern WITH metadata
+kato.observe({'strings': ['A'], 'metadata': {'book': 'Alice', 'chapter': '1'}})
+kato.observe({'strings': ['B'], 'metadata': {'book': 'Alice', 'chapter': '2'}})
+kato.learn()
+
+# 2. Pattern will contain accumulated metadata
+pattern = kato.get_pattern(pattern_name)
+# pattern['metadata'] = {'book': ['Alice'], 'chapter': ['1', '2']}
+
+# 3. Re-learning same pattern adds new metadata
+kato.observe({'strings': ['A'], 'metadata': {'book': 'Through the Looking Glass'}})
+kato.observe({'strings': ['B'], 'metadata': {}})
+kato.learn()
+
+# 4. Pattern now has both books
+# pattern['metadata'] = {'book': ['Alice', 'Through the Looking Glass'], 'chapter': ['1', '2']}
+```
+
+### Use Cases
+- **Document tracking**: Link patterns to source documents/chapters
+- **Dataset attribution**: Track which datasets contributed to patterns
+- **Category tagging**: Add semantic categories to patterns
+- **Version tracking**: Mark patterns with version/timestamp information
 
 ## Automated Planning System Protocol
 

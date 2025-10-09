@@ -267,7 +267,8 @@ class KATOClient:
         self,
         strings: Optional[List[str]] = None,
         vectors: Optional[List[List[float]]] = None,
-        emotives: Optional[Dict[str, float]] = None
+        emotives: Optional[Dict[str, float]] = None,
+        metadata: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Process an observation.
@@ -276,6 +277,7 @@ class KATOClient:
             strings: List of string symbols to observe
             vectors: List of vector embeddings (768-dim recommended)
             emotives: Emotional values as {emotion_name: value} (values -1.0 to 1.0)
+            metadata: Pattern metadata as {key: value} (stored as unique string lists)
 
         Returns:
             Observation result with status, stm_length, time, etc.
@@ -283,7 +285,8 @@ class KATOClient:
         Example:
             >>> result = client.observe(
             ...     strings=["hello", "world"],
-            ...     emotives={"happiness": 0.8, "arousal": 0.5}
+            ...     emotives={"happiness": 0.8, "arousal": 0.5},
+            ...     metadata={"book": "title1", "chapter": "1"}
             ... )
             >>> print(result['stm_length'])
             1
@@ -291,7 +294,8 @@ class KATOClient:
         data = {
             'strings': strings or [],
             'vectors': vectors or [],
-            'emotives': emotives or {}
+            'emotives': emotives or {},
+            'metadata': metadata or {}
         }
         return self._request('POST', f'/sessions/{self._session_id}/observe', data=data)
 
@@ -348,7 +352,7 @@ class KATOClient:
         Process multiple observations in sequence.
 
         Args:
-            observations: List of observation dicts with strings/vectors/emotives
+            observations: List of observation dicts with strings/vectors/emotives/metadata
             learn_after_each: Whether to learn after each observation
             learn_at_end: Whether to learn from final STM state
             clear_stm_between: Whether to clear STM between observations (isolation)
@@ -359,9 +363,9 @@ class KATOClient:
         Example:
             >>> result = client.observe_sequence(
             ...     observations=[
-            ...         {'strings': ['A', 'B']},
-            ...         {'strings': ['C', 'D']},
-            ...         {'strings': ['E', 'F']}
+            ...         {'strings': ['A', 'B'], 'metadata': {'book': 'title1'}},
+            ...         {'strings': ['C', 'D'], 'metadata': {'book': 'title2'}},
+            ...         {'strings': ['E', 'F'], 'metadata': {'chapter': '1'}}
             ...     ],
             ...     learn_at_end=True
             ... )
@@ -664,11 +668,17 @@ if __name__ == "__main__":
     ) as client:
         print(f"Created session: {client._session_id}")
 
-        # Observe
-        obs1 = client.observe(strings=["hello", "world"])
+        # Observe with metadata
+        obs1 = client.observe(
+            strings=["hello", "world"],
+            metadata={"book": "Alice in Wonderland", "chapter": "1"}
+        )
         print(f"Observed: {obs1['stm_length']} events in STM")
 
-        obs2 = client.observe(strings=["foo", "bar"])
+        obs2 = client.observe(
+            strings=["foo", "bar"],
+            metadata={"book": "Alice in Wonderland", "chapter": "2"}
+        )
         print(f"Observed: {obs2['stm_length']} events in STM")
 
         # Learn pattern
@@ -709,9 +719,9 @@ if __name__ == "__main__":
 
     result = client.observe_sequence(
         observations=[
-            {'strings': ['A', 'B']},
-            {'strings': ['C', 'D']},
-            {'strings': ['E', 'F']}
+            {'strings': ['A', 'B'], 'metadata': {'source': 'dataset1'}},
+            {'strings': ['C', 'D'], 'metadata': {'source': 'dataset2'}},
+            {'strings': ['E', 'F'], 'metadata': {'source': 'dataset1', 'tag': 'important'}}
         ],
         learn_at_end=True
     )

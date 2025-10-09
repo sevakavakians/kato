@@ -243,6 +243,7 @@ async def observe_in_session(
         processor.set_stm(session.stm)
         logger.info(f"DEBUG: Processor STM after setting: {processor.get_stm()}")
         processor.set_emotives_accumulator(session.emotives_accumulator)
+        processor.set_metadata_accumulator(session.metadata_accumulator)
         processor.time = session.time
 
         # Process observation
@@ -250,6 +251,7 @@ async def observe_in_session(
             'strings': data.strings,
             'vectors': data.vectors,
             'emotives': data.emotives,
+            'metadata': data.metadata,
             'unique_id': f"obs-{uuid.uuid4().hex}",
             'source': 'session'
         }
@@ -261,6 +263,7 @@ async def observe_in_session(
         logger.info(f"DEBUG: Final processor STM after observation: {final_stm}")
         session.stm = final_stm
         session.emotives_accumulator = processor.get_emotives_accumulator()
+        session.metadata_accumulator = processor.get_metadata_accumulator()
         session.time = processor.time
 
         # Save updated session
@@ -300,6 +303,7 @@ async def get_session_stm(session_id: str):
                 logger.info(f"Session STM empty but processor has {len(processor_stm)} events, syncing to session")
                 session.stm = processor_stm
                 session.emotives_accumulator = processor.get_emotives_accumulator()
+                session.metadata_accumulator = processor.get_metadata_accumulator()
                 session.time = processor.time
                 await app_state.session_manager.update_session(session)
         except Exception as sync_error:
@@ -335,6 +339,7 @@ async def learn_in_session(session_id: str):
         # Set processor state
         processor.set_stm(session.stm)
         processor.set_emotives_accumulator(session.emotives_accumulator)
+        processor.set_metadata_accumulator(session.metadata_accumulator)
 
         # Learn pattern
         pattern_name = processor.learn()
@@ -342,6 +347,7 @@ async def learn_in_session(session_id: str):
         # Update session state
         session.stm = processor.get_stm()
         session.emotives_accumulator = processor.get_emotives_accumulator()
+        session.metadata_accumulator = processor.get_metadata_accumulator()
 
         await app_state.session_manager.update_session(session)
 
@@ -443,6 +449,7 @@ async def observe_sequence_in_session(
         # Set processor state from session
         processor.set_stm(session.stm)
         processor.set_emotives_accumulator(session.emotives_accumulator)
+        processor.set_metadata_accumulator(session.metadata_accumulator)
         processor.time = session.time
 
         logger.info(f"Processing sequence of {len(data.observations)} observations in session {session_id}")
@@ -461,6 +468,7 @@ async def observe_sequence_in_session(
                 'strings': obs_data.strings,
                 'vectors': obs_data.vectors,
                 'emotives': obs_data.emotives,
+                'metadata': obs_data.metadata,
                 'unique_id': obs_data.unique_id or f"seq-obs-{uuid.uuid4().hex}",
                 'source': 'sequence'
             }
@@ -503,6 +511,7 @@ async def observe_sequence_in_session(
         # Update session state with final processor state
         session.stm = processor.get_stm()
         session.emotives_accumulator = processor.get_emotives_accumulator()
+        session.metadata_accumulator = processor.get_metadata_accumulator()
         session.time = processor.time
 
         # Save updated session

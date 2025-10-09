@@ -138,6 +138,24 @@ class ObservationProcessor:
                         validation_rule="Value must be int or float"
                     )
 
+        # Validate metadata if present
+        if 'metadata' in data and data['metadata'] is not None:
+            if not isinstance(data['metadata'], dict):
+                raise ValidationError(
+                    "Metadata must be a dictionary",
+                    field_name="metadata",
+                    field_value=type(data['metadata']).__name__,
+                    validation_rule="Must be dict type"
+                )
+            for key in data['metadata'].keys():
+                if not isinstance(key, str):
+                    raise ValidationError(
+                        "Metadata key must be a string",
+                        field_name=f"metadata[{key}]",
+                        field_value=type(key).__name__,
+                        validation_rule="Key must be string type"
+                    )
+
     def process_vectors(self, vector_data: list[list[float]]) -> list[str]:
         """
         Process vectors through vector processor to get symbolic representations.
@@ -205,6 +223,17 @@ class ObservationProcessor:
         if emotives_data:
             self.memory_manager.process_emotives(emotives_data)
             logger.debug(f"Processed {len(emotives_data)} emotive dimensions")
+
+    def process_metadata(self, metadata_data: dict[str, Any]) -> None:
+        """
+        Process pattern metadata.
+
+        Args:
+            metadata_data: Dictionary of metadata values
+        """
+        if metadata_data:
+            self.memory_manager.process_metadata(metadata_data)
+            logger.debug(f"Processed {len(metadata_data)} metadata keys")
 
     def check_auto_learning(self) -> Optional[str]:
         """
@@ -310,6 +339,7 @@ class ObservationProcessor:
                 string_data = data.get('strings', [])
                 vector_data = data.get('vectors', [])
                 emotives_data = data.get('emotives', {})
+                metadata_data = data.get('metadata', {})
 
                 # Add processing path
                 if 'path' not in data:
@@ -337,6 +367,9 @@ class ObservationProcessor:
 
                 if emotives_data:
                     self.process_emotives(emotives_data)
+
+                if metadata_data:
+                    self.process_metadata(metadata_data)
 
                 # Combine all symbols
                 combined_symbols = v_identified + symbols

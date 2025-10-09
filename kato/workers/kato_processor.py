@@ -318,3 +318,24 @@ class KatoProcessor:
             List of emotive dictionaries
         """
         return self.memory_manager.emotives_accumulator.copy() if hasattr(self.memory_manager, 'emotives_accumulator') else []
+
+    def set_metadata_accumulator(self, metadata_acc):
+        """
+        Set the metadata accumulator to a specific state.
+        Used for session isolation in v2.0.
+
+        Args:
+            metadata_acc: List of metadata dictionaries
+        """
+        self.memory_manager.metadata_accumulator = metadata_acc.copy() if metadata_acc else []
+        return
+
+    def get_metadata_accumulator(self):
+        """
+        Get the current metadata accumulator state.
+        Used for session persistence in v2.0.
+
+        Returns:
+            List of metadata dictionaries
+        """
+        return self.memory_manager.metadata_accumulator.copy() if hasattr(self.memory_manager, 'metadata_accumulator') else []

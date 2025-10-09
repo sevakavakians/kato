@@ -180,30 +180,55 @@ class SuperKnowledgeBase:
                                          upsert=True)
         return r
 
-    def learnPattern(self, pattern_object, emotives=None):
+    def learnPattern(self, pattern_object, emotives=None, metadata=None):
         """
         Core machine learning function.
         Use this to learn patterns by passing a Pattern object.  Optional keywords available.
         """
         if emotives is None:
             emotives = {}
+        if metadata is None:
+            metadata = {}
 
         try:
+            # Build update operations
+            update_ops = {
+                "$setOnInsert": {
+                    "pattern_data": pattern_object.pattern_data,
+                    "length": pattern_object.length
+                },
+                "$inc": {"frequency": 1}
+            }
+
+            # Handle emotives (rolling window with $push and $slice)
             if emotives:
                 self.emotives_available.update(emotives.keys())
                 emotives = {k: v for k, v in emotives.items() if v != 0}
-                result = self.patterns_kb.update_one({ "name": pattern_object.name},
-                                    {"$setOnInsert": {"pattern_data": pattern_object.pattern_data, "length": pattern_object.length},
-                                    "$inc": { "frequency": 1 },
-                                    "$push": {"emotives": {"$each": [emotives], "$slice": -1 * self.persistence}}},
-                                    upsert=True)
+                update_ops["$push"] = {
+                    "emotives": {"$each": [emotives], "$slice": -1 * self.persistence}
+                }
             else:
-                result = self.patterns_kb.update_one({ "name": pattern_object.name},
-                                       {"$inc": { "frequency": 1 },
-                                       "$setOnInsert": {"pattern_data": pattern_object.pattern_data,
-                                                        "length": pattern_object.length,
-                                                        "emotives": {} }},
-                                      upsert=True)
+                update_ops["$setOnInsert"]["emotives"] = {}
+
+            # Handle metadata (accumulate unique string lists)
+            if metadata:
+                # Use $addToSet to append unique values to each metadata key's list
+                add_to_set_ops = {}
+                for key, values in metadata.items():
+                    # values is already a list of strings from accumulate_metadata()
+                    add_to_set_ops[f"metadata.{key}"] = {"$each": values}
+
+                if add_to_set_ops:
+                    update_ops["$addToSet"] = add_to_set_ops
+            else:
+                update_ops["$setOnInsert"]["metadata"] = {}
+
+            # Execute the update
+            result = self.patterns_kb.update_one(
+                {"name": pattern_object.name},
+                update_ops,
+                upsert=True
+            )
 
             # Update symbol statistics for all symbols in this pattern
             # Count occurrences of each symbol across the entire pattern data

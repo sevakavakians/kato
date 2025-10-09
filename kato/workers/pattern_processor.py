@@ -14,6 +14,7 @@ from pymongo import ReturnDocument
 
 from kato.informatics.knowledge_base import SuperKnowledgeBase
 from kato.informatics.metrics import (
+    accumulate_metadata,
     average_emotives,
     confluence,
     global_normalized_entropy,
@@ -95,11 +96,12 @@ class PatternProcessor:
     def clear_stm(self) -> None:
         """Clear the short-term memory and reset related state.
 
-        Empties the STM deque, disables prediction triggering, and clears emotives.
+        Empties the STM deque, disables prediction triggering, and clears emotives and metadata.
         """
         self.STM: deque[list[str]] = deque()
         self.trigger_predictions: bool = False
         self.emotives: list[dict[str, float]] = []
+        self.metadata: list[dict[str, Any]] = []
         return
 
     def clear_all_memory(self) -> None:
@@ -129,11 +131,12 @@ class PatternProcessor:
     def initiateDefaults(self) -> None:
         """Initialize default values for processor state.
 
-        Sets up empty STM, emotives, mood, and loads patterns from database.
+        Sets up empty STM, emotives, metadata, mood, and loads patterns from database.
         Called during initialization and memory clearing.
         """
         self.STM: deque[list[str]] = deque()
         self.emotives: list[dict[str, float]] = []
+        self.metadata: list[dict[str, Any]] = []
         self.mood: dict[str, float] = {}
         self.last_learned_pattern_name: Optional[str] = None
         self.patterns_searcher.getPatterns()
@@ -168,8 +171,12 @@ class PatternProcessor:
         self.STM.clear()  # Reset short-term memory after learning
 
         if len(pattern) > 1:  # Only learn multi-event patterns
-            # Store pattern with averaged emotives from all events
-            x = self.patterns_kb.learnPattern(pattern, emotives=average_emotives(self.emotives))
+            # Store pattern with averaged emotives and accumulated metadata from all events
+            x = self.patterns_kb.learnPattern(
+                pattern,
+                emotives=average_emotives(self.emotives),
+                metadata=accumulate_metadata(self.metadata) if self.metadata else {}
+            )
 
             if x:
                 # Add newly learned pattern to the searcher
@@ -189,8 +196,10 @@ class PatternProcessor:
             self.last_learned_pattern_name = pattern.name
             del(pattern)
             self.emotives = []
+            self.metadata = []
             return self.last_learned_pattern_name
         self.emotives = []
+        self.metadata = []
         return None
 
     def delete_pattern(self, name: str) -> str:

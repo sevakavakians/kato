@@ -39,6 +39,7 @@ class MemoryManager:
         self.symbols: list[str] = []
         self.current_emotives: dict[str, float] = {}
         self.emotives_accumulator: list[dict[str, float]] = []  # v2.0: For session isolation
+        self.metadata_accumulator: list[dict[str, Any]] = []  # v2.0: For session isolation
         self.last_command: str = ""
         self.percept_data: dict[str, Any] = {}
         self.percept_data_vector: Optional[list[float]] = None
@@ -57,6 +58,7 @@ class MemoryManager:
             self.symbols = []
             self.current_emotives = {}
             self.emotives_accumulator = []  # v2.0: Reset emotives accumulator
+            self.metadata_accumulator = []  # v2.0: Reset metadata accumulator
             self.last_command = ""
             self.pattern_processor.v_identified = []
             self.percept_data = {}
@@ -171,6 +173,30 @@ class MemoryManager:
                 memory_type="STM",
                 operation="process_emotives",
                 context={"emotives_count": len(emotives) if emotives else 0}
+            )
+
+    def process_metadata(self, metadata: dict[str, Any]) -> None:
+        """
+        Process and accumulate metadata.
+
+        Args:
+            metadata: Dictionary of metadata to process
+
+        Updates:
+            - Adds metadata to pattern processor's accumulator
+        """
+        try:
+            if metadata:
+                # Add to pattern processor's metadata list
+                self.pattern_processor.metadata += [metadata]
+
+                logger.debug(f"Processed metadata: {len(metadata)} keys")
+        except Exception as e:
+            raise MemoryOperationError(
+                f"Failed to process metadata: {str(e)}",
+                memory_type="STM",
+                operation="process_metadata",
+                context={"metadata_keys": len(metadata) if metadata else 0}
             )
 
     def update_percept_data(self, strings: list[str], vectors: list[list[float]],

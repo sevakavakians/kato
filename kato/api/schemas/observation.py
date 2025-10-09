@@ -12,6 +12,7 @@ class ObservationData(BaseModel):
     strings: list[str] = Field(default_factory=list, description="String symbols to observe")
     vectors: list[list[float]] = Field(default_factory=list, description="Vector embeddings")
     emotives: dict[str, float] = Field(default_factory=dict, description="Emotional values")
+    metadata: dict[str, Any] = Field(default_factory=dict, description="Pattern metadata (stored as unique string lists)")
 
 
 class ObservationResult(BaseModel):

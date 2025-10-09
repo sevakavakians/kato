@@ -34,6 +34,7 @@ class SessionState:
     # Session-specific STM state (node's LTM is in their processor)
     stm: list[list[str]] = field(default_factory=list)
     emotives_accumulator: list[dict[str, float]] = field(default_factory=list)
+    metadata_accumulator: list[dict[str, Any]] = field(default_factory=list)
     time: int = 0
 
     # Session-specific configuration (replaces user_config)
@@ -46,6 +47,7 @@ class SessionState:
     # Resource limits
     max_stm_size: int = 1000
     max_emotives_size: int = 1000
+    max_metadata_size: int = 1000
 
     def is_expired(self) -> bool:
         """Check if session has expired"""
@@ -66,6 +68,10 @@ class SessionState:
         # Trim emotives if too large
         if len(self.emotives_accumulator) > self.max_emotives_size:
             self.emotives_accumulator = self.emotives_accumulator[-self.max_emotives_size:]
+
+        # Trim metadata if too large
+        if len(self.metadata_accumulator) > self.max_metadata_size:
+            self.metadata_accumulator = self.metadata_accumulator[-self.max_metadata_size:]
 
 
 class SessionManager:

@@ -44,6 +44,47 @@ def average_emotives(record: list[dict[str, float]]) -> dict[str, float]:
             avg_dict[e] = 0.0
     return avg_dict
 
+
+def accumulate_metadata(metadata_list: list[dict]) -> dict[str, list[str]]:
+    """Accumulate metadata dicts into a single dict with unique string list values.
+
+    Merges all metadata dictionaries, converting values to strings and ensuring
+    uniqueness within each key's list. This is used for pattern metadata storage
+    where we want to track all unique values seen for each metadata key.
+
+    Args:
+        metadata_list: List of metadata dictionaries with any value types
+
+    Returns:
+        Dictionary mapping each key to a list of unique string values.
+
+    Example:
+        >>> accumulate_metadata([{'book': 'title1'}, {'book': 'title2'}, {'book': 'title1'}, {'author': 'Smith'}])
+        {'book': ['title1', 'title2'], 'author': ['Smith']}
+    """
+    logger.debug(f'accumulate_metadata list: {metadata_list}')
+    accumulated: dict[str, set[str]] = {}
+
+    for metadata_dict in metadata_list:
+        logger.debug(f'Processing metadata dict: {metadata_dict}')
+        for key, value in metadata_dict.items():
+            # Convert value to string
+            str_value = str(value)
+
+            if key not in accumulated:
+                accumulated[key] = {str_value}
+            else:
+                accumulated[key].add(str_value)
+
+    # Convert sets to sorted lists for consistent ordering
+    result: dict[str, list[str]] = {}
+    for key, value_set in accumulated.items():
+        result[key] = sorted(list(value_set))
+
+    logger.debug(f'Accumulated metadata result: {result}')
+    return result
+
+
 def compandingFunction(target: Union[int, float], collection: list[Union[int, float]]) -> Union[int, float]:
     """Reduces the data rate of signals by making the quantization levels unequal.
 

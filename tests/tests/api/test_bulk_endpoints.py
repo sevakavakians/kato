@@ -180,6 +180,57 @@ def test_observe_sequence_alphanumeric_sorting(kato_fixture):
     assert stm[2] == ['A', 'M', 'Z']
 
 
+def test_observe_sequence_with_metadata(kato_fixture):
+    """Test batch observation processing with metadata accumulation."""
+    assert kato_fixture.clear_all_memory() == 'all-cleared'
+
+    # Create a sequence of observations with metadata
+    observations = [
+        {
+            'strings': ['hello'],
+            'vectors': [],
+            'emotives': {},
+            'metadata': {'book': 'Alice in Wonderland', 'chapter': '1'}
+        },
+        {
+            'strings': ['world'],
+            'vectors': [],
+            'emotives': {},
+            'metadata': {'book': 'Alice in Wonderland', 'chapter': '2'}
+        },
+        {
+            'strings': ['test'],
+            'vectors': [],
+            'emotives': {},
+            'metadata': {'book': 'Through the Looking Glass', 'author': 'Lewis Carroll'}
+        }
+    ]
+
+    # Process sequence and learn at end
+    result = kato_fixture.observe_sequence(observations, learn_at_end=True)
+
+    # Verify sequence was processed
+    assert result['observations_processed'] == 3
+    assert len(result['auto_learned_patterns']) == 1
+
+    # Get the learned pattern
+    pattern_name = result['auto_learned_patterns'][0]
+    pattern_result = kato_fixture.get_pattern(pattern_name)
+    assert pattern_result['status'] == 'okay'
+
+    pattern = pattern_result['pattern']
+    assert 'metadata' in pattern
+
+    # Verify metadata was accumulated correctly
+    metadata = pattern['metadata']
+    assert 'book' in metadata
+    assert set(metadata['book']) == {'Alice in Wonderland', 'Through the Looking Glass'}
+    assert 'chapter' in metadata
+    assert set(metadata['chapter']) == {'1', '2'}
+    assert 'author' in metadata
+    assert metadata['author'] == ['Lewis Carroll']
+
+
 def test_observe_sequence_empty_batch(kato_fixture):
     """Test handling of empty batch."""
 

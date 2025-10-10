@@ -56,6 +56,7 @@ class RedisSessionManager(session_manager_module.SessionManager):
         self.key_prefix = key_prefix
         self.redis_client: Optional[redis.Redis] = None
         self._connected = False
+        self._init_lock = asyncio.Lock()  # CRITICAL FIX: Lock for thread-safe initialization
 
         logger.info(f"RedisSessionManager initialized with URL: {redis_url}")
 
@@ -100,39 +101,52 @@ class RedisSessionManager(session_manager_module.SessionManager):
             # Create default session config if not present
             session_dict['session_config'] = SessionConfiguration()
 
+        # Ensure metadata_accumulator exists (for backward compatibility)
+        if 'metadata_accumulator' not in session_dict:
+            session_dict['metadata_accumulator'] = []
+
+        # Ensure max_metadata_size exists (for backward compatibility)
+        if 'max_metadata_size' not in session_dict:
+            session_dict['max_metadata_size'] = 1000
+
         return SessionState(**session_dict)
 
     async def initialize(self):
-        """Initialize Redis connection"""
-        if self._connected:
-            return
+        """Initialize Redis connection with thread-safe locking"""
+        # CRITICAL FIX: Use lock to prevent race condition when multiple concurrent
+        # requests try to initialize the Redis client simultaneously
+        async with self._init_lock:
+            # Double-check pattern: recheck after acquiring lock
+            if self._connected:
+                return
 
-        try:
-            # Create Redis client with connection pool
-            self.redis_client = redis.from_url(
-                self.redis_url,
-                encoding="utf-8",
-                decode_responses=True,
-                max_connections=50
-            )
+            try:
+                # Create Redis client with connection pool
+                self.redis_client = redis.from_url(
+                    self.redis_url,
+                    encoding="utf-8",
+                    decode_responses=True,
+                    max_connections=50
+                )
 
-            # Test connection
-            await self.redis_client.ping()
-            self._connected = True
+                # Test connection
+                await self.redis_client.ping()
+                self._connected = True
 
-            logger.info("Redis connection established")
+                logger.info("Redis connection established")
 
-            # Start cleanup task
-            if not self._cleanup_task:
-                self._cleanup_task = asyncio.create_task(self._cleanup_loop())
+                # Start cleanup task
+                if not self._cleanup_task:
+                    self._cleanup_task = asyncio.create_task(self._cleanup_loop())
 
-        except Exception as e:
-            logger.error(f"Failed to connect to Redis: {e}")
-            raise
+            except Exception as e:
+                logger.error(f"Failed to connect to Redis: {e}")
+                raise
 
     async def get_or_create_session(
         self,
         node_id: str,
+        config: Optional[dict[str, Any]] = None,
         metadata: Optional[dict[str, Any]] = None,
         ttl_seconds: Optional[int] = None
     ) -> SessionState:
@@ -143,6 +157,7 @@ class RedisSessionManager(session_manager_module.SessionManager):
 
         Args:
             node_id: Node identifier (required for processor isolation)
+            config: Optional session configuration parameters
             metadata: Optional session metadata
             ttl_seconds: Session TTL (uses default if not specified)
 
@@ -171,7 +186,7 @@ class RedisSessionManager(session_manager_module.SessionManager):
                 await self.redis_client.delete(node_session_key)
 
         # No existing session, create new one
-        session = await self.create_session(node_id, metadata, ttl_seconds)
+        session = await self.create_session(node_id, config, metadata, ttl_seconds)
 
         # Store the session ID for this node
         ttl = ttl_seconds or self.default_ttl
@@ -182,7 +197,8 @@ class RedisSessionManager(session_manager_module.SessionManager):
 
     async def create_session(
         self,
-        node_id: Optional[str] = None,
+        node_id: str,
+        config: Optional[dict[str, Any]] = None,
         metadata: Optional[dict[str, Any]] = None,
         ttl_seconds: Optional[int] = None
     ) -> SessionState:
@@ -190,7 +206,8 @@ class RedisSessionManager(session_manager_module.SessionManager):
         Create a new session and store in Redis.
 
         Args:
-            node_id: Optional node identifier
+            node_id: Node identifier (required for processor isolation)
+            config: Optional session configuration parameters
             metadata: Optional session metadata
             ttl_seconds: Session TTL (uses default if not specified)
 
@@ -201,10 +218,18 @@ class RedisSessionManager(session_manager_module.SessionManager):
             await self.initialize()
 
         session_id = f"session-{uuid.uuid4().hex}-{int(datetime.now(timezone.utc).timestamp() * 1000)}"
+        print(f"[TRACE-CREATE] Starting create_session for session_id: {session_id}, node_id: {node_id}", flush=True)
         ttl = ttl_seconds or self.default_ttl
 
         now = datetime.now(timezone.utc)
         expires_at = now + timedelta(seconds=ttl)
+
+        # Initialize session configuration
+        session_config = SessionConfiguration(session_id=session_id, node_id=node_id)
+
+        # Apply config if provided
+        if config:
+            session_config.update(config)
 
         session = SessionState(
             session_id=session_id,
@@ -214,13 +239,17 @@ class RedisSessionManager(session_manager_module.SessionManager):
             expires_at=expires_at,
             stm=[],
             emotives_accumulator=[],
+            metadata_accumulator=[],
             time=0,
             metadata=metadata or {},
-            access_count=0
+            access_count=0,
+            session_config=session_config
         )
 
+        print(f"[TRACE-CREATE] About to save session {session_id} to Redis with TTL {ttl}s", flush=True)
         # Store in Redis with TTL
         await self._save_session(session, ttl)
+        print(f"[TRACE-CREATE] Session {session_id} saved successfully", flush=True)
 
         # Create lock for this session
         self.session_locks[session_id] = asyncio.Lock()
@@ -238,20 +267,25 @@ class RedisSessionManager(session_manager_module.SessionManager):
         Returns:
             SessionState if found and not expired, None otherwise
         """
+        print(f"[TRACE-GET] Starting get_session for session_id: {session_id}", flush=True)
         logger.info(f"Getting session {session_id}, connected: {self._connected}")
         if not self._connected:
             logger.info("Not connected, initializing Redis connection")
             await self.initialize()
 
         key = f"{self.key_prefix}{session_id}"
+        print(f"[TRACE-GET] Looking for Redis key: {key}", flush=True)
         logger.info(f"Looking for Redis key: {key}")
 
         try:
             # Get session data from Redis
+            print(f"[TRACE-GET] Calling Redis GET for {key}", flush=True)
             session_data = await self.redis_client.get(key)
+            print(f"[TRACE-GET] Redis GET returned: {'DATA' if session_data else 'NULL'} for {key}", flush=True)
             logger.info(f"Redis returned data: {session_data is not None}")
 
             if not session_data:
+                print(f"[TRACE-GET] Session {session_id} NOT FOUND in Redis", flush=True)
                 return None
 
             # Deserialize session
@@ -339,27 +373,37 @@ class RedisSessionManager(session_manager_module.SessionManager):
 
     async def delete_session(self, session_id: str) -> bool:
         """
-        Delete session from Redis.
+        Delete session from Redis and clean up node tracking key.
 
         Args:
             session_id: Session identifier
 
         Returns:
-            True if deleted, False if not found
+            True if deleted or session was found, False if not found
         """
         if not self._connected:
             await self.initialize()
 
+        # Get session first to find node_id for cleanup
+        session = await self.get_session(session_id)
+
         key = f"{self.key_prefix}{session_id}"
 
-        # Delete from Redis
+        # Delete session from Redis
         deleted = await self.redis_client.delete(key)
+
+        # If session existed, also delete node tracking key
+        if session:
+            node_session_key = f"{self.key_prefix}node:{session.node_id}:active"
+            await self.redis_client.delete(node_session_key)
+            logger.info(f"Deleted session {session_id} and node tracking key for {session.node_id}")
 
         # Remove lock
         if session_id in self.session_locks:
             del self.session_locks[session_id]
 
-        if deleted:
+        # Return True if we cleaned up a session (even if Redis key didn't exist)
+        if deleted or session:
             logger.info(f"Deleted session {session_id}")
             return True
 
@@ -471,14 +515,18 @@ class RedisSessionManager(session_manager_module.SessionManager):
         Returns:
             asyncio.Lock for the session, None if session doesn't exist
         """
+        print(f"[TRACE-LOCK] Getting lock for session: {session_id}", flush=True)
         # For Redis sessions, check if session exists first
         # Check Redis directly without calling get_session to avoid recursion
         if not self._connected:
             await self.initialize()
 
         key = f"{self.key_prefix}{session_id}"
+        print(f"[TRACE-LOCK] Calling Redis EXISTS for key: {key}", flush=True)
         session_exists = await self.redis_client.exists(key)
+        print(f"[TRACE-LOCK] Redis EXISTS returned: {session_exists} for {key}", flush=True)
         if not session_exists:
+            print(f"[TRACE-LOCK] Session {session_id} NOT FOUND - returning None", flush=True)
             return None
 
         # Ensure lock exists for this session
@@ -582,6 +630,7 @@ class RedisSessionManager(session_manager_module.SessionManager):
             ttl_seconds: TTL in seconds
         """
         key = f"{self.key_prefix}{session.session_id}"
+        print(f"[TRACE-SAVE] Saving session {session.session_id} to Redis key: {key}", flush=True)
 
         # Convert session to dict for serialization
         session_dict = {
@@ -592,19 +641,32 @@ class RedisSessionManager(session_manager_module.SessionManager):
             'expires_at': session.expires_at.isoformat(),
             'stm': session.stm,
             'emotives_accumulator': session.emotives_accumulator,
+            'metadata_accumulator': session.metadata_accumulator,
             'time': session.time,
             'metadata': session.metadata,
             'access_count': session.access_count,
             'max_stm_size': session.max_stm_size,
             'max_emotives_size': session.max_emotives_size,
+            'max_metadata_size': session.max_metadata_size,
             'session_config': self._serialize_session_config(session.session_config) if session.session_config else None
         }
 
         # Serialize to JSON
         session_data = json.dumps(session_dict)
+        print(f"[TRACE-SAVE] Serialized session {session.session_id}, JSON length: {len(session_data)}", flush=True)
 
         # Save with TTL
+        print(f"[TRACE-SAVE] Calling Redis SETEX for {key} with TTL {ttl_seconds}s", flush=True)
         await self.redis_client.setex(key, ttl_seconds, session_data)
+        print(f"[TRACE-SAVE] Redis SETEX completed for {key}", flush=True)
+
+        # CRITICAL FIX: Verify write completed with EXISTS check
+        # This ensures the key is actually in Redis before we return
+        print(f"[TRACE-SAVE] Verifying write with EXISTS for {key}", flush=True)
+        exists = await self.redis_client.exists(key)
+        print(f"[TRACE-SAVE] EXISTS verification returned: {exists} for {key}", flush=True)
+        if not exists:
+            raise RuntimeError(f"Session write verification failed - key {key} not found after SETEX")
 
     async def _cleanup_loop(self):
         """

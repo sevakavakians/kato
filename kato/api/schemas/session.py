@@ -13,6 +13,7 @@ class CreateSessionRequest(BaseModel):
     node_id: str = Field(..., description="Node identifier (required for processor isolation)")
     metadata: Optional[dict[str, Any]] = Field(default_factory=dict, description="Session metadata")
     ttl_seconds: Optional[int] = Field(None, description="Session TTL in seconds (uses default if not specified)")
+    config: Optional[dict[str, Any]] = Field(None, description="Initial session configuration (optional)")
 
 
 class SessionResponse(BaseModel):

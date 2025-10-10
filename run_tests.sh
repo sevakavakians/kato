@@ -91,6 +91,10 @@ if [ "$START_KATO" = true ]; then
         fi
         sleep 1
     done
+
+    # Flush Redis to ensure clean test state
+    echo -e "${GREEN}Flushing Redis for clean test state...${NC}"
+    docker exec kato-redis redis-cli FLUSHALL > /dev/null 2>&1 || echo -e "${YELLOW}Warning: Could not flush Redis${NC}"
 fi
 
 # Set environment variables to disable container mode

@@ -79,7 +79,9 @@ class KatoSessionClient:
             self.session = self._create_session()
 
         async with self.session.delete(f"{self.base_url}/sessions/{session_id}") as resp:
-            resp.raise_for_status()
+            # 404 means session already deleted - that's OK for cleanup
+            if resp.status != 404:
+                resp.raise_for_status()
 
     async def observe_in_session(self, session_id: str, data: dict[str, Any]) -> dict[str, Any]:
         """Make an observation in a session."""

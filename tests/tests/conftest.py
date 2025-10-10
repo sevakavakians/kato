@@ -6,9 +6,31 @@ import asyncio
 import contextlib
 import uuid
 
+import subprocess
+
 import pytest
 import pytest_asyncio
 from fixtures.kato_session_client import KatoSessionClient
+
+
+@pytest.fixture(scope="session", autouse=True)
+def flush_redis_before_tests():
+    """Flush Redis before test session to ensure clean state.
+
+    This prevents old session data from previous test runs from
+    interfering with current tests.
+    """
+    try:
+        subprocess.run(
+            ["docker", "exec", "kato-redis", "redis-cli", "FLUSHALL"],
+            check=True,
+            capture_output=True,
+            timeout=5
+        )
+        print("\n✓ Redis flushed - clean test state ensured")
+    except Exception as e:
+        print(f"\n⚠ Warning: Could not flush Redis: {e}")
+    yield
 
 
 @pytest_asyncio.fixture

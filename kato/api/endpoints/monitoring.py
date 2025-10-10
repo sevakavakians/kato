@@ -5,6 +5,7 @@ Handles system metrics, cache statistics, and performance monitoring.
 """
 
 import logging
+import os
 import time
 from datetime import datetime, timezone
 from typing import Optional
@@ -15,6 +16,96 @@ from kato.storage.pattern_cache import get_cache_manager
 
 router = APIRouter(tags=["monitoring"])
 logger = logging.getLogger('kato.api.monitoring')
+
+
+@router.get("/concurrency")
+async def get_concurrency_metrics():
+    """
+    Get real-time concurrency metrics.
+
+    Returns current concurrent requests and capacity information.
+    Useful for monitoring server load and diagnosing 404 errors under heavy load.
+    """
+    from kato.services.kato_fastapi import (
+        _concurrent_count,
+        _max_concurrent_seen,
+        CONCURRENCY_LIMIT,
+        CONCURRENCY_WARNING_THRESHOLD,
+        CONCURRENCY_CRITICAL_THRESHOLD
+    )
+
+    workers = int(os.getenv('UVICORN_WORKERS', '1'))
+    current_utilization = int(_concurrent_count / CONCURRENCY_LIMIT * 100) if CONCURRENCY_LIMIT > 0 else 0
+    max_utilization = int(_max_concurrent_seen / CONCURRENCY_LIMIT * 100) if CONCURRENCY_LIMIT > 0 else 0
+
+    status = "healthy"
+    if _concurrent_count >= CONCURRENCY_CRITICAL_THRESHOLD:
+        status = "critical"
+    elif _concurrent_count >= CONCURRENCY_WARNING_THRESHOLD:
+        status = "warning"
+
+    return {
+        "status": status,
+        "current": {
+            "concurrent_requests": _concurrent_count,
+            "utilization_percent": current_utilization,
+        },
+        "peak": {
+            "concurrent_requests": _max_concurrent_seen,
+            "utilization_percent": max_utilization,
+        },
+        "limits": {
+            "per_worker": CONCURRENCY_LIMIT,
+            "warning_threshold": CONCURRENCY_WARNING_THRESHOLD,
+            "critical_threshold": CONCURRENCY_CRITICAL_THRESHOLD,
+            "total_capacity": CONCURRENCY_LIMIT * workers,
+        },
+        "configuration": {
+            "workers": workers,
+            "backlog": int(os.getenv('UVICORN_BACKLOG', '2048')),
+            "max_requests": os.getenv('UVICORN_LIMIT_MAX_REQUESTS', 'unlimited'),
+        },
+        "recommendations": _get_concurrency_recommendations(
+            _concurrent_count,
+            _max_concurrent_seen,
+            CONCURRENCY_LIMIT,
+            workers
+        ),
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+
+
+def _get_concurrency_recommendations(current: int, peak: int, limit: int, workers: int) -> list:
+    """Generate recommendations based on concurrency metrics"""
+    recommendations = []
+
+    if peak >= limit * 0.95:
+        recommendations.append({
+            "level": "critical",
+            "message": f"Peak concurrent requests ({peak}) exceeded 95% of per-worker limit ({limit}). "
+                      f"Increase --workers (currently {workers}) or --limit-concurrency (currently {limit})."
+        })
+    elif peak >= limit * 0.80:
+        recommendations.append({
+            "level": "warning",
+            "message": f"Peak concurrent requests ({peak}) exceeded 80% of per-worker limit ({limit}). "
+                      f"Consider increasing --workers or --limit-concurrency for headroom."
+        })
+
+    if current >= limit * 0.90:
+        recommendations.append({
+            "level": "urgent",
+            "message": f"Currently at {current} concurrent requests ({int(current/limit*100)}% of limit). "
+                      f"System is under heavy load. New requests may be dropped or timeout."
+        })
+
+    if not recommendations:
+        recommendations.append({
+            "level": "info",
+            "message": f"Concurrency is healthy. Peak {peak}/{limit} ({int(peak/limit*100) if limit > 0 else 0}%)."
+        })
+
+    return recommendations
 
 
 @router.get("/cache/stats")

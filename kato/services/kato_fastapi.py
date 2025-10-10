@@ -58,6 +58,59 @@ app.add_middleware(
 # Add session middleware
 app.add_middleware(SessionMiddleware, auto_create=False)
 
+# Concurrency monitoring
+import asyncio
+from contextvars import ContextVar
+
+# Track concurrent requests per worker
+_concurrent_requests = ContextVar('concurrent_requests', default=0)
+_concurrent_count = 0
+_concurrent_lock = asyncio.Lock()
+_max_concurrent_seen = 0
+
+# Configuration from uvicorn CMD (--limit-concurrency 100)
+CONCURRENCY_LIMIT = int(os.getenv('UVICORN_LIMIT_CONCURRENCY', '100'))
+CONCURRENCY_WARNING_THRESHOLD = int(CONCURRENCY_LIMIT * 0.8)  # Warn at 80%
+CONCURRENCY_CRITICAL_THRESHOLD = int(CONCURRENCY_LIMIT * 0.95)  # Critical at 95%
+
+@app.middleware("http")
+async def concurrency_monitor_middleware(request: Request, call_next):
+    """
+    Monitor concurrent requests and log warnings when approaching limits.
+
+    This helps diagnose connection pool exhaustion and uvicorn overload.
+    """
+    global _concurrent_count, _max_concurrent_seen
+
+    async with _concurrent_lock:
+        _concurrent_count += 1
+        current_count = _concurrent_count
+
+        # Track maximum concurrent requests seen
+        if current_count > _max_concurrent_seen:
+            _max_concurrent_seen = current_count
+            if current_count >= CONCURRENCY_CRITICAL_THRESHOLD:
+                logger.error(
+                    f"🚨 CRITICAL: Concurrent requests ({current_count}) >= {CONCURRENCY_CRITICAL_THRESHOLD} "
+                    f"({CONCURRENCY_CRITICAL_THRESHOLD}/{CONCURRENCY_LIMIT} = 95% of limit). "
+                    f"Requests may be dropped! Consider increasing --limit-concurrency or --workers."
+                )
+            elif current_count >= CONCURRENCY_WARNING_THRESHOLD:
+                logger.warning(
+                    f"⚠️  WARNING: High concurrent requests: {current_count}/{CONCURRENCY_LIMIT} "
+                    f"({int(current_count/CONCURRENCY_LIMIT*100)}%). "
+                    f"Approaching uvicorn --limit-concurrency limit."
+                )
+
+    try:
+        # Process request
+        response = await call_next(request)
+        return response
+    finally:
+        # Decrement counter
+        async with _concurrent_lock:
+            _concurrent_count -= 1
+
 # Add metrics collection middleware
 @app.middleware("http")
 async def metrics_middleware(request: Request, call_next):
@@ -162,6 +215,23 @@ async def startup_event():
     """Initialize application on startup"""
     logger.info("Starting KATO FastAPI service...")
 
+    # Log uvicorn configuration for debugging concurrency issues
+    logger.info("=" * 80)
+    logger.info("UVICORN CONFIGURATION")
+    logger.info("=" * 80)
+    logger.info(f"Workers: {os.getenv('UVICORN_WORKERS', 'Not set (default: 1)')}")
+    logger.info(f"Limit Concurrency: {CONCURRENCY_LIMIT} per worker")
+    logger.info(f"  → Warning threshold: {CONCURRENCY_WARNING_THRESHOLD} concurrent requests (80%)")
+    logger.info(f"  → Critical threshold: {CONCURRENCY_CRITICAL_THRESHOLD} concurrent requests (95%)")
+    logger.info(f"Limit Max Requests: {os.getenv('UVICORN_LIMIT_MAX_REQUESTS', 'Not set (default: unlimited)')}")
+    logger.info(f"Timeout Keep-Alive: {os.getenv('UVICORN_TIMEOUT_KEEP_ALIVE', 'Not set (default: 5s)')}")
+    logger.info(f"Backlog: {os.getenv('UVICORN_BACKLOG', 'Not set (default: 2048)')}")
+    logger.info(f"")
+    logger.info(f"CAPACITY ESTIMATES (per worker):")
+    logger.info(f"  → Safe concurrent: {CONCURRENCY_WARNING_THRESHOLD} requests")
+    logger.info(f"  → Total with {os.getenv('UVICORN_WORKERS', '1')} workers: {CONCURRENCY_WARNING_THRESHOLD * int(os.getenv('UVICORN_WORKERS', '1'))} concurrent")
+    logger.info("=" * 80)
+
     # Initialize Redis session manager if using Redis
     if hasattr(app_state.session_manager, 'initialize'):
         await app_state.session_manager.initialize()
@@ -182,10 +252,29 @@ async def startup_event():
     app_state.metrics_collector = metrics_collector
     await metrics_collector.start_collection()
 
+    # Start concurrency monitoring task
+    asyncio.create_task(_concurrency_reporter())
+
     # Setup error handlers
     setup_error_handlers(app)
 
     logger.info("KATO FastAPI service started successfully")
+
+
+async def _concurrency_reporter():
+    """Periodically report max concurrency for capacity planning"""
+    global _max_concurrent_seen
+    last_reported = 0
+
+    while True:
+        await asyncio.sleep(60)  # Report every minute
+        if _max_concurrent_seen > last_reported:
+            utilization = int(_max_concurrent_seen / CONCURRENCY_LIMIT * 100)
+            logger.info(
+                f"📊 Concurrency Stats: Peak {_max_concurrent_seen} concurrent requests "
+                f"({utilization}% of limit) in last minute"
+            )
+            last_reported = _max_concurrent_seen
 
 
 @app.on_event("shutdown")

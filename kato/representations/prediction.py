@@ -76,22 +76,23 @@ class Prediction(dict):
             except Exception as e:
                 raise Exception("Error matching events in predictions! CODE-55 {}".format(e))
 
-        # Calculate event-aligned missing and extras using STM event structure
+        # Calculate event-aligned missing and extras using proper alignment
         if stm_events and len(stm_events) > 0:
-            # Event-by-event comparison - align with STM events (not pattern events)
+            # Missing: aligned with PRESENT events (pattern events)
+            # Each sub-list corresponds to a present event
+            # Contains symbols from that pattern event that were not observed (not in matches)
             self['missing'] = []
-            self['extras'] = []
-
-            for i in range(len(stm_events)):
-                stm_event = stm_events[i]
-                pattern_event = self['present'][i] if i < len(self['present']) else []
-
-                # Missing: symbols in pattern event but not in corresponding STM event
-                event_missing = [s for s in pattern_event if s not in stm_event]
+            for present_event in self['present']:
+                event_missing = [s for s in present_event if s not in self['matches']]
                 self['missing'].append(event_missing)
 
-                # Extras: symbols in STM event but not in corresponding pattern event
-                event_extras = [s for s in stm_event if s not in pattern_event]
+            # Extras: aligned with STM events (observed events)
+            # Each sub-list corresponds to an STM event
+            # Contains symbols observed in STM but not expected in the pattern present
+            self['extras'] = []
+            flattened_present = list(chain(*self['present']))
+            for stm_event in stm_events:
+                event_extras = [s for s in stm_event if s not in flattened_present]
                 self['extras'].append(event_extras)
         else:
             # Fallback: Use old flat-list behavior (for backward compatibility)

@@ -326,3 +326,31 @@ class SuperKnowledgeBase:
         # self.connection.close()  # REMOVED: This breaks other processors using same connection
         logger.debug(f"KnowledgeBase.close() called for {self.id} - connection managed centrally, no action taken")
         return
+
+    def drop_database(self):
+        """
+        Drop the MongoDB database for this processor.
+
+        WARNING: This permanently deletes all data. Only use for:
+        - Test processors (processor_id starts with 'test_')
+        - Explicit cleanup operations
+
+        This method is used during processor eviction to prevent resource leaks
+        in test environments.
+        """
+        try:
+            # Get database name (same as processor ID)
+            db_name = self.id
+
+            # Safety check: only drop test databases
+            if not db_name.startswith('test_'):
+                logger.warning(f"Refusing to drop non-test database: {db_name}")
+                return False
+
+            # Drop the database
+            self.client.drop_database(db_name)
+            logger.info(f"Dropped MongoDB database: {db_name}")
+            return True
+        except Exception as e:
+            logger.error(f"Error dropping database {self.id}: {e}")
+            return False

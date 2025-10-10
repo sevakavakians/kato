@@ -538,6 +538,32 @@ class VectorSearchEngine:
 
         return success
 
+    async def delete_collection(self) -> bool:
+        """
+        Delete the entire Qdrant collection for this search engine.
+
+        This permanently removes all vectors and metadata for this collection.
+        Used during processor cleanup to prevent resource leaks.
+
+        Returns:
+            True if deletion successful, False otherwise
+        """
+        try:
+            success = await self.store.delete_collection(self.collection_name)
+            if success:
+                logger.info(f"Deleted Qdrant collection: {self.collection_name}")
+                # Clear cache
+                if self._cache:
+                    self._cache.clear()
+            return success
+        except Exception as e:
+            logger.error(f"Error deleting collection {self.collection_name}: {e}")
+            return False
+
+    def delete_collection_sync(self) -> bool:
+        """Synchronous wrapper for delete_collection"""
+        return self._run_async_in_sync(self.delete_collection())
+
     async def get_stats(self) -> dict[str, Any]:
         """Get search engine statistics"""
         collection_info = await self.store.get_collection_info(self.collection_name)
@@ -692,6 +718,22 @@ class VectorIndexer:
 
         # Return vector IDs
         return [r.id for r in results]
+
+    def delete_collection(self):
+        """
+        Delete the Qdrant collection for this processor.
+
+        This permanently removes all vectors and metadata for this processor.
+        Used during processor cleanup to prevent resource leaks.
+        """
+        try:
+            success = self.engine.delete_collection_sync()
+            if success:
+                logger.info(f"Deleted Qdrant collection for processor {self.processor_id}")
+            return success
+        except Exception as e:
+            logger.error(f"Error deleting Qdrant collection for processor {self.processor_id}: {e}")
+            return False
 
     def __del__(self):
         """Cleanup on deletion"""

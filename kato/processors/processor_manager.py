@@ -235,18 +235,41 @@ class ProcessorManager:
             logger.debug(f"Updated max_predictions to {session_config.max_predictions}")
 
     def _evict_oldest(self):
-        """Evict the least recently used processor."""
+        """Evict the least recently used processor with resource cleanup."""
         if not self.processors:
             return
 
         # OrderedDict pops first item (oldest)
         evicted_id, evicted_info = self.processors.popitem(last=False)
 
-        # Clean up the processor
+        # Clean up processor resources
         try:
-            evicted_info['processor'].pattern_processor.superkb.close()
+            processor = evicted_info['processor']
+
+            # Clean up Qdrant collection
+            if hasattr(processor, 'vector_processor') and \
+               hasattr(processor.vector_processor, 'vector_indexer'):
+                try:
+                    processor.vector_processor.vector_indexer.delete_collection()
+                    logger.info(f"Cleaned up Qdrant collection for {evicted_id}")
+                except Exception as e:
+                    logger.error(f"Error cleaning Qdrant for {evicted_id}: {e}")
+
+            # Clean up MongoDB database (ONLY for test processors)
+            if evicted_id.startswith('test_') and \
+               hasattr(processor, 'pattern_processor') and \
+               hasattr(processor.pattern_processor, 'superkb'):
+                try:
+                    processor.pattern_processor.superkb.drop_database()
+                    logger.info(f"Cleaned up MongoDB database for {evicted_id}")
+                except Exception as e:
+                    logger.error(f"Error cleaning MongoDB for {evicted_id}: {e}")
+
+            # Standard close (no-op but kept for compatibility)
+            processor.pattern_processor.superkb.close()
+
         except Exception as e:
-            logger.error(f"Error closing processor {evicted_id}: {e}")
+            logger.error(f"Error cleaning up processor {evicted_id}: {e}")
 
         # Remove lock
         if evicted_id in self.processor_locks:

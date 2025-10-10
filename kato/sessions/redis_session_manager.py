@@ -251,8 +251,8 @@ class RedisSessionManager(session_manager_module.SessionManager):
         await self._save_session(session, ttl)
         print(f"[TRACE-CREATE] Session {session_id} saved successfully", flush=True)
 
-        # Create lock for this session
-        self.session_locks[session_id] = asyncio.Lock()
+        # Create lock for this session (use setdefault for safety)
+        self.session_locks.setdefault(session_id, asyncio.Lock())
 
         logger.info(f"Created session {session_id} for node {node_id} with {ttl}s TTL")
         return session
@@ -327,9 +327,8 @@ class RedisSessionManager(session_manager_module.SessionManager):
             if ttl > 0:
                 await self._save_session(session, ttl)
 
-            # Ensure lock exists
-            if session_id not in self.session_locks:
-                self.session_locks[session_id] = asyncio.Lock()
+            # Ensure lock exists (atomic operation)
+            self.session_locks.setdefault(session_id, asyncio.Lock())
 
             return session
 
@@ -529,11 +528,8 @@ class RedisSessionManager(session_manager_module.SessionManager):
             print(f"[TRACE-LOCK] Session {session_id} NOT FOUND - returning None", flush=True)
             return None
 
-        # Ensure lock exists for this session
-        if session_id not in self.session_locks:
-            self.session_locks[session_id] = asyncio.Lock()
-
-        return self.session_locks[session_id]
+        # Ensure lock exists for this session (atomic operation)
+        return self.session_locks.setdefault(session_id, asyncio.Lock())
 
     async def get_all_sessions(self) -> list[SessionState]:
         """

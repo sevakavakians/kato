@@ -5,6 +5,7 @@ Provides methods to interact with the session-based API.
 Migrated from aiohttp to httpx for improved reliability under concurrent load.
 """
 
+import asyncio
 from typing import Any, Optional
 
 import httpx
@@ -40,6 +41,50 @@ class KatoSessionClient:
         if self.session:
             await self.session.aclose()
 
+    async def _request_with_retry(self, method: str, url: str, **kwargs) -> httpx.Response:
+        """
+        Make HTTP request with retry logic for transient failures.
+
+        Args:
+            method: HTTP method (GET, POST, DELETE, etc.)
+            url: Full URL to request
+            **kwargs: Additional arguments for httpx request
+
+        Returns:
+            httpx.Response object
+
+        Raises:
+            httpx.HTTPError: After all retries exhausted
+        """
+        max_retries = 3
+        backoff_factor = 0.5  # 0.5s, 1s, 2s
+        retry_status_codes = {502, 503, 504}
+
+        last_exception = None
+
+        for attempt in range(max_retries + 1):
+            try:
+                response = await self.session.request(method, url, **kwargs)
+
+                # Retry on specific server errors
+                if response.status_code in retry_status_codes and attempt < max_retries:
+                    await asyncio.sleep(backoff_factor * (2 ** attempt))
+                    continue
+
+                return response
+
+            except (httpx.ConnectError, httpx.TimeoutException, httpx.RemoteProtocolError) as e:
+                last_exception = e
+                if attempt < max_retries:
+                    await asyncio.sleep(backoff_factor * (2 ** attempt))
+                    continue
+                else:
+                    raise
+
+        # Should not reach here, but just in case
+        if last_exception:
+            raise last_exception
+
     async def create_session(self, node_id: Optional[str] = None, ttl_seconds: int = 3600,
                            metadata: Optional[dict[str, Any]] = None) -> dict[str, Any]:
         """Create a new session."""
@@ -57,7 +102,7 @@ class KatoSessionClient:
             "metadata": metadata or {}
         }
 
-        resp = await self.session.post(f"{self.base_url}/sessions", json=payload)
+        resp = await self._request_with_retry("POST", f"{self.base_url}/sessions", json=payload)
         resp.raise_for_status()
         return resp.json()
 
@@ -66,7 +111,7 @@ class KatoSessionClient:
         if not self.session:
             self.session = self._create_session()
 
-        resp = await self.session.get(f"{self.base_url}/sessions/{session_id}")
+        resp = await self._request_with_retry("GET", f"{self.base_url}/sessions/{session_id}")
         if resp.status_code == 404:
             raise SessionNotFoundError(session_id)
         resp.raise_for_status()
@@ -77,7 +122,7 @@ class KatoSessionClient:
         if not self.session:
             self.session = self._create_session()
 
-        resp = await self.session.delete(f"{self.base_url}/sessions/{session_id}")
+        resp = await self._request_with_retry("DELETE", f"{self.base_url}/sessions/{session_id}")
         # 404 means session already deleted - that's OK for cleanup
         if resp.status_code != 404:
             resp.raise_for_status()
@@ -95,7 +140,8 @@ class KatoSessionClient:
         if "emotives" not in data:
             data["emotives"] = {}
 
-        resp = await self.session.post(
+        resp = await self._request_with_retry(
+            "POST",
             f"{self.base_url}/sessions/{session_id}/observe",
             json=data
         )
@@ -109,7 +155,7 @@ class KatoSessionClient:
         if not self.session:
             self.session = self._create_session()
 
-        resp = await self.session.get(f"{self.base_url}/sessions/{session_id}/stm")
+        resp = await self._request_with_retry("GET", f"{self.base_url}/sessions/{session_id}/stm")
         if resp.status_code == 404:
             raise SessionNotFoundError(session_id)
         resp.raise_for_status()
@@ -120,7 +166,7 @@ class KatoSessionClient:
         if not self.session:
             self.session = self._create_session()
 
-        resp = await self.session.post(f"{self.base_url}/sessions/{session_id}/learn")
+        resp = await self._request_with_retry("POST", f"{self.base_url}/sessions/{session_id}/learn")
         if resp.status_code == 404:
             raise SessionNotFoundError(session_id)
         resp.raise_for_status()
@@ -131,7 +177,7 @@ class KatoSessionClient:
         if not self.session:
             self.session = self._create_session()
 
-        resp = await self.session.post(f"{self.base_url}/sessions/{session_id}/clear-stm")
+        resp = await self._request_with_retry("POST", f"{self.base_url}/sessions/{session_id}/clear-stm")
         if resp.status_code == 404:
             raise SessionNotFoundError(session_id)
         resp.raise_for_status()
@@ -142,7 +188,7 @@ class KatoSessionClient:
         if not self.session:
             self.session = self._create_session()
 
-        resp = await self.session.get(f"{self.base_url}/sessions/{session_id}/predictions")
+        resp = await self._request_with_retry("GET", f"{self.base_url}/sessions/{session_id}/predictions")
         if resp.status_code == 404:
             raise SessionNotFoundError(session_id)
         resp.raise_for_status()
@@ -154,7 +200,8 @@ class KatoSessionClient:
             self.session = self._create_session()
 
         params = {"ttl_seconds": ttl_seconds}
-        resp = await self.session.post(
+        resp = await self._request_with_retry(
+            "POST",
             f"{self.base_url}/sessions/{session_id}/extend",
             params=params
         )
@@ -173,7 +220,8 @@ class KatoSessionClient:
         if headers and "X-Session-ID" in headers:
             # Route to specific session
             session_id = headers["X-Session-ID"]
-            resp = await self.session.post(
+            resp = await self._request_with_retry(
+                "POST",
                 f"{self.base_url}/sessions/{session_id}/observe",
                 json=observation
             )
@@ -181,7 +229,8 @@ class KatoSessionClient:
             return resp.json()
         else:
             # Use default/legacy behavior (direct observe endpoint)
-            resp = await self.session.post(
+            resp = await self._request_with_retry(
+                "POST",
                 f"{self.base_url}/observe",
                 json=observation,
                 headers=headers or {}
@@ -194,7 +243,8 @@ class KatoSessionClient:
         if not self.session:
             self.session = self._create_session()
 
-        resp = await self.session.post(
+        resp = await self._request_with_retry(
+            "POST",
             f"{self.base_url}/sessions/{session_id}/config",
             json=config
         )
@@ -208,7 +258,8 @@ class KatoSessionClient:
         if not self.session:
             self.session = self._create_session()
 
-        resp = await self.session.get(
+        resp = await self._request_with_retry(
+            "GET",
             f"{self.base_url}/stm",
             headers=headers or {}
         )
@@ -220,7 +271,8 @@ class KatoSessionClient:
         if not self.session:
             self.session = self._create_session()
 
-        resp = await self.session.post(
+        resp = await self._request_with_retry(
+            "POST",
             f"{self.base_url}/clear-stm",
             headers=headers or {}
         )
@@ -232,7 +284,7 @@ class KatoSessionClient:
         if not self.session:
             self.session = self._create_session()
 
-        resp = await self.session.get(f"{self.base_url}/sessions/count")
+        resp = await self._request_with_retry("GET", f"{self.base_url}/sessions/count")
         resp.raise_for_status()
         result = resp.json()
         return result["active_session_count"]

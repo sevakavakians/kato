@@ -37,6 +37,8 @@ from typing import Any, Dict, List, Optional, Union
 from urllib.parse import urljoin
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 
 class KATOClient:
@@ -131,6 +133,17 @@ class KATOClient:
         self.timeout = timeout
         self.node_id = node_id
         self._http_session = requests.Session()
+
+        # Configure retry strategy for resilience against transient failures
+        retry_strategy = Retry(
+            total=3,  # Total number of retries
+            backoff_factor=0.5,  # Exponential backoff: 0.5s, 1s, 2s
+            status_forcelist=[502, 503, 504],  # Retry on server errors
+            allowed_methods=["GET", "POST", "DELETE", "PUT"]  # Retry safe methods
+        )
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        self._http_session.mount("http://", adapter)
+        self._http_session.mount("https://", adapter)
 
         # Build configuration
         config = {}

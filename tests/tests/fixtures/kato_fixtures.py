@@ -14,6 +14,8 @@ from typing import Any, Optional
 
 import pytest
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 # Try to import docker, but don't fail if it's not available
 try:
@@ -48,6 +50,18 @@ class KATOFastAPIFixture:
         self.services_available = False
         self.session_id = None  # Will be created per test
         self.session_config = {}  # Session-specific configuration
+
+        # Configure requests session with retry logic for resilience
+        self.requests_session = requests.Session()
+        retry_strategy = Retry(
+            total=3,  # Total number of retries
+            backoff_factor=0.5,  # Exponential backoff: 0.5s, 1s, 2s
+            status_forcelist=[502, 503, 504],  # Retry on server errors
+            allowed_methods=["GET", "POST", "DELETE", "PUT"]  # Retry safe methods
+        )
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        self.requests_session.mount("http://", adapter)
+        self.requests_session.mount("https://", adapter)
 
         if use_docker and HAS_DOCKER_PACKAGE:
             try:
@@ -95,7 +109,7 @@ class KATOFastAPIFixture:
                         if port:
                             # Verify the service is actually running
                             try:
-                                response = requests.get(f"http://localhost:{port}/health", timeout=1)
+                                response = self.requests_session.get(f"http://localhost:{port}/health", timeout=1)
                                 if response.status_code == 200:
                                     return port
                             except Exception:
@@ -118,7 +132,7 @@ class KATOFastAPIFixture:
                         port_str = result.stdout.strip().split(':')[-1]
                         port = int(port_str)
                         # Verify the service is running
-                        response = requests.get(f"http://localhost:{port}/health", timeout=1)
+                        response = self.requests_session.get(f"http://localhost:{port}/health", timeout=1)
                         if response.status_code == 200:
                             return port
                 except (subprocess.TimeoutExpired, ValueError, requests.exceptions.RequestException):
@@ -134,10 +148,10 @@ class KATOFastAPIFixture:
 
         while time.time() - start_time < timeout:
             try:
-                response = requests.get(f"{self.base_url}/health", timeout=2)
+                response = self.requests_session.get(f"{self.base_url}/health", timeout=2)
                 if response.status_code == 200:
                     # Verify processor is responding
-                    response = requests.get(f"{self.base_url}/status", timeout=2)
+                    response = self.requests_session.get(f"{self.base_url}/status", timeout=2)
                     if response.status_code == 200:
                         return True
             except requests.exceptions.RequestException:
@@ -215,7 +229,7 @@ class KATOFastAPIFixture:
                     self.base_url = f"http://localhost:{port}"
                     try:
                         # Check if service is running
-                        response = requests.get(f"{self.base_url}/health", timeout=2)
+                        response = self.requests_session.get(f"{self.base_url}/health", timeout=2)
                         if response.status_code == 200:
                             response.json()
                             self.services_available = True
@@ -252,7 +266,7 @@ class KATOFastAPIFixture:
             'config': self.session_config  # Session-specific configuration
         }
 
-        response = requests.post(f"{self.base_url}/sessions", json=session_data)
+        response = self.requests_session.post(f"{self.base_url}/sessions", json=session_data)
         response.raise_for_status()
         result = response.json()
         self.session_id = result['session_id']
@@ -265,13 +279,13 @@ class KATOFastAPIFixture:
         if self.session_id:
             try:
                 # Clear all memory in the session
-                response = requests.post(
+                response = self.requests_session.post(
                     f"{self.base_url}/sessions/{self.session_id}/clear-all"
                 )
                 response.raise_for_status()
 
                 # Then delete the session
-                response = requests.delete(f"{self.base_url}/sessions/{self.session_id}")
+                response = self.requests_session.delete(f"{self.base_url}/sessions/{self.session_id}")
                 response.raise_for_status()
             except Exception:
                 pass  # Ignore errors during cleanup
@@ -293,7 +307,7 @@ class KATOFastAPIFixture:
         self._ensure_session()
 
         # Use session-based endpoint to match learn method
-        response = requests.post(f"{self.base_url}/sessions/{self.session_id}/observe", json=data)
+        response = self.requests_session.post(f"{self.base_url}/sessions/{self.session_id}/observe", json=data)
 
         response.raise_for_status()
         result = response.json()
@@ -321,7 +335,7 @@ class KATOFastAPIFixture:
         self._ensure_session()
 
         # Use session-based endpoint to match learn method
-        response = requests.get(f"{self.base_url}/sessions/{self.session_id}/stm")
+        response = self.requests_session.get(f"{self.base_url}/sessions/{self.session_id}/stm")
 
         response.raise_for_status()
         result = response.json()
@@ -344,7 +358,7 @@ class KATOFastAPIFixture:
         if unique_id:
             params['unique_id'] = unique_id
 
-        response = requests.get(f"{self.base_url}/sessions/{self.session_id}/predictions", params=params)
+        response = self.requests_session.get(f"{self.base_url}/sessions/{self.session_id}/predictions", params=params)
 
         response.raise_for_status()
         result = response.json()
@@ -359,7 +373,7 @@ class KATOFastAPIFixture:
         self._ensure_session()
 
         # Use session-based endpoint
-        response = requests.post(f"{self.base_url}/sessions/{self.session_id}/learn", json={})
+        response = self.requests_session.post(f"{self.base_url}/sessions/{self.session_id}/learn", json={})
 
         # Handle insufficient data case (API returns 400 for empty STM)
         if response.status_code == 400:
@@ -396,7 +410,7 @@ class KATOFastAPIFixture:
         self._ensure_session()
 
         # Use session-based endpoint to match other methods
-        response = requests.post(f"{self.base_url}/sessions/{self.session_id}/clear-stm", json={})
+        response = self.requests_session.post(f"{self.base_url}/sessions/{self.session_id}/clear-stm", json={})
 
         response.raise_for_status()
         result = response.json()
@@ -422,13 +436,13 @@ class KATOFastAPIFixture:
         if self.session_id:
             try:
                 # First call clear-all to delete patterns
-                response = requests.post(
+                response = self.requests_session.post(
                     f"{self.base_url}/sessions/{self.session_id}/clear-all"
                 )
                 response.raise_for_status()
 
                 # Then delete the session
-                response = requests.delete(f"{self.base_url}/sessions/{self.session_id}")
+                response = self.requests_session.delete(f"{self.base_url}/sessions/{self.session_id}")
             except Exception:
                 pass  # Ignore errors during cleanup
 
@@ -459,7 +473,7 @@ class KATOFastAPIFixture:
         self._ensure_session()
 
         # Use session config endpoint
-        response = requests.post(
+        response = self.requests_session.post(
             f"{self.base_url}/sessions/{self.session_id}/config",
             json={'config': genes},
             timeout=5
@@ -555,7 +569,7 @@ class KATOFastAPIFixture:
             'clear_stm_between': clear_stm_between
         }
 
-        response = requests.post(
+        response = self.requests_session.post(
             f"{self.base_url}/sessions/{self.session_id}/observe-sequence",
             json=data,
             timeout=10
@@ -570,7 +584,7 @@ class KATOFastAPIFixture:
 
         # Use x-test-id header for isolation
         headers = {'x-test-id': self.processor_id}
-        response = requests.get(f"{self.base_url}/status", headers=headers)
+        response = self.requests_session.get(f"{self.base_url}/status", headers=headers)
         response.raise_for_status()
         return response.json()
 
@@ -581,7 +595,7 @@ class KATOFastAPIFixture:
 
         # Use x-test-id header for isolation
         headers = {'x-test-id': self.processor_id}
-        response = requests.get(f"{self.base_url}/cognition-data", headers=headers)
+        response = self.requests_session.get(f"{self.base_url}/cognition-data", headers=headers)
         response.raise_for_status()
         result = response.json()
         return result.get('cognition_data', {})
@@ -593,7 +607,7 @@ class KATOFastAPIFixture:
 
         # Use x-test-id header for isolation
         headers = {'x-test-id': self.processor_id}
-        response = requests.get(f"{self.base_url}/percept-data", headers=headers)
+        response = self.requests_session.get(f"{self.base_url}/percept-data", headers=headers)
         response.raise_for_status()
         result = response.json()
         return result.get('percept_data', {})
@@ -605,7 +619,7 @@ class KATOFastAPIFixture:
 
         # Use x-test-id header for isolation
         headers = {'x-test-id': self.processor_id}
-        response = requests.get(f"{self.base_url}/pattern/{pattern_id}", headers=headers)
+        response = self.requests_session.get(f"{self.base_url}/pattern/{pattern_id}", headers=headers)
         if response.status_code == 404:
             return None
         response.raise_for_status()
@@ -619,7 +633,7 @@ class KATOFastAPIFixture:
 
         # Use x-test-id header for isolation
         headers = {'x-test-id': self.processor_id}
-        response = requests.get(f"{self.base_url}/metrics", headers=headers)
+        response = self.requests_session.get(f"{self.base_url}/metrics", headers=headers)
         response.raise_for_status()
         return response.json()
 

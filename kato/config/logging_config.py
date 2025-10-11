@@ -8,10 +8,11 @@ import logging
 import sys
 import time
 import uuid
+from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import datetime, timezone
 from logging import LogRecord
-from typing import Any, Optional, Union
+from typing import Any, Generator, Optional, Union
 
 # Context variable for storing trace ID across async boundaries
 trace_id_var: ContextVar[Optional[str]] = ContextVar('trace_id', default=None)
@@ -165,6 +166,34 @@ def get_trace_id() -> Optional[str]:
         The current trace ID or None
     """
     return trace_id_var.get()
+
+
+@contextmanager
+def trace_context(trace_id: Optional[str] = None) -> Generator[str, None, None]:
+    """
+    Context manager for setting trace ID within a scope.
+
+    Args:
+        trace_id: Optional trace ID to set. If None, generates a new one.
+
+    Yields:
+        The trace ID that was set
+
+    Example:
+        with trace_context() as tid:
+            logger.info("This log will have trace ID")
+    """
+    if trace_id is None:
+        trace_id = generate_trace_id()
+
+    # Set the trace ID and get the reset token
+    token = trace_id_var.set(trace_id)
+
+    try:
+        yield trace_id
+    finally:
+        # Reset to previous value
+        trace_id_var.reset(token)
 
 
 def start_request_timer() -> None:

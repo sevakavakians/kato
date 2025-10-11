@@ -25,13 +25,10 @@ from kato.representations.pattern import Pattern
 from kato.searches.pattern_search import PatternSearcher
 from kato.storage.aggregation_pipelines import OptimizedQueryManager
 from kato.storage.metrics_cache import CachedMetricsCalculator, get_metrics_cache_manager
-from kato.utils.logging import get_logger
 
-# Use enhanced logger with trace ID support
-kato_logger = get_logger('kato.pattern_processor')
-logger = logging.getLogger('kato.pattern_processor')  # Keep for compatibility
+# Standard logger configuration
+logger = logging.getLogger('kato.pattern_processor')
 logger.setLevel(getattr(logging, environ.get('LOG_LEVEL', 'INFO')))
-logger.info('logging initiated')
 
 class PatternProcessor:
     """
@@ -283,12 +280,8 @@ class PatternProcessor:
         Args:
             symbols: List of symbol strings to add as a new event.
         """
-        logger.debug(f"setCurrentEvent called with symbols: {symbols}")
         if symbols:
             self.STM.append(symbols)
-            logger.debug(f"STM after append: {list(self.STM)}")
-        else:
-            logger.debug(f"No symbols to add, STM unchanged: {list(self.STM)}")
         return
 
     def maintain_rolling_window(self, max_length: int) -> None:

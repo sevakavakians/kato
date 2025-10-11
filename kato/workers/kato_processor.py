@@ -13,7 +13,6 @@ from kato.workers.vector_processor import VectorProcessor
 
 logger = logging.getLogger('kato.workers.kato-processor')
 # Logger level will be set when first instance is created
-logger.info('logging initiated')
 
 
 class KatoProcessor:

@@ -42,18 +42,18 @@ async def create_session(request: CreateSessionRequest):
     This enables multiple users to use KATO simultaneously
     without any data collision.
     """
-    print(f"[TRACE-ENDPOINT] create_session endpoint called with node_id: {request.node_id}", flush=True)
+    logger.debug(f"create_session endpoint called with node_id: {request.node_id}")
     from kato.services.kato_fastapi import app_state
 
     logger.info(f"Creating session with manager id: {id(app_state.session_manager)}")
-    print(f"[TRACE-ENDPOINT] Calling session_manager.create_session for node: {request.node_id}", flush=True)
+    logger.debug(f"Calling session_manager.create_session for node: {request.node_id}")
     session = await app_state.session_manager.create_session(
         node_id=request.node_id,
         config=request.config,
         metadata=request.metadata,
         ttl_seconds=request.ttl_seconds
     )
-    print(f"[TRACE-ENDPOINT] Session created: {session.session_id}", flush=True)
+    logger.debug(f"Session created: {session.session_id}")
 
     return SessionResponse(
         session_id=session.session_id,
@@ -223,13 +223,13 @@ async def observe_in_session(
     This is the core endpoint that enables multi-user support.
     Each session maintains its own isolated STM.
     """
-    print(f"[TRACE-ENDPOINT] observe_in_session called for session: {session_id}", flush=True)
+    logger.debug(f"observe_in_session called for session: {session_id}")
     from kato.services.kato_fastapi import app_state
 
     # Get session lock first to ensure proper serialization
-    print(f"[TRACE-ENDPOINT] Getting session lock for: {session_id}", flush=True)
+    logger.debug(f"Getting session lock for: {session_id}")
     lock = await app_state.session_manager.get_session_lock(session_id)
-    print(f"[TRACE-ENDPOINT] Got lock result: {lock is not None} for {session_id}", flush=True)
+    logger.debug(f"Got lock result: {lock is not None} for {session_id}")
     if not lock:
         raise HTTPException(404, detail=f"Session {session_id} not found or expired")
 

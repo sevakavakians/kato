@@ -218,7 +218,7 @@ class RedisSessionManager(session_manager_module.SessionManager):
             await self.initialize()
 
         session_id = f"session-{uuid.uuid4().hex}-{int(datetime.now(timezone.utc).timestamp() * 1000)}"
-        print(f"[TRACE-CREATE] Starting create_session for session_id: {session_id}, node_id: {node_id}", flush=True)
+        logger.debug(f"Starting create_session for session_id: {session_id}, node_id: {node_id}")
         ttl = ttl_seconds or self.default_ttl
 
         now = datetime.now(timezone.utc)
@@ -246,10 +246,10 @@ class RedisSessionManager(session_manager_module.SessionManager):
             session_config=session_config
         )
 
-        print(f"[TRACE-CREATE] About to save session {session_id} to Redis with TTL {ttl}s", flush=True)
+        logger.debug(f"About to save session {session_id} to Redis with TTL {ttl}s")
         # Store in Redis with TTL
         await self._save_session(session, ttl)
-        print(f"[TRACE-CREATE] Session {session_id} saved successfully", flush=True)
+        logger.debug(f"Session {session_id} saved successfully")
 
         # Create lock for this session (use setdefault for safety)
         self.session_locks.setdefault(session_id, asyncio.Lock())
@@ -267,25 +267,25 @@ class RedisSessionManager(session_manager_module.SessionManager):
         Returns:
             SessionState if found and not expired, None otherwise
         """
-        print(f"[TRACE-GET] Starting get_session for session_id: {session_id}", flush=True)
+        logger.debug(f"Starting get_session for session_id: {session_id}")
         logger.info(f"Getting session {session_id}, connected: {self._connected}")
         if not self._connected:
             logger.info("Not connected, initializing Redis connection")
             await self.initialize()
 
         key = f"{self.key_prefix}{session_id}"
-        print(f"[TRACE-GET] Looking for Redis key: {key}", flush=True)
+        logger.debug(f"Looking for Redis key: {key}")
         logger.info(f"Looking for Redis key: {key}")
 
         try:
             # Get session data from Redis
-            print(f"[TRACE-GET] Calling Redis GET for {key}", flush=True)
+            logger.debug(f"Calling Redis GET for {key}")
             session_data = await self.redis_client.get(key)
-            print(f"[TRACE-GET] Redis GET returned: {'DATA' if session_data else 'NULL'} for {key}", flush=True)
+            logger.debug(f"Redis GET returned: {'DATA' if session_data else 'NULL'} for {key}")
             logger.info(f"Redis returned data: {session_data is not None}")
 
             if not session_data:
-                print(f"[TRACE-GET] Session {session_id} NOT FOUND in Redis", flush=True)
+                logger.debug(f"Session {session_id} NOT FOUND in Redis")
                 return None
 
             # Deserialize session
@@ -514,18 +514,18 @@ class RedisSessionManager(session_manager_module.SessionManager):
         Returns:
             asyncio.Lock for the session, None if session doesn't exist
         """
-        print(f"[TRACE-LOCK] Getting lock for session: {session_id}", flush=True)
+        logger.debug(f"Getting lock for session: {session_id}")
         # For Redis sessions, check if session exists first
         # Check Redis directly without calling get_session to avoid recursion
         if not self._connected:
             await self.initialize()
 
         key = f"{self.key_prefix}{session_id}"
-        print(f"[TRACE-LOCK] Calling Redis EXISTS for key: {key}", flush=True)
+        logger.debug(f"Calling Redis EXISTS for key: {key}")
         session_exists = await self.redis_client.exists(key)
-        print(f"[TRACE-LOCK] Redis EXISTS returned: {session_exists} for {key}", flush=True)
+        logger.debug(f"Redis EXISTS returned: {session_exists} for {key}")
         if not session_exists:
-            print(f"[TRACE-LOCK] Session {session_id} NOT FOUND - returning None", flush=True)
+            logger.debug(f"Session {session_id} NOT FOUND - returning None")
             return None
 
         # Ensure lock exists for this session (atomic operation)
@@ -626,7 +626,7 @@ class RedisSessionManager(session_manager_module.SessionManager):
             ttl_seconds: TTL in seconds
         """
         key = f"{self.key_prefix}{session.session_id}"
-        print(f"[TRACE-SAVE] Saving session {session.session_id} to Redis key: {key}", flush=True)
+        logger.debug(f"Saving session {session.session_id} to Redis key: {key}")
 
         # Convert session to dict for serialization
         session_dict = {
@@ -649,18 +649,18 @@ class RedisSessionManager(session_manager_module.SessionManager):
 
         # Serialize to JSON
         session_data = json.dumps(session_dict)
-        print(f"[TRACE-SAVE] Serialized session {session.session_id}, JSON length: {len(session_data)}", flush=True)
+        logger.debug(f"Serialized session {session.session_id}, JSON length: {len(session_data)}")
 
         # Save with TTL
-        print(f"[TRACE-SAVE] Calling Redis SETEX for {key} with TTL {ttl_seconds}s", flush=True)
+        logger.debug(f"Calling Redis SETEX for {key} with TTL {ttl_seconds}s")
         await self.redis_client.setex(key, ttl_seconds, session_data)
-        print(f"[TRACE-SAVE] Redis SETEX completed for {key}", flush=True)
+        logger.debug(f"Redis SETEX completed for {key}")
 
         # CRITICAL FIX: Verify write completed with EXISTS check
         # This ensures the key is actually in Redis before we return
-        print(f"[TRACE-SAVE] Verifying write with EXISTS for {key}", flush=True)
+        logger.debug(f"Verifying write with EXISTS for {key}")
         exists = await self.redis_client.exists(key)
-        print(f"[TRACE-SAVE] EXISTS verification returned: {exists} for {key}", flush=True)
+        logger.debug(f"EXISTS verification returned: {exists} for {key}")
         if not exists:
             raise RuntimeError(f"Session write verification failed - key {key} not found after SETEX")
 

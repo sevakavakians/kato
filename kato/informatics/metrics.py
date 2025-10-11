@@ -7,7 +7,6 @@ from typing import Any, Optional, Union
 
 logger = logging.getLogger('kato.informatics.metrics')
 logger.setLevel(getattr(logging, environ.get('LOG_LEVEL', 'INFO')))
-logger.info('logging initiated')
 
 
 def average_emotives(record: list[dict[str, float]]) -> dict[str, float]:

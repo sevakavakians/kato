@@ -63,7 +63,6 @@ class MemoryManager:
             self.pattern_processor.v_identified = []
             self.percept_data = {}
             self.percept_data_vector = None
-            logger.debug("Primitive variables reset")
         except Exception as e:
             raise MemoryOperationError(
                 f"Failed to reset primitive variables: {str(e)}",
@@ -144,7 +143,6 @@ class MemoryManager:
         This counter tracks the number of observations processed.
         """
         self.time += 1
-        logger.debug(f"Time incremented to {self.time}")
 
     def process_emotives(self, emotives: dict[str, float]) -> None:
         """
@@ -164,9 +162,6 @@ class MemoryManager:
 
                 # Calculate average of all accumulated emotives
                 self.current_emotives = average_emotives(self.pattern_processor.emotives)
-
-                logger.debug(f"Processed emotives: {len(emotives)} values, "
-                           f"current average: {len(self.current_emotives)} dimensions")
         except Exception as e:
             raise MemoryOperationError(
                 f"Failed to process emotives: {str(e)}",
@@ -189,8 +184,6 @@ class MemoryManager:
             if metadata:
                 # Add to pattern processor's metadata list
                 self.pattern_processor.metadata += [metadata]
-
-                logger.debug(f"Processed metadata: {len(metadata)} keys")
         except Exception as e:
             raise MemoryOperationError(
                 f"Failed to process metadata: {str(e)}",
@@ -219,8 +212,6 @@ class MemoryManager:
             'path': path,
             'metadata': metadata
         }
-        logger.debug(f"Percept data updated with {len(strings)} strings, "
-                    f"{len(vectors)} vectors")
 
     def get_stm_state(self) -> list[list[str]]:
         """

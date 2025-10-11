@@ -139,7 +139,6 @@ class PatternOperations:
                 if 'name' in pattern and not pattern['name'].startswith('PTRN|'):
                     pattern['name'] = f"PTRN|{pattern['name']}"
 
-                logger.debug(f"Retrieved pattern: {pattern_id}")
                 return {'status': 'okay', 'pattern': pattern}
             else:
                 logger.warning(f"Pattern not found: {pattern_id}")
@@ -259,7 +258,6 @@ class PatternOperations:
                     resource_id=name
                 )
 
-            logger.debug(f"Retrieved vector: {name}")
             return vector
 
         except ResourceNotFoundError:
@@ -298,8 +296,6 @@ class PatternOperations:
                     pred.pop('_id')
                 predictions.append(pred)
 
-        logger.debug(f"Retrieved {len(predictions)} predictions for "
-                    f"{'current state' if not unique_id else f'ID {unique_id}'}")
         return predictions
 
     def get_pattern_count(self) -> int:

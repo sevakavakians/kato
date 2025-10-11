@@ -8,7 +8,6 @@ from kato.config.settings import get_settings
 
 logger = logging.getLogger('kato.informatics.knowledge-base')
 # Configure logging lazily
-logger.info('logging initiated')
 
 
 class KnowledgeBase(dict):

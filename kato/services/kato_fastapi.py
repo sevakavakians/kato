@@ -30,11 +30,10 @@ from kato.processors.processor_manager import ProcessorManager
 from kato.sessions.redis_session_manager import get_redis_session_manager
 from kato.sessions.session_manager import get_session_manager
 from kato.sessions.session_middleware_simple import SessionMiddleware
-from kato.utils.logging import generate_trace_id, get_logger, trace_context
+from kato.config.logging_config import generate_trace_id, trace_context
 
-# Use enhanced logger with trace ID support
-kato_logger = get_logger('kato.fastapi')
-logger = logging.getLogger('kato.fastapi')  # Keep for compatibility
+# Standard logger configuration
+logger = logging.getLogger('kato.fastapi')
 
 # ============================================================================
 # FastAPI Application Setup

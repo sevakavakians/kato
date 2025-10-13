@@ -23,6 +23,9 @@ from kato.config.session_config import SessionConfiguration
 from .session_manager import SessionState
 import contextlib
 
+# Import event broadcaster for WebSocket notifications
+from kato.websocket import get_event_broadcaster
+
 logger = logging.getLogger('kato.sessions.redis')
 
 
@@ -255,6 +258,25 @@ class RedisSessionManager(session_manager_module.SessionManager):
         self.session_locks.setdefault(session_id, asyncio.Lock())
 
         logger.info(f"Created session {session_id} for node {node_id} with {ttl}s TTL")
+
+        # Broadcast session.created event to WebSocket clients
+        try:
+            broadcaster = get_event_broadcaster()
+            event = {
+                "event_type": "session.created",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "data": {
+                    "session_id": session_id,
+                    "node_id": node_id,
+                    "created_at": session.created_at.isoformat()
+                }
+            }
+            await broadcaster.broadcast_event(event)
+            logger.debug(f"Broadcasted session.created event for {session_id}")
+        except Exception as e:
+            # Don't fail session creation if broadcast fails
+            logger.warning(f"Failed to broadcast session.created event: {e}")
+
         return session
 
     async def get_session(self, session_id: str) -> Optional[SessionState]:
@@ -400,6 +422,25 @@ class RedisSessionManager(session_manager_module.SessionManager):
         # Remove lock
         if session_id in self.session_locks:
             del self.session_locks[session_id]
+
+        # Broadcast session.destroyed event to WebSocket clients if session existed
+        if session:
+            try:
+                broadcaster = get_event_broadcaster()
+                event = {
+                    "event_type": "session.destroyed",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "data": {
+                        "session_id": session_id,
+                        "destroyed_at": datetime.now(timezone.utc).isoformat(),
+                        "reason": "explicit_delete"
+                    }
+                }
+                await broadcaster.broadcast_event(event)
+                logger.debug(f"Broadcasted session.destroyed event for {session_id}")
+            except Exception as e:
+                # Don't fail session deletion if broadcast fails
+                logger.warning(f"Failed to broadcast session.destroyed event: {e}")
 
         # Return True if we cleaned up a session (even if Redis key didn't exist)
         if deleted or session:

@@ -21,7 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 # Import modular API endpoints
-from kato.api.endpoints import health_router, kato_ops_router, monitoring_router, sessions_router
+from kato.api.endpoints import health_router, kato_ops_router, monitoring_router, sessions_router, websocket_events_router
 from kato.config.configuration_service import get_configuration_service
 from kato.config.settings import get_settings
 from kato.exceptions.handlers import setup_error_handlers
@@ -342,6 +342,9 @@ app.include_router(health_router)
 # Include primary KATO operation endpoints
 app.include_router(kato_ops_router)
 
+# Include WebSocket events endpoint
+app.include_router(websocket_events_router)
+
 
 # ============================================================================
 # Root Endpoint
@@ -364,30 +367,9 @@ async def root():
 
 
 # ============================================================================
-# WebSocket Support (if needed)
+# Note: WebSocket event streaming is now handled by /ws/events endpoint
+# See kato/api/endpoints/websocket_events.py for implementation
 # ============================================================================
-
-
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    """WebSocket endpoint for real-time communication"""
-    await websocket.accept()
-    logger.info("WebSocket connection established")
-
-    try:
-        while True:
-            # Receive message from client
-            data = await websocket.receive_text()
-            logger.debug(f"Received WebSocket message: {data}")
-
-            # Echo back for now (can be enhanced for real-time observations)
-            await websocket.send_text(f"Echo: {data}")
-
-    except WebSocketDisconnect:
-        logger.info("WebSocket connection closed")
-    except Exception as e:
-        logger.error(f"WebSocket error: {e}")
-        await websocket.close()
 
 
 if __name__ == "__main__":

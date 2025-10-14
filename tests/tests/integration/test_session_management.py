@@ -210,16 +210,18 @@ class TestSessionLifecycle:
         )
         session_id = session['session_id']
 
-        # Session should be accessible immediately
-        stm = await kato_client.get_session_stm(session_id)
-        assert stm['stm'] == []
+        # Session should be accessible immediately (without extending)
+        status = await kato_client.check_session_exists(session_id)
+        assert status['exists'] is True
+        assert status['expired'] is False
 
         # Wait for expiration
         await asyncio.sleep(3)
 
-        # Session should be expired - expect SessionNotFoundError
-        with pytest.raises(SessionNotFoundError):
-            await kato_client.get_session_stm(session_id)
+        # Session should be expired (check without extending TTL)
+        status = await kato_client.check_session_exists(session_id)
+        # Session may be completely gone (not exists) or expired
+        assert status['exists'] is False or status['expired'] is True
 
     @pytest.mark.asyncio
     async def test_session_cleanup(self, kato_client):
@@ -274,6 +276,43 @@ class TestSessionLifecycle:
 
         # Cleanup
         await kato_client.delete_session(session_id)
+
+    @pytest.mark.asyncio
+    async def test_session_auto_extend_sliding_window(self, kato_client):
+        """Test that sessions auto-extend on activity (sliding window behavior)"""
+        # Create session with short TTL for faster testing
+        session = await kato_client.create_session(ttl_seconds=5)
+        session_id = session['session_id']
+
+        # Make requests every 2 seconds for 12 seconds (longer than TTL)
+        # If auto-extend is working, session should NOT expire
+        for i in range(6):  # 6 iterations * 2 seconds = 12 seconds > 5 second TTL
+            await asyncio.sleep(2)
+
+            # Make an observation to trigger auto-extend
+            result = await kato_client.observe_in_session(
+                session_id,
+                {"strings": [f"keep_alive_{i}"]}
+            )
+            assert result['status'] == 'okay'
+
+            # Verify session is still active
+            stm = await kato_client.get_session_stm(session_id)
+            assert stm is not None
+            assert len(stm['stm']) == i + 1  # STM should grow
+
+        # Session should still be active after 12 seconds of activity
+        final_stm = await kato_client.get_session_stm(session_id)
+        assert final_stm is not None
+        assert len(final_stm['stm']) == 6
+
+        # Now stop making requests and wait for expiration
+        await asyncio.sleep(6)  # Wait longer than TTL with no activity
+
+        # Session should now be expired (check without extending TTL)
+        status = await kato_client.check_session_exists(session_id)
+        # Session should be gone or expired
+        assert status['exists'] is False or status['expired'] is True
 
 
 class TestSessionPersistence:

@@ -44,7 +44,8 @@ class RedisSessionManager(session_manager_module.SessionManager):
         self,
         redis_url: str = "redis://localhost:6379",
         default_ttl_seconds: int = 3600,
-        key_prefix: str = "kato:session:"
+        key_prefix: str = "kato:session:",
+        auto_extend: bool = True
     ):
         """
         Initialize Redis session manager.
@@ -53,15 +54,17 @@ class RedisSessionManager(session_manager_module.SessionManager):
             redis_url: Redis connection URL
             default_ttl_seconds: Default session TTL
             key_prefix: Prefix for Redis keys
+            auto_extend: Automatically extend session TTL on access (sliding window)
         """
         super().__init__(default_ttl_seconds)
         self.redis_url = redis_url
         self.key_prefix = key_prefix
+        self.auto_extend = auto_extend
         self.redis_client: Optional[redis.Redis] = None
         self._connected = False
         self._init_lock = asyncio.Lock()  # CRITICAL FIX: Lock for thread-safe initialization
 
-        logger.info(f"RedisSessionManager initialized with URL: {redis_url}")
+        logger.info(f"RedisSessionManager initialized with URL: {redis_url}, auto_extend: {auto_extend}")
 
     def _serialize_session_config(self, session_config: SessionConfiguration) -> dict[str, Any]:
         """
@@ -111,6 +114,10 @@ class RedisSessionManager(session_manager_module.SessionManager):
         # Ensure max_metadata_size exists (for backward compatibility)
         if 'max_metadata_size' not in session_dict:
             session_dict['max_metadata_size'] = 1000
+
+        # Ensure ttl_seconds exists (for backward compatibility)
+        if 'ttl_seconds' not in session_dict:
+            session_dict['ttl_seconds'] = self.default_ttl
 
         return SessionState(**session_dict)
 
@@ -240,6 +247,7 @@ class RedisSessionManager(session_manager_module.SessionManager):
             created_at=now,
             last_accessed=now,
             expires_at=expires_at,
+            ttl_seconds=ttl,  # Store session-specific TTL for auto-extension
             stm=[],
             emotives_accumulator=[],
             metadata_accumulator=[],
@@ -279,12 +287,13 @@ class RedisSessionManager(session_manager_module.SessionManager):
 
         return session
 
-    async def get_session(self, session_id: str) -> Optional[SessionState]:
+    async def get_session(self, session_id: str, check_only: bool = False) -> Optional[SessionState]:
         """
         Get session from Redis.
 
         Args:
             session_id: Session identifier
+            check_only: If True, retrieve without auto-extending (for testing expiration)
 
         Returns:
             SessionState if found and not expired, None otherwise
@@ -341,13 +350,17 @@ class RedisSessionManager(session_manager_module.SessionManager):
 
             logger.info(f"Session {session_id} is valid, updating access time")
 
-            # Update access time
-            session.update_access()
+            # Update access time and expiration (unless check_only mode)
+            # Don't save here - let update_session() handle the save to avoid double-writing
+            if not check_only:
+                session.update_access()
 
-            # Get remaining TTL
-            ttl = await self.redis_client.ttl(key)
-            if ttl > 0:
-                await self._save_session(session, ttl)
+                # Auto-extend session TTL on access (sliding window)
+                if self.auto_extend:
+                    # Reset expiration to now + session's TTL (sliding window)
+                    # Just update the field, don't save yet
+                    session.expires_at = datetime.now(timezone.utc) + timedelta(seconds=session.ttl_seconds)
+                    logger.debug(f"Marked session {session_id} for TTL extension by {session.ttl_seconds}s")
 
             # Ensure lock exists (atomic operation)
             self.session_locks.setdefault(session_id, asyncio.Lock())
@@ -372,20 +385,26 @@ class RedisSessionManager(session_manager_module.SessionManager):
             await self.initialize()
 
         try:
-            # Calculate remaining TTL
-            # Calculate remaining TTL (all datetimes should now be timezone-aware)
-            remaining_ttl = int((session.expires_at - datetime.now(timezone.utc)).total_seconds())
+            # Auto-extend session on update if enabled
+            if self.auto_extend:
+                # Reset expiration to now + session's TTL (sliding window)
+                session.expires_at = datetime.now(timezone.utc) + timedelta(seconds=session.ttl_seconds)
+                ttl = session.ttl_seconds
+                logger.debug(f"Auto-extending session {session.session_id} on update with {ttl}s TTL")
+            else:
+                # Calculate remaining TTL (fixed expiration)
+                ttl = int((session.expires_at - datetime.now(timezone.utc)).total_seconds())
 
-            if remaining_ttl <= 0:
-                # Session expired
-                await self.delete_session(session.session_id)
-                return False
+                if ttl <= 0:
+                    # Session expired
+                    await self.delete_session(session.session_id)
+                    return False
 
             # Enforce limits before saving
             session.enforce_limits()
 
             # Save to Redis
-            await self._save_session(session, remaining_ttl)
+            await self._save_session(session, ttl)
             return True
 
         except Exception as e:
@@ -676,6 +695,7 @@ class RedisSessionManager(session_manager_module.SessionManager):
             'created_at': session.created_at.isoformat(),
             'last_accessed': session.last_accessed.isoformat(),
             'expires_at': session.expires_at.isoformat(),
+            'ttl_seconds': session.ttl_seconds,
             'stm': session.stm,
             'emotives_accumulator': session.emotives_accumulator,
             'metadata_accumulator': session.metadata_accumulator,

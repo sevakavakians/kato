@@ -195,9 +195,15 @@ class AppState:
             logger.debug(f"Call stack:\n{''.join(traceback.format_stack()[-5:])}")
             # Use Redis session manager if Redis is configured
             redis_url = os.environ.get('REDIS_URL')
+            settings = get_settings()
             if redis_url:
                 logger.info(f"Using Redis session manager with URL: {redis_url}")
-                self._session_manager = get_redis_session_manager(redis_url=redis_url)
+                logger.info(f"Session auto-extend: {settings.session.session_auto_extend}, TTL: {settings.session.session_ttl}s")
+                self._session_manager = get_redis_session_manager(
+                    redis_url=redis_url,
+                    default_ttl_seconds=settings.session.session_ttl,
+                    auto_extend=settings.session.session_auto_extend
+                )
             else:
                 logger.info("Using in-memory session manager")
                 self._session_manager = get_session_manager()

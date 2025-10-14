@@ -292,8 +292,20 @@ The system uses Redis-based session management for configuration:
 - **Persistent State**: Session data persists across service restarts
 - **Configuration via API**: Use session endpoints to modify behavior
 
+#### Session TTL and Auto-Extension
+- `SESSION_TTL`: Default session time-to-live in seconds (default: 3600)
+- `SESSION_AUTO_EXTEND`: Enable sliding window session expiration (default: true)
+  - **Enabled (true)**: Sessions automatically extend TTL on each access (recommended for long-running tasks)
+    - Session expires only after TTL of inactivity
+    - Prevents expiration during active use
+    - Example: With 1-hour TTL, a training run can last indefinitely as long as it makes requests
+  - **Disabled (false)**: Sessions use fixed expiration time from creation
+    - Session expires at creation_time + TTL regardless of activity
+    - Use for time-bounded sessions with strict expiration requirements
+
 ## Recent Modernizations
 
+- **Session Auto-Extension** (2025-10): Added sliding window session expiration for long-running tasks
 - **API Endpoint Migration Complete (Phase 3)** (2025-10): Removed all deprecated direct endpoints, session-only architecture
 - **API Endpoint Deprecation Phase 2** (2025-10): Auto-session middleware for transparent backward compatibility
 - **FastAPI Migration**: Replaced REST/ZMQ with direct FastAPI embedding (2025-09)

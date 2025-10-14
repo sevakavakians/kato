@@ -210,6 +210,23 @@ class KatoSessionClient:
         resp.raise_for_status()
         return resp.json()
 
+    async def check_session_exists(self, session_id: str) -> dict[str, Any]:
+        """
+        Check if session exists without extending its TTL.
+
+        Returns:
+            dict with 'exists' and 'expired' boolean fields
+        """
+        if not self.session:
+            self.session = self._create_session()
+
+        resp = await self._request_with_retry(
+            "GET",
+            f"{self.base_url}/sessions/{session_id}/exists"
+        )
+        resp.raise_for_status()
+        return resp.json()
+
     # Legacy compatibility methods
     async def observe_legacy(self, observation: dict[str, Any], headers: Optional[dict[str, str]] = None) -> dict[str, Any]:
         """Legacy observe method for backward compatibility tests."""

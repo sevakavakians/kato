@@ -269,7 +269,8 @@ class TestRedisSessionManager:
 
         # Verify Redis operations
         manager.redis_client.get.assert_called()
-        manager.redis_client.setex.assert_called()  # Access time update
+        # Note: setex is no longer called in get_session() - it only updates fields in memory
+        # The actual save happens in update_session() to avoid double-writes
 
     async def test_session_operations_mock(self):
         """Test various session operations with mocked store"""

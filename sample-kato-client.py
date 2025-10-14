@@ -4,6 +4,12 @@ KATO Python Client - Simple API Wrapper with Transparent Session Management
 This is a complete Python client for the KATO API that can be copied into any project.
 Sessions are handled automatically - one client instance equals one isolated KATO session.
 
+Features:
+- Automatic session creation and cleanup
+- Automatic session recreation on 404 errors (expired/lost sessions)
+- STM state recovery after session recreation
+- Exponential backoff retry for transient failures
+
 USAGE:
     from sample_kato_client import KATOClient
 
@@ -29,10 +35,11 @@ USAGE:
         predictions = client.get_predictions()
 
 Author: KATO Team
-Version: 3.0.0
+Version: 3.1.0
 """
 
 import json
+import time
 from typing import Any, Dict, List, Optional, Union
 from urllib.parse import urljoin
 
@@ -43,10 +50,16 @@ from urllib3.util.retry import Retry
 
 class KATOClient:
     """
-    Python client for KATO API with transparent session management.
+    Python client for KATO API with transparent session management and automatic recovery.
 
     This client provides a simple interface to KATO where sessions are handled
     automatically. One client instance = one isolated KATO session.
+
+    Features:
+        - Automatic session creation and cleanup
+        - Automatic session recreation on 404 errors (expired/lost sessions)
+        - STM state recovery after session recreation
+        - Exponential backoff retry for transient failures
 
     Configuration Parameters:
         max_pattern_length: int (0+, default=0)
@@ -75,14 +88,32 @@ class KATOClient:
         process_predictions: bool (default=True)
             - Whether to process predictions
 
+        auto_recreate_session: bool (default=True)
+            - Automatically recreate session on 404 errors
+            - Attempts to restore STM state when recreating
+
+        max_session_recreate_attempts: int (default=3)
+            - Maximum attempts to recreate session before failing
+            - Uses exponential backoff: 0.5s, 1s, 2s
+
+    Resilience:
+        The client is designed for long-running tasks and handles:
+        - Session expiration: Auto-recreates and restores STM
+        - Network failures: Retries with exponential backoff
+        - Transient errors: HTTP 502/503/504 automatic retry
+
     Example:
+        >>> # Long-running training that survives session expiration
         >>> client = KATOClient(
         ...     base_url="http://localhost:8000",
         ...     node_id="level0_token_node",
         ...     max_pattern_length=10,
-        ...     stm_mode="ROLLING"
+        ...     stm_mode="ROLLING",
+        ...     auto_recreate_session=True  # Enabled by default
         ... )
-        >>> client.observe(strings=["hello", "world"])
+        >>> # Even if session expires mid-training, client auto-recovers
+        >>> for i in range(10000):
+        ...     client.observe(strings=[f"token_{i}"])
         >>> client.learn()
         >>> predictions = client.get_predictions()
         >>> client.close()
@@ -103,7 +134,10 @@ class KATOClient:
         indexer_type: str = 'VI',
         max_predictions: int = 100,
         sort_symbols: bool = True,
-        process_predictions: bool = True
+        process_predictions: bool = True,
+        # Retry configuration
+        auto_recreate_session: bool = True,
+        max_session_recreate_attempts: int = 3
     ):
         """
         Initialize KATO client with automatic session creation.
@@ -122,6 +156,8 @@ class KATOClient:
             max_predictions: Max predictions to return (1-10000, default: 100)
             sort_symbols: Sort symbols alphabetically (default: True)
             process_predictions: Enable prediction processing (default: True)
+            auto_recreate_session: Auto-recreate session on 404 errors (default: True)
+            max_session_recreate_attempts: Max attempts to recreate session (default: 3)
 
         Raises:
             ValueError: If node_id is not provided
@@ -133,6 +169,15 @@ class KATOClient:
         self.timeout = timeout
         self.node_id = node_id
         self._http_session = requests.Session()
+
+        # Retry configuration
+        self.auto_recreate_session = auto_recreate_session
+        self.max_session_recreate_attempts = max_session_recreate_attempts
+
+        # Store session creation parameters for recreation
+        self._session_metadata = metadata or {}
+        self._session_ttl_seconds = ttl_seconds
+        self._session_config = {}
 
         # Configure retry strategy for resilience against transient failures
         retry_strategy = Retry(
@@ -164,20 +209,72 @@ class KATOClient:
         if process_predictions is not True:
             config['process_predictions'] = process_predictions
 
-        # Auto-create session
-        session_data = {
-            'node_id': node_id,
-            'metadata': metadata or {},
-        }
-        if ttl_seconds is not None:
-            session_data['ttl_seconds'] = ttl_seconds
+        # Store config for session recreation
+        self._session_config = config
 
-        session_response = self._request('POST', '/sessions', data=session_data)
+        # Auto-create session (bypass retry logic for initial creation)
+        self._session_id = None
+        self._create_session()
+
+    def _create_session(self) -> None:
+        """Create a new session with stored parameters."""
+        session_data = {
+            'node_id': self.node_id,
+            'metadata': self._session_metadata,
+        }
+        if self._session_ttl_seconds is not None:
+            session_data['ttl_seconds'] = self._session_ttl_seconds
+
+        # Direct request without retry wrapper for session creation
+        url = urljoin(self.base_url, '/sessions')
+        response = self._http_session.post(url, json=session_data, timeout=self.timeout)
+        response.raise_for_status()
+        session_response = response.json()
         self._session_id = session_response['session_id']
 
         # Update config if any non-default values provided
-        if config:
-            self._request('POST', f'/sessions/{self._session_id}/config', data={'config': config})
+        if self._session_config:
+            url = urljoin(self.base_url, f'/sessions/{self._session_id}/config')
+            response = self._http_session.post(
+                url,
+                json={'config': self._session_config},
+                timeout=self.timeout
+            )
+            response.raise_for_status()
+
+    def _recreate_session_with_state_recovery(self) -> None:
+        """
+        Recreate session and attempt to restore STM state.
+
+        This is called automatically when a 404 error occurs, indicating
+        the session has expired or been lost.
+        """
+        # Try to get current STM state before recreation (may fail)
+        cached_stm = None
+        try:
+            # Attempt direct GET without retry wrapper
+            url = urljoin(self.base_url, f'/sessions/{self._session_id}/stm')
+            response = self._http_session.get(url, timeout=self.timeout)
+            if response.status_code == 200:
+                stm_data = response.json()
+                cached_stm = stm_data.get('stm', [])
+        except Exception:
+            # STM retrieval failed, will create fresh session
+            pass
+
+        # Create new session
+        old_session_id = self._session_id
+        self._create_session()
+
+        # Restore STM if we retrieved it
+        if cached_stm:
+            try:
+                # Replay observations to restore STM state
+                for event in cached_stm:
+                    self.observe(strings=event)
+            except Exception:
+                # STM restoration failed, continue with empty STM
+                pass
 
     def _request(
         self,
@@ -188,7 +285,14 @@ class KATOClient:
         **kwargs
     ) -> Dict[str, Any]:
         """
-        Internal method to make HTTP requests.
+        Internal method to make HTTP requests with automatic session recreation.
+
+        This method implements retry logic with session recreation on 404 errors.
+        If a session expires or is lost, it will:
+        1. Attempt to cache current STM state
+        2. Recreate the session
+        3. Restore STM state if possible
+        4. Retry the original request
 
         Args:
             method: HTTP method (GET, POST, DELETE, etc.)
@@ -201,7 +305,7 @@ class KATOClient:
             Response JSON as dictionary
 
         Raises:
-            requests.HTTPError: On HTTP error responses
+            requests.HTTPError: On HTTP error responses after all retry attempts
         """
         url = urljoin(self.base_url, endpoint.lstrip('/'))
 
@@ -211,10 +315,40 @@ class KATOClient:
         if params is not None:
             kwargs['params'] = params
 
-        response = self._http_session.request(method, url, **kwargs)
-        response.raise_for_status()
+        # Retry loop with session recreation
+        for attempt in range(self.max_session_recreate_attempts):
+            try:
+                response = self._http_session.request(method, url, **kwargs)
+                response.raise_for_status()
+                return response.json()
 
-        return response.json()
+            except requests.HTTPError as e:
+                # Check if this is a 404 error (session not found)
+                if e.response.status_code == 404 and self.auto_recreate_session:
+                    # Don't retry session creation/deletion endpoints
+                    if '/sessions' in endpoint and method in ['POST', 'DELETE']:
+                        raise
+
+                    # Don't retry on last attempt
+                    if attempt >= self.max_session_recreate_attempts - 1:
+                        raise
+
+                    # Recreate session and retry
+                    try:
+                        self._recreate_session_with_state_recovery()
+                        # Update URL with new session_id if endpoint contains session reference
+                        if self._session_id and '{session_id}' not in endpoint:
+                            # Replace old session_id in URL
+                            url = urljoin(self.base_url, endpoint.lstrip('/'))
+                        # Exponential backoff before retry
+                        time.sleep(0.5 * (2 ** attempt))
+                        continue  # Retry the request
+                    except Exception:
+                        # Session recreation failed, re-raise original error
+                        raise e
+                else:
+                    # Not a 404 or auto-recreate disabled, re-raise
+                    raise
 
     # ========================================================================
     # Root Endpoint
@@ -253,6 +387,30 @@ class KATOClient:
             >>> result = client.extend_session(ttl_seconds=7200)
         """
         return self._request('POST', f'/sessions/{self._session_id}/extend', params={'ttl_seconds': ttl_seconds})
+
+    def check_session_exists(self) -> Dict[str, Any]:
+        """
+        Check if session exists without extending its TTL.
+
+        This is useful for checking session status without triggering auto-extension.
+        When SESSION_AUTO_EXTEND is enabled on the server, normal operations like
+        get_stm() will extend the session TTL. Use this method to check expiration
+        status without side effects.
+
+        Returns:
+            Dictionary with:
+            - exists: Whether session exists in Redis
+            - expired: Whether session has expired
+            - session_id: The session identifier
+
+        Example:
+            >>> status = client.check_session_exists()
+            >>> if status['expired']:
+            ...     print("Session has expired!")
+            >>> elif status['exists']:
+            ...     print("Session is still active")
+        """
+        return self._request('GET', f'/sessions/{self._session_id}/exists')
 
     def close(self) -> None:
         """

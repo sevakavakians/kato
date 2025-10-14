@@ -116,16 +116,22 @@ class TestSessionErrorHandling:
 
         session_id = response.json()["session_id"]
 
-        # Should work immediately
-        response = requests.get(f"{base_url}/sessions/{session_id}/stm")
+        # Should exist immediately (check without extending)
+        response = requests.get(f"{base_url}/sessions/{session_id}/exists")
         assert response.status_code == 200
+        status = response.json()
+        assert status['exists'] is True
+        assert status['expired'] is False
 
         # Wait for expiration
         time.sleep(2)
 
-        # Should now return 404 or appropriate error
-        response = requests.get(f"{base_url}/sessions/{session_id}/stm")
-        assert response.status_code in [404, 410], "Expired session should return error"
+        # Should now be expired or gone (check without extending)
+        response = requests.get(f"{base_url}/sessions/{session_id}/exists")
+        assert response.status_code == 200  # exists endpoint always returns 200
+        status = response.json()
+        # Session should be expired or completely gone
+        assert status['exists'] is False or status['expired'] is True, "Expired session should not be valid"
 
     def test_malformed_json_handling(self):
         """Test handling of malformed JSON requests"""

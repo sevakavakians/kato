@@ -30,6 +30,7 @@ class SessionState:
     created_at: datetime
     last_accessed: datetime
     expires_at: datetime
+    ttl_seconds: int = 3600  # Session-specific TTL for auto-extension
 
     # Session-specific STM state (node's LTM is in their processor)
     stm: list[list[str]] = field(default_factory=list)
@@ -168,6 +169,7 @@ class SessionManager:
             created_at=now,
             last_accessed=now,
             expires_at=now + timedelta(seconds=ttl),
+            ttl_seconds=ttl,  # Store session-specific TTL
             metadata=metadata or {},
             session_config=session_config
         )

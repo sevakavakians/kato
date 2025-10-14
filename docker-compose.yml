@@ -62,6 +62,7 @@ services:
       - REDIS_URL=redis://redis:6379
       - LOG_LEVEL=INFO
       - SESSION_TTL=3600
+      - SESSION_AUTO_EXTEND=true
     ports:
       - "8000:8000"
     networks:

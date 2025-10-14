@@ -80,6 +80,61 @@ async def get_active_session_count():
         raise HTTPException(status_code=500, detail="Failed to get session count")
 
 
+@router.get("/{session_id}/exists")
+async def check_session_exists(session_id: str):
+    """
+    Check if session exists without extending its TTL.
+
+    This endpoint is useful for testing expiration behavior since
+    it won't trigger auto-extension when SESSION_AUTO_EXTEND is enabled.
+
+    Returns:
+        exists: Whether session exists in Redis
+        expired: Whether session has expired (if exists)
+    """
+    from kato.services.kato_fastapi import app_state
+
+    # Check Redis directly first to avoid auto-deletion of expired sessions
+    if hasattr(app_state.session_manager, 'redis_client'):
+        if not app_state.session_manager._connected:
+            await app_state.session_manager.initialize()
+
+        key = f"{app_state.session_manager.key_prefix}{session_id}"
+        exists = await app_state.session_manager.redis_client.exists(key)
+
+        if not exists:
+            return {
+                "exists": False,
+                "expired": False,
+                "session_id": session_id
+            }
+
+        # Session exists in Redis, check if it's expired
+        session = await app_state.session_manager.get_session(session_id, check_only=True)
+        if not session:
+            # Exists but get_session returned None = expired (and now deleted)
+            return {
+                "exists": False,  # Was deleted
+                "expired": True,  # But it was expired
+                "session_id": session_id
+            }
+
+        # Session exists and is valid
+        return {
+            "exists": True,
+            "expired": False,
+            "session_id": session_id
+        }
+
+    # Fallback for non-Redis session manager
+    session = await app_state.session_manager.get_session(session_id, check_only=True)
+    return {
+        "exists": session is not None,
+        "expired": False if session else False,
+        "session_id": session_id
+    }
+
+
 @router.get("/{session_id}", response_model=SessionResponse)
 async def get_session_info(session_id: str):
     """Get information about a session"""

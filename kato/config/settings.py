@@ -312,6 +312,12 @@ class SessionConfig(BaseSettings):
         description="Session time-to-live in seconds"
     )
 
+    session_auto_extend: bool = Field(
+        True,
+        json_schema_extra={'env': 'SESSION_AUTO_EXTEND'},
+        description="Automatically extend session TTL on each access (sliding window)"
+    )
+
     model_config = ConfigDict(env_prefix='')
 
 

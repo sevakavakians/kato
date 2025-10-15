@@ -35,7 +35,7 @@ USAGE:
         predictions = client.get_predictions()
 
 Author: KATO Team
-Version: 3.1.0
+Version: 3.2.0 - Optimized timeout defaults for long-running training workloads
 """
 
 import json
@@ -102,11 +102,24 @@ class KATOClient:
         - Network failures: Retries with exponential backoff
         - Transient errors: HTTP 502/503/504 automatic retry
 
+    Timeout Configuration:
+        The timeout parameter controls how long to wait for server responses.
+
+        Recommended values:
+        - 30-60s: Standard workloads with small batches (<100 observations)
+        - 120s: Training workloads with large batches (100-1000 observations)
+        - 300s: Very large batches or slow database conditions
+
+        Note: The server has SESSION_AUTO_EXTEND enabled, which means sessions
+        automatically extend their TTL on every request. Long timeouts are safe
+        and won't cause session expiration issues.
+
     Example:
-        >>> # Long-running training that survives session expiration
+        >>> # Long-running training with appropriate timeout
         >>> client = KATOClient(
         ...     base_url="http://localhost:8000",
         ...     node_id="level0_token_node",
+        ...     timeout=120,  # 2 minutes for training workloads
         ...     max_pattern_length=10,
         ...     stm_mode="ROLLING",
         ...     auto_recreate_session=True  # Enabled by default
@@ -123,7 +136,7 @@ class KATOClient:
         self,
         base_url: str = "http://localhost:8000",
         node_id: str = None,
-        timeout: int = 30,
+        timeout: int = 120,
         metadata: Optional[Dict[str, Any]] = None,
         ttl_seconds: Optional[int] = None,
         # Configuration parameters with defaults from KATO settings
@@ -145,7 +158,9 @@ class KATOClient:
         Args:
             base_url: Base URL of KATO service
             node_id: Node identifier (required for processor isolation)
-            timeout: Request timeout in seconds (default: 30)
+            timeout: Request timeout in seconds (default: 120)
+                    Recommended: 30-60s for standard workloads, 120s for training,
+                    300s for very large batches or slow DB conditions
             metadata: Optional session metadata
             ttl_seconds: Session TTL in seconds (default: 3600)
             max_pattern_length: Auto-learn after N observations (0=manual, default: 0)

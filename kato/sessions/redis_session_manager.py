@@ -351,16 +351,23 @@ class RedisSessionManager(session_manager_module.SessionManager):
             logger.info(f"Session {session_id} is valid, updating access time")
 
             # Update access time and expiration (unless check_only mode)
-            # Don't save here - let update_session() handle the save to avoid double-writing
             if not check_only:
                 session.update_access()
 
                 # Auto-extend session TTL on access (sliding window)
                 if self.auto_extend:
                     # Reset expiration to now + session's TTL (sliding window)
-                    # Just update the field, don't save yet
                     session.expires_at = datetime.now(timezone.utc) + timedelta(seconds=session.ttl_seconds)
-                    logger.debug(f"Marked session {session_id} for TTL extension by {session.ttl_seconds}s")
+                    logger.debug(f"Auto-extending session {session_id} by {session.ttl_seconds}s (immediate save)")
+
+                    # CRITICAL FIX: Save immediately to ensure extension persists even if request fails
+                    # This prevents session expiration during long-running operations or client timeouts
+                    try:
+                        await self._save_session(session, session.ttl_seconds)
+                        logger.debug(f"Session {session_id} extension saved to Redis")
+                    except Exception as save_error:
+                        logger.error(f"Failed to save session extension for {session_id}: {save_error}")
+                        # Don't fail the request - session will retry on next access
 
             # Ensure lock exists (atomic operation)
             self.session_locks.setdefault(session_id, asyncio.Lock())

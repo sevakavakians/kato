@@ -480,6 +480,28 @@ async def observe_sequence_in_session(
     from kato.api.schemas import ObservationSequenceResult
     from kato.services.kato_fastapi import app_state
 
+    # Background heartbeat task to keep session alive during long operations
+    async def _session_heartbeat(interval_seconds: int = 30):
+        """
+        Periodically extend session TTL during long-running operations.
+
+        This ensures sessions don't expire mid-processing, even if the operation
+        takes longer than the client timeout or session TTL.
+        """
+        try:
+            while True:
+                await asyncio.sleep(interval_seconds)
+                session = await app_state.session_manager.get_session(session_id)
+                if session:
+                    # get_session() with auto_extend=True already extends and saves the session
+                    logger.debug(f"Heartbeat: extended session {session_id}")
+                else:
+                    logger.warning(f"Heartbeat: session {session_id} no longer exists")
+                    break
+        except asyncio.CancelledError:
+            logger.debug(f"Heartbeat cancelled for session {session_id}")
+            raise
+
     # Get session lock for thread-safe operations
     lock = await app_state.session_manager.get_session_lock(session_id)
     if not lock:
@@ -516,59 +538,76 @@ async def observe_sequence_in_session(
 
         logger.info(f"Processing sequence of {len(data.observations)} observations in session {session_id}")
 
+        # Start heartbeat for large batches to prevent session expiration during long operations
+        heartbeat_task = None
+        if len(data.observations) > 50:  # Start heartbeat for batches >50 observations
+            heartbeat_task = asyncio.create_task(_session_heartbeat(interval_seconds=30))
+            logger.debug(f"Started session heartbeat for {len(data.observations)} observations")
+
         results = []
         initial_stm_length = len(processor.get_stm())
         auto_learned_patterns = []
 
-        for i, obs_data in enumerate(data.observations):
-            # Clear STM before each observation if isolation requested
-            if data.clear_stm_between and i > 0:
-                processor.clear_stm()
-                logger.debug(f"Cleared STM for isolated observation {i}")
+        try:
+            for i, obs_data in enumerate(data.observations):
+                # Clear STM before each observation if isolation requested
+                if data.clear_stm_between and i > 0:
+                    processor.clear_stm()
+                    logger.debug(f"Cleared STM for isolated observation {i}")
 
-            observation = {
-                'strings': obs_data.strings,
-                'vectors': obs_data.vectors,
-                'emotives': obs_data.emotives,
-                'metadata': obs_data.metadata,
-                'unique_id': obs_data.unique_id or f"seq-obs-{uuid.uuid4().hex}",
-                'source': 'sequence'
-            }
+                observation = {
+                    'strings': obs_data.strings,
+                    'vectors': obs_data.vectors,
+                    'emotives': obs_data.emotives,
+                    'metadata': obs_data.metadata,
+                    'unique_id': obs_data.unique_id or f"seq-obs-{uuid.uuid4().hex}",
+                    'source': 'sequence'
+                }
 
-            result = await processor.observe(observation)
+                result = await processor.observe(observation)
 
-            # Learn after each if requested
-            if data.learn_after_each and processor.get_stm():
-                pattern_name = processor.learn()
-                auto_learned_patterns.append(pattern_name)
+                # Learn after each if requested
+                if data.learn_after_each and processor.get_stm():
+                    pattern_name = processor.learn()
+                    auto_learned_patterns.append(pattern_name)
 
-            # Track auto-learned patterns from auto-learning
-            if result.get('auto_learned_pattern'):
-                auto_learned_patterns.append(result['auto_learned_pattern'])
+                # Track auto-learned patterns from auto-learning
+                if result.get('auto_learned_pattern'):
+                    auto_learned_patterns.append(result['auto_learned_pattern'])
 
-            observation_result = {
-                "status": "okay",
-                "sequence_position": i,
-                "stm_length": len(processor.get_stm()),
-                "time": processor.time,
-                "unique_id": observation['unique_id'],
-                "auto_learned_pattern": result.get('auto_learned_pattern')
-            }
-            results.append(observation_result)
+                observation_result = {
+                    "status": "okay",
+                    "sequence_position": i,
+                    "stm_length": len(processor.get_stm()),
+                    "time": processor.time,
+                    "unique_id": observation['unique_id'],
+                    "auto_learned_pattern": result.get('auto_learned_pattern')
+                }
+                results.append(observation_result)
 
-        # Learn from final STM if requested and STM is not empty
-        final_learned_pattern = None
-        if data.learn_at_end:
-            final_stm = processor.get_stm()
-            if final_stm:
+            # Learn from final STM if requested and STM is not empty
+            final_learned_pattern = None
+            if data.learn_at_end:
+                final_stm = processor.get_stm()
+                if final_stm:
+                    try:
+                        final_learned_pattern = processor.learn()
+                        auto_learned_patterns.append(final_learned_pattern)
+                        logger.info(f"Learned final pattern: {final_learned_pattern}")
+                    except Exception as learn_error:
+                        logger.warning(f"Failed to learn final pattern: {learn_error}")
+
+            final_stm_length = len(processor.get_stm())
+
+        finally:
+            # Always cancel the heartbeat task if it was started
+            if heartbeat_task and not heartbeat_task.done():
+                heartbeat_task.cancel()
                 try:
-                    final_learned_pattern = processor.learn()
-                    auto_learned_patterns.append(final_learned_pattern)
-                    logger.info(f"Learned final pattern: {final_learned_pattern}")
-                except Exception as learn_error:
-                    logger.warning(f"Failed to learn final pattern: {learn_error}")
-
-        final_stm_length = len(processor.get_stm())
+                    await heartbeat_task
+                except asyncio.CancelledError:
+                    pass
+                logger.debug(f"Cancelled heartbeat for session {session_id}")
 
         # Update session state with final processor state
         session.stm = processor.get_stm()

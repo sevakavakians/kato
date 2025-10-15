@@ -59,8 +59,9 @@ class SessionMiddleware(BaseHTTPMiddleware):
             if len(parts) >= 3 and parts[2]:
                 session_id = parts[2]
 
-                # Skip validation for GET session info endpoint - let the endpoint handle it
-                if len(parts) == 3 and request.method == 'GET':
+                # Skip validation for GET session info endpoint and exists check endpoint - let the endpoint handle it
+                if (len(parts) == 3 and request.method == 'GET') or \
+                   (len(parts) == 4 and parts[3] == 'exists' and request.method == 'GET'):
                     session_id = None  # Don't validate, let endpoint handle it
                 else:
                     # Validate the session exists for session-scoped operations

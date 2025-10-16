@@ -4,6 +4,7 @@ Session Management Endpoints
 Handles session creation, management, and session-scoped KATO operations.
 """
 
+import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone

@@ -10,6 +10,8 @@ services:
     networks:
       - kato-network
     restart: unless-stopped
+    # Increased memory for large-scale hierarchical training
+    command: mongod --wiredTigerCacheSizeGB 2
     healthcheck:
       test: ["CMD", "mongo", "--eval", "db.adminCommand('ping')", "--quiet"]
       interval: 15s
@@ -63,6 +65,10 @@ services:
       - LOG_LEVEL=INFO
       - SESSION_TTL=3600
       - SESSION_AUTO_EXTEND=true
+      # Performance optimizations for hierarchical training
+      - KATO_BATCH_SIZE=10000
+      - CONNECTION_POOL_SIZE=50
+      - REQUEST_TIMEOUT=120.0
     ports:
       - "8000:8000"
     networks:

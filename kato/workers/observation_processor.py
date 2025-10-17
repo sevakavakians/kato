@@ -26,7 +26,7 @@ class ObservationProcessor:
     """
 
     def __init__(self, vector_processor, pattern_processor, memory_manager,
-                 pattern_operations, sort_symbols, max_pattern_length):
+                 pattern_operations, sort_symbols, max_pattern_length, process_predictions=True):
         """
         Initialize observation processor with references to other components.
 
@@ -37,6 +37,7 @@ class ObservationProcessor:
             pattern_operations: Reference to pattern operations for learning
             sort_symbols: Whether to sort symbols alphabetically
             max_pattern_length: Maximum pattern length for auto-learning
+            process_predictions: Whether to compute predictions (default True)
         """
         self.vector_processor = vector_processor
         self.pattern_processor = pattern_processor
@@ -46,6 +47,7 @@ class ObservationProcessor:
         # Get configuration passed in
         self.sort_symbols = sort_symbols
         self.max_pattern_length = max_pattern_length
+        self.process_predictions = process_predictions
 
         # Processing lock for thread safety
         self.processing_lock = Lock()
@@ -378,13 +380,18 @@ class ObservationProcessor:
                 # Only trigger predictions if we have actual symbolic content
                 predictions = []
                 if vector_data or string_data:
-                    self.pattern_processor.trigger_predictions = True
+                    # Only trigger predictions if enabled (BUG FIX: set flag based on process_predictions)
+                    self.pattern_processor.trigger_predictions = self.process_predictions
 
                     # Add current symbols to STM
                     self.pattern_processor.setCurrentEvent(combined_symbols)
 
-                    # Generate predictions
-                    predictions = await self.pattern_processor.processEvents(unique_id)
+                    # Generate predictions ONLY if enabled (BUG FIX: check before calling processEvents)
+                    if self.process_predictions:
+                        predictions = await self.pattern_processor.processEvents(unique_id)
+                        logger.debug(f"Generated {len(predictions)} predictions (process_predictions=True)")
+                    else:
+                        logger.debug("Skipping prediction computation (process_predictions=False)")
 
                     # Check for auto-learning AFTER adding current event
                     # This matches the original behavior where auto-learning happens

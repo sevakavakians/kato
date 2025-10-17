@@ -234,6 +234,13 @@ class ProcessorManager:
                 processor.pattern_processor.patterns_searcher.max_predictions = session_config.max_predictions
             logger.debug(f"Updated max_predictions to {session_config.max_predictions}")
 
+        if session_config.process_predictions is not None:
+            processor.process_predictions = session_config.process_predictions
+            if hasattr(processor, 'observation_processor'):
+                processor.observation_processor.process_predictions = session_config.process_predictions
+                logger.debug(f"Updated observation_processor.process_predictions to {session_config.process_predictions}")
+            logger.debug(f"Updated process_predictions to {session_config.process_predictions}")
+
     def _evict_oldest(self):
         """Evict the least recently used processor with resource cleanup."""
         if not self.processors:

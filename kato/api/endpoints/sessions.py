@@ -244,6 +244,11 @@ async def update_session_config(session_id: str, request_data: dict[str, Any]):
                 processor.genome_manifest['SORT'] = value
             elif key == 'process_predictions':
                 processor.genome_manifest['PROCESS_PREDICTIONS'] = value
+                processor.process_predictions = value  # Update the processor's attribute directly
+                # Also update the observation processor's process_predictions
+                if hasattr(processor, 'observation_processor'):
+                    processor.observation_processor.process_predictions = value
+                    logger.info(f"Updated observation_processor.process_predictions to {value}")
 
     # Log session config after update
     logger.info(f"Session config after update: {session.session_config.get_config_only()}")

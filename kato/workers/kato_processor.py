@@ -36,6 +36,7 @@ class KatoProcessor:
         logger.info(" Starting KatoProcessor ID: {}".format(self.id))
 
         self.SORT = self.genome_manifest["sort"]
+        self.process_predictions = self.genome_manifest.get("process_predictions", True)
         self.time = 0
 
         # Use all available processors for parallel searches
@@ -64,7 +65,8 @@ class KatoProcessor:
         self.observation_processor = ObservationProcessor(
             self.vector_processor, self.pattern_processor,
             self.memory_manager, self.pattern_operations,
-            self.SORT, self.pattern_processor.max_pattern_length
+            self.SORT, self.pattern_processor.max_pattern_length,
+            self.process_predictions
         )
 
         # Initialize state through memory manager
@@ -277,6 +279,11 @@ class KatoProcessor:
                 if gene_name == 'max_pattern_length':
                     self.observation_processor.max_pattern_length = value
                 # No need to update stm_mode in observation_processor - it reads from pattern_processor
+            # Handle process_predictions which is on kato_processor, not pattern_processor
+            if gene_name == 'process_predictions':
+                self.process_predictions = value
+                self.observation_processor.process_predictions = value
+                logger.debug(f'Updated process_predictions to {value}')
         return "genes-updated"
 
     # ========================================================================

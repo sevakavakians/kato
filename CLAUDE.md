@@ -382,6 +382,7 @@ All predictions MUST contain these fields:
 - **PERSISTENCE**: Controls window size (default: 5) - how many historical values kept
 - **Averaging**: Multiple emotive values are averaged (arithmetic mean)
 - **Critical**: Emotives in predictions come from learned patterns, NOT current observations
+- **observe_sequence**: Placement within sequence doesn't matter - all emotives from all observations are accumulated and averaged together
 
 ### Data Flow
 1. Observation includes emotives dict
@@ -389,6 +390,12 @@ All predictions MUST contain these fields:
 3. Averaged when learning pattern
 4. Stored with MongoDB `$slice` operation
 5. Retrieved and averaged in predictions
+
+### Batch Operations (observe_sequence)
+When using `observe_sequence`, emotives can be specified on any observation in the batch:
+- **Placement is irrelevant**: Whether emotives are in the first, last, or distributed across observations, the final averaged emotives will be identical
+- **All accumulate together**: All emotives from all observations are collected and averaged when learning
+- **Example**: `[{'strings': ['A'], 'emotives': {'joy': 0.8}}, {'strings': ['B'], 'emotives': {}}]` produces the same result as `[{'strings': ['A'], 'emotives': {}}, {'strings': ['B'], 'emotives': {'joy': 0.8}}]`
 
 ### Rolling Window Behavior
 With PERSISTENCE=5, pattern's emotive arrays maintain last 5 values:
@@ -428,6 +435,7 @@ predictions = kato.get_predictions()
 - **Purpose**: Contextual tags for patterns (sources, categories, attributes)
 - **Accumulation**: Values accumulate across re-learning, duplicates auto-filtered
 - **Critical**: Metadata accumulates from all observations that form the pattern
+- **observe_sequence**: Placement within sequence doesn't matter - all metadata from all observations are merged together
 
 ### Data Flow
 1. Observation includes metadata dict
@@ -435,6 +443,13 @@ predictions = kato.get_predictions()
 3. Merged when learning pattern (unique string lists per key)
 4. Stored with MongoDB `$addToSet` operation
 5. Retrieved with pattern data in predictions
+
+### Batch Operations (observe_sequence)
+When using `observe_sequence`, metadata can be specified on any observation in the batch:
+- **Placement is irrelevant**: Whether metadata is in the first, last, or distributed across observations, the final merged metadata will be identical
+- **All merge together**: All metadata from all observations are collected and merged with set-union semantics when learning
+- **Duplicates filtered**: Same values appearing in multiple observations are only stored once
+- **Example**: `[{'strings': ['A'], 'metadata': {'book': 'Alice'}}, {'strings': ['B'], 'metadata': {}}]` produces the same result as `[{'strings': ['A'], 'metadata': {}}, {'strings': ['B'], 'metadata': {'book': 'Alice'}}]`
 
 ### Rolling Window Behavior
 Unlike emotives (which use rolling windows), metadata uses **set-union** accumulation:

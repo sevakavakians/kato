@@ -467,6 +467,109 @@ processor.observe(observation)
 # 5. Retrieved in predictions
 ```
 
+## Emotives in Batch Operations (observe_sequence)
+
+### Overview
+
+The `observe_sequence` endpoint supports emotives on individual observations within the batch. **Importantly, the placement of emotives within the sequence does not affect the final learned pattern** - all emotives from all observations in the sequence are accumulated and averaged together.
+
+### Placement Independence
+
+Whether emotives are provided in the first observation, last observation, or distributed across multiple observations, the final averaged emotives will be identical:
+
+```python
+# Example 1: All emotives in first observation
+observations_first = [
+    {'strings': ['A'], 'emotives': {'joy': 0.8, 'confidence': 0.6}},
+    {'strings': ['B'], 'emotives': {}}
+]
+
+# Example 2: All emotives in last observation
+observations_last = [
+    {'strings': ['A'], 'emotives': {}},
+    {'strings': ['B'], 'emotives': {'joy': 0.8, 'confidence': 0.6'}}
+]
+
+# Example 3: Emotives distributed
+observations_distributed = [
+    {'strings': ['A'], 'emotives': {'joy': 0.8}},
+    {'strings': ['B'], 'emotives': {'confidence': 0.6}}
+]
+
+# All three will produce the SAME averaged emotives when learned:
+# {'joy': 0.8, 'confidence': 0.6}
+```
+
+### Accumulation Process
+
+1. **During Sequence Processing**: Each observation's emotives are added to the accumulator
+2. **When Learning**: All accumulated emotives are averaged using `average_emotives()`
+3. **Result**: Final pattern contains averaged values from ALL observations
+
+### Use Cases
+
+This placement independence is useful for:
+
+**1. Flexible Data Formats**
+```python
+# Some observations may have emotives, others may not
+observations = [
+    {'strings': ['event1'], 'emotives': {'mood': 0.7}},
+    {'strings': ['event2'], 'emotives': {}},  # No emotives
+    {'strings': ['event3'], 'emotives': {'mood': 0.9}}
+]
+# Pattern will have mood: (0.7 + 0.9) / 2 = 0.8
+```
+
+**2. Different Emotive Dimensions Per Observation**
+```python
+# Each observation can contribute different emotive dimensions
+observations = [
+    {'strings': ['greeting'], 'emotives': {'friendliness': 0.9}},
+    {'strings': ['question'], 'emotives': {'curiosity': 0.7}},
+    {'strings': ['farewell'], 'emotives': {'friendliness': 0.8, 'sadness': 0.3}}
+]
+# Pattern will have:
+# - friendliness: (0.9 + 0.8) / 2 = 0.85
+# - curiosity: 0.7
+# - sadness: 0.3
+```
+
+**3. Consolidated Emotives**
+```python
+# Provide all emotives in one observation for convenience
+observations = [
+    {'strings': ['A'], 'emotives': {'joy': 0.8, 'confidence': 0.6, 'energy': 0.7}},
+    {'strings': ['B'], 'emotives': {}},
+    {'strings': ['C'], 'emotives': {}}
+]
+# Pattern will have all three emotive dimensions
+```
+
+### Best Practice for observe_sequence
+
+While emotives can be placed anywhere in the sequence, for clarity and maintainability:
+
+**Option 1: Consolidate in First Observation**
+```python
+observations = [
+    {'strings': ['event1'], 'emotives': {'joy': 0.8, 'confidence': 0.6}},  # All emotives here
+    {'strings': ['event2'], 'emotives': {}},
+    {'strings': ['event3'], 'emotives': {}}
+]
+```
+
+**Option 2: Distribute Based on Semantic Meaning**
+```python
+observations = [
+    {'strings': ['greeting'], 'emotives': {'friendliness': 0.9}},     # Emotive for greeting
+    {'strings': ['question'], 'emotives': {'curiosity': 0.7}},        # Emotive for question
+    {'strings': ['answer'], 'emotives': {'helpfulness': 0.8}}         # Emotive for answer
+]
+```
+
+Both approaches produce equivalent results - choose based on your application's semantics and clarity needs.
+
 ## Best Practices
 
 ### 1. Choose Meaningful Dimensions

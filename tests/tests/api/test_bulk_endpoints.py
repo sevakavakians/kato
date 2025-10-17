@@ -399,3 +399,183 @@ def test_observe_sequence_isolation_verification(kato_fixture):
     stm = kato_fixture.get_stm()
     assert len(stm) == 1
     assert stm[0] == ['isolated3']
+
+
+def test_observe_sequence_emotives_placement_irrelevance(kato_fixture):
+    """
+    Test that emotives placement within sequence doesn't affect learned pattern.
+
+    Emotives should be accumulated across all observations regardless of which
+    observation they're attached to. The final averaged emotives should be the
+    same whether emotives are in the first observation, last observation, or
+    distributed across multiple observations.
+    """
+    assert kato_fixture.clear_all_memory() == 'all-cleared'
+
+    # Sequence 1: All emotives in first observation
+    observations_first = [
+        {
+            'strings': ['test', 'pattern'],
+            'vectors': [],
+            'emotives': {'joy': 0.8, 'confidence': 0.6},
+            'metadata': {}
+        },
+        {
+            'strings': ['sequence', 'data'],
+            'vectors': [],
+            'emotives': {},
+            'metadata': {}
+        }
+    ]
+
+    result1 = kato_fixture.observe_sequence(observations_first, learn_at_end=True)
+    pattern_name_1 = result1['auto_learned_patterns'][0]
+    pattern_1 = kato_fixture.get_pattern(pattern_name_1)
+
+    # Clear for next test
+    kato_fixture.clear_all_memory()
+
+    # Sequence 2: All emotives in last observation
+    observations_last = [
+        {
+            'strings': ['test', 'pattern'],
+            'vectors': [],
+            'emotives': {},
+            'metadata': {}
+        },
+        {
+            'strings': ['sequence', 'data'],
+            'vectors': [],
+            'emotives': {'joy': 0.8, 'confidence': 0.6},
+            'metadata': {}
+        }
+    ]
+
+    result2 = kato_fixture.observe_sequence(observations_last, learn_at_end=True)
+    pattern_name_2 = result2['auto_learned_patterns'][0]
+    pattern_2 = kato_fixture.get_pattern(pattern_name_2)
+
+    # Both patterns should have identical emotives
+    assert pattern_1['status'] == 'okay'
+    assert pattern_2['status'] == 'okay'
+
+    # Same pattern should be learned (same hash)
+    assert pattern_name_1 == pattern_name_2, "Same sequence should produce same pattern name"
+
+    # Emotives should be identical regardless of placement
+    emotives_1 = pattern_1['pattern']['emotives']
+    emotives_2 = pattern_2['pattern']['emotives']
+
+    assert len(emotives_1) > 0, "Pattern should have emotives"
+    assert len(emotives_2) > 0, "Pattern should have emotives"
+
+    # Get the latest emotives entry (last in the rolling window)
+    latest_emotives_1 = emotives_1[-1]
+    latest_emotives_2 = emotives_2[-1]
+
+    assert latest_emotives_1 == latest_emotives_2, \
+        f"Emotives should be identical regardless of placement: {latest_emotives_1} vs {latest_emotives_2}"
+
+
+def test_observe_sequence_metadata_placement_irrelevance(kato_fixture):
+    """
+    Test that metadata placement within sequence doesn't affect learned pattern.
+
+    Metadata should be accumulated across all observations regardless of which
+    observation it's attached to. The final merged metadata should be the same
+    whether metadata is in the first observation, last observation, or distributed
+    across multiple observations.
+    """
+    assert kato_fixture.clear_all_memory() == 'all-cleared'
+
+    # Sequence 1: All metadata in first observation
+    observations_first = [
+        {
+            'strings': ['chapter', 'one'],
+            'vectors': [],
+            'emotives': {},
+            'metadata': {'book': 'Alice', 'chapter': '1', 'author': 'Carroll'}
+        },
+        {
+            'strings': ['chapter', 'two'],
+            'vectors': [],
+            'emotives': {},
+            'metadata': {}
+        }
+    ]
+
+    result1 = kato_fixture.observe_sequence(observations_first, learn_at_end=True)
+    pattern_name_1 = result1['auto_learned_patterns'][0]
+    pattern_1 = kato_fixture.get_pattern(pattern_name_1)
+
+    # Clear for next test
+    kato_fixture.clear_all_memory()
+
+    # Sequence 2: All metadata in last observation
+    observations_last = [
+        {
+            'strings': ['chapter', 'one'],
+            'vectors': [],
+            'emotives': {},
+            'metadata': {}
+        },
+        {
+            'strings': ['chapter', 'two'],
+            'vectors': [],
+            'emotives': {},
+            'metadata': {'book': 'Alice', 'chapter': '1', 'author': 'Carroll'}
+        }
+    ]
+
+    result2 = kato_fixture.observe_sequence(observations_last, learn_at_end=True)
+    pattern_name_2 = result2['auto_learned_patterns'][0]
+    pattern_2 = kato_fixture.get_pattern(pattern_name_2)
+
+    # Clear for next test
+    kato_fixture.clear_all_memory()
+
+    # Sequence 3: Metadata distributed across observations
+    observations_distributed = [
+        {
+            'strings': ['chapter', 'one'],
+            'vectors': [],
+            'emotives': {},
+            'metadata': {'book': 'Alice', 'author': 'Carroll'}
+        },
+        {
+            'strings': ['chapter', 'two'],
+            'vectors': [],
+            'emotives': {},
+            'metadata': {'chapter': '1'}
+        }
+    ]
+
+    result3 = kato_fixture.observe_sequence(observations_distributed, learn_at_end=True)
+    pattern_name_3 = result3['auto_learned_patterns'][0]
+    pattern_3 = kato_fixture.get_pattern(pattern_name_3)
+
+    # All three patterns should be identical
+    assert pattern_1['status'] == 'okay'
+    assert pattern_2['status'] == 'okay'
+    assert pattern_3['status'] == 'okay'
+
+    # Same pattern should be learned (same hash)
+    assert pattern_name_1 == pattern_name_2 == pattern_name_3, \
+        "Same sequence should produce same pattern name regardless of metadata placement"
+
+    # Metadata should be identical regardless of placement
+    metadata_1 = pattern_1['pattern']['metadata']
+    metadata_2 = pattern_2['pattern']['metadata']
+    metadata_3 = pattern_3['pattern']['metadata']
+
+    assert metadata_1 is not None, "Pattern should have metadata"
+    assert metadata_2 is not None, "Pattern should have metadata"
+    assert metadata_3 is not None, "Pattern should have metadata"
+
+    # All should have the same keys and values
+    assert set(metadata_1.keys()) == set(metadata_2.keys()) == set(metadata_3.keys()), \
+        "All patterns should have same metadata keys"
+
+    for key in metadata_1.keys():
+        assert set(metadata_1[key]) == set(metadata_2[key]) == set(metadata_3[key]), \
+            f"Metadata values for '{key}' should be identical: {metadata_1[key]} vs {metadata_2[key]} vs {metadata_3[key]}"

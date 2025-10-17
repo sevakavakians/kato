@@ -440,6 +440,140 @@ learn()
 }
 ```
 
+## Metadata in Batch Operations (observe_sequence)
+
+### Overview
+
+The `observe_sequence` endpoint supports metadata on individual observations within the batch. **Importantly, the placement of metadata within the sequence does not affect the final learned pattern** - all metadata from all observations in the sequence are accumulated and merged together using set-union semantics.
+
+### Placement Independence
+
+Whether metadata is provided in the first observation, last observation, or distributed across multiple observations, the final merged metadata will be identical:
+
+```python
+# Example 1: All metadata in first observation
+observations_first = [
+    {'strings': ['A'], 'metadata': {'book': 'Alice', 'chapter': '1', 'author': 'Carroll'}},
+    {'strings': ['B'], 'metadata': {}}
+]
+
+# Example 2: All metadata in last observation
+observations_last = [
+    {'strings': ['A'], 'metadata': {}},
+    {'strings': ['B'], 'metadata': {'book': 'Alice', 'chapter': '1', 'author': 'Carroll'}}
+]
+
+# Example 3: Metadata distributed
+observations_distributed = [
+    {'strings': ['A'], 'metadata': {'book': 'Alice', 'author': 'Carroll'}},
+    {'strings': ['B'], 'metadata': {'chapter': '1'}}
+]
+
+# All three will produce the SAME merged metadata when learned:
+# {'book': ['Alice'], 'chapter': ['1'], 'author': ['Carroll']}
+```
+
+### Accumulation Process
+
+1. **During Sequence Processing**: Each observation's metadata is added to the accumulator
+2. **When Learning**: All accumulated metadata is merged using `accumulate_metadata()`
+3. **Result**: Final pattern contains unique values from ALL observations
+
+### Use Cases
+
+This placement independence is useful for:
+
+**1. Flexible Data Formats**
+```python
+# Some observations may have metadata, others may not
+observations = [
+    {'strings': ['event1'], 'metadata': {'source': 'db1'}},
+    {'strings': ['event2'], 'metadata': {}},  # No metadata
+    {'strings': ['event3'], 'metadata': {'version': '2.0'}}
+]
+# Pattern will have: {'source': ['db1'], 'version': ['2.0']}
+```
+
+**2. Different Metadata Keys Per Observation**
+```python
+# Each observation can contribute different metadata keys
+observations = [
+    {'strings': ['chapter1'], 'metadata': {'book': 'Alice', 'chapter': '1'}},
+    {'strings': ['chapter2'], 'metadata': {'chapter': '2', 'page': '15'}},
+    {'strings': ['chapter3'], 'metadata': {'chapter': '3', 'author': 'Carroll'}}
+]
+# Pattern will have:
+# - book: ['Alice']
+# - chapter: ['1', '2', '3']
+# - page: ['15']
+# - author: ['Carroll']
+```
+
+**3. Consolidated Metadata**
+```python
+# Provide all metadata in one observation for convenience
+observations = [
+    {'strings': ['A'], 'metadata': {'book': 'Alice', 'chapter': '1', 'author': 'Carroll'}},
+    {'strings': ['B'], 'metadata': {}},
+    {'strings': ['C'], 'metadata': {}}
+]
+# Pattern will have all three metadata keys
+```
+
+**4. Duplicate Value Filtering**
+```python
+# Duplicate values are automatically filtered
+observations = [
+    {'strings': ['event1'], 'metadata': {'source': 'dataset_v1', 'type': 'training'}},
+    {'strings': ['event2'], 'metadata': {'source': 'dataset_v1', 'type': 'validation'}},
+    {'strings': ['event3'], 'metadata': {'source': 'dataset_v1'}}
+]
+# Pattern will have:
+# - source: ['dataset_v1']  # Only one entry despite being in all 3 observations
+# - type: ['training', 'validation']
+```
+
+### Best Practice for observe_sequence
+
+While metadata can be placed anywhere in the sequence, for clarity and maintainability:
+
+**Option 1: Consolidate in First Observation**
+```python
+observations = [
+    {'strings': ['event1'], 'metadata': {'book': 'Alice', 'chapter': '1'}},  # All metadata here
+    {'strings': ['event2'], 'metadata': {}},
+    {'strings': ['event3'], 'metadata': {}}
+]
+```
+
+**Option 2: Distribute Based on Semantic Meaning**
+```python
+observations = [
+    {'strings': ['intro'], 'metadata': {'section': 'introduction', 'page': '1'}},
+    {'strings': ['body'], 'metadata': {'section': 'body', 'page': '5'}},
+    {'strings': ['conclusion'], 'metadata': {'section': 'conclusion', 'page': '20'}}
+]
+# Pattern will have:
+# - section: ['body', 'conclusion', 'introduction']  # Sorted alphabetically
+# - page: ['1', '20', '5']  # All unique pages
+```
+
+**Option 3: Track Different Attributes Per Event**
+```python
+# Each observation contributes different provenance information
+observations = [
+    {'strings': ['A'], 'metadata': {'source': 'db1', 'timestamp': '2025-01-01'}},
+    {'strings': ['B'], 'metadata': {'source': 'db2', 'timestamp': '2025-01-02'}},
+    {'strings': ['C'], 'metadata': {'source': 'db1', 'user': 'alice'}}
+]
+# Pattern will have:
+# - source: ['db1', 'db2']
+# - timestamp: ['2025-01-01', '2025-01-02']
+# - user: ['alice']
+```
+
+All approaches produce equivalent results when the same metadata values are used - choose based on your application's semantics and clarity needs.
+
 ## Best Practices
 
 ### 1. Use Metadata for Discrete Values

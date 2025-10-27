@@ -2,10 +2,15 @@
 Unit tests for RapidFuzz integration in pattern matching.
 
 Tests ensure that:
-1. RapidFuzz produces identical results to difflib
-2. Performance is significantly better with RapidFuzz
+1. RapidFuzz produces identical results to difflib (determinism)
+2. Threshold filtering works correctly with RapidFuzz
 3. Graceful fallback works when RapidFuzz is not available
 4. String caching optimization works correctly
+5. Edge cases are handled properly (empty state, special chars, large vocabularies)
+
+Note: Performance benchmarking is done in benchmarks/compare_matchers.py,
+not here, since unit tests run against a shared long-running service where
+configuration is set at startup.
 """
 
 import os
@@ -339,48 +344,3 @@ class TestStringCaching:
 
         # Should work fine with new patterns
         assert len(predictions) > 0
-
-
-class TestPerformance:
-    """Test that RapidFuzz is actually faster (optional, may be slow)."""
-
-    @pytest.mark.slow
-    @pytest.mark.skipif(not RAPIDFUZZ_INSTALLED, reason="RapidFuzz not installed")
-    def test_rapidfuzz_faster_than_difflib(self, kato_fixture):
-        """Test that RapidFuzz is measurably faster than difflib with large pattern sets."""
-        import time
-        kato = kato_fixture
-
-        # Learn many patterns (500+ to see measurable speedup)
-        for i in range(500):
-            kato.clear_stm()
-            kato.observe({'strings': [f"sym{i}", f"sym{i+1}", f"sym{i+2}"]})
-            kato.learn()
-
-        # Benchmark difflib with multiple queries for stable timing
-        os.environ['KATO_USE_FAST_MATCHING'] = 'false'
-        start_difflib = time.perf_counter()
-        for _ in range(10):  # Multiple queries for stable timing
-            kato.clear_stm()
-            kato.observe({'strings': ['sym250', 'sym251']})
-            kato.get_predictions()
-        difflib_time = time.perf_counter() - start_difflib
-
-        # Benchmark RapidFuzz
-        os.environ['KATO_USE_FAST_MATCHING'] = 'true'
-        start_rapidfuzz = time.perf_counter()
-        for _ in range(10):  # Same number of queries
-            kato.clear_stm()
-            kato.observe({'strings': ['sym250', 'sym251']})
-            kato.get_predictions()
-        rapidfuzz_time = time.perf_counter() - start_rapidfuzz
-
-        # Reset
-        os.environ['KATO_USE_FAST_MATCHING'] = 'true'
-
-        # RapidFuzz should be faster with 500+ patterns
-        # Use 1.5x threshold to account for variance (actual speedup is typically 5-10x)
-        speedup = difflib_time / rapidfuzz_time
-        assert speedup > 1.5, \
-            f"RapidFuzz should be faster (got {speedup:.2f}x speedup, expected >1.5x). " \
-            f"RapidFuzz: {rapidfuzz_time:.4f}s, difflib: {difflib_time:.4f}s"

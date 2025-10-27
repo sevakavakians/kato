@@ -8,3 +8,8 @@ pymongo>=4.0.0
 redis>=4.5.0
 qdrant-client>=1.7.0
 websocket-client>=1.8.0
+
+# GPU testing (optional - requires CUDA-enabled Linux system)
+# Install with: pip install cupy-cuda12x  (for CUDA 12.x)
+# Or: pip install cupy-cuda11x  (for CUDA 11.x)
+# cupy-cuda12x>=12.0.0

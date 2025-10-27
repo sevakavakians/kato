@@ -30,6 +30,7 @@ kato_venv/
 tests/venv/
 tests/tests/venv/
 **/venv/
+venv-gpu/
 
 # IDE
 .vscode/
@@ -84,3 +85,11 @@ update_container.sh
 
 # Dynamic port mappings (generated)
 .kato-ports.json
+
+# GPU development
+benchmarks/results/*.json
+benchmarks/results/*.csv
+*.prof
+*.nvprof
+*.qdrep
+*.nvvp

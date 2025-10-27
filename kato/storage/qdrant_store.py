@@ -76,12 +76,9 @@ class QdrantStore(VectorStore):
         else:
             self.quant_config = KatoQuantConfig(**config.get('quantization', {}))
 
-        # Initialize client
-        self.client = QdrantClient(
-            host=self.qdrant_config.host,
-            port=self.qdrant_config.port,
-            timeout=config.get('search_timeout', 10.0)
-        )
+        # Store connection parameters for lazy initialization
+        self.client = None
+        self._client_timeout = config.get('search_timeout', 10.0)
 
         # Distance metric mapping
         self.distance_map = {
@@ -91,11 +88,27 @@ class QdrantStore(VectorStore):
             'manhattan': Distance.MANHATTAN
         }
 
-        logger.info(f"Initialized Qdrant store: {self.qdrant_config.get_url()}")
+        logger.info(f"Initialized Qdrant store config (client will be created on first use): {self.qdrant_config.get_url()}")
+
+    def _ensure_client(self):
+        """
+        Ensure QdrantClient is initialized (lazy initialization).
+        Creates the client on first use to avoid unnecessary connections.
+        """
+        if self.client is None:
+            self.client = QdrantClient(
+                host=self.qdrant_config.host,
+                port=self.qdrant_config.port,
+                timeout=self._client_timeout
+            )
+            logger.info(f"Qdrant client created and connected to: {self.qdrant_config.get_url()}")
 
     async def connect(self) -> bool:
         """Establish connection to Qdrant"""
         try:
+            # Ensure client is created (lazy initialization)
+            self._ensure_client()
+
             # Test connection by getting collections
             collections = await self._async_wrapper(self.client.get_collections)
             self._is_connected = True
@@ -125,6 +138,7 @@ class QdrantStore(VectorStore):
     ) -> bool:
         """Create a new Qdrant collection"""
         try:
+            self._ensure_client()
             # Get distance metric
             distance = self.distance_map.get(
                 kwargs.get('distance', self.qdrant_config.distance),
@@ -209,6 +223,7 @@ class QdrantStore(VectorStore):
     async def delete_collection(self, collection_name: str) -> bool:
         """Delete a Qdrant collection"""
         try:
+            self._ensure_client()
             await self._async_wrapper(
                 self.client.delete_collection,
                 collection_name=collection_name
@@ -222,6 +237,7 @@ class QdrantStore(VectorStore):
     async def collection_exists(self, collection_name: str) -> bool:
         """Check if a collection exists"""
         try:
+            self._ensure_client()
             collections = await self._async_wrapper(self.client.get_collections)
             return any(c.name == collection_name for c in collections.collections)
         except Exception as e:
@@ -237,6 +253,7 @@ class QdrantStore(VectorStore):
     ) -> bool:
         """Add a single vector to Qdrant"""
         try:
+            self._ensure_client()
             point = PointStruct(
                 id=vector_id,
                 vector=vector.tolist(),
@@ -262,6 +279,7 @@ class QdrantStore(VectorStore):
     ) -> tuple[int, list[str]]:
         """Add multiple vectors in batch"""
         try:
+            self._ensure_client()
             points = []
             for i in range(batch.size):
                 payload = batch.payloads[i] if batch.payloads else {}
@@ -297,6 +315,7 @@ class QdrantStore(VectorStore):
     ) -> Optional[VectorSearchResult]:
         """Retrieve a vector by ID"""
         try:
+            self._ensure_client()
             points = await self._async_wrapper(
                 self.client.retrieve,
                 collection_name=collection_name,
@@ -328,6 +347,7 @@ class QdrantStore(VectorStore):
     ) -> list[VectorSearchResult]:
         """Retrieve multiple vectors by IDs"""
         try:
+            self._ensure_client()
             points = await self._async_wrapper(
                 self.client.retrieve,
                 collection_name=collection_name,
@@ -360,6 +380,7 @@ class QdrantStore(VectorStore):
     ) -> bool:
         """Update a vector and/or its payload"""
         try:
+            self._ensure_client()
             if vector is not None:
                 # Update vector
                 point = PointStruct(
@@ -397,6 +418,7 @@ class QdrantStore(VectorStore):
     ) -> bool:
         """Delete a vector from Qdrant"""
         try:
+            self._ensure_client()
             result = await self._async_wrapper(
                 self.client.delete,
                 collection_name=collection_name,
@@ -415,6 +437,7 @@ class QdrantStore(VectorStore):
     ) -> tuple[int, list[str]]:
         """Delete multiple vectors"""
         try:
+            self._ensure_client()
             result = await self._async_wrapper(
                 self.client.delete,
                 collection_name=collection_name,
@@ -441,6 +464,7 @@ class QdrantStore(VectorStore):
     ) -> list[VectorSearchResult]:
         """Search for similar vectors"""
         try:
+            self._ensure_client()
             # Build Qdrant filter from dict
             qdrant_filter = None
             if filter:
@@ -493,6 +517,7 @@ class QdrantStore(VectorStore):
     ) -> list[list[VectorSearchResult]]:
         """Batch search for multiple query vectors"""
         try:
+            self._ensure_client()
             # Build search requests
             requests = []
             qdrant_filter = None
@@ -550,6 +575,7 @@ class QdrantStore(VectorStore):
     ) -> int:
         """Count vectors in a collection"""
         try:
+            self._ensure_client()
             if filter:
                 # Count with filter using scroll
                 conditions = []
@@ -596,6 +622,7 @@ class QdrantStore(VectorStore):
     ) -> dict[str, Any]:
         """Get information about a collection"""
         try:
+            self._ensure_client()
             info = await self._async_wrapper(
                 self.client.get_collection,
                 collection_name=collection_name
@@ -621,6 +648,7 @@ class QdrantStore(VectorStore):
     async def list_collections(self) -> list[str]:
         """List all collections"""
         try:
+            self._ensure_client()
             collections = await self._async_wrapper(self.client.get_collections)
             return [c.name for c in collections.collections]
         except Exception as e:
@@ -634,6 +662,7 @@ class QdrantStore(VectorStore):
     ) -> bool:
         """Optimize a collection for better performance"""
         try:
+            self._ensure_client()
             # Update collection parameters if provided
             if kwargs:
                 await self._async_wrapper(
@@ -663,6 +692,7 @@ class QdrantStore(VectorStore):
     ) -> bool:
         """Backup a collection (create snapshot)"""
         try:
+            self._ensure_client()
             # Create snapshot
             snapshot_info = await self._async_wrapper(
                 self.client.create_snapshot,

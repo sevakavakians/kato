@@ -1,0 +1,98 @@
+services:
+  # MongoDB shared by all sessions
+  mongodb:
+    image: mongo:4.4
+    container_name: kato-mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - kato-network
+    restart: unless-stopped
+    # Increased memory for large-scale hierarchical training
+    command: mongod --wiredTigerCacheSizeGB 2
+    healthcheck:
+      test: ["CMD", "mongo", "--eval", "db.adminCommand('ping')", "--quiet"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 180s
+
+  # Qdrant vector database
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: kato-qdrant
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant-data:/qdrant/storage
+    networks:
+      - kato-network
+    restart: unless-stopped
+
+  # Redis for session storage
+  redis:
+    image: redis:7-alpine
+    container_name: kato-redis
+    command: redis-server --save "" --appendonly no  # Disable persistence for faster operations
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - kato-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # KATO Service - Using pre-built container image
+  # Image available at: https://github.com/sevakavakians/kato/pkgs/container/kato
+  kato:
+    image: ghcr.io/sevakavakians/kato:latest
+    container_name: kato
+    environment:
+      - SERVICE_NAME=kato
+      - MONGO_BASE_URL=mongodb://mongodb:27017
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+      - REDIS_URL=redis://redis:6379
+      - LOG_LEVEL=INFO
+      - SESSION_TTL=3600
+      - SESSION_AUTO_EXTEND=true
+      # Performance optimizations for hierarchical training
+      - KATO_BATCH_SIZE=10000
+      - CONNECTION_POOL_SIZE=50
+      - REQUEST_TIMEOUT=120.0
+    ports:
+      - "8000:8000"
+    networks:
+      - kato-network
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5).read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  kato-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+volumes:
+  mongo-data:
+  qdrant-data:
+  redis-data:

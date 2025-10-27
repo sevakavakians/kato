@@ -170,7 +170,13 @@ KATO uses environment variables for configuration. These can be set in:
   - `0.7`: Strict
   - `0.9`: Very strict
   - `1.0`: Exact matches only
-- **Notes**: Acts as rough filter, not exact decimal precision
+- **Notes**:
+  - Acts as rough filter, not exact decimal precision
+  - **Avoid exact boundaries**: Similarity scores may vary slightly depending on whether RapidFuzz is installed
+    - With RapidFuzz (faster): Character-level Levenshtein distance on joined strings
+    - Without RapidFuzz (fallback): Token-level matching on list elements
+    - Typical difference: < 0.03 (e.g., 0.5714 vs 0.6000)
+    - **Recommendation**: Use thresholds with safety margins (e.g., 0.5 instead of 0.6) to ensure consistent behavior
 
 ### AUTO_LEARN_ENABLED
 - **Type**: Boolean
@@ -217,6 +223,21 @@ KATO uses environment variables for configuration. These can be set in:
 - **Description**: Enable prediction processing
 - **Options**: `true`, `false`
 - **Notes**: Can be disabled for observation-only mode
+
+### KATO_USE_TOKEN_MATCHING
+- **Type**: Boolean
+- **Default**: `false`
+- **Description**: Use token-level (vs character-level) pattern matching
+- **Options**:
+  - `false` (default): Character-level matching - Faster (75x speedup), ~0.03 score difference
+  - `true`: Token-level matching - Slower (9x speedup), EXACT difflib compatibility
+- **Performance Trade-off**:
+  - Character-level: Best for production, high throughput
+  - Token-level: Best for testing, exact similarity requirements
+- **Notes**:
+  - Token mode provides EXACT difflib.SequenceMatcher compatibility
+  - Character mode is recommended for most use cases
+  - See [Pattern Matching Documentation](PATTERN_MATCHING.md) for details
 
 ## Performance Configuration
 

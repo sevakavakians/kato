@@ -101,6 +101,8 @@ pyyaml==6.0.3
     # via uvicorn
 qdrant-client==1.15.1
     # via -r requirements.txt
+rapidfuzz==3.14.1
+    # via -r requirements.txt
 redis==6.4.0
     # via -r requirements.txt
 sniffio==1.3.1

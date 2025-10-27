@@ -16,6 +16,19 @@ All learned structures in KATO are patterns, whether they represent time-ordered
 
 ## Common Development Commands
 
+### Dependency Management
+**CRITICAL:** Always update `requirements.lock` after modifying `requirements.txt`
+
+```bash
+# After editing requirements.txt, regenerate the lock file
+pip-compile --output-file=requirements.lock requirements.txt
+
+# Then rebuild Docker image to include changes
+docker-compose build --no-cache kato
+```
+
+The Docker image uses `requirements.lock` (not `requirements.txt`) to ensure reproducible builds. Missing this step will cause dependencies to be missing from the container.
+
 ### Building and Running
 ```bash
 # Start all services (MongoDB, Qdrant, Redis, KATO)
@@ -221,6 +234,11 @@ Client Request → FastAPI Service (Port 8000) → Embedded KATO Processor
      - Threshold comparison uses >= with tolerance (roughly similarity >= recall_threshold)
      - Don't test exact boundary cases where similarity ≈ threshold
      - Similarity calculation may use approximations, not exact ratios
+     - **Matching Modes**: KATO supports two modes via `KATO_USE_TOKEN_MATCHING` env var
+       - Character-level (default, fastest): 75x speedup, ~0.03 score difference
+       - Token-level (exact): 9x speedup, EXACT difflib compatibility
+       - Use token mode (`KATO_USE_TOKEN_MATCHING=true`) when exact difflib compatibility required
+       - Use character mode (default) for production/performance
    - **Examples** (approximate behavior):
      - threshold=0.1: Most patterns with any match returned
      - threshold=0.5: Patterns with ~50% or more matches returned

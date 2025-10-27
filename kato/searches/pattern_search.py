@@ -29,6 +29,7 @@ from .index_manager import IndexManager
 # RapidFuzz for fast string matching (5-10x speedup)
 try:
     from rapidfuzz import fuzz, process
+    from rapidfuzz.distance import LCSseq
     RAPIDFUZZ_AVAILABLE = True
 except ImportError:
     RAPIDFUZZ_AVAILABLE = False
@@ -40,6 +41,32 @@ logger = logging.getLogger('kato.searches.pattern_search')
 logger.setLevel(getattr(logging, environ.get('LOG_LEVEL', 'INFO')))
 
 
+def _lcs_ratio_scorer(s1: list, s2: list, **kwargs) -> float:
+    """
+    Token-level similarity scorer using LCSseq with difflib formula.
+
+    This provides EXACT difflib compatibility by using the same algorithm
+    (Longest Common Subsequence) at the token level.
+
+    Args:
+        s1: First sequence (list of tokens)
+        s2: Second sequence (list of tokens)
+        **kwargs: Additional arguments (ignored, for compatibility)
+
+    Returns:
+        Similarity score in 0-100 range (for RapidFuzz process.extract)
+    """
+    if RAPIDFUZZ_AVAILABLE:
+        lcs_matches = LCSseq.similarity(s1, s2)
+        total = len(s1) + len(s2)
+        # difflib formula: 2 * M / T, scaled to 0-100
+        return (2.0 * lcs_matches / total * 100.0) if total > 0 else 0.0
+    else:
+        # Fallback to difflib
+        matcher = difflib.SequenceMatcher(None, s1, s2)
+        return matcher.ratio() * 100.0
+
+
 class InformationExtractor:
     """
     Optimized information extraction using fast matching algorithms.
@@ -49,17 +76,22 @@ class InformationExtractor:
 
     Attributes:
         use_fast_matcher: Whether to use optimized matching algorithms.
+        use_token_matching: Whether to use token-level (vs character-level) matching.
         fast_matcher: FastSequenceMatcher instance for optimized matching.
     """
 
-    def __init__(self, use_fast_matcher: bool = True) -> None:
+    def __init__(self, use_fast_matcher: bool = True, use_token_matching: bool = False) -> None:
         """
         Initialize optimized extractor.
 
         Args:
             use_fast_matcher: Use fast matching algorithms for better performance.
+            use_token_matching: Use token-level matching for exact difflib compatibility.
+                              False (default): Character-level matching (faster, ~0.03 score difference)
+                              True: Token-level matching (slower, exact difflib match)
         """
         self.use_fast_matcher = use_fast_matcher
+        self.use_token_matching = use_token_matching
         self.fast_matcher = FastSequenceMatcher() if use_fast_matcher else None
 
     def extract_prediction_info(self, pattern: list[str], state: list[str],
@@ -85,11 +117,18 @@ class InformationExtractor:
             Returns None if similarity is below cutoff.
         """
         if self.use_fast_matcher and RAPIDFUZZ_AVAILABLE:
-            # Use RapidFuzz for fast similarity calculation
-            # Convert lists to strings for RapidFuzz
-            pattern_str = ' '.join(pattern)
-            state_str = ' '.join(state)
-            similarity = fuzz.ratio(pattern_str, state_str) / 100.0
+            if self.use_token_matching:
+                # Token-level matching: EXACT difflib compatibility
+                # Uses LCSseq on lists directly
+                lcs_matches = LCSseq.similarity(pattern, state)
+                total = len(pattern) + len(state)
+                similarity = (2.0 * lcs_matches / total) if total > 0 else 0.0
+            else:
+                # Character-level matching: Faster but ~0.03 score difference
+                # Convert lists to strings for RapidFuzz
+                pattern_str = ' '.join(pattern)
+                state_str = ' '.join(state)
+                similarity = fuzz.ratio(pattern_str, state_str) / 100.0
         else:
             # Fall back to original SequenceMatcher
             matcher = difflib.SequenceMatcher()
@@ -204,6 +243,7 @@ class PatternSearcher:
 
         # Feature flags for optimization
         self.use_fast_matching = environ.get('KATO_USE_FAST_MATCHING', 'true').lower() == 'true'
+        self.use_token_matching = environ.get('KATO_USE_TOKEN_MATCHING', 'false').lower() == 'true'
         self.use_indexing = environ.get('KATO_USE_INDEXING', 'true').lower() == 'true'
 
         # Initialize optimized components
@@ -221,7 +261,10 @@ class PatternSearcher:
         # Initialize optimized query manager for aggregation pipelines
         self.query_manager = OptimizedQueryManager(self.knowledgebase)
 
-        self.extractor = InformationExtractor(self.use_fast_matching)
+        self.extractor = InformationExtractor(
+            use_fast_matcher=self.use_fast_matching,
+            use_token_matching=self.use_token_matching
+        )
 
         # Pattern cache (in-memory fallback)
         self.patterns_cache = {}
@@ -663,19 +706,34 @@ class PatternSearcher:
             candidates: Candidate pattern IDs
             results: Output list for results
         """
-        # Convert state to string for RapidFuzz (single operation)
-        state_str = ' '.join(state)
-
-        # Prepare choices with string caching
+        # Prepare choices based on matching mode
         choices = {}
-        for pattern_id in candidates:
-            if pattern_id in self.patterns_cache:
-                # Check cache first to avoid repeated string joins
-                if pattern_id not in self._pattern_strings_cache:
-                    pattern_seq = self.patterns_cache[pattern_id]
-                    self._pattern_strings_cache[pattern_id] = ' '.join(pattern_seq)
 
-                choices[pattern_id] = self._pattern_strings_cache[pattern_id]
+        if self.use_token_matching:
+            # Token-level: Use lists directly (no string conversion)
+            for pattern_id in candidates:
+                if pattern_id in self.patterns_cache:
+                    choices[pattern_id] = self.patterns_cache[pattern_id]
+
+            # Use token-level scorer
+            scorer = _lcs_ratio_scorer
+            query = state
+        else:
+            # Character-level: Convert to strings with caching
+            state_str = ' '.join(state)
+
+            for pattern_id in candidates:
+                if pattern_id in self.patterns_cache:
+                    # Check cache first to avoid repeated string joins
+                    if pattern_id not in self._pattern_strings_cache:
+                        pattern_seq = self.patterns_cache[pattern_id]
+                        self._pattern_strings_cache[pattern_id] = ' '.join(pattern_seq)
+
+                    choices[pattern_id] = self._pattern_strings_cache[pattern_id]
+
+            # Use character-level scorer
+            scorer = fuzz.ratio
+            query = state_str
 
         # Use RapidFuzz to find best matches
         if choices:
@@ -684,9 +742,9 @@ class PatternSearcher:
             score_cutoff = self.recall_threshold * 100
 
             matches = process.extract(
-                state_str,
+                query,
                 choices,
-                scorer=fuzz.ratio,  # Best balance of speed/accuracy
+                scorer=scorer,
                 score_cutoff=score_cutoff,  # Early termination optimization
                 limit=None  # Get all matches above cutoff
             )
@@ -892,21 +950,33 @@ class PatternSearcher:
             List of match results for this batch
         """
         batch_results = []
-        state_str = ' '.join(state)
 
-        # Prepare choices for this batch
-        choices = {}
-        for pattern_id in candidates:
-            if pattern_id in self.patterns_cache:
-                pattern_seq = self.patterns_cache[pattern_id]
-                choices[pattern_id] = ' '.join(pattern_seq)
+        # Prepare choices based on matching mode
+        if self.use_token_matching:
+            # Token-level: Use lists directly
+            choices = {}
+            for pattern_id in candidates:
+                if pattern_id in self.patterns_cache:
+                    choices[pattern_id] = self.patterns_cache[pattern_id]
+            scorer = _lcs_ratio_scorer
+            query = state
+        else:
+            # Character-level: Convert to strings
+            state_str = ' '.join(state)
+            choices = {}
+            for pattern_id in candidates:
+                if pattern_id in self.patterns_cache:
+                    pattern_seq = self.patterns_cache[pattern_id]
+                    choices[pattern_id] = ' '.join(pattern_seq)
+            scorer = fuzz.ratio
+            query = state_str
 
         # Use RapidFuzz to find matches in this batch
         if choices:
             matches = process.extract(
-                state_str,
+                query,
                 choices,
-                scorer=fuzz.ratio,
+                scorer=scorer,
                 limit=None
             )
 

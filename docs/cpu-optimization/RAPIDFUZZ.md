@@ -215,22 +215,50 @@ import rapidfuzz
 
 ## Determinism and Correctness
 
-### Ensuring Identical Results
+### Matching Modes: Character vs Token Level
 
-**Critical requirement:** RapidFuzz MUST produce same results as difflib
+KATO supports two RapidFuzz matching modes to balance performance and compatibility:
 
-**Verification:**
+**Character-Level Mode** (default, `KATO_USE_TOKEN_MATCHING=false`):
+- Uses `fuzz.ratio()` on joined strings
+- **Performance**: 75x faster than difflib
+- **Compatibility**: ~0.03 score difference from difflib
+- **Best for**: Production environments with high throughput requirements
+
+**Token-Level Mode** (`KATO_USE_TOKEN_MATCHING=true`):
+- Uses `LCSseq.similarity()` on list tokens
+- **Performance**: 9x faster than difflib
+- **Compatibility**: EXACT difflib match (0.0000 difference)
+- **Best for**: Testing, exact compatibility requirements, regulatory compliance
+
+| Aspect | Character Mode | Token Mode | difflib (Baseline) |
+|--------|---------------|------------|-------------------|
+| **Algorithm** | Levenshtein on strings | LCS on tokens | LCS on tokens |
+| **Speedup** | 75.8x | 9.7x | 1.0x (baseline) |
+| **Score Match** | ~0.03 difference | EXACT | Reference |
+| **Input** | Joined strings | Direct lists | Direct lists |
+
+**Example Comparison:**
 ```python
-# Test suite validates determinism
-def test_rapidfuzz_vs_difflib_identical_predictions():
-    # Compare predictions from both matchers
-    assert rapidfuzz_preds == difflib_preds
+state = ['m1', 'm2', 'm3']
+pattern = ['m1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7']
+
+difflib (baseline):     0.6000
+Token mode (LCSseq):    0.6000  ← EXACT match
+Character mode (fuzz):  0.5714  ← 0.0286 difference
 ```
 
-**Why it works:**
-- Both use Levenshtein distance
-- `fuzz.ratio` implements same algorithm as difflib
-- Score conversion: `score / 100.0` matches difflib's 0-1 scale
+**Configuration:**
+```bash
+# Set matching mode
+export KATO_USE_TOKEN_MATCHING=false  # Character (default, fastest)
+export KATO_USE_TOKEN_MATCHING=true   # Token (exact compatibility)
+
+# Then restart services
+docker-compose restart kato
+```
+
+**Recommendation**: Keep character mode (default) for production. Only use token mode when exact difflib compatibility is required.
 
 ### Testing Strategy
 

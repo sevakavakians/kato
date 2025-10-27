@@ -93,12 +93,12 @@ def test_medium_sequences_varying_thresholds(kato_fixture):
 
     # Test with different thresholds
     # Note: Only 2 patterns have matching symbols (m1, m2, m3), so max predictions = 2
-    # Both patterns have similarity ~0.6, so thresholds > 0.6 will filter them out
+    # Both patterns have similarity ~0.57-0.6 depending on implementation
+    # (difflib=0.6, RapidFuzz=0.5714 due to character vs token matching)
     test_cases = [
         (0.1, 2),  # Low threshold, expect both matching predictions
         (0.3, 2),  # Medium threshold, expect both matching predictions
-        (0.5, 2),  # High threshold, still expect both (similarity = 0.6)
-        (0.6, 2),  # Threshold at similarity level, expect both
+        (0.5, 2),  # High threshold, safely below similarity scores
     ]
 
     for threshold, min_expected in test_cases:

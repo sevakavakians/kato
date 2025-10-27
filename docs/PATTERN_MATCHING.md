@@ -116,6 +116,45 @@ where p = prime number (101), m = large prime (2^31 - 1)
 - **Fallback**: Automatically uses SequenceMatcher if not available
 - **Algorithm**: Optimized Levenshtein distance calculations
 
+**Matching Modes: Token-Level vs Character-Level**
+
+KATO supports two pattern matching modes via the `KATO_USE_TOKEN_MATCHING` environment variable:
+
+**Character-Level Mode** (`KATO_USE_TOKEN_MATCHING=false`, default):
+- Joins lists to strings: `'m1 m2 m3'` vs `'m1 m2 m3 m4 m5 m6 m7'`
+- Uses Levenshtein distance on joined strings
+- **Performance**: 75x faster than difflib baseline
+- **Accuracy**: ~0.03 score difference from difflib
+- **Use case**: Production environments, high throughput
+
+**Token-Level Mode** (`KATO_USE_TOKEN_MATCHING=true`):
+- Compares lists directly: `['m1', 'm2', 'm3']` vs `['m1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7']`
+- Uses LCSseq (Longest Common Subsequence) on token sequences
+- **Performance**: 9x faster than difflib baseline
+- **Accuracy**: EXACT difflib.SequenceMatcher compatibility
+- **Use case**: Testing, exact similarity requirements, regulatory compliance
+
+**Example Comparison**:
+```python
+State:   ['m1', 'm2', 'm3']
+Pattern: ['m1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7']
+
+difflib (baseline):     0.6000 (3 tokens / 10 total)
+Token mode (LCSseq):    0.6000 (EXACT match)
+Character mode (fuzz):  0.5714 (~0.03 difference)
+```
+
+**Configuration**:
+```bash
+# Character-level (default, fastest)
+export KATO_USE_TOKEN_MATCHING=false
+
+# Token-level (exact difflib compatibility)
+export KATO_USE_TOKEN_MATCHING=true
+```
+
+**Recommendation**: Use character-level for production (default) unless you specifically need exact difflib compatibility.
+
 ### 3. Indexing Layer
 
 **Location**: `kato/searches/index_manager.py`

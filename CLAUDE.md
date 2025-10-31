@@ -213,14 +213,25 @@ Client Request → FastAPI Service (Port 8000) → Embedded KATO Processor
 5. **Empty Event Handling**: Empty events are NOT supported per spec
    - Empty events should be filtered BEFORE observation
    - STM only processes non-empty event sequences
-6. **Multi-Modal Processing**: Handles strings, vectors (768-dim), emotional context, and pattern metadata
+6. **Multi-Modal Processing**: Handles strings, vectors, emotional context, and pattern metadata
    - Vectors always produce name strings (e.g., 'VCTR|<hash>') for STM
    - Metadata provides contextual tags stored as unique string lists per pattern
-7. **Deterministic**: Same inputs always produce same outputs
-8. **Variable Pattern Lengths**: Supports patterns of arbitrary length (2+ strings total)
+7. **Vector Dimension Locking**: The first vector sent to a KATO processor locks the dimension for all subsequent vectors
+   - **First Vector Rule**: The first vector observation determines the vector dimension for that processor/agent
+   - **Dimension Isolation**: Each processor can have a different vector dimension (e.g., one uses 2D, another uses 512D)
+   - **Validation**: All subsequent vectors sent to the same processor MUST match the locked dimension
+   - **Error Handling**: Dimension mismatches return 400 Bad Request with `VectorDimensionError`
+   - **Examples**:
+     - Processor A: First vector is 2D → All vectors must be 2D
+     - Processor B: First vector is 512D → All vectors must be 512D
+     - Processor C: First vector is 128D → All vectors must be 128D
+   - **Use Case**: Allows different KATO agents to work with different embedding models (BERT, OpenAI, custom)
+   - **Collection Behavior**: Qdrant collections are created with the dimension of the first vector
+8. **Deterministic**: Same inputs always produce same outputs
+9. **Variable Pattern Lengths**: Supports patterns of arbitrary length (2+ strings total)
    - Events can have varying numbers of symbols
    - Each prediction has unique missing/matches/extras fields based on partial matching
-9. **Recall Threshold Behavior**:
+10. **Recall Threshold Behavior**:
    - Range: 0.0 to 1.0
    - Default: 0.1 (permissive matching)
    - **PURPOSE**: Rough filter for pattern matching, NOT exact decimal precision
@@ -244,12 +255,12 @@ Client Request → FastAPI Service (Port 8000) → Embedded KATO Processor
      - threshold=0.5: Patterns with ~50% or more matches returned
      - threshold=0.9: Only near-perfect matches returned
    - Note: All patterns in KB have frequency ≥ 1 (learned at least once)
-10. **Error Handling Philosophy**:
+11. **Error Handling Philosophy**:
    - **DO NOT mask errors with safe defaults** - errors must be visible for debugging
    - Better to fail explicitly than hide issues with graceful degradation
    - This helps identify and fix root causes rather than papering over problems
    - All calculation errors should raise exceptions with detailed context
-11. **Edge Cases and Boundaries**:
+12. **Edge Cases and Boundaries**:
    - **Fragmentation**: Can be -1, causing division by zero in potential calculations
    - **Pattern Frequencies**: All patterns have frequency ≥ 1 (no zero-frequency patterns exist)
    - **Empty State**: Normalized entropy calculations require non-empty state
@@ -663,18 +674,209 @@ Without proper isolation:
 - Test failures become non-deterministic
 - Parallel test execution becomes impossible
 
+## Container Manager Workflow Protocol
+
+### ⚠️ CRITICAL: Use Container-Manager Workflow After Code Changes Ready for Release ⚠️
+
+The container-manager workflow automates the complete release pipeline after code changes are ready to be published. This is executed directly by Claude Code, not through a separate agent.
+
+### When to Use Container-Manager Workflow:
+
+**Always use after:**
+1. **Bug fixes** (patch) - Fixed bugs, security patches, performance improvements
+2. **New features** (minor) - Added functionality, new endpoints, backward-compatible changes
+3. **Breaking changes** (major) - API changes, architecture changes, incompatible updates
+
+**Never use for:**
+- Work in progress (WIP) commits
+- Experimental code
+- Pre-merge feature branch commits
+
+### What the Workflow Does:
+
+Claude Code automatically:
+1. **Version Bump**: Updates version in pyproject.toml, setup.py, kato/__init__.py
+2. **Git Operations**: Creates commit ("chore: bump version to X.Y.Z") and tag (vX.Y.Z)
+3. **Push to Remote**: Pushes commit and tag to origin
+4. **Build Images**: Builds container with version metadata
+5. **Push to Registry**: Publishes to ghcr.io with multiple tags (X.Y.Z, X.Y, X, latest)
+6. **Verification**: Verifies images are available
+
+### How to Trigger the Workflow:
+
+Claude Code **automatically determines** the appropriate version bump type by analyzing:
+- Git commit messages since last version
+- Files changed and their significance
+- Nature of the changes (breaking, additive, fixes)
+- Context provided by the user
+
+```
+Example: After making changes
+User: "I've fixed the pattern matching bug and optimized the database queries. Please release a new version."
+
+Claude: I'll analyze the changes and execute the container release workflow.
+
+Step 1: Analyze changes
+<runs git commands>
+git log --oneline $(git describe --tags --abbrev=0)..HEAD
+> fix: pattern matching similarity calculation bug
+> perf: optimize MongoDB aggregation pipeline queries
+
+git diff --name-only $(git describe --tags --abbrev=0)..HEAD
+> kato/searches/pattern_search.py
+> kato/storage/aggregation_pipelines.py
+
+Analysis:
+- Commit types: fix, perf → PATCH indicators
+- Files: Internal logic changes, no API modifications
+- No breaking changes detected
+→ Determination: PATCH version (2.0.0 → 2.0.1)
+
+Step 2: Execute release
+<runs Bash tool>
+./container-manager.sh patch "Fix pattern matching bug and optimize database queries"
+
+Output:
+✓ Version bumped: 2.0.0 → 2.0.1
+✓ Git commit created: "chore: bump version to 2.0.1"
+✓ Git tag created: v2.0.1
+✓ Pushed to remote
+✓ Container images built and pushed:
+  - ghcr.io/sevakavakians/kato:2.0.1
+  - ghcr.io/sevakavakians/kato:2.0
+  - ghcr.io/sevakavakians/kato:2
+  - ghcr.io/sevakavakians/kato:latest
+
+Release complete! Users can pull: docker pull ghcr.io/sevakavakians/kato:2.0.1
+```
+
+### Prerequisites for Container Release Workflow:
+
+1. **Docker Login**: Must be logged into ghcr.io
+   ```bash
+   echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
+   ```
+
+2. **Clean Working Directory**: All changes committed
+   ```bash
+   git status  # Should be clean
+   ```
+
+3. **On Main Branch**: Should be on main (or release branch)
+   ```bash
+   git branch --show-current
+   ```
+
+### How Claude Code Determines Version Bump Type:
+
+Before invoking container-manager, analyze changes using these criteria:
+
+#### 1. Check Git History
+```bash
+# Commands to run:
+git log --oneline $(git describe --tags --abbrev=0)..HEAD  # Commits since last tag
+git diff --name-only $(git describe --tags --abbrev=0)..HEAD  # Files changed
+git diff --stat $(git describe --tags --abbrev=0)..HEAD  # Change summary
+```
+
+#### 2. Analyze Commit Messages (Conventional Commits)
+- `fix:`, `perf:`, `docs:`, `style:`, `refactor:`, `test:` → **patch**
+- `feat:` → **minor**
+- `BREAKING CHANGE:` or `!` suffix (e.g., `feat!:`) → **major**
+
+#### 3. Analyze Files Changed
+
+**MAJOR (breaking changes):**
+- API endpoint paths changed/removed (`kato/api/endpoints/*.py`)
+- Database schema changes (`kato/storage/*.py` with schema modifications)
+- Required configuration changes (environment variable removals)
+- Removal of public functions/classes
+- Changes to function signatures that break compatibility
+
+**MINOR (new features):**
+- New API endpoints added (`kato/api/endpoints/*.py` with new routes)
+- New public functions/classes added
+- New configuration options (backward-compatible)
+- New features in `kato/workers/*.py` or `kato/services/*.py`
+
+**PATCH (bug fixes/improvements):**
+- Bug fixes in existing code
+- Performance improvements (no API changes)
+- Documentation updates (`docs/`, `README.md`, `CHANGELOG.md`)
+- Test improvements (`tests/`)
+- Internal refactoring (no public API changes)
+- Security patches
+
+#### 4. Decision Tree
+
+```
+Did any change break backward compatibility? (API changes, removals, signature changes)
+├─ YES → MAJOR
+└─ NO → Did any change add new functionality? (new endpoints, new features)
+    ├─ YES → MINOR
+    └─ NO → Are changes only fixes/improvements/docs? (bug fixes, performance, docs)
+        ├─ YES → PATCH
+        └─ UNCLEAR → Ask user for clarification
+```
+
+#### 5. Examples
+
+**PATCH Examples:**
+- Fixed pattern matching bug in `kato/searches/pattern_search.py`
+- Optimized database queries in `kato/storage/aggregation_pipelines.py`
+- Updated documentation in `docs/`
+- Fixed typos in `README.md`
+- Improved test coverage in `tests/`
+
+**MINOR Examples:**
+- Added `/metrics` endpoint in `kato/api/endpoints/kato_ops.py`
+- Added GPU acceleration support in `kato/gpu/`
+- Added new configuration option `GPU_ENABLED` (defaults to False)
+- Added WebSocket support for real-time updates
+
+**MAJOR Examples:**
+- Removed deprecated `/observe-direct` endpoint
+- Changed `/sessions` API response format (breaking)
+- Required new environment variable `REDIS_URL` (no default)
+- Changed function signature: `observe(strings)` → `observe(data: ObservationData)`
+- Database migration required (MongoDB schema change)
+
+### Version Bump Rules (Summary):
+
+- **patch** (X.Y.Z → X.Y.Z+1): Bug fixes, security patches, documentation, performance improvements
+- **minor** (X.Y.Z → X.Y+1.0): New features, new endpoints, backward-compatible additions
+- **major** (X.Y.Z → X+1.0.0): Breaking changes, API incompatibilities, required migrations
+
+### Complete Documentation:
+
+See `docs/CONTAINER_MANAGER.md` for:
+- Detailed usage instructions
+- Troubleshooting guide
+- CI/CD integration examples
+- Best practices
+
+### Manual Alternative:
+
+If you need to run manually instead of using the agent:
+```bash
+./container-manager.sh patch "Description of changes"
+```
+
 ## Agent Usage Summary
 
 ### Available Specialized Agents:
 1. **project-manager**: ALL planning-docs/ updates and documentation
 2. **test-analyst**: Docker-based testing and complex test orchestration ONLY
-3. **general-purpose**: Complex multi-step research tasks
+3. **general-purpose**: Complex multi-step research tasks, version management, and container releases
 4. **statusline-setup**: Configure Claude Code status line
+
+**Note**: Container-manager functionality is implemented through the general-purpose agent or direct script execution, not as a separate agent type.
 
 ### Quick Decision Tree:
 - Updating documentation? → project-manager
 - Running Docker tests? → test-analyst
 - Running local tests? → Do it directly with `./run_tests.sh`
+- Code changes ready to release? → Direct workflow (analyze + run container-manager.sh)
 - Complex research? → general-purpose
 - Everything else? → Do it directly
 
@@ -683,5 +885,6 @@ Without proper isolation:
 2. ❌ Using test-analyst for local tests → ✅ Use `./run_tests.sh`
 3. ❌ Forgetting to start services before tests → ✅ Run `./start.sh` first
 4. ❌ Sharing processor_ids between tests → ✅ Each test gets unique processor_id
+5. ❌ Manually bumping versions → ✅ Request release and Claude Code handles version analysis
 - **ALWAYS** rebuild KATO docker image using no-cache options after **EVERY** code update and **BEFORE** testing.
 - Do **NOT** use MCPs for this project.

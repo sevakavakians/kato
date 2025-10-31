@@ -51,8 +51,13 @@ services:
 
   # KATO Service - Using pre-built container image
   # Image available at: https://github.com/sevakavakians/kato/pkgs/container/kato
+  # Version options:
+  #   - ghcr.io/sevakavakians/kato:2.0.0   # Pin to specific version (recommended for production)
+  #   - ghcr.io/sevakavakians/kato:2.0     # Auto-receive patches (2.0.1, 2.0.2, etc.)
+  #   - ghcr.io/sevakavakians/kato:2       # Auto-receive minor updates (2.1.0, 2.2.0, etc.)
+  #   - ghcr.io/sevakavakians/kato:latest  # Always use latest (development only)
   kato:
-    image: ghcr.io/sevakavakians/kato:latest
+    image: ghcr.io/sevakavakians/kato:2.0.0
     container_name: kato
     environment:
       - SERVICE_NAME=kato

@@ -95,6 +95,10 @@ class VectorSearchEngine:
         self.cache_hits = 0
         self.total_search_time = 0.0
 
+        # Vector dimension tracking (locked on first vector)
+        self.locked_dimension = None
+        self._collection_initialized = False
+
         # Ensure async event loop exists
         try:
             self._loop = asyncio.get_event_loop()
@@ -110,6 +114,7 @@ class VectorSearchEngine:
     async def initialize(self) -> bool:
         """
         Initialize the search engine and connect to backend.
+        Note: Collection is created on first vector to detect dimension.
 
         Returns:
             True if initialization successful
@@ -120,16 +125,17 @@ class VectorSearchEngine:
                 logger.error("Failed to connect to vector store")
                 return False
 
-            # Ensure collection exists
-            vector_dim = self.config.vector_dim or 512  # Default dimension
-
-            if not await self.store.ensure_collection(
-                self.collection_name,
-                vector_dim,
-                distance=self.config.similarity_metric
-            ):
-                logger.error(f"Failed to ensure collection: {self.collection_name}")
-                return False
+            # Check if collection already exists (from previous run)
+            if await self.store.collection_exists(self.collection_name):
+                # Collection exists, get its dimension
+                try:
+                    collection_info = await self.store.get_collection_info(self.collection_name)
+                    if collection_info and 'vector_dim' in collection_info:
+                        self.locked_dimension = collection_info['vector_dim']
+                        self._collection_initialized = True
+                        logger.info(f"Existing collection found with dimension: {self.locked_dimension}")
+                except Exception as e:
+                    logger.warning(f"Could not get collection info: {e}")
 
             logger.info("Vector search engine initialized successfully")
             return True
@@ -158,6 +164,90 @@ class VectorSearchEngine:
         """Synchronous wrapper for initialize"""
         return self._run_async_in_sync(self.initialize())
 
+    def _get_vector_dimension(self, vector: Union[np.ndarray, VectorObject]) -> int:
+        """
+        Get the dimension of a vector.
+
+        Args:
+            vector: Vector to check (numpy array or VectorObject)
+
+        Returns:
+            Dimension of the vector
+        """
+        if isinstance(vector, VectorObject):
+            return len(vector.vector)
+        else:
+            return len(vector)
+
+    def _validate_vector_dimension(self, vector: Union[np.ndarray, VectorObject], vector_id: Optional[str] = None) -> int:
+        """
+        Validate vector dimension against locked dimension.
+        If this is the first vector, lock the dimension.
+
+        Args:
+            vector: Vector to validate
+            vector_id: Optional vector ID for error messages
+
+        Returns:
+            Dimension of the vector
+
+        Raises:
+            VectorDimensionError: If dimension doesn't match locked dimension
+        """
+        from ..exceptions import VectorDimensionError
+
+        dim = self._get_vector_dimension(vector)
+
+        if self.locked_dimension is None:
+            # First vector - lock the dimension
+            self.locked_dimension = dim
+            logger.info(f"Locked vector dimension to {dim}D for collection {self.collection_name}")
+        elif dim != self.locked_dimension:
+            # Dimension mismatch
+            error_msg = (
+                f"Vector dimension mismatch: expected {self.locked_dimension}D, "
+                f"got {dim}D for vector '{vector_id or 'unknown'}'"
+            )
+            logger.error(error_msg)
+            raise VectorDimensionError(
+                message=error_msg,
+                expected_dim=self.locked_dimension,
+                actual_dim=dim,
+                vector_name=vector_id
+            )
+
+        return dim
+
+    async def _ensure_collection_with_dimension(self, dimension: int) -> bool:
+        """
+        Ensure collection exists with the specified dimension.
+
+        Args:
+            dimension: Vector dimension for the collection
+
+        Returns:
+            True if collection ready, False otherwise
+        """
+        if self._collection_initialized:
+            return True
+
+        try:
+            if not await self.store.ensure_collection(
+                self.collection_name,
+                dimension,
+                distance=self.config.similarity_metric
+            ):
+                logger.error(f"Failed to create collection: {self.collection_name}")
+                return False
+
+            self._collection_initialized = True
+            logger.info(f"Created collection {self.collection_name} with dimension {dimension}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to ensure collection: {e}")
+            return False
+
     async def add_vector(
         self,
         vector: Union[np.ndarray, VectorObject],
@@ -166,6 +256,7 @@ class VectorSearchEngine:
     ) -> bool:
         """
         Add a vector to the search index.
+        First vector locks the dimension for all subsequent vectors.
 
         Args:
             vector: Vector to add (numpy array or VectorObject)
@@ -174,20 +265,31 @@ class VectorSearchEngine:
 
         Returns:
             True if addition successful
-        """
-        try:
-            # Convert VectorObject if needed
-            if isinstance(vector, VectorObject):
-                vector_array = vector.vector
-                vector_id = vector_id or vector.name
-            else:
-                vector_array = vector
-                if vector_id is None:
-                    # Generate ID from vector hash
-                    vector_hash = hashlib.sha1(str(vector_array).encode(), usedforsecurity=False).hexdigest()
-                    vector_id = f"VCTR|{vector_hash}"
 
-            # Add to vector store
+        Raises:
+            VectorDimensionError: If vector dimension doesn't match locked dimension
+        """
+        # Convert VectorObject if needed
+        if isinstance(vector, VectorObject):
+            vector_array = vector.vector
+            vector_id = vector_id or vector.name
+        else:
+            vector_array = vector
+            if vector_id is None:
+                # Generate ID from vector hash
+                vector_hash = hashlib.sha1(str(vector_array).encode(), usedforsecurity=False).hexdigest()
+                vector_id = f"VCTR|{vector_hash}"
+
+        # Validate and lock dimension (raises VectorDimensionError if mismatch)
+        dimension = self._validate_vector_dimension(vector, vector_id)
+
+        # Ensure collection exists with this dimension
+        if not await self._ensure_collection_with_dimension(dimension):
+            logger.error(f"Failed to ensure collection for dimension {dimension}")
+            return False
+
+        # Add to vector store
+        try:
             success = await self.store.add_vector(
                 self.collection_name,
                 vector_id,
@@ -203,7 +305,7 @@ class VectorSearchEngine:
 
         except Exception as e:
             logger.error(f"Failed to add vector: {e}")
-            return False
+            raise  # Re-raise to preserve exception type
 
     def add_vector_sync(
         self,
@@ -224,6 +326,7 @@ class VectorSearchEngine:
     ) -> tuple[int, list[str]]:
         """
         Add multiple vectors in batch.
+        All vectors must match the locked dimension.
 
         Args:
             vectors: List of vectors to add
@@ -232,27 +335,43 @@ class VectorSearchEngine:
 
         Returns:
             Tuple of (number added successfully, list of failed IDs)
-        """
-        try:
-            # Prepare batch
-            if vector_ids is None:
-                vector_ids = []
-                for v in vectors:
-                    if isinstance(v, VectorObject):
-                        vector_ids.append(v.name)
-                    else:
-                        vector_hash = hashlib.sha1(str(v).encode(), usedforsecurity=False).hexdigest()
-                        vector_ids.append(f"VCTR|{vector_hash}")
 
-            # Convert vectors to numpy arrays
-            vector_arrays = []
+        Raises:
+            VectorDimensionError: If any vector dimension doesn't match locked dimension
+        """
+        # Prepare batch
+        if vector_ids is None:
+            vector_ids = []
             for v in vectors:
                 if isinstance(v, VectorObject):
-                    vector_arrays.append(v.vector)
+                    vector_ids.append(v.name)
                 else:
-                    vector_arrays.append(v)
+                    vector_hash = hashlib.sha1(str(v).encode(), usedforsecurity=False).hexdigest()
+                    vector_ids.append(f"VCTR|{vector_hash}")
 
-            # Create batch
+        # Validate dimensions for all vectors and convert to arrays
+        vector_arrays = []
+        dimension = None
+        for i, v in enumerate(vectors):
+            vid = vector_ids[i] if i < len(vector_ids) else None
+            # Validate dimension (this will lock on first vector)
+            dim = self._validate_vector_dimension(v, vid)
+            if dimension is None:
+                dimension = dim
+
+            # Convert to numpy array
+            if isinstance(v, VectorObject):
+                vector_arrays.append(v.vector)
+            else:
+                vector_arrays.append(v)
+
+        # Ensure collection exists with this dimension
+        if dimension and not await self._ensure_collection_with_dimension(dimension):
+            logger.error(f"Failed to ensure collection for dimension {dimension}")
+            return 0, vector_ids
+
+        # Create batch
+        try:
             batch = VectorBatch(
                 ids=vector_ids,
                 vectors=np.array(vector_arrays),

@@ -94,6 +94,55 @@ pip install -r requirements.txt
 pip install -r tests/requirements.txt
 ```
 
+## Installation Options
+
+### Option 1: Using Pre-Built Container Images (Recommended)
+
+KATO provides official pre-built container images hosted on GitHub Container Registry. This is the fastest way to get started.
+
+#### Available Image Tags
+
+| Tag | Description | Use Case |
+|-----|-------------|----------|
+| `2.0.0` | Specific version (immutable) | Production - pin to exact version |
+| `2.0` | Latest patch for 2.0.x | Auto-receive security/bug fixes |
+| `2` | Latest minor for 2.x | Track major version |
+| `latest` | Latest stable release | Development and testing |
+
+#### Pull Pre-Built Image
+
+```bash
+# Recommended for production - pin to specific version
+docker pull ghcr.io/sevakavakians/kato:2.0.0
+
+# Auto-receive patch updates (security fixes, bug fixes)
+docker pull ghcr.io/sevakavakians/kato:2.0
+
+# Always use latest stable (for development)
+docker pull ghcr.io/sevakavakians/kato:latest
+```
+
+#### Use with Docker Compose
+
+Modify your `docker-compose.yml` to use pre-built images:
+
+```yaml
+services:
+  kato:
+    image: ghcr.io/sevakavakians/kato:2.0.0  # Use pre-built image
+    # Remove 'build' section
+    container_name: kato
+    environment:
+      - SERVICE_NAME=kato
+      # ... rest of environment variables
+```
+
+See the [Standalone Deployment Guide](deployment/README.md) for complete instructions on using pre-built images.
+
+### Option 2: Build from Source
+
+If you need to modify the code or contribute to development, build from source.
+
 ## Quick Start
 
 ### 1. Clone Repository

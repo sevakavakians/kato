@@ -52,7 +52,7 @@ class AggregationPipelines:
         if limit:
             pipeline.append({"$limit": limit})
 
-        return list(collection.aggregate(pipeline))
+        return list(collection.aggregate(pipeline, allowDiskUse=True))
 
     @staticmethod
     def get_symbol_statistics_bulk(collection: Collection,
@@ -77,7 +77,7 @@ class AggregationPipelines:
         ]
 
         results = {}
-        for doc in collection.aggregate(pipeline):
+        for doc in collection.aggregate(pipeline, allowDiskUse=True):
             results[doc["name"]] = doc
 
         return results
@@ -102,7 +102,7 @@ class AggregationPipelines:
         ]
 
         results = {}
-        for doc in collection.aggregate(pipeline):
+        for doc in collection.aggregate(pipeline, allowDiskUse=True):
             results[doc["name"]] = doc
 
         return results
@@ -131,7 +131,7 @@ class AggregationPipelines:
             }}
         ]
 
-        pattern_stats = list(patterns_collection.aggregate(pattern_stats_pipeline))
+        pattern_stats = list(patterns_collection.aggregate(pattern_stats_pipeline, allowDiskUse=True))
         if pattern_stats:
             results["patterns"] = pattern_stats[0]
 
@@ -146,7 +146,7 @@ class AggregationPipelines:
             }}
         ]
 
-        symbol_stats = list(symbols_collection.aggregate(symbol_stats_pipeline))
+        symbol_stats = list(symbols_collection.aggregate(symbol_stats_pipeline, allowDiskUse=True))
         if symbol_stats:
             results["symbols"] = symbol_stats[0]
 
@@ -189,7 +189,7 @@ class AggregationPipelines:
             {"$limit": top_n}
         ]
 
-        return list(collection.aggregate(pipeline))
+        return list(collection.aggregate(pipeline, allowDiskUse=True))
 
     @staticmethod
     def get_patterns_by_symbol_content(collection: Collection,
@@ -231,7 +231,7 @@ class AggregationPipelines:
             {"$sort": {"frequency": -1}}
         ]
 
-        return list(collection.aggregate(pipeline))
+        return list(collection.aggregate(pipeline, allowDiskUse=True))
 
 
 class OptimizedQueryManager:

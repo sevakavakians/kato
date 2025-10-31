@@ -128,15 +128,18 @@ class PatternProcessor:
     def initiateDefaults(self) -> None:
         """Initialize default values for processor state.
 
-        Sets up empty STM, emotives, metadata, mood, and loads patterns from database.
+        Sets up empty STM, emotives, metadata, mood.
         Called during initialization and memory clearing.
+
+        Note: Patterns are loaded lazily on-demand when predictions are needed,
+        not during initialization. This avoids unnecessary database queries.
         """
         self.STM: deque[list[str]] = deque()
         self.emotives: list[dict[str, float]] = []
         self.metadata: list[dict[str, Any]] = []
         self.mood: dict[str, float] = {}
         self.last_learned_pattern_name: Optional[str] = None
-        self.patterns_searcher.getPatterns()
+        # Patterns are loaded lazily in PatternSearcher.causalBelief() when needed
         self.trigger_predictions: bool = False
         return
 

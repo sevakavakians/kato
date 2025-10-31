@@ -17,21 +17,51 @@ KATO (Knowledge Abstraction for Traceable Outcomes) is a deterministic memory an
 - 4GB+ available RAM
 - Ports available: 8000, 27017, 6333, 6379
 
-### Installation
+### Fastest Setup
 
-1. **Download this deployment directory** or clone the repository:
+```bash
+# Download deployment files
+curl -L https://github.com/sevakavakians/kato/archive/main.tar.gz | tar xz
+cd kato-main/deployment
+
+# Start all services
+./start.sh start
+
+# Verify
+./start.sh status
+```
+
+**Access KATO:**
+- API: http://localhost:8000
+- Interactive Docs: http://localhost:8000/docs
+- Health Check: http://localhost:8000/health
+
+**See [Deployment Options](#deployment-options) below for alternative installation methods.**
+
+## Deployment Options
+
+Choose the deployment method that best fits your needs:
+
+### Option 1: Copy Deployment Directory (Recommended for Production)
+
+**Best for:** Remote servers, production deployments, minimal footprint
+
+**What you need:** Just the 4 files in this `deployment/` directory
+
+**Steps:**
+
+1. **Copy deployment files to your remote machine:**
    ```bash
-   # Option 1: Download deployment files only
-   curl -L https://github.com/sevakavakians/kato/archive/main.tar.gz | tar xz
-   cd kato-main/deployment
+   # From your local machine
+   scp -r deployment/ user@remote-machine:/opt/kato/
 
-   # Option 2: Clone entire repository
-   git clone https://github.com/sevakavakians/kato.git
-   cd kato/deployment
+   # Or use rsync
+   rsync -av deployment/ user@remote-machine:/opt/kato/
    ```
 
-2. **Start all services:**
+2. **On the remote machine:**
    ```bash
+   cd /opt/kato
    ./start.sh start
    ```
 
@@ -40,12 +70,177 @@ KATO (Knowledge Abstraction for Traceable Outcomes) is a deterministic memory an
    ./start.sh status
    ```
 
-4. **Access KATO:**
-   - API: http://localhost:8000
-   - Interactive Docs: http://localhost:8000/docs
-   - Health Check: http://localhost:8000/health
+**Advantages:**
+- ✅ Minimal footprint (only 4 small files needed)
+- ✅ No source code required
+- ✅ Easy to manage with included `start.sh` script
+- ✅ Simple updates: `./start.sh update`
+- ✅ Clean separation from development environment
 
-That's it! KATO is now running with all required infrastructure.
+**Files included:**
+- `docker-compose.yml` - Service orchestration
+- `start.sh` - Management script
+- `.env.example` - Configuration template
+- `README.md` - This documentation
+
+### Option 2: Download from GitHub
+
+**Best for:** Quick setup, trying KATO, automated deployments
+
+**Steps:**
+
+```bash
+# Using curl
+curl -L https://github.com/sevakavakians/kato/archive/main.tar.gz | tar xz
+cd kato-main/deployment
+./start.sh start
+
+# Using wget
+wget -O- https://github.com/sevakavakians/kato/archive/main.tar.gz | tar xz
+cd kato-main/deployment
+./start.sh start
+
+# Download specific version
+curl -L https://github.com/sevakavakians/kato/archive/v1.2.3.tar.gz | tar xz
+cd kato-1.2.3/deployment
+./start.sh start
+
+# Clone entire repository
+git clone https://github.com/sevakavakians/kato.git
+cd kato/deployment
+./start.sh start
+```
+
+**Advantages:**
+- ✅ Always get latest version
+- ✅ Can specify exact version tags
+- ✅ No manual file transfers
+- ✅ Good for CI/CD pipelines
+
+### Option 3: Manual Docker Commands
+
+**Best for:** Custom setups, testing, environments without docker-compose
+
+**No files required** - just run these commands:
+
+```bash
+# 1. Create network
+docker network create kato-network --subnet 172.28.0.0/16
+
+# 2. Start MongoDB
+docker run -d \
+  --name kato-mongodb \
+  --network kato-network \
+  -p 27017:27017 \
+  -v kato-mongo-data:/data/db \
+  --restart unless-stopped \
+  mongo:4.4 \
+  mongod --wiredTigerCacheSizeGB 2
+
+# 3. Start Qdrant
+docker run -d \
+  --name kato-qdrant \
+  --network kato-network \
+  -p 6333:6333 \
+  -v kato-qdrant-data:/qdrant/storage \
+  --restart unless-stopped \
+  qdrant/qdrant:latest
+
+# 4. Start Redis
+docker run -d \
+  --name kato-redis \
+  --network kato-network \
+  -p 6379:6379 \
+  -v kato-redis-data:/data \
+  --restart unless-stopped \
+  redis:7-alpine \
+  redis-server --save "" --appendonly no
+
+# 5. Wait for databases to be ready
+sleep 10
+
+# 6. Start KATO
+docker run -d \
+  --name kato \
+  --network kato-network \
+  -p 8000:8000 \
+  --restart unless-stopped \
+  -e SERVICE_NAME=kato \
+  -e MONGO_BASE_URL=mongodb://kato-mongodb:27017 \
+  -e QDRANT_HOST=kato-qdrant \
+  -e QDRANT_PORT=6333 \
+  -e REDIS_URL=redis://kato-redis:6379 \
+  -e LOG_LEVEL=INFO \
+  -e SESSION_TTL=3600 \
+  -e SESSION_AUTO_EXTEND=true \
+  -e KATO_BATCH_SIZE=10000 \
+  -e CONNECTION_POOL_SIZE=50 \
+  -e REQUEST_TIMEOUT=120.0 \
+  ghcr.io/sevakavakians/kato:latest
+
+# 7. Check health
+sleep 5
+curl http://localhost:8000/health
+```
+
+**Management commands:**
+```bash
+# View logs
+docker logs kato --tail 50
+docker logs kato -f
+
+# Restart services
+docker restart kato
+docker restart kato-mongodb kato-qdrant kato-redis
+
+# Stop all services
+docker stop kato kato-mongodb kato-qdrant kato-redis
+
+# Start all services
+docker start kato-mongodb kato-qdrant kato-redis kato
+
+# Update KATO
+docker pull ghcr.io/sevakavakians/kato:latest
+docker stop kato
+docker rm kato
+# Then run the KATO docker run command again (step 6 above)
+
+# Clean up everything
+docker stop kato kato-mongodb kato-qdrant kato-redis
+docker rm kato kato-mongodb kato-qdrant kato-redis
+docker network rm kato-network
+docker volume rm kato-mongo-data kato-qdrant-data kato-redis-data
+```
+
+**Advantages:**
+- ✅ No files required at all
+- ✅ Works without docker-compose
+- ✅ Full control over every parameter
+- ✅ Easy to customize and modify
+- ✅ Good for scripting and automation
+
+**Disadvantages:**
+- ❌ More verbose commands
+- ❌ Manual service orchestration
+- ❌ No built-in management scripts
+
+### Comparison Table
+
+| Feature | Copy Directory | Download from GitHub | Manual Docker |
+|---------|---------------|---------------------|---------------|
+| **Files needed** | 4 files | Internet access | None |
+| **Setup complexity** | Low | Low | Medium |
+| **Management ease** | Excellent (`start.sh`) | Excellent (`start.sh`) | Manual |
+| **Customization** | Easy (edit files) | Easy (edit files) | Very Easy (modify commands) |
+| **Updates** | `./start.sh update` | `./start.sh update` | Manual pull & restart |
+| **Best for** | Production servers | Quick testing | Custom setups |
+| **Version control** | Manual | Easy (git tags) | Manual |
+
+### Recommendation
+
+- **Production deployments**: Use **Option 1** (Copy Directory) for minimal footprint and easy management
+- **Quick testing/evaluation**: Use **Option 2** (Download from GitHub) for fastest setup
+- **Custom configurations**: Use **Option 3** (Manual Docker) for full control without files
 
 ## Usage
 
@@ -376,14 +571,148 @@ For large-scale production deployments, consider:
 
 See LICENSE file in the main repository.
 
-## Version
+## Version Management
 
-This deployment uses the latest KATO image from GitHub Container Registry:
-- Image: `ghcr.io/sevakavakians/kato:latest`
-- Registry: https://github.com/sevakavakians/kato/pkgs/container/kato
+KATO follows [Semantic Versioning 2.0.0](https://semver.org/) with multiple tag options for different use cases.
 
-To use a specific version:
+### Available Image Tags
+
+| Tag Format | Example | Description | Updates | Use Case |
+|------------|---------|-------------|---------|----------|
+| `MAJOR.MINOR.PATCH` | `2.0.0` | Specific version (immutable) | Never | **Production** - Pin to exact version |
+| `MAJOR.MINOR` | `2.0` | Latest patch for minor | Patches only | Auto-receive bug/security fixes |
+| `MAJOR` | `2` | Latest minor for major | Minor + Patches | Track major version line |
+| `latest` | `latest` | Latest stable release | All updates | Development/testing only |
+
+### Choosing the Right Tag
+
+**For Production (Recommended):**
 ```yaml
-# In docker-compose.yml
-image: ghcr.io/sevakavakians/kato:v1.2.3
+# Pin to specific version for stability
+image: ghcr.io/sevakavakians/kato:2.0.0
 ```
+
+**For Auto-Patching (Security/Bug Fixes):**
+```yaml
+# Automatically get patches (2.0.1, 2.0.2, etc.)
+image: ghcr.io/sevakavakians/kato:2.0
+```
+
+**For Development:**
+```yaml
+# Always use latest (not recommended for production)
+image: ghcr.io/sevakavakians/kato:latest
+```
+
+### Updating KATO
+
+#### Method 1: Using start.sh (Recommended)
+
+```bash
+# Update to latest version of current tag
+./start.sh update
+
+# This will:
+# - Pull latest image for your configured tag
+# - Gracefully stop KATO service
+# - Remove old container
+# - Start with new image
+# - Preserve all data (MongoDB, Qdrant, Redis)
+```
+
+#### Method 2: Change Version in docker-compose.yml
+
+```bash
+# 1. Edit docker-compose.yml
+vim docker-compose.yml
+
+# Change:
+#   image: ghcr.io/sevakavakians/kato:2.0.0
+# To:
+#   image: ghcr.io/sevakavakians/kato:2.1.0
+
+# 2. Pull and restart
+./start.sh pull
+./start.sh restart kato
+```
+
+#### Method 3: Manual Docker Commands
+
+```bash
+# Pull new version
+docker pull ghcr.io/sevakavakians/kato:2.1.0
+
+# Stop and remove old container
+docker stop kato
+docker rm kato
+
+# Start with new version (use your existing docker run command)
+docker run -d \
+  --name kato \
+  --network kato-network \
+  -p 8000:8000 \
+  --restart unless-stopped \
+  -e SERVICE_NAME=kato \
+  -e MONGO_BASE_URL=mongodb://kato-mongodb:27017 \
+  -e QDRANT_HOST=kato-qdrant \
+  -e QDRANT_PORT=6333 \
+  -e REDIS_URL=redis://kato-redis:6379 \
+  -e LOG_LEVEL=INFO \
+  ghcr.io/sevakavakians/kato:2.1.0
+```
+
+### Version Verification
+
+```bash
+# Check running version
+docker inspect kato | grep -A 5 "Labels"
+
+# View version metadata
+docker inspect ghcr.io/sevakavakians/kato:2.0.0 | jq '.[0].Config.Labels'
+
+# Test version in container
+docker exec kato python -c "import kato; print(kato.__version__)"
+```
+
+### Version Compatibility
+
+- **Major versions** (e.g., 1.x → 2.x): May include breaking changes, review changelog
+- **Minor versions** (e.g., 2.0.x → 2.1.x): New features, backward compatible
+- **Patch versions** (e.g., 2.0.0 → 2.0.1): Bug fixes, fully compatible
+
+### Registry Information
+
+- **Registry**: GitHub Container Registry (ghcr.io)
+- **Repository**: `ghcr.io/sevakavakians/kato`
+- **Packages Page**: https://github.com/sevakavakians/kato/pkgs/container/kato
+- **Release Notes**: https://github.com/sevakavakians/kato/releases
+
+### Rollback
+
+If you need to rollback to a previous version:
+
+```bash
+# 1. Stop current version
+docker stop kato
+docker rm kato
+
+# 2. Start previous version
+# (Update version number in docker-compose.yml or docker run command)
+./start.sh start
+
+# Or with docker-compose
+docker-compose up -d kato
+```
+
+Data in MongoDB, Qdrant, and Redis volumes is preserved during version changes.
+
+### Pre-Release Versions
+
+Pre-release versions (alpha, beta, rc) are available with special tags:
+
+```yaml
+# Use pre-release version
+image: ghcr.io/sevakavakians/kato:2.1.0-beta.1
+```
+
+**Note:** Pre-releases do NOT update `latest`, `2.1`, or `2` tags. Use only for testing.

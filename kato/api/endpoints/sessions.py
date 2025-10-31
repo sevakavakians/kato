@@ -324,7 +324,27 @@ async def observe_in_session(
             'source': 'session'
         }
 
-        result = await processor.observe(observation)
+        try:
+            result = await processor.observe(observation)
+        except Exception as e:
+            # Import VectorDimensionError to check exception type
+            from kato.exceptions import VectorDimensionError
+
+            # Check if this is a vector dimension error
+            if isinstance(e, VectorDimensionError):
+                logger.error(f"Vector dimension error in session {session_id}: {e}")
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "error": "VectorDimensionError",
+                        "message": str(e),
+                        "expected_dimension": e.context.get('expected_dimension'),
+                        "actual_dimension": e.context.get('actual_dimension'),
+                        "vector_name": e.context.get('vector_name')
+                    }
+                )
+            # Re-raise other exceptions
+            raise
 
         # Update session state with results
         final_stm = processor.get_stm()
@@ -570,7 +590,38 @@ async def observe_sequence_in_session(
                     'source': 'sequence'
                 }
 
-                result = await processor.observe(observation)
+                try:
+                    result = await processor.observe(observation)
+                except Exception as e:
+                    # Import VectorDimensionError to check exception type
+                    from kato.exceptions import VectorDimensionError
+
+                    # Cancel heartbeat before raising
+                    if heartbeat_task:
+                        heartbeat_task.cancel()
+                        try:
+                            await heartbeat_task
+                        except asyncio.CancelledError:
+                            pass
+
+                    # Check if this is a vector dimension error
+                    if isinstance(e, VectorDimensionError):
+                        logger.error(f"Vector dimension error at observation {i} in session {session_id}: {e}")
+                        raise HTTPException(
+                            status_code=400,
+                            detail={
+                                "error": "VectorDimensionError",
+                                "message": str(e),
+                                "observation_index": i,
+                                "expected_dimension": e.context.get('expected_dimension'),
+                                "actual_dimension": e.context.get('actual_dimension'),
+                                "vector_name": e.context.get('vector_name')
+                            }
+                        )
+                    # Re-raise other exceptions
+                    raise
+
+                result = result
 
                 # Learn after each if requested
                 if data.learn_after_each and processor.get_stm():

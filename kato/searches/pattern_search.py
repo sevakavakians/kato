@@ -278,8 +278,8 @@ class PatternSearcher:
         self.redis_cache: Optional[PatternCache] = None
         self._cache_enabled = environ.get('KATO_USE_REDIS_CACHE', 'true').lower() == 'true'
 
-        # Load existing patterns
-        self.getPatterns()
+        # Patterns are loaded lazily on-demand in causalBelief() when needed
+        # This avoids unnecessary database queries during initialization
 
         # Initialize worker queues for parallel processing
         self.extractions_queue = Queue()
@@ -288,7 +288,8 @@ class PatternSearcher:
         logger.info(f"PatternSearcher initialized: "
                    f"fast_matching={self.use_fast_matching}, "
                    f"indexing={self.use_indexing}, "
-                   f"redis_cache={self._cache_enabled}")
+                   f"redis_cache={self._cache_enabled} "
+                   f"(lazy pattern loading enabled)")
 
     async def initialize_redis_cache(self, session_id: Optional[str] = None) -> bool:
         """

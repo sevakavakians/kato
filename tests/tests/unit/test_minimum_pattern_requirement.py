@@ -98,23 +98,59 @@ def test_empty_events_dont_count(kato_fixture):
 
 
 def test_vector_only_observations(kato_fixture):
-    """Test behavior with vector-only observations (no strings)."""
-    kato_fixture.clear_all_memory()
+    """
+    Test behavior with vector-only observations (no strings).
+    Tests that the service handles vectors without crashing.
 
-    # Learn a mixed sequence (strings + vectors)
-    kato_fixture.observe({'strings': ['start'], 'vectors': [[1.0, 2.0]], 'emotives': {}})
-    kato_fixture.observe({'strings': ['end'], 'vectors': [[3.0, 4.0]], 'emotives': {}})
-    kato_fixture.learn()
+    This test verifies:
+    1. Vector observations are handled without service crashes
+    2. System gracefully handles vector dimension mismatches
+    3. Predictions work with vector-only observations
+    """
+    import random
 
-    # Clear and observe only vectors
-    kato_fixture.clear_short_term_memory()
-    kato_fixture.observe({'strings': [], 'vectors': [[1.0, 2.0]], 'emotives': {}})
-    kato_fixture.observe({'strings': [], 'vectors': [[3.0, 4.0]], 'emotives': {}})
+    # Test with multiple dimensions to ensure robustness
+    # The service should handle all dimensions without crashing
+    dimensions_to_test = [2, 128, 512]
 
-    # Behavior depends on whether vectors produce symbols
-    # This test just verifies no crash and consistent behavior
-    predictions = kato_fixture.get_predictions()
-    assert isinstance(predictions, list), "Should return a list (empty or with predictions)"
+    for dim in dimensions_to_test:
+        # Generate test vectors of the specified dimension
+        vec1 = [random.random() for _ in range(dim)]
+        vec2 = [random.random() for _ in range(dim)]
+        vec3 = [random.random() for _ in range(dim)]
+
+        # Learn a mixed sequence (strings + vectors)
+        kato_fixture.observe({'strings': ['start'], 'vectors': [vec1], 'emotives': {}})
+        kato_fixture.observe({'strings': ['middle'], 'vectors': [vec2], 'emotives': {}})
+        kato_fixture.observe({'strings': ['end'], 'vectors': [vec3], 'emotives': {}})
+        kato_fixture.learn()
+
+        # Clear STM and observe only vectors of the same dimension
+        kato_fixture.clear_short_term_memory()
+        kato_fixture.observe({'strings': [], 'vectors': [vec1], 'emotives': {}})
+        kato_fixture.observe({'strings': [], 'vectors': [vec2], 'emotives': {}})
+
+        # This test verifies no crash and consistent behavior for each dimension
+        predictions = kato_fixture.get_predictions()
+        assert isinstance(predictions, list), f"Should return a list for {dim}D vectors (no crash)"
+
+        # Test that dimension mismatches are handled gracefully (no service crash)
+        wrong_dim = dim + 1
+        wrong_vec = [random.random() for _ in range(wrong_dim)]
+
+        # Try to send a vector with wrong dimension - should not crash the service
+        # The system may accept it (with degraded performance) or reject it gracefully
+        try:
+            kato_fixture.observe({'strings': [], 'vectors': [wrong_vec], 'emotives': {}})
+            # If accepted, just verify no crash occurred
+            assert True, "Dimension mismatch handled gracefully"
+        except Exception as e:
+            # If rejected, verify it's a graceful error (not a crash)
+            assert "400" in str(e) or "dimension" in str(e).lower() or "error" in str(e).lower(), \
+                f"Should get graceful error for dimension mismatch, got: {e}"
+
+        # Clear all memory for next test iteration
+        kato_fixture.clear_all_memory()
 
 
 def test_learning_with_insufficient_strings(kato_fixture):

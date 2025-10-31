@@ -15,7 +15,7 @@ with open(os.path.join(this_directory, 'requirements.txt'), encoding='utf-8') as
 
 setup(
     name="kato",
-    version="1.0.0",
+    version="2.0.0",
     description="Knowledge Abstraction for Traceable Outcomes - Transparent memory and abstraction for agentic AI systems",
     long_description=long_description,
     long_description_content_type="text/markdown",

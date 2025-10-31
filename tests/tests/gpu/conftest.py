@@ -12,6 +12,19 @@ from pymongo import MongoClient
 
 from kato.gpu.encoder import SymbolVocabularyEncoder
 
+# Check GPU availability and skip entire module if not available
+try:
+    from kato.gpu import GPU_AVAILABLE
+except ImportError:
+    GPU_AVAILABLE = False
+
+# Skip entire GPU test directory if GPU not available
+if not GPU_AVAILABLE:
+    pytest.skip(
+        "GPU tests require CuPy/CUDA - skipping entire directory",
+        allow_module_level=True
+    )
+
 
 @pytest.fixture
 def mongodb():

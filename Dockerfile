@@ -1,5 +1,21 @@
 FROM python:3.10-slim
 
+# Build arguments for version metadata
+ARG VERSION=dev
+ARG GIT_COMMIT=unknown
+ARG BUILD_DATE=unknown
+
+# OCI-compliant image labels
+LABEL org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${GIT_COMMIT}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.title="KATO" \
+      org.opencontainers.image.description="Knowledge Abstraction for Traceable Outcomes - Deterministic memory and prediction system" \
+      org.opencontainers.image.vendor="Intelligent Artifacts" \
+      org.opencontainers.image.source="https://github.com/intelligent-artifacts/kato" \
+      org.opencontainers.image.documentation="https://github.com/intelligent-artifacts/kato/blob/main/README.md" \
+      org.opencontainers.image.licenses="MIT"
+
 # Set working directory
 WORKDIR /app
 

@@ -65,7 +65,7 @@ class KatoProcessor:
         self.observation_processor = ObservationProcessor(
             self.vector_processor, self.pattern_processor,
             self.memory_manager, self.pattern_operations,
-            self.SORT, self.pattern_processor.max_pattern_length,
+            self.pattern_processor.sort, self.pattern_processor.max_pattern_length,
             self.process_predictions
         )
 

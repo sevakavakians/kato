@@ -69,6 +69,11 @@ async def update_genes(
                     if hasattr(processor.pattern_processor, 'patterns_searcher'):
                         processor.pattern_processor.patterns_searcher.recall_threshold = value
                     logger.info(f"Updated pattern_processor.recall_threshold to {value}")
+            elif key_lower == 'process_predictions':
+                processor.process_predictions = value
+                if hasattr(processor, 'observation_processor'):
+                    processor.observation_processor.process_predictions = value
+                    logger.info(f"Updated observation_processor.process_predictions to {value}")
 
         return {"status": "okay", "node_id": processor.id, "genes": genes_data}
     except Exception as e:

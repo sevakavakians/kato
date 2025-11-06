@@ -58,10 +58,38 @@ class PatternProcessor:
         self.recall_threshold = float(kwargs["recall_threshold"])
         self.stm_mode = kwargs.get("stm_mode", "CLEAR")  # Default to CLEAR for backward compatibility
         self.calculate_predictive_information = kwargs.get("calculate_predictive_information", False)  # Default to False
+
+        # Get use_token_matching from kwargs (fallback to environment variable for backward compatibility)
+        self.use_token_matching = kwargs.get("use_token_matching",
+                                            environ.get('KATO_USE_TOKEN_MATCHING', 'true').lower() == 'true')
+
+        # AUTO-TOGGLE SORT based on use_token_matching
+        # Token-level matching requires sort=True for consistent symbol matching
+        # Character-level matching requires sort=False to preserve string order
+        if "use_token_matching" in kwargs:
+            if "sort" not in kwargs:
+                # Auto-set sort based on matching mode
+                self.sort = self.use_token_matching
+                logger.info(f"Auto-toggled sort={self.sort} based on use_token_matching={self.use_token_matching}")
+            else:
+                # User explicitly set sort - warn if mismatch
+                user_sort = kwargs.get("sort")
+                if user_sort != self.use_token_matching:
+                    logger.warning(
+                        f"CONFIGURATION MISMATCH: sort={user_sort} with use_token_matching={self.use_token_matching}. "
+                        f"Token-level matching requires sort=True, character-level requires sort=False. "
+                        f"Using user-specified sort={user_sort}, but this may cause incorrect matching behavior."
+                    )
+                self.sort = user_sort
+        else:
+            # use_token_matching not in kwargs - use existing sort behavior
+            self.sort = kwargs.get("sort", environ.get('SORT', 'true').lower() == 'true')
+
         self.superkb = SuperKnowledgeBase(self.kb_id, self.persistence, settings=self.settings)
         self.patterns_searcher = PatternSearcher(kb_id=self.kb_id,
                                              max_predictions=self.max_predictions,
-                                             recall_threshold=self.recall_threshold)
+                                             recall_threshold=self.recall_threshold,
+                                             use_token_matching=self.use_token_matching)
 
         # Initialize optimized query manager for aggregation pipelines
         self.query_manager = OptimizedQueryManager(self.superkb)
@@ -405,6 +433,7 @@ class PatternProcessor:
 
         # Early return if no patterns found
         if not causal_patterns:
+            self.future_potentials = []  # Clear stale future_potentials
             logger.debug(f" {self.name} [ PatternProcessor predictPattern (async) ] No causal patterns found, returning empty list")
             return []
 

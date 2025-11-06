@@ -37,6 +37,7 @@ class SessionConfiguration:
     max_predictions: Optional[int] = None  # 1-10000 (prediction limit)
     sort_symbols: Optional[bool] = None  # Whether to sort symbols alphabetically
     process_predictions: Optional[bool] = None  # Whether to process predictions
+    use_token_matching: Optional[bool] = None  # Token-level vs character-level matching
 
     # Metadata
     session_id: str = field(default="")
@@ -181,7 +182,7 @@ class SessionConfiguration:
         valid_fields = {
             'max_pattern_length', 'persistence', 'recall_threshold', 'stm_mode',
             'indexer_type', 'max_predictions', 'sort_symbols', 'process_predictions',
-            'session_id', 'node_id', 'version'
+            'use_token_matching', 'session_id', 'node_id', 'version'
         }
 
         filtered_data = {k: v for k, v in data.items() if k in valid_fields}
@@ -212,7 +213,8 @@ class SessionConfiguration:
 
         config_keys = [
             'max_pattern_length', 'persistence', 'recall_threshold',
-            'indexer_type', 'max_predictions', 'sort_symbols', 'process_predictions'
+            'indexer_type', 'max_predictions', 'sort_symbols', 'process_predictions',
+            'use_token_matching', 'stm_mode'
         ]
 
         for key in config_keys:

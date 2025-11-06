@@ -326,6 +326,7 @@ See [Testing Guide](docs/TESTING.md) for complete details.
 - [Docker Guide](docs/deployment/DOCKER.md) - Container deployment
 - [Configuration](docs/deployment/CONFIGURATION.md) - All parameters explained
 - [Architecture](docs/deployment/ARCHITECTURE.md) - System design
+- [Production Scale Migration Plan (PSMP)](docs/deployment/PRODUCTION_SCALE_MIGRATION_PLAN.md) - Future scaling strategy for production workloads
 
 ### 🔧 Development
 - [API Reference](docs/API_REFERENCE.md) - Complete endpoint documentation
@@ -359,7 +360,8 @@ docs/
 ├── deployment/
 │   ├── ARCHITECTURE.md      # System design
 │   ├── CONFIGURATION.md     # All parameters
-│   └── DOCKER.md            # Container guide
+│   ├── DOCKER.md            # Container guide
+│   └── PRODUCTION_SCALE_MIGRATION_PLAN.md  # Future scaling strategy
 ├── development/
 │   ├── CONTRIBUTING.md      # Dev guidelines
 │   └── CHANGELOG.md         # Version history

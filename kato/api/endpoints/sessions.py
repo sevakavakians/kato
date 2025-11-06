@@ -191,6 +191,20 @@ async def update_session_config(session_id: str, request_data: dict[str, Any]):
     config = request_data.get('config', request_data)
     logger.info(f"Extracted config: {config}")
 
+    # AUTO-TOGGLE SORT based on use_token_matching if provided
+    if 'use_token_matching' in config and 'sort_symbols' not in config:
+        # Auto-set sort_symbols based on use_token_matching
+        config['sort_symbols'] = config['use_token_matching']
+        logger.info(f"Auto-toggled sort_symbols={config['sort_symbols']} based on use_token_matching={config['use_token_matching']}")
+    elif 'use_token_matching' in config and 'sort_symbols' in config:
+        # Warn if there's a mismatch
+        if config['sort_symbols'] != config['use_token_matching']:
+            logger.warning(
+                f"CONFIGURATION MISMATCH: sort_symbols={config['sort_symbols']} with use_token_matching={config['use_token_matching']}. "
+                f"Token-level matching requires sort_symbols=True, character-level requires sort_symbols=False. "
+                f"Using user-specified values, but this may cause incorrect matching behavior."
+            )
+
     # Update the session's config - using SessionConfiguration's update method
     for key, value in config.items():
         if hasattr(session.session_config, key):
@@ -242,6 +256,24 @@ async def update_session_config(session_id: str, request_data: dict[str, Any]):
                 processor.genome_manifest['MAX_PREDICTIONS'] = value
             elif key == 'sort_symbols':
                 processor.genome_manifest['SORT'] = value
+                # Update pattern processor's sort
+                if hasattr(processor, 'pattern_processor'):
+                    processor.pattern_processor.sort = value
+                    logger.info(f"Updated pattern_processor.sort to {value}")
+                # Update observation processor's sort_symbols
+                if hasattr(processor, 'observation_processor'):
+                    processor.observation_processor.sort_symbols = value
+                    logger.info(f"Updated observation_processor.sort_symbols to {value}")
+            elif key == 'use_token_matching':
+                processor.genome_manifest['USE_TOKEN_MATCHING'] = value
+                # Update pattern processor's use_token_matching
+                if hasattr(processor, 'pattern_processor'):
+                    processor.pattern_processor.use_token_matching = value
+                    logger.info(f"Updated pattern_processor.use_token_matching to {value}")
+                    # Update the patterns_searcher as well
+                    if hasattr(processor.pattern_processor, 'patterns_searcher'):
+                        processor.pattern_processor.patterns_searcher.use_token_matching = value
+                        logger.info(f"Updated patterns_searcher.use_token_matching to {value}")
             elif key == 'process_predictions':
                 processor.genome_manifest['PROCESS_PREDICTIONS'] = value
                 processor.process_predictions = value  # Update the processor's attribute directly

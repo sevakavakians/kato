@@ -40,6 +40,7 @@ class ResolvedConfiguration:
     max_predictions: int
     sort_symbols: bool
     process_predictions: bool
+    use_token_matching: bool
 
     # Source tracking
     source_session_id: Optional[str] = None
@@ -61,7 +62,8 @@ class ResolvedConfiguration:
             'stm_mode': self.stm_mode,
             'max_predictions': self.max_predictions,
             'sort': self.sort_symbols,
-            'process_predictions': self.process_predictions
+            'process_predictions': self.process_predictions,
+            'use_token_matching': self.use_token_matching
         }
 
     def to_genes_dict(self) -> dict[str, Any]:
@@ -78,7 +80,8 @@ class ResolvedConfiguration:
             'stm_mode': self.stm_mode,
             'max_predictions': self.max_predictions,
             'sort': self.sort_symbols,
-            'process_predictions': self.process_predictions
+            'process_predictions': self.process_predictions,
+            'use_token_matching': self.use_token_matching
         }
 
 
@@ -121,7 +124,8 @@ class ConfigurationService:
             'stm_mode': self.settings.learning.stm_mode,
             'max_predictions': self.settings.processing.max_predictions,
             'sort': self.settings.processing.sort_symbols,
-            'process_predictions': self.settings.processing.process_predictions
+            'process_predictions': self.settings.processing.process_predictions,
+            'use_token_matching': self.settings.processing.use_token_matching
         }
 
     def resolve_configuration(
@@ -172,6 +176,7 @@ class ConfigurationService:
             max_predictions=merged['max_predictions'],
             sort_symbols=merged['sort'],
             process_predictions=merged['process_predictions'],
+            use_token_matching=merged['use_token_matching'],
             source_session_id=session_id,
             source_node_id=node_id,
             overrides_applied=overrides_applied

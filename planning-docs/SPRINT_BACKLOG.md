@@ -53,6 +53,27 @@ None - All major projects complete
 
 ## Backlog (Future Work)
 
+### Production Scale Migration Plan (PSMP)
+**Status**: Documented, Not Yet Implemented
+**Priority**: Future Enhancement (Implement when traffic exceeds 100 req/sec)
+**Documentation**: `docs/deployment/PRODUCTION_SCALE_MIGRATION_PLAN.md`
+
+Phased plan for scaling KATO to production workloads:
+- **Phase 0**: Quick fix - Increase request limit from 10k to 50k (1 day)
+- **Phase 1**: Gunicorn + Uvicorn multi-worker deployment (2 weeks)
+- **Phase 2**: Nginx reverse proxy + SSL/TLS termination (4 weeks)
+- **Phase 3**: Monitoring & observability (Prometheus, Grafana) (1 month)
+- **Phase 4**: Kubernetes migration with auto-scaling (3+ months)
+
+**Current State**: Single-worker Uvicorn (appropriate for dev/test)
+**Future State**: Multi-worker Gunicorn+Uvicorn or Kubernetes with HPA
+
+**Implement when**:
+- Traffic exceeds 100 requests/sec
+- Multi-user production deployment needed
+- Worker restarts interrupt training sessions (>10k requests)
+- Need SSL/TLS, rate limiting, or auto-scaling
+
 ### Additional API Features
 - Advanced session management endpoints
 - Bulk pattern operations

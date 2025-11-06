@@ -240,6 +240,11 @@ class ProcessingConfig(BaseSettings):
         json_schema_extra={'env': 'PROCESS_PREDICTIONS'},
         description="Enable prediction processing"
     )
+    use_token_matching: bool = Field(
+        True,
+        json_schema_extra={'env': 'KATO_USE_TOKEN_MATCHING'},
+        description="Use token-level matching (True) vs character-level matching (False)"
+    )
 
     model_config = ConfigDict(env_prefix='')
 

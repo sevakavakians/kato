@@ -243,7 +243,9 @@ class PatternSearcher:
 
         # Feature flags for optimization
         self.use_fast_matching = environ.get('KATO_USE_FAST_MATCHING', 'true').lower() == 'true'
-        self.use_token_matching = environ.get('KATO_USE_TOKEN_MATCHING', 'false').lower() == 'true'
+        # Get use_token_matching from kwargs (fallback to environment variable for backward compatibility)
+        self.use_token_matching = kwargs.get("use_token_matching",
+                                            environ.get('KATO_USE_TOKEN_MATCHING', 'true').lower() == 'true')
         self.use_indexing = environ.get('KATO_USE_INDEXING', 'true').lower() == 'true'
 
         # Initialize optimized components
@@ -287,6 +289,7 @@ class PatternSearcher:
 
         logger.info(f"PatternSearcher initialized: "
                    f"fast_matching={self.use_fast_matching}, "
+                   f"token_matching={self.use_token_matching}, "
                    f"indexing={self.use_indexing}, "
                    f"redis_cache={self._cache_enabled} "
                    f"(lazy pattern loading enabled)")

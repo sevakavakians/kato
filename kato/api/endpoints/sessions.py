@@ -357,7 +357,8 @@ async def observe_in_session(
         }
 
         try:
-            result = await processor.observe(observation)
+            # Pass session config to observe for session-specific behavior
+            result = await processor.observe(observation, config=session.session_config)
         except Exception as e:
             # Import VectorDimensionError to check exception type
             from kato.exceptions import VectorDimensionError
@@ -623,7 +624,8 @@ async def observe_sequence_in_session(
                 }
 
                 try:
-                    result = await processor.observe(observation)
+                    # Pass session config to observe for session-specific behavior
+                    result = await processor.observe(observation, config=session.session_config)
                 except Exception as e:
                     # Import VectorDimensionError to check exception type
                     from kato.exceptions import VectorDimensionError
@@ -739,8 +741,8 @@ async def get_session_predictions(session_id: str):
         # Set processor state
         processor.set_stm(session.stm)
 
-        # Get predictions
-        predictions = processor.get_predictions()
+        # Get predictions with session config
+        predictions = await processor.get_predictions(config=session.session_config)
 
         # Get future_potentials from the pattern processor if available
         future_potentials = None

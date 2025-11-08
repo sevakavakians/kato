@@ -63,6 +63,9 @@ class PatternProcessor:
         self.use_token_matching = kwargs.get("use_token_matching",
                                             environ.get('KATO_USE_TOKEN_MATCHING', 'true').lower() == 'true')
 
+        # Get rank_sort_algo from kwargs (default to 'potential')
+        self.rank_sort_algo = kwargs.get("rank_sort_algo", "potential")
+
         # AUTO-TOGGLE SORT based on use_token_matching
         # Token-level matching requires sort=True for consistent symbol matching
         # Character-level matching requires sort=False to preserve string order
@@ -580,27 +583,38 @@ class PatternProcessor:
                 # Remove pattern_data to save bandwidth
                 prediction.pop('pattern_data', None)
 
-            # Calculate ensemble-based predictive information and update potentials
+            # Calculate ensemble-based predictive information for metrics
             try:
                 causal_patterns, future_potentials = calculate_ensemble_predictive_information(causal_patterns)
                 # Store future_potentials for the API response
                 self.future_potentials = future_potentials
             except Exception as e:
                 logger.error(f"Error in ensemble predictive information calculation: {e}")
-                # Set defaults if calculation fails - use old formula as fallback
+                # Set predictive_information to 0 if calculation fails
                 for prediction in causal_patterns:
                     if 'predictive_information' not in prediction:
                         prediction['predictive_information'] = 0.0
-                    if 'potential' not in prediction:
-                        # Use old formula as fallback
-                        try:
-                            prediction['potential'] = (prediction['evidence'] + prediction['confidence']) * prediction['snr'] + prediction.get('itfdf_similarity', 0.0) + (1/(prediction['fragmentation'] + 1))
-                        except ZeroDivisionError:
-                            prediction['potential'] = (prediction['evidence'] + prediction['confidence']) * prediction['snr'] + prediction.get('itfdf_similarity', 0.0)
                 self.future_potentials = []
 
+            # Calculate potential using direct formula (overwrites any potential from calculate_ensemble_predictive_information)
+            # potential = (evidence + confidence) * snr + itfdf_similarity + (1/(fragmentation + 1))
+            # No fallback - errors will propagate
+            for prediction in causal_patterns:
+                prediction['potential'] = (
+                    (prediction['evidence'] + prediction['confidence']) * prediction['snr']
+                    + prediction.get('itfdf_similarity', 0.0)
+                    + (1 / (prediction['fragmentation'] + 1))
+                )
+
             try:
-                active_causal_patterns = sorted(list(heapq.nlargest(self.max_predictions, causal_patterns, key=itemgetter('potential'))), reverse=True, key=itemgetter('potential'))
+                # Sort predictions using configurable ranking algorithm (default: 'potential')
+                active_causal_patterns = sorted(
+                    list(heapq.nlargest(self.max_predictions, causal_patterns, key=itemgetter(self.rank_sort_algo))),
+                    reverse=True,
+                    key=itemgetter(self.rank_sort_algo)
+                )
+            except KeyError as e:
+                raise ValueError(f"Invalid rank_sort_algo '{self.rank_sort_algo}': metric not found in predictions. Available metrics: {list(causal_patterns[0].keys()) if causal_patterns else 'none'}")
             except Exception as e:
                 raise Exception(f"\nException in PatternProcessor.predictPattern (async): Error in sorting predictions! {self.kb_id}: {e}")
 
@@ -609,3 +623,81 @@ class PatternProcessor:
 
         except Exception as e:
             raise Exception(f"\nException in PatternProcessor.predictPattern (async): Error in metrics calculation! {self.kb_id}: {e}")
+
+    async def get_predictions_async(self, stm: list[list[str]], config=None) -> list[dict[str, Any]]:
+        """
+        Generate predictions with session-specific configuration (async version).
+
+        This is the config-as-parameter version that doesn't mutate processor state.
+
+        Args:
+            stm: Short-term memory (list of events)
+            config: Optional SessionConfiguration with prediction parameters
+
+        Returns:
+            List of prediction dictionaries
+        """
+        # Flatten STM to state
+        state = list(chain(*stm))
+
+        # Only generate predictions if we have at least 2 strings in state
+        if len(state) < 2:
+            logger.debug("Not enough symbols in state for predictions (need at least 2)")
+            return []
+
+        # Extract config values or use instance defaults
+        recall_threshold = config.recall_threshold if config and config.recall_threshold is not None else self.recall_threshold
+        max_predictions = config.max_predictions if config and config.max_predictions is not None else self.max_predictions
+        use_token_matching = config.use_token_matching if config and config.use_token_matching is not None else self.use_token_matching
+
+        # Temporarily create a PatternSearcher with config values
+        # This avoids mutating the instance's patterns_searcher
+        temp_searcher = PatternSearcher(
+            kb_id=self.kb_id,
+            max_predictions=max_predictions,
+            recall_threshold=recall_threshold,
+            use_token_matching=use_token_matching
+        )
+
+        # Save original searcher
+        original_searcher = self.patterns_searcher
+        original_max_predictions = self.max_predictions
+
+        try:
+            # Temporarily swap searcher and max_predictions
+            self.patterns_searcher = temp_searcher
+            self.max_predictions = max_predictions
+
+            # Call predictPattern with the provided STM
+            predictions = await self.predictPattern(state, stm_events=stm)
+
+            return predictions or []
+        finally:
+            # Restore original searcher and max_predictions
+            self.patterns_searcher = original_searcher
+            self.max_predictions = original_max_predictions
+
+    def get_predictions(self, stm: list[list[str]], config=None) -> list[dict[str, Any]]:
+        """
+        Generate predictions with session-specific configuration (sync wrapper).
+
+        This is a synchronous wrapper around get_predictions_async.
+
+        Args:
+            stm: Short-term memory (list of events)
+            config: Optional SessionConfiguration with prediction parameters
+
+        Returns:
+            List of prediction dictionaries
+        """
+        import asyncio
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # If we're in an async context, create a task
+                return asyncio.create_task(self.get_predictions_async(stm, config))
+            else:
+                return loop.run_until_complete(self.get_predictions_async(stm, config))
+        except RuntimeError:
+            # No event loop, create one
+            return asyncio.run(self.get_predictions_async(stm, config))

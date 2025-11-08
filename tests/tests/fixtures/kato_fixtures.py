@@ -461,10 +461,16 @@ class KATOFastAPIFixture:
 
         return 'all-cleared'
 
-    def update_genes(self, genes: dict[str, Any]) -> str:
-        """Update gene values using session endpoint.
+    def update_config(self, config: dict[str, Any]) -> str:
+        """Update session configuration values.
 
         Uses the session configuration endpoint to update processor settings.
+
+        Args:
+            config: Configuration dictionary to update
+
+        Returns:
+            Status response
         """
         if not self.services_available:
             pytest.skip("KATO services not available")
@@ -475,49 +481,57 @@ class KATOFastAPIFixture:
         # Use session config endpoint
         response = self.requests_session.post(
             f"{self.base_url}/sessions/{self.session_id}/config",
-            json={'config': genes},
+            json={'config': config},
             timeout=5
         )
 
         if response.status_code == 200:
             result = response.json()
-            # Update local session config for get_genes compatibility
-            self.session_config.update(genes)
-            return {'status': 'okay', 'message': result.get('message', 'genes-updated')}
+            # Update local session config for get_config compatibility
+            self.session_config.update(config)
+            return {'status': 'okay', 'message': result.get('message', 'config-updated')}
 
         # Log the error but don't fail - some tests may expect this
-        print(f"Warning: Failed to update genes: {response.status_code} - {response.text if hasattr(response, 'text') else ''}")
-        return {'status': 'error', 'message': 'genes-update-failed'}
+        print(f"Warning: Failed to update config: {response.status_code} - {response.text if hasattr(response, 'text') else ''}")
+        return {'status': 'error', 'message': 'config-update-failed'}
 
-    def reset_genes_to_defaults(self) -> str:
-        """Reset genes to default values."""
-        default_genes = {
+    def update_genes(self, genes: dict[str, Any]) -> str:
+        """DEPRECATED: Alias for update_config for backward compatibility."""
+        return self.update_config(genes)
+
+    def reset_config_to_defaults(self) -> str:
+        """Reset configuration to default values."""
+        default_config = {
             'max_pattern_length': 0,  # Disable auto-learning by default
             'recall_threshold': 0.1,
             'persistence': 5,
         }
         self.session_config = {}  # Clear session config to use defaults
-        return self.update_genes(default_genes)
+        return self.update_config(default_config)
+
+    def reset_genes_to_defaults(self) -> str:
+        """DEPRECATED: Alias for reset_config_to_defaults for backward compatibility."""
+        return self.reset_config_to_defaults()
 
     def set_recall_threshold(self, threshold: float) -> str:
         """Set the recall_threshold parameter.
 
-        V2 supports dynamic configuration through the /genes/update endpoint.
+        Updates session configuration with the new threshold.
         """
         if not 0.0 <= threshold <= 1.0:
             raise ValueError(f"recall_threshold must be between 0.0 and 1.0, got {threshold}")
 
-        # V2 supports dynamic threshold changes via the API
+        # Update session configuration with new threshold
         self._attempted_threshold = threshold
-        return self.update_genes({"recall_threshold": threshold})
+        return self.update_config({"recall_threshold": threshold})
 
     def supports_dynamic_threshold(self) -> bool:
         """Check if the service supports dynamic recall threshold changes."""
         # V2 now supports dynamic threshold changes
         return True
 
-    def get_genes(self) -> dict[str, Any]:
-        """Get current gene/configuration values.
+    def get_config(self) -> dict[str, Any]:
+        """Get current session configuration values.
 
         Returns the current session configuration.
         """
@@ -529,7 +543,7 @@ class KATOFastAPIFixture:
 
         # For session-based configuration, return current session config
         # with defaults for missing values
-        genes = {
+        config = {
             'max_pattern_length': self.session_config.get('max_pattern_length', 0),
             'stm_mode': self.session_config.get('stm_mode', 'CLEAR'),
             'recall_threshold': self.session_config.get('recall_threshold', 0.1),
@@ -538,7 +552,11 @@ class KATOFastAPIFixture:
             'sort': self.session_config.get('sort_symbols', True),
         }
 
-        return genes
+        return config
+
+    def get_genes(self) -> dict[str, Any]:
+        """DEPRECATED: Alias for get_config for backward compatibility."""
+        return self.get_config()
 
     def observe_sequence(self, observations: list[dict[str, Any]],
                         learn_after_each: bool = False,

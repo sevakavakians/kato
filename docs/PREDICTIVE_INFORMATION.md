@@ -2,16 +2,21 @@
 
 ## Executive Summary
 
-**Predictive Information** (also called **Excess Entropy**) measures how much information the past of a sequence contains about its future. In KATO, this metric quantifies the hidden structure and long-range correlations within learned patterns, providing a theoretically grounded basis for ranking predictions.
+**Predictive Information** (also called **Excess Entropy**) measures how much information the past of a sequence contains about its future. In KATO, this metric quantifies the hidden structure and long-range correlations within learned patterns, and is available as one of the ranking metrics alongside other measures.
 
-The new scoring system replaces KATO's complex composite potential calculation with:
+**Current Potential Calculation:**
 ```
-potential = similarity * predictive_information
+potential = (evidence + confidence) * snr + itfdf_similarity + (1/(fragmentation + 1))
 ```
 
 Where:
-- `similarity`: How well the observed state matches the pattern (already computed)
-- `predictive_information`: Mutual information between past and future segments
+- `evidence`: Proportion of the pattern that has been observed
+- `confidence`: Ratio of matched symbols to total present symbols
+- `snr`: Signal-to-noise ratio (matches vs extras)
+- `itfdf_similarity`: Inverse term frequency-document frequency similarity
+- `fragmentation`: Pattern cohesion measure (number of blocks - 1)
+
+**Predictive Information**: Calculated separately and available as `predictive_information` field and as an alternative ranking metric via `rank_sort_algo` configuration
 
 ## 1. Theoretical Foundation
 
@@ -168,8 +173,8 @@ To efficiently calculate predictive information, KATO needs to track:
 
 2. **Prediction Generation** (`predictPattern`):
    - Calculate predictive_information for each prediction
-   - Replace complex potential formula with `similarity * predictive_information`
-   - Sort by new potential value
+   - Calculate potential using standard formula: `(evidence + confidence) * snr + itfdf_similarity + (1/(fragmentation + 1))`
+   - Sort by configurable ranking metric (default: `potential`; alternative: `predictive_information`)
 
 ### 4.3 Algorithm Pseudocode
 
@@ -193,19 +198,23 @@ def update_predictive_information_stats(pattern):
 
 # During prediction
 def calculate_prediction_potential(prediction):
-    # Get predictive information
+    # Calculate predictive information (for metrics)
     pi = calculate_predictive_information(
         prediction['present'],
         prediction['future'],
         kb
     )
-    
+
     # Store in prediction object
     prediction['predictive_information'] = pi
-    
-    # New simplified potential
-    prediction['potential'] = prediction['similarity'] * pi
-    
+
+    # Calculate potential using standard formula
+    prediction['potential'] = (
+        (prediction['evidence'] + prediction['confidence']) * prediction['snr']
+        + prediction['itfdf_similarity']
+        + (1 / (prediction['fragmentation'] + 1))
+    )
+
     return prediction
 ```
 
@@ -250,12 +259,22 @@ PI = 0.0095 * log2(0.0095/(0.012*0.015))
 
 ### 5.3 Potential Calculation
 
-If similarity = 0.75 (good match):
+With the following metrics:
+- evidence = 0.6 (60% of pattern observed)
+- confidence = 0.8 (80% match quality in present)
+- snr = 0.7 (good signal-to-noise)
+- itfdf_similarity = 0.65
+- fragmentation = 2 (3 blocks)
+
 ```python
-potential = similarity * predictive_information
-         = 0.75 * 0.054
-         = 0.0405
+potential = (evidence + confidence) * snr + itfdf_similarity + (1/(fragmentation + 1))
+         = (0.6 + 0.8) * 0.7 + 0.65 + (1/3)
+         = 1.4 * 0.7 + 0.65 + 0.333
+         = 0.98 + 0.65 + 0.333
+         = 1.963
 ```
+
+The predictive_information value (0.054) is available separately for analysis or as an alternative ranking metric.
 
 ## 6. Benefits and Implications
 
@@ -267,9 +286,10 @@ potential = similarity * predictive_information
 
 ### 6.2 Practical Benefits
 
-1. **Simplified Calculation**: Replaces complex multi-term potential formula
-2. **Better Ranking**: Prioritizes patterns with strong predictive relationships
+1. **Complementary Metrics**: Provides information-theoretic ranking option alongside composite potential
+2. **Flexible Ranking**: Can prioritize patterns based on predictive information via `rank_sort_algo` configuration
 3. **Adaptive Learning**: Naturally adapts as co-occurrence statistics evolve
+4. **Multiple Perspectives**: Potential uses composite metrics for balanced ranking, predictive_information provides pure information-theoretic view
 
 ### 6.3 Decision-Making Implications
 

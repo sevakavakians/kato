@@ -128,10 +128,9 @@ class ProcessorManager:
             # Move to end for LRU
             self.processors.move_to_end(processor_id)
 
-            # Apply dynamic configuration updates to cached processor
+            # Return processor without mutating its config
+            # Config is now passed as parameter to processor methods
             processor = processor_info['processor']
-            if session_config:
-                self._apply_config_to_processor(processor, session_config)
 
             logger.debug(f"Returning cached processor for node {node_id}")
             return processor
@@ -151,21 +150,13 @@ class ProcessorManager:
             # Create new processor
             logger.info(f"Creating new processor for node {node_id}")
 
-            # Resolve configuration using ConfigurationService
-            resolved_config = self.config_service.resolve_configuration(
-                session_config=session_config,
-                session_id=session_config.session_id if session_config else None,
-                node_id=node_id
+            # Create processor instance with minimal parameters
+            # Configuration is now session-based only - no processor-level config
+            processor = KatoProcessor(
+                name=f"Node-{node_id}",
+                processor_id=processor_id,
+                settings=self.settings
             )
-
-            # Build genome manifest without processor_id (now passed directly)
-            genome_manifest = {
-                'name': f"Node-{node_id}",
-                **resolved_config.to_genome_manifest()
-            }
-
-            # Create processor instance with direct processor_id parameter
-            processor = KatoProcessor(genome_manifest, processor_id=processor_id, settings=self.settings)
 
             # Initialize async components
             await processor.initialize_async_components()
@@ -188,58 +179,6 @@ class ProcessorManager:
                 self._cleanup_task = asyncio.create_task(self._cleanup_loop())
 
             return processor
-
-    def _apply_config_to_processor(self, processor: 'KatoProcessor', session_config: SessionConfiguration):
-        """
-        Apply dynamic configuration updates to an existing processor.
-
-        Args:
-            processor: The KatoProcessor instance to update
-            session_config: Session configuration with updates
-        """
-        # Update critical parameters that can be changed dynamically
-        if session_config.recall_threshold is not None and hasattr(processor, 'pattern_processor'):
-            # Update the pattern processor's recall threshold
-            processor.pattern_processor.recall_threshold = session_config.recall_threshold
-            # Also update the pattern searcher's threshold
-            if hasattr(processor.pattern_processor, 'patterns_searcher'):
-                processor.pattern_processor.patterns_searcher.recall_threshold = session_config.recall_threshold
-            logger.debug(f"Updated recall_threshold to {session_config.recall_threshold}")
-
-        if session_config.max_pattern_length is not None:
-            if hasattr(processor, 'max_pattern_length'):
-                processor.max_pattern_length = session_config.max_pattern_length
-            if hasattr(processor, 'pattern_processor'):
-                processor.pattern_processor.max_pattern_length = session_config.max_pattern_length
-            if hasattr(processor, 'observation_processor'):
-                processor.observation_processor.max_pattern_length = session_config.max_pattern_length
-                logger.debug(f"Updated observation_processor.max_pattern_length to {session_config.max_pattern_length}")
-            logger.debug(f"Updated max_pattern_length to {session_config.max_pattern_length}")
-
-        if session_config.persistence is not None and hasattr(processor, 'pattern_processor'):
-            processor.pattern_processor.persistence = session_config.persistence
-            logger.debug(f"Updated persistence to {session_config.persistence}")
-
-        if session_config.stm_mode is not None:
-            if hasattr(processor, 'pattern_processor'):
-                processor.pattern_processor.stm_mode = session_config.stm_mode
-                logger.debug(f"Updated pattern_processor.stm_mode to {session_config.stm_mode} for processor {processor.id}")
-            else:
-                logger.warning("Processor does not have pattern_processor attribute!")
-
-        # Update other configurable parameters
-        if session_config.max_predictions is not None and hasattr(processor, 'pattern_processor'):
-            processor.pattern_processor.max_predictions = session_config.max_predictions
-            if hasattr(processor.pattern_processor, 'patterns_searcher'):
-                processor.pattern_processor.patterns_searcher.max_predictions = session_config.max_predictions
-            logger.debug(f"Updated max_predictions to {session_config.max_predictions}")
-
-        if session_config.process_predictions is not None:
-            processor.process_predictions = session_config.process_predictions
-            if hasattr(processor, 'observation_processor'):
-                processor.observation_processor.process_predictions = session_config.process_predictions
-                logger.debug(f"Updated observation_processor.process_predictions to {session_config.process_predictions}")
-            logger.debug(f"Updated process_predictions to {session_config.process_predictions}")
 
     def _evict_oldest(self):
         """Evict the least recently used processor with resource cleanup."""
@@ -286,71 +225,6 @@ class ProcessorManager:
             f"Evicted processor {evicted_id} for node {evicted_info['node_id']} "
             f"(created: {evicted_info['created_at']}, accesses: {evicted_info['access_count']})"
         )
-
-    async def update_processor_config(self, node_id: str, session_config: SessionConfiguration) -> bool:
-        """
-        Update a processor's configuration dynamically.
-
-        Args:
-            node_id: Node identifier
-            session_config: New session configuration
-
-        Returns:
-            True if successful, False otherwise
-        """
-        processor_id = self._get_processor_id(node_id)
-
-        if processor_id not in self.processors:
-            # Processor doesn't exist, will be created with new config on next access
-            logger.debug(f"Processor {processor_id} doesn't exist yet, will be created with new config")
-            return True
-
-        processor_info = self.processors[processor_id]
-        processor = processor_info['processor']
-
-        try:
-            # Resolve configuration using ConfigurationService
-            resolved_config = self.config_service.resolve_configuration(
-                session_config=session_config,
-                session_id=session_config.session_id if session_config else None,
-                node_id=node_id
-            )
-
-            # Get the configuration values
-            new_config = resolved_config.to_genome_manifest()
-
-            # Update processor attributes directly
-            # These are the safe runtime-updateable parameters
-            if 'recall_threshold' in new_config:
-                processor.recall_threshold = new_config['recall_threshold']
-                if hasattr(processor, 'pattern_processor'):
-                    processor.pattern_processor.recall_threshold = new_config['recall_threshold']
-
-            if 'persistence' in new_config:
-                processor.persistence = new_config['persistence']
-
-            if 'max_pattern_length' in new_config:
-                processor.max_pattern_length = new_config['max_pattern_length']
-
-            if 'max_predictions' in new_config:
-                processor.max_predictions = new_config['max_predictions']
-
-            if 'sort' in new_config:
-                processor.sort = new_config['sort']
-
-            if 'process_predictions' in new_config:
-                processor.process_predictions = new_config['process_predictions']
-
-            if 'stm_mode' in new_config and hasattr(processor, 'pattern_processor'):
-                processor.pattern_processor.stm_mode = new_config['stm_mode']
-                logger.debug(f"Updated STM mode to {new_config['stm_mode']} for processor {processor_id}")
-
-            logger.info(f"Updated processor {processor_id} configuration for node {node_id}")
-            return True
-
-        except Exception as e:
-            logger.error(f"Failed to update processor config for {node_id}: {e}")
-            return False
 
     async def remove_processor(self, node_id: str) -> bool:
         """

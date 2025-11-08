@@ -136,7 +136,7 @@ Client Request → FastAPI Service (Port 8000) → Embedded KATO Processor
    - Async request handling with FastAPI
    - Core endpoints: `/observe`, `/observe-sequence`, `/learn`, `/predictions`, `/health`, `/status`
    - Bulk processing: `/observe-sequence` for batch observations with isolation options
-   - Advanced endpoints: `/pattern/{id}`, `/genes/update`, `/gene/{name}`, `/percept-data`, `/cognition-data`, `/metrics`
+   - Advanced endpoints: `/pattern/{id}`, `/percept-data`, `/cognition-data`, `/metrics`
    - STM endpoints: `/stm` (alias: `/short-term-memory`)
    - Clear endpoints: `/clear-stm`, `/clear-all` (with aliases)
    - WebSocket support at `/ws` for real-time communication
@@ -332,6 +332,153 @@ The system uses Redis-based session management for configuration:
   - **Disabled (false)**: Sessions use fixed expiration time from creation
     - Session expires at creation_time + TTL regardless of activity
     - Use for time-bounded sessions with strict expiration requirements
+
+### Config-as-Parameter Architecture (Multi-Session Support)
+
+**CRITICAL**: KATO uses a **config-as-parameter** architecture to enable true multi-session support without configuration thrashing.
+
+#### How It Works
+
+Instead of mutating shared processor state, configuration is passed as parameters through the call stack:
+
+```python
+# BEFORE (BROKEN - v2.0.x and earlier):
+processor.recall_threshold = 0.1  # Mutates shared state
+predictions = processor.get_predictions()
+
+# AFTER (CORRECT - v2.1.0+):
+predictions = await processor.get_predictions(config=session_config)
+# Config passed as parameter, no mutation
+```
+
+#### Architecture Flow
+
+```
+Session Request
+    ↓
+Session Config (isolated, stored in Redis)
+    ↓
+processor.observe(data, config=session_config)  ← Config as parameter
+    ↓
+observation_processor.process_observation(data, config)
+    ↓
+pattern_processor.get_predictions_async(stm, config)
+    ↓
+Uses config values WITHOUT mutating processor state
+```
+
+#### Multi-Session Scenario (Production Use Case)
+
+**Scenario**: Multiple users querying the same trained knowledge base with different preferences
+
+```python
+# Shared knowledge base (same node_id)
+# But different sessions with different configs
+
+# Researcher wants to see all possible matches
+client_A = KATOClient(
+    node_id="production_kb",
+    recall_threshold=0.1,  # Low threshold
+    max_predictions=1000   # Many predictions
+)
+
+# QA system wants high-confidence matches only
+client_B = KATOClient(
+    node_id="production_kb",
+    recall_threshold=0.9,  # High threshold
+    max_predictions=10     # Few predictions
+)
+
+# ✅ CORRECT BEHAVIOR:
+# - Both clients share the same processor (efficient)
+# - Both clients share the same LTM/patterns (shared knowledge)
+# - Each client gets their own STM (isolated observations)
+# - Each client uses their own config (no thrashing)
+```
+
+**What Happens Under the Hood**:
+```
+Time  Session A (recall=0.1)              Session B (recall=0.9)
+──────────────────────────────────────────────────────────────────────
+t1    Get processor (node="production_kb")
+t2    Set STM to session_A's STM
+t3    Call get_predictions(config=session_A.config)
+t4      ├─ Temporarily use recall=0.1
+t5      └─ Return predictions            Get processor (SAME processor!)
+t6                                        Set STM to session_B's STM
+t7                                        Call get_predictions(config=session_B.config)
+t8                                          ├─ Temporarily use recall=0.9
+t9                                          └─ Return predictions
+t10   Both sessions get correct results with their own config values
+```
+
+#### Key Benefits
+
+✅ **Thread-safe**: No shared mutable state
+✅ **Concurrent-safe**: Multiple sessions can access same processor simultaneously
+✅ **Predictable**: Session A's config never affects Session B
+✅ **Efficient**: One processor per node (not per session)
+✅ **Isolated STM**: Each session maintains its own short-term memory
+✅ **Shared LTM**: All sessions share the same learned patterns
+
+#### Configuration Update Methods
+
+**✅ RECOMMENDED: Session-based config updates**
+```python
+# Update configuration for a specific session
+PUT /sessions/{session_id}/config
+{
+    "config": {
+        "recall_threshold": 0.1,
+        "max_predictions": 100,
+        "process_predictions": true
+    }
+}
+```
+
+#### Best Practices
+
+**✓ DO**:
+- Create separate sessions for different users/use-cases
+- Update config via `POST /sessions/{session_id}/config`
+- Use different `node_id` for completely separate knowledge bases
+- Use same `node_id` with different sessions for shared knowledge with different query params
+
+**✗ DON'T**:
+- Expect config changes to affect other sessions
+- Share sessions between users (each user should have their own session)
+
+#### Example: Multi-User Training System
+
+```python
+# Training node (low recall, no predictions during training)
+trainer = KATOClient(
+    node_id="shared_kb",
+    recall_threshold=0.0,     # Not used during training
+    max_predictions=0,        # Not used during training
+    process_predictions=False # Skip prediction computation
+)
+
+# Query node 1 (permissive matching)
+query_low = KATOClient(
+    node_id="shared_kb",      # Same knowledge base
+    recall_threshold=0.1,     # Low threshold
+    max_predictions=100,
+    process_predictions=True
+)
+
+# Query node 2 (strict matching)
+query_high = KATOClient(
+    node_id="shared_kb",      # Same knowledge base
+    recall_threshold=0.9,     # High threshold
+    max_predictions=10,
+    process_predictions=True
+)
+
+# All three share the same LTM (patterns)
+# Each has isolated STM (observations)
+# Each uses its own config (no thrashing)
+```
 
 ## Pattern Matching Modes
 
@@ -539,6 +686,16 @@ PUT /sessions/{session_id}/config
 
 ## Recent Modernizations
 
+- **Processor Genes Removed** (2025-11): Eliminated dual configuration system for single source of truth
+  - Removed `/genes/update` and `/gene/{name}` endpoints completely
+  - Removed `genome_manifest`, `_default_config`, `getGene()`, `update_genes()` from KatoProcessor
+  - Processors are now stateless execution engines - ALL config comes from sessions
+  - Only session-based configuration remains (Settings → SessionConfig → Config-as-Parameter)
+  - Eliminates confusion between processor defaults and session config
+- **Config-as-Parameter Architecture** (2025-11): Eliminated shared mutable state for true multi-session support
+  - Configuration now passed as parameters through call stack instead of mutating processor state
+  - Enables concurrent access to same processor with different configs per session
+  - Thread-safe and race-condition-free multi-user support
 - **Session Auto-Extension** (2025-10): Added sliding window session expiration for long-running tasks
 - **API Endpoint Migration Complete (Phase 3)** (2025-10): Removed all deprecated direct endpoints, session-only architecture
 - **API Endpoint Deprecation Phase 2** (2025-10): Auto-session middleware for transparent backward compatibility
@@ -559,7 +716,7 @@ PUT /sessions/{session_id}/config
 
 - Main service: `kato/services/kato_fastapi.py`
 - Session endpoints: `kato/api/endpoints/sessions.py` (primary API)
-- Utility endpoints: `kato/api/endpoints/kato_ops.py` (genes, patterns, data access)
+- Utility endpoints: `kato/api/endpoints/kato_ops.py` (patterns, data access)
 - Processing logic: `kato/workers/kato_processor.py`
 - Vector operations: `kato/storage/qdrant_manager.py`
 - Pattern representations: `kato/representations/pattern.py`
@@ -587,10 +744,13 @@ PUT /sessions/{session_id}/config
    - Formula: `1 - (distance * prediction['frequency'] / total_ensemble_pattern_frequencies)`
    - Protected against zero total_ensemble_pattern_frequencies
 
-4. **Potential**: Composite metric for ranking predictions
-   - Combines: evidence, confidence, SNR, similarity, and fragmentation
-   - Formula: `(evidence + confidence) * snr + itfdf_similarity + (1/(fragmentation + 1))`
-   - Protected against fragmentation = -1 edge case
+4. **Potential**: Composite metric for ranking predictions (default)
+   - Formula: `potential = (evidence + confidence) * snr + itfdf_similarity + (1/(fragmentation + 1))`
+   - Combines: match completeness, signal quality, frequency-weighted similarity, and pattern cohesion
+   - Errors in calculation will propagate (no fallback masking)
+   - **Configurable Ranking**: Can use alternative metrics via `rank_sort_algo` gene
+     - Available: potential (default), similarity, evidence, confidence, snr, frequency, fragmentation, normalized_entropy, global_normalized_entropy, itfdf_similarity, confluence, predictive_information
+     - Example: Set `rank_sort_algo=similarity` to prioritize best pattern matches
 
 5. **Confluence**: Probability of pattern occurring vs random chance
    - Formula: `p(e|h) * (1 - conditionalProbability(present, symbol_probabilities))`

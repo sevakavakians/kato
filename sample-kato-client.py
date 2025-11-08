@@ -6,6 +6,7 @@ Sessions are handled automatically - one client instance equals one isolated KAT
 
 Features:
 - Automatic session creation and cleanup
+- Session-based configuration updates (v3.3.0+)
 - Automatic session recreation on 404 errors (expired/lost sessions)
 - STM state recovery after session recreation
 - Exponential backoff retry for transient failures
@@ -26,6 +27,12 @@ USAGE:
     client.learn()
     predictions = client.get_predictions()
 
+    # Update configuration dynamically (v3.3.0+)
+    client.update_session_config({
+        'recall_threshold': 0.1,
+        'max_predictions': 100
+    })
+
     # Cleanup
     client.close()
 
@@ -35,7 +42,7 @@ USAGE:
         predictions = client.get_predictions()
 
 Author: KATO Team
-Version: 3.2.0 - Optimized timeout defaults for long-running training workloads
+Version: 3.5.0 - Removed processor genes (update_genes/get_gene) - session config only (breaking change)
 """
 
 import json
@@ -57,6 +64,7 @@ class KATOClient:
 
     Features:
         - Automatic session creation and cleanup
+        - Session-based configuration updates (v3.3.0+)
         - Automatic session recreation on 404 errors (expired/lost sessions)
         - STM state recovery after session recreation
         - Exponential backoff retry for transient failures
@@ -95,6 +103,32 @@ class KATOClient:
         max_session_recreate_attempts: int (default=3)
             - Maximum attempts to recreate session before failing
             - Uses exponential backoff: 0.5s, 1s, 2s
+
+    Node Isolation (v3.4.0+):
+        **BREAKING CHANGE**: Optional node_id parameters removed from all methods.
+        One client instance = one node, always. To access multiple nodes, create
+        multiple client instances.
+
+        ✅ CORRECT:
+            node0 = KATOClient(node_id="node0")
+            node1 = KATOClient(node_id="node1")
+            node0.get_gene("recall_threshold")  # Always uses node0
+            node1.get_gene("recall_threshold")  # Always uses node1
+
+        ❌ REMOVED (no longer supported):
+            client.get_gene("recall_threshold", node_id="other_node")
+
+    Configuration Updates (v3.3.0+):
+        **IMPORTANT**: Use update_session_config() for runtime configuration changes.
+
+        ✅ CORRECT:
+            client.update_session_config({'recall_threshold': 0.1})
+
+        ❌ DEPRECATED:
+            client.update_genes({'recall_threshold': 0.1})  # Won't affect your session!
+
+        The update_genes() method only updates processor defaults and does NOT
+        affect active sessions. It's deprecated in KATO v2.1.0+.
 
     Resilience:
         The client is designed for long-running tasks and handles:
@@ -388,6 +422,53 @@ class KATOClient:
     # Session Management (Internal)
     # ========================================================================
 
+    def get_session_info(self) -> Dict[str, Any]:
+        """
+        Get complete session information including configuration.
+
+        This returns the ACTUAL session configuration that's being used,
+        not the processor's default genes.
+
+        Returns:
+            Dictionary with:
+            - session_id: Session identifier
+            - node_id: Node this session is connected to
+            - created_at: Session creation timestamp
+            - expires_at: Session expiration timestamp
+            - ttl_seconds: Remaining time to live
+            - metadata: Session metadata
+            - session_config: Current session configuration (THIS is what matters!)
+
+        Example:
+            >>> info = client.get_session_info()
+            >>> print(info['session_config']['recall_threshold'])
+            0.6  # This is the ACTUAL value being used
+        """
+        return self._request('GET', f'/sessions/{self._session_id}')
+
+    def get_session_config(self) -> Dict[str, Any]:
+        """
+        Get the current session configuration.
+
+        This is the ACTUAL configuration being used for this session's operations.
+        Use this instead of get_gene() to check your session's config.
+
+        Returns:
+            Dictionary of session configuration parameters
+
+        Example:
+            >>> config = client.get_session_config()
+            >>> print(config['recall_threshold'])
+            0.6  # The value you set when creating the client
+
+            >>> # Compare to get_gene (WRONG - returns processor default):
+            >>> gene = client.get_gene('recall_threshold')
+            >>> print(gene['value'])
+            0.1  # This is NOT what your session is using!
+        """
+        info = self.get_session_info()
+        return info.get('session_config', {})
+
     def extend_session(self, ttl_seconds: int = 3600) -> Dict[str, Any]:
         """
         Extend session expiration time.
@@ -581,114 +662,101 @@ class KATOClient:
         return self._request('GET', f'/sessions/{self._session_id}/predictions')
 
     # ========================================================================
-    # Gene and Pattern Management
+    # Configuration Management
     # ========================================================================
+    # NOTE: All methods operate on this client's node (self.node_id).
+    # To access multiple nodes, create multiple KATOClient instances.
 
-    def update_genes(
+    def update_session_config(
         self,
-        genes: Dict[str, Any],
-        node_id: Optional[str] = None
+        config: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
-        Update processor genes/configuration.
+        Update session configuration (RECOMMENDED method).
+
+        This is the proper way to update configuration in KATO v2.1.0+.
+        Configuration changes affect this session immediately and persist
+        across requests.
+
+        Available configuration parameters:
+            - max_pattern_length: int (0+) - Auto-learn after N observations
+            - persistence: int (1-100) - Rolling window size for emotives
+            - recall_threshold: float (0.0-1.0) - Pattern matching threshold
+            - stm_mode: str - STM mode 'CLEAR' or 'ROLLING'
+            - indexer_type: str - Vector indexer type
+            - max_predictions: int (1-10000) - Max predictions to return
+            - sort_symbols: bool - Sort symbols alphabetically
+            - process_predictions: bool - Enable prediction processing
+            - use_token_matching: bool - Token-level vs character-level matching
 
         Args:
-            genes: Gene configuration to update (see class docstring for params)
-            node_id: Optional node identifier
+            config: Configuration parameters to update
 
         Returns:
-            Status response
+            Status response with updated configuration
 
         Example:
-            >>> result = client.update_genes(
-            ...     {
-            ...         "max_pattern_length": 5,
-            ...         "recall_threshold": 0.5,
-            ...         "stm_mode": "ROLLING"
-            ...     },
-            ...     node_id="user123"
-            ... )
+            >>> # Update recall threshold for this session
+            >>> result = client.update_session_config({
+            ...     'recall_threshold': 0.1,
+            ...     'max_predictions': 100,
+            ...     'process_predictions': True
+            ... })
+            >>> print(result['status'])
+            'okay'
+
+            >>> # Changes take effect immediately on next operation
+            >>> predictions = client.get_predictions()  # Uses recall_threshold=0.1
         """
-        data = {'genes': genes}
-        params = {'node_id': node_id} if node_id else None
-        return self._request('POST', '/genes/update', data=data, params=params)
-
-    def get_gene(
-        self,
-        gene_name: str,
-        node_id: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """
-        Get a specific gene value.
-
-        Args:
-            gene_name: Name of gene to retrieve
-            node_id: Optional node identifier
-
-        Returns:
-            Gene response with gene name and value
-
-        Example:
-            >>> result = client.get_gene("max_pattern_length", node_id="user123")
-            >>> print(result['value'])
-        """
-        params = {'node_id': node_id} if node_id else None
-        return self._request('GET', f'/gene/{gene_name}', params=params)
+        data = {'config': config}
+        return self._request('POST', f'/sessions/{self._session_id}/config', data=data)
 
     def get_pattern(
         self,
-        pattern_id: str,
-        node_id: Optional[str] = None
+        pattern_id: str
     ) -> Dict[str, Any]:
         """
-        Get a specific pattern by ID.
+        Get a specific pattern by ID from this client's node.
 
         Args:
             pattern_id: Pattern identifier (e.g., "PTRN|a1b2c3...")
-            node_id: Optional node identifier
 
         Returns:
             Pattern data
 
         Example:
-            >>> result = client.get_pattern("PTRN|abc123...", node_id="user123")
+            >>> result = client.get_pattern("PTRN|abc123...")
             >>> print(result['pattern'])
         """
-        params = {'node_id': node_id} if node_id else None
+        params = {'node_id': self.node_id}
         return self._request('GET', f'/pattern/{pattern_id}', params=params)
 
-    def get_percept_data(self, node_id: Optional[str] = None) -> Dict[str, Any]:
+    def get_percept_data(self) -> Dict[str, Any]:
         """
-        Get current percept data from processor.
-
-        Args:
-            node_id: Optional node identifier
+        Get current percept data from this client's node.
 
         Returns:
             Percept data
 
         Example:
-            >>> result = client.get_percept_data(node_id="user123")
+            >>> result = client.get_percept_data()
             >>> print(result['percept_data'])
         """
-        params = {'node_id': node_id} if node_id else None
+        params = {'node_id': self.node_id}
         return self._request('GET', '/percept-data', params=params)
 
-    def get_cognition_data(self, node_id: Optional[str] = None) -> Dict[str, Any]:
+    def get_cognition_data(self) -> Dict[str, Any]:
         """
-        Get current cognition data from processor.
-
-        Args:
-            node_id: Optional node identifier
+        Get current cognition data from this client's node.
 
         Returns:
             Cognition data
 
         Example:
-            >>> result = client.get_cognition_data(node_id="user123")
+            >>> result = client.get_cognition_data()
             >>> print(result['cognition_data'])
         """
-        params = {'node_id': node_id} if node_id else None
+        params = {'node_id': self.node_id}
         return self._request('GET', '/cognition-data', params=params)
 
     # ========================================================================
@@ -928,6 +996,37 @@ if __name__ == "__main__":
 
     metrics = client.get_metrics()
     print(f"Total requests: {metrics.get('performance', {}).get('total_requests', 0)}")
+
+    client.close()
+
+    # Example 5: Configuration updates
+    print("\n=== Example 5: Dynamic Configuration Updates ===")
+    client = KATOClient(
+        base_url="http://localhost:8000",
+        node_id="config_demo",
+        recall_threshold=0.5,  # Initial config
+        max_predictions=50
+    )
+
+    # Observe and learn some patterns
+    client.observe(strings=["hello", "world"])
+    client.observe(strings=["foo", "bar"])
+    client.learn()
+
+    # Update configuration dynamically
+    print("Updating session configuration...")
+    config_result = client.update_session_config({
+        'recall_threshold': 0.1,  # More permissive matching
+        'max_predictions': 100,   # More predictions
+        'process_predictions': True
+    })
+    print(f"Config updated: {config_result['status']}")
+
+    # New config takes effect immediately
+    client.clear_stm()
+    client.observe(strings=["hello", "world"])
+    predictions = client.get_predictions()  # Uses new recall_threshold=0.1
+    print(f"Got {predictions['count']} predictions with new config")
 
     client.close()
 

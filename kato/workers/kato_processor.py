@@ -4,6 +4,7 @@ import logging
 import os
 from multiprocessing import Lock, cpu_count
 
+from kato.config.session_config import SessionConfiguration
 from kato.config.settings import get_settings
 from kato.workers.memory_manager import MemoryManager
 from kato.workers.observation_processor import ObservationProcessor
@@ -16,8 +17,12 @@ logger = logging.getLogger('kato.workers.kato-processor')
 
 
 class KatoProcessor:
-    def __init__(self, genome_manifest, processor_id: str, settings=None, **kwargs):
-        '''genome is the specific kato processor's genes.'''
+    def __init__(self, name: str, processor_id: str, settings=None, **genome_manifest):
+        '''Initialize KATO processor as a stateless execution engine.
+
+        Configuration is now session-based only - no processor-level config state.
+        All runtime config must be passed as parameters to observe() and get_predictions().
+        '''
         # Accept settings via dependency injection, fallback to get_settings() for compatibility
         if settings is None:
             settings = get_settings()
@@ -27,24 +32,37 @@ class KatoProcessor:
         if logger.level == 0:  # Logger level not set
             logger.setLevel(getattr(logging, settings.logging.log_level))
 
-        self.genome_manifest = genome_manifest
-        self.id = processor_id  # Direct processor ID parameter instead of from genome_manifest
-        self.name = self.genome_manifest["name"]
-        self.vector_indexer_type = self.genome_manifest["indexer_type"]
+        self.id = processor_id
+        self.name = name
+
         # Get service name from environment
         self.agent_name = os.environ.get('SERVICE_NAME', 'kato')
-        logger.info(" Starting KatoProcessor ID: {}".format(self.id))
+        logger.info(f" Starting KatoProcessor ID: {self.id}, Name: {self.name}")
 
-        self.SORT = self.genome_manifest["sort"]
-        self.process_predictions = self.genome_manifest.get("process_predictions", True)
         self.time = 0
 
         # Use all available processors for parallel searches
         self.procs_for_searches = int(cpu_count())
 
-        self.genome_manifest["kb_id"] = self.id
-        self.vector_processor = VectorProcessor(self.procs_for_searches, **self.genome_manifest)
-        self.pattern_processor = PatternProcessor(settings=self.settings, **self.genome_manifest)
+        # Create minimal manifest with only essential processor info
+        minimal_manifest = {
+            'name': self.name,
+            'kb_id': self.id,
+            # Use settings defaults for processor initialization
+            'indexer_type': settings.processing.indexer_type,
+            'sort': settings.processing.sort_symbols,
+            'process_predictions': settings.processing.process_predictions,
+            'max_pattern_length': settings.learning.max_pattern_length,
+            'recall_threshold': settings.learning.recall_threshold,
+            'max_predictions': settings.processing.max_predictions,
+            'use_token_matching': settings.processing.use_token_matching,
+            'stm_mode': settings.learning.stm_mode,
+            'persistence': settings.learning.persistence,
+            'rank_sort_algo': settings.processing.rank_sort_algo
+        }
+
+        self.vector_processor = VectorProcessor(self.procs_for_searches, **minimal_manifest)
+        self.pattern_processor = PatternProcessor(settings=self.settings, **minimal_manifest)
         self.knowledge = self.pattern_processor.superkb.knowledge
         self.pattern_processor.patterns_kb = self.pattern_processor.superkb.patterns_kb
         self.predictions_kb = self.knowledge.predictions_kb
@@ -66,7 +84,7 @@ class KatoProcessor:
             self.vector_processor, self.pattern_processor,
             self.memory_manager, self.pattern_operations,
             self.pattern_processor.sort, self.pattern_processor.max_pattern_length,
-            self.process_predictions
+            settings.processing.process_predictions
         )
 
         # Initialize state through memory manager
@@ -79,6 +97,7 @@ class KatoProcessor:
         self.time = self.memory_manager.time
 
         self.predictions = []
+
         logger.info(f" {self.name}-{self.id} kato processor, ready!")
         return
 
@@ -181,7 +200,7 @@ class KatoProcessor:
         """Update pattern - delegates to pattern operations"""
         return self.pattern_operations.update_pattern(name, frequency, emotives)
 
-    async def observe(self, data=None):
+    async def observe(self, data=None, config: SessionConfiguration = None):
         """
         Process incoming observations - delegates to observation processor.
 
@@ -190,9 +209,22 @@ class KatoProcessor:
         - Vectors (converted to symbols via vector processor)
         - Emotives (emotional/utility values)
         - Auto-learning when max_pattern_length is reached
+
+        Args:
+            data: Observation data
+            config: SessionConfiguration for session-specific behavior (REQUIRED)
+
+        Raises:
+            ValueError: If config is None (config is required for all operations)
         """
+        if config is None:
+            raise ValueError(
+                "SessionConfiguration is required for observe(). "
+                "KATO processors no longer have default config - all config must come from sessions."
+            )
+
         # Process observation through the observation processor
-        result = await self.observation_processor.process_observation(data)
+        result = await self.observation_processor.process_observation(data, config=config)
 
         # Update local state from result
         self.predictions = result.get('predictions', [])
@@ -218,12 +250,19 @@ class KatoProcessor:
             'instance_id': self.id
         }
 
-    def get_predictions(self, unique_id=None):
+    async def get_predictions(self, unique_id=None, config: SessionConfiguration = None):
         """
         Retrieve predictions - delegates to pattern operations.
 
-        If no ID provided, returns the most recent predictions from memory.
+        If no ID provided, generates predictions based on current STM.
         Otherwise queries the database for stored predictions.
+
+        Args:
+            unique_id: Optional unique ID to retrieve stored predictions
+            config: SessionConfiguration for session-specific behavior (REQUIRED for new predictions)
+
+        Raises:
+            ValueError: If config is None and generating new predictions
         """
         if unique_id is None:
             unique_id = {}
@@ -232,16 +271,19 @@ class KatoProcessor:
             uid = unique_id.get('unique_id')
 
         if not uid:
-            # Return cached predictions from last observe() call
-            return self.predictions
+            # Generate predictions with provided config
+            if config is None:
+                raise ValueError(
+                    "SessionConfiguration is required for get_predictions(). "
+                    "KATO processors no longer have default config - all config must come from sessions."
+                )
+            return await self.pattern_operations.get_predictions_with_config(
+                stm=self.memory_manager.get_stm_state(),
+                config=config
+            )
         else:
-            # Delegate to pattern operations for database query
+            # Delegate to pattern operations for database query (no config needed for retrieval)
             return self.pattern_operations.get_predictions(uid)
-
-    def getGene(self, gene_name):
-        """Return the value of a gene parameter"""
-        logger.debug(f'getGene called with {gene_name} for {self.name}-{self.id}')
-        return getattr(self.pattern_processor, gene_name, None)
 
     def get_stm(self):
         """Get the current short-term memory - delegates to memory manager"""
@@ -269,25 +311,8 @@ class KatoProcessor:
             'short_term_memory': self.memory_manager.get_stm_state()
         }
 
-    def update_genes(self, genes):
-        """Update gene values"""
-        logger.debug(f'update_genes called with {genes} for {self.name}-{self.id}')
-        for gene_name, value in genes.items():
-            if hasattr(self.pattern_processor, gene_name):
-                setattr(self.pattern_processor, gene_name, value)
-                # Also update observation processor's copy for specific genes
-                if gene_name == 'max_pattern_length':
-                    self.observation_processor.max_pattern_length = value
-                # No need to update stm_mode in observation_processor - it reads from pattern_processor
-            # Handle process_predictions which is on kato_processor, not pattern_processor
-            if gene_name == 'process_predictions':
-                self.process_predictions = value
-                self.observation_processor.process_predictions = value
-                logger.debug(f'Updated process_predictions to {value}')
-        return "genes-updated"
-
     # ========================================================================
-    # v2.0 Session State Management Methods
+    # v3.0 Session State Management Methods
     # ========================================================================
 
     def set_stm(self, stm):

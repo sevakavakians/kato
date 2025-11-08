@@ -298,6 +298,22 @@ class PatternOperations:
 
         return predictions
 
+    async def get_predictions_with_config(self, stm: list, config) -> list[dict[str, Any]]:
+        """
+        Generate predictions with session-specific configuration.
+
+        This is the config-as-parameter version that doesn't mutate processor state.
+
+        Args:
+            stm: Short-term memory state
+            config: SessionConfiguration with prediction parameters
+
+        Returns:
+            List of prediction dictionaries
+        """
+        # Pass config directly to pattern processor's get_predictions_async
+        return await self.pattern_processor.get_predictions_async(stm, config=config)
+
     def get_pattern_count(self) -> int:
         """
         Get the total count of patterns in the database.

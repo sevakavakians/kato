@@ -245,6 +245,11 @@ class ProcessingConfig(BaseSettings):
         json_schema_extra={'env': 'KATO_USE_TOKEN_MATCHING'},
         description="Use token-level matching (True) vs character-level matching (False)"
     )
+    rank_sort_algo: str = Field(
+        'potential',
+        json_schema_extra={'env': 'RANK_SORT_ALGO'},
+        description="Metric to use for ranking predictions (potential, similarity, evidence, confidence, snr, etc.)"
+    )
 
     model_config = ConfigDict(env_prefix='')
 

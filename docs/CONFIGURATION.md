@@ -239,6 +239,29 @@ KATO uses environment variables for configuration. These can be set in:
   - Character mode is recommended for most use cases
   - See [Pattern Matching Documentation](PATTERN_MATCHING.md) for details
 
+### RANK_SORT_ALGO
+- **Type**: String
+- **Default**: `potential`
+- **Description**: Metric to use for ranking predictions
+- **Options**:
+  - `potential`: Primary composite ranking metric (default)
+  - `similarity`: Base pattern similarity score
+  - `evidence`: Proportion of pattern observed
+  - `confidence`: Match quality in current context
+  - `snr`: Signal-to-noise ratio
+  - `frequency`: Pattern occurrence count
+  - `fragmentation`: Pattern cohesion measure
+  - `normalized_entropy`: Local information content
+  - `global_normalized_entropy`: Global information content
+  - `itfdf_similarity`: Frequency-weighted importance
+  - `confluence`: Probability vs random occurrence
+  - `predictive_information`: Future prediction reliability
+- **Example**: `potential`, `similarity`, `evidence`
+- **Notes**:
+  - Controls how predictions are sorted in the response
+  - Can be changed at runtime via `/genes/update` endpoint
+  - Different metrics optimize for different use cases (match quality vs predictive power vs frequency)
+
 ## Performance Configuration
 
 ### KATO_USE_FAST_MATCHING
@@ -509,9 +532,12 @@ export KATO_USE_FAST_MATCHING=true
 Some configuration can be updated at runtime using the `/genes/update` endpoint:
 
 ### Updatable Parameters
-- `recall_threshold`
-- `max_predictions`
-- `persistence`
+- `recall_threshold` - Pattern matching sensitivity
+- `max_predictions` - Maximum number of predictions returned
+- `persistence` - Emotive value rolling window size
+- `stm_mode` - Short-term memory mode (CLEAR/ROLLING)
+- `process_predictions` - Enable/disable prediction processing
+- `rank_sort_algo` - Prediction ranking metric
 
 ### Example Update Request
 ```bash
@@ -521,9 +547,32 @@ curl -X POST http://localhost:8000/genes/update \
     "genes": {
       "recall_threshold": 0.5,
       "max_predictions": 50,
-      "persistence": 10
+      "persistence": 10,
+      "rank_sort_algo": "similarity"
     }
   }'
+```
+
+### Ranking Algorithm Selection
+
+The `rank_sort_algo` parameter allows you to optimize predictions for different use cases:
+
+```bash
+# Prioritize overall potential (default - balanced approach)
+curl -X POST http://localhost:8000/genes/update \
+  -d '{"genes": {"rank_sort_algo": "potential"}}'
+
+# Prioritize pattern similarity (best matches)
+curl -X POST http://localhost:8000/genes/update \
+  -d '{"genes": {"rank_sort_algo": "similarity"}}'
+
+# Prioritize frequent patterns (most common)
+curl -X POST http://localhost:8000/genes/update \
+  -d '{"genes": {"rank_sort_algo": "frequency"}}'
+
+# Prioritize predictive reliability
+curl -X POST http://localhost:8000/genes/update \
+  -d '{"genes": {"rank_sort_algo": "predictive_information"}}'
 ```
 
 ## Configuration Best Practices

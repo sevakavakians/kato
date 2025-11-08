@@ -41,30 +41,12 @@ class ResolvedConfiguration:
     sort_symbols: bool
     process_predictions: bool
     use_token_matching: bool
+    rank_sort_algo: str
 
     # Source tracking
     source_session_id: Optional[str] = None
     source_node_id: Optional[str] = None
     overrides_applied: dict[str, Any] = None
-
-    def to_genome_manifest(self) -> dict[str, Any]:
-        """
-        Convert to genome manifest format for KatoProcessor.
-
-        Returns:
-            Dictionary in the format expected by KatoProcessor
-        """
-        return {
-            'indexer_type': self.indexer_type,
-            'max_pattern_length': self.max_pattern_length,
-            'persistence': self.persistence,
-            'recall_threshold': self.recall_threshold,
-            'stm_mode': self.stm_mode,
-            'max_predictions': self.max_predictions,
-            'sort': self.sort_symbols,
-            'process_predictions': self.process_predictions,
-            'use_token_matching': self.use_token_matching
-        }
 
     def to_genes_dict(self) -> dict[str, Any]:
         """
@@ -81,7 +63,8 @@ class ResolvedConfiguration:
             'max_predictions': self.max_predictions,
             'sort': self.sort_symbols,
             'process_predictions': self.process_predictions,
-            'use_token_matching': self.use_token_matching
+            'use_token_matching': self.use_token_matching,
+            'rank_sort_algo': self.rank_sort_algo
         }
 
 
@@ -125,7 +108,8 @@ class ConfigurationService:
             'max_predictions': self.settings.processing.max_predictions,
             'sort': self.settings.processing.sort_symbols,
             'process_predictions': self.settings.processing.process_predictions,
-            'use_token_matching': self.settings.processing.use_token_matching
+            'use_token_matching': self.settings.processing.use_token_matching,
+            'rank_sort_algo': self.settings.processing.rank_sort_algo
         }
 
     def resolve_configuration(
@@ -177,6 +161,7 @@ class ConfigurationService:
             sort_symbols=merged['sort'],
             process_predictions=merged['process_predictions'],
             use_token_matching=merged['use_token_matching'],
+            rank_sort_algo=merged['rank_sort_algo'],
             source_session_id=session_id,
             source_node_id=node_id,
             overrides_applied=overrides_applied
@@ -244,11 +229,23 @@ class ConfigurationService:
                 updates['stm_mode'] = 'CLEAR'
 
         # Validate boolean fields
-        for bool_field in ['sort', 'process_predictions']:
+        for bool_field in ['sort', 'process_predictions', 'use_token_matching']:
             if bool_field in updates:
                 value = updates[bool_field]
                 if not isinstance(value, bool):
                     errors[bool_field] = 'Must be a boolean (true/false)'
+
+        # Validate rank_sort_algo
+        if 'rank_sort_algo' in updates:
+            value = updates['rank_sort_algo']
+            valid_algorithms = [
+                'potential', 'similarity', 'evidence', 'confidence', 'snr',
+                'fragmentation', 'frequency', 'normalized_entropy',
+                'global_normalized_entropy', 'itfdf_similarity', 'confluence',
+                'predictive_information'
+            ]
+            if not isinstance(value, str) or value not in valid_algorithms:
+                errors['rank_sort_algo'] = f'Must be one of: {", ".join(valid_algorithms)}'
 
         return errors
 

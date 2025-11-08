@@ -237,7 +237,7 @@ class ObservationProcessor:
             self.memory_manager.process_metadata(metadata_data)
             logger.debug(f"Processed {len(metadata_data)} metadata keys")
 
-    def check_auto_learning(self) -> Optional[str]:
+    def check_auto_learning(self, max_pattern_length: int, stm_mode: str) -> Optional[str]:
         """
         Check if auto-learning should be triggered and perform it if needed.
 
@@ -245,30 +245,33 @@ class ObservationProcessor:
         - CLEAR mode: Learn pattern and completely clear STM (original behavior)
         - ROLLING mode: Learn pattern and maintain STM as a rolling window
 
+        Args:
+            max_pattern_length: Maximum pattern length for auto-learning (0 = disabled)
+            stm_mode: STM mode ('CLEAR' or 'ROLLING')
+
         Returns:
             Pattern name if auto-learning occurred, None otherwise
         """
-        logger.debug(f"check_auto_learning: max_pattern_length={self.max_pattern_length}")
-        if self.max_pattern_length <= 0:
-            logger.debug(f"Auto-learning disabled (max_pattern_length={self.max_pattern_length})")
+        logger.debug(f"check_auto_learning: max_pattern_length={max_pattern_length}")
+        if max_pattern_length <= 0:
+            logger.debug(f"Auto-learning disabled (max_pattern_length={max_pattern_length})")
             return None
 
         stm_length = self.memory_manager.get_stm_length()
-        stm_mode = getattr(self.pattern_processor, 'stm_mode', 'CLEAR')
         # Normalize invalid modes to CLEAR
         if stm_mode not in ['CLEAR', 'ROLLING']:
             stm_mode = 'CLEAR'
-        logger.info(f"check_auto_learning: STM length={stm_length}, max={self.max_pattern_length}, mode={stm_mode}")
+        logger.info(f"check_auto_learning: STM length={stm_length}, max={max_pattern_length}, mode={stm_mode}")
 
-        if stm_length >= self.max_pattern_length:
+        if stm_length >= max_pattern_length:
             logger.info(f"Auto-learning triggered: STM length {stm_length} >= "
-                       f"max_pattern_length {self.max_pattern_length} (mode: {stm_mode})")
+                       f"max_pattern_length {max_pattern_length} (mode: {stm_mode})")
 
             if stm_length > 1:
                 if stm_mode == 'ROLLING':
                     # ROLLING mode: Save the last N-1 events before learning
                     stm_state = self.memory_manager.get_stm_state()
-                    window_size = self.max_pattern_length - 1
+                    window_size = max_pattern_length - 1
                     events_to_restore = stm_state[-window_size:] if len(stm_state) > window_size else stm_state[1:]
 
                     # Learn pattern (this clears STM)
@@ -299,7 +302,7 @@ class ObservationProcessor:
 
         return None
 
-    async def process_observation(self, data: dict[str, Any]) -> dict[str, Any]:
+    async def process_observation(self, data: dict[str, Any], config=None) -> dict[str, Any]:
         """
         Process a complete observation including strings, vectors, and emotives.
 
@@ -320,6 +323,7 @@ class ObservationProcessor:
                 - emotives: Dictionary of emotional values
                 - path: Processing path (optional)
                 - metadata: Additional metadata (optional)
+            config: Optional SessionConfiguration for session-specific behavior
 
         Returns:
             Dictionary containing:
@@ -336,6 +340,12 @@ class ObservationProcessor:
             try:
                 # Validate input
                 self.validate_observation(data)
+
+                # Extract config values (use provided config or fallback to instance defaults)
+                max_pattern_length = config.max_pattern_length if config and config.max_pattern_length is not None else self.max_pattern_length
+                process_predictions = config.process_predictions if config and config.process_predictions is not None else self.process_predictions
+                stm_mode = config.stm_mode if config and config.stm_mode is not None else getattr(self.pattern_processor, 'stm_mode', 'CLEAR')
+                sort_symbols = config.sort_symbols if config and config.sort_symbols is not None else self.sort_symbols
 
                 unique_id = data['unique_id']
                 string_data = data.get('strings', [])
@@ -380,24 +390,26 @@ class ObservationProcessor:
                 # Only trigger predictions if we have actual symbolic content
                 predictions = []
                 if vector_data or string_data:
-                    # Only trigger predictions if enabled (BUG FIX: set flag based on process_predictions)
-                    self.pattern_processor.trigger_predictions = self.process_predictions
+                    # Only trigger predictions if enabled
+                    self.pattern_processor.trigger_predictions = process_predictions
 
                     # Add current symbols to STM
                     self.pattern_processor.setCurrentEvent(combined_symbols)
 
-                    # Generate predictions ONLY if enabled (BUG FIX: check before calling processEvents)
-                    if self.process_predictions:
+                    # Generate predictions ONLY if enabled
+                    if process_predictions:
                         predictions = await self.pattern_processor.processEvents(unique_id)
                         logger.debug(f"Generated {len(predictions)} predictions (process_predictions=True)")
                     else:
                         logger.debug("Skipping prediction computation (process_predictions=False)")
 
                     # Check for auto-learning AFTER adding current event
-                    # This matches the original behavior where auto-learning happens
-                    # when STM reaches the max length AFTER the new observation
-                    logger.debug(f"About to check auto-learning with max_pattern_length={self.max_pattern_length}")
-                    auto_learned_pattern = self.check_auto_learning()
+                    # Pass config values to check_auto_learning
+                    logger.debug(f"About to check auto-learning with max_pattern_length={max_pattern_length}")
+                    auto_learned_pattern = self.check_auto_learning(
+                        max_pattern_length=max_pattern_length,
+                        stm_mode=stm_mode
+                    )
                     logger.debug(f"Auto-learning result: {auto_learned_pattern}")
                 else:
                     logger.debug("No data to process, skipping auto-learning check")

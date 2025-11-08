@@ -261,7 +261,8 @@ Updates processor configuration parameters.
     "max_predictions": 50,
     "persistence": 10,
     "max_pattern_length": 4,
-    "stm_mode": "ROLLING"
+    "stm_mode": "ROLLING",
+    "rank_sort_algo": "similarity"
   }
 }
 ```
@@ -283,6 +284,8 @@ This enables continuous learning where every new observation after reaching 3 ev
 - `persistence`: Rolling window size for emotive values per pattern
 - `max_pattern_length`: Auto-learn threshold (0 = manual only)
 - `stm_mode`: Short-term memory mode ('CLEAR' or 'ROLLING')
+- `rank_sort_algo`: Prediction ranking metric ('potential', 'similarity', 'evidence', 'confidence', 'snr', 'frequency', 'fragmentation', 'normalized_entropy', 'global_normalized_entropy', 'itfdf_similarity', 'confluence', 'predictive_information')
+- `process_predictions`: Enable/disable prediction processing (true/false)
 - And others (see Configuration guide)
 
 ### Get Gene

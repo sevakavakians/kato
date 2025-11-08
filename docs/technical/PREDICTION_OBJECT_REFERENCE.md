@@ -134,10 +134,16 @@ A Prediction Object is generated when KATO's pattern recognition engine identifi
 **Purpose**: Quantifies the predictive value of this pattern for its anticipated future events. Higher values indicate more reliable predictions.
 
 ### 21. **potential** (float)
-**Description**: Primary ranking metric combining pattern similarity with predictive information.  
-**Formula**: `potential = similarity * predictive_information`  
-**Range**: 0.0 to 1.0  
-**Purpose**: Simplified ranking metric that prioritizes both how well the pattern matches the observation (similarity) and how reliably it predicts the future (predictive_information).
+**Description**: Primary composite ranking metric combining multiple pattern quality measures.
+**Formula**: `potential = (evidence + confidence) * snr + itfdf_similarity + (1/(fragmentation + 1))`
+**Range**: Typically 0.0 to ~3.0 (unbounded positive)
+**Purpose**: Default ranking metric that balances multiple dimensions:
+- Match completeness (evidence + confidence)
+- Signal quality (snr)
+- Frequency-weighted similarity (itfdf_similarity)
+- Pattern cohesion (fragmentation term)
+
+**Configuration**: Can be replaced as ranking metric using `rank_sort_algo` parameter. Alternative rankings include similarity, evidence, confidence, predictive_information, and others.
 
 ### 22. **emotives** (map<string, float>)
 **Description**: Emotional or utility values associated with this pattern.  
@@ -167,12 +173,12 @@ A Prediction Object is generated when KATO's pattern recognition engine identifi
 - **predictive_information**: Pattern's contribution to future prediction
 
 ### Composite Metrics
-- **potential**: Information-theoretic ranking metric (similarity × predictive_information)
+- **potential**: Multi-dimensional ranking metric (default sorting key)
 - **itfdf_similarity**: Frequency-weighted importance
 
 ## Usage Notes
 
-1. **Prediction Selection**: When multiple predictions are generated, use `potential` as the primary ranking metric. The new formula `potential = similarity * predictive_information` provides a theoretically grounded ranking based on both pattern match quality and predictive reliability.
+1. **Prediction Selection**: When multiple predictions are generated, use `potential` as the default ranking metric. The formula `potential = (evidence + confidence) * snr + itfdf_similarity + (1/(fragmentation + 1))` provides balanced ranking across multiple quality dimensions. Alternative ranking metrics can be selected via `rank_sort_algo` configuration to optimize for specific use cases (e.g., `similarity` for best matches, `frequency` for common patterns, `predictive_information` for information-theoretic ranking).
 
 2. **Confidence vs Evidence**: 
    - `confidence` measures match quality in the current context

@@ -49,21 +49,28 @@ def _lcs_ratio_scorer(s1: list, s2: list, **kwargs) -> float:
     (Longest Common Subsequence) at the token level.
 
     Args:
-        s1: First sequence (list of tokens)
-        s2: Second sequence (list of tokens)
+        s1: First sequence (list of tokens) - state from query
+        s2: Second sequence (list of tokens) - pattern from choices
         **kwargs: Additional arguments (ignored, for compatibility)
 
     Returns:
         Similarity score in 0-100 range (for RapidFuzz process.extract)
+
+    Note:
+        Arguments are swapped to (s2, s1) to match extract_prediction_info ordering.
+        process.extract calls this with (state, pattern) but we need (pattern, state)
+        for consistency with extract_prediction_info.
     """
     if RAPIDFUZZ_AVAILABLE:
-        lcs_matches = LCSseq.similarity(s1, s2)
+        # Swap arguments to match extract_prediction_info: (pattern, state)
+        # s1 = state (from query), s2 = pattern (from choices)
+        lcs_matches = LCSseq.similarity(s2, s1)  # pattern, state
         total = len(s1) + len(s2)
         # difflib formula: 2 * M / T, scaled to 0-100
         return (2.0 * lcs_matches / total * 100.0) if total > 0 else 0.0
     else:
-        # Fallback to difflib
-        matcher = difflib.SequenceMatcher(None, s1, s2)
+        # Fallback to difflib - also swap for consistency
+        matcher = difflib.SequenceMatcher(None, s2, s1)  # pattern, state
         return matcher.ratio() * 100.0
 
 
@@ -683,13 +690,29 @@ class PatternSearcher:
 
         # Final threshold validation - ensure all predictions meet threshold
         filtered_list = []
+        below_threshold_count = 0
         for pred in active_list:
-            if 'similarity' in pred and pred['similarity'] >= self.recall_threshold:
-                filtered_list.append(pred)
-            elif 'similarity' not in pred:
+            if 'similarity' in pred:
+                if pred['similarity'] >= self.recall_threshold:
+                    filtered_list.append(pred)
+                else:
+                    # DEFENSIVE: Pattern below threshold detected - should have been filtered earlier
+                    below_threshold_count += 1
+                    logger.error(
+                        f"THRESHOLD FILTER BUG: Pattern '{pred.get('name', 'unknown')}' "
+                        f"with similarity {pred['similarity']:.4f} is below recall_threshold "
+                        f"{self.recall_threshold:.4f}. This should have been filtered earlier!"
+                    )
+            else:
                 # If no similarity key, include it (shouldn't happen)
                 logger.warning(f"Prediction without similarity score: {pred.get('name', 'unknown')}")
                 filtered_list.append(pred)
+
+        if below_threshold_count > 0:
+            logger.error(
+                f"THRESHOLD FILTER SUMMARY: {below_threshold_count}/{len(active_list)} predictions "
+                f"were below recall_threshold={self.recall_threshold:.4f} and filtered out"
+            )
 
         logger.debug(f"Built {len(active_list)} predictions, {len(filtered_list)} after final threshold filter")
 
@@ -929,9 +952,27 @@ class PatternSearcher:
         # Build Prediction objects asynchronously
         active_list = await self._build_predictions_async(all_results, max_workers, stm_events)
 
-        # Final threshold validation
-        filtered_list = [pred for pred in active_list
-                        if pred.get('similarity', 0) >= self.recall_threshold]
+        # Final threshold validation with defensive logging
+        filtered_list = []
+        below_threshold_count = 0
+        for pred in active_list:
+            similarity = pred.get('similarity', 0)
+            if similarity >= self.recall_threshold:
+                filtered_list.append(pred)
+            else:
+                # DEFENSIVE: Pattern below threshold detected - should have been filtered earlier
+                below_threshold_count += 1
+                logger.error(
+                    f"THRESHOLD FILTER BUG (async): Pattern '{pred.get('name', 'unknown')}' "
+                    f"with similarity {similarity:.4f} is below recall_threshold "
+                    f"{self.recall_threshold:.4f}. This should have been filtered earlier!"
+                )
+
+        if below_threshold_count > 0:
+            logger.error(
+                f"THRESHOLD FILTER SUMMARY (async): {below_threshold_count}/{len(active_list)} predictions "
+                f"were below recall_threshold={self.recall_threshold:.4f} and filtered out"
+            )
 
         logger.debug(f"Final predictions after threshold filter: {len(filtered_list)}")
 
@@ -977,15 +1018,21 @@ class PatternSearcher:
 
         # Use RapidFuzz to find matches in this batch
         if choices:
+            # Use score_cutoff for early termination (consistent with sync version)
+            # Convert recall_threshold (0-1) to score (0-100)
+            score_cutoff = self.recall_threshold * 100
+
             matches = process.extract(
                 query,
                 choices,
                 scorer=scorer,
+                score_cutoff=score_cutoff,  # Early termination optimization
                 limit=None
             )
 
             for _choice_str, score, pattern_id in matches:
                 similarity = score / 100.0
+                # Double-check threshold (should be redundant with score_cutoff)
                 if similarity >= self.recall_threshold:
                     pattern_seq = self.patterns_cache[pattern_id]
 
@@ -994,10 +1041,12 @@ class PatternSearcher:
                         pattern_seq, state, self.recall_threshold)
 
                     if info:
+                        # Use similarity from extract_prediction_info (info[6]) for consistency
+                        # This ensures both sync and async use the same similarity calculation
                         batch_results.append((
                             pattern_id, pattern_seq, info[1],  # matching_intersection
                             info[2], info[3], info[4], info[5],  # past, present, missing, extras
-                            similarity, info[7]  # similarity, number_of_blocks
+                            info[6], info[7]  # similarity (from extract_prediction_info), number_of_blocks
                         ))
 
         return batch_results

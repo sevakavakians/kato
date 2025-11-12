@@ -39,6 +39,30 @@ class SessionConfiguration:
     process_predictions: Optional[bool] = None  # Whether to process predictions
     use_token_matching: Optional[bool] = None  # Token-level vs character-level matching
 
+    # Filter Pipeline Configuration
+    filter_pipeline: Optional[list[str]] = None  # Ordered list of filter names
+
+    # Length Filter Parameters
+    length_min_ratio: Optional[float] = None  # Min pattern length as ratio of STM length (default: 0.5)
+    length_max_ratio: Optional[float] = None  # Max pattern length as ratio of STM length (default: 2.0)
+
+    # Jaccard Filter Parameters
+    jaccard_threshold: Optional[float] = None  # Minimum Jaccard similarity (default: 0.3)
+    jaccard_min_overlap: Optional[int] = None  # Minimum absolute token overlap count (default: 2)
+
+    # MinHash/LSH Filter Parameters
+    minhash_threshold: Optional[float] = None  # Estimated Jaccard threshold for LSH (default: 0.7)
+    minhash_bands: Optional[int] = None  # Number of LSH bands (default: 20)
+    minhash_rows: Optional[int] = None  # Rows per LSH band (default: 5)
+    minhash_num_hashes: Optional[int] = None  # Total MinHash signature size (default: 100)
+
+    # Bloom Filter Parameters
+    bloom_false_positive_rate: Optional[float] = None  # Bloom filter FPR (default: 0.01)
+
+    # Pipeline Control Parameters
+    max_candidates_per_stage: Optional[int] = None  # Safety limit per stage (default: 100000)
+    enable_filter_metrics: Optional[bool] = None  # Log timing and counts (default: True)
+
     # Metadata
     session_id: str = field(default="")
     node_id: str = field(default="")
@@ -87,6 +111,55 @@ class SessionConfiguration:
                 if self.stm_mode not in valid_modes:
                     logger.warning(f"Invalid stm_mode '{self.stm_mode}', normalizing to 'CLEAR'")
                     self.stm_mode = 'CLEAR'
+
+            # Validate filter pipeline
+            if self.filter_pipeline is not None:
+                valid_filters = ['minhash', 'length', 'jaccard', 'bloom', 'rapidfuzz']
+                for filter_name in self.filter_pipeline:
+                    if filter_name not in valid_filters:
+                        logger.error(f"Invalid filter in pipeline: {filter_name}")
+                        return False
+
+            # Validate filter parameters
+            if self.length_min_ratio is not None and not 0.0 <= self.length_min_ratio <= 1.0:
+                logger.error(f"Invalid length_min_ratio: {self.length_min_ratio}")
+                return False
+
+            if self.length_max_ratio is not None and self.length_max_ratio < 1.0:
+                logger.error(f"Invalid length_max_ratio: {self.length_max_ratio}")
+                return False
+
+            if self.jaccard_threshold is not None and not 0.0 <= self.jaccard_threshold <= 1.0:
+                logger.error(f"Invalid jaccard_threshold: {self.jaccard_threshold}")
+                return False
+
+            if self.jaccard_min_overlap is not None and self.jaccard_min_overlap < 1:
+                logger.error(f"Invalid jaccard_min_overlap: {self.jaccard_min_overlap}")
+                return False
+
+            if self.minhash_threshold is not None and not 0.0 <= self.minhash_threshold <= 1.0:
+                logger.error(f"Invalid minhash_threshold: {self.minhash_threshold}")
+                return False
+
+            if self.minhash_bands is not None and not 1 <= self.minhash_bands <= 100:
+                logger.error(f"Invalid minhash_bands: {self.minhash_bands}")
+                return False
+
+            if self.minhash_rows is not None and not 1 <= self.minhash_rows <= 20:
+                logger.error(f"Invalid minhash_rows: {self.minhash_rows}")
+                return False
+
+            if self.minhash_num_hashes is not None and not 10 <= self.minhash_num_hashes <= 256:
+                logger.error(f"Invalid minhash_num_hashes: {self.minhash_num_hashes}")
+                return False
+
+            if self.bloom_false_positive_rate is not None and not 0.0001 <= self.bloom_false_positive_rate <= 0.1:
+                logger.error(f"Invalid bloom_false_positive_rate: {self.bloom_false_positive_rate}")
+                return False
+
+            if self.max_candidates_per_stage is not None and self.max_candidates_per_stage < 100:
+                logger.error(f"Invalid max_candidates_per_stage: {self.max_candidates_per_stage}")
+                return False
 
             return True
 
@@ -182,7 +255,12 @@ class SessionConfiguration:
         valid_fields = {
             'max_pattern_length', 'persistence', 'recall_threshold', 'stm_mode',
             'indexer_type', 'max_predictions', 'sort_symbols', 'process_predictions',
-            'use_token_matching', 'session_id', 'node_id', 'version'
+            'use_token_matching', 'session_id', 'node_id', 'version',
+            # Filter pipeline fields
+            'filter_pipeline', 'length_min_ratio', 'length_max_ratio',
+            'jaccard_threshold', 'jaccard_min_overlap',
+            'minhash_threshold', 'minhash_bands', 'minhash_rows', 'minhash_num_hashes',
+            'bloom_false_positive_rate', 'max_candidates_per_stage', 'enable_filter_metrics'
         }
 
         filtered_data = {k: v for k, v in data.items() if k in valid_fields}
@@ -214,7 +292,12 @@ class SessionConfiguration:
         config_keys = [
             'max_pattern_length', 'persistence', 'recall_threshold',
             'indexer_type', 'max_predictions', 'sort_symbols', 'process_predictions',
-            'use_token_matching', 'stm_mode'
+            'use_token_matching', 'stm_mode',
+            # Filter pipeline configuration
+            'filter_pipeline', 'length_min_ratio', 'length_max_ratio',
+            'jaccard_threshold', 'jaccard_min_overlap',
+            'minhash_threshold', 'minhash_bands', 'minhash_rows', 'minhash_num_hashes',
+            'bloom_false_positive_rate', 'max_candidates_per_stage', 'enable_filter_metrics'
         ]
 
         for key in config_keys:

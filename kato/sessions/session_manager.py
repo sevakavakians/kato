@@ -38,6 +38,10 @@ class SessionState:
     metadata_accumulator: list[dict[str, Any]] = field(default_factory=list)
     time: int = 0
 
+    # Session-specific percept and cognition data (v3.0: session isolation)
+    percept_data: dict[str, Any] = field(default_factory=dict)
+    predictions: list = field(default_factory=list)
+
     # Session-specific configuration (replaces user_config)
     session_config: SessionConfiguration = field(default_factory=lambda: SessionConfiguration())
 
@@ -367,6 +371,10 @@ class SessionManager:
 
         session.stm = []
         session.emotives_accumulator = []
+        session.metadata_accumulator = []
+        session.time = 0
+        session.percept_data = {}
+        session.predictions = []
         logger.info(f"Cleared STM for session {session_id}")
         return True
 

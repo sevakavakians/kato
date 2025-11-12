@@ -2,6 +2,7 @@
 numpy>=1.24.0
 pymongo>=4.5.0
 qdrant-client>=1.7.0
+clickhouse-connect>=0.7.0  # Official ClickHouse Python client
 pydantic>=2.0.0
 pydantic-settings>=2.0.0
 redis>=5.0.0
@@ -9,6 +10,7 @@ psutil>=5.9.0
 
 # Performance optimization
 rapidfuzz>=3.0.0  # Fast string matching (5-10x speedup over difflib)
+datasketch>=1.6.0  # MinHash and LSH for approximate similarity
 
 # FastAPI and web server
 fastapi>=0.118.0,<0.119.0

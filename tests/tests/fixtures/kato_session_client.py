@@ -305,3 +305,24 @@ class KatoSessionClient:
         resp.raise_for_status()
         result = resp.json()
         return result["active_session_count"]
+
+    # Generic HTTP methods for testing new endpoints
+    async def get(self, path: str) -> dict[str, Any]:
+        """Generic GET request for testing."""
+        if not self.session:
+            self.session = self._create_session()
+
+        url = f"{self.base_url}{path}" if path.startswith("/") else f"{self.base_url}/{path}"
+        resp = await self._request_with_retry("GET", url)
+        resp.raise_for_status()
+        return resp.json()
+
+    async def post(self, path: str, data: dict[str, Any] = None) -> dict[str, Any]:
+        """Generic POST request for testing."""
+        if not self.session:
+            self.session = self._create_session()
+
+        url = f"{self.base_url}{path}" if path.startswith("/") else f"{self.base_url}/{path}"
+        resp = await self._request_with_retry("POST", url, json=data or {})
+        resp.raise_for_status()
+        return resp.json()

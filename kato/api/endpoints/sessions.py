@@ -213,80 +213,14 @@ async def update_session_config(session_id: str, request_data: dict[str, Any]):
         else:
             logger.warning(f"Session config does not have attribute {key}")
 
-    # Save the updated session back to Redis
+    # Save the updated session to Redis
     logger.info("Saving updated session to Redis")
     await app_state.session_manager.update_session(session)
-    logger.info("Session saved successfully")
+    logger.info(f"Session saved successfully with config: {session.session_config.get_config_only()}")
 
-    # Try to get processor if it exists, otherwise it will be created with new config on next observation
-    processor = None
-    try:
-        processor = await app_state.processor_manager.get_processor(session.node_id, session.session_config)
-    except Exception as e:
-        # Processor doesn't exist yet, will be created with new config on next observation
-        logger.info(f"Processor not yet created for node {session.node_id}, config will be applied on first observation: {e}")
-
-    if processor:
-        # Apply configuration dynamically to processor
-        for key, value in config.items():
-            if key == 'max_pattern_length':
-                processor.genome_manifest['MAX_PATTERN_LENGTH'] = value
-                processor.MAX_PATTERN_LENGTH = value  # Update the processor's attribute directly
-                # Also update the observation processor's max_pattern_length for auto-learning
-                if hasattr(processor, 'observation_processor'):
-                    processor.observation_processor.max_pattern_length = value
-                    logger.info(f"Updated observation_processor.max_pattern_length to {value}")
-                # And update the pattern processor's max_pattern_length
-                if hasattr(processor, 'pattern_processor'):
-                    processor.pattern_processor.max_pattern_length = value
-                    logger.info(f"Updated pattern_processor.max_pattern_length to {value}")
-            elif key == 'stm_mode':
-                processor.genome_manifest['STM_MODE'] = value
-                # Update pattern processor's stm_mode
-                if hasattr(processor, 'pattern_processor'):
-                    processor.pattern_processor.stm_mode = value
-                    logger.info(f"Updated pattern_processor.stm_mode to {value}")
-            elif key == 'persistence':
-                processor.genome_manifest['PERSISTENCE'] = value
-            elif key == 'recall_threshold':
-                processor.genome_manifest['RECALL_THRESHOLD'] = value
-            elif key == 'indexer_type':
-                processor.genome_manifest['INDEXER_TYPE'] = value
-            elif key == 'max_predictions':
-                processor.genome_manifest['MAX_PREDICTIONS'] = value
-            elif key == 'sort_symbols':
-                processor.genome_manifest['SORT'] = value
-                # Update pattern processor's sort
-                if hasattr(processor, 'pattern_processor'):
-                    processor.pattern_processor.sort = value
-                    logger.info(f"Updated pattern_processor.sort to {value}")
-                # Update observation processor's sort_symbols
-                if hasattr(processor, 'observation_processor'):
-                    processor.observation_processor.sort_symbols = value
-                    logger.info(f"Updated observation_processor.sort_symbols to {value}")
-            elif key == 'use_token_matching':
-                processor.genome_manifest['USE_TOKEN_MATCHING'] = value
-                # Update pattern processor's use_token_matching
-                if hasattr(processor, 'pattern_processor'):
-                    processor.pattern_processor.use_token_matching = value
-                    logger.info(f"Updated pattern_processor.use_token_matching to {value}")
-                    # Update the patterns_searcher as well
-                    if hasattr(processor.pattern_processor, 'patterns_searcher'):
-                        processor.pattern_processor.patterns_searcher.use_token_matching = value
-                        logger.info(f"Updated patterns_searcher.use_token_matching to {value}")
-            elif key == 'process_predictions':
-                processor.genome_manifest['PROCESS_PREDICTIONS'] = value
-                processor.process_predictions = value  # Update the processor's attribute directly
-                # Also update the observation processor's process_predictions
-                if hasattr(processor, 'observation_processor'):
-                    processor.observation_processor.process_predictions = value
-                    logger.info(f"Updated observation_processor.process_predictions to {value}")
-
-    # Log session config after update
-    logger.info(f"Session config after update: {session.session_config.get_config_only()}")
-
-    # Save the updated session
-    await app_state.session_manager.update_session(session)
+    # Note: Processors are stateless and receive config as parameters.
+    # The updated config will be used on the next observe/prediction call.
+    # No need to update existing processor instances.
 
     return {"status": "okay", "message": "Configuration updated", "session_id": session_id}
 
@@ -386,6 +320,8 @@ async def observe_in_session(
         session.emotives_accumulator = processor.get_emotives_accumulator()
         session.metadata_accumulator = processor.get_metadata_accumulator()
         session.time = processor.time
+        session.percept_data = processor.get_percept_data()
+        session.predictions = result.get('predictions', [])
 
         # Save updated session
         logger.info(f"DEBUG: Saving session with STM: {session.stm}")
@@ -705,6 +641,8 @@ async def observe_sequence_in_session(
         session.emotives_accumulator = processor.get_emotives_accumulator()
         session.metadata_accumulator = processor.get_metadata_accumulator()
         session.time = processor.time
+        session.percept_data = processor.get_percept_data()
+        session.predictions = processor.predictions
 
         # Save updated session
         await app_state.session_manager.update_session(session)
@@ -755,3 +693,70 @@ async def get_session_predictions(session_id: str):
         session_id=session_id,
         count=len(predictions)
     )
+
+
+@router.get("/{session_id}/percept-data")
+async def get_session_percept_data(session_id: str):
+    """
+    Get percept data (input observation data) for a specific session.
+
+    Returns the most recent observation data sent to this session via
+    observe or observe_sequence calls. This data is session-isolated.
+
+    Args:
+        session_id: Session identifier
+
+    Returns:
+        Percept data and session metadata
+    """
+    from kato.services.kato_fastapi import app_state
+
+    session = await app_state.session_manager.get_session(session_id)
+
+    if not session:
+        raise HTTPException(404, detail=f"Session {session_id} not found or expired")
+
+    return {
+        "percept_data": session.percept_data,
+        "session_id": session_id,
+        "node_id": session.node_id
+    }
+
+
+@router.get("/{session_id}/cognition-data")
+async def get_session_cognition_data(session_id: str):
+    """
+    Get cognition data (processing outputs) for a specific session.
+
+    Returns predictions and other cognitive processing results from this session.
+    This data is session-isolated and reflects the session's most recent state.
+
+    Args:
+        session_id: Session identifier
+
+    Returns:
+        Cognition data including predictions, emotives, and symbols
+    """
+    from kato.services.kato_fastapi import app_state
+
+    session = await app_state.session_manager.get_session(session_id)
+
+    if not session:
+        raise HTTPException(404, detail=f"Session {session_id} not found or expired")
+
+    # Get processor to access current symbols
+    processor = await app_state.processor_manager.get_processor(session.node_id, session.session_config)
+
+    # Set processor state to session's state to get accurate symbols
+    processor.set_stm(session.stm)
+
+    return {
+        "cognition_data": {
+            "predictions": session.predictions,
+            "emotives": session.emotives_accumulator,
+            "symbols": processor.memory_manager.symbols,
+            "time": session.time
+        },
+        "session_id": session_id,
+        "node_id": session.node_id
+    }

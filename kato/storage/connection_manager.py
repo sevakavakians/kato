@@ -1,5 +1,5 @@
 """
-Optimized connection pool manager for MongoDB, Redis, and Qdrant.
+Optimized connection pool manager for MongoDB, Redis, Qdrant, and ClickHouse.
 
 This module provides a centralized, thread-safe connection manager that:
 1. Reduces connection overhead through proper pooling
@@ -25,6 +25,13 @@ try:
 except ImportError:
     QdrantClient = None
     QDRANT_AVAILABLE = False
+
+try:
+    import clickhouse_connect
+    CLICKHOUSE_AVAILABLE = True
+except ImportError:
+    clickhouse_connect = None
+    CLICKHOUSE_AVAILABLE = False
 
 from kato.config.settings import get_settings
 
@@ -86,6 +93,7 @@ class OptimizedConnectionManager:
         self._mongodb_client: Optional[MongoClient] = None
         self._redis_client: Optional[redis.Redis] = None
         self._qdrant_client: Optional[QdrantClient] = None
+        self._clickhouse_client: Optional[Any] = None
 
         # Connection state tracking
         self._connections_closed = False
@@ -94,21 +102,24 @@ class OptimizedConnectionManager:
         self._health_status: dict[str, ConnectionHealth] = {
             'mongodb': ConnectionHealth(),
             'redis': ConnectionHealth(),
-            'qdrant': ConnectionHealth()
+            'qdrant': ConnectionHealth(),
+            'clickhouse': ConnectionHealth()
         }
 
         # Pool statistics
         self._pool_stats: dict[str, PoolStats] = {
             'mongodb': PoolStats(),
             'redis': PoolStats(),
-            'qdrant': PoolStats()
+            'qdrant': PoolStats(),
+            'clickhouse': PoolStats()
         }
 
         # Connection locks for thread safety
         self._connection_locks = {
             'mongodb': threading.RLock(),
             'redis': threading.RLock(),
-            'qdrant': threading.RLock()
+            'qdrant': threading.RLock(),
+            'clickhouse': threading.RLock()
         }
 
         # Health check configuration
@@ -357,6 +368,74 @@ class OptimizedConnectionManager:
             logger.error(f"Failed to create Qdrant connection: {e}")
             raise
 
+    @property
+    def clickhouse(self) -> Optional[Any]:
+        """Get optimized ClickHouse client."""
+        if not CLICKHOUSE_AVAILABLE:
+            return None
+
+        with self._connection_locks['clickhouse']:
+            if self._connections_closed:
+                logger.warning("Attempting to use ClickHouse connection after close_all_connections() was called")
+                raise RuntimeError("Cannot use closed connection manager. Connection was explicitly closed.")
+
+            if self._clickhouse_client is None:
+                self._create_clickhouse_connection()
+
+            # Health check if needed
+            if self._should_health_check('clickhouse'):
+                self._check_clickhouse_health()
+
+            return self._clickhouse_client
+
+    def _create_clickhouse_connection(self) -> None:
+        """Create optimized ClickHouse connection."""
+        if not CLICKHOUSE_AVAILABLE:
+            logger.warning("ClickHouse client not available")
+            return
+
+        try:
+            start_time = time.time()
+
+            # Get ClickHouse settings from config
+            clickhouse_host = getattr(self.settings.database, 'clickhouse_host', 'localhost')
+            clickhouse_port = getattr(self.settings.database, 'clickhouse_port', 8123)  # HTTP port, not native port
+            clickhouse_db = getattr(self.settings.database, 'clickhouse_db', 'default')
+
+            # Create ClickHouse client with connection pooling
+            self._clickhouse_client = clickhouse_connect.get_client(
+                host=clickhouse_host,
+                port=clickhouse_port,
+                database=clickhouse_db,
+                username='default',
+                password='',
+                connect_timeout=10,
+                send_receive_timeout=30,
+                compress=True,  # Enable compression for better network performance
+            )
+
+            # Test the connection
+            result = self._clickhouse_client.command('SELECT 1')
+
+            response_time = (time.time() - start_time) * 1000
+            self._health_status['clickhouse'] = ConnectionHealth(
+                is_healthy=True,
+                last_check=time.time(),
+                response_time_ms=response_time
+            )
+
+            logger.info(f"ClickHouse connection established (response: {response_time:.1f}ms)")
+
+        except Exception as e:
+            self._health_status['clickhouse'] = ConnectionHealth(
+                is_healthy=False,
+                last_check=time.time(),
+                error_count=self._health_status['clickhouse'].error_count + 1,
+                last_error=str(e)
+            )
+            logger.error(f"Failed to create ClickHouse connection: {e}")
+            raise
+
     def _should_health_check(self, service: str) -> bool:
         """Determine if a health check is needed for the service."""
         health = self._health_status[service]
@@ -437,6 +516,31 @@ class OptimizedConnectionManager:
 
             logger.warning(f"Qdrant health check failed: {e}")
 
+    def _check_clickhouse_health(self) -> None:
+        """Perform ClickHouse health check."""
+        try:
+            # Initialize connection if not exists
+            if self._clickhouse_client is None:
+                self._create_clickhouse_connection()
+
+            start_time = time.time()
+            self._clickhouse_client.command('SELECT 1')
+            response_time = (time.time() - start_time) * 1000
+
+            self._health_status['clickhouse'] = ConnectionHealth(
+                is_healthy=True,
+                last_check=time.time(),
+                response_time_ms=response_time
+            )
+
+        except Exception as e:
+            self._health_status['clickhouse'].is_healthy = False
+            self._health_status['clickhouse'].last_check = time.time()
+            self._health_status['clickhouse'].error_count += 1
+            self._health_status['clickhouse'].last_error = str(e)
+
+            logger.warning(f"ClickHouse health check failed: {e}")
+
     @contextmanager
     def mongodb_transaction(self, **kwargs):
         """Context manager for MongoDB transactions with optimized settings."""
@@ -514,6 +618,13 @@ class OptimizedConnectionManager:
                 'status': 'connected' if self._health_status['qdrant'].is_healthy else 'disconnected'
             }
 
+        # ClickHouse stats
+        if self._clickhouse_client:
+            stats['clickhouse'] = {
+                'type': 'clickhouse',
+                'status': 'connected' if self._health_status['clickhouse'].is_healthy else 'disconnected'
+            }
+
         return stats
 
     def force_health_check(self) -> None:
@@ -533,6 +644,11 @@ class OptimizedConnectionManager:
             self._check_qdrant_health()
         except Exception as e:
             logger.warning(f"Qdrant health check failed: {e}")
+
+        try:
+            self._check_clickhouse_health()
+        except Exception as e:
+            logger.warning(f"ClickHouse health check failed: {e}")
 
     def close_all_connections(self) -> None:
         """Close all database connections gracefully."""
@@ -572,6 +688,16 @@ class OptimizedConnectionManager:
             finally:
                 self._qdrant_client = None
 
+        # Close ClickHouse
+        if self._clickhouse_client:
+            try:
+                self._clickhouse_client.close()
+                logger.info("ClickHouse connection closed")
+            except Exception as e:
+                logger.error(f"Error closing ClickHouse connection: {e}")
+            finally:
+                self._clickhouse_client = None
+
         # Reset health status
         for service in self._health_status:
             self._health_status[service] = ConnectionHealth()
@@ -610,3 +736,8 @@ def get_redis_client() -> Optional[redis.Redis]:
 def get_qdrant_client() -> Optional[QdrantClient]:
     """Get optimized Qdrant client."""
     return get_connection_manager().qdrant
+
+
+def get_clickhouse_client() -> Optional[Any]:
+    """Get optimized ClickHouse client."""
+    return get_connection_manager().clickhouse

@@ -24,7 +24,7 @@ print_error() {
 }
 
 # Available services
-ALL_SERVICES="mongodb redis qdrant kato"
+ALL_SERVICES="mongodb redis qdrant clickhouse kato"
 
 # Command to execute
 COMMAND=${1:-help}
@@ -146,10 +146,18 @@ case "$COMMAND" in
         else
             print_warn "✗ Redis is not responding"
         fi
+
+        # Check ClickHouse
+        if curl -s http://localhost:8123/ping > /dev/null 2>&1; then
+            print_info "✓ ClickHouse is healthy"
+        else
+            print_warn "✗ ClickHouse is not responding"
+            print_info "  Note: ClickHouse is optional for hybrid architecture"
+        fi
         ;;
 
     clean-data)
-        print_warn "⚠️  This will DELETE ALL DATA in MongoDB, Qdrant, and Redis!"
+        print_warn "⚠️  This will DELETE ALL DATA in MongoDB, Qdrant, Redis, and ClickHouse!"
         print_warn "Services will remain running but all databases will be cleared."
         echo -e "${RED}Are you absolutely sure? (yes/N)${NC}"
         read -r response
@@ -183,6 +191,12 @@ case "$COMMAND" in
             print_info "Clearing Redis data..."
             docker exec kato-redis redis-cli FLUSHALL || print_error "Failed to clear Redis"
 
+            # Clear ClickHouse - drop patterns_data table
+            print_info "Clearing ClickHouse data..."
+            docker exec kato-clickhouse clickhouse-client --query "DROP TABLE IF EXISTS default.patterns_data" 2>/dev/null || print_warn "ClickHouse not available or already empty"
+            # Recreate table from init script
+            docker exec kato-clickhouse clickhouse-client --queries-file /docker-entrypoint-initdb.d/init.sql 2>/dev/null || print_warn "Could not recreate ClickHouse table"
+
             print_info "✓ All database data has been cleared!"
             print_warn "Services are still running. Use './start.sh restart' if needed."
         else
@@ -202,12 +216,88 @@ case "$COMMAND" in
         fi
         ;;
 
+    mode)
+        MODE=${2:-}
+        ENV_FILE=".env"
+
+        if [[ -z "$MODE" ]]; then
+            # Show current mode
+            if [[ -f "$ENV_FILE" ]] && grep -q "KATO_ARCHITECTURE_MODE" "$ENV_FILE"; then
+                CURRENT_MODE=$(grep "KATO_ARCHITECTURE_MODE" "$ENV_FILE" | cut -d'=' -f2)
+                print_info "Current architecture mode: $CURRENT_MODE"
+            else
+                print_info "Current architecture mode: mongodb (default)"
+            fi
+            echo ""
+            echo "Available modes:"
+            echo "  mongodb - MongoDB-only mode (default, stable)"
+            echo "  hybrid  - ClickHouse/Redis hybrid mode (100-300x faster)"
+            echo ""
+            echo "Usage: ./start.sh mode [mongodb|hybrid]"
+        elif [[ "$MODE" == "mongodb" || "$MODE" == "hybrid" ]]; then
+            print_info "Switching to $MODE mode..."
+
+            # Update or create .env file
+            if [[ -f "$ENV_FILE" ]]; then
+                # Update existing line or add if not present
+                if grep -q "KATO_ARCHITECTURE_MODE" "$ENV_FILE"; then
+                    # Update existing line (macOS and Linux compatible)
+                    if [[ "$OSTYPE" == "darwin"* ]]; then
+                        sed -i '' "s/^KATO_ARCHITECTURE_MODE=.*/KATO_ARCHITECTURE_MODE=$MODE/" "$ENV_FILE"
+                    else
+                        sed -i "s/^KATO_ARCHITECTURE_MODE=.*/KATO_ARCHITECTURE_MODE=$MODE/" "$ENV_FILE"
+                    fi
+                else
+                    echo "KATO_ARCHITECTURE_MODE=$MODE" >> "$ENV_FILE"
+                fi
+            else
+                echo "KATO_ARCHITECTURE_MODE=$MODE" > "$ENV_FILE"
+            fi
+
+            print_info "✓ Mode set to: $MODE"
+
+            # Restart KATO service to apply changes
+            print_info "Restarting KATO service to apply changes..."
+            docker-compose restart kato
+
+            print_info "Waiting for service to be ready..."
+            sleep 3
+
+            # Verify service is healthy
+            if curl -s http://localhost:8000/health > /dev/null 2>&1; then
+                print_info "✓ KATO service restarted successfully"
+                echo ""
+                if [[ "$MODE" == "hybrid" ]]; then
+                    print_warn "⚠️  Hybrid mode requires:"
+                    print_warn "  1. ClickHouse and Redis services running"
+                    print_warn "  2. Data migrated to ClickHouse/Redis"
+                    print_warn "  3. SessionConfig with filter_pipeline configured"
+                    echo ""
+                    print_info "Run migrations if not done:"
+                    print_info "  python scripts/migrate_mongodb_to_clickhouse.py"
+                    print_info "  python scripts/migrate_mongodb_to_redis.py"
+                    echo ""
+                    print_info "See docs/HYBRID_ARCHITECTURE.md for setup guide"
+                else
+                    print_info "MongoDB mode active - no additional setup required"
+                fi
+            else
+                print_error "Service health check failed"
+                print_info "Check logs: ./start.sh logs kato"
+            fi
+        else
+            print_error "Invalid mode: $MODE"
+            print_info "Valid modes: mongodb, hybrid"
+            exit 1
+        fi
+        ;;
+
     clean-all)
         print_error "⚠️  NUCLEAR OPTION: This will COMPLETELY RESET KATO!"
         print_warn "This will:"
         print_warn "  1. Stop all services"
         print_warn "  2. Remove all containers"
-        print_warn "  3. Delete all volumes (mongo-data, qdrant-data, redis-data)"
+        print_warn "  3. Delete all volumes (mongo-data, qdrant-data, redis-data, clickhouse-data, clickhouse-logs)"
         print_warn "  4. Restart services from clean state"
         echo -e "${RED}Type 'DELETE EVERYTHING' to confirm:${NC}"
         read -r response
@@ -216,7 +306,7 @@ case "$COMMAND" in
             docker-compose down
 
             print_info "Removing all volumes..."
-            docker volume rm kato_mongo-data kato_qdrant-data kato_redis-data 2>/dev/null || print_warn "Some volumes may not exist"
+            docker volume rm kato_mongo-data kato_qdrant-data kato_redis-data kato_clickhouse-data kato_clickhouse-logs 2>/dev/null || print_warn "Some volumes may not exist"
 
             print_info "Starting fresh services..."
             docker-compose up -d
@@ -249,7 +339,8 @@ case "$COMMAND" in
         echo "  logs [SERVICE] [N] - Show last N lines of logs (default: kato, 50 lines)"
         echo "  follow [SERVICE]   - Follow logs in real-time (default: kato)"
         echo "  status             - Check all service status"
-        echo "  clean-data         - Delete all data in MongoDB, Qdrant, and Redis (services keep running)"
+        echo "  mode [MODE]        - Switch architecture mode (mongodb|hybrid) or show current"
+        echo "  clean-data         - Delete all data in MongoDB, Qdrant, Redis, and ClickHouse"
         echo "  clean              - Remove all containers and volumes"
         echo "  clean-all          - NUCLEAR: Complete reset - stops services, removes volumes, restarts clean"
         echo "  help               - Show this help message"
@@ -265,7 +356,16 @@ case "$COMMAND" in
         echo "  ./start.sh follow kato        # Follow KATO logs in real-time"
         echo "  ./start.sh build kato         # Rebuild only KATO image"
         echo "  ./start.sh status             # Check all services"
+        echo "  ./start.sh mode               # Show current architecture mode"
+        echo "  ./start.sh mode mongodb       # Switch to MongoDB-only mode"
+        echo "  ./start.sh mode hybrid        # Switch to hybrid ClickHouse/Redis mode"
         echo "  ./start.sh clean-data         # Clear all database data (soft reset)"
         echo "  ./start.sh clean-all          # Complete reset with volume removal (hard reset)"
+        echo ""
+        echo "Architecture Notes:"
+        echo "  • MongoDB mode: Default (no configuration needed)"
+        echo "  • Hybrid mode: ClickHouse/Redis for 100-300x performance (opt-in)"
+        echo "  • Both modes work simultaneously - no switching required"
+        echo "  • See docs/HYBRID_ARCHITECTURE.md for hybrid mode setup"
         ;;
 esac

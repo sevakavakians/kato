@@ -30,8 +30,8 @@ class TestPredictiveInformationE2E:
             assert pred['predictive_information'] >= 0.0
             assert pred['predictive_information'] <= 1.0  # Normalized value
 
-    def test_potential_uses_pi_formula(self, kato_fixture):
-        """Verify potential is calculated as similarity * predictive_information."""
+    def test_potential_uses_correct_formula(self, kato_fixture):
+        """Verify potential is calculated using the composite formula."""
         # Learn a pattern
         kato_fixture.observe({"strings": ["X", "Y", "Z"], "vectors": [], "emotives": {}})
         kato_fixture.observe({"strings": ["W", "V"], "vectors": [], "emotives": {}})
@@ -46,14 +46,22 @@ class TestPredictiveInformationE2E:
         assert len(predictions) > 0
 
         for pred in predictions:
-            similarity = pred.get('similarity', 0)
-            pi = pred.get('predictive_information', 0)
+            # Extract metrics
+            evidence = pred.get('evidence', 0)
+            confidence = pred.get('confidence', 0)
+            snr = pred.get('snr', 0)
+            itfdf_similarity = pred.get('itfdf_similarity', 0)
+            fragmentation = pred.get('fragmentation', 0)
             potential = pred.get('potential', 0)
 
-            # Verify the new formula (within floating point tolerance)
-            expected_potential = similarity * pi
+            # Verify the current formula: potential = (evidence + confidence) * snr + itfdf_similarity + (1/(fragmentation + 1))
+            expected_potential = (
+                (evidence + confidence) * snr
+                + itfdf_similarity
+                + (1 / (fragmentation + 1))
+            )
             assert abs(potential - expected_potential) < 0.0001, \
-                f"Potential {potential} != similarity {similarity} * PI {pi}"
+                f"Potential {potential} != (evidence {evidence} + confidence {confidence}) * snr {snr} + itfdf_similarity {itfdf_similarity} + (1/(fragmentation {fragmentation} + 1))"
 
     def test_pi_increases_with_pattern_repetition(self, kato_fixture):
         """Test that PI increases when patterns are learned multiple times."""

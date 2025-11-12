@@ -119,6 +119,14 @@ class RedisSessionManager(session_manager_module.SessionManager):
         if 'ttl_seconds' not in session_dict:
             session_dict['ttl_seconds'] = self.default_ttl
 
+        # Ensure percept_data exists (v3.0 backward compatibility)
+        if 'percept_data' not in session_dict:
+            session_dict['percept_data'] = {}
+
+        # Ensure predictions exists (v3.0 backward compatibility)
+        if 'predictions' not in session_dict:
+            session_dict['predictions'] = []
+
         return SessionState(**session_dict)
 
     async def initialize(self):
@@ -528,6 +536,10 @@ class RedisSessionManager(session_manager_module.SessionManager):
 
         session.stm = []
         session.emotives_accumulator = []
+        session.metadata_accumulator = []
+        session.time = 0
+        session.percept_data = {}
+        session.predictions = []
 
         return await self.update_session(session)
 

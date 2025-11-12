@@ -15,8 +15,8 @@ KATO processes multi-modal observations (text, vectors, emotions) and makes temp
 - **Container**: Docker (required for deployment)
 - **API Framework**: FastAPI with uvicorn
 - **Vector Database**: Qdrant with HNSW indexing
-- **Cache**: Redis (for vector caching)
-- **Database**: MongoDB for pattern storage
+- **Cache**: Redis (for vector caching and session management)
+- **Pattern Database**: MongoDB (current), ClickHouse + Redis (migration in progress)
 - **Testing**: pytest with fixtures
 
 ### Infrastructure
@@ -138,12 +138,29 @@ KATO processes multi-modal observations (text, vectors, emotions) and makes temp
 - **Current Status**: Stable production-ready system, ongoing code quality improvements
 - **Next Steps**: Coverage analysis, performance profiling, feature requests
 
+### Phase 4: IN PROGRESS - Billion-Scale Knowledge Base Architecture
+- **Initiative**: Hybrid ClickHouse + Redis Architecture for Pattern Storage
+- **Started**: 2025-11-11
+- **Timeline**: 6-7 weeks to production deployment
+- **Current Phase**: Phase 1 Complete (Infrastructure Foundation)
+- **Objective**: Replace MongoDB with hybrid architecture for 100-300x performance improvement
+- **Status**:
+  - Phase 1 (Infrastructure): ✅ Complete (2025-11-11)
+  - Phase 2 (Filter Framework): Weeks 2-3
+  - Phase 3 (Individual Filters): Weeks 3-4
+  - Phase 4 (Data Migration): Weeks 4-5
+  - Phase 5 (Integration & Testing): Weeks 5-6
+  - Phase 6 (Production Deployment): Weeks 6-7
+- **Key Achievement**: ClickHouse + Redis infrastructure integrated, ready for filter development
+- **Expected Outcome**: 200-500ms query performance for billions of patterns
+
 ## Current Focus Areas
-1. **Code Quality Monitoring**: Leverage automated tools (ruff, bandit, vulture, pytest-cov)
-2. **Performance Optimization**: Profile and optimize hot paths identified in production use
-3. **Feature Development**: Respond to user feature requests and use cases
-4. **Test Coverage**: Maintain high test coverage as new features are added
-5. **Documentation**: Keep planning docs and code docs synchronized with reality
+1. **Billion-Scale Architecture**: ClickHouse + Redis hybrid with multi-stage filtering (Active Initiative)
+2. **Code Quality Monitoring**: Leverage automated tools (ruff, bandit, vulture, pytest-cov)
+3. **Performance Optimization**: Profile and optimize hot paths identified in production use
+4. **Feature Development**: Respond to user feature requests and use cases
+5. **Test Coverage**: Maintain high test coverage as new features are added
+6. **Documentation**: Keep planning docs and code docs synchronized with reality
 
 ## Development Philosophy
 - **Determinism First**: Reproducibility over performance

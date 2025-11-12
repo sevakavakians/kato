@@ -25,6 +25,8 @@ from kato.representations.pattern import Pattern
 from kato.searches.pattern_search import PatternSearcher
 from kato.storage.aggregation_pipelines import OptimizedQueryManager
 from kato.storage.metrics_cache import CachedMetricsCalculator, get_metrics_cache_manager
+from kato.storage.connection_manager import OptimizedConnectionManager
+from kato.config.session_config import SessionConfiguration
 
 # Standard logger configuration
 logger = logging.getLogger('kato.pattern_processor')
@@ -89,10 +91,172 @@ class PatternProcessor:
             self.sort = kwargs.get("sort", environ.get('SORT', 'true').lower() == 'true')
 
         self.superkb = SuperKnowledgeBase(self.kb_id, self.persistence, settings=self.settings)
-        self.patterns_searcher = PatternSearcher(kb_id=self.kb_id,
-                                             max_predictions=self.max_predictions,
-                                             recall_threshold=self.recall_threshold,
-                                             use_token_matching=self.use_token_matching)
+
+        # Check architecture mode from environment
+        arch_mode = environ.get('KATO_ARCHITECTURE_MODE', 'mongodb').lower()
+
+        # Initialize PatternSearcher with appropriate configuration
+        searcher_kwargs = {
+            'kb_id': self.kb_id,
+            'max_predictions': self.max_predictions,
+            'recall_threshold': self.recall_threshold,
+            'use_token_matching': self.use_token_matching
+        }
+
+        # Configure hybrid architecture if enabled
+        if arch_mode == 'hybrid':
+            # Check if strict mode is enabled (fails instead of falling back)
+            strict_mode = environ.get('KATO_STRICT_MODE', 'false').lower() == 'true'
+
+            try:
+                logger.info("=" * 60)
+                logger.info("HYBRID ARCHITECTURE MODE ENABLED")
+                logger.info("=" * 60)
+                logger.info("Initializing ClickHouse/Redis connections...")
+
+                # Get connection manager
+                conn_manager = OptimizedConnectionManager()
+
+                # Test ClickHouse connection
+                clickhouse_client = conn_manager.clickhouse
+                if clickhouse_client is None:
+                    error_msg = (
+                        "ClickHouse client is None! "
+                        "Possible causes:\n"
+                        "  1. ClickHouse service not running (check: docker ps | grep clickhouse)\n"
+                        "  2. Connection failed (check: curl http://localhost:8123/ping)\n"
+                        "  3. Environment variables incorrect (CLICKHOUSE_HOST, CLICKHOUSE_PORT)\n"
+                        "  4. clickhouse-connect library not installed\n"
+                        "Run: docker-compose logs clickhouse"
+                    )
+                    logger.error(error_msg)
+                    if strict_mode:
+                        raise RuntimeError("ClickHouse required in strict mode but not available")
+                    logger.warning("⚠️  Falling back to MongoDB mode")
+                    arch_mode = 'mongodb'
+                else:
+                    # Test ClickHouse query
+                    try:
+                        result = clickhouse_client.query("SELECT 1")
+                        logger.info("✓ ClickHouse connection verified")
+                    except Exception as ch_error:
+                        error_msg = (
+                            f"ClickHouse connection test failed: {ch_error}\n"
+                            f"  Host: {environ.get('CLICKHOUSE_HOST', 'localhost')}\n"
+                            f"  Port: {environ.get('CLICKHOUSE_PORT', '9000')}\n"
+                            f"Run: docker exec kato-clickhouse clickhouse-client --query 'SELECT 1'"
+                        )
+                        logger.error(error_msg)
+                        if strict_mode:
+                            raise RuntimeError(f"ClickHouse query failed: {ch_error}")
+                        logger.warning("⚠️  Falling back to MongoDB mode")
+                        arch_mode = 'mongodb'
+                        clickhouse_client = None
+
+                # Test Redis connection
+                redis_client = conn_manager.redis
+                if redis_client is None:
+                    error_msg = (
+                        "Redis client is None! "
+                        "Possible causes:\n"
+                        "  1. Redis service not running (check: docker ps | grep redis)\n"
+                        "  2. Connection failed (check: docker exec kato-redis redis-cli ping)\n"
+                        "  3. Environment variables incorrect (REDIS_URL)\n"
+                        "  4. redis library not installed\n"
+                        "Run: docker-compose logs redis"
+                    )
+                    logger.error(error_msg)
+                    if strict_mode:
+                        raise RuntimeError("Redis required in strict mode but not available")
+                    logger.warning("⚠️  Falling back to MongoDB mode")
+                    arch_mode = 'mongodb'
+                else:
+                    # Test Redis ping
+                    try:
+                        redis_client.ping()
+                        logger.info("✓ Redis connection verified")
+                    except Exception as redis_error:
+                        error_msg = (
+                            f"Redis connection test failed: {redis_error}\n"
+                            f"  URL: {environ.get('REDIS_URL', 'redis://localhost:6379')}\n"
+                            f"Run: docker exec kato-redis redis-cli ping"
+                        )
+                        logger.error(error_msg)
+                        if strict_mode:
+                            raise RuntimeError(f"Redis ping failed: {redis_error}")
+                        logger.warning("⚠️  Falling back to MongoDB mode")
+                        arch_mode = 'mongodb'
+                        redis_client = None
+
+                # Configure hybrid mode if both clients available
+                if clickhouse_client and redis_client and arch_mode == 'hybrid':
+                    # Check if data is migrated
+                    try:
+                        pattern_count = clickhouse_client.query("SELECT COUNT(*) FROM default.patterns_data").result_rows[0][0]
+                        logger.info(f"ClickHouse patterns_data table: {pattern_count:,} rows")
+
+                        if pattern_count == 0:
+                            logger.warning(
+                                "⚠️  WARNING: patterns_data table is EMPTY!\n"
+                                "  Hybrid mode will return no results until data is migrated.\n"
+                                "  Run: python scripts/migrate_mongodb_to_clickhouse.py"
+                            )
+                            if strict_mode:
+                                raise RuntimeError("ClickHouse table empty - run migration first")
+                    except Exception as check_error:
+                        logger.error(f"Failed to check patterns_data: {check_error}")
+                        if strict_mode:
+                            raise
+
+                    # Create default session config for filter pipeline
+                    session_config = SessionConfiguration(
+                        filter_pipeline=['minhash', 'length', 'jaccard', 'rapidfuzz'],
+                        minhash_threshold=0.7,
+                        length_min_ratio=0.5,
+                        length_max_ratio=2.0,
+                        jaccard_threshold=0.3,
+                        jaccard_min_overlap=2,
+                        recall_threshold=self.recall_threshold,
+                        use_token_matching=self.use_token_matching,
+                        enable_filter_metrics=True
+                    )
+
+                    # Add hybrid params to searcher
+                    searcher_kwargs.update({
+                        'session_config': session_config,
+                        'clickhouse_client': clickhouse_client,
+                        'redis_client': redis_client
+                    })
+
+                    logger.info("=" * 60)
+                    logger.info("✓ HYBRID ARCHITECTURE CONFIGURED SUCCESSFULLY")
+                    logger.info("=" * 60)
+                    logger.info("Filter pipeline: ['minhash', 'length', 'jaccard', 'rapidfuzz']")
+                    logger.info("Performance: 100-300x improvement expected")
+                    logger.info("=" * 60)
+
+            except Exception as e:
+                import traceback
+                error_details = traceback.format_exc()
+                logger.error("=" * 60)
+                logger.error("HYBRID ARCHITECTURE INITIALIZATION FAILED")
+                logger.error("=" * 60)
+                logger.error(f"Error: {e}")
+                logger.error(f"Full traceback:\n{error_details}")
+                logger.error("=" * 60)
+
+                if strict_mode:
+                    logger.error("STRICT MODE: Failing hard instead of falling back")
+                    raise RuntimeError(f"Hybrid mode required but initialization failed: {e}")
+
+                logger.warning("⚠️  FALLING BACK TO MONGODB MODE")
+                logger.warning("Set KATO_STRICT_MODE=true to fail instead of fallback")
+                arch_mode = 'mongodb'
+
+        if arch_mode == 'mongodb':
+            logger.info("MongoDB architecture mode active")
+
+        self.patterns_searcher = PatternSearcher(**searcher_kwargs)
 
         # Initialize optimized query manager for aggregation pipelines
         self.query_manager = OptimizedQueryManager(self.superkb)
@@ -598,12 +762,15 @@ class PatternProcessor:
 
             # Calculate potential using direct formula (overwrites any potential from calculate_ensemble_predictive_information)
             # potential = (evidence + confidence) * snr + itfdf_similarity + (1/(fragmentation + 1))
-            # No fallback - errors will propagate
+            # Handle fragmentation = -1 edge case (0 blocks, no matches) -> contribution = 0
             for prediction in causal_patterns:
+                frag = prediction['fragmentation']
+                frag_contribution = 0.0 if frag == -1 else (1 / (frag + 1))
+
                 prediction['potential'] = (
                     (prediction['evidence'] + prediction['confidence']) * prediction['snr']
                     + prediction.get('itfdf_similarity', 0.0)
-                    + (1 / (prediction['fragmentation'] + 1))
+                    + frag_contribution
                 )
 
             try:
@@ -652,12 +819,24 @@ class PatternProcessor:
 
         # Temporarily create a PatternSearcher with config values
         # This avoids mutating the instance's patterns_searcher
-        temp_searcher = PatternSearcher(
-            kb_id=self.kb_id,
-            max_predictions=max_predictions,
-            recall_threshold=recall_threshold,
-            use_token_matching=use_token_matching
-        )
+        # Use same architecture mode as main searcher
+        temp_searcher_kwargs = {
+            'kb_id': self.kb_id,
+            'max_predictions': max_predictions,
+            'recall_threshold': recall_threshold,
+            'use_token_matching': use_token_matching
+        }
+
+        # Check if main searcher is using hybrid architecture
+        if hasattr(self.patterns_searcher, 'use_hybrid_architecture') and self.patterns_searcher.use_hybrid_architecture:
+            # Pass hybrid parameters from main searcher
+            temp_searcher_kwargs.update({
+                'session_config': config if config else self.patterns_searcher.session_config,
+                'clickhouse_client': self.patterns_searcher.clickhouse_client,
+                'redis_client': self.patterns_searcher.redis_client
+            })
+
+        temp_searcher = PatternSearcher(**temp_searcher_kwargs)
 
         # Save original searcher
         original_searcher = self.patterns_searcher

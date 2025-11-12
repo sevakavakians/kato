@@ -760,6 +760,207 @@ class MockKatoCurrentClient:
             self.sessions["default-session"]["stm"] = []
 
 
+class TestSessionPerceptCognitionIsolation:
+    """Test that percept_data and cognition_data are session-isolated"""
+
+    @pytest.mark.asyncio
+    async def test_percept_data_isolation(self, kato_client):
+        """Test that percept_data is isolated per session"""
+        # Create two sessions with the same node_id (shared LTM)
+        node_id = f"test_node_{uuid.uuid4().hex[:8]}"
+        session1 = await kato_client.create_session(node_id=node_id)
+        session2 = await kato_client.create_session(node_id=node_id)
+
+        session1_id = session1['session_id']
+        session2_id = session2['session_id']
+
+        # Session 1 observes data
+        await kato_client.observe_in_session(
+            session1_id,
+            {"strings": ["hello", "world"], "vectors": [], "emotives": {"joy": 0.8}}
+        )
+
+        # Session 2 observes different data
+        await kato_client.observe_in_session(
+            session2_id,
+            {"strings": ["foo", "bar"], "vectors": [], "emotives": {"anger": 0.6}}
+        )
+
+        # Get percept_data for both sessions
+        percept1_response = await kato_client.get(f"/sessions/{session1_id}/percept-data")
+        percept2_response = await kato_client.get(f"/sessions/{session2_id}/percept-data")
+
+        percept1 = percept1_response['percept_data']
+        percept2 = percept2_response['percept_data']
+
+        # Debug: Print what we got
+        print(f"DEBUG: percept1 = {percept1}")
+        print(f"DEBUG: percept2 = {percept2}")
+
+        # Verify Session 1's percept_data
+        assert 'strings' in percept1, f"percept1 should have 'strings' key, got: {list(percept1.keys())}"
+        assert percept1['strings'] == ['hello', 'world'], \
+            "Session 1 should have its own percept_data"
+        assert percept1['emotives']['joy'] == 0.8, \
+            "Session 1 should have its own emotives"
+
+        # Verify Session 2's percept_data
+        assert percept2['strings'] == ['bar', 'foo'], \
+            "Session 2 should have its own percept_data (sorted)"
+        assert percept2['emotives']['anger'] == 0.6, \
+            "Session 2 should have its own emotives"
+
+        # Verify no cross-contamination
+        assert 'hello' not in percept2['strings'], \
+            "Session 2 should not see Session 1's data"
+        assert 'foo' not in percept1['strings'], \
+            "Session 1 should not see Session 2's data"
+
+        # Cleanup
+        await kato_client.delete_session(session1_id)
+        await kato_client.delete_session(session2_id)
+
+    @pytest.mark.asyncio
+    async def test_cognition_data_isolation(self, kato_client):
+        """Test that cognition_data (predictions) is isolated per session"""
+        # Create shared node for learning
+        node_id = f"test_node_{uuid.uuid4().hex[:8]}"
+
+        # Create session and learn a pattern
+        learn_session = await kato_client.create_session(node_id=node_id)
+        learn_session_id = learn_session['session_id']
+
+        # Build and learn pattern A -> B -> C
+        await kato_client.observe_in_session(learn_session_id, {"strings": ["A"]})
+        await kato_client.observe_in_session(learn_session_id, {"strings": ["B"]})
+        await kato_client.observe_in_session(learn_session_id, {"strings": ["C"]})
+        await kato_client.learn_in_session(learn_session_id)
+
+        # Clear STM for clean state
+        await kato_client.post(f"/sessions/{learn_session_id}/clear-stm", {})
+
+        # Now create two query sessions on the same node
+        session1 = await kato_client.create_session(node_id=node_id)
+        session2 = await kato_client.create_session(node_id=node_id)
+
+        session1_id = session1['session_id']
+        session2_id = session2['session_id']
+
+        # Session 1 observes A and gets predictions
+        await kato_client.observe_in_session(session1_id, {"strings": ["A"]})
+
+        # Session 2 observes X and gets predictions (no match expected)
+        await kato_client.observe_in_session(session2_id, {"strings": ["X"]})
+
+        # Get cognition_data for both sessions
+        cognition1_response = await kato_client.get(f"/sessions/{session1_id}/cognition-data")
+        cognition2_response = await kato_client.get(f"/sessions/{session2_id}/cognition-data")
+
+        cognition1 = cognition1_response['cognition_data']
+        cognition2 = cognition2_response['cognition_data']
+
+        # Session 1 should have predictions (matched pattern A->B->C)
+        assert len(cognition1['predictions']) > 0, \
+            "Session 1 should have predictions for pattern A->B->C"
+
+        # Session 2 should have no predictions (no pattern matches X)
+        assert len(cognition2['predictions']) == 0, \
+            "Session 2 should have no predictions for X"
+
+        # Verify no cross-contamination
+        # Session 2's cognition_data should not contain Session 1's predictions
+        assert cognition1['predictions'] != cognition2['predictions'], \
+            "Sessions should have different prediction sets"
+
+        # Cleanup
+        await kato_client.delete_session(learn_session_id)
+        await kato_client.delete_session(session1_id)
+        await kato_client.delete_session(session2_id)
+
+    @pytest.mark.asyncio
+    async def test_concurrent_percept_data_updates(self, kato_client):
+        """Test concurrent updates to percept_data across sessions"""
+        node_id = f"test_node_{uuid.uuid4().hex[:8]}"
+
+        # Create multiple sessions
+        num_sessions = 5
+        sessions = []
+        for i in range(num_sessions):
+            session = await kato_client.create_session(node_id=node_id)
+            sessions.append(session)
+
+        async def observe_and_check(session, value):
+            """Observe data and verify percept_data is correct"""
+            session_id = session['session_id']
+
+            # Observe unique data for this session
+            await kato_client.observe_in_session(
+                session_id,
+                {"strings": [value]}
+            )
+
+            # Get percept_data
+            response = await kato_client.get(f"/sessions/{session_id}/percept-data")
+            percept = response['percept_data']
+
+            # Verify it has the correct value
+            assert value in percept['strings'], \
+                f"Session {session_id} should have {value} in percept_data"
+
+            return True
+
+        # Run concurrent observations
+        tasks = [
+            observe_and_check(sessions[i], f"value_{i}")
+            for i in range(num_sessions)
+        ]
+        results = await asyncio.gather(*tasks)
+
+        # All should succeed
+        assert all(results), "All concurrent percept_data updates should succeed"
+
+        # Cleanup
+        for session in sessions:
+            await kato_client.delete_session(session['session_id'])
+
+    @pytest.mark.asyncio
+    async def test_clear_stm_clears_percept_and_predictions(self, kato_client):
+        """Test that clearing STM also clears percept_data and predictions"""
+        session = await kato_client.create_session()
+        session_id = session['session_id']
+
+        # Observe data
+        await kato_client.observe_in_session(
+            session_id,
+            {"strings": ["test"]}
+        )
+
+        # Verify percept_data exists
+        percept_response = await kato_client.get(f"/sessions/{session_id}/percept-data")
+        assert len(percept_response['percept_data']) > 0, \
+            "Percept data should exist after observation"
+
+        # Verify predictions exist (may be empty, but field should exist)
+        cognition_response = await kato_client.get(f"/sessions/{session_id}/cognition-data")
+        assert 'predictions' in cognition_response['cognition_data'], \
+            "Predictions field should exist in cognition_data"
+
+        # Clear STM
+        await kato_client.post(f"/sessions/{session_id}/clear-stm", {})
+
+        # Verify percept_data is cleared
+        percept_after = await kato_client.get(f"/sessions/{session_id}/percept-data")
+        assert percept_after['percept_data'] == {}, \
+            "Percept data should be cleared after clear-stm"
+
+        # Verify predictions are cleared
+        cognition_after = await kato_client.get(f"/sessions/{session_id}/cognition-data")
+        assert cognition_after['cognition_data']['predictions'] == [], \
+            "Predictions should be cleared after clear-stm"
+
+        # Cleanup
+        await kato_client.delete_session(session_id)
+
 
 if __name__ == "__main__":
     # Run tests with pytest

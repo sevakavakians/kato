@@ -31,15 +31,16 @@ services:
       - kato-network
     restart: unless-stopped
 
-  # Redis for session storage
+  # Redis for session storage and pattern metadata
   redis:
     image: redis:7-alpine
     container_name: kato-redis
-    command: redis-server --save "" --appendonly no  # Disable persistence for faster operations
+    command: redis-server /usr/local/etc/redis/redis.conf
     ports:
       - "6379:6379"
     volumes:
       - redis-data:/data
+      - ./config/redis.conf:/usr/local/etc/redis/redis.conf:ro
     networks:
       - kato-network
     restart: unless-stopped
@@ -48,6 +49,35 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # ClickHouse for pattern data storage
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: kato-clickhouse
+    ports:
+      - "8123:8123"  # HTTP interface
+      - "9000:9000"  # Native client interface
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - clickhouse-logs:/var/log/clickhouse-server
+      - ./config/clickhouse/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./config/clickhouse/users.xml:/etc/clickhouse-server/users.xml:ro
+    networks:
+      - kato-network
+    restart: unless-stopped
+    environment:
+      - CLICKHOUSE_DB=kato
+      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
 
   # Single KATO Service - Configuration is now per-session
   kato:
@@ -62,9 +92,17 @@ services:
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
       - REDIS_URL=redis://redis:6379
+      - REDIS_ENABLED=true
+      - CLICKHOUSE_HOST=clickhouse
+      - CLICKHOUSE_PORT=8123
+      - CLICKHOUSE_DB=kato
       - LOG_LEVEL=INFO
       - SESSION_TTL=3600
       - SESSION_AUTO_EXTEND=true
+      # Architecture mode: mongodb (default) or hybrid (ClickHouse/Redis)
+      - KATO_ARCHITECTURE_MODE=${KATO_ARCHITECTURE_MODE:-hybrid}
+      # Strict mode: fail hard on hybrid errors instead of falling back (for development)
+      - KATO_STRICT_MODE=${KATO_STRICT_MODE:-false}
       # Performance optimizations for hierarchical training
       - KATO_BATCH_SIZE=10000
       - CONNECTION_POOL_SIZE=50
@@ -79,6 +117,8 @@ services:
       qdrant:
         condition: service_started
       redis:
+        condition: service_healthy
+      clickhouse:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
@@ -98,3 +138,5 @@ volumes:
   mongo-data:
   qdrant-data:
   redis-data:
+  clickhouse-data:
+  clickhouse-logs:

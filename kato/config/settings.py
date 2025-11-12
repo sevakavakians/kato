@@ -161,6 +161,34 @@ class DatabaseConfig(BaseSettings):
             return f"redis://{self.redis_host}:{self.redis_port}/0"
         return None
 
+    # ClickHouse settings (for hybrid architecture)
+    CLICKHOUSE_HOST: str = Field(
+        'localhost',
+        description="ClickHouse host address"
+    )
+    CLICKHOUSE_PORT: int = Field(
+        8123,
+        ge=1,
+        le=65535,
+        description="ClickHouse HTTP port number"
+    )
+    CLICKHOUSE_DB: str = Field(
+        'kato',
+        description="ClickHouse database name"
+    )
+
+    @property
+    def clickhouse_host(self) -> str:
+        return self.CLICKHOUSE_HOST
+
+    @property
+    def clickhouse_port(self) -> int:
+        return self.CLICKHOUSE_PORT
+
+    @property
+    def clickhouse_db(self) -> str:
+        return self.CLICKHOUSE_DB
+
     model_config = ConfigDict(env_prefix='')
 
 

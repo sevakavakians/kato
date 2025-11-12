@@ -123,7 +123,8 @@ Client Request → FastAPI Service (Port 8000) → Embedded KATO Processor
    - Async request handling with FastAPI
    - Core endpoints: `/observe`, `/observe-sequence`, `/learn`, `/predictions`, `/health`, `/status`
    - Bulk processing: `/observe-sequence` for batch observations with isolation options
-   - Advanced endpoints: `/pattern/{id}`, `/genes/update`, `/gene/{name}`, `/percept-data`, `/cognition-data`, `/metrics`
+   - Advanced endpoints: `/pattern/{id}`, `/percept-data`, `/cognition-data`, `/metrics`
+   - Session configuration: `/sessions/{session_id}/config`
    - STM endpoints: `/stm` (alias: `/short-term-memory`)
    - Clear endpoints: `/clear-stm`, `/clear-all` (with aliases)
    - WebSocket support at `/ws` for real-time communication

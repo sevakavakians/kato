@@ -48,6 +48,7 @@ All parameters can be specified directly when starting KATO:
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `--max-seq-length` | integer | 0 | **Auto-learning threshold**: When short-term memory reaches this length, automatically learn pattern. Regular learn() completely clears STM, auto-learn preserves last event (0=disabled) |
+| `--stm-mode` | string | CLEAR | **STM mode after auto-learn**: 'CLEAR' (reset STM) or 'ROLLING' (sliding window) |
 | `--persistence` | integer | 5 | Rolling window size for emotive history |
 | `--smoothness` | integer | 3 | Learning smoothness parameter |
 | `--quiescence` | integer | 3 | Quiescence period |
@@ -70,9 +71,10 @@ When `max_pattern_length` is set to a value greater than 0, KATO automatically l
 # Set auto-learning at 3 observations
 ./start.sh --max-seq-length 3
 
-# Or update dynamically via API
-curl -X POST http://localhost:8000/p46b6b076c/genes/change \
-  -d '{"data": {"max_pattern_length": 3}}'
+# Or update dynamically via session API
+curl -X POST http://localhost:8000/sessions/{session_id}/config \
+  -H "Content-Type: application/json" \
+  -d '{"config": {"max_pattern_length": 3}}'
 ```
 
 **Use Cases:**
@@ -90,6 +92,8 @@ curl -X POST http://localhost:8000/p46b6b076c/genes/change \
 | `--update-frequencies` | flag | false | Always update pattern frequencies |
 | `--no-sort` | flag | false | Disable alphanumeric sorting |
 | `--no-predictions` | flag | false | Disable prediction processing |
+| `--rank-sort-algo` | string | potential | **Prediction ranking metric**: potential (default), similarity, evidence, confidence, snr, frequency, fragmentation, normalized_entropy, global_normalized_entropy, itfdf_similarity, confluence, predictive_information |
+| `--use-token-matching` | boolean | true | **Pattern matching mode**: true (token-level, exact), false (character-level, fast) |
 
 ### FastAPI Configuration
 
@@ -211,9 +215,14 @@ EOF
 | `KATO_MAX_PREDICTIONS` | `--max-predictions` | |
 | `KATO_RECALL_THRESHOLD` | `--recall-threshold` | |
 | `KATO_MAX_SEQ_LENGTH` | `--max-seq-length` | |
+| `STM_MODE` | `--stm-mode` | CLEAR or ROLLING |
 | `KATO_PERSISTENCE` | `--persistence` | |
 | `KATO_SMOOTHNESS` | `--smoothness` | |
 | `KATO_QUIESCENCE` | `--quiescence` | |
+| `RANK_SORT_ALGO` | `--rank-sort-algo` | Prediction ranking metric |
+| `KATO_USE_TOKEN_MATCHING` | `--use-token-matching` | true (token-level) or false (character-level) |
+| `SESSION_TTL` | - | Session time-to-live in seconds (default: 3600) |
+| `SESSION_AUTO_EXTEND` | - | Auto-extend session TTL on access (default: true) |
 
 ### Critical Environment Variables
 
@@ -434,22 +443,25 @@ The manager script validates all parameters:
 
 ## Dynamic Reconfiguration
 
-Some parameters can be changed at runtime via the API:
+Configuration parameters can be changed at runtime via session-based API:
 
 ```bash
-# Change recall threshold
-curl -X POST http://localhost:8000/p46b6b076c/gene/recall_threshold/change \
-  -d '{"value": 0.2}'
-
-# Update multiple parameters
-curl -X POST http://localhost:8000/p46b6b076c/genes/update \
+# Update configuration for a specific session
+curl -X POST http://localhost:8000/sessions/{session_id}/config \
+  -H "Content-Type: application/json" \
   -d '{
-    "genes": {
+    "config": {
+      "recall_threshold": 0.2,
       "max_predictions": 150,
       "persistence": 8
     }
   }'
+
+# Get current session configuration
+curl http://localhost:8000/sessions/{session_id}
 ```
+
+**Note**: Session configuration changes only affect that specific session. Each session maintains independent configuration.
 
 ## recall_threshold Tuning Guide
 

@@ -168,7 +168,7 @@ The API layer provides the external interface for KATO:
   - `/stm` - View short-term memory
   - `/clear-stm` - Clear short-term memory
   - `/pattern/{id}` - Get specific pattern
-  - `/genes/update` - Update configuration genes
+  - `/sessions/{session_id}/config` - Update session configuration
   - `/metrics` - System metrics
 - **WebSocket Handler**: Real-time bidirectional communication at `/ws`
 - **Middleware**:

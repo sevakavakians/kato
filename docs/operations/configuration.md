@@ -259,7 +259,7 @@ KATO uses environment variables for configuration. These can be set in:
 - **Example**: `potential`, `similarity`, `evidence`
 - **Notes**:
   - Controls how predictions are sorted in the response
-  - Can be changed at runtime via `/genes/update` endpoint
+  - Can be changed at runtime via `/sessions/{session_id}/config` endpoint
   - Different metrics optimize for different use cases (match quality vs predictive power vs frequency)
 
 ## Performance Configuration
@@ -529,7 +529,7 @@ export KATO_USE_FAST_MATCHING=true
 
 ## Runtime Configuration Updates
 
-Some configuration can be updated at runtime using the `/genes/update` endpoint:
+Configuration can be updated at runtime using session-based endpoints:
 
 ### Updatable Parameters
 - `recall_threshold` - Pattern matching sensitivity
@@ -538,13 +538,14 @@ Some configuration can be updated at runtime using the `/genes/update` endpoint:
 - `stm_mode` - Short-term memory mode (CLEAR/ROLLING)
 - `process_predictions` - Enable/disable prediction processing
 - `rank_sort_algo` - Prediction ranking metric
+- `use_token_matching` - Pattern matching mode (token vs character level)
 
 ### Example Update Request
 ```bash
-curl -X POST http://localhost:8000/genes/update \
+curl -X POST http://localhost:8000/sessions/{session_id}/config \
   -H "Content-Type: application/json" \
   -d '{
-    "genes": {
+    "config": {
       "recall_threshold": 0.5,
       "max_predictions": 50,
       "persistence": 10,
@@ -553,26 +554,32 @@ curl -X POST http://localhost:8000/genes/update \
   }'
 ```
 
+**Note**: Configuration changes only affect the specific session. Each session maintains independent configuration.
+
 ### Ranking Algorithm Selection
 
 The `rank_sort_algo` parameter allows you to optimize predictions for different use cases:
 
 ```bash
 # Prioritize overall potential (default - balanced approach)
-curl -X POST http://localhost:8000/genes/update \
-  -d '{"genes": {"rank_sort_algo": "potential"}}'
+curl -X POST http://localhost:8000/sessions/{session_id}/config \
+  -H "Content-Type: application/json" \
+  -d '{"config": {"rank_sort_algo": "potential"}}'
 
 # Prioritize pattern similarity (best matches)
-curl -X POST http://localhost:8000/genes/update \
-  -d '{"genes": {"rank_sort_algo": "similarity"}}'
+curl -X POST http://localhost:8000/sessions/{session_id}/config \
+  -H "Content-Type: application/json" \
+  -d '{"config": {"rank_sort_algo": "similarity"}}'
 
 # Prioritize frequent patterns (most common)
-curl -X POST http://localhost:8000/genes/update \
-  -d '{"genes": {"rank_sort_algo": "frequency"}}'
+curl -X POST http://localhost:8000/sessions/{session_id}/config \
+  -H "Content-Type: application/json" \
+  -d '{"config": {"rank_sort_algo": "frequency"}}'
 
 # Prioritize predictive reliability
-curl -X POST http://localhost:8000/genes/update \
-  -d '{"genes": {"rank_sort_algo": "predictive_information"}}'
+curl -X POST http://localhost:8000/sessions/{session_id}/config \
+  -H "Content-Type: application/json" \
+  -d '{"config": {"rank_sort_algo": "predictive_information"}}'
 ```
 
 ## Configuration Best Practices

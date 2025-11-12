@@ -364,6 +364,6 @@ create_session(node_id=old_node_id)  # Accesses old database
 - ⚠️ Random `node_id` values prevent reconnection
 
 **For more information:**
-- [Getting Started Guide](GETTING_STARTED.md)
-- [Configuration Guide](deployment/CONFIGURATION.md)
-- [API Reference](API_REFERENCE.md)
+- [Getting Started Guide](quick-start.md)
+- [Configuration Guide](../operations/configuration.md)
+- [API Reference](api-reference.md)

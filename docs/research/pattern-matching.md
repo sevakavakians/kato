@@ -451,5 +451,5 @@ self.procs = multiprocessing.cpu_count()
 
 - [Configuration Management](CONFIGURATION_MANAGEMENT.md)
 - [System Overview](SYSTEM_OVERVIEW.md)
-- [API Reference](API_REFERENCE.md)
+- [API Reference](../users/api-reference.md)
 - [Performance Tuning](deployment/PERFORMANCE_TUNING.md)

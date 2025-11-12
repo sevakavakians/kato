@@ -755,5 +755,5 @@ docker network inspect kato-network
 For Docker-specific issues:
 - Check [Docker documentation](https://docs.docker.com)
 - Review [Troubleshooting Guide](../technical/TROUBLESHOOTING.md)
-- See [Testing Guide](../development/TESTING.md) for test-specific help
+- See [Testing Guide](../developers/testing.md) for test-specific help
 - Open an issue on GitHub

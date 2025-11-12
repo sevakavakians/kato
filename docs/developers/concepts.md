@@ -169,7 +169,7 @@ Using the same `node_id` in a new session automatically accesses all previously 
 # KATO immediately has access to all Day 1 patterns!
 ```
 
-For complete details, see [Database Persistence Guide](DATABASE_PERSISTENCE.md).
+For complete details, see [Database Persistence Guide](../users/database-persistence.md).
 
 ## Prediction System
 

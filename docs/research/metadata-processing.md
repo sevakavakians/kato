@@ -784,5 +784,5 @@ db.patterns_kb.findOne(
 
 - [Emotives Processing](EMOTIVES_PROCESSING.md) - Emotional/utility value processing
 - [Pattern Matching](PATTERN_MATCHING.md) - How patterns are matched
-- [API Reference](API_REFERENCE.md) - API endpoints for observations with metadata
+- [API Reference](../users/api-reference.md) - API endpoints for observations with metadata
 - [Configuration Management](CONFIGURATION_MANAGEMENT.md) - All configuration options

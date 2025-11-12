@@ -145,7 +145,7 @@ curl http://localhost:8000/sessions/$NEW_SESSION/predictions
 
 **Key Takeaway:** Same `node_id` = Same trained database (always)
 
-For complete details, see [Database Persistence Guide](DATABASE_PERSISTENCE.md).
+For complete details, see [Database Persistence Guide](database-persistence.md).
 
 ## Understanding KATO's Behavior
 
@@ -167,92 +167,83 @@ For complete details, see [Database Persistence Guide](DATABASE_PERSISTENCE.md).
 
 ## Common Operations
 
-### Start with Custom Parameters
-
-```bash
-# Start with specific configuration
-./start.sh \
-  --name "MyProcessor" \
-  --max-predictions 200 \
-  --recall-threshold 0.1
-```
-
 ### View Logs
 
 ```bash
 # Follow KATO logs
-docker-compose logs kato
+docker-compose logs -f kato
 
-# Check all logs
-docker-compose logs all
+# Check all service logs
+docker-compose logs
 ```
 
 ### Stop KATO
 
 ```bash
-# Stop and remove all instances (asks about MongoDB)
+# Stop all services
 docker-compose down
 
-# Stop specific instance by name or ID
-docker-compose down "My KATO"           # By name
-docker-compose down my-processor        # By ID
-
-# Stop all instances and MongoDB
-docker-compose down --all --with-mongo
-
-# Stop all instances but keep MongoDB
-docker-compose down --all --no-mongo
-```
-
-### Clean Up Everything
-
-```bash
-# Remove all containers, images, and volumes
-./kato-manager.sh clean
+# Stop and remove volumes (WARNING: deletes all data)
+docker-compose down -v
 ```
 
 ## Python Client Example
 
 ```python
 import requests
-import json
 
 class KATOClient:
-    def __init__(self, base_url="http://localhost:8000", session_id="p46b6b076c"):
+    def __init__(self, base_url="http://localhost:8000"):
         self.base_url = base_url
-        self.session_id = session_id
-    
+        self.session_id = None
+
+    def create_session(self, node_id, config=None):
+        """Create a new session"""
+        response = requests.post(
+            f"{self.base_url}/sessions",
+            json={"node_id": node_id, "config": config or {}}
+        )
+        self.session_id = response.json()['session_id']
+        return self.session_id
+
     def observe(self, strings, vectors=None, emotives=None):
         """Send an observation to KATO"""
-        url = f"{self.base_url}/{self.session_id}/observe"
-        data = {
-            "strings": strings,
-            "vectors": vectors or [],
-            "emotives": emotives or {}
-        }
-        response = requests.post(url, json=data)
+        response = requests.post(
+            f"{self.base_url}/sessions/{self.session_id}/observe",
+            json={
+                "strings": strings,
+                "vectors": vectors or [],
+                "emotives": emotives or {}
+            }
+        )
         return response.json()
-    
+
     def learn(self):
         """Trigger learning from short-term memory"""
-        url = f"{self.base_url}/{self.session_id}/learn"
-        response = requests.post(url)
+        response = requests.post(
+            f"{self.base_url}/sessions/{self.session_id}/learn"
+        )
         return response.json()
-    
+
     def get_predictions(self):
         """Get current predictions"""
-        url = f"{self.base_url}/{self.session_id}/predictions"
-        response = requests.get(url)
+        response = requests.get(
+            f"{self.base_url}/sessions/{self.session_id}/predictions"
+        )
         return response.json()
-    
-    def clear_short_term_memory(self):
+
+    def clear_stm(self):
         """Clear short-term memory"""
-        url = f"{self.base_url}/{self.session_id}/short-term-memory/clear"
-        response = requests.post(url)
+        response = requests.post(
+            f"{self.base_url}/sessions/{self.session_id}/clear-stm"
+        )
         return response.json()
 
 # Example usage
 kato = KATOClient()
+
+# Create session
+kato.create_session("my_first_kato")
 
 # Learn a pattern
 kato.observe(["morning"])
@@ -262,7 +253,7 @@ pattern = kato.learn()
 print(f"Learned pattern: {pattern}")
 
 # Test recall
-kato.clear_short_term_memory()
+kato.clear_stm()
 kato.observe(["morning"])
 predictions = kato.get_predictions()
 print(f"KATO predicts: {predictions}")
@@ -270,75 +261,44 @@ print(f"KATO predicts: {predictions}")
 
 ## Running Tests
 
-KATO uses a simple local Python testing approach with pytest:
-
 ```bash
-# Set up virtual environment (first time only)
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-pip install -r tests/requirements.txt
+# Ensure services are running
+./start.sh
 
-# Run all tests
-./tests/run_tests.sh
+# Run all tests (recommended)
+./run_tests.sh --no-start --no-stop
 
 # Run specific test suites
-./tests/run_tests.sh tests/tests/unit/          # Unit tests only
-./tests/run_tests.sh tests/tests/integration/   # Integration tests
-./tests/run_tests.sh tests/tests/api/          # API tests
-./tests/run_tests.sh tests/tests/performance/  # Performance tests
-
-# Run with pytest directly
-python -m pytest tests/tests/ -v       # Verbose output
-python -m pytest tests/tests/ -s       # Show print statements
-python -m pytest tests/tests/ --pdb    # Drop into debugger on failure
-
-# Run tests without starting/stopping KATO
-./tests/run_tests.sh --no-start --no-stop tests/
+python -m pytest tests/tests/unit/ -v
+python -m pytest tests/tests/integration/ -v
+python -m pytest tests/tests/api/ -v
 ```
 
-**Key Features:**
-- Each test gets a unique processor ID for database isolation
-- Simple debugging with standard Python tools
-- Fast iteration without container rebuilds
-- Full IDE and debugger support
-
-For detailed testing information, see the [Testing Guide](development/TESTING.md).
+For detailed testing information, see the [Testing Guide](../developers/testing.md).
 
 ## Troubleshooting
 
-### Port Already in Use
-```bash
-# Use a different port
-./start.sh --port 9000
-```
-
 ### Docker Not Running
-```bash
-# Start Docker Desktop, then retry
-./start.sh
-```
+Start Docker Desktop, then run `./start.sh`
 
 ### Container Won't Start
 ```bash
-# Check logs and rebuild
+# Check logs
 docker-compose logs kato
-./kato-manager.sh clean
-docker-compose build
+
+# Rebuild if needed
+docker-compose build --no-cache kato
 ./start.sh
 ```
 
 ## Next Steps
 
-- **Important**: Read [Database Persistence Guide](DATABASE_PERSISTENCE.md) to understand how data persists
+- **Important**: Read [Database Persistence Guide](database-persistence.md) to understand data persistence
 - Read [Core Concepts](CONCEPTS.md) to understand KATO's behavior
-- Learn [Multi-Instance Management](MULTI_INSTANCE_GUIDE.md) to run multiple processors
-- Explore the [API Reference](API_REFERENCE.md) for all endpoints
-- Check [System Overview](SYSTEM_OVERVIEW.md) for architecture details
-- See [Configuration Guide](deployment/CONFIGURATION.md) for all parameters
+- Explore the [API Reference](api-reference.md) for all endpoints
+- See [Configuration Guide](deployment/CONFIGURATION.md) for parameters
 
 ## Getting Help
 
 - Check the [Troubleshooting Guide](technical/TROUBLESHOOTING.md)
-- Review [test examples](development/TESTING.md) for usage patterns
 - Open an issue on GitHub for bugs or questions

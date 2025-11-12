@@ -10,7 +10,7 @@ This guide provides patterns and examples for building orchestration layers that
 
 Before implementing network topologies, ensure you understand:
 - [Multi-Instance Management](MULTI_INSTANCE_GUIDE.md) - How to run multiple KATO instances
-- [API Reference](API_REFERENCE.md) - KATO's HTTP API endpoints
+- [API Reference](../users/api-reference.md) - KATO's HTTP API endpoints
 - [Core Concepts](CONCEPTS.md) - KATO's behavior and data structures
 
 ## KATO Instance Independence
@@ -951,7 +951,7 @@ logger.info(f"Final result: {result}")
 ## Next Steps
 
 - Review [Multi-Instance Guide](MULTI_INSTANCE_GUIDE.md) for managing KATO instances
-- See [API Reference](API_REFERENCE.md) for complete endpoint documentation
+- See [API Reference](../users/api-reference.md) for complete endpoint documentation
 - Read [Core Concepts](CONCEPTS.md) to understand KATO's behavior
 - Check [Performance Guide](technical/PERFORMANCE.md) for optimization strategies
 

@@ -748,4 +748,4 @@ db.patterns_kb.findOne(
 - [Vector Processing](VECTOR_PROCESSING.md) - How vectors are processed
 - [System Overview](SYSTEM_OVERVIEW.md) - Overall KATO architecture
 - [Configuration Management](CONFIGURATION_MANAGEMENT.md) - All configuration options
-- [API Reference](API_REFERENCE.md) - API endpoints for observations with emotives
+- [API Reference](../users/api-reference.md) - API endpoints for observations with emotives

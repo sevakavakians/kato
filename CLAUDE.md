@@ -1,1255 +1,324 @@
-# CLAUDE.md
+# CLAUDE.md - AI Assistant Navigation Index
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## 📖 Documentation Navigation
+
+**Start here**: See [docs/00-START-HERE.md](docs/00-START-HERE.md) for complete documentation index organized by role and audience.
+
+### Quick Links by Task
+
+- **Getting started with KATO**: [docs/users/quick-start.md](docs/users/quick-start.md)
+- **Understanding architecture**: [docs/developers/architecture.md](docs/developers/architecture.md) + [ARCHITECTURE_DIAGRAM.md](ARCHITECTURE_DIAGRAM.md)
+- **Deploying to production**: [docs/operations/docker-deployment.md](docs/operations/docker-deployment.md)
+- **Understanding algorithms**: [docs/research/README.md](docs/research/README.md)
+- **Integration patterns**: [docs/integration/README.md](docs/integration/README.md)
+- **Release management**: [docs/maintenance/releasing.md](docs/maintenance/releasing.md)
+- **API reference**: [docs/reference/api/](docs/reference/api/)
+- **Configuration reference**: [docs/reference/configuration-vars.md](docs/reference/configuration-vars.md)
 
 ## Project Overview
 
 KATO (Knowledge Abstraction for Traceable Outcomes) is a deterministic memory and prediction system for transparent, explainable AI. It processes multi-modal observations (text, vectors, emotions) and makes temporal predictions while maintaining complete transparency and traceability.
 
-## Pattern Terminology
+**Core Concept**: **Patterns** - learned sequences (temporal) or profiles (non-temporal) that represent knowledge.
 
-**Pattern** is the core concept in KATO that encompasses:
-- **Temporal Patterns (Sequences)**: Patterns with temporal dependency and ordering sensitivity
-- **Profile Patterns**: Patterns without temporal dependency or ordering requirements
-
-All learned structures in KATO are patterns, whether they represent time-ordered sequences or unordered profiles.
-
-## Common Development Commands
+## Essential Development Commands
 
 ### Dependency Management
-**CRITICAL:** Always update `requirements.lock` after modifying `requirements.txt`
-
 ```bash
-# After editing requirements.txt, regenerate the lock file
+# After editing requirements.txt, regenerate lock file
 pip-compile --output-file=requirements.lock requirements.txt
-
-# Then rebuild Docker image to include changes
 docker-compose build --no-cache kato
 ```
 
-The Docker image uses `requirements.lock` (not `requirements.txt`) to ensure reproducible builds. Missing this step will cause dependencies to be missing from the container.
-
 ### Building and Running
 ```bash
-# Start all services (MongoDB, Qdrant, Redis, KATO)
-./start.sh
-
-# Stop services
-docker-compose down
-
-# Restart services
-docker-compose restart
-
-# Check status
-docker-compose ps
-
-# View logs
-docker-compose logs                      # All services
-docker-compose logs kato                 # KATO service
-docker logs kato --tail 50               # Direct Docker logs
+./start.sh                    # Start all services
+docker-compose down           # Stop services
+docker-compose restart        # Restart services
+docker-compose ps             # Check status
+docker-compose logs kato      # View logs
 ```
 
 ### Service URLs
-After running `./start.sh`:
-- **KATO Service**: http://localhost:8000
+- **KATO**: http://localhost:8000
+- **API Docs**: http://localhost:8000/docs
 - **MongoDB**: mongodb://localhost:27017
 - **Qdrant**: http://localhost:6333
 - **Redis**: redis://localhost:6379
-- **API Docs**: http://localhost:8000/docs
 
 ### Testing
 ```bash
-# IMPORTANT: Services must be running first!
-./start.sh
+./start.sh  # Services must be running first!
 
-# Set up virtual environment (first time only)
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-pip install -r tests/requirements.txt
-
-# Run all tests (with running services)
+# Run all tests
 ./run_tests.sh --no-start --no-stop
 
-# Run specific test categories
+# Run specific test suites
 ./run_tests.sh --no-start --no-stop tests/tests/unit/
 ./run_tests.sh --no-start --no-stop tests/tests/integration/
 ./run_tests.sh --no-start --no-stop tests/tests/api/
 
-# Run specific test file
-./run_tests.sh --no-start --no-stop tests/tests/unit/test_observations.py
-
-# Run with options
-./run_tests.sh --no-start --no-stop -v    # Verbose output
-
-# Run tests directly with pytest
-source venv/bin/activate
-python -m pytest tests/tests/unit/ -v --tb=short
+# Direct pytest
+python -m pytest tests/tests/unit/ -v
 ```
 
-**Key Features:**
-- Tests run in local Python, connect to running KATO service
-- Each test gets unique processor_id for complete isolation
-- Direct debugging with print statements and breakpoints
-- Fast iteration - no container builds for tests
-- Tests can run in parallel safely
+**Details**: See [docs/developers/testing.md](docs/developers/testing.md)
 
-### Health Checks and Debugging
-```bash
-# Check service health
-curl http://localhost:8000/health
-
-# Test basic operations
-curl -X POST http://localhost:8000/observe \
-  -H "Content-Type: application/json" \
-  -d '{"strings": ["hello"], "vectors": [], "emotives": {}}'
-
-# Test bulk observation endpoint
-curl -X POST http://localhost:8000/observe-sequence \
-  -H "Content-Type: application/json" \
-  -d '{"observations": [{"strings": ["test1"]}, {"strings": ["test2"]}]}'
-
-# View API documentation
-open http://localhost:8000/docs     # macOS
-xdg-open http://localhost:8000/docs # Linux
-
-# Check database connections
-docker exec kato-mongodb mongo --eval "db.adminCommand('ping')"
-curl http://localhost:6333/health   # Qdrant
-```
-
-## High-Level Architecture
-
-### FastAPI Architecture (Current)
-```
-Client Request → FastAPI Service (Port 8000) → Embedded KATO Processor
-                           ↓                                    ↓
-                    Async Processing              MongoDB, Qdrant & Redis
-                           ↓                     (Isolated by session_id)
-                    JSON Response
-```
-
-### Core Components
-
-1. **FastAPI Service** (`kato/services/kato_fastapi.py`)
-   - Direct embedding of KATO processor
-   - Async request handling with FastAPI
-   - Core endpoints: `/observe`, `/observe-sequence`, `/learn`, `/predictions`, `/health`, `/status`
-   - Bulk processing: `/observe-sequence` for batch observations with isolation options
-   - Advanced endpoints: `/pattern/{id}`, `/percept-data`, `/cognition-data`, `/metrics`
-   - STM endpoints: `/stm` (alias: `/short-term-memory`)
-   - Clear endpoints: `/clear-stm`, `/clear-all` (with aliases)
-   - WebSocket support at `/ws` for real-time communication
-
-2. **KATO Processor** (`kato/workers/kato_processor.py`)
-   - Core AI engine managing observations and predictions
-   - Maintains short-term memory and long-term memory
-   - Coordinates with vector database for similarity searches
-   - Implements deterministic hashing for pattern identification
-
-3. **Storage Layer** (`kato/storage/`)
-   - **Vector Storage**: Qdrant with HNSW indexing for 10-100x performance
-   - **Session Storage**: Redis for fast session state management
-   - **Pattern Storage**: MongoDB for persistent pattern knowledge
-   - **Caching**: Redis for frequently accessed data
-   - Abstraction layer supports multiple backends
-
-### Memory Architecture
-
-- **Short-Term Memory (STM)**: Temporary storage for current observation sequences
-- **Long-Term Memory**: Persistent storage with `PTRN|<sha1_hash>` identifiers
-- **Vector Storage**: Modern Qdrant database with collection per processor
-- **Pattern Hashing**: SHA1-based deterministic pattern identification
-
-### MongoDB Pattern Storage
-
-- **Unique Indexing**: Patterns indexed by SHA1 hash of pattern data
-- **Duplicate Prevention**: Uses `update_one` with `upsert=True` to prevent duplicates
-- **Frequency Tracking**: Each re-learning of same pattern increments frequency counter
-  - Minimum frequency = 1 (pattern must be learned at least once to exist)
-  - Frequency increments each time the same pattern is re-learned
-- **Pattern Naming**: `PTRN|<sha1_hash>` where hash uniquely identifies the pattern
-- **Storage Guarantee**: Only one record per unique pattern in MongoDB
-
-### Key Behavioral Properties
-
-1. **Minimum Sequence Length**: KATO requires at least 2 strings total in STM to generate predictions
-   - Valid: `[['A', 'B']]` (2 strings in 1 event)
-   - Valid: `[['A'], ['B']]` (2 strings across 2 events)
-   - Valid: `[['A']] + vectors` (1 user string + vector strings like 'VCTR|<hash>')
-   - Invalid: `[['A']]` (only 1 string without vectors - no predictions generated)
-
-2. **Auto-Learning Modes**: Two STM modes control behavior after reaching MAX_PATTERN_LENGTH
-   - **CLEAR Mode** (default): Traditional behavior - STM is completely emptied after auto-learn
-   - **ROLLING Mode**: STM maintained as sliding window (size = MAX_PATTERN_LENGTH - 1)
-     - Enables continuous learning of overlapping patterns
-     - Every new observation triggers learning and oldest event removal
-     - Example: With MAX_PATTERN_LENGTH=3, sequence A→B→C→D→E learns patterns ABC, BCD, CDE
-3. **Alphanumeric Sorting**: Strings within events are sorted alphanumerically for consistency
-4. **Temporal Segmentation**: Predictions structured as past/present/future
-   - **Past**: Events before the first matching event
-   - **Present**: ALL events containing matching symbols from the observed state (from first to last match)
-     - Includes ALL symbols within those events, even if they weren't observed
-     - The complete events are included, not just the observed symbols
-   - **Future**: Events after the last matching event
-   - **Missing**: Event-structured list (list of lists) aligned with `present` events
-     - Format: `[['sym1'], ['sym2']]` where each sub-list corresponds to a `present` event
-     - Contains symbols from that pattern event that were not observed in corresponding STM event
-     - Example: `missing = [['b'], ['d']]` means 'b' is missing from 1st present event, 'd' from 2nd
-   - **Extras**: Event-structured list (list of lists) aligned with STM events
-     - Format: `[['x'], ['y', 'z']]` where each sub-list corresponds to an STM event
-     - Contains symbols observed in STM but not expected in corresponding pattern event
-     - Example: `extras = [['x', 'y'], ['x']]` means 1st STM event has extras 'x','y', 2nd has 'x'
-   - Example 1: Observing `['B'], ['C']` from pattern `[['A'], ['B'], ['C'], ['D']]`:
-     - Past: `[['A']]`
-     - Present: `[['B'], ['C']]` (both events have matches)
-     - Future: `[['D']]`
-     - Missing: `[[], []]` (all symbols in present were observed)
-   - Example 2: Observing `['a'], ['c']` from pattern `[['a', 'b'], ['c', 'd'], ['e', 'f']]`:
-     - Past: `[]` (no events before first match)
-     - Present: `[['a', 'b'], ['c', 'd']]` (full events, including unobserved 'b' and 'd')
-     - Future: `[['e', 'f']]`
-     - Missing: `[['b'], ['d']]` (event-structured: 1st event missing 'b', 2nd missing 'd')
-5. **Empty Event Handling**: Empty events are NOT supported per spec
-   - Empty events should be filtered BEFORE observation
-   - STM only processes non-empty event sequences
-6. **Multi-Modal Processing**: Handles strings, vectors, emotional context, and pattern metadata
-   - Vectors always produce name strings (e.g., 'VCTR|<hash>') for STM
-   - Metadata provides contextual tags stored as unique string lists per pattern
-7. **Vector Dimension Locking**: The first vector sent to a KATO processor locks the dimension for all subsequent vectors
-   - **First Vector Rule**: The first vector observation determines the vector dimension for that processor/agent
-   - **Dimension Isolation**: Each processor can have a different vector dimension (e.g., one uses 2D, another uses 512D)
-   - **Validation**: All subsequent vectors sent to the same processor MUST match the locked dimension
-   - **Error Handling**: Dimension mismatches return 400 Bad Request with `VectorDimensionError`
-   - **Examples**:
-     - Processor A: First vector is 2D → All vectors must be 2D
-     - Processor B: First vector is 512D → All vectors must be 512D
-     - Processor C: First vector is 128D → All vectors must be 128D
-   - **Use Case**: Allows different KATO agents to work with different embedding models (BERT, OpenAI, custom)
-   - **Collection Behavior**: Qdrant collections are created with the dimension of the first vector
-8. **Deterministic**: Same inputs always produce same outputs
-9. **Variable Pattern Lengths**: Supports patterns of arbitrary length (2+ strings total)
-   - Events can have varying numbers of symbols
-   - Each prediction has unique missing/matches/extras fields based on partial matching
-10. **Recall Threshold Behavior**:
-   - Range: 0.0 to 1.0
-   - Default: 0.1 (permissive matching)
-   - **PURPOSE**: Rough filter for pattern matching, NOT exact decimal precision
-   - **CRITICAL**: Patterns with NO matches are NEVER returned regardless of threshold
-   - **Key Behaviors**:
-     - Low values (0.1-0.3): Include more predictions with partial matches
-     - Medium values (0.4-0.6): Moderate filtering
-     - High values (0.7-0.9): Filter to only high-similarity matches
-   - **Implementation Notes**:
-     - Uses heuristic calculations for speed - NOT exact to decimal places
-     - Threshold comparison uses >= with tolerance (roughly similarity >= recall_threshold)
-     - Don't test exact boundary cases where similarity ≈ threshold
-     - Similarity calculation may use approximations, not exact ratios
-     - **Matching Modes**: KATO supports two modes via `KATO_USE_TOKEN_MATCHING` env var
-       - Character-level (default, fastest): 75x speedup, ~0.03 score difference
-       - Token-level (exact): 9x speedup, EXACT difflib compatibility
-       - Use token mode (`KATO_USE_TOKEN_MATCHING=true`) when exact difflib compatibility required
-       - Use character mode (default) for production/performance
-   - **Examples** (approximate behavior):
-     - threshold=0.1: Most patterns with any match returned
-     - threshold=0.5: Patterns with ~50% or more matches returned
-     - threshold=0.9: Only near-perfect matches returned
-   - Note: All patterns in KB have frequency ≥ 1 (learned at least once)
-11. **Error Handling Philosophy**:
-   - **DO NOT mask errors with safe defaults** - errors must be visible for debugging
-   - Better to fail explicitly than hide issues with graceful degradation
-   - This helps identify and fix root causes rather than papering over problems
-   - All calculation errors should raise exceptions with detailed context
-12. **Edge Cases and Boundaries**:
-   - **Fragmentation**: Can be -1, causing division by zero in potential calculations
-   - **Pattern Frequencies**: All patterns have frequency ≥ 1 (no zero-frequency patterns exist)
-   - **Empty State**: Normalized entropy calculations require non-empty state
-   - **Missing Metadata**: MongoDB metadata documents may be missing, causing None values
-   - **Total Ensemble Frequencies**: Can be 0 if no patterns match (even though each pattern has frequency ≥ 1)
-
-## Testing Strategy
-
-The codebase has comprehensive test coverage with 287 test functions across multiple test files. Tests are organized under `tests/tests/`:
-
-1. **Unit Tests** (`tests/tests/unit/`): Test individual components
-2. **Integration Tests** (`tests/tests/integration/`): Test end-to-end workflows
-3. **API Tests** (`tests/tests/api/`): Test REST endpoints
-4. **Performance Tests** (`tests/tests/performance/`): Stress and performance tests
-
-**Test Isolation:**
-- Each test gets a unique processor_id for database isolation
-- Tests use the fixture from `tests/tests/fixtures/kato_fixtures.py`
-- KATO services must be running before tests
-- Databases are isolated by processor_id to prevent contamination
-- Tests run in local Python environment for fast debugging
-
-## Configuration
-
-### Environment Variables
-
-#### Core Configuration
-- `PROCESSOR_ID`: Unique identifier for processor instance
-- `PROCESSOR_NAME`: Display name for the processor
-- `LOG_LEVEL`: DEBUG, INFO, WARNING, ERROR (default: INFO)
-
-#### Database Configuration
-- `MONGO_BASE_URL`: MongoDB connection string
-- `QDRANT_HOST`: Qdrant host (default: localhost)
-- `QDRANT_PORT`: Qdrant port (default: 6333)
-
-#### Learning Configuration
-- `MAX_PATTERN_LENGTH`: Auto-learn after N observations (0 = manual only, default: 0)
-  - When auto-learn triggers, behavior depends on STM_MODE
-- `STM_MODE`: Short-term memory mode after auto-learn (default: 'CLEAR')
-  - 'CLEAR': STM is completely cleared after auto-learn (original behavior)
-  - 'ROLLING': STM is maintained as sliding window for continuous learning
-- `PERSISTENCE`: Rolling window size for emotive values per pattern (default: 5)
-  - Controls how many historical emotive entries are kept when patterns are re-learned
-- `RECALL_THRESHOLD`: Pattern matching threshold (0.0-1.0, default: 0.1)
-
-#### Processing Configuration
-- `INDEXER_TYPE`: Vector indexer type (default: 'VI')
-- `MAX_PREDICTIONS`: Maximum predictions to return (default: 100)
-- `SORT`: Sort symbols alphabetically within events (default: true)
-- `PROCESS_PREDICTIONS`: Enable prediction processing (default: true)
-- `KATO_USE_TOKEN_MATCHING`: Token-level vs character-level pattern matching (default: true)
-
-
-### Session-Based Configuration
-The system uses Redis-based session management for configuration:
-- **Session Isolation**: Each session gets unique configuration
-- **Dynamic Configuration**: Settings can be changed per session
-- **Persistent State**: Session data persists across service restarts
-- **Configuration via API**: Use session endpoints to modify behavior
-
-#### Session TTL and Auto-Extension
-- `SESSION_TTL`: Default session time-to-live in seconds (default: 3600)
-- `SESSION_AUTO_EXTEND`: Enable sliding window session expiration (default: true)
-  - **Enabled (true)**: Sessions automatically extend TTL on each access (recommended for long-running tasks)
-    - Session expires only after TTL of inactivity
-    - Prevents expiration during active use
-    - Example: With 1-hour TTL, a training run can last indefinitely as long as it makes requests
-  - **Disabled (false)**: Sessions use fixed expiration time from creation
-    - Session expires at creation_time + TTL regardless of activity
-    - Use for time-bounded sessions with strict expiration requirements
-
-### Config-as-Parameter Architecture (Multi-Session Support)
-
-**CRITICAL**: KATO uses a **config-as-parameter** architecture to enable true multi-session support without configuration thrashing.
-
-#### How It Works
-
-Instead of mutating shared processor state, configuration is passed as parameters through the call stack:
-
-```python
-# BEFORE (BROKEN - v2.0.x and earlier):
-processor.recall_threshold = 0.1  # Mutates shared state
-predictions = processor.get_predictions()
-
-# AFTER (CORRECT - v2.1.0+):
-predictions = await processor.get_predictions(config=session_config)
-# Config passed as parameter, no mutation
-```
-
-#### Architecture Flow
+## Architecture Quick Reference
 
 ```
-Session Request
+FastAPI Service (Port 8000)
     ↓
-Session Config (isolated, stored in Redis)
+Session Manager (Redis)
     ↓
-processor.observe(data, config=session_config)  ← Config as parameter
+KatoProcessor (Per node_id)
     ↓
-observation_processor.process_observation(data, config)
+├─ MemoryManager (STM/LTM)
+├─ PatternProcessor (Learning/Matching)
+├─ VectorProcessor (Embeddings)
+└─ ObservationProcessor (Input)
     ↓
-pattern_processor.get_predictions_async(stm, config)
-    ↓
-Uses config values WITHOUT mutating processor state
+Storage Layer
+├─ MongoDB (Patterns)
+├─ Qdrant (Vectors)
+└─ Redis (Sessions/Cache)
 ```
 
-#### Multi-Session Scenario (Production Use Case)
-
-**Scenario**: Multiple users querying the same trained knowledge base with different preferences
-
-```python
-# Shared knowledge base (same node_id)
-# But different sessions with different configs
-
-# Researcher wants to see all possible matches
-client_A = KATOClient(
-    node_id="production_kb",
-    recall_threshold=0.1,  # Low threshold
-    max_predictions=1000   # Many predictions
-)
-
-# QA system wants high-confidence matches only
-client_B = KATOClient(
-    node_id="production_kb",
-    recall_threshold=0.9,  # High threshold
-    max_predictions=10     # Few predictions
-)
-
-# ✅ CORRECT BEHAVIOR:
-# - Both clients share the same processor (efficient)
-# - Both clients share the same LTM/patterns (shared knowledge)
-# - Each client gets their own STM (isolated observations)
-# - Each client uses their own config (no thrashing)
-```
-
-**What Happens Under the Hood**:
-```
-Time  Session A (recall=0.1)              Session B (recall=0.9)
-──────────────────────────────────────────────────────────────────────
-t1    Get processor (node="production_kb")
-t2    Set STM to session_A's STM
-t3    Call get_predictions(config=session_A.config)
-t4      ├─ Temporarily use recall=0.1
-t5      └─ Return predictions            Get processor (SAME processor!)
-t6                                        Set STM to session_B's STM
-t7                                        Call get_predictions(config=session_B.config)
-t8                                          ├─ Temporarily use recall=0.9
-t9                                          └─ Return predictions
-t10   Both sessions get correct results with their own config values
-```
-
-#### Key Benefits
-
-✅ **Thread-safe**: No shared mutable state
-✅ **Concurrent-safe**: Multiple sessions can access same processor simultaneously
-✅ **Predictable**: Session A's config never affects Session B
-✅ **Efficient**: One processor per node (not per session)
-✅ **Isolated STM**: Each session maintains its own short-term memory
-✅ **Shared LTM**: All sessions share the same learned patterns
-
-#### Configuration Update Methods
-
-**✅ RECOMMENDED: Session-based config updates**
-```python
-# Update configuration for a specific session
-PUT /sessions/{session_id}/config
-{
-    "config": {
-        "recall_threshold": 0.1,
-        "max_predictions": 100,
-        "process_predictions": true
-    }
-}
-```
-
-#### Best Practices
-
-**✓ DO**:
-- Create separate sessions for different users/use-cases
-- Update config via `POST /sessions/{session_id}/config`
-- Use different `node_id` for completely separate knowledge bases
-- Use same `node_id` with different sessions for shared knowledge with different query params
-
-**✗ DON'T**:
-- Expect config changes to affect other sessions
-- Share sessions between users (each user should have their own session)
-
-#### Example: Multi-User Training System
-
-```python
-# Training node (low recall, no predictions during training)
-trainer = KATOClient(
-    node_id="shared_kb",
-    recall_threshold=0.0,     # Not used during training
-    max_predictions=0,        # Not used during training
-    process_predictions=False # Skip prediction computation
-)
-
-# Query node 1 (permissive matching)
-query_low = KATOClient(
-    node_id="shared_kb",      # Same knowledge base
-    recall_threshold=0.1,     # Low threshold
-    max_predictions=100,
-    process_predictions=True
-)
-
-# Query node 2 (strict matching)
-query_high = KATOClient(
-    node_id="shared_kb",      # Same knowledge base
-    recall_threshold=0.9,     # High threshold
-    max_predictions=10,
-    process_predictions=True
-)
-
-# All three share the same LTM (patterns)
-# Each has isolated STM (observations)
-# Each uses its own config (no thrashing)
-```
-
-## Pattern Matching Modes
-
-### Overview
-
-KATO supports two pattern matching modes that affect how similarity is calculated and how predictions are generated. The mode selection is **critical** and depends on your data type.
-
-### Token-Level Matching (use_token_matching=True, sort=True) **[DEFAULT]**
-
-**Best for**: Tokenized text (BPE, SentencePiece, word-level), discrete symbols, atomic units
-
-**How it works**:
-- Compares token sequences directly as lists
-- Uses LCSseq (Longest Common Subsequence) algorithm at token level
-- Provides EXACT difflib.SequenceMatcher compatibility
-- Each token is an atomic unit that either matches exactly or doesn't match
-
-**Configuration**:
-```python
-# Session-specific (recommended)
-session = create_session(config={
-    'use_token_matching': True,  # Default
-    # sort auto-set to True
-})
-
-# Or environment variable (global)
-export KATO_USE_TOKEN_MATCHING=true
-```
-
-**Example**:
-```python
-Pattern: ['ĠNorth', 'ĠAmerican', 'Ġwolves', 'Ġis', 'ĠAl', 'aria', ',', 'Ġwhich']
-State:   ['For', 'Ġseveral', 'Ġyears', 'Ġthe', 'Ġarsenal', 'Ġ,', 'Ġwhich', 'Ġwas']
-
-Token-level matching:
-- Only 'Ġwhich' matches (1 out of 8 tokens)
-- Similarity: 2*1/(8+8) = 0.125 ✓ CORRECT
-- With recall_threshold=0.6: Pattern is correctly FILTERED OUT
-- Performance: 9x faster than difflib baseline
-```
-
-**Auto-Toggle Behavior**:
-- When `use_token_matching=True`, `sort` is automatically set to `True`
-- Tokens are sorted alphabetically within events for consistent matching
-- Manual override triggers warning but is respected
-
-### Character-Level Matching (use_token_matching=False, sort=False)
-
-**Best for**: Document/chunk-level matching where each event is a complete text unit
-
-**How it works**:
-- Joins token lists to strings with spaces
-- Uses fuzzy string matching (RapidFuzz fuzz.ratio) on joined text
-- Finds character-level overlaps between strings
-- Much faster but produces different similarity scores
-
-**Configuration**:
-```python
-# Session-specific
-session = create_session(config={
-    'use_token_matching': False,
-    # sort auto-set to False to preserve string order
-})
-
-# Or environment variable (global)
-export KATO_USE_TOKEN_MATCHING=false
-```
-
-**Example**:
-```python
-Pattern: ['ĠNorth', 'ĠAmerican', 'Ġwolves', 'Ġis', 'ĠAl', 'aria', ',', 'Ġwhich']
-State:   ['For', 'Ġseveral', 'Ġyears', 'Ġthe', 'Ġarsenal', 'Ġ,', 'Ġwhich', 'Ġwas']
-
-Character-level matching:
-- Joined: 'ĠNorth ĠAmerican...' vs 'For Ġseveral...'
-- Finds character overlaps: multiple 'Ġ', common letters
-- Similarity: ~0.57 ✗ MISLEADING (spurious character matches!)
-- With recall_threshold=0.6: Pattern INCORRECTLY PASSES (BUG!)
-- Performance: 75x faster than difflib baseline
-```
-
-**Auto-Toggle Behavior**:
-- When `use_token_matching=False`, `sort` is automatically set to `False`
-- String order is preserved (no alphabetical sorting)
-- Manual override triggers warning but is respected
-
-### ⚠️ CRITICAL CAVEAT: Character-Level Mode Produces Semantically Incorrect Results for Tokenized Text
-
-**Character-level mode breaks for tokenized text** because:
-
-1. **Spurious Matches**: Character-level similarity finds misleading overlaps
-   - BPE prefix 'Ġ' appears in all tokens → artificial similarity
-   - Common letters like 'a', 'i', 'e' → spurious matches
-   - Result: High similarity score despite few actual token matches
-
-2. **Broken Prediction Semantics**:
-   - High similarity (0.8) suggests good match
-   - But `matches` list has only 1-2 tokens
-   - `past/present/future` fields become meaningless
-   - `missing/extras` fields don't reflect actual token gaps
-
-3. **Threshold Filtering Fails**:
-   - `recall_threshold=0.6` should filter patterns with <60% token matches
-   - But character-level gives similarity=0.8 for pattern with 12% token matches
-   - Result: Garbage predictions flood the results
-
-**Valid Use Cases for Character-Level Mode**:
-```python
-# ✓ CORRECT: Document/chunk matching with exact chunk matches
-Pattern: [['The cat sat on the mat.'], ['The dog ran fast.']]
-State:   [['The cat sat on the mat.'], ['The dog walked slowly.']]
-
-# Similarity: ~0.8 (high character overlap in first sentence)
-# Matches: ['The cat sat on the mat.'] (exact chunk match)
-# Semantically correct: First chunk matches, second doesn't
-```
-
-**Invalid Use Cases for Character-Level Mode**:
-```python
-# ✗ WRONG: Tokenized text (BPE, word-level, etc.)
-Pattern: [['Ġtoken1'], ['Ġtoken2'], ['Ġtoken3']]
-State:   [['Ġtoken4'], ['Ġtoken5'], ['Ġtoken6']]
-
-# Character-level gives high similarity (many 'Ġ' matches)
-# But NO actual token matches!
-# Result: Completely broken predictions
-```
-
-### Auto-Toggle of Sort Parameter
-
-KATO automatically toggles the `sort` parameter based on `use_token_matching`:
-
-| use_token_matching | Auto-set sort | Reason |
-|--------------------|---------------|--------|
-| True (token-level) | True | Tokens are atomic units, alphabetical sorting enables consistent matching |
-| False (character-level) | False | Strings must preserve sequential order, sorting would corrupt the text |
-
-**Manual Override** (not recommended):
-```python
-# This will trigger a warning
-session = create_session(config={
-    'use_token_matching': True,
-    'sort': False  # ⚠️ MISMATCH: Token mode needs sort=True
-})
-# Log: "CONFIGURATION MISMATCH: sort=False with use_token_matching=True..."
-```
-
-### Per-Session Configuration
-
-Each session/node can use a different matching mode:
-
-```python
-# Node0: Tokenized corpus training (BPE tokens)
-session0 = create_session(
-    node_id='node0_training',
-    config={'use_token_matching': True}  # Token-level for BPE text
-)
-
-# Node1: Document chunk retrieval
-session1 = create_session(
-    node_id='node1_retrieval',
-    config={'use_token_matching': False}  # Character-level for doc chunks
-)
-
-# Both work independently with correct behavior
-```
-
-### Runtime Configuration Updates
-
-Configuration can be updated dynamically:
-
-```python
-# Update via API
-PUT /sessions/{session_id}/config
-{
-    "config": {
-        "use_token_matching": true
-        # sort will be auto-set to true
-    }
-}
-```
-
-### Performance Comparison
-
-| Mode | Speed vs difflib | Accuracy | Use Case |
-|------|------------------|----------|----------|
-| Token-level (LCSseq) | 9x faster | EXACT | Tokenized text, discrete symbols |
-| Character-level (fuzz.ratio) | 75x faster | ~0.03 score difference | Document chunks with exact matches |
-| Baseline (difflib) | 1x (reference) | EXACT | Reference implementation |
-
-### Recommendation
-
-**Use token-level matching (default) for**:
-- BPE tokenized text (like your training corpus)
-- SentencePiece tokens
-- Word-level tokens
-- Any discrete symbolic sequences
-
-**Only use character-level matching for**:
-- Document/chunk-level retrieval
-- Cases where each event is a complete text unit
-- Fuzzy string similarity is semantically meaningful
-
-**When in doubt**: Use token-level matching (the default). It provides correct semantics with 9x performance improvement.
-
-## Recent Modernizations
-
-- **Processor Genes Removed** (2025-11): Eliminated dual configuration system for single source of truth
-  - Removed `/genes/update` and `/gene/{name}` endpoints completely
-  - Removed `genome_manifest`, `_default_config`, `getGene()`, `update_genes()` from KatoProcessor
-  - Processors are now stateless execution engines - ALL config comes from sessions
-  - Only session-based configuration remains (Settings → SessionConfig → Config-as-Parameter)
-  - Eliminates confusion between processor defaults and session config
-- **Config-as-Parameter Architecture** (2025-11): Eliminated shared mutable state for true multi-session support
-  - Configuration now passed as parameters through call stack instead of mutating processor state
-  - Enables concurrent access to same processor with different configs per session
-  - Thread-safe and race-condition-free multi-user support
-- **Session Auto-Extension** (2025-10): Added sliding window session expiration for long-running tasks
-- **API Endpoint Migration Complete (Phase 3)** (2025-10): Removed all deprecated direct endpoints, session-only architecture
-- **API Endpoint Deprecation Phase 2** (2025-10): Auto-session middleware for transparent backward compatibility
-- **FastAPI Migration**: Replaced REST/ZMQ with direct FastAPI embedding (2025-09)
-- **Vector Database**: Migrated from linear search to Qdrant (10-100x faster)
-- **Simplified Architecture**: Removed connection pooling complexity
-- **Better Testing**: Local Python tests with automatic isolation
-
-## Development Workflow
-
-1. Make changes to source files in `kato/` directory
-2. Restart services: `docker-compose restart`
-3. Run tests: `./run_tests.sh --no-start --no-stop`
-4. Debug failures directly with print statements or debugger
-5. Commit changes when tests pass
+**Complete Architecture**: See [ARCHITECTURE_DIAGRAM.md](ARCHITECTURE_DIAGRAM.md) and [docs/developers/architecture.md](docs/developers/architecture.md)
 
 ## Important Files and Locations
 
-- Main service: `kato/services/kato_fastapi.py`
-- Session endpoints: `kato/api/endpoints/sessions.py` (primary API)
-- Utility endpoints: `kato/api/endpoints/kato_ops.py` (patterns, data access)
-- Processing logic: `kato/workers/kato_processor.py`
-- Vector operations: `kato/storage/qdrant_manager.py`
-- Pattern representations: `kato/representations/pattern.py`
-- Pattern processing: `kato/workers/pattern_processor.py`
-- Pattern search: `kato/searches/pattern_search.py`
-- Metrics calculations: `kato/informatics/metrics.py`
-- Monitoring metrics: `kato/monitoring/metrics.py`
-- Test fixtures: `tests/tests/fixtures/kato_fixtures.py`
-- Startup script: `start.sh`
+### API Layer
+- `kato/api/endpoints/sessions.py` - Session-based API (primary)
+- `kato/api/endpoints/kato_ops.py` - Utility endpoints
 
-## Prediction Metrics and Calculations
+### Core Processing
+- `kato/workers/kato_processor.py` - Main processing engine
+- `kato/workers/pattern_processor.py` - Pattern learning/matching
+- `kato/workers/observation_processor.py` - Input processing
 
-### Core Metrics
-1. **Normalized Entropy**: Entropy-like measure of pattern complexity
-   - Requires non-empty state
-   - Formula: `sum([expectation(state.count(symbol) / len(state), total_symbols) for symbol in state])`
-   - Protected against division by zero when state is empty
+### Storage & Search
+- `kato/storage/qdrant_manager.py` - Vector operations
+- `kato/searches/pattern_search.py` - Pattern matching
+- `kato/sessions/session_manager.py` - Session management
 
-2. **Global Normalized Entropy**: Extended normalized entropy using symbol probability cache
-   - Calculates entropy using global symbol probabilities
-   - Also requires non-empty state
+### Configuration
+- `kato/config/settings.py` - Environment-based configuration
+- `kato/config/session_config.py` - Per-session configuration
 
-3. **ITFDF Similarity**: Inverse term frequency-document frequency similarity
-   - Measures pattern relevance based on frequency and distance
-   - Formula: `1 - (distance * prediction['frequency'] / total_ensemble_pattern_frequencies)`
-   - Protected against zero total_ensemble_pattern_frequencies
+### Testing
+- `tests/tests/fixtures/kato_fixtures.py` - Test fixtures
+- `./start.sh` - Service startup
+- `./run_tests.sh` - Test runner
 
-4. **Potential**: Composite metric for ranking predictions (default)
-   - Formula: `potential = (evidence + confidence) * snr + itfdf_similarity + (1/(fragmentation + 1))`
-   - Combines: match completeness, signal quality, frequency-weighted similarity, and pattern cohesion
-   - Errors in calculation will propagate (no fallback masking)
-   - **Configurable Ranking**: Can use alternative metrics via `rank_sort_algo` gene
-     - Available: potential (default), similarity, evidence, confidence, snr, frequency, fragmentation, normalized_entropy, global_normalized_entropy, itfdf_similarity, confluence, predictive_information
-     - Example: Set `rank_sort_algo=similarity` to prioritize best pattern matches
+**Code Organization**: See [docs/developers/code-organization.md](docs/developers/code-organization.md)
 
-5. **Confluence**: Probability of pattern occurring vs random chance
-   - Formula: `p(e|h) * (1 - conditionalProbability(present, symbol_probabilities))`
-   - Returns 0 for empty state
+## Configuration Quick Reference
 
-### Required Prediction Fields
-All predictions MUST contain these fields:
-- `frequency`: Pattern occurrence count
-- `matches`: Symbols that match between observation and pattern
-- `missing`: Symbols in pattern but not observed
-- `evidence`: Strength of pattern match
-- `confidence`: Ratio of matches to present length
-- `snr`: Signal-to-noise ratio
-- `fragmentation`: Pattern cohesion measure (can be -1)
-- `emotives`: Emotional context data
-- `present`: Events containing matching symbols
+### Key Environment Variables
+- `PROCESSOR_ID`: Unique identifier (required)
+- `LOG_LEVEL`: DEBUG, INFO, WARNING, ERROR (default: INFO)
+- `MAX_PATTERN_LENGTH`: Auto-learn trigger (default: 0 = manual)
+- `STM_MODE`: CLEAR or ROLLING (default: CLEAR)
+- `RECALL_THRESHOLD`: 0.0-1.0 (default: 0.1)
+- `SESSION_TTL`: Session timeout in seconds (default: 3600)
+- `SESSION_AUTO_EXTEND`: Auto-extend TTL on access (default: true)
 
-## Emotives and PERSISTENCE
-
-### Quick Reference
-- **Input Format**: `Dict[str, float]` - e.g., `{"happiness": 0.8, "arousal": -0.3}`
-- **Storage**: Rolling window arrays per pattern, limited by PERSISTENCE parameter
-- **PERSISTENCE**: Controls window size (default: 5) - how many historical values kept
-- **Averaging**: Multiple emotive values are averaged (arithmetic mean)
-- **Critical**: Emotives in predictions come from learned patterns, NOT current observations
-- **observe_sequence**: Placement within sequence doesn't matter - all emotives from all observations are accumulated and averaged together
-
-### Data Flow
-1. Observation includes emotives dict
-2. Added to STM accumulator list
-3. Averaged when learning pattern
-4. Stored with MongoDB `$slice` operation
-5. Retrieved and averaged in predictions
-
-### Batch Operations (observe_sequence)
-When using `observe_sequence`, emotives can be specified on any observation in the batch:
-- **Placement is irrelevant**: Whether emotives are in the first, last, or distributed across observations, the final averaged emotives will be identical
-- **All accumulate together**: All emotives from all observations are collected and averaged when learning
-- **Example**: `[{'strings': ['A'], 'emotives': {'joy': 0.8}}, {'strings': ['B'], 'emotives': {}}]` produces the same result as `[{'strings': ['A'], 'emotives': {}}, {'strings': ['B'], 'emotives': {'joy': 0.8}}]`
-
-### Rolling Window Behavior
-With PERSISTENCE=5, pattern's emotive arrays maintain last 5 values:
-```python
-# Array grows until limit
-[0.8] → [0.8, 0.6] → [0.8, 0.6, 0.9] → [0.8, 0.6, 0.9, 0.7] → [0.8, 0.6, 0.9, 0.7, 0.5]
-# Next value pushes off oldest
-[0.6, 0.9, 0.7, 0.5, 0.3]  # 0.8 dropped
+### Session Configuration
+Update configuration per session via API:
+```bash
+POST /sessions/{session_id}/config
+{
+  "config": {
+    "recall_threshold": 0.5,
+    "max_predictions": 100,
+    "use_token_matching": true
+  }
+}
 ```
 
-### Configuration Guidelines
-- `PERSISTENCE=1`: Instant adaptation (only latest value)
-- `PERSISTENCE=5`: Default, balanced adaptation
-- `PERSISTENCE=10+`: Slower adaptation, longer memory
+**Complete Configuration**: See [docs/reference/configuration-vars.md](docs/reference/configuration-vars.md)
 
-### Testing Emotives
-```python
-# 1. Learn pattern WITH emotives
-kato.observe({'strings': ['A'], 'emotives': {'joy': 0.8}})
-kato.observe({'strings': ['B'], 'emotives': {'joy': 0.6}})
-kato.learn()
+## Key Behavioral Properties (Quick Reference)
 
-# 2. Clear STM and observe matching pattern
-kato.clear_short_term_memory()
-kato.observe({'strings': ['A', 'B']})
+### Critical Rules
+1. **Minimum Sequence Length**: 2+ strings total in STM required for predictions
+2. **Alphanumeric Sorting**: Strings sorted within events (configurable)
+3. **Deterministic**: Same inputs → same outputs (always)
+4. **Session Isolation**: Each session has isolated STM, shared LTM per node_id
+5. **Config-as-Parameter**: Configuration passed as parameters (not mutated)
 
-# 3. Predictions will contain averaged emotives from learned pattern
-predictions = kato.get_predictions()
-# predictions[0]['emotives'] will have averaged values
-```
+### Pattern Matching Modes
+- **Token-level** (default): EXACT difflib compatibility, 9x faster, use for tokenized text
+- **Character-level**: Fuzzy string matching, 75x faster, use for document chunks only
 
-## Pattern Metadata
+**Details**: See [docs/research/pattern-matching.md](docs/research/pattern-matching.md)
 
-### Quick Reference
-- **Input Format**: `Dict[str, Any]` - e.g., `{"book": "Alice in Wonderland", "chapter": "1"}`
-- **Storage**: Unique string lists per pattern (set-union behavior)
-- **Purpose**: Contextual tags for patterns (sources, categories, attributes)
-- **Accumulation**: Values accumulate across re-learning, duplicates auto-filtered
-- **Critical**: Metadata accumulates from all observations that form the pattern
-- **observe_sequence**: Placement within sequence doesn't matter - all metadata from all observations are merged together
+### Prediction Structure
+- **past**: Events before first match
+- **present**: ALL events containing matches (complete events, not just matches)
+- **future**: Events after last match
+- **missing**: Event-structured list of unobserved symbols (aligned with present)
+- **extras**: Event-structured list of unexpected symbols (aligned with STM)
 
-### Data Flow
-1. Observation includes metadata dict
-2. Added to STM metadata accumulator list
-3. Merged when learning pattern (unique string lists per key)
-4. Stored with MongoDB `$addToSet` operation
-5. Retrieved with pattern data in predictions
+**Details**: See [docs/research/predictive-information.md](docs/research/predictive-information.md)
 
-### Batch Operations (observe_sequence)
-When using `observe_sequence`, metadata can be specified on any observation in the batch:
-- **Placement is irrelevant**: Whether metadata is in the first, last, or distributed across observations, the final merged metadata will be identical
-- **All merge together**: All metadata from all observations are collected and merged with set-union semantics when learning
-- **Duplicates filtered**: Same values appearing in multiple observations are only stored once
-- **Example**: `[{'strings': ['A'], 'metadata': {'book': 'Alice'}}, {'strings': ['B'], 'metadata': {}}]` produces the same result as `[{'strings': ['A'], 'metadata': {}}, {'strings': ['B'], 'metadata': {'book': 'Alice'}}]`
+### Multi-Modal Processing
+- **Strings**: Discrete symbols
+- **Vectors**: 768-dim embeddings → hash-based names (VCTR|hash)
+- **Emotives**: Emotional context (-1 to +1), rolling window storage
+- **Metadata**: Contextual tags, set-union accumulation
 
-### Rolling Window Behavior
-Unlike emotives (which use rolling windows), metadata uses **set-union** accumulation:
-```python
-# Observation 1
-{'book': 'title1'}
-# MongoDB: {'book': ['title1']}
+**Details**:
+- Vectors: [docs/research/vector-embeddings.md](docs/research/vector-embeddings.md)
+- Emotives: [docs/research/emotives-processing.md](docs/research/emotives-processing.md)
+- Metadata: [docs/research/metadata-processing.md](docs/research/metadata-processing.md)
 
-# Observation 2 (same pattern re-learned)
-{'book': 'title2', 'chapter': '1'}
-# MongoDB: {'book': ['title1', 'title2'], 'chapter': ['1']}
+## Testing Architecture
 
-# Observation 3 (duplicate value)
-{'book': 'title1', 'chapter': '2'}
-# MongoDB: {'book': ['title1', 'title2'], 'chapter': ['1', '2']}
-# Note: 'title1' not duplicated, '2' added to chapter
-```
+### Test Isolation
+- Each test gets unique `processor_id` for complete database isolation
+- Format: `test_{test_name}_{timestamp}_{uuid}`
+- Tests run in local Python, connect to Docker services
+- Fast iteration - no container rebuilds for tests
 
-### Type Conversion
-All metadata values are automatically converted to strings:
-```python
-# Input
-{'count': 123, 'flag': True, 'price': 45.67}
-# Stored as
-{'count': ['123'], 'flag': ['True'], 'price': ['45.67']}
-```
+### Test Organization
+- `tests/tests/unit/` - Component tests
+- `tests/tests/integration/` - End-to-end workflows
+- `tests/tests/api/` - REST endpoint tests
+- `tests/tests/performance/` - Stress tests
 
-### Testing Metadata
-```python
-# 1. Learn pattern WITH metadata
-kato.observe({'strings': ['A'], 'metadata': {'book': 'Alice', 'chapter': '1'}})
-kato.observe({'strings': ['B'], 'metadata': {'book': 'Alice', 'chapter': '2'}})
-kato.learn()
-
-# 2. Pattern will contain accumulated metadata
-pattern = kato.get_pattern(pattern_name)
-# pattern['metadata'] = {'book': ['Alice'], 'chapter': ['1', '2']}
-
-# 3. Re-learning same pattern adds new metadata
-kato.observe({'strings': ['A'], 'metadata': {'book': 'Through the Looking Glass'}})
-kato.observe({'strings': ['B'], 'metadata': {}})
-kato.learn()
-
-# 4. Pattern now has both books
-# pattern['metadata'] = {'book': ['Alice', 'Through the Looking Glass'], 'chapter': ['1', '2']}
-```
-
-### Use Cases
-- **Document tracking**: Link patterns to source documents/chapters
-- **Dataset attribution**: Track which datasets contributed to patterns
-- **Category tagging**: Add semantic categories to patterns
-- **Version tracking**: Mark patterns with version/timestamp information
+**Details**: See [docs/developers/testing.md](docs/developers/testing.md)
 
 ## Automated Planning System Protocol
 
 ### ⚠️ CRITICAL RULE: NEVER EDIT planning-docs/ FILES DIRECTLY ⚠️
 
-### Role Separation
-**Claude Code's Responsibility**: 
-- **READ-ONLY** access to planning documentation for context
-- **TRIGGER** project-manager agent for ALL documentation updates
-- **EXECUTE** development tasks (code, tests, configs)
+**Claude Code's Role**:
+- **READ-ONLY** access to planning documentation
+- **TRIGGER** project-manager agent for ALL planning updates
+- **EXECUTE** development tasks only
 
-**Project-Manager's Responsibility**:
-- **EXCLUSIVE WRITE ACCESS** to all planning-docs/ files
-- Documentation archival and organization
-- Pattern tracking and velocity calculations
-- Time estimate refinements
+**Trigger project-manager agent when**:
+- Task completion
+- New tasks created
+- Blocker encountered/resolved
+- Architectural decision made
+- Milestone reached
 
-### ❌ FORBIDDEN ACTIONS for Claude Code:
-- Using Edit, Write, or MultiEdit tools on ANY file in planning-docs/
-- Creating new files in planning-docs/
-- Modifying SESSION_STATE.md, DAILY_BACKLOG.md, or any other planning files
+**Context Loading**:
+1. Always read `planning-docs/README.md` first
+2. Read `planning-docs/SESSION_STATE.md` for current task
+3. Load additional context on-demand
 
-### ✅ CORRECT WORKFLOW:
-1. **READ** planning docs to understand current state
-2. **EXECUTE** development tasks
-3. **TRIGGER** project-manager with results for documentation updates
-
-**VIOLATION CONSEQUENCE**: Direct edits to planning-docs/ will create conflicts and break the documentation system.
-
-### Every Session Start:
-1. READ `planning-docs/README.md` to understand the current system state
-2. The README will guide you to the most relevant documents for immediate context
-3. Only read additional documents when specifically needed for the current work
-
-### Trigger Project-Manager When:
-Use the Task tool with subagent_type="project-manager" when these events occur:
-- **Task Completion** → Agent will update SESSION_STATE, archive work, refresh backlogs
-- **New Tasks Created** → Agent will add to backlogs with time estimates
-- **Priority Changes** → Agent will reorder backlogs and update dependencies
-- **Blocker Encountered** → Agent will log blocker, suggest alternative tasks
-- **Blocker Resolved** → Agent will update estimates, clear blocker status
-- **Architectural Decision** → Agent will update DECISIONS.md and ARCHITECTURE.md
-- **New Specifications** → Agent will parse into tasks, update scope
-- **Context Switch** → Agent will create session log, update current state
-- **Milestone Reached** → Agent will archive phase, update project overview
-
-### Context Loading Strategy (Read-Only):
-1. **Immediate Context** (Always Load):
-   - `planning-docs/README.md` → Entry point and guide
-   - `planning-docs/SESSION_STATE.md` → Current task and progress
-   - `planning-docs/DAILY_BACKLOG.md` → Today's priorities
-   - Latest session log in `planning-docs/sessions/` (if exists)
-
-2. **On-Demand Context** (Load When Needed):
-   - `planning-docs/PROJECT_OVERVIEW.md` → Project scope and tech stack
-   - `planning-docs/ARCHITECTURE.md` → Technical decisions and structure
-   - `planning-docs/SPRINT_BACKLOG.md` → Weekly planning and future work
-   - `planning-docs/DECISIONS.md` → Historical architectural choices
-   - `planning-docs/completed/` → Previous work for reference
-
-### How to Trigger the Project-Manager:
-```
-Example: After completing a task
-assistant: "I've finished implementing the OAuth2 authentication feature. Let me trigger the project-manager to update our documentation."
-<uses Task tool with subagent_type="project-manager">
-
-The project-manager will automatically:
-- Update SESSION_STATE.md progress
-- Archive the completed task
-- Refresh the backlogs
-- Calculate actual vs estimated time
-- Log any patterns observed
-```
+**Details**: See section "Automated Planning System Protocol" in original CLAUDE.md (lines 901-972)
 
 ## Test Execution Protocol
 
-### ⚠️ CRITICAL: Use test-analyst Agent ONLY for Docker-based Testing ⚠️
-
-With the new FastAPI architecture, most testing is done locally with Python:
-
 ### Local Testing (Recommended)
 ```bash
-# Ensure services are running
-./start.sh
-
-# Run tests locally
+./start.sh  # Ensure services running
 ./run_tests.sh --no-start --no-stop
-
-# Direct pytest execution
-python -m pytest tests/tests/unit/ -v
 ```
 
-### When to Use test-analyst Agent:
-The test-analyst agent should ONLY be used for:
-- Running tests that require Docker container rebuilds
-- Complex test orchestration across multiple containers
-- Performance benchmarking with isolated environments
+### test-analyst Agent (Only for Docker-based testing)
+Use ONLY for:
+- Tests requiring container rebuilds
+- Complex test orchestration
+- Performance benchmarking
 
-For regular development testing, use the local Python approach described above.
-
-## Test Isolation Architecture
-
-### Critical Requirement: Complete Database Isolation
-Each KATO instance MUST have complete isolation via unique processor_id to prevent cross-contamination between tests and production instances.
-
-### Database Isolation Strategy
-Each KATO instance uses its processor_id for complete database isolation:
-
-1. **MongoDB**: Database name = processor_id
-   - Patterns stored in `{processor_id}.patterns_kb`
-   - Symbols stored in `{processor_id}.symbols_kb`
-   - Predictions stored in `{processor_id}.predictions_kb`
-   - Metadata stored in `{processor_id}.metadata`
-
-2. **Qdrant**: Collection name = `vectors_{processor_id}`
-   - Vector embeddings isolated per instance
-   - No cross-contamination between tests
-   - Each instance has its own HNSW index
-
-3. **In-Memory Cache**: Per processor instance
-   - Cache is automatically isolated per processor
-   - No shared state between processors
-
-### Test Requirements
-- **Each test MUST use a unique processor_id**
-- Format: `test_{test_name}_{timestamp}_{uuid}`
-- Example: `test_pattern_endpoint_1699123456789_a1b2c3d4`
-- **Fixture scope is 'function'** - each test gets fresh isolation
-- **Services must be running** before tests execute
-
-### Production Requirements
-- **Each production instance MUST have unique processor_id**
-- Never share processor_ids between instances
-- Monitor for ID collisions
-- Use format: `{environment}_{service}_{timestamp}_{uuid}`
-
-### Why This Matters
-Without proper isolation:
-- Tests contaminate each other's long-term memory
-- Patterns learned in one test affect predictions in another
-- Test failures become non-deterministic
-- Parallel test execution becomes impossible
+**Details**: See [docs/developers/testing.md](docs/developers/testing.md)
 
 ## Container Manager Workflow Protocol
 
-### ⚠️ CRITICAL: Use Container-Manager Workflow After Code Changes Ready for Release ⚠️
+### When to Use
+- **patch**: Bug fixes, security patches, performance improvements
+- **minor**: New features, new endpoints, backward-compatible additions
+- **major**: Breaking changes, API incompatibilities, required migrations
 
-The container-manager workflow automates the complete release pipeline after code changes are ready to be published. This is executed directly by Claude Code, not through a separate agent.
-
-### When to Use Container-Manager Workflow:
-
-**Always use after:**
-1. **Bug fixes** (patch) - Fixed bugs, security patches, performance improvements
-2. **New features** (minor) - Added functionality, new endpoints, backward-compatible changes
-3. **Breaking changes** (major) - API changes, architecture changes, incompatible updates
-
-**Never use for:**
-- Work in progress (WIP) commits
-- Experimental code
-- Pre-merge feature branch commits
-
-### What the Workflow Does:
-
+### Workflow
 Claude Code automatically:
-1. **Version Bump**: Updates version in pyproject.toml, setup.py, kato/__init__.py
-2. **Git Operations**: Creates commit ("chore: bump version to X.Y.Z") and tag (vX.Y.Z)
-3. **Push to Remote**: Pushes commit and tag to origin
-4. **Build Images**: Builds container with version metadata
-5. **Push to Registry**: Publishes to ghcr.io with multiple tags (X.Y.Z, X.Y, X, latest)
-6. **Verification**: Verifies images are available
+1. Analyzes git history and commit messages
+2. Determines appropriate version bump (patch/minor/major)
+3. Executes `./container-manager.sh [bump_type] "description"`
+4. Builds and pushes container images to ghcr.io
 
-### How to Trigger the Workflow:
-
-Claude Code **automatically determines** the appropriate version bump type by analyzing:
-- Git commit messages since last version
-- Files changed and their significance
-- Nature of the changes (breaking, additive, fixes)
-- Context provided by the user
-
-```
-Example: After making changes
-User: "I've fixed the pattern matching bug and optimized the database queries. Please release a new version."
-
-Claude: I'll analyze the changes and execute the container release workflow.
-
-Step 1: Analyze changes
-<runs git commands>
-git log --oneline $(git describe --tags --abbrev=0)..HEAD
-> fix: pattern matching similarity calculation bug
-> perf: optimize MongoDB aggregation pipeline queries
-
-git diff --name-only $(git describe --tags --abbrev=0)..HEAD
-> kato/searches/pattern_search.py
-> kato/storage/aggregation_pipelines.py
-
-Analysis:
-- Commit types: fix, perf → PATCH indicators
-- Files: Internal logic changes, no API modifications
-- No breaking changes detected
-→ Determination: PATCH version (2.0.0 → 2.0.1)
-
-Step 2: Execute release
-<runs Bash tool>
-./container-manager.sh patch "Fix pattern matching bug and optimize database queries"
-
-Output:
-✓ Version bumped: 2.0.0 → 2.0.1
-✓ Git commit created: "chore: bump version to 2.0.1"
-✓ Git tag created: v2.0.1
-✓ Pushed to remote
-✓ Container images built and pushed:
-  - ghcr.io/sevakavakians/kato:2.0.1
-  - ghcr.io/sevakavakians/kato:2.0
-  - ghcr.io/sevakavakians/kato:2
-  - ghcr.io/sevakavakians/kato:latest
-
-Release complete! Users can pull: docker pull ghcr.io/sevakavakians/kato:2.0.1
-```
-
-### Prerequisites for Container Release Workflow:
-
-1. **Docker Login**: Must be logged into ghcr.io
-   ```bash
-   echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
-   ```
-
-2. **Clean Working Directory**: All changes committed
-   ```bash
-   git status  # Should be clean
-   ```
-
-3. **On Main Branch**: Should be on main (or release branch)
-   ```bash
-   git branch --show-current
-   ```
-
-### How Claude Code Determines Version Bump Type:
-
-Before invoking container-manager, analyze changes using these criteria:
-
-#### 1. Check Git History
-```bash
-# Commands to run:
-git log --oneline $(git describe --tags --abbrev=0)..HEAD  # Commits since last tag
-git diff --name-only $(git describe --tags --abbrev=0)..HEAD  # Files changed
-git diff --stat $(git describe --tags --abbrev=0)..HEAD  # Change summary
-```
-
-#### 2. Analyze Commit Messages (Conventional Commits)
-- `fix:`, `perf:`, `docs:`, `style:`, `refactor:`, `test:` → **patch**
-- `feat:` → **minor**
-- `BREAKING CHANGE:` or `!` suffix (e.g., `feat!:`) → **major**
-
-#### 3. Analyze Files Changed
-
-**MAJOR (breaking changes):**
-- API endpoint paths changed/removed (`kato/api/endpoints/*.py`)
-- Database schema changes (`kato/storage/*.py` with schema modifications)
-- Required configuration changes (environment variable removals)
-- Removal of public functions/classes
-- Changes to function signatures that break compatibility
-
-**MINOR (new features):**
-- New API endpoints added (`kato/api/endpoints/*.py` with new routes)
-- New public functions/classes added
-- New configuration options (backward-compatible)
-- New features in `kato/workers/*.py` or `kato/services/*.py`
-
-**PATCH (bug fixes/improvements):**
-- Bug fixes in existing code
-- Performance improvements (no API changes)
-- Documentation updates (`docs/`, `README.md`, `CHANGELOG.md`)
-- Test improvements (`tests/`)
-- Internal refactoring (no public API changes)
-- Security patches
-
-#### 4. Decision Tree
-
-```
-Did any change break backward compatibility? (API changes, removals, signature changes)
-├─ YES → MAJOR
-└─ NO → Did any change add new functionality? (new endpoints, new features)
-    ├─ YES → MINOR
-    └─ NO → Are changes only fixes/improvements/docs? (bug fixes, performance, docs)
-        ├─ YES → PATCH
-        └─ UNCLEAR → Ask user for clarification
-```
-
-#### 5. Examples
-
-**PATCH Examples:**
-- Fixed pattern matching bug in `kato/searches/pattern_search.py`
-- Optimized database queries in `kato/storage/aggregation_pipelines.py`
-- Updated documentation in `docs/`
-- Fixed typos in `README.md`
-- Improved test coverage in `tests/`
-
-**MINOR Examples:**
-- Added `/metrics` endpoint in `kato/api/endpoints/kato_ops.py`
-- Added GPU acceleration support in `kato/gpu/`
-- Added new configuration option `GPU_ENABLED` (defaults to False)
-- Added WebSocket support for real-time updates
-
-**MAJOR Examples:**
-- Removed deprecated `/observe-direct` endpoint
-- Changed `/sessions` API response format (breaking)
-- Required new environment variable `REDIS_URL` (no default)
-- Changed function signature: `observe(strings)` → `observe(data: ObservationData)`
-- Database migration required (MongoDB schema change)
-
-### Version Bump Rules (Summary):
-
-- **patch** (X.Y.Z → X.Y.Z+1): Bug fixes, security patches, documentation, performance improvements
-- **minor** (X.Y.Z → X.Y+1.0): New features, new endpoints, backward-compatible additions
-- **major** (X.Y.Z → X+1.0.0): Breaking changes, API incompatibilities, required migrations
-
-### Complete Documentation:
-
-See `docs/CONTAINER_MANAGER.md` for:
-- Detailed usage instructions
-- Troubleshooting guide
-- CI/CD integration examples
-- Best practices
-
-### Manual Alternative:
-
-If you need to run manually instead of using the agent:
-```bash
-./container-manager.sh patch "Description of changes"
-```
+**Details**: See [docs/maintenance/releasing.md](docs/maintenance/releasing.md)
 
 ## Agent Usage Summary
 
-### Available Specialized Agents:
-1. **project-manager**: ALL planning-docs/ updates and documentation
-2. **test-analyst**: Docker-based testing and complex test orchestration ONLY
-3. **general-purpose**: Complex multi-step research tasks, version management, and container releases
-4. **statusline-setup**: Configure Claude Code status line
+### Available Agents
+1. **project-manager**: Planning documentation updates
+2. **test-analyst**: Docker-based testing only
+3. **general-purpose**: Complex research, version management
 
-**Note**: Container-manager functionality is implemented through the general-purpose agent or direct script execution, not as a separate agent type.
-
-### Quick Decision Tree:
-- Updating documentation? → project-manager
+### Quick Decision Tree
+- Updating planning docs? → project-manager
 - Running Docker tests? → test-analyst
-- Running local tests? → Do it directly with `./run_tests.sh`
-- Code changes ready to release? → Direct workflow (analyze + run container-manager.sh)
+- Running local tests? → Do directly with `./run_tests.sh`
+- Code ready to release? → Direct workflow (analyze + run container-manager.sh)
 - Complex research? → general-purpose
-- Everything else? → Do it directly
+- Everything else? → Do directly
 
-### Common Mistakes to Avoid:
-1. ❌ Editing planning-docs/ directly → ✅ Use project-manager
-2. ❌ Using test-analyst for local tests → ✅ Use `./run_tests.sh`
-3. ❌ Forgetting to start services before tests → ✅ Run `./start.sh` first
-4. ❌ Sharing processor_ids between tests → ✅ Each test gets unique processor_id
-5. ❌ Manually bumping versions → ✅ Request release and Claude Code handles version analysis
-- **ALWAYS** rebuild KATO docker image using no-cache options after **EVERY** code update and **BEFORE** testing.
-- Do **NOT** use MCPs for this project.
+## Common Development Workflow
+
+1. Make changes to source files in `kato/`
+2. Restart services: `docker-compose restart`
+3. Run tests: `./run_tests.sh --no-start --no-stop`
+4. Debug with print statements or debugger (tests run locally)
+5. Commit changes when tests pass
+6. Trigger project-manager agent to update planning docs
+
+## Critical Reminders
+
+- **ALWAYS** update `requirements.lock` after modifying `requirements.txt`
+- **NEVER** edit `planning-docs/` files directly (use project-manager agent)
+- **ALWAYS** rebuild KATO docker image after code updates: `docker-compose build --no-cache kato`
+- **Services must be running** before tests: `./start.sh`
+- **Each test needs unique processor_id** for isolation
+- **Do NOT use MCPs** for this project
+
+## Additional Documentation
+
+### For Detailed Information, See:
+
+**Users**:
+- Quick Start: [docs/users/quick-start.md](docs/users/quick-start.md)
+- API Reference: [docs/users/api-reference.md](docs/users/api-reference.md)
+- Core Concepts: [docs/users/concepts.md](docs/users/concepts.md)
+
+**Developers**:
+- Contributing: [docs/developers/contributing.md](docs/developers/contributing.md)
+- Architecture: [docs/developers/architecture.md](docs/developers/architecture.md)
+- Testing: [docs/developers/testing.md](docs/developers/testing.md)
+
+**Operations**:
+- Deployment: [docs/operations/docker-deployment.md](docs/operations/docker-deployment.md)
+- Configuration: [docs/operations/configuration.md](docs/operations/configuration.md)
+- Monitoring: [docs/operations/monitoring.md](docs/operations/monitoring.md)
+
+**Research**:
+- Core Concepts: [docs/research/core-concepts.md](docs/research/core-concepts.md)
+- Pattern Matching: [docs/research/pattern-matching.md](docs/research/pattern-matching.md)
+- Predictive Information: [docs/research/predictive-information.md](docs/research/predictive-information.md)
+
+**Integration**:
+- Architecture Patterns: [docs/integration/architecture-patterns.md](docs/integration/architecture-patterns.md)
+- Multi-Instance: [docs/integration/multi-instance.md](docs/integration/multi-instance.md)
+- Hybrid Agents: [docs/integration/hybrid-agents.md](docs/integration/hybrid-agents.md)
+
+**Maintenance**:
+- Release Process: [docs/maintenance/releasing.md](docs/maintenance/releasing.md)
+- Known Issues: [docs/maintenance/known-issues.md](docs/maintenance/known-issues.md)
+
+**Reference**:
+- API Reference: [docs/reference/api/](docs/reference/api/)
+- Configuration Variables: [docs/reference/configuration-vars.md](docs/reference/configuration-vars.md)
+- Glossary: [docs/reference/glossary.md](docs/reference/glossary.md)
+
+---
+
+**Last Updated**: November 2025
+**KATO Version**: 3.0+

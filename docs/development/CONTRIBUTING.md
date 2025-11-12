@@ -250,9 +250,9 @@ def process_emotives(self, emotives: Dict[str, float]) -> Dict[str, float]:
 
 When adding features:
 1. Update relevant docs/*.md files
-2. Add examples to GETTING_STARTED.md if user-facing
-3. Update API_REFERENCE.md for new endpoints
-4. Document configuration in CONFIGURATION.md
+2. Add examples to docs/users/quick-start.md if user-facing
+3. Update docs/users/api-reference.md for new endpoints
+4. Document configuration in docs/operations/configuration.md
 
 ## Performance Considerations
 
@@ -355,7 +355,7 @@ Brief description of changes
 
 - [System Overview](../SYSTEM_OVERVIEW.md) - Architecture understanding
 - [Core Concepts](../CONCEPTS.md) - KATO behavior reference
-- [Testing Guide](TESTING.md) - Test writing help
+- [Testing Guide](../developers/testing.md) - Test writing help
 - GitHub Issues - Bug reports and features
 
 ### Communication

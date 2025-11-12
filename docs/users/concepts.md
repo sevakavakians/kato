@@ -110,7 +110,7 @@ node_id = "alice"
 → All patterns for this node stored permanently
 ```
 
-**Important**: Using the same `node_id` in future sessions accesses the same trained database. See [Database Persistence Guide](DATABASE_PERSISTENCE.md) for details.
+**Important**: Using the same `node_id` in future sessions accesses the same trained database. See [Database Persistence Guide](database-persistence.md) for details.
 
 ### 3. Learning Process
 

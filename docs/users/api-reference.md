@@ -11,6 +11,18 @@ Complete API documentation for the KATO FastAPI service.
 - Swagger UI: `http://localhost:8000/docs`
 - ReDoc: `http://localhost:8000/redoc`
 
+## ⚠️ IMPORTANT: Session-Based API Required
+
+**As of Phase 3 (2025-10-06), all core KATO operations require session-based endpoints.**
+
+Direct endpoints (`/observe`, `/learn`, `/predictions`, etc.) have been **permanently removed**. This migration ensures:
+- ✅ Proper state isolation between users
+- ✅ Multi-user support with concurrent access
+- ✅ Configuration per session
+- ✅ Redis-backed session persistence
+
+See [API Migration Guide](API_MIGRATION_GUIDE.md) for migration instructions.
+
 ## Core Endpoints
 
 ### Health Check
@@ -50,13 +62,48 @@ Returns detailed processor status.
 }
 ```
 
-### Observe
+### Session Management
+
+#### Create Session
 
 ```http
-POST /observe
+POST /sessions
 ```
 
-Processes an observation and adds it to short-term memory.
+Creates a new isolated session for a user or application.
+
+**Request Model: `CreateSessionRequest`**
+```json
+{
+  "node_id": "user_alice",              // Required: Node identifier
+  "config": {                            // Optional: Session-specific configuration
+    "recall_threshold": 0.5,
+    "max_predictions": 100
+  },
+  "ttl_seconds": 3600,                   // Optional: Session TTL (default: 3600)
+  "metadata": {}                         // Optional: Custom metadata
+}
+```
+
+**Response Model: `SessionResponse`**
+```json
+{
+  "session_id": "session-abc123...",
+  "node_id": "user_alice",
+  "created_at": "2025-11-11T12:00:00Z",
+  "expires_at": "2025-11-11T13:00:00Z",
+  "ttl_seconds": 3600,
+  "session_config": {}
+}
+```
+
+### Observe (Session-Based)
+
+```http
+POST /sessions/{session_id}/observe
+```
+
+Processes an observation and adds it to the session's short-term memory.
 
 **Request Model: `ObservationData`**
 ```json
@@ -85,14 +132,13 @@ Processes an observation and adds it to short-term memory.
 - Symbols within events are sorted alphabetically if SORT=true
 - Auto-learning triggers when STM length reaches MAX_PATTERN_LENGTH
 
-### Get Short-Term Memory
+### Get Short-Term Memory (Session-Based)
 
 ```http
-GET /stm
-GET /short-term-memory  # Alias
+GET /sessions/{session_id}/stm
 ```
 
-Returns current short-term memory state.
+Returns the session's current short-term memory state.
 
 **Response Model: `STMResponse`**
 ```json
@@ -105,13 +151,13 @@ Returns current short-term memory state.
 }
 ```
 
-### Learn
+### Learn (Session-Based)
 
 ```http
-POST /learn
+POST /sessions/{session_id}/learn
 ```
 
-Learns a pattern from current short-term memory.
+Learns a pattern from the session's current short-term memory.
 
 **Response Model: `LearnResult`**
 ```json
@@ -132,15 +178,14 @@ Learns a pattern from current short-term memory.
 - Pattern name format: `PTRN|<sha1_hash>`
 - Clears STM after learning
 
-### Get Predictions
+### Get Predictions (Session-Based)
 
 ```http
-GET /predictions
-POST /predictions
-GET /predictions?unique_id=<observation_id>
+GET /sessions/{session_id}/predictions
+GET /sessions/{session_id}/predictions?unique_id=<observation_id>
 ```
 
-Returns predictions based on current STM or specific observation.
+Returns predictions based on the session's current STM or specific observation.
 
 **Response Model: `PredictionsResponse`**
 ```json
@@ -181,14 +226,13 @@ Returns predictions based on current STM or specific observation.
 }
 ```
 
-### Clear STM
+### Clear STM (Session-Based)
 
 ```http
-POST /clear-stm
-POST /clear-short-term-memory  # Alias
+POST /sessions/{session_id}/clear-stm
 ```
 
-Clears short-term memory only.
+Clears the session's short-term memory only.
 
 **Response Model: `StatusResponse`**
 ```json
@@ -199,14 +243,13 @@ Clears short-term memory only.
 }
 ```
 
-### Clear All Memory
+### Clear All Memory (Session-Based)
 
 ```http
-POST /clear-all
-POST /clear-all-memory  # Alias
+POST /sessions/{session_id}/clear-all
 ```
 
-Clears all memory (STM and long-term patterns).
+Clears all session memory (STM and long-term patterns for this node).
 
 **Response Model: `StatusResponse`**
 ```json

@@ -13,7 +13,6 @@ from os import environ
 from queue import Queue
 from typing import Any, Optional
 
-# MongoDB is required for KATO
 # Import original components for compatibility
 from kato.informatics import extractor as difflib
 from kato.representations.prediction import Prediction
@@ -26,13 +25,13 @@ from .bloom_filter import get_pattern_bloom_filter
 from .fast_matcher import FastSequenceMatcher
 from .index_manager import IndexManager
 
-# Import filter pipeline for ClickHouse/Redis hybrid architecture
+# Import filter pipeline for ClickHouse/Redis hybrid architecture (REQUIRED)
 try:
     from ..filters import FilterPipelineExecutor
     FILTER_PIPELINE_AVAILABLE = True
 except ImportError:
     FILTER_PIPELINE_AVAILABLE = False
-    logging.warning("Filter pipeline not available - using MongoDB-only mode")
+    logging.error("Filter pipeline not available - KATO requires ClickHouse/Redis hybrid architecture")
 
 # RapidFuzz for fast string matching (5-10x speedup)
 try:
@@ -216,7 +215,7 @@ class PatternSearcher:
     Optimized pattern searcher using fast matching and indexing.
 
     Drop-in replacement for PatternSearcher with ~300x performance improvements.
-    Uses MongoDB for pattern storage and optional fast indexing/matching.
+    Uses ClickHouse/Redis hybrid architecture for pattern storage.
 
     Attributes:
         kb_id: Knowledge base identifier.
@@ -230,50 +229,55 @@ class PatternSearcher:
 
     def __init__(self, **kwargs: Any) -> None:
         """
-        Initialize optimized pattern searcher.
+        Initialize optimized pattern searcher with ClickHouse/Redis hybrid architecture.
 
         Args:
             **kwargs: Configuration parameters including:
-                - kb_id: Knowledge base identifier
-                - max_predictions: Max predictions to return
-                - recall_threshold: Minimum similarity threshold
-                - session_config: Optional SessionConfiguration for filter pipeline
-                - clickhouse_client: Optional ClickHouse client for hybrid architecture
-                - redis_client: Optional Redis client for metadata
+                - kb_id: Knowledge base identifier (REQUIRED)
+                - max_predictions: Max predictions to return (REQUIRED)
+                - recall_threshold: Minimum similarity threshold (REQUIRED)
+                - session_config: SessionConfiguration for filter pipeline (REQUIRED)
+                - clickhouse_client: ClickHouse client for hybrid architecture (REQUIRED)
+                - redis_client: Redis client for metadata (REQUIRED)
 
         Raises:
-            ValueError: If MONGO_BASE_URL is not set.
-            RuntimeError: If MongoDB connection fails.
+            RuntimeError: If ClickHouse/Redis hybrid architecture is not available.
         """
         self.procs = multiprocessing.cpu_count()
         logger.info(f"PatternSearcher using {self.procs} CPUs")
 
         self.kb_id = kwargs["kb_id"]
-
-        # Use optimized connection manager for MongoDB
-        from kato.storage.connection_manager import get_mongodb_client
-        self.connection = get_mongodb_client()
-        self.knowledgebase = self.connection[self.kb_id]
-        logger.info(f"Using optimized MongoDB connection for kb_id: {self.kb_id}")
-
         self.max_predictions = kwargs["max_predictions"]
         self.recall_threshold = kwargs["recall_threshold"]
 
-        # ClickHouse/Redis hybrid architecture support (optional)
+        # ClickHouse/Redis hybrid architecture (REQUIRED)
         self.session_config = kwargs.get("session_config", None)
         self.clickhouse_client = kwargs.get("clickhouse_client", None)
         self.redis_client = kwargs.get("redis_client", None)
         self.filter_executor: Optional[FilterPipelineExecutor] = None
 
-        # Enable hybrid mode if ClickHouse is available
-        self.use_hybrid_architecture = (
-            FILTER_PIPELINE_AVAILABLE and
-            self.clickhouse_client is not None and
-            self.session_config is not None
-        )
+        # Validate hybrid architecture requirements
+        if not FILTER_PIPELINE_AVAILABLE:
+            raise RuntimeError(
+                "ClickHouse/Redis hybrid architecture is REQUIRED. "
+                "Filter pipeline not available - check imports."
+            )
 
-        if self.use_hybrid_architecture:
-            logger.info("ClickHouse/Redis hybrid architecture ENABLED")
+        if self.clickhouse_client is None:
+            raise RuntimeError(
+                "ClickHouse/Redis hybrid architecture is REQUIRED. "
+                "clickhouse_client parameter is missing."
+            )
+
+        if self.session_config is None:
+            raise RuntimeError(
+                "ClickHouse/Redis hybrid architecture is REQUIRED. "
+                "session_config parameter is missing."
+            )
+
+        # Hybrid architecture is now ALWAYS enabled
+        self.use_hybrid_architecture = True
+        logger.info("ClickHouse/Redis hybrid architecture ENABLED (required mode)")
 
         # Feature flags for optimization
         self.use_fast_matching = environ.get('KATO_USE_FAST_MATCHING', 'true').lower() == 'true'
@@ -294,8 +298,7 @@ class PatternSearcher:
         self.use_bloom_filter = environ.get('KATO_USE_BLOOM_FILTER', 'true').lower() == 'true'
         self.bloom_filter = get_pattern_bloom_filter() if self.use_bloom_filter else None
 
-        # Initialize optimized query manager for aggregation pipelines
-        self.query_manager = OptimizedQueryManager(self.knowledgebase)
+        # Note: OptimizedQueryManager removed - hybrid architecture uses FilterPipelineExecutor
 
         self.extractor = InformationExtractor(
             use_fast_matcher=self.use_fast_matching,
@@ -346,14 +349,7 @@ class PatternSearcher:
             if cache_manager and cache_manager.is_initialized():
                 self.redis_cache = cache_manager.pattern_cache
 
-                # Optionally warm the cache
-                if session_id and self.redis_cache:
-                    await self.redis_cache.warm_cache(
-                        session_id,
-                        self.knowledgebase.patterns_kb,
-                        self.knowledgebase.symbols_kb,
-                        self.knowledgebase.metadata
-                    )
+                # Note: Cache warming removed - FilterPipelineExecutor handles caching in hybrid architecture
 
                 logger.info("Redis pattern cache initialized successfully")
                 return True
@@ -367,105 +363,37 @@ class PatternSearcher:
 
     def getPatterns(self) -> None:
         """
-        Load patterns from database using optimized aggregation pipelines.
+        DEPRECATED: Pattern loading via MongoDB removed.
 
-        Uses server-side aggregation for better performance and reduced data transfer.
-        Fetches all patterns from MongoDB and populates fast matching
-        structures if enabled. Builds indices for efficient lookup.
+        Hybrid architecture uses FilterPipelineExecutor for pattern loading,
+        which happens automatically during candidate selection.
 
         Raises:
-            RuntimeError: If MongoDB connection is not available.
+            RuntimeError: Always raises - MongoDB mode no longer supported.
         """
-        # Use optimized aggregation pipeline for pattern loading
-        try:
-            _patterns = self.query_manager.get_patterns_optimized()
-
-            # Get original pattern data for Bloom filter (need non-flattened data)
-            original_patterns = []
-            if self.bloom_filter:
-                # Need to fetch original pattern_data structure for Bloom filter
-                for p in self.knowledgebase.patterns_kb.find({}, {"name": 1, "pattern_data": 1}):
-                    original_patterns.append(p)
-
-            # Add to fast matcher, index manager, and Bloom filter if enabled
-            for pattern_name, flattened in _patterns.items():
-                if self.fast_matcher:
-                    self.fast_matcher.add_pattern(pattern_name, flattened)
-
-                if self.index_manager:
-                    self.index_manager.add_pattern(pattern_name, flattened)
-
-            # Add patterns to Bloom filter using original non-flattened data
-            if self.bloom_filter and original_patterns:
-                self.bloom_filter.add_patterns_batch(original_patterns)
-
-            self.patterns_cache = _patterns
-            self.patterns_count = len(_patterns)
-
-            logger.debug(f"Loaded {self.patterns_count} patterns using optimized aggregation pipeline")
-
-        except Exception as e:
-            # No fallback - fail fast if ClickHouse/Redis is unavailable
-            logger.error(f"Pattern loading failed: {e}")
-            raise
+        raise RuntimeError(
+            "getPatterns() is deprecated. Hybrid architecture uses FilterPipelineExecutor "
+            "for pattern loading during getCandidatesViaFilterPipeline()."
+        )
 
     async def getPatternsAsync(self, session_id: Optional[str] = None, limit: int = 1000) -> None:
         """
-        Async version of getPatterns with Redis caching support.
+        DEPRECATED: Pattern loading via MongoDB removed.
+
+        Hybrid architecture uses FilterPipelineExecutor for pattern loading,
+        which happens automatically during candidate selection.
 
         Args:
-            session_id: Session identifier for cache isolation
-            limit: Maximum number of patterns to load
+            session_id: Session identifier (unused)
+            limit: Maximum number of patterns (unused)
+
+        Raises:
+            RuntimeError: Always raises - MongoDB mode no longer supported.
         """
-        _patterns = {}
-
-        # Try Redis cache first if enabled and available
-        if self.redis_cache and session_id:
-            try:
-                cached_patterns = await self.redis_cache.get_top_patterns(
-                    session_id, limit, self.knowledgebase.patterns_kb
-                )
-
-                for pattern_doc in cached_patterns:
-                    pattern_name = pattern_doc["name"]
-                    if "pattern_data" in pattern_doc:
-                        flattened = list(chain(*pattern_doc["pattern_data"]))
-                        _patterns[pattern_name] = flattened
-
-                        # Add to fast matcher if enabled
-                        if self.fast_matcher:
-                            self.fast_matcher.add_pattern(pattern_name, flattened)
-
-                        # Add to index manager if enabled
-                        if self.index_manager:
-                            self.index_manager.add_pattern(pattern_name, flattened)
-
-                self.patterns_cache = _patterns
-                self.patterns_count = len(_patterns)
-
-                logger.debug(f"Loaded {self.patterns_count} patterns from Redis cache")
-                return
-
-            except Exception as e:
-                # No fallback - fail fast if Redis cache fails
-                logger.error(f"Redis cache failed: {e}")
-                raise
-
-        # Load patterns using optimized aggregation pipeline
-        _patterns = self.query_manager.get_patterns_optimized(limit=limit)
-
-        # Add to fast matcher and index manager if enabled
-        for pattern_name, flattened in _patterns.items():
-            if self.fast_matcher:
-                self.fast_matcher.add_pattern(pattern_name, flattened)
-
-            if self.index_manager:
-                self.index_manager.add_pattern(pattern_name, flattened)
-
-        self.patterns_cache = _patterns
-        self.patterns_count = len(_patterns)
-
-        logger.debug(f"Loaded {self.patterns_count} patterns using optimized aggregation pipeline (async)")
+        raise RuntimeError(
+            "getPatternsAsync() is deprecated. Hybrid architecture uses FilterPipelineExecutor "
+            "for pattern loading during getCandidatesViaFilterPipeline()."
+        )
 
     def getCandidatesViaFilterPipeline(self, state: list[str]) -> set[str]:
         """
@@ -617,8 +545,7 @@ class PatternSearcher:
         Find matching patterns and generate predictions.
 
         Optimized version with fast filtering and matching. Uses ClickHouse/Redis
-        filter pipeline for billion-scale performance when available, otherwise
-        falls back to MongoDB with indexing.
+        filter pipeline for billion-scale performance (REQUIRED).
 
         Args:
             state: Current state sequence (flattened STM).
@@ -632,33 +559,18 @@ class PatternSearcher:
         """
         logger.info(f"*** causalBelief called with state={state}, target_class_candidates={target_class_candidates}")
 
-        # Use ClickHouse/Redis hybrid architecture if available and no target candidates specified
-        if self.use_hybrid_architecture and not target_class_candidates:
+        # Use ClickHouse/Redis hybrid architecture (REQUIRED)
+        if not target_class_candidates:
             logger.info("Using ClickHouse/Redis filter pipeline for candidate selection")
             # No fallback - fail fast if filter pipeline fails
             candidates = self.getCandidatesViaFilterPipeline(state)
             logger.info(f"Filter pipeline returned {len(candidates)} candidates")
         else:
-            # MongoDB mode - load all patterns if not already loaded
-            if self.patterns_count == 0:
-                self.getPatterns()
-            candidates = None
+            # Use specified target patterns only (no filtering needed)
+            logger.info(f"Using {len(target_class_candidates)} target_class_candidates")
+            candidates = target_class_candidates
 
         results = []
-
-        # Get candidate patterns using indices (MongoDB mode only)
-        if candidates is None and self.use_indexing and self.index_manager and not target_class_candidates:
-            # Use index to find candidates
-            candidates = self.index_manager.search_candidates(state, length_tolerance=0.5)
-
-            # If we have target candidates, intersect with them
-            if target_class_candidates:
-                candidates &= set(target_class_candidates)
-
-            logger.debug(f"Index filtering: {self.patterns_count} -> {len(candidates)} candidates")
-        else:
-            # Use all patterns or specified targets
-            candidates = target_class_candidates if target_class_candidates else self.patterns_cache.keys()
 
         # Apply Bloom filter pre-screening if enabled
         logger.debug(f"Bloom filter check: self.bloom_filter={self.bloom_filter is not None}, candidates count={len(candidates) if candidates else 0}")
@@ -718,12 +630,11 @@ class PatternSearcher:
             if len(result) >= 8:  # Ensure we have all required fields
                 pattern_hash, pattern, matching_intersection, past, present, missing, extras, similarity, number_of_blocks = result[:9]
 
-                # Fetch full pattern data from database (MongoDB required)
-                if self.knowledgebase is None:
-                    raise RuntimeError("MongoDB connection required but not available")
+                # Fetch pattern data from hybrid architecture cache
+                if self.filter_executor is None:
+                    raise RuntimeError("FilterPipelineExecutor not initialized - hybrid architecture required")
 
-                pattern_data = self.knowledgebase.patterns_kb.find_one(
-                    {"name": pattern_hash}, {"_id": 0})
+                pattern_data = self.filter_executor.patterns_cache.get(pattern_hash, {})
 
                 if pattern_data:
                     pred = Prediction(
@@ -1212,27 +1123,22 @@ class PatternSearcher:
             if len(result) >= 8:
                 pattern_hash, pattern, matching_intersection, past, present, missing, extras, similarity, number_of_blocks = result[:9]
 
-                # Fetch pattern data from ClickHouse + Redis (hybrid mode) or MongoDB
+                # Fetch pattern data from ClickHouse + Redis (hybrid architecture REQUIRED)
                 pattern_data = None
 
-                if self.use_hybrid_architecture and self.filter_executor:
-                    # Hybrid mode: pattern data already in filter_executor cache from pipeline
-                    pattern_dict = self.filter_executor.patterns_cache.get(pattern_hash, {})
-                    if pattern_dict:
-                        # Reconstruct pattern_data dict for Prediction object
-                        pattern_data = {
-                            'name': pattern_hash,
-                            'pattern_data': pattern_dict.get('pattern_data', []),
-                            'length': pattern_dict.get('length', 0),
-                            'frequency': 1  # Frequency will be fetched from Redis if needed
-                        }
-                else:
-                    # MongoDB mode: fetch from database
-                    if self.knowledgebase is None:
-                        raise RuntimeError("MongoDB connection required but not available")
+                if self.filter_executor is None:
+                    raise RuntimeError("FilterPipelineExecutor not initialized - hybrid architecture required")
 
-                    pattern_data = self.knowledgebase.patterns_kb.find_one(
-                        {"name": pattern_hash}, {"_id": 0})
+                # Hybrid architecture: pattern data already in filter_executor cache from pipeline
+                pattern_dict = self.filter_executor.patterns_cache.get(pattern_hash, {})
+                if pattern_dict:
+                    # Reconstruct pattern_data dict for Prediction object
+                    pattern_data = {
+                        'name': pattern_hash,
+                        'pattern_data': pattern_dict.get('pattern_data', []),
+                        'length': pattern_dict.get('length', 0),
+                        'frequency': 1  # Frequency will be fetched from Redis if needed
+                    }
 
                 if pattern_data:
                     pred = Prediction(

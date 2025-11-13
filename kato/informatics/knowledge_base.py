@@ -2,8 +2,6 @@ import logging
 from collections import Counter
 from itertools import chain
 
-from pymongo import ASCENDING, DESCENDING
-
 from kato.config.settings import get_settings
 
 logger = logging.getLogger('kato.informatics.knowledge-base')
@@ -98,8 +96,6 @@ class SuperKnowledgeBase:
             # These allow existing code to work without changes during migration
             self.patterns_kb = self._create_patterns_kb_interface()
             self.symbols_kb = self._create_symbols_kb_interface()
-            self.predictions_kb = self._create_stub_collection_interface()
-            self.associative_action_kb = self._create_stub_collection_interface()
             self.metadata = self._create_metadata_interface()
 
             logger.info(f"SuperKnowledgeBase initialized for {self.id} with ClickHouse + Redis")
@@ -223,38 +219,6 @@ class SuperKnowledgeBase:
 
         return SymbolsKBInterface(self)
 
-    def _create_stub_collection_interface(self):
-        """Create a stub interface for MongoDB collections during migration."""
-        class StubCollection:
-            def __init__(self):
-                pass
-
-            def delete_many(self, query):
-                """Stub for delete_many (no-op during migration)."""
-                return type('DeleteResult', (), {'deleted_count': 0})()
-
-            def insert_one(self, document):
-                """Stub for insert_one (no-op during migration)."""
-                return type('InsertResult', (), {'inserted_id': None})()
-
-            def update_one(self, filter, update, **kwargs):
-                """Stub for update_one (no-op during migration)."""
-                return type('UpdateResult', (), {'matched_count': 0, 'modified_count': 0})()
-
-            def find_one(self, filter, **kwargs):
-                """Stub for find_one (returns None)."""
-                return None
-
-            def find(self, *args, **kwargs):
-                """Stub for find (returns empty list)."""
-                return []
-
-            def count_documents(self, query):
-                """Stub for count_documents (returns 0)."""
-                return 0
-
-        return StubCollection()
-
     def _create_metadata_interface(self):
         """Create Redis-backed metadata interface for global totals."""
         class MetadataInterface:
@@ -315,23 +279,10 @@ class SuperKnowledgeBase:
     def __pkb_repr__(self):
         return "{{KB| objects: {} }}".format(self.patterns_kb.count_documents({}))
 
-    def __akb_repr__(self):
-        return "{{KB| objects: {} }}".format(self.associative_action_kb.count_documents({}))
-
     def __vkb_repr__(self):
         return "{KB| vectors: 0 }"  # Vectors now handled by modern vector store
 
     # learnVector method removed - vectors now handled by modern vector store
-
-    def learnAssociation(self, action, symbols):
-        """
-        Used by Decision Engine when ActionManipulatives are attached.
-        """
-        for symbol in symbols:
-            x = self.associative_action_kb.update_one({ "name": symbol, "action": action },
-                                              {"$inc": { "frequency": 1}},
-                                              upsert=True)
-        return x
 
     def learnPattern(self, pattern_object, emotives=None, metadata=None):
         """

@@ -1,24 +1,4 @@
 services:
-  # MongoDB shared by all sessions
-  mongodb:
-    image: mongo:4.4
-    container_name: kato-mongodb
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongo-data:/data/db
-    networks:
-      - kato-network
-    restart: unless-stopped
-    # Increased memory for large-scale hierarchical training
-    command: mongod --wiredTigerCacheSizeGB 2
-    healthcheck:
-      test: ["CMD", "mongo", "--eval", "db.adminCommand('ping')", "--quiet"]
-      interval: 15s
-      timeout: 10s
-      retries: 20
-      start_period: 180s
-
   # Qdrant vector database
   qdrant:
     image: qdrant/qdrant:latest
@@ -88,7 +68,6 @@ services:
     container_name: kato
     environment:
       - SERVICE_NAME=kato
-      - MONGO_BASE_URL=mongodb://mongodb:27017
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
       - REDIS_URL=redis://redis:6379
@@ -112,8 +91,6 @@ services:
     networks:
       - kato-network
     depends_on:
-      mongodb:
-        condition: service_healthy
       qdrant:
         condition: service_started
       redis:
@@ -135,7 +112,6 @@ networks:
         - subnet: 172.28.0.0/16
 
 volumes:
-  mongo-data:
   qdrant-data:
   redis-data:
   clickhouse-data:

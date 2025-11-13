@@ -57,28 +57,6 @@ class LoggingConfig(BaseSettings):
 class DatabaseConfig(BaseSettings):
     """Database configuration for MongoDB and Qdrant."""
 
-    # MongoDB settings - field name must match env var for pydantic-settings v2
-    MONGO_BASE_URL: str = Field(
-        'mongodb://localhost:27017',
-        description="MongoDB connection URL"
-    )
-    MONGO_TIMEOUT: int = Field(
-        5000,
-        ge=1000,
-        le=30000,
-        description="MongoDB connection timeout in milliseconds"
-    )
-
-    @property
-    def mongo_url(self) -> str:
-        """Backward compatibility property."""
-        return self.MONGO_BASE_URL
-
-    @property
-    def mongo_timeout(self) -> int:
-        """Backward compatibility property."""
-        return self.MONGO_TIMEOUT
-
     # Qdrant settings - field names must match env vars
     QDRANT_HOST: str = Field(
         'localhost',
@@ -513,8 +491,6 @@ class Settings(BaseSettings):
 
         # Check database connectivity settings
         if self.environment == 'production':
-            if self.database.mongo_url == 'mongodb://localhost:27017':
-                warnings.append("Using localhost MongoDB in production environment")
             if self.debug:
                 warnings.append("Debug mode enabled in production environment")
             if self.api.cors_origins == ['*']:

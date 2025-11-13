@@ -1,5 +1,5 @@
 """
-Optimized connection pool manager for MongoDB, Redis, Qdrant, and ClickHouse.
+Optimized connection pool manager for Redis, Qdrant, and ClickHouse.
 
 This module provides a centralized, thread-safe connection manager that:
 1. Reduces connection overhead through proper pooling
@@ -16,8 +16,6 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 import redis
-from pymongo import MongoClient
-from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError
 
 try:
     from qdrant_client import QdrantClient
@@ -90,7 +88,6 @@ class OptimizedConnectionManager:
         self.settings = get_settings()
 
         # Connection instances
-        self._mongodb_client: Optional[MongoClient] = None
         self._redis_client: Optional[redis.Redis] = None
         self._qdrant_client: Optional[QdrantClient] = None
         self._clickhouse_client: Optional[Any] = None
@@ -100,7 +97,6 @@ class OptimizedConnectionManager:
 
         # Health monitoring
         self._health_status: dict[str, ConnectionHealth] = {
-            'mongodb': ConnectionHealth(),
             'redis': ConnectionHealth(),
             'qdrant': ConnectionHealth(),
             'clickhouse': ConnectionHealth()
@@ -108,7 +104,6 @@ class OptimizedConnectionManager:
 
         # Pool statistics
         self._pool_stats: dict[str, PoolStats] = {
-            'mongodb': PoolStats(),
             'redis': PoolStats(),
             'qdrant': PoolStats(),
             'clickhouse': PoolStats()
@@ -116,7 +111,6 @@ class OptimizedConnectionManager:
 
         # Connection locks for thread safety
         self._connection_locks = {
-            'mongodb': threading.RLock(),
             'redis': threading.RLock(),
             'qdrant': threading.RLock(),
             'clickhouse': threading.RLock()
@@ -128,23 +122,6 @@ class OptimizedConnectionManager:
         self.retry_delay = 1.0  # seconds
 
         logger.info("OptimizedConnectionManager initialized")
-
-    @property
-    def mongodb(self) -> MongoClient:
-        """Get optimized MongoDB client with connection pooling."""
-        with self._connection_locks['mongodb']:
-            if self._connections_closed:
-                logger.warning("Attempting to use MongoDB connection after close_all_connections() was called")
-                raise RuntimeError("Cannot use closed connection manager. Connection was explicitly closed.")
-
-            if self._mongodb_client is None:
-                self._create_mongodb_connection()
-
-            # Health check if needed
-            if self._should_health_check('mongodb'):
-                self._check_mongodb_health()
-
-            return self._mongodb_client
 
     @property
     def redis(self) -> Optional[redis.Redis]:
@@ -185,82 +162,6 @@ class OptimizedConnectionManager:
                 self._check_qdrant_health()
 
             return self._qdrant_client
-
-    def _create_mongodb_connection(self) -> None:
-        """Create optimized MongoDB connection with advanced pooling."""
-        try:
-            start_time = time.time()
-
-            # Simplified MongoDB connection options for compatibility
-            client_options = {
-                # Basic pool optimization
-                'minPoolSize': 5,
-                'maxPoolSize': 50,
-
-                # Connection timeouts
-                'connectTimeoutMS': self.settings.database.MONGO_TIMEOUT,
-                'socketTimeoutMS': self.settings.database.MONGO_TIMEOUT,
-                'serverSelectionTimeoutMS': self.settings.database.MONGO_TIMEOUT,
-            }
-
-            self._mongodb_client = MongoClient(
-                self.settings.database.MONGO_BASE_URL,
-                **client_options
-            )
-
-            # Warm up the connection pool
-            self._mongodb_client.admin.command('ping')
-
-            response_time = (time.time() - start_time) * 1000
-            self._health_status['mongodb'] = ConnectionHealth(
-                is_healthy=True,
-                last_check=time.time(),
-                response_time_ms=response_time
-            )
-
-            logger.info(f"MongoDB connection established (response: {response_time:.1f}ms)")
-
-        except (ConnectionFailure, ServerSelectionTimeoutError) as e:
-            error_msg = f"""
-╔══════════════════════════════════════════════════════════════════╗
-║                   MONGODB CONNECTION FAILURE                     ║
-╠══════════════════════════════════════════════════════════════════╣
-║ MongoDB is not responding. This is usually caused by:            ║
-║                                                                  ║
-║ 1. MongoDB is still performing crash recovery after unclean     ║
-║    shutdown (check: docker logs kato-mongodb)                   ║
-║                                                                  ║
-║ 2. MongoDB container is not fully started yet                   ║
-║    (check: docker ps and look for 'healthy' status)             ║
-║                                                                  ║
-║ 3. Network connectivity issues between containers               ║
-║                                                                  ║
-║ Troubleshooting steps:                                          ║
-║ - Check MongoDB logs: docker logs kato-mongodb --tail 50        ║
-║ - Check container status: docker ps -a                          ║
-║ - Verify MongoDB health: docker exec kato-mongodb mongo \\       ║
-║   --eval "db.adminCommand('ping')"                              ║
-║                                                                  ║
-║ Original error: {str(e)[:50]}...                                 ║
-╚══════════════════════════════════════════════════════════════════╝
-"""
-            self._health_status['mongodb'] = ConnectionHealth(
-                is_healthy=False,
-                last_check=time.time(),
-                error_count=self._health_status['mongodb'].error_count + 1,
-                last_error=str(e)
-            )
-            logger.error(error_msg)
-            raise ConnectionFailure(error_msg) from e
-        except Exception as e:
-            self._health_status['mongodb'] = ConnectionHealth(
-                is_healthy=False,
-                last_check=time.time(),
-                error_count=self._health_status['mongodb'].error_count + 1,
-                last_error=str(e)
-            )
-            logger.error(f"Failed to create MongoDB connection: {e}")
-            raise
 
     def _create_redis_connection(self) -> None:
         """Create optimized Redis connection with advanced pooling."""
@@ -441,31 +342,6 @@ class OptimizedConnectionManager:
         health = self._health_status[service]
         return (time.time() - health.last_check) > self.health_check_interval
 
-    def _check_mongodb_health(self) -> None:
-        """Perform MongoDB health check."""
-        try:
-            # Initialize connection if not exists
-            if self._mongodb_client is None:
-                self._create_mongodb_connection()
-
-            start_time = time.time()
-            self._mongodb_client.admin.command('ping')
-            response_time = (time.time() - start_time) * 1000
-
-            self._health_status['mongodb'] = ConnectionHealth(
-                is_healthy=True,
-                last_check=time.time(),
-                response_time_ms=response_time
-            )
-
-        except Exception as e:
-            self._health_status['mongodb'].is_healthy = False
-            self._health_status['mongodb'].last_check = time.time()
-            self._health_status['mongodb'].error_count += 1
-            self._health_status['mongodb'].last_error = str(e)
-
-            logger.warning(f"MongoDB health check failed: {e}")
-
     def _check_redis_health(self) -> None:
         """Perform Redis health check."""
         try:
@@ -541,30 +417,6 @@ class OptimizedConnectionManager:
 
             logger.warning(f"ClickHouse health check failed: {e}")
 
-    @contextmanager
-    def mongodb_transaction(self, **kwargs):
-        """Context manager for MongoDB transactions with optimized settings."""
-        client = self.mongodb
-        session = client.start_session()
-        try:
-            with session.start_transaction(**kwargs):
-                yield session
-        finally:
-            session.end_session()
-
-    @asynccontextmanager
-    async def async_mongodb_transaction(self, **kwargs):
-        """Async context manager for MongoDB transactions."""
-        # Note: For true async MongoDB, would need motor client
-        # This is a placeholder for future async implementation
-        client = self.mongodb
-        session = client.start_session()
-        try:
-            with session.start_transaction(**kwargs):
-                yield session
-        finally:
-            session.end_session()
-
     def get_health_status(self) -> dict[str, dict[str, Any]]:
         """Get health status of all connections."""
         return {
@@ -581,20 +433,6 @@ class OptimizedConnectionManager:
     def get_pool_stats(self) -> dict[str, dict[str, Any]]:
         """Get connection pool statistics."""
         stats = {}
-
-        # MongoDB pool stats
-        if self._mongodb_client:
-            try:
-                # Get pool info from MongoDB client
-                pool_info = self._mongodb_client.topology_description
-                stats['mongodb'] = {
-                    'type': 'mongodb',
-                    'pool_size': getattr(pool_info, 'pool_size', 'unknown'),
-                    'active_connections': 'dynamic',
-                    'status': 'connected' if self._health_status['mongodb'].is_healthy else 'disconnected'
-                }
-            except Exception:
-                stats['mongodb'] = {'type': 'mongodb', 'status': 'error'}
 
         # Redis pool stats
         if self._redis_client:
@@ -631,11 +469,6 @@ class OptimizedConnectionManager:
         """Force immediate health check for all services."""
         logger.info("Performing forced health check for all services")
         try:
-            self._check_mongodb_health()
-        except Exception as e:
-            logger.warning(f"MongoDB health check failed: {e}")
-
-        try:
             self._check_redis_health()
         except Exception as e:
             logger.warning(f"Redis health check failed: {e}")
@@ -657,16 +490,6 @@ class OptimizedConnectionManager:
             return
 
         logger.info("Closing all database connections...")
-
-        # Close MongoDB
-        if self._mongodb_client:
-            try:
-                self._mongodb_client.close()
-                logger.info("MongoDB connection closed")
-            except Exception as e:
-                logger.error(f"Error closing MongoDB connection: {e}")
-            finally:
-                self._mongodb_client = None
 
         # Close Redis
         if self._redis_client:
@@ -723,11 +546,6 @@ def get_connection_manager() -> OptimizedConnectionManager:
 
 
 # Convenience functions for backward compatibility
-def get_mongodb_client() -> MongoClient:
-    """Get optimized MongoDB client."""
-    return get_connection_manager().mongodb
-
-
 def get_redis_client() -> Optional[redis.Redis]:
     """Get optimized Redis client."""
     return get_connection_manager().redis

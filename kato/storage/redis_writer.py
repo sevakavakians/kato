@@ -214,3 +214,193 @@ class RedisWriter:
         except Exception as e:
             logger.error(f"Failed to count patterns for {self.kb_id}: {e}")
             return 0
+
+    def get_global_metadata(self) -> dict[str, int]:
+        """
+        Get global metadata totals for this kb_id.
+
+        Returns:
+            Dictionary with total_symbols_in_patterns_frequencies and total_pattern_frequencies
+        """
+        try:
+            # Get total_symbols_in_patterns_frequencies
+            symbols_key = f"{self.kb_id}:global:total_symbols_in_patterns_frequencies"
+            symbols_total = self.client.get(symbols_key)
+
+            # Get total_pattern_frequencies
+            patterns_key = f"{self.kb_id}:global:total_pattern_frequencies"
+            patterns_total = self.client.get(patterns_key)
+
+            return {
+                'total_symbols_in_patterns_frequencies': int(symbols_total) if symbols_total else 0,
+                'total_pattern_frequencies': int(patterns_total) if patterns_total else 0
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to get global metadata for {self.kb_id}: {e}")
+            return {
+                'total_symbols_in_patterns_frequencies': 0,
+                'total_pattern_frequencies': 0
+            }
+
+    def increment_global_symbol_count(self, count: int) -> int:
+        """
+        Increment global total_symbols_in_patterns_frequencies counter.
+
+        Args:
+            count: Number to increment by (number of symbols in pattern)
+
+        Returns:
+            New total value after increment
+        """
+        try:
+            symbols_key = f"{self.kb_id}:global:total_symbols_in_patterns_frequencies"
+            new_total = self.client.incrby(symbols_key, count)
+            logger.debug(f"Incremented global symbol count by {count} to {new_total}")
+            return new_total
+
+        except Exception as e:
+            logger.error(f"Failed to increment global symbol count: {e}")
+            raise
+
+    def increment_global_pattern_count(self, count: int = 1) -> int:
+        """
+        Increment global total_pattern_frequencies counter.
+
+        Args:
+            count: Number to increment by (typically 1 for each pattern learned)
+
+        Returns:
+            New total value after increment
+        """
+        try:
+            patterns_key = f"{self.kb_id}:global:total_pattern_frequencies"
+            new_total = self.client.incrby(patterns_key, count)
+            logger.debug(f"Incremented global pattern count by {count} to {new_total}")
+            return new_total
+
+        except Exception as e:
+            logger.error(f"Failed to increment global pattern count: {e}")
+            raise
+
+    def increment_symbol_frequency(self, symbol: str, count: int = 1) -> int:
+        """
+        Increment symbol frequency counter.
+
+        Tracks total occurrences of this symbol across all patterns.
+        If a symbol appears 3 times in a pattern with frequency=2,
+        this increments by 3*2=6.
+
+        Args:
+            symbol: Symbol name
+            count: Number to increment by
+
+        Returns:
+            New frequency value after increment
+
+        Raises:
+            Exception: If increment fails
+        """
+        try:
+            freq_key = f"{self.kb_id}:symbol:freq:{symbol}"
+            new_freq = self.client.incrby(freq_key, count)
+            logger.debug(f"Incremented symbol frequency for {symbol} by {count} to {new_freq}")
+            return new_freq
+
+        except Exception as e:
+            logger.error(f"Failed to increment symbol frequency for {symbol}: {e}")
+            raise
+
+    def increment_pattern_member_frequency(self, symbol: str, count: int = 1) -> int:
+        """
+        Increment pattern member frequency for a symbol.
+
+        Tracks how many patterns contain this symbol (counted once per pattern).
+        Used for calculating symbol probability across pattern space.
+
+        Args:
+            symbol: Symbol name
+            count: Number to increment by (typically 1 per pattern)
+
+        Returns:
+            New pattern_member_frequency value after increment
+
+        Raises:
+            Exception: If increment fails
+        """
+        try:
+            pmf_key = f"{self.kb_id}:symbol:pmf:{symbol}"
+            new_pmf = self.client.incrby(pmf_key, count)
+            logger.debug(f"Incremented pattern_member_frequency for {symbol} by {count} to {new_pmf}")
+            return new_pmf
+
+        except Exception as e:
+            logger.error(f"Failed to increment pattern_member_frequency for {symbol}: {e}")
+            raise
+
+    def get_symbol_stats(self, symbol: str) -> dict[str, Any]:
+        """
+        Get all statistics for a symbol.
+
+        Args:
+            symbol: Symbol name
+
+        Returns:
+            Dictionary with 'frequency' and 'pattern_member_frequency'
+
+        Raises:
+            Exception: If retrieval fails
+        """
+        try:
+            freq_key = f"{self.kb_id}:symbol:freq:{symbol}"
+            pmf_key = f"{self.kb_id}:symbol:pmf:{symbol}"
+
+            freq = self.client.get(freq_key)
+            pmf = self.client.get(pmf_key)
+
+            return {
+                'name': symbol,
+                'frequency': int(freq) if freq else 0,
+                'pattern_member_frequency': int(pmf) if pmf else 0
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to get symbol stats for {symbol}: {e}")
+            raise
+
+    def get_all_symbols_batch(self) -> dict[str, dict[str, Any]]:
+        """
+        Get statistics for all symbols in this kb_id.
+
+        Returns:
+            Dictionary mapping symbol names to their statistics
+
+        Raises:
+            Exception: If retrieval fails
+        """
+        try:
+            # Scan for all symbol frequency keys
+            freq_pattern = f"{self.kb_id}:symbol:freq:*"
+            symbols = {}
+
+            for freq_key in self.client.scan_iter(match=freq_pattern, count=1000):
+                # Extract symbol name from key: kb_id:symbol:freq:symbol_name
+                symbol_name = freq_key.split(f"{self.kb_id}:symbol:freq:", 1)[1]
+
+                # Get both frequency and pattern_member_frequency
+                pmf_key = f"{self.kb_id}:symbol:pmf:{symbol_name}"
+                freq = self.client.get(freq_key)
+                pmf = self.client.get(pmf_key)
+
+                symbols[symbol_name] = {
+                    'name': symbol_name,
+                    'frequency': int(freq) if freq else 0,
+                    'pattern_member_frequency': int(pmf) if pmf else 0
+                }
+
+            logger.debug(f"Retrieved {len(symbols)} symbols for kb_id: {self.kb_id}")
+            return symbols
+
+        except Exception as e:
+            logger.error(f"Failed to get all symbols for {self.kb_id}: {e}")
+            raise

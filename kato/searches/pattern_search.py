@@ -405,37 +405,9 @@ class PatternSearcher:
             logger.debug(f"Loaded {self.patterns_count} patterns using optimized aggregation pipeline")
 
         except Exception as e:
-            logger.warning(f"Aggregation pipeline failed, falling back to original method: {e}")
-            # Fallback to original implementation
-            _patterns = {}
-
-            if self.knowledgebase is None:
-                raise RuntimeError("MongoDB connection required but not available")
-
-            original_patterns = []
-            for p in self.knowledgebase.patterns_kb.find({}, {"name": 1, "pattern_data": 1}):
-                pattern_name = p["name"]
-                flattened = list(chain(*p["pattern_data"]))
-                _patterns[pattern_name] = flattened
-
-                if self.fast_matcher:
-                    self.fast_matcher.add_pattern(pattern_name, flattened)
-
-                if self.index_manager:
-                    self.index_manager.add_pattern(pattern_name, flattened)
-
-                # Store original pattern for Bloom filter
-                if self.bloom_filter:
-                    original_patterns.append(p)
-
-            # Add patterns to Bloom filter
-            if self.bloom_filter and original_patterns:
-                self.bloom_filter.add_patterns_batch(original_patterns)
-
-            self.patterns_cache = _patterns
-            self.patterns_count = len(_patterns)
-
-            logger.debug(f"Loaded {self.patterns_count} patterns using fallback method")
+            # No fallback - fail fast if ClickHouse/Redis is unavailable
+            logger.error(f"Pattern loading failed: {e}")
+            raise
 
     async def getPatternsAsync(self, session_id: Optional[str] = None, limit: int = 1000) -> None:
         """
@@ -475,28 +447,25 @@ class PatternSearcher:
                 return
 
             except Exception as e:
-                logger.warning(f"Redis cache failed, falling back to MongoDB: {e}")
+                # No fallback - fail fast if Redis cache fails
+                logger.error(f"Redis cache failed: {e}")
+                raise
 
-        # Fallback to MongoDB using optimized aggregation pipeline
-        try:
-            _patterns = self.query_manager.get_patterns_optimized(limit=limit)
+        # Load patterns using optimized aggregation pipeline
+        _patterns = self.query_manager.get_patterns_optimized(limit=limit)
 
-            # Add to fast matcher and index manager if enabled
-            for pattern_name, flattened in _patterns.items():
-                if self.fast_matcher:
-                    self.fast_matcher.add_pattern(pattern_name, flattened)
+        # Add to fast matcher and index manager if enabled
+        for pattern_name, flattened in _patterns.items():
+            if self.fast_matcher:
+                self.fast_matcher.add_pattern(pattern_name, flattened)
 
-                if self.index_manager:
-                    self.index_manager.add_pattern(pattern_name, flattened)
+            if self.index_manager:
+                self.index_manager.add_pattern(pattern_name, flattened)
 
-            self.patterns_cache = _patterns
-            self.patterns_count = len(_patterns)
+        self.patterns_cache = _patterns
+        self.patterns_count = len(_patterns)
 
-            logger.debug(f"Loaded {self.patterns_count} patterns using optimized aggregation pipeline (async)")
-
-        except Exception as e:
-            logger.warning(f"Aggregation pipeline failed in async method, using original find(): {e}")
-            # Final fallback to original find()
+        logger.debug(f"Loaded {self.patterns_count} patterns using optimized aggregation pipeline (async)")
 
     def getCandidatesViaFilterPipeline(self, state: list[str]) -> set[str]:
         """
@@ -666,15 +635,9 @@ class PatternSearcher:
         # Use ClickHouse/Redis hybrid architecture if available and no target candidates specified
         if self.use_hybrid_architecture and not target_class_candidates:
             logger.info("Using ClickHouse/Redis filter pipeline for candidate selection")
-            try:
-                candidates = self.getCandidatesViaFilterPipeline(state)
-                logger.info(f"Filter pipeline returned {len(candidates)} candidates")
-            except Exception as e:
-                logger.error(f"Filter pipeline failed, falling back to MongoDB: {e}")
-                # Fall back to MongoDB
-                if self.patterns_count == 0:
-                    self.getPatterns()
-                candidates = None
+            # No fallback - fail fast if filter pipeline fails
+            candidates = self.getCandidatesViaFilterPipeline(state)
+            logger.info(f"Filter pipeline returned {len(candidates)} candidates")
         else:
             # MongoDB mode - load all patterns if not already loaded
             if self.patterns_count == 0:
@@ -998,16 +961,10 @@ class PatternSearcher:
         # Use ClickHouse/Redis hybrid architecture if available and no target candidates specified
         if self.use_hybrid_architecture and not target_class_candidates:
             logger.info("Using ClickHouse/Redis filter pipeline for candidate selection (async)")
-            try:
-                candidate_set = self.getCandidatesViaFilterPipeline(state)
-                candidates = list(candidate_set)
-                logger.info(f"Filter pipeline returned {len(candidates)} candidates (async)")
-            except Exception as e:
-                logger.error(f"Filter pipeline failed, falling back to MongoDB: {e}")
-                # Fall back to MongoDB
-                if self.patterns_count == 0:
-                    await self.getPatternsAsync()
-                candidates = None
+            # No fallback - fail fast if filter pipeline fails
+            candidate_set = self.getCandidatesViaFilterPipeline(state)
+            candidates = list(candidate_set)
+            logger.info(f"Filter pipeline returned {len(candidates)} candidates (async)")
         else:
             # MongoDB mode - load all patterns if not already loaded
             if self.patterns_count == 0:

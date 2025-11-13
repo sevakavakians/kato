@@ -267,18 +267,9 @@ class OptimizedQueryManager:
             return result
 
         except Exception as e:
-            logger.warning(f"Aggregation pipeline failed, falling back to find(): {e}")
-            # Fallback to original find() method
-            result = {}
-            query = self.superkb.patterns_kb.find({}, {"name": 1, "pattern_data": 1})
-            if limit:
-                query = query.limit(limit)
-
-            for p in query:
-                from itertools import chain
-                result[p["name"]] = list(chain(*p["pattern_data"]))
-
-            return result
+            # No fallback - fail fast if ClickHouse/Redis is unavailable
+            logger.error(f"Aggregation pipeline failed: {e}")
+            raise
 
     def get_all_symbols_optimized(self, collection: Collection) -> dict[str, dict[str, Any]]:
         """
@@ -297,34 +288,21 @@ class OptimizedQueryManager:
 
         Returns: Dict mapping symbol names to frequencies
         """
-        try:
-            if not self._cache_valid:
-                self._symbol_cache = self.pipelines.get_all_symbols_optimized(
-                    self.superkb.symbols_kb
-                )
-                self._cache_valid = True
+        # No fallback - fail fast if Redis is unavailable
+        if not self._cache_valid:
+            self._symbol_cache = self.pipelines.get_all_symbols_optimized(
+                self.superkb.symbols_kb
+            )
+            self._cache_valid = True
 
-            result = {}
-            for symbol in symbols:
-                if symbol in self._symbol_cache:
-                    result[symbol] = self._symbol_cache[symbol].get("frequency", 0)
-                else:
-                    result[symbol] = 0
+        result = {}
+        for symbol in symbols:
+            if symbol in self._symbol_cache:
+                result[symbol] = self._symbol_cache[symbol].get("frequency", 0)
+            else:
+                result[symbol] = 0
 
-            return result
-
-        except Exception as e:
-            logger.warning(f"Batch symbol query failed, falling back to individual queries: {e}")
-            # Fallback to individual queries
-            result = {}
-            for symbol in symbols:
-                try:
-                    doc = self.superkb.symbols_kb.find_one({"name": symbol})
-                    result[symbol] = doc.get("frequency", 0) if doc else 0
-                except Exception as e:
-                    logger.warning(f"Error getting symbol frequency for {symbol}: {e}")
-                    result[symbol] = 0
-            return result
+        return result
 
     def get_comprehensive_statistics(self) -> dict[str, Any]:
         """
@@ -332,12 +310,9 @@ class OptimizedQueryManager:
 
         Returns: Combined statistics from patterns, symbols, and metadata
         """
-        try:
-            return self.pipelines.get_pattern_statistics(
-                self.superkb.patterns_kb,
-                self.superkb.symbols_kb,
-                self.superkb.metadata
-            )
-        except Exception as e:
-            logger.warning(f"Comprehensive statistics query failed: {e}")
-            return {}
+        # No fallback - fail fast if ClickHouse/Redis is unavailable
+        return self.pipelines.get_pattern_statistics(
+            self.superkb.patterns_kb,
+            self.superkb.symbols_kb,
+            self.superkb.metadata
+        )

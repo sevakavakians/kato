@@ -97,10 +97,10 @@ class SuperKnowledgeBase:
             # Create backward-compatible interfaces for MongoDB collections
             # These allow existing code to work without changes during migration
             self.patterns_kb = self._create_patterns_kb_interface()
-            self.symbols_kb = self._create_stub_collection_interface()
+            self.symbols_kb = self._create_symbols_kb_interface()
             self.predictions_kb = self._create_stub_collection_interface()
             self.associative_action_kb = self._create_stub_collection_interface()
-            self.metadata = self._create_stub_collection_interface()
+            self.metadata = self._create_metadata_interface()
 
             logger.info(f"SuperKnowledgeBase initialized for {self.id} with ClickHouse + Redis")
         except Exception as e:
@@ -129,6 +129,99 @@ class SuperKnowledgeBase:
                 return f"{{KB| objects: {count} }}"
 
         return PatternsKBInterface(self)
+
+    def _create_symbols_kb_interface(self):
+        """Create a Redis-backed interface for symbols_kb to maintain backward compatibility."""
+        class SymbolsKBInterface:
+            def __init__(self, parent):
+                self.parent = parent
+
+            def find_one(self, filter, **kwargs):
+                """
+                Find one symbol matching filter.
+
+                Args:
+                    filter: Query dict, e.g., {"name": "symbol1"}
+
+                Returns:
+                    Symbol document dict or None
+                """
+                if 'name' not in filter:
+                    raise ValueError("symbols_kb.find_one() requires 'name' in filter")
+
+                symbol_name = filter['name']
+                return self.parent.redis_writer.get_symbol_stats(symbol_name)
+
+            def find(self, filter=None, projection=None, **kwargs):
+                """
+                Find all symbols matching filter.
+
+                Args:
+                    filter: Query dict (currently ignored, returns all)
+                    projection: Field projection (currently ignored)
+
+                Returns:
+                    List of symbol documents
+                """
+                # Get all symbols from Redis
+                symbols_dict = self.parent.redis_writer.get_all_symbols_batch()
+                # Convert to list of documents
+                return list(symbols_dict.values())
+
+            def aggregate(self, pipeline, **kwargs):
+                """
+                Aggregate query for symbols (used by aggregation_pipelines.py).
+
+                For now, this delegates to get_all_symbols_batch and mimics
+                the aggregation behavior by returning symbol documents.
+
+                Args:
+                    pipeline: Aggregation pipeline (currently simplified)
+
+                Returns:
+                    List of symbol documents
+                """
+                # For the get_all_symbols_optimized use case, just return all symbols
+                # The pipeline typically does projection and sorting
+                symbols_dict = self.parent.redis_writer.get_all_symbols_batch()
+                return list(symbols_dict.values())
+
+            def count_documents(self, query):
+                """
+                Count symbols.
+
+                Returns:
+                    Number of unique symbols tracked
+                """
+                symbols_dict = self.parent.redis_writer.get_all_symbols_batch()
+                return len(symbols_dict)
+
+            def delete_many(self, query):
+                """
+                Delete all symbols (part of clear_all_memory).
+                Symbol keys are deleted when clear_all_memory is called.
+
+                Returns:
+                    DeleteResult with deleted_count
+                """
+                # Symbols are deleted as part of redis_writer.delete_all_metadata()
+                # which is called by clear_all_memory()
+                return type('DeleteResult', (), {'deleted_count': 0})()
+
+            def update_one(self, filter, update, **kwargs):
+                """
+                Update symbol (legacy method, not used in hybrid architecture).
+                Symbol updates happen via increment methods in redis_writer.
+
+                Returns:
+                    UpdateResult indicating no-op
+                """
+                # Symbol updates happen via increment_symbol_frequency/increment_pattern_member_frequency
+                # This method exists for backward compatibility but is a no-op
+                logger.warning("symbols_kb.update_one() called but is deprecated in hybrid architecture")
+                return type('UpdateResult', (), {'matched_count': 0, 'modified_count': 0})()
+
+        return SymbolsKBInterface(self)
 
     def _create_stub_collection_interface(self):
         """Create a stub interface for MongoDB collections during migration."""
@@ -161,6 +254,39 @@ class SuperKnowledgeBase:
                 return 0
 
         return StubCollection()
+
+    def _create_metadata_interface(self):
+        """Create Redis-backed metadata interface for global totals."""
+        class MetadataInterface:
+            def __init__(self, parent):
+                self.parent = parent
+
+            def find_one(self, filter, **kwargs):
+                """
+                Return global metadata matching MongoDB interface.
+
+                Expected usage: metadata.find_one({"class": "totals"})
+                Returns dict with total_symbols_in_patterns_frequencies and total_pattern_frequencies
+                """
+                if filter.get("class") == "totals":
+                    return self.parent.redis_writer.get_global_metadata()
+                return None
+
+            def update_one(self, filter, update, **kwargs):
+                """
+                Update global metadata (no-op for now, updates happen via increment methods).
+                """
+                return type('UpdateResult', (), {'matched_count': 0, 'modified_count': 0})()
+
+            def delete_many(self, query):
+                """Delete metadata (handled by clear_all_memory)."""
+                return type('DeleteResult', (), {'deleted_count': 0})()
+
+            def count_documents(self, query):
+                """Stub for count_documents."""
+                return 0
+
+        return MetadataInterface(self)
 
     def clear_all_memory(self):
         """
@@ -207,13 +333,6 @@ class SuperKnowledgeBase:
                                               upsert=True)
         return x
 
-    def updateSymbols(self, symbol, frequency):
-        "Used by information analyzer and potential calculation."
-        r = self.symbols_kb.update_one({ 'name': symbol },
-                                        {'$inc': { 'frequency': frequency}},
-                                         upsert=True)
-        return r
-
     def learnPattern(self, pattern_object, emotives=None, metadata=None):
         """
         Core machine learning function.
@@ -250,6 +369,27 @@ class SuperKnowledgeBase:
                 # Pattern exists - increment frequency
                 self.redis_writer.increment_frequency(pattern_object.name)
                 logger.info(f"[HYBRID] Incremented frequency for pattern {pattern_object.name}")
+
+                # Update symbol statistics (pattern seen again)
+                from itertools import chain
+                from collections import Counter
+
+                # Flatten pattern_data to get all symbols
+                all_symbols = list(chain(*pattern_object.pattern_data))
+                symbol_count = len(all_symbols)
+
+                # Count occurrences of each symbol in this pattern
+                symbol_counts = Counter(all_symbols)
+
+                # Increment symbol frequency for each symbol by its count in pattern
+                for symbol, count in symbol_counts.items():
+                    self.redis_writer.increment_symbol_frequency(symbol, count)
+                    logger.debug(f"[HYBRID] Incremented symbol frequency for {symbol} by {count}")
+
+                # Increment global symbol count (pattern seen again)
+                self.redis_writer.increment_global_symbol_count(symbol_count)
+                logger.debug(f"[HYBRID] Updated symbol stats: {len(symbol_counts)} unique symbols, {symbol_count} total")
+
                 return False  # Not a new pattern
 
             else:
@@ -268,6 +408,30 @@ class SuperKnowledgeBase:
                     metadata=metadata if metadata else None
                 )
                 logger.info(f"[HYBRID] Redis write completed for {pattern_object.name}")
+
+                # Update symbol statistics for new pattern
+                from itertools import chain
+                from collections import Counter
+
+                # Flatten pattern_data to get all symbols
+                all_symbols = list(chain(*pattern_object.pattern_data))
+                symbol_count = len(all_symbols)
+
+                # Count occurrences of each symbol in this pattern
+                symbol_counts = Counter(all_symbols)
+
+                # For NEW pattern: update both frequency and pattern_member_frequency
+                for symbol, count in symbol_counts.items():
+                    # Increment symbol frequency by count (how many times it appears)
+                    self.redis_writer.increment_symbol_frequency(symbol, count)
+                    # Increment pattern_member_frequency by 1 (this pattern contains this symbol)
+                    self.redis_writer.increment_pattern_member_frequency(symbol, 1)
+                    logger.debug(f"[HYBRID] Tracked symbol {symbol}: freq+{count}, pmf+1")
+
+                # Update global totals for new pattern
+                self.redis_writer.increment_global_symbol_count(symbol_count)
+                self.redis_writer.increment_global_pattern_count(1)
+                logger.debug(f"[HYBRID] Updated global totals: {len(symbol_counts)} unique symbols, {symbol_count} total, +1 pattern")
 
                 logger.info(f"[HYBRID] Successfully learned new pattern {pattern_object.name} to ClickHouse + Redis")
                 return True  # New pattern

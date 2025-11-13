@@ -507,15 +507,10 @@ class PatternProcessor:
         Returns:
             Frequency count of the symbol.
         """
-        try:
-            # Use batch query for better performance
-            symbol_stats = self.query_manager.get_symbol_frequencies_batch([symbol])
-            return symbol_stats.get(symbol, 0)
-        except Exception as e:
-            logger.warning(f"Batch symbol query failed, falling back to find_one(): {e}")
-            # Fallback to original method
-            doc = self.superkb.symbols_kb.find_one({"name": symbol})
-            return doc['frequency'] if doc else 0
+        # Use batch query for better performance
+        # No fallback - fail fast if Redis is unavailable
+        symbol_stats = self.query_manager.get_symbol_frequencies_batch([symbol])
+        return symbol_stats.get(symbol, 0)
 
     def symbolProbability(self, symbol: str, total_symbols_in_patterns_frequencies: int) -> float:
         """Calculate the probability of a symbol appearing in patterns.
@@ -531,19 +526,13 @@ class PatternProcessor:
         # multiple times in one pattern, or we can look at the probability of a symbol to appear in any pattern, regardless
         # of the number of times it appears within any one pattern.
         # We can also look at coming up with a formula to account for both to affect the potential.
-        try:
-            # Use batch query for better performance
-            symbol_stats = self.query_manager.get_symbol_frequencies_batch([symbol])
-            symbol_data = symbol_stats.get(symbol, {})
-            pattern_member_frequency = symbol_data.get('pattern_member_frequency', 0)
-            return float(pattern_member_frequency / total_symbols_in_patterns_frequencies) if total_symbols_in_patterns_frequencies > 0 else 0.0
-        except Exception as e:
-            logger.warning(f"Batch symbol query failed in symbolProbability, falling back to find_one(): {e}")
-            # Fallback to original method
-            doc = self.superkb.symbols_kb.find_one({"name": symbol})
-            if doc and total_symbols_in_patterns_frequencies > 0:
-                return float(doc['pattern_member_frequency'] / total_symbols_in_patterns_frequencies)
-            return 0.0
+
+        # Use batch query for better performance
+        # No fallback - fail fast if Redis is unavailable
+        symbol_stats = self.query_manager.get_symbol_frequencies_batch([symbol])
+        symbol_data = symbol_stats.get(symbol, {})
+        pattern_member_frequency = symbol_data.get('pattern_member_frequency', 0)
+        return float(pattern_member_frequency / total_symbols_in_patterns_frequencies) if total_symbols_in_patterns_frequencies > 0 else 0.0
 
     def patternProbability(self, freq: int, total_pattern_frequencies: int) -> float:
         """Calculate the probability of a pattern based on its frequency.
@@ -622,19 +611,12 @@ class PatternProcessor:
             symbol_frequency_cache = Counter()
             total_ensemble_pattern_frequencies = 0
 
-            # Use optimized aggregation pipeline to load all symbols
-            try:
-                symbol_cache = self.query_manager.get_all_symbols_optimized(
-                    self.superkb.symbols_kb
-                )
-                logger.debug(f"Loaded {len(symbol_cache)} symbols using optimized aggregation pipeline (async)")
-            except Exception as e:
-                logger.warning(f"Aggregation pipeline failed for symbols in async, falling back to find(): {e}")
-                # Fallback to original method
-                symbol_cache = {}
-                all_symbols = self.superkb.symbols_kb.find({}, {'_id': False}, cursor_type=pymongo.CursorType.EXHAUST)
-                for symbol in all_symbols:
-                    symbol_cache[symbol['name']] = symbol
+            # Load all symbols using optimized aggregation pipeline
+            # No fallback - fail fast if Redis is unavailable
+            symbol_cache = self.query_manager.get_all_symbols_optimized(
+                self.superkb.symbols_kb
+            )
+            logger.debug(f"Loaded {len(symbol_cache)} symbols using optimized aggregation pipeline (async)")
 
             # Calculate totals and caches
             for prediction in causal_patterns:
@@ -692,10 +674,10 @@ class PatternProcessor:
                     try:
                         # Use cached metrics calculations
                         normalized_entropy_val = await self.cached_calculator.normalized_entropy_cached(
-                            state, total_symbols, symbol_probability_cache
+                            state, total_symbols
                         )
                         global_normalized_entropy_val = await self.cached_calculator.global_normalized_entropy_cached(
-                            state, symbol_probability_cache
+                            state, symbol_probability_cache, total_symbols
                         )
                     except Exception as e:
                         logger.warning(f"Cached metrics calculation failed: {e}, falling back to direct calculation")
@@ -717,14 +699,14 @@ class PatternProcessor:
                         try:
                             # Use cached conditional probability calculation
                             conditional_prob = await self.cached_calculator.conditional_probability_cached(
-                                [_present], symbol_probability_cache
+                                _present, symbol_probability_cache
                             )
                             confluence_val = _p_e_h * (1 - conditional_prob)
                         except Exception as e:
                             logger.debug(f"Cached conditional probability failed: {e}, falling back to direct calculation")
-                            confluence_val = confluence(_p_e_h, _present, symbol_probability_cache)
+                            confluence_val = _p_e_h * (1 - confluence(_present, symbol_probability_cache))
                     else:
-                        confluence_val = confluence(_p_e_h, _present, symbol_probability_cache)
+                        confluence_val = _p_e_h * (1 - confluence(_present, symbol_probability_cache))
                 except Exception as e:
                     logger.debug(f"Error calculating confluence: {e}")
                     confluence_val = 0.0

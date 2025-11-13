@@ -282,8 +282,52 @@ Deleted 0 Redis keys for kb_id: test_simple_sequence_learning_1763040555614_9ea3
 
 ---
 
+## Phase 5 Follow-up: MongoDB Removal ⚙️ IN PROGRESS
+**Status**: IN PROGRESS (Just Started - 2025-11-13)
+**Objective**: Complete removal of MongoDB code, configuration, and dependencies from KATO
+**Timeline**: 4-6 hours estimated
+
+### Background
+Phase 4 (Symbol Statistics & Fail-Fast Architecture) is 100% complete. The ClickHouse + Redis hybrid architecture is production-ready. MongoDB is no longer used anywhere in the codebase. This cleanup phase removes all MongoDB-related code to simplify the architecture.
+
+### Sub-Phases
+
+#### Sub-Phase 1: Code Cleanup (1-2 hours)
+- [ ] Delete `kato/storage/connection_manager.py` (726 lines - MongoDB-only code)
+- [ ] Remove `learnAssociation()` from `kato/informatics/knowledge_base.py` (unused method)
+- [ ] Remove StubCollections from `kato/informatics/knowledge_base.py` (no longer needed)
+- [ ] Remove MongoDB mode from `kato/searches/pattern_search.py` (keep only ClickHouse/Redis hybrid)
+
+#### Sub-Phase 2: Configuration Cleanup (30 min)
+- [ ] Remove MongoDB environment variables from `kato/config/settings.py`
+- [ ] Update docker-compose.yml environment section (remove MONGO_* vars)
+
+#### Sub-Phase 3: Infrastructure Cleanup (30 min)
+- [ ] Remove MongoDB service from `docker-compose.yml`
+- [ ] Remove `pymongo` from `requirements.txt` and regenerate `requirements.lock`
+
+#### Sub-Phase 4: Testing & Verification (1-2 hours)
+- [ ] Rebuild containers (`docker-compose build --no-cache kato`)
+- [ ] Run integration tests (target: 9/11+ passing)
+- [ ] Verify no MongoDB connections in logs
+- [ ] Update documentation (ARCHITECTURE_DIAGRAM.md)
+
+### Success Criteria
+- ✅ No MongoDB imports in codebase
+- ✅ Tests passing (9/11+ integration tests)
+- ✅ MongoDB service not in docker-compose.yml
+- ✅ No MongoDB connection attempts in logs
+- ✅ Pattern learning and predictions working
+- ✅ Container builds successfully without pymongo
+- ✅ Documentation updated to reflect ClickHouse + Redis architecture
+
+**Status**: 🎯 Just Started (2025-11-13)
+**Dependencies**: Phase 4 (Symbol Statistics) complete ✅
+
+---
+
 ## Phase 5: Production Deployment 🎯 READY
-**Status**: Ready to begin (Phase 4 complete)
+**Status**: Ready to begin after MongoDB cleanup
 **Objective**: Deployment planning and production readiness
 
 ### Planned Tasks
@@ -294,7 +338,7 @@ Deleted 0 Redis keys for kb_id: test_simple_sequence_learning_1763040555614_9ea3
 - [ ] Final production deployment (change KATO_ARCHITECTURE_MODE default if needed)
 
 **Estimate**: 4-8 hours
-**Prerequisites**: ✅ All complete (Phases 1-4 finished)
+**Prerequisites**: ✅ Phase 4 complete, MongoDB removal in progress
 
 ## Decision Points
 

@@ -3,9 +3,85 @@
 
 ## Active Projects
 
+### Phase 5 Follow-up: MongoDB Removal
+**Priority**: High - Architecture Cleanup
+**Status**: IN PROGRESS ⚙️ (Just Started - 2025-11-13)
+**Timeline**: Estimated 4-6 hours
+**Objective**: Complete removal of MongoDB code, configuration, and dependencies from KATO
+
+#### Background
+Phase 4 (Symbol Statistics & Fail-Fast Architecture) is 100% complete. The ClickHouse + Redis hybrid architecture is production-ready. MongoDB is no longer used anywhere in the codebase. This cleanup phase removes all MongoDB-related code to simplify the architecture.
+
+#### Sub-Phase 1: Code Cleanup (1-2 hours)
+- [ ] Delete `kato/storage/connection_manager.py` (726 lines - MongoDB-only code)
+  - Legacy file from MongoDB era
+  - Contains MongoDB client creation, connection pooling, healthchecks
+  - No longer used after hybrid architecture migration
+  - Safe to delete: No imports found in active code
+- [ ] Remove `learnAssociation()` from `kato/informatics/knowledge_base.py`
+  - Unused method from legacy MongoDB implementation
+  - Not called anywhere in current codebase
+  - Safe to delete after verification
+- [ ] Remove StubCollections from `kato/informatics/knowledge_base.py`
+  - Legacy MongoDB-style collections (predictions_kb, associative_action_kb)
+  - No longer needed after SymbolsKBInterface implementation
+  - Only symbols_kb remains (now backed by Redis)
+- [ ] Remove MongoDB mode from `kato/searches/pattern_search.py`
+  - Remove MongoDB-specific query code
+  - Keep only ClickHouse/Redis hybrid mode
+  - Simplify causalBeliefAsync and getPatternsAsync
+
+#### Sub-Phase 2: Configuration Cleanup (30 min)
+- [ ] Remove MongoDB environment variables from `kato/config/settings.py`
+  - MONGO_DB, MONGO_COLLECTION, MONGO_HOST, MONGO_PORT
+  - MONGO_USERNAME, MONGO_PASSWORD (if present)
+- [ ] Update docker-compose.yml environment section
+  - Remove MONGO_* environment variable references
+  - Verify ClickHouse and Redis variables remain
+
+#### Sub-Phase 3: Infrastructure Cleanup (30 min)
+- [ ] Remove MongoDB service from `docker-compose.yml`
+  - Remove `mongo:` service definition
+  - Remove MongoDB volume mounts
+  - Remove MongoDB network references
+- [ ] Remove `pymongo` from dependencies
+  - Remove from `requirements.txt`
+  - Regenerate `requirements.lock` with `pip-compile`
+  - Verify no other packages depend on pymongo
+
+#### Sub-Phase 4: Testing & Verification (1-2 hours)
+- [ ] Rebuild containers
+  - `docker-compose build --no-cache kato`
+  - Verify build succeeds without MongoDB dependencies
+- [ ] Run integration tests
+  - Target: 9/11+ tests passing (baseline from Phase 4)
+  - `./run_tests.sh --no-start --no-stop tests/tests/integration/`
+  - Verify pattern learning and predictions work
+- [ ] Verify no MongoDB connections
+  - Check container logs for MongoDB connection attempts
+  - Verify no import errors for pymongo
+  - Confirm ClickHouse + Redis are the only databases used
+- [ ] Update documentation
+  - Verify ARCHITECTURE_DIAGRAM.md reflects ClickHouse + Redis only
+  - Update any references to MongoDB in docs/
+
+#### Success Criteria
+- ✅ No MongoDB imports in codebase
+- ✅ Tests passing (9/11+ integration tests)
+- ✅ MongoDB service not in docker-compose.yml
+- ✅ No MongoDB connection attempts in logs
+- ✅ Pattern learning and predictions working
+- ✅ Container builds successfully without pymongo
+- ✅ Documentation updated to reflect ClickHouse + Redis architecture
+
+**Estimated Total Duration**: 4-6 hours
+**Dependencies**: Phase 4 (Symbol Statistics) complete ✅
+
+---
+
 ### ClickHouse + Redis Hybrid Architecture (Billion-Scale Pattern Storage)
 **Priority**: High - Major Performance Initiative
-**Status**: Phase 4 COMPLETE ✅ (2025-11-13), Phase 5 Ready to Begin
+**Status**: Phase 4 COMPLETE ✅ (2025-11-13), Phase 5 (Production Deployment) Ready to Begin
 **Timeline**: Phases 1-4 complete (38 hours total over 3 days: 2025-11-11 to 2025-11-13)
 **Objective**: Replace MongoDB with hybrid architecture for 100-300x performance improvement
 

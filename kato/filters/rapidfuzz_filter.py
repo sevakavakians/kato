@@ -115,9 +115,9 @@ class RapidFuzzFilter(PatternFilter):
                 continue
 
             # Extract pattern_data (flattened list of tokens)
-            pattern_data = pattern_data_dict.get('pattern_data')
+            pattern_data = pattern_data_dict.get('pattern_data_flat')
             if not pattern_data:
-                logger.warning(f"Pattern '{pattern_name}' missing pattern_data, skipping")
+                logger.warning(f"Pattern '{pattern_name}' missing pattern_data_flat, skipping")
                 continue
 
             # Calculate similarity using extractor

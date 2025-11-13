@@ -543,14 +543,17 @@ class PatternSearcher:
             logger.info(f"Filter pipeline complete: {metrics['final_candidates']} candidates "
                        f"after {metrics['total_stages']} stages")
 
-        # Populate patterns_cache with filtered patterns
+        # Populate patterns_cache with filtered patterns (use flattened version for matching)
         # The executor has already cached pattern_data during database queries
         self.patterns_cache = {}
         for pattern_name in candidates:
             pattern_dict = self.filter_executor.patterns_cache.get(pattern_name, {})
-            pattern_data = pattern_dict.get('pattern_data')
-            if pattern_data:
-                self.patterns_cache[pattern_name] = pattern_data
+            # Use pattern_data_flat for similarity matching (flattened list)
+            pattern_data_flat = pattern_dict.get('pattern_data_flat')
+            if pattern_data_flat:
+                self.patterns_cache[pattern_name] = pattern_data_flat
+                logger.info(f"DEBUG: Loaded pattern {pattern_name[:20]}... with pattern_data_flat type={type(pattern_data_flat)}, "
+                          f"len={len(pattern_data_flat) if pattern_data_flat else 0}, sample={pattern_data_flat[:3] if pattern_data_flat else None}")
 
         self.patterns_count = len(self.patterns_cache)
         logger.info(f"Loaded {self.patterns_count} filtered patterns into cache")
@@ -872,6 +875,8 @@ class PatternSearcher:
                     info = self.extractor.extract_prediction_info(
                         pattern_seq, state, self.recall_threshold)
 
+                    logger.info(f"DEBUG: extract_prediction_info returned info={'NOT_NONE' if info else 'NONE'} for pattern_id={pattern_id[:20]}...")
+
                     if info:
                         results.append((pattern_id,) + info)
 
@@ -990,22 +995,38 @@ class PatternSearcher:
         """
         logger.info(f"*** causalBeliefAsync called with state={state}, target_class_candidates={target_class_candidates}")
 
-        if self.patterns_count == 0:
-            await self.getPatternsAsync()
+        # Use ClickHouse/Redis hybrid architecture if available and no target candidates specified
+        if self.use_hybrid_architecture and not target_class_candidates:
+            logger.info("Using ClickHouse/Redis filter pipeline for candidate selection (async)")
+            try:
+                candidate_set = self.getCandidatesViaFilterPipeline(state)
+                candidates = list(candidate_set)
+                logger.info(f"Filter pipeline returned {len(candidates)} candidates (async)")
+            except Exception as e:
+                logger.error(f"Filter pipeline failed, falling back to MongoDB: {e}")
+                # Fall back to MongoDB
+                if self.patterns_count == 0:
+                    await self.getPatternsAsync()
+                candidates = None
+        else:
+            # MongoDB mode - load all patterns if not already loaded
+            if self.patterns_count == 0:
+                await self.getPatternsAsync()
+            candidates = None
 
         # Default max_workers to CPU count
         if max_workers is None:
             max_workers = min(multiprocessing.cpu_count(), 8)  # Cap at 8 to avoid overload
 
-        # Get candidate patterns using indices
-        if self.use_indexing and self.index_manager and not target_class_candidates:
+        # Get candidate patterns using indices (MongoDB mode only)
+        if candidates is None and self.use_indexing and self.index_manager and not target_class_candidates:
             candidates = self.index_manager.search_candidates(state, length_tolerance=0.5)
             if target_class_candidates:
                 candidates &= set(target_class_candidates)
             logger.debug(f"Index filtering: {self.patterns_count} -> {len(candidates)} candidates")
             # Convert set to list for slicing
             candidates = list(candidates)
-        else:
+        elif candidates is None:
             candidates = target_class_candidates if target_class_candidates else list(self.patterns_cache.keys())
 
         # Split candidates into batches for parallel processing
@@ -1087,6 +1108,13 @@ class PatternSearcher:
             for pattern_id in candidates:
                 if pattern_id in self.patterns_cache:
                     choices[pattern_id] = self.patterns_cache[pattern_id]
+            logger.info(f"DEBUG: _process_batch_rapidfuzz: candidates={len(candidates)}, "
+                      f"patterns_cache_size={len(self.patterns_cache)}, choices={len(choices)}, "
+                      f"use_token_matching={self.use_token_matching}")
+            if choices:
+                sample_key = list(choices.keys())[0]
+                logger.info(f"DEBUG: Sample pattern_data type={type(choices[sample_key])}, "
+                          f"len={len(choices[sample_key])}, value={choices[sample_key]}")
             scorer = _lcs_ratio_scorer
             query = state
         else:
@@ -1105,6 +1133,8 @@ class PatternSearcher:
             # Use score_cutoff for early termination (consistent with sync version)
             # Convert recall_threshold (0-1) to score (0-100)
             score_cutoff = self.recall_threshold * 100
+            logger.info(f"DEBUG: About to call rapidfuzz with query={query}, "
+                      f"recall_threshold={self.recall_threshold}, score_cutoff={score_cutoff}")
 
             matches = process.extract(
                 query,
@@ -1113,6 +1143,7 @@ class PatternSearcher:
                 score_cutoff=score_cutoff,  # Early termination optimization
                 limit=None
             )
+            logger.info(f"DEBUG: Rapidfuzz returned {len(matches)} matches")
 
             for _choice_str, score, pattern_id in matches:
                 similarity = score / 100.0
@@ -1123,6 +1154,8 @@ class PatternSearcher:
                     # Extract detailed info for prediction
                     info = self.extractor.extract_prediction_info(
                         pattern_seq, state, self.recall_threshold)
+
+                    logger.info(f"DEBUG: extract_prediction_info returned info={'NOT_NONE' if info else 'NONE'} for pattern_id={pattern_id[:20]}...")
 
                     if info:
                         # Use similarity from extract_prediction_info (info[6]) for consistency
@@ -1222,12 +1255,27 @@ class PatternSearcher:
             if len(result) >= 8:
                 pattern_hash, pattern, matching_intersection, past, present, missing, extras, similarity, number_of_blocks = result[:9]
 
-                # Fetch pattern data from MongoDB (still sync, but batched)
-                if self.knowledgebase is None:
-                    raise RuntimeError("MongoDB connection required but not available")
+                # Fetch pattern data from ClickHouse + Redis (hybrid mode) or MongoDB
+                pattern_data = None
 
-                pattern_data = self.knowledgebase.patterns_kb.find_one(
-                    {"name": pattern_hash}, {"_id": 0})
+                if self.use_hybrid_architecture and self.filter_executor:
+                    # Hybrid mode: pattern data already in filter_executor cache from pipeline
+                    pattern_dict = self.filter_executor.patterns_cache.get(pattern_hash, {})
+                    if pattern_dict:
+                        # Reconstruct pattern_data dict for Prediction object
+                        pattern_data = {
+                            'name': pattern_hash,
+                            'pattern_data': pattern_dict.get('pattern_data', []),
+                            'length': pattern_dict.get('length', 0),
+                            'frequency': 1  # Frequency will be fetched from Redis if needed
+                        }
+                else:
+                    # MongoDB mode: fetch from database
+                    if self.knowledgebase is None:
+                        raise RuntimeError("MongoDB connection required but not available")
+
+                    pattern_data = self.knowledgebase.patterns_kb.find_one(
+                        {"name": pattern_hash}, {"_id": 0})
 
                 if pattern_data:
                     pred = Prediction(

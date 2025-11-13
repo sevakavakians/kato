@@ -37,10 +37,9 @@ class PatternOperations:
         self.vector_processor = vector_processor
         self.memory_manager = memory_manager
 
-        # Quick access to knowledge base
-        self.knowledge = pattern_processor.superkb.knowledge
+        # Quick access to knowledge base collections (hybrid architecture)
         self.patterns_kb = pattern_processor.superkb.patterns_kb
-        self.predictions_kb = self.knowledge.predictions_kb
+        self.predictions_kb = pattern_processor.superkb.predictions_kb
 
         logger.debug("PatternOperations initialized")
 

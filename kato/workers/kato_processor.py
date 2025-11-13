@@ -63,9 +63,9 @@ class KatoProcessor:
 
         self.vector_processor = VectorProcessor(self.procs_for_searches, **minimal_manifest)
         self.pattern_processor = PatternProcessor(settings=self.settings, **minimal_manifest)
-        self.knowledge = self.pattern_processor.superkb.knowledge
+        # Access collections directly from superkb (hybrid architecture)
         self.pattern_processor.patterns_kb = self.pattern_processor.superkb.patterns_kb
-        self.predictions_kb = self.knowledge.predictions_kb
+        self.predictions_kb = self.pattern_processor.superkb.predictions_kb
 
         # Mark components that need async initialization
         self._metrics_cache_initialized = False

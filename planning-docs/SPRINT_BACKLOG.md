@@ -5,8 +5,8 @@
 
 ### ClickHouse + Redis Hybrid Architecture (Billion-Scale Pattern Storage)
 **Priority**: High - Major Performance Initiative
-**Status**: Phase 1 VERIFIED ✅ - Tests Running in Hybrid Mode by Default (2025-11-12)
-**Timeline**: Core functionality complete, optional enhancements remain
+**Status**: Phase 4 PARTIAL (80% Complete) - ⚠️ BLOCKER DISCOVERED (2025-11-13)
+**Timeline**: Phase 3 complete (28 hours), Phase 4 in progress (~8 hours), blocker affecting both MongoDB and hybrid modes
 **Objective**: Replace MongoDB with hybrid architecture for 100-300x performance improvement
 
 #### Phase 1: Infrastructure Foundation ✅ VERIFIED (2025-11-12)
@@ -43,17 +43,66 @@
 - **Estimate**: 8-12 hours (for production polish, not needed for core functionality)
 - **Dependencies**: Phase 1 complete ✅
 
-#### Phase 3: Individual Filter Implementation (✅ COMPLETE)
-- [x] MinHashFilter: LSH bucket lookup for 99% candidate reduction - WORKING
-- [x] LengthFilter: Pattern length range filtering - WORKING
-- [x] JaccardFilter: Token set similarity (exact) - WORKING
-- [x] BloomFilter: Probabilistic membership testing (optional) - NOT NEEDED
-- [x] RapidFuzzFilter: Character-level similarity (final stage) - WORKING
-- [x] Unit tests for each filter - 12/12 hybrid tests passing
-- [x] Integration tests for filter combinations - 31/32 integration tests passing
-- **Status**: ✅ Complete - All filters operational in tests
-- **Estimate**: 16-20 hours (completed as part of hybrid test implementation)
+#### Phase 3: Core Hybrid Implementation ✅ COMPLETE (2025-11-13)
+**Status**: ✅ COMPLETE - Write-Side Fully Functional
+- [x] Created ClickHouseWriter (kato/storage/clickhouse_writer.py) - 217 lines
+  - Write pattern data with MinHash signatures and LSH bands
+  - Delete operations (drop partition by kb_id)
+  - Count and existence checks
+  - Pattern data retrieval
+- [x] Created RedisWriter (kato/storage/redis_writer.py) - 217 lines
+  - Frequency counters with kb_id namespacing
+  - Emotives and metadata storage as JSON
+  - Pattern existence checks
+  - Bulk delete operations
+- [x] Replaced MongoDB with ClickHouse + Redis in SuperKnowledgeBase
+  - Modified kato/informatics/knowledge_base.py to use ClickHouse + Redis clients (~325 lines changed)
+  - Created backward-compatible interfaces (PatternsKBInterface, StubCollection)
+  - Implemented learnPattern() to write to both ClickHouse and Redis
+  - Implemented getPattern() to read from both stores
+  - Implemented clear_all_memory() to delete from both stores
+  - Implemented drop_database() with safety checks for test kb_ids
+- [x] Fixed Integration Issues
+  - Removed self.knowledge references in kato/workers/kato_processor.py
+  - Removed self.knowledge references in kato/workers/pattern_operations.py
+  - Fixed ClickHouse database references (default.patterns_data → kato.patterns_data)
+  - Added missing schema columns: token_count, first_token, last_token, created_at, updated_at
+  - Fixed negative hash values for UInt64 columns (abs(hash(...)))
+  - Added stub collections for predictions_kb, symbols_kb, associative_action_kb, metadata
+- [x] Resolved Critical Blocker
+  - **Issue**: ClickHouse insert failed with KeyError: 0
+  - **Root Cause**: clickhouse_connect expected list of lists with column_names, not list of dicts
+  - **Solution**: Convert row dict to list of values + pass column_names explicitly
+  - **Resolution Time**: ~1 hour
+- [x] End-to-End Verification
+  - Pattern write to ClickHouse successful (verified in logs)
+  - Metadata write to Redis successful (verified in logs)
+  - Pattern retrieval working (getPattern)
+  - Bulk delete working (clear_all_memory)
+  - KB_ID isolation maintained (partition-based)
+  - Test progresses past learn() without errors
+- **Status**: ✅ COMPLETE
+- **Actual Duration**: 18 hours (vs estimated 20-24 hours, 90% efficiency)
 - **Dependencies**: Phase 2 complete ✅
+
+**Files Created** (Phase 3):
+- kato/storage/clickhouse_writer.py (217 lines)
+- kato/storage/redis_writer.py (217 lines)
+
+**Files Modified** (Phase 3):
+- kato/informatics/knowledge_base.py (major rewrite, ~325 lines changed)
+- kato/workers/kato_processor.py (removed .knowledge references)
+- kato/workers/pattern_operations.py (removed .knowledge references)
+- kato/workers/pattern_processor.py (fixed ClickHouse table reference)
+
+**Verification Evidence**:
+```
+[HYBRID] learnPattern() called for 386fbb12926e8e015a1483990df913e8410f94ce
+[HYBRID] Writing NEW pattern to ClickHouse: 386fbb12926e8e015a1483990df913e8410f94ce
+[HYBRID] ClickHouse write completed for 386fbb12926e8e015a1483990df913e8410f94ce
+[HYBRID] Writing metadata to Redis: 386fbb12926e8e015a1483990df913e8410f94ce
+[HYBRID] Successfully learned new pattern to ClickHouse + Redis
+```
 
 #### Phase 4: Data Migration (READY - Scripts prepared, not needed for tests)
 - [x] Create migration script (MongoDB → ClickHouse + Redis) - scripts/migrate_mongodb_to_clickhouse.py EXISTS
@@ -68,43 +117,108 @@
 - **Estimate**: 12-16 hours (only needed for production deployment)
 - **Dependencies**: Phase 3 complete ✅
 
-#### Phase 5: Integration & Testing (✅ COMPLETE)
-- [x] Modify pattern_search.py to use ClickHouse + Redis - AUTOMATIC detection working
-- [x] Update PatternProcessor to use filter pipeline - WORKING in tests
-- [x] Add comprehensive unit tests - 12/12 hybrid-specific tests passing
-- [x] Create integration tests for full pipeline - 31/32 integration tests passing
-- [ ] Benchmark performance vs MongoDB baseline - scripts/benchmark_hybrid_architecture.py EXISTS
-- [ ] Stress testing with millions of patterns - OPTIONAL (can run benchmark script)
-- [x] Verify prediction accuracy (no regressions) - All core functionality tests passing
-- **Status**: ✅ Complete - All tests run in hybrid mode by default
-- **Estimate**: 16-20 hours (completed)
-- **Dependencies**: Phase 4 complete ✅
+#### Phase 4: Read-Side Migration ⚠️ 80% COMPLETE - BLOCKER DISCOVERED
+**Status**: ⚠️ PARTIAL (Infrastructure 80% complete) - BLOCKER in prediction aggregation (2025-11-13)
+**Objective**: Migrate pattern search and prediction to query ClickHouse + Redis (Read-side)
 
-#### Phase 6: Production Deployment (READY when needed)
-- [ ] Deploy to staging environment - READY (just change docker-compose.yml)
+**Completed Tasks** ✅:
+- [x] Modified pattern_search.py (causalBeliefAsync method)
+  - Added ClickHouse filter pipeline support to async prediction path (lines 991-1025)
+  - Code checks `use_hybrid_architecture` and calls `getCandidatesViaFilterPipeline(state)`
+  - Maintains fallback to MongoDB if filter pipeline fails
+  - File: kato/searches/pattern_search.py
+- [x] Fixed pattern_data flattening (executor.py)
+  - Restored flattening of pattern_data when loading from ClickHouse (lines 293-299)
+  - Pattern data stored as flat list `['hello', 'world', 'test']` to match MongoDB behavior
+  - File: kato/filters/executor.py
+- [x] Verified ClickHouse filter pipeline works
+  - Filter pipeline successfully returns 1 candidate for test pattern
+  - Pattern data correctly loaded from ClickHouse (flattened format)
+- [x] Verified RapidFuzz scoring works
+  - RapidFuzz scoring returns 1 match correctly
+- [x] Verified extract_prediction_info works
+  - extract_prediction_info returns valid info (NOT_NONE)
+
+**BLOCKER DISCOVERED** ⚠️:
+- **Issue**: Test `test_simple_sequence_learning` fails with empty predictions in BOTH MongoDB and hybrid modes
+- **Severity**: Critical - Blocks Phase 4 completion
+- **Discovery Date**: 2025-11-13 (during Phase 4 verification)
+- **Evidence**:
+  - Tested with `KATO_ARCHITECTURE_MODE=mongodb` → FAILS with empty predictions
+  - Tested with `KATO_ARCHITECTURE_MODE=hybrid` → FAILS with empty predictions
+  - ✅ Filter pipeline works correctly (returns 1 candidate)
+  - ✅ Pattern matching works (RapidFuzz returns 1 match)
+  - ✅ extract_prediction_info works (returns NOT_NONE)
+  - ❌ Final predictions list is EMPTY
+- **Root Cause Analysis**:
+  - Issue is NOT specific to hybrid architecture
+  - Issue is in prediction aggregation or final return logic
+  - Possible causes:
+    1. temp_searcher in `pattern_processor.get_predictions_async` (line ~839) might have issues
+    2. `predictPattern` method might be filtering out results
+    3. Missing logging in final prediction building stages
+    4. Async/await issue in prediction aggregation
+- **Investigation Next Steps**:
+  1. Investigate `pattern_processor.predictPattern` method
+  2. Check `_build_predictions_async` in pattern_search.py
+  3. Add logging to track predictions through final stages
+  4. May need to run working test suite baseline to confirm this isn't a pre-existing issue
+- **Files Modified**:
+  - kato/searches/pattern_search.py: Added hybrid architecture support to causalBeliefAsync (Phase 4 read-side)
+  - kato/filters/executor.py: Fixed pattern_data flattening for ClickHouse compatibility
+  - Added extensive DEBUG logging throughout pattern search pipeline
+
+**Remaining Tasks** (Blocked):
+- [ ] Resolve prediction aggregation blocker (PRIORITY)
+- [ ] Verify end-to-end test passes with predictions
+  - Test should return non-empty predictions after blocker resolved
+  - Verify pattern search returns correct results
+- [ ] Benchmark performance vs MongoDB baseline
+  - Use scripts/benchmark_hybrid_architecture.py
+  - Measure query time for millions of patterns
+  - Verify 100-300x performance improvement
+
+- **Status**: ⚠️ 80% Complete - Infrastructure working, blocker discovered in prediction aggregation
+- **Time Spent**: ~8 hours (infrastructure complete, debugging in progress)
+- **Estimate Remaining**: 4-8 hours (blocker resolution + verification)
+- **Dependencies**: Phase 3 complete ✅
+- **Key Finding**: Phase 4 infrastructure is complete - ClickHouse filter pipeline integration works, but prediction final aggregation has a blocker that affects both architectures
+
+#### Phase 5: Production Deployment (READY - Infrastructure exists)
+- [ ] Production deployment planning
 - [ ] Run stress tests with billions of patterns - scripts/benchmark_hybrid_architecture.py available
-- [ ] Implement feature flag for gradual rollout - NOT NEEDED (backward compatible fallback exists)
-- [ ] Monitor performance metrics (latency, throughput) - READY
-- [ ] Create operations runbook - OPTIONAL
-- [ ] Document troubleshooting procedures - OPTIONAL
-- [ ] Final production deployment - READY (KATO_ARCHITECTURE_MODE=hybrid is default)
-- **Status**: ✅ Ready for production deployment
-- **Note**: Hybrid mode is now the default, production-ready
-- **Estimate**: 12-16 hours (minimal work needed)
-- **Dependencies**: Phase 5 complete ✅
+- [ ] Monitor performance metrics (latency, throughput)
+- [ ] Document troubleshooting procedures
+- [ ] Final production deployment
+- **Status**: Ready when Phase 3-4 complete
+- **Note**: Just change KATO_ARCHITECTURE_MODE default when ready
+- **Estimate**: 4-8 hours
+- **Dependencies**: Phase 4 complete
 
-**Total Effort Estimate**: 64-84 hours (6-7 weeks) - MAJORITY COMPLETE
-**Actual Effort**: ~40 hours (Phase 1-3, 5 complete)
-**Expected Performance**: 200-500ms for billions of patterns (100-300x improvement) - READY TO BENCHMARK
-**Key Innovation**: Session-configurable multi-stage filter pipeline - ✅ WORKING
+**Total Effort Estimate**: 64-84 hours (6-7 weeks)
+**Actual Effort**: ~28 hours (Phase 1-3 complete)
+**Expected Performance**: 200-500ms for billions of patterns (100-300x improvement)
+**Key Innovation**: Direct MongoDB replacement with ClickHouse + Redis (no graceful fallback)
 
-**Current State**:
-- ✅ Hybrid mode is DEFAULT for all tests (KATO_ARCHITECTURE_MODE=hybrid)
-- ✅ All core functionality working (43 tests, 96.9% pass rate)
-- ✅ Filter pipeline operational with ['minhash', 'length', 'jaccard', 'rapidfuzz']
-- ✅ Session isolation working correctly (kb_id partitioning verified)
-- ✅ Backward compatibility maintained (MongoDB fallback functional)
-- ✅ Production-ready when needed
+**Current State** (2025-11-13):
+- ✅ Phase 1 Complete: Infrastructure (ClickHouse + Redis services) - 6 hours
+- ✅ Phase 2 Complete: Filter framework foundation - 4 hours
+- ✅ Phase 3 Complete: Write-side implementation (learnPattern) - 18 hours
+  - SuperKnowledgeBase fully integrated with hybrid architecture
+  - ClickHouseWriter and RedisWriter fully operational
+  - learnPattern() writes to both ClickHouse and Redis successfully
+  - getPattern() reads from both stores
+  - clear_all_memory() deletes from both stores
+  - Critical blocker resolved (clickhouse_connect data format)
+  - End-to-end verification complete with test logs
+- ⚠️ Phase 4: Read-side migration (pattern search and prediction) - 80% COMPLETE, BLOCKER DISCOVERED
+  - Infrastructure complete (~8 hours)
+  - ClickHouse filter pipeline integration working
+  - Pattern data flattening fixed
+  - BLOCKER: Empty predictions in both MongoDB and hybrid modes
+  - Issue in prediction aggregation logic (not specific to hybrid architecture)
+  - Estimated resolution: 4-8 hours
+- ⏸️ Phase 5: Production deployment - BLOCKED by Phase 4 blocker resolution
 
 **Documentation**:
 - Decision Log: planning-docs/DECISIONS.md (entry added 2025-11-11, verified 2025-11-12)

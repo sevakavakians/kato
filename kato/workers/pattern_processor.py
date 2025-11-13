@@ -192,7 +192,7 @@ class PatternProcessor:
                 if clickhouse_client and redis_client and arch_mode == 'hybrid':
                     # Check if data is migrated
                     try:
-                        pattern_count = clickhouse_client.query("SELECT COUNT(*) FROM default.patterns_data").result_rows[0][0]
+                        pattern_count = clickhouse_client.query("SELECT COUNT(*) FROM kato.patterns_data").result_rows[0][0]
                         logger.info(f"ClickHouse patterns_data table: {pattern_count:,} rows")
 
                         if pattern_count == 0:

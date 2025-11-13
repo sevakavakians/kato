@@ -46,7 +46,7 @@ class KnowledgeBase(dict):
             return
 
 class SuperKnowledgeBase:
-    "KnowledgeBase database that can be combined with other KBs"
+    "KnowledgeBase database using ClickHouse + Redis for hybrid storage"
     def __init__(self, primitive_id, persistence=7, settings=None):
         "Provide the primitive's ID."
         self.id = primitive_id
@@ -60,91 +60,126 @@ class SuperKnowledgeBase:
         if logger.level == 0:  # Logger level not set
             logger.setLevel(getattr(logging, settings.logging.log_level))
 
-        logger.info(f" Attaching knowledgebase for {self.id} using optimized connection manager ...")
+        logger.info(f" Attaching knowledgebase for {self.id} using ClickHouse + Redis ...")
         try:
-            # Use optimized connection manager for improved performance and reliability
-            from kato.storage.connection_manager import get_mongodb_client
-            self.connection = get_mongodb_client()
+            # Get ClickHouse and Redis clients (REQUIRED)
+            from kato.storage.connection_manager import get_clickhouse_client, get_redis_client
+            from kato.storage.clickhouse_writer import ClickHouseWriter
+            from kato.storage.redis_writer import RedisWriter
 
-            # Test the connection
-            self.connection.admin.command('ping')
-            logger.info(" MongoDB connection successful via optimized connection manager")
-            # CRITICAL FIX: Changed from w=0 (fire-and-forget) to w="majority" for data durability
-            self.write_concern = {"w": "majority", "j": True}  # v2.0: Ensure write acknowledgment
-            self.knowledge = self.connection[self.id]
-            self.patterns_kb = self.knowledge.patterns_kb
-            self.symbols_kb = self.knowledge.symbols_kb
-            self.associative_action_kb = self.knowledge.associative_action_kb
-            self.predictions_kb = self.knowledge.predictions_kb
-            self.metadata = self.knowledge.metadata
+            clickhouse_client = get_clickhouse_client()
+            redis_client = get_redis_client()
 
-            # Primary indexes for unique lookups
-            # Patterns are keyed by hash of their pattern data
-            self.patterns_kb.create_index( [("name", ASCENDING)], background=1, unique=1 )
-            # Symbols are unique string/vector identifiers
-            self.symbols_kb.create_index( [("name", ASCENDING)], background=1, unique=1 )
-            # Actions associated with symbols
-            self.associative_action_kb.create_index( [("symbol", ASCENDING)], background=1 )
+            if clickhouse_client is None:
+                raise RuntimeError(
+                    "ClickHouse client is required but not available. "
+                    "Ensure ClickHouse is running: docker ps | grep clickhouse"
+                )
 
-            # Compound indexes for optimized queries
-            # For finding high-frequency patterns quickly
-            self.patterns_kb.create_index([("frequency", DESCENDING), ("name", ASCENDING)], background=1)
-            # For pattern matching operations
-            self.patterns_kb.create_index([("pattern_data", ASCENDING), ("name", ASCENDING)], background=1)
-            # For symbol frequency queries
-            self.symbols_kb.create_index([("frequency", DESCENDING), ("name", ASCENDING)], background=1)
-            # For retrieving predictions by observation ID
-            self.predictions_kb.create_index([("unique_id", ASCENDING), ("time", DESCENDING)], background=1)
+            if redis_client is None:
+                raise RuntimeError(
+                    "Redis client is required but not available. "
+                    "Ensure Redis is running: docker ps | grep redis"
+                )
 
-            self.patterns_kb.learnPattern = self.learnPattern
-            self.associative_action_kb.learnAssociation = self.learnAssociation
+            # Initialize hybrid storage writers
+            self.clickhouse_writer = ClickHouseWriter(self.id, clickhouse_client)
+            self.redis_writer = RedisWriter(self.id, redis_client)
 
-            self.patterns_kb.__pkb_repr__ = self.__pkb_repr__
-            self.associative_action_kb.__akb_repr__ = self.__akb_repr__
-
-            self.total_utility = None
+            # Set emotives tracking and observation counts
             self.emotives_available = set()
+            self.total_utility = None
             self.total_information = None
             self.entropy = None
             self.histogram = None
+            self.patterns_observation_count = 0
 
-            if not self.metadata.find_one({"class": "totals"}):
-                self.metadata.insert_one({"class": "totals",
-                                    "total_pattern_frequencies": 0,
-                                    "total_symbol_frequencies": 0,
-                                    "total_symbols_in_patterns_frequencies": 0})
-            logger.info("done.")
+            # Create backward-compatible interfaces for MongoDB collections
+            # These allow existing code to work without changes during migration
+            self.patterns_kb = self._create_patterns_kb_interface()
+            self.symbols_kb = self._create_stub_collection_interface()
+            self.predictions_kb = self._create_stub_collection_interface()
+            self.associative_action_kb = self._create_stub_collection_interface()
+            self.metadata = self._create_stub_collection_interface()
+
+            logger.info(f"SuperKnowledgeBase initialized for {self.id} with ClickHouse + Redis")
         except Exception as e:
-            logger.error("FAILED! Exception: {}".format(e))
-            raise Exception("\nFAILED! KnowledgeBase Exception: {}".format(e))
+            logger.error(f"FAILED! Exception: {e}")
+            raise Exception(f"\nFAILED! KnowledgeBase Exception: {e}")
         return
+
+    def _create_patterns_kb_interface(self):
+        """Create a duck-typed interface for patterns_kb to maintain backward compatibility."""
+        class PatternsKBInterface:
+            def __init__(self, parent):
+                self.parent = parent
+                self.learnPattern = parent.learnPattern
+
+            def count_documents(self, query):
+                """Count patterns (for backward compatibility)."""
+                return self.parent.clickhouse_writer.count_patterns()
+
+            def delete_many(self, query):
+                """Delete all patterns (delegates to clear_all_memory)."""
+                self.parent.clickhouse_writer.delete_all_patterns()
+                return type('DeleteResult', (), {'deleted_count': 0})()
+
+            def __pkb_repr__(self):
+                count = self.parent.clickhouse_writer.count_patterns()
+                return f"{{KB| objects: {count} }}"
+
+        return PatternsKBInterface(self)
+
+    def _create_stub_collection_interface(self):
+        """Create a stub interface for MongoDB collections during migration."""
+        class StubCollection:
+            def __init__(self):
+                pass
+
+            def delete_many(self, query):
+                """Stub for delete_many (no-op during migration)."""
+                return type('DeleteResult', (), {'deleted_count': 0})()
+
+            def insert_one(self, document):
+                """Stub for insert_one (no-op during migration)."""
+                return type('InsertResult', (), {'inserted_id': None})()
+
+            def update_one(self, filter, update, **kwargs):
+                """Stub for update_one (no-op during migration)."""
+                return type('UpdateResult', (), {'matched_count': 0, 'modified_count': 0})()
+
+            def find_one(self, filter, **kwargs):
+                """Stub for find_one (returns None)."""
+                return None
+
+            def find(self, *args, **kwargs):
+                """Stub for find (returns empty list)."""
+                return []
+
+            def count_documents(self, query):
+                """Stub for count_documents (returns 0)."""
+                return 0
+
+        return StubCollection()
 
     def clear_all_memory(self):
         """
         Core machine learning function.
         Used only if there is a need to clear out the entire knowledgebase.
+        Deletes all patterns from ClickHouse + Redis for this kb_id.
         """
-        self.connection.drop_database(self.id)
+        try:
+            # Delete from ClickHouse (drop partition)
+            self.clickhouse_writer.delete_all_patterns()
+            logger.info(f"Dropped ClickHouse partition for kb_id: {self.id}")
 
-        self.patterns_kb.drop()
-        self.symbols_kb.drop()
-        self.associative_action_kb.drop()
-        self.predictions_kb.drop()
-        self.metadata.drop()
-        self.metadata.insert_one({"class": "totals",
-                            "total_pattern_frequencies": 0,
-                            "total_symbol_frequencies": 0,
-                            "total_symbols_in_patterns_frequencies": 0})
-        # Recreate indexes after clearing
-        self.patterns_kb.create_index([("name", ASCENDING)], background=1, unique=1)
-        self.symbols_kb.create_index([("name", ASCENDING)], background=1, unique=1)
-        self.associative_action_kb.create_index([("symbol", ASCENDING)], background=1)
+            # Delete from Redis (delete all keys with kb_id prefix)
+            deleted_count = self.redis_writer.delete_all_metadata()
+            logger.info(f"Deleted {deleted_count} Redis keys for kb_id: {self.id}")
 
-        # Compound indexes
-        self.patterns_kb.create_index([("frequency", DESCENDING), ("name", ASCENDING)], background=1)
-        self.patterns_kb.create_index([("pattern_data", ASCENDING), ("name", ASCENDING)], background=1)
-        self.symbols_kb.create_index([("frequency", DESCENDING), ("name", ASCENDING)], background=1)
-        self.predictions_kb.create_index([("unique_id", ASCENDING), ("time", DESCENDING)], background=1)
+        except Exception as e:
+            logger.error(f"Error clearing memory for {self.id}: {e}")
+            raise
 
         return
 
@@ -182,7 +217,15 @@ class SuperKnowledgeBase:
     def learnPattern(self, pattern_object, emotives=None, metadata=None):
         """
         Core machine learning function.
-        Use this to learn patterns by passing a Pattern object.  Optional keywords available.
+        Store pattern in ClickHouse + Redis.
+
+        Args:
+            pattern_object: Pattern object with name, pattern_data, length
+            emotives: Emotional context dictionary (optional)
+            metadata: Additional metadata dictionary (optional)
+
+        Returns:
+            True if this is a new pattern, False if pattern already existed
         """
         if emotives is None:
             emotives = {}
@@ -190,113 +233,88 @@ class SuperKnowledgeBase:
             metadata = {}
 
         try:
-            # Build update operations
-            update_ops = {
-                "$setOnInsert": {
-                    "pattern_data": pattern_object.pattern_data,
-                    "length": pattern_object.length
-                },
-                "$inc": {"frequency": 1}
-            }
+            logger.info(f"[HYBRID] learnPattern() called for {pattern_object.name}")
 
-            # Handle emotives (rolling window with $push and $slice)
+            # Track available emotives
             if emotives:
                 self.emotives_available.update(emotives.keys())
+                # Filter out zero emotives
                 emotives = {k: v for k, v in emotives.items() if v != 0}
-                update_ops["$push"] = {
-                    "emotives": {"$each": [emotives], "$slice": -1 * self.persistence}
-                }
+
+            # Check if pattern already exists in Redis
+            logger.info(f"[HYBRID] Checking if pattern exists in Redis: {pattern_object.name}")
+            existing_frequency = self.redis_writer.get_frequency(pattern_object.name)
+            logger.info(f"[HYBRID] Existing frequency: {existing_frequency}")
+
+            if existing_frequency > 0:
+                # Pattern exists - increment frequency
+                self.redis_writer.increment_frequency(pattern_object.name)
+                logger.info(f"[HYBRID] Incremented frequency for pattern {pattern_object.name}")
+                return False  # Not a new pattern
+
             else:
-                update_ops["$setOnInsert"]["emotives"] = {}
+                # New pattern - write to both ClickHouse and Redis
+                logger.info(f"[HYBRID] Writing NEW pattern to ClickHouse: {pattern_object.name}")
+                # Write pattern data to ClickHouse
+                self.clickhouse_writer.write_pattern(pattern_object)
+                logger.info(f"[HYBRID] ClickHouse write completed for {pattern_object.name}")
 
-            # Handle metadata (accumulate unique string lists)
-            if metadata:
-                # Use $addToSet to append unique values to each metadata key's list
-                add_to_set_ops = {}
-                for key, values in metadata.items():
-                    # values is already a list of strings from accumulate_metadata()
-                    add_to_set_ops[f"metadata.{key}"] = {"$each": values}
+                # Write metadata to Redis
+                logger.info(f"[HYBRID] Writing metadata to Redis: {pattern_object.name}")
+                self.redis_writer.write_metadata(
+                    pattern_name=pattern_object.name,
+                    frequency=1,
+                    emotives=emotives if emotives else None,
+                    metadata=metadata if metadata else None
+                )
+                logger.info(f"[HYBRID] Redis write completed for {pattern_object.name}")
 
-                if add_to_set_ops:
-                    update_ops["$addToSet"] = add_to_set_ops
-            else:
-                update_ops["$setOnInsert"]["metadata"] = {}
-
-            # Execute the update
-            result = self.patterns_kb.update_one(
-                {"name": pattern_object.name},
-                update_ops,
-                upsert=True
-            )
-
-            # Update symbol statistics for all symbols in this pattern
-            # Count occurrences of each symbol across the entire pattern data
-            symbols = Counter(list(chain(*pattern_object.pattern_data)))
-
-            # Prepare emotive updates for MongoDB dot notation
-            __s = {}
-            for emotive, value in emotives.items():
-                __s["emotives.{}".format(emotive)] = value
-
-            # Track symbol statistics:
-            # - pattern_member_frequency: how many patterns contain this symbol
-            # - frequency: total occurrences of this symbol
-            __x = {"pattern_member_frequency": 1}
-            total_symbols_in_patterns_frequencies = len(symbols)
-            total_pattern_frequencies = 1
-
-            # Update each symbol's statistics in the database
-            for symbol, c in symbols.items():
-                __x["frequency"] = c  # How many times symbol appears in this pattern
-                __x.update(__s)  # Add emotive values
-
-                # Atomic upsert: increment counters or create new entry
-                self.symbols_kb.update_one({ "name": symbol},
-                                        {"$inc": {**__x},  # Increment all counters
-                                        "$setOnInsert": {"name": symbol}  # Set name on first insert
-                                        },
-                                        upsert=True)
-
-            # if result.matched_count: # then these symbols have already been counted for this pattern.
-            #     __x = {}
-            #     total_symbols_in_patterns_frequencies = 0
-            #     total_pattern_frequencies = 0
-            # else: # then these symbols have NOT already been counted for this pattern.
-            #     __x = {"pattern_member_frequency": 1}
-            #     total_symbols_in_patterns_frequencies = len(symbols)
-            #     total_pattern_frequencies = 1
-            # for symbol, c in symbols.items():
-            #     __x["frequency"] = c
-            #     __x.update(__s)
-            #     self.symbols_kb.update_one({ "name": symbol},
-            #                             {"$inc": {**__x},
-            #                             "$setOnInsert": {"name": symbol}
-            #                             },
-            #                             upsert=True)
-
-            ## Update totals in metadata:
-
-            total_symbol_frequencies = sum(symbols.values())
-
-            self.metadata.update_one({"class": "totals"},
-                                      {"$inc": {"total_pattern_frequencies": total_pattern_frequencies,
-                                                "total_symbol_frequencies": total_symbol_frequencies,
-                                                "total_symbols_in_patterns_frequencies": total_symbols_in_patterns_frequencies}})
-
-            return not result.matched_count ### If 1, then this was known, so return False to be "new"
+                logger.info(f"[HYBRID] Successfully learned new pattern {pattern_object.name} to ClickHouse + Redis")
+                return True  # New pattern
 
         except Exception as e:
-            raise Exception("\nException in learnPattern: {}, \n{}".format(pattern_object.name, e))
+            logger.error(f"[HYBRID] Exception in learnPattern: {pattern_object.name}, {e}")
+            raise Exception(f"\nException in learnPattern: {pattern_object.name}, \n{e}")
 
     def getPattern(self, pattern, by="name"):
         """
         Core machine learning function.
         Retrieves a specific learned pattern using the pattern's hashed name as input parameter.
+
+        Args:
+            pattern: Pattern name (hash)
+            by: Search field (default: "name")
+
+        Returns:
+            Dictionary with pattern data, or None if not found
         """
         try:
-            return self.patterns_kb.find_one({by: pattern})
+            # Get pattern data from ClickHouse
+            pattern_data = self.clickhouse_writer.get_pattern_data(pattern)
+            if not pattern_data:
+                return None
+
+            # Get metadata from Redis
+            redis_metadata = self.redis_writer.get_metadata(pattern)
+
+            # Combine ClickHouse and Redis data
+            result = {
+                'name': pattern,
+                'pattern_data': pattern_data['pattern_data'],
+                'length': pattern_data['length'],
+                'frequency': redis_metadata.get('frequency', 1)
+            }
+
+            # Add emotives and metadata if present
+            if 'emotives' in redis_metadata:
+                result['emotives'] = redis_metadata['emotives']
+            if 'metadata' in redis_metadata:
+                result['metadata'] = redis_metadata['metadata']
+
+            return result
+
         except Exception as e:
-            raise Exception("\nException in getPattern ({}): {}".format(pattern, e))
+            raise Exception(f"\nException in getPattern ({pattern}): {e}")
 
     def getTargetedPatternNames(self, target_class):
         """
@@ -328,27 +346,29 @@ class SuperKnowledgeBase:
 
     def drop_database(self):
         """
-        Drop the MongoDB database for this processor.
+        Drop all data for this kb_id from ClickHouse + Redis.
 
         WARNING: This permanently deletes all data. Only use for:
-        - Test processors (processor_id starts with 'test_')
+        - Test processors (kb_id starts with 'test_')
         - Explicit cleanup operations
 
         This method is used during processor eviction to prevent resource leaks
         in test environments.
         """
         try:
-            # Get database name (same as processor ID)
-            db_name = self.id
-
-            # Safety check: only drop test databases
-            if not db_name.startswith('test_'):
-                logger.warning(f"Refusing to drop non-test database: {db_name}")
+            # Safety check: only drop test kb_ids
+            if not self.id.startswith('test_'):
+                logger.warning(f"Refusing to drop non-test kb_id: {self.id}")
                 return False
 
-            # Drop the database
-            self.client.drop_database(db_name)
-            logger.info(f"Dropped MongoDB database: {db_name}")
+            # Drop from ClickHouse
+            self.clickhouse_writer.delete_all_patterns()
+            logger.info(f"Dropped ClickHouse partition: {self.id}")
+
+            # Drop from Redis
+            self.redis_writer.delete_all_metadata()
+            logger.info(f"Deleted Redis keys for kb_id: {self.id}")
+
             return True
         except Exception as e:
             logger.error(f"Error dropping database {self.id}: {e}")

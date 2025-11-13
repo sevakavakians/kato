@@ -290,10 +290,13 @@ class FilterPipelineExecutor:
 
                     value = row[i] if i < len(row) else None
 
-                    # Special handling for pattern_data: flatten nested arrays
+                    # Special handling for pattern_data: store both event-structured and flattened versions
                     if col_name == 'pattern_data' and value:
                         from itertools import chain
-                        self.patterns_cache[name]['pattern_data'] = list(chain(*value))
+                        # Store original event-structured for Prediction class
+                        self.patterns_cache[name]['pattern_data'] = value
+                        # Store flattened version for similarity matching
+                        self.patterns_cache[name]['pattern_data_flat'] = list(chain(*value))
                     else:
                         self.patterns_cache[name][col_name] = value
 

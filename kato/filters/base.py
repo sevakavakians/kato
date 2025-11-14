@@ -64,6 +64,19 @@ class PatternFilter(ABC):
         """Check if this filter runs on database side."""
         return self.get_db_query() is not None
 
+    def is_hybrid_filter(self) -> bool:
+        """
+        Check if this filter is hybrid (both database and Python stages).
+
+        Hybrid filters run a database query first, then Python-side verification.
+        By default, only MinHash is hybrid. Override this for other hybrid filters.
+
+        Returns:
+            True if filter should run both database and Python stages
+        """
+        # Check if this is MinHashFilter by class name
+        return 'MinHash' in self.__class__.__name__
+
     def get_filter_name(self) -> str:
         """Get human-readable filter name."""
         return self.__class__.__name__.replace('Filter', '').replace('Stage', '').lower()

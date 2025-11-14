@@ -10,6 +10,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **Getting started with KATO**: [docs/users/quick-start.md](docs/users/quick-start.md)
 - **Understanding architecture**: [docs/developers/architecture.md](docs/developers/architecture.md) + [ARCHITECTURE_DIAGRAM.md](ARCHITECTURE_DIAGRAM.md)
+- **Hybrid architecture (ClickHouse + Redis)**: [docs/HYBRID_ARCHITECTURE.md](docs/HYBRID_ARCHITECTURE.md)
+- **Node isolation (kb_id)**: [docs/KB_ID_ISOLATION.md](docs/KB_ID_ISOLATION.md)
+- **Filter pipeline tuning (MinHash/LSH)**: [docs/reference/filter-pipeline-guide.md](docs/reference/filter-pipeline-guide.md)
 - **Deploying to production**: [docs/operations/docker-deployment.md](docs/operations/docker-deployment.md)
 - **Understanding algorithms**: [docs/research/README.md](docs/research/README.md)
 - **Integration patterns**: [docs/integration/README.md](docs/integration/README.md)
@@ -22,6 +25,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 KATO (Knowledge Abstraction for Traceable Outcomes) is a deterministic memory and prediction system for transparent, explainable AI. It processes multi-modal observations (text, vectors, emotions) and makes temporal predictions while maintaining complete transparency and traceability.
 
 **Core Concept**: **Patterns** - learned sequences (temporal) or profiles (non-temporal) that represent knowledge.
+
+### Storage Architecture (v3.0+)
+**IMPORTANT**: KATO now uses a **ClickHouse + Redis hybrid architecture** (MongoDB completely removed as of v3.0.0):
+- **ClickHouse**: Pattern data storage with multi-stage filter pipeline (billion-scale performance)
+- **Redis**: Session management, pattern metadata (frequency, emotives), caching
+- **Qdrant**: Vector embeddings (unchanged)
+- **Node Isolation**: Via `kb_id` partitioning (ClickHouse) and key namespacing (Redis)
+
+See [docs/HYBRID_ARCHITECTURE.md](docs/HYBRID_ARCHITECTURE.md) for complete details.
 
 ## Essential Development Commands
 
@@ -44,7 +56,7 @@ docker-compose logs kato      # View logs
 ### Service URLs
 - **KATO**: http://localhost:8000
 - **API Docs**: http://localhost:8000/docs
-- **MongoDB**: mongodb://localhost:27017
+- **ClickHouse**: http://localhost:8123
 - **Qdrant**: http://localhost:6333
 - **Redis**: redis://localhost:6379
 
@@ -80,10 +92,10 @@ KatoProcessor (Per node_id)
 ├─ VectorProcessor (Embeddings)
 └─ ObservationProcessor (Input)
     ↓
-Storage Layer
-├─ MongoDB (Patterns)
-├─ Qdrant (Vectors)
-└─ Redis (Sessions/Cache)
+Storage Layer (Hybrid Architecture)
+├─ ClickHouse (Pattern Data + Filter Pipeline)
+├─ Redis (Sessions + Metadata + Cache)
+└─ Qdrant (Vectors)
 ```
 
 **Complete Architecture**: See [ARCHITECTURE_DIAGRAM.md](ARCHITECTURE_DIAGRAM.md) and [docs/developers/architecture.md](docs/developers/architecture.md)
@@ -100,9 +112,11 @@ Storage Layer
 - `kato/workers/observation_processor.py` - Input processing
 
 ### Storage & Search
+- `kato/storage/clickhouse_writer.py` - ClickHouse pattern storage
+- `kato/storage/redis_writer.py` - Redis metadata storage
 - `kato/storage/qdrant_manager.py` - Vector operations
-- `kato/searches/pattern_search.py` - Pattern matching
-- `kato/sessions/session_manager.py` - Session management
+- `kato/searches/pattern_search.py` - Pattern matching with filter pipeline
+- `kato/sessions/redis_session_manager.py` - Session management
 
 ### Configuration
 - `kato/config/settings.py` - Environment-based configuration
@@ -164,6 +178,13 @@ POST /sessions/{session_id}/config
 - **extras**: Event-structured list of unexpected symbols (aligned with STM)
 
 **Details**: See [docs/research/predictive-information.md](docs/research/predictive-information.md)
+
+### Pattern Naming Convention
+- **Storage**: Pattern names are stored as **SHA1 hashes WITHOUT 'PTRN|' prefix**
+- **Example**: Database stores `7729f0ed56a13a9373fc1b1c17e34f61d4512ab4` (not `PTRN|7729...`)
+- **Display**: The `PTRN|` prefix only appears in `Pattern.__repr__()` for human-readable output
+- **Debugging**: When querying ClickHouse or Redis, use the plain hash (e.g., `name='7729f0ed...'`)
+- **Generation**: Pattern names are generated via `sha1(pattern_data).hexdigest()`
 
 ### Multi-Modal Processing
 - **Strings**: Discrete symbols
@@ -276,9 +297,11 @@ Claude Code automatically:
 - **ALWAYS** update `requirements.lock` after modifying `requirements.txt`
 - **NEVER** edit `planning-docs/` files directly (use project-manager agent)
 - **ALWAYS** rebuild KATO docker image after code updates: `docker-compose build --no-cache kato`
-- **Services must be running** before tests: `./start.sh`
+- **Services must be running** before tests: `./start.sh` (ClickHouse, Redis, Qdrant)
 - **Each test needs unique processor_id** for isolation
 - **Do NOT use MCPs** for this project
+- **Architecture**: ClickHouse + Redis hybrid is MANDATORY (no MongoDB fallback)
+- **Pattern names**: Stored WITHOUT 'PTRN|' prefix in databases (plain SHA1 hashes)
 
 ## Additional Documentation
 
@@ -292,6 +315,8 @@ Claude Code automatically:
 **Developers**:
 - Contributing: [docs/developers/contributing.md](docs/developers/contributing.md)
 - Architecture: [docs/developers/architecture.md](docs/developers/architecture.md)
+- Hybrid Architecture: [docs/HYBRID_ARCHITECTURE.md](docs/HYBRID_ARCHITECTURE.md)
+- KB ID Isolation: [docs/KB_ID_ISOLATION.md](docs/KB_ID_ISOLATION.md)
 - Testing: [docs/developers/testing.md](docs/developers/testing.md)
 
 **Operations**:

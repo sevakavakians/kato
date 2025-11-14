@@ -145,6 +145,11 @@ class MinHashFilter(PatternFilter):
         Returns:
             Filtered set of patterns with estimated Jaccard >= threshold
         """
+        logger.info(
+            f"MinHash Python-side filtering: {len(candidates)} candidates, "
+            f"threshold={self.threshold}"
+        )
+
         if not candidates:
             return set()
 
@@ -173,9 +178,18 @@ class MinHashFilter(PatternFilter):
             # Keep pattern if estimated Jaccard >= threshold
             if estimated_jaccard >= self.threshold:
                 filtered.add(pattern_name)
+                logger.debug(
+                    f"Pattern {pattern_name[:20]}... PASSED MinHash: "
+                    f"jaccard={estimated_jaccard:.3f} >= {self.threshold}"
+                )
+            else:
+                logger.debug(
+                    f"Pattern {pattern_name[:20]}... REJECTED MinHash: "
+                    f"jaccard={estimated_jaccard:.3f} < {self.threshold}"
+                )
 
-        logger.debug(
-            f"MinHash Python-side filtering: {len(candidates)} candidates → "
+        logger.info(
+            f"MinHash Python-side filtering complete: {len(candidates)} candidates → "
             f"{len(filtered)} patterns (threshold={self.threshold})"
         )
 

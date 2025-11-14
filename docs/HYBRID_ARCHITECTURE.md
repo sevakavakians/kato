@@ -200,6 +200,16 @@ python scripts/migrate_mongodb_to_redis.py \
 
 ## Filter Pipeline
 
+⚠️ **IMPORTANT: MinHash Parameter Tuning Required**
+
+MinHash uses Locality-Sensitive Hashing (LSH) with parameters tuned for **high similarity matching (≥0.7)** by default. Using MinHash with low similarity thresholds (<0.4) or wrong parameter combinations will result in **false negatives** and missed patterns.
+
+**Before using MinHash, read**: [Filter Pipeline Configuration Guide](reference/filter-pipeline-guide.md) for:
+- LSH probability mathematics and parameter tuning
+- When to use MinHash vs Jaccard
+- Filter ordering considerations
+- Common pitfalls and solutions
+
 ### Available Filters
 
 1. **LengthFilter** (database-side)
@@ -209,11 +219,13 @@ python scripts/migrate_mongodb_to_redis.py \
 2. **JaccardFilter** (database-side)
    - Set intersection using ClickHouse array functions
    - Exact Jaccard similarity calculation
+   - **Recommended for <10M patterns** (faster + exact)
 
 3. **MinHashFilter** (hybrid: DB + Python)
    - Stage 1 (DB): LSH band matching (99% reduction)
    - Stage 2 (Python): MinHash similarity verification
    - Billion-scale approximate matching
+   - **⚠️ Requires parameter tuning** - see [Filter Guide](reference/filter-pipeline-guide.md)
 
 4. **BloomFilterStage** (Python-side)
    - Fast token presence checking

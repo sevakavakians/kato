@@ -70,6 +70,49 @@ class FilterPipelineExecutor:
         # Default pipeline if not configured
         return ["length", "jaccard", "rapidfuzz"]
 
+    def _get_all_patterns(self) -> Set[str]:
+        """
+        Query all patterns from database (with kb_id filtering).
+        Used when filter_pipeline is empty to bypass filtering.
+
+        Returns:
+            Set of all pattern names in the knowledge base
+        """
+        query = f"""
+            SELECT name, pattern_data
+            FROM patterns_data
+            WHERE kb_id = '{self.kb_id}'
+        """
+
+        try:
+            result = self.clickhouse.query(query)
+
+            # Extract pattern names and cache pattern data
+            all_patterns = set()
+            for row in result.result_rows:
+                name = row[0]
+                pattern_data = row[1] if len(row) > 1 else None
+
+                all_patterns.add(name)
+
+                # Cache pattern data for matching
+                if name not in self.patterns_cache:
+                    self.patterns_cache[name] = {}
+
+                if pattern_data:
+                    from itertools import chain
+                    # Store original event-structured for Prediction class
+                    self.patterns_cache[name]['pattern_data'] = pattern_data
+                    # Store flattened version for similarity matching
+                    self.patterns_cache[name]['pattern_data_flat'] = list(chain(*pattern_data))
+
+            logger.info(f"Retrieved {len(all_patterns)} patterns from database (no filtering)")
+            return all_patterns
+
+        except Exception as e:
+            logger.error(f"Failed to query all patterns: {e}")
+            return set()
+
     @classmethod
     def register_filter(cls, name: str, filter_class: type):
         """
@@ -90,8 +133,8 @@ class FilterPipelineExecutor:
             Set of pattern names that passed all filters
         """
         if not self.filter_pipeline:
-            logger.info("Empty filter pipeline, returning empty set")
-            return set()
+            logger.info("Empty filter pipeline, querying all patterns from database")
+            return self._get_all_patterns()
 
         candidates: Optional[Set[str]] = None
         pipeline_start = time.time()
@@ -113,11 +156,28 @@ class FilterPipelineExecutor:
 
             # Execute filter
             try:
-                if filter_instance.is_database_filter():
-                    # Database-side filter
+                is_db_filter = filter_instance.is_database_filter()
+                is_hybrid = filter_instance.is_hybrid_filter()
+
+                logger.info(
+                    f"Filter '{filter_name}': is_database={is_db_filter}, "
+                    f"is_hybrid={is_hybrid}, initial_candidates={len(candidates) if candidates else 0}"
+                )
+
+                # Stage 1: Database-side filtering (if applicable)
+                if is_db_filter:
+                    candidates_before = len(candidates) if candidates else 0
                     candidates = self._execute_database_filter(filter_instance, candidates)
-                else:
-                    # Python-side filter
+                    logger.info(
+                        f"Filter '{filter_name}' DB stage: {candidates_before} → {len(candidates)} candidates"
+                    )
+
+                # Stage 2: Python-side filtering (if applicable)
+                # This handles:
+                # - Pure Python filters (bloom, rapidfuzz without DB stage)
+                # - Hybrid filters (minhash - DB stage + Python verification)
+                if not is_db_filter or is_hybrid:
+                    # Ensure we have candidates from database stage
                     if candidates is None:
                         logger.error(
                             f"Python-side filter '{filter_name}' called before database filters. "
@@ -127,7 +187,15 @@ class FilterPipelineExecutor:
                             f"Pipeline must start with database filter, not '{filter_name}'"
                         )
 
+                    # Run Python-side filtering
+                    candidates_before_python = len(candidates)
+                    logger.info(
+                        f"Filter '{filter_name}' running Python stage on {candidates_before_python} candidates"
+                    )
                     candidates = filter_instance.filter_python(candidates, self.patterns_cache)
+                    logger.info(
+                        f"Filter '{filter_name}' Python stage: {candidates_before_python} → {len(candidates)} candidates"
+                    )
 
             except Exception as e:
                 logger.error(f"Filter '{filter_name}' failed with error: {e}")

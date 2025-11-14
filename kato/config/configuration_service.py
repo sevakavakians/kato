@@ -100,16 +100,34 @@ class ConfigurationService:
             Dictionary with default configuration values
         """
         return {
-            'indexer_type': self.settings.processing.indexer_type,
+            # Learning Configuration
             'max_pattern_length': self.settings.learning.max_pattern_length,
             'persistence': self.settings.learning.persistence,
             'recall_threshold': self.settings.learning.recall_threshold,
             'stm_mode': self.settings.learning.stm_mode,
+
+            # Processing Configuration
+            'indexer_type': self.settings.processing.indexer_type,
             'max_predictions': self.settings.processing.max_predictions,
-            'sort': self.settings.processing.sort_symbols,
+            'sort_symbols': self.settings.processing.sort_symbols,
+            'sort': self.settings.processing.sort_symbols,  # Alias for backward compatibility
             'process_predictions': self.settings.processing.process_predictions,
             'use_token_matching': self.settings.processing.use_token_matching,
-            'rank_sort_algo': self.settings.processing.rank_sort_algo
+            'rank_sort_algo': self.settings.processing.rank_sort_algo,
+
+            # Filter Pipeline Configuration (defaults based on documentation)
+            'filter_pipeline': ['length', 'jaccard', 'rapidfuzz'],
+            'length_min_ratio': 0.5,
+            'length_max_ratio': 2.0,
+            'jaccard_threshold': 0.3,
+            'jaccard_min_overlap': 2,
+            'minhash_threshold': 0.7,
+            'minhash_bands': 20,
+            'minhash_rows': 5,
+            'minhash_num_hashes': 100,
+            'bloom_false_positive_rate': 0.01,
+            'max_candidates_per_stage': 100000,
+            'enable_filter_metrics': True
         }
 
     def resolve_configuration(

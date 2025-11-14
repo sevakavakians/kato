@@ -225,6 +225,50 @@ curl -X POST http://localhost:8000/sessions \
 
 **Important**: Changing this mid-session causes inconsistent matching!
 
+### Vector Indexing
+
+#### indexer_type
+
+Algorithm for vector similarity search.
+
+```json
+{
+  "indexer_type": "VI"
+}
+```
+
+**Options**:
+- **VI** (default): Vector Index - Fast, accurate, general purpose
+- **LSH**: Locality-Sensitive Hashing - Approximate, scalable for millions of vectors
+- **ANNOY**: Spotify's Approximate Nearest Neighbors - High-dimensional embeddings
+- **FAISS**: Facebook's vector search library - GPU-accelerated search
+
+**Use Cases**:
+- **VI**: General purpose (recommended for most applications)
+- **LSH**: Large-scale vector search with millions of patterns
+- **ANNOY**: High-dimensional embeddings (768+ dimensions)
+- **FAISS**: GPU-accelerated similarity search
+
+**Example - LSH Indexing**:
+```bash
+# For large-scale vector search
+curl -X POST http://localhost:8000/sessions \
+  -d '{
+    "node_id": "vector_search",
+    "config": {"indexer_type": "LSH"}
+  }'
+```
+
+**Performance Characteristics**:
+| Type | Speed | Accuracy | Scale | GPU |
+|------|-------|----------|-------|-----|
+| VI | Fast | Exact | 10K-100K | No |
+| LSH | Very Fast | ~95% | 1M+ | No |
+| ANNOY | Fast | ~99% | 100K-1M | No |
+| FAISS | Fastest | Configurable | 10M+ | Yes |
+
+**Recommendation**: Use default `VI` unless handling millions of vector embeddings.
+
 ## Session Management
 
 ### session_ttl
@@ -317,6 +361,290 @@ STM_MODE=CLEAR
 - **CLEAR**: Discrete patterns, sessions
 - **ROLLING**: Continuous streams, overlapping patterns
 
+## Filter Pipeline Configuration
+
+Control how KATO filters candidate patterns during prediction generation. The filter pipeline executes sequentially, progressively narrowing down candidates for final similarity scoring.
+
+### filter_pipeline
+
+Ordered list of filter stages to execute.
+
+```json
+{
+  "filter_pipeline": ["length", "jaccard", "rapidfuzz"]
+}
+```
+
+**Available Filters**:
+- **length**: Filter by pattern length relative to STM (fast, coarse)
+- **jaccard**: Filter by token overlap similarity (fast, mid-precision)
+- **minhash**: LSH-based approximate matching (very fast, scalable to millions)
+- **bloom**: Bloom filter for fast set membership (fastest, probabilistic)
+- **rapidfuzz**: High-precision similarity scoring (slower, most accurate)
+
+**Default Pipeline**: `["length", "jaccard", "rapidfuzz"]`
+
+**Pipeline Strategy**:
+1. **Database filters first** (length, jaccard, minhash, bloom) - run in ClickHouse
+2. **Python filters last** (rapidfuzz) - run on filtered candidates
+
+**Example - Custom Pipeline**:
+```bash
+# Skip length filter, add MinHash for scale
+curl -X POST http://localhost:8000/sessions \
+  -d '{
+    "node_id": "large_scale",
+    "config": {
+      "filter_pipeline": ["minhash", "jaccard", "rapidfuzz"],
+      "minhash_threshold": 0.7
+    }
+  }'
+```
+
+### Length Filter Parameters
+
+Control pattern length filtering (first stage - fastest).
+
+```json
+{
+  "length_min_ratio": 0.5,
+  "length_max_ratio": 2.0
+}
+```
+
+**length_min_ratio**: Minimum pattern length as ratio of STM length
+- `0.5` (default): Pattern must be at least 50% of STM length
+- **Lower values** (0.3): More candidates, slower matching, better recall
+- **Higher values** (0.7): Fewer candidates, faster matching, stricter
+
+**length_max_ratio**: Maximum pattern length as ratio of STM length
+- `2.0` (default): Pattern can be up to 200% of STM length
+- Controls how much longer patterns can be vs current context
+- **Lower values**: Stricter length requirements
+- **Higher values**: Allow much longer patterns
+
+**Example**:
+```bash
+# Strict length requirements
+curl -X POST http://localhost:8000/sessions \
+  -d '{
+    "node_id": "strict_length",
+    "config": {
+      "length_min_ratio": 0.7,
+      "length_max_ratio": 1.5
+    }
+  }'
+```
+
+### Jaccard Filter Parameters
+
+Control token overlap filtering (second stage - fast).
+
+```json
+{
+  "jaccard_threshold": 0.3,
+  "jaccard_min_overlap": 2
+}
+```
+
+**jaccard_threshold**: Minimum Jaccard similarity (0.0-1.0)
+- `0.3` (default): 30% token overlap required
+- **Jaccard similarity** = |A ∩ B| / |A ∪ B|
+- **Higher values** (0.5-0.8): Stricter filtering, fewer candidates, faster
+- **Lower values** (0.1-0.2): More permissive, more candidates, better recall
+
+**jaccard_min_overlap**: Minimum absolute token count
+- `2` (default): At least 2 tokens must overlap
+- Prevents matching on single-token overlap
+- **Higher values**: Require more substantial overlap
+
+**Example**:
+```bash
+# Require substantial overlap
+curl -X POST http://localhost:8000/sessions \
+  -d '{
+    "node_id": "high_overlap",
+    "config": {
+      "jaccard_threshold": 0.5,
+      "jaccard_min_overlap": 5
+    }
+  }'
+```
+
+**Use Cases**:
+- **Low threshold** (0.1-0.3): Exploratory search, loose matching
+- **Medium threshold** (0.3-0.5): Balanced filtering (default)
+- **High threshold** (0.5-0.8): Strict similarity requirements
+
+### MinHash/LSH Filter Parameters
+
+Control locality-sensitive hashing for large-scale pattern matching (alternative to Jaccard, scales to millions).
+
+```json
+{
+  "minhash_threshold": 0.7,
+  "minhash_bands": 20,
+  "minhash_rows": 5,
+  "minhash_num_hashes": 100
+}
+```
+
+**minhash_threshold**: Estimated Jaccard threshold (0.0-1.0)
+- `0.7` (default): 70% estimated similarity
+- Controls LSH bucket membership
+- **Higher values**: Fewer false positives, may miss some candidates
+- **Lower values**: More candidates, more false positives
+
+**minhash_bands**: Number of LSH bands (1-100)
+- `20` (default): Balanced speed/accuracy
+- **More bands**: Faster queries, more false negatives
+- **Fewer bands**: Slower queries, better recall
+
+**minhash_rows**: Rows per band (1-20)
+- `5` (default): Standard configuration
+- **More rows**: More accurate, slower
+- **Fewer rows**: Faster, less accurate
+- **Important**: `bands × rows = num_hashes`
+
+**minhash_num_hashes**: Total signature size (10-256)
+- `100` (default): Full MinHash signature size
+- Must equal `bands × rows`
+- **Common configurations**:
+  - 100 = 20 bands × 5 rows (default)
+  - 128 = 16 bands × 8 rows (more accurate)
+  - 200 = 20 bands × 10 rows (high accuracy)
+
+**Example - Large Scale**:
+```bash
+# Configure for millions of patterns
+curl -X POST http://localhost:8000/sessions \
+  -d '{
+    "node_id": "large_scale",
+    "config": {
+      "filter_pipeline": ["minhash", "bloom", "rapidfuzz"],
+      "minhash_threshold": 0.6,
+      "minhash_bands": 25,
+      "minhash_rows": 4,
+      "minhash_num_hashes": 100
+    }
+  }'
+```
+
+**When to Use MinHash**:
+- ✅ **Use when**: Millions of patterns, scalability critical
+- ❌ **Skip when**: < 100K patterns (Jaccard is faster)
+
+### Bloom Filter Parameters
+
+Control Bloom filter false positive rate (fastest set membership test).
+
+```json
+{
+  "bloom_false_positive_rate": 0.01
+}
+```
+
+**bloom_false_positive_rate**: False positive probability (0.0001-0.1)
+- `0.01` (default): 1% false positive rate
+- **Lower values** (0.001): More memory, fewer false positives, higher precision
+- **Higher values** (0.05): Less memory, more false positives, faster
+
+**Trade-offs**:
+- **Lower FPR**: More accurate filtering, uses more memory
+- **Higher FPR**: Faster filtering, some irrelevant candidates pass through
+
+**Example**:
+```bash
+# Very accurate Bloom filter
+curl -X POST http://localhost:8000/sessions \
+  -d '{
+    "node_id": "accurate_bloom",
+    "config": {
+      "filter_pipeline": ["bloom", "jaccard", "rapidfuzz"],
+      "bloom_false_positive_rate": 0.001
+    }
+  }'
+```
+
+### Pipeline Control Parameters
+
+Global pipeline behavior controls.
+
+```json
+{
+  "max_candidates_per_stage": 100000,
+  "enable_filter_metrics": true
+}
+```
+
+**max_candidates_per_stage**: Safety limit per filter stage
+- `100000` (default): Maximum candidates between stages
+- Prevents memory exhaustion on large datasets
+- **Lower values**: More conservative, may truncate results
+- **Higher values**: Allow more candidates, use more memory
+
+**enable_filter_metrics**: Log filter performance
+- `true` (default): Log timing and candidate counts for each stage
+- `false`: Disable metrics logging (slight performance gain)
+
+**Example Metrics**:
+```
+Filter 'length': 5432 candidates (2.3ms)
+Filter 'jaccard': 1234 candidates (5.7ms)
+Filter 'rapidfuzz': 234 candidates (45.2ms)
+```
+
+### Filter Pipeline Examples
+
+**High-Precision Pipeline** (quality over speed):
+```json
+{
+  "filter_pipeline": ["length", "jaccard", "rapidfuzz"],
+  "length_min_ratio": 0.7,
+  "jaccard_threshold": 0.5,
+  "recall_threshold": 0.8,
+  "max_predictions": 10
+}
+```
+**Use for**: Security, exact matching, high-confidence predictions
+
+**High-Scale Pipeline** (millions of patterns):
+```json
+{
+  "filter_pipeline": ["minhash", "bloom", "rapidfuzz"],
+  "minhash_threshold": 0.6,
+  "minhash_bands": 20,
+  "minhash_rows": 5,
+  "bloom_false_positive_rate": 0.02,
+  "max_candidates_per_stage": 50000,
+  "max_predictions": 100
+}
+```
+**Use for**: Large databases, high-throughput systems
+
+**Fast Pipeline** (fewer stages):
+```json
+{
+  "filter_pipeline": ["length", "rapidfuzz"],
+  "length_min_ratio": 0.6,
+  "recall_threshold": 0.5,
+  "max_predictions": 50
+}
+```
+**Use for**: Low-latency requirements, small pattern sets
+
+**Exploratory Pipeline** (maximum recall):
+```json
+{
+  "filter_pipeline": ["length"],
+  "length_min_ratio": 0.3,
+  "length_max_ratio": 3.0,
+  "recall_threshold": 0.1,
+  "max_predictions": 1000
+}
+```
+**Use for**: Pattern discovery, research, exploratory analysis
+
 ## Performance Configuration
 
 ### Batch Sizes
@@ -379,7 +707,9 @@ KATO_USE_OPTIMIZED=true
   "max_predictions": 50,
   "sort_symbols": true,
   "use_token_matching": true,
-  "rank_sort_algo": "potential"
+  "rank_sort_algo": "potential",
+  "filter_pipeline": ["length", "jaccard", "rapidfuzz"],
+  "jaccard_threshold": 0.2
 }
 ```
 
@@ -391,7 +721,10 @@ KATO_USE_OPTIMIZED=true
   "max_predictions": 10,
   "sort_symbols": false,
   "use_token_matching": true,
-  "rank_sort_algo": "similarity"
+  "rank_sort_algo": "similarity",
+  "filter_pipeline": ["length", "jaccard", "rapidfuzz"],
+  "jaccard_threshold": 0.7,
+  "length_min_ratio": 0.8
 }
 ```
 
@@ -403,7 +736,8 @@ KATO_USE_OPTIMIZED=true
   "max_predictions": 100,
   "sort_symbols": true,
   "use_token_matching": true,
-  "rank_sort_algo": "evidence"
+  "rank_sort_algo": "evidence",
+  "filter_pipeline": ["length", "jaccard", "rapidfuzz"]
 }
 ```
 
@@ -420,7 +754,27 @@ SESSION_TTL=86400
 {
   "recall_threshold": 0.3,
   "max_predictions": 100,
-  "use_token_matching": true
+  "use_token_matching": true,
+  "rank_sort_algo": "potential",
+  "filter_pipeline": ["length", "rapidfuzz"]
+}
+```
+
+### Large-Scale System (Millions of Patterns)
+
+```json
+{
+  "indexer_type": "LSH",
+  "recall_threshold": 0.3,
+  "max_predictions": 100,
+  "use_token_matching": true,
+  "rank_sort_algo": "potential",
+  "filter_pipeline": ["minhash", "bloom", "rapidfuzz"],
+  "minhash_threshold": 0.7,
+  "minhash_bands": 20,
+  "minhash_rows": 5,
+  "bloom_false_positive_rate": 0.02,
+  "max_candidates_per_stage": 50000
 }
 ```
 

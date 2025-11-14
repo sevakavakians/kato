@@ -21,11 +21,39 @@ Session configuration allows per-session customization of KATO's behavior. Each 
 
 | Parameter | Type | Range | Default | Description |
 |-----------|------|-------|---------|-------------|
-| `indexer_type` | string | VI\|LSH\|ANNOY\|FAISS | VI | Vector indexer type |
-| `max_predictions` | integer | 1-10000 | 10000 | Maximum predictions to return |
+| `indexer_type` | string | VI\|LSH\|ANNOY\|FAISS | VI | Vector indexer algorithm |
+| `max_predictions` | integer | 1-10000 | 100 | Maximum predictions to return |
 | `sort_symbols` | boolean | true\|false | true | Sort symbols alphabetically within events |
 | `process_predictions` | boolean | true\|false | true | Enable prediction processing |
 | `use_token_matching` | boolean | true\|false | true | Token-level (true) vs character-level (false) matching |
+| `rank_sort_algo` | string | See below | potential | Prediction ranking metric |
+
+### Prediction Ranking
+
+The `rank_sort_algo` parameter controls how predictions are sorted and prioritized:
+
+| Value | Description | Use Case |
+|-------|-------------|----------|
+| `potential` | Information-theoretic value (default) | General purpose, balanced results |
+| `similarity` | Pattern match score | Prioritize exact matches |
+| `evidence` | Observation count | Popular patterns first |
+| `confidence` | Bayesian confidence | Risk-averse applications |
+| `snr` | Signal-to-noise ratio | High-quality signals |
+| `fragmentation` | Pattern fragmentation score | Cohesive patterns |
+| `frequency` | Pattern frequency | Common patterns first |
+| `normalized_entropy` | Entropy-normalized score | Information density |
+| `global_normalized_entropy` | Global entropy normalization | Cross-pattern comparison |
+| `itfdf_similarity` | TF-IDF-inspired similarity | Text-like patterns |
+| `confluence` | Pattern confluence score | Convergent patterns |
+| `predictive_information` | Predictive information content | Maximum information gain |
+
+**Example:**
+```json
+{
+  "rank_sort_algo": "similarity",
+  "max_predictions": 10
+}
+```
 
 ## Filter Pipeline Configuration
 
@@ -56,9 +84,14 @@ Session configuration allows per-session customization of KATO's behavior. Each 
 | Parameter | Type | Range | Default | Description |
 |-----------|------|-------|---------|-------------|
 | `minhash_threshold` | float | 0.0-1.0 | 0.7 | Estimated Jaccard threshold for LSH |
-| `minhash_bands` | integer | 1-100 | 20 | Number of LSH bands |
-| `minhash_rows` | integer | 1-20 | 5 | Rows per LSH band |
-| `minhash_num_hashes` | integer | 10-256 | 100 | Total MinHash signature size |
+| `minhash_bands` | integer | 1-100 | 20 | Number of LSH bands (higher = faster, less accurate) |
+| `minhash_rows` | integer | 1-20 | 5 | Rows per LSH band (bands × rows = num_hashes) |
+| `minhash_num_hashes` | integer | 10-256 | 100 | Total MinHash signature size (must equal bands × rows) |
+
+**Tuning Guide:**
+- **More bands**: Faster queries, more false negatives
+- **More rows**: Higher accuracy, slower queries
+- **Total hashes = bands × rows**: Common values: 100 (20×5), 128 (16×8), 200 (20×10)
 
 ### Bloom Filter
 
@@ -83,7 +116,9 @@ Session configuration allows per-session customization of KATO's behavior. Each 
   "use_token_matching": true,
   "sort_symbols": true,
   "max_predictions": 10,
-  "jaccard_threshold": 0.8
+  "rank_sort_algo": "similarity",
+  "jaccard_threshold": 0.8,
+  "filter_pipeline": ["length", "jaccard", "rapidfuzz"]
 }
 ```
 
@@ -96,7 +131,9 @@ Session configuration allows per-session customization of KATO's behavior. Each 
   "recall_threshold": 0.1,
   "max_predictions": 1000,
   "use_token_matching": false,
-  "sort_symbols": false
+  "sort_symbols": false,
+  "rank_sort_algo": "potential",
+  "filter_pipeline": ["length", "rapidfuzz"]
 }
 ```
 
@@ -109,7 +146,9 @@ Session configuration allows per-session customization of KATO's behavior. Each 
   "max_pattern_length": 10,
   "stm_mode": "ROLLING",
   "recall_threshold": 0.3,
-  "persistence": 20
+  "persistence": 20,
+  "rank_sort_algo": "evidence",
+  "max_predictions": 100
 }
 ```
 
@@ -122,11 +161,29 @@ Session configuration allows per-session customization of KATO's behavior. Each 
   "use_token_matching": false,
   "sort_symbols": false,
   "recall_threshold": 0.5,
-  "max_predictions": 100
+  "max_predictions": 100,
+  "rank_sort_algo": "potential"
 }
 ```
 
 **Use Cases**: Document similarity, NLP, fuzzy text matching
+
+### Large-Scale Mode
+
+```json
+{
+  "indexer_type": "LSH",
+  "filter_pipeline": ["minhash", "bloom", "rapidfuzz"],
+  "minhash_threshold": 0.7,
+  "minhash_bands": 20,
+  "minhash_rows": 5,
+  "recall_threshold": 0.3,
+  "max_predictions": 100,
+  "rank_sort_algo": "potential"
+}
+```
+
+**Use Cases**: Millions of patterns, scalable similarity search, high-throughput systems
 
 ## See Also
 

@@ -67,6 +67,66 @@ curl -X POST http://localhost:8000/sessions/$SESSION_ID/config \
 
 ---
 
+### Get Session Configuration
+
+Retrieve the effective configuration for a session, showing all configurable parameters with their current values (session overrides merged with system defaults).
+
+```http
+GET /sessions/{session_id}/config
+```
+
+**Response** (`200 OK`):
+
+```json
+{
+  "session_id": "session-abc123...",
+  "config": {
+    "max_pattern_length": 0,
+    "persistence": 5,
+    "recall_threshold": 0.6,
+    "stm_mode": "CLEAR",
+    "indexer_type": "VI",
+    "max_predictions": 100,
+    "sort_symbols": true,
+    "process_predictions": true,
+    "use_token_matching": true,
+    "rank_sort_algo": "potential",
+    "filter_pipeline": ["length", "jaccard", "rapidfuzz"],
+    "length_min_ratio": 0.5,
+    "length_max_ratio": 2.0,
+    "jaccard_threshold": 0.3,
+    "jaccard_min_overlap": 2,
+    "minhash_threshold": 0.7,
+    "minhash_bands": 20,
+    "minhash_rows": 5,
+    "minhash_num_hashes": 100,
+    "bloom_false_positive_rate": 0.01,
+    "max_candidates_per_stage": 100000,
+    "enable_filter_metrics": true
+  }
+}
+```
+
+**Errors**:
+
+- `404 Not Found`: Session not found or expired
+
+**Example**:
+
+```bash
+curl http://localhost:8000/sessions/$SESSION_ID/config
+```
+
+**Use Cases**:
+- View effective configuration (session overrides + defaults)
+- Verify configuration updates applied correctly
+- Debug configuration issues
+- Export session configuration for replication
+
+**Note**: This endpoint returns ALL configurable parameters, even if not explicitly set in the session. Values shown are the effective values used by the processor (session override if set, otherwise system default).
+
+---
+
 ## Configuration Parameters
 
 ### Learning Configuration
@@ -82,21 +142,26 @@ curl -X POST http://localhost:8000/sessions/$SESSION_ID/config \
 
 | Parameter | Type | Range | Default | Description |
 |-----------|------|-------|---------|-------------|
-| `max_predictions` | integer | 1-10000 | 10000 | Maximum predictions to return |
+| `indexer_type` | string | VI\|LSH\|ANNOY\|FAISS | VI | Vector indexer algorithm |
+| `max_predictions` | integer | 1-10000 | 100 | Maximum predictions to return |
 | `sort_symbols` | boolean | true\|false | true | Sort symbols alphanumerically |
 | `use_token_matching` | boolean | true\|false | true | Token-level (true) vs character-level (false) |
 | `process_predictions` | boolean | true\|false | true | Whether to process predictions |
+| `rank_sort_algo` | string | See [Session Config](../session-configuration.md#prediction-ranking) | potential | Prediction ranking metric |
 
 ### Filter Pipeline Configuration
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `filter_pipeline` | array[string] | ["length", "jaccard", "bloom", "minhash", "rapidfuzz"] | Ordered filter stages |
+| `filter_pipeline` | array[string] | ["length", "jaccard", "rapidfuzz"] | Ordered filter stages |
 | `length_min_ratio` | float | 0.5 | Min pattern length as ratio of STM |
 | `length_max_ratio` | float | 2.0 | Max pattern length as ratio of STM |
 | `jaccard_threshold` | float | 0.3 | Minimum Jaccard similarity |
 | `jaccard_min_overlap` | integer | 2 | Minimum token overlap count |
 | `minhash_threshold` | float | 0.7 | LSH Jaccard threshold |
+| `minhash_bands` | integer | 20 | Number of LSH bands (higher = faster) |
+| `minhash_rows` | integer | 5 | Rows per LSH band (bands × rows = num_hashes) |
+| `minhash_num_hashes` | integer | 100 | Total MinHash signature size |
 | `bloom_false_positive_rate` | float | 0.01 | Bloom filter FPR |
 | `max_candidates_per_stage` | integer | 100000 | Safety limit per filter stage |
 | `enable_filter_metrics` | boolean | true | Log filter timing/counts |
@@ -117,25 +182,46 @@ curl -X POST http://localhost:8000/sessions \
     "config": {
       "recall_threshold": 0.5,
       "max_pattern_length": 5,
-      "use_token_matching": true
+      "use_token_matching": true,
+      "rank_sort_algo": "similarity"
     }
   }'
 ```
 
-**Response**:
+**Response** (showing effective configuration with all parameters):
 
 ```json
 {
   "session_id": "session-abc123...",
   "node_id": "user_alice",
   "session_config": {
-    "recall_threshold": 0.5,
     "max_pattern_length": 5,
+    "persistence": 5,
+    "recall_threshold": 0.5,
+    "stm_mode": "CLEAR",
+    "indexer_type": "VI",
+    "max_predictions": 100,
+    "sort_symbols": true,
+    "process_predictions": true,
     "use_token_matching": true,
-    "sort_symbols": true
+    "rank_sort_algo": "similarity",
+    "filter_pipeline": ["length", "jaccard", "rapidfuzz"],
+    "length_min_ratio": 0.5,
+    "length_max_ratio": 2.0,
+    "jaccard_threshold": 0.3,
+    "jaccard_min_overlap": 2,
+    "minhash_threshold": 0.7,
+    "minhash_bands": 20,
+    "minhash_rows": 5,
+    "minhash_num_hashes": 100,
+    "bloom_false_positive_rate": 0.01,
+    "max_candidates_per_stage": 100000,
+    "enable_filter_metrics": true
   }
 }
 ```
+
+**Note**: Response now includes all configuration parameters with effective values (session overrides + defaults).
 
 ---
 
@@ -179,7 +265,10 @@ For applications requiring exact matches:
   "config": {
     "recall_threshold": 0.9,
     "use_token_matching": true,
-    "max_predictions": 10
+    "rank_sort_algo": "similarity",
+    "max_predictions": 10,
+    "filter_pipeline": ["length", "jaccard", "rapidfuzz"],
+    "jaccard_threshold": 0.8
   }
 }
 ```
@@ -198,7 +287,9 @@ For discovering patterns with loose matching:
   "config": {
     "recall_threshold": 0.1,
     "max_predictions": 1000,
-    "use_token_matching": false  // Fuzzy matching
+    "use_token_matching": false,
+    "rank_sort_algo": "potential",
+    "filter_pipeline": ["length", "rapidfuzz"]
   }
 }
 ```
@@ -217,7 +308,9 @@ For continuous learning from streaming data:
   "config": {
     "max_pattern_length": 10,
     "stm_mode": "ROLLING",
-    "recall_threshold": 0.3
+    "recall_threshold": 0.3,
+    "rank_sort_algo": "evidence",
+    "max_predictions": 100
   }
 }
 ```
@@ -234,10 +327,11 @@ For character-level similarity on text chunks:
 ```json
 {
   "config": {
-    "use_token_matching": false,  // Character-level
-    "sort_symbols": false,         // Preserve order
+    "use_token_matching": false,
+    "sort_symbols": false,
     "recall_threshold": 0.5,
-    "max_predictions": 100
+    "max_predictions": 100,
+    "rank_sort_algo": "potential"
   }
 }
 ```
@@ -246,6 +340,30 @@ For character-level similarity on text chunks:
 - Document similarity
 - Natural language processing
 - Fuzzy text matching
+
+### Large-Scale Mode
+
+For millions of patterns with scalable filtering:
+
+```json
+{
+  "config": {
+    "indexer_type": "LSH",
+    "filter_pipeline": ["minhash", "bloom", "rapidfuzz"],
+    "minhash_threshold": 0.7,
+    "minhash_bands": 20,
+    "minhash_rows": 5,
+    "recall_threshold": 0.3,
+    "max_predictions": 100,
+    "rank_sort_algo": "potential"
+  }
+}
+```
+
+**Use Cases**:
+- Millions of learned patterns
+- High-throughput prediction systems
+- Scalable similarity search
 
 ---
 

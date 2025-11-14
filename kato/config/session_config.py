@@ -38,6 +38,7 @@ class SessionConfiguration:
     sort_symbols: Optional[bool] = None  # Whether to sort symbols alphabetically
     process_predictions: Optional[bool] = None  # Whether to process predictions
     use_token_matching: Optional[bool] = None  # Token-level vs character-level matching
+    rank_sort_algo: Optional[str] = None  # Ranking algorithm for predictions (e.g., 'potential', 'similarity')
 
     # Filter Pipeline Configuration
     filter_pipeline: Optional[list[str]] = None  # Ordered list of filter names
@@ -111,6 +112,18 @@ class SessionConfiguration:
                 if self.stm_mode not in valid_modes:
                     logger.warning(f"Invalid stm_mode '{self.stm_mode}', normalizing to 'CLEAR'")
                     self.stm_mode = 'CLEAR'
+
+            # Validate rank_sort_algo
+            if self.rank_sort_algo is not None:
+                valid_algorithms = [
+                    'potential', 'similarity', 'evidence', 'confidence', 'snr',
+                    'fragmentation', 'frequency', 'normalized_entropy',
+                    'global_normalized_entropy', 'itfdf_similarity', 'confluence',
+                    'predictive_information'
+                ]
+                if self.rank_sort_algo not in valid_algorithms:
+                    logger.error(f"Invalid rank_sort_algo: {self.rank_sort_algo}")
+                    return False
 
             # Validate filter pipeline
             if self.filter_pipeline is not None:
@@ -255,7 +268,7 @@ class SessionConfiguration:
         valid_fields = {
             'max_pattern_length', 'persistence', 'recall_threshold', 'stm_mode',
             'indexer_type', 'max_predictions', 'sort_symbols', 'process_predictions',
-            'use_token_matching', 'session_id', 'node_id', 'version',
+            'use_token_matching', 'rank_sort_algo', 'session_id', 'node_id', 'version',
             # Filter pipeline fields
             'filter_pipeline', 'length_min_ratio', 'length_max_ratio',
             'jaccard_threshold', 'jaccard_min_overlap',
@@ -285,14 +298,14 @@ class SessionConfiguration:
         Get only the configuration parameters (exclude metadata and topology).
 
         Returns:
-            Dictionary of configuration parameters only
+            Dictionary of configuration parameters only (only non-None values)
         """
         config = {}
 
         config_keys = [
             'max_pattern_length', 'persistence', 'recall_threshold',
             'indexer_type', 'max_predictions', 'sort_symbols', 'process_predictions',
-            'use_token_matching', 'stm_mode',
+            'use_token_matching', 'stm_mode', 'rank_sort_algo',
             # Filter pipeline configuration
             'filter_pipeline', 'length_min_ratio', 'length_max_ratio',
             'jaccard_threshold', 'jaccard_min_overlap',
@@ -304,6 +317,45 @@ class SessionConfiguration:
             value = getattr(self, key)
             if value is not None:
                 config[key] = value
+
+        return config
+
+    def get_effective_config(self, defaults: dict[str, Any]) -> dict[str, Any]:
+        """
+        Get effective configuration with all configurable items.
+
+        Merges session configuration with system defaults, returning ALL
+        configurable items with their effective values (session override or default).
+
+        Args:
+            defaults: System default configuration dictionary
+
+        Returns:
+            Dictionary of all configuration parameters with effective values
+        """
+        config = {}
+
+        config_keys = [
+            'max_pattern_length', 'persistence', 'recall_threshold',
+            'indexer_type', 'max_predictions', 'sort_symbols', 'process_predictions',
+            'use_token_matching', 'stm_mode', 'rank_sort_algo',
+            # Filter pipeline configuration
+            'filter_pipeline', 'length_min_ratio', 'length_max_ratio',
+            'jaccard_threshold', 'jaccard_min_overlap',
+            'minhash_threshold', 'minhash_bands', 'minhash_rows', 'minhash_num_hashes',
+            'bloom_false_positive_rate', 'max_candidates_per_stage', 'enable_filter_metrics'
+        ]
+
+        # For each config key, use session value if set, otherwise use default
+        for key in config_keys:
+            session_value = getattr(self, key)
+            if session_value is not None:
+                # Session has override for this key
+                config[key] = session_value
+            elif key in defaults:
+                # Use default value
+                config[key] = defaults[key]
+            # else: neither session nor default has this key (skip it)
 
         return config
 

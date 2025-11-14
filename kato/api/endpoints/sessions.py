@@ -45,6 +45,7 @@ async def create_session(request: CreateSessionRequest):
     """
     logger.debug(f"create_session endpoint called with node_id: {request.node_id}")
     from kato.services.kato_fastapi import app_state
+    from kato.config.configuration_service import get_configuration_service
 
     logger.info(f"Creating session with manager id: {id(app_state.session_manager)}")
     logger.debug(f"Calling session_manager.create_session for node: {request.node_id}")
@@ -56,6 +57,11 @@ async def create_session(request: CreateSessionRequest):
     )
     logger.debug(f"Session created: {session.session_id}")
 
+    # Get effective config (merges session config with system defaults)
+    config_service = get_configuration_service()
+    defaults = config_service.get_default_configuration()
+    effective_config = session.session_config.get_effective_config(defaults) if hasattr(session, 'session_config') else {}
+
     return SessionResponse(
         session_id=session.session_id,
         node_id=session.node_id,
@@ -63,7 +69,7 @@ async def create_session(request: CreateSessionRequest):
         expires_at=session.expires_at,
         ttl_seconds=request.ttl_seconds or 3600,  # Use provided TTL or default
         metadata=session.metadata,
-        session_config=session.session_config.get_config_only() if hasattr(session, 'session_config') else {}
+        session_config=effective_config
     )
 
 
@@ -140,6 +146,7 @@ async def check_session_exists(session_id: str):
 async def get_session_info(session_id: str):
     """Get information about a session"""
     from kato.services.kato_fastapi import app_state
+    from kato.config.configuration_service import get_configuration_service
 
     logger.info(f"Getting session info for: {session_id}")
     session = await app_state.session_manager.get_session(session_id)
@@ -150,6 +157,11 @@ async def get_session_info(session_id: str):
     # Calculate TTL from expires_at - current time
     ttl_seconds = int((session.expires_at - datetime.now(timezone.utc)).total_seconds())
 
+    # Get effective config (merges session config with system defaults)
+    config_service = get_configuration_service()
+    defaults = config_service.get_default_configuration()
+    effective_config = session.session_config.get_effective_config(defaults) if hasattr(session, 'session_config') else {}
+
     return SessionResponse(
         session_id=session.session_id,
         node_id=session.node_id,
@@ -157,7 +169,7 @@ async def get_session_info(session_id: str):
         expires_at=session.expires_at,
         ttl_seconds=max(0, ttl_seconds),  # Ensure non-negative
         metadata=session.metadata,
-        session_config=session.session_config.get_config_only() if hasattr(session, 'session_config') else {}
+        session_config=effective_config
     )
 
 
@@ -174,10 +186,42 @@ async def delete_session(session_id: str):
     return {"status": "deleted", "session_id": session_id}
 
 
+@router.get("/{session_id}/config")
+async def get_session_config(session_id: str):
+    """
+    Get effective configuration for a session.
+
+    Returns all configurable parameters with their effective values
+    (session overrides or system defaults).
+    """
+    from kato.services.kato_fastapi import app_state
+    from kato.config.configuration_service import get_configuration_service
+
+    session = await app_state.session_manager.get_session(session_id)
+
+    if not session:
+        raise HTTPException(404, detail=f"Session {session_id} not found or expired")
+
+    # Get configuration service
+    config_service = get_configuration_service()
+
+    # Get defaults
+    defaults = config_service.get_default_configuration()
+
+    # Get effective config (merges session config with defaults)
+    effective_config = session.session_config.get_effective_config(defaults)
+
+    return {
+        "session_id": session_id,
+        "config": effective_config
+    }
+
+
 @router.post("/{session_id}/config")
 async def update_session_config(session_id: str, request_data: dict[str, Any]):
     """Update session configuration (genes/parameters)"""
     from kato.services.kato_fastapi import app_state
+    from kato.config.configuration_service import get_configuration_service
 
     logger.error(f"!!! DEBUG: update_session_config called for {session_id} with: {request_data}")
     logger.info(f"Updating config for session {session_id} with data: {request_data}")
@@ -190,6 +234,20 @@ async def update_session_config(session_id: str, request_data: dict[str, Any]):
     # Extract config from request - it comes as {"config": {...}}
     config = request_data.get('config', request_data)
     logger.info(f"Extracted config: {config}")
+
+    # Validate configuration using ConfigurationService
+    config_service = get_configuration_service()
+    validation_errors = config_service.validate_configuration_update(config)
+
+    if validation_errors:
+        logger.error(f"Configuration validation failed: {validation_errors}")
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "Configuration validation failed",
+                "validation_errors": validation_errors
+            }
+        )
 
     # AUTO-TOGGLE SORT based on use_token_matching if provided
     if 'use_token_matching' in config and 'sort_symbols' not in config:
@@ -427,7 +485,7 @@ async def clear_session_stm(session_id: str):
 
     # Also clear the processor's STM
     processor = await app_state.processor_manager.get_processor(session.node_id, session.session_config)
-    processor.clear_stm()
+    await processor.clear_stm()
 
     cleared = await app_state.session_manager.clear_session_stm(session_id)
 
@@ -547,7 +605,7 @@ async def observe_sequence_in_session(
             for i, obs_data in enumerate(data.observations):
                 # Clear STM before each observation if isolation requested
                 if data.clear_stm_between and i > 0:
-                    processor.clear_stm()
+                    await processor.clear_stm()
                     logger.debug(f"Cleared STM for isolated observation {i}")
 
                 observation = {

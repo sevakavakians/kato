@@ -3,6 +3,120 @@
 
 ---
 
+## 2025-11-13 - Phase 5 Follow-up: Complete MongoDB Removal from KATO
+**Decision**: Remove all MongoDB code, configuration, and dependencies from KATO codebase
+**Context**: ClickHouse + Redis hybrid architecture (Phases 1-4) complete and production-ready. MongoDB no longer used anywhere in the system.
+**Rationale**:
+- MongoDB completely replaced by ClickHouse (patterns) + Redis (metadata + symbols)
+- All write operations use ClickHouse + Redis (learnPattern, getPattern, clear_all_memory)
+- All read operations use ClickHouse filter pipeline (pattern search, predictions)
+- Symbol statistics tracked in Redis (Phase 4 completion)
+- Fail-fast architecture prevents any fallback to MongoDB (11 fallbacks removed)
+- 726 lines of connection_manager.py is dead code (MongoDB-only)
+- Simplified architecture: 2 databases (ClickHouse + Redis) instead of 3
+
+**Work Planned** (4 sub-phases, 4-6 hours estimated):
+
+**Sub-Phase 1: Code Cleanup** (1-2 hours)
+- Delete `kato/storage/connection_manager.py` (726 lines - MongoDB-only code)
+  - Contains MongoDB client creation, connection pooling, healthchecks
+  - No imports found in active code after Phase 3-4 migration
+  - Safe to delete
+- Remove `learnAssociation()` from `kato/informatics/knowledge_base.py`
+  - Unused method from legacy MongoDB implementation
+  - Not called anywhere in current codebase
+- Remove StubCollections from `kato/informatics/knowledge_base.py`
+  - Legacy MongoDB-style collections (predictions_kb, associative_action_kb)
+  - No longer needed after SymbolsKBInterface implementation (Phase 4)
+  - Only symbols_kb remains (now backed by Redis)
+- Remove MongoDB mode from `kato/searches/pattern_search.py`
+  - Remove MongoDB-specific query code from causalBeliefAsync and getPatternsAsync
+  - Keep only ClickHouse/Redis hybrid mode
+  - Simplify codebase (single code path)
+
+**Sub-Phase 2: Configuration Cleanup** (30 min)
+- Remove MongoDB environment variables from `kato/config/settings.py`:
+  - MONGO_DB, MONGO_COLLECTION, MONGO_HOST, MONGO_PORT
+  - MONGO_USERNAME, MONGO_PASSWORD (if present)
+- Update `docker-compose.yml` environment section:
+  - Remove MONGO_* environment variable references
+  - Verify ClickHouse and Redis variables remain
+
+**Sub-Phase 3: Infrastructure Cleanup** (30 min)
+- Remove MongoDB service from `docker-compose.yml`:
+  - Remove `mongo:` service definition
+  - Remove MongoDB volume mounts
+  - Remove MongoDB network references
+- Remove `pymongo` from dependencies:
+  - Remove from `requirements.txt`
+  - Regenerate `requirements.lock` with `pip-compile`
+  - Verify no other packages depend on pymongo
+
+**Sub-Phase 4: Testing & Verification** (1-2 hours)
+- Rebuild containers: `docker-compose build --no-cache kato`
+  - Verify build succeeds without MongoDB dependencies
+  - Verify no import errors for pymongo
+- Run integration tests: `./run_tests.sh --no-start --no-stop tests/tests/integration/`
+  - Target: 9/11+ tests passing (baseline from Phase 4)
+  - Verify pattern learning and predictions work
+- Verify no MongoDB connections:
+  - Check container logs for MongoDB connection attempts
+  - Confirm ClickHouse + Redis are the only databases used
+- Update documentation:
+  - Verify ARCHITECTURE_DIAGRAM.md reflects ClickHouse + Redis only
+  - Update any references to MongoDB in docs/
+
+**Key Design Decisions**:
+- Complete removal (no partial cleanup): All MongoDB code removed at once to avoid confusion
+- Architecture simplification: 2 databases (ClickHouse + Redis) instead of 3
+- No MongoDB fallback mode: Fail-fast architecture makes fallback impossible and unnecessary
+- Delete connection_manager.py entirely: File is MongoDB-only, no code reuse possible
+
+**Alternatives Considered**:
+- Keep connection_manager.py for future use: Rejected - file is MongoDB-specific, no reuse value
+- Gradual removal over multiple PRs: Rejected - atomic removal is cleaner and less risky
+- Keep MongoDB service for migration purposes: Rejected - migration complete (Phase 3-4)
+- Maintain MongoDB mode in pattern_search.py: Rejected - dead code, no users, confuses architecture
+
+**Expected Impact**:
+- **Simplified Architecture**: 2 databases (ClickHouse + Redis) instead of 3
+- **Reduced Container Footprint**: No MongoDB service (saves ~500MB memory)
+- **Fewer Dependencies**: No pymongo (cleaner dependency tree)
+- **Cleaner Codebase**: ~800+ lines of code removed (connection_manager + unused methods + stubs)
+- **Clear Separation**: ClickHouse (patterns) + Redis (metadata/symbols) - single responsibility per database
+- **No Breaking Changes**: All functionality preserved (MongoDB already replaced in Phases 1-4)
+
+**Success Criteria**:
+- No MongoDB imports in codebase (grep verification)
+- Tests passing (9/11+ integration tests, same as Phase 4 baseline)
+- MongoDB service not in docker-compose.yml
+- No MongoDB connection attempts in logs
+- Pattern learning and predictions working (regression check)
+- Container builds successfully without pymongo
+- Documentation updated to reflect ClickHouse + Redis architecture
+
+**Files to Modify**:
+- DELETE: `kato/storage/connection_manager.py` (726 lines)
+- MODIFY: `kato/informatics/knowledge_base.py` (remove learnAssociation, StubCollections)
+- MODIFY: `kato/searches/pattern_search.py` (remove MongoDB mode)
+- MODIFY: `kato/config/settings.py` (remove MONGO_* env vars)
+- MODIFY: `docker-compose.yml` (remove MongoDB service, env vars)
+- MODIFY: `requirements.txt` (remove pymongo)
+- UPDATE: `ARCHITECTURE_DIAGRAM.md` (remove MongoDB references)
+- UPDATE: Relevant documentation files
+
+**Timeline**:
+- Started: 2025-11-13
+- Status: Just Started (0% Complete)
+- Estimated Duration: 4-6 hours (across 4 sub-phases)
+- Dependencies: Phase 4 (Symbol Statistics & Fail-Fast) complete ✅
+
+**Confidence**: Very High - Straightforward cleanup, MongoDB not used anywhere, clear success criteria
+**Risk**: Low - No functionality loss, all MongoDB operations replaced in Phases 1-4
+**Reversibility**: Medium - Would require re-adding MongoDB service, but functionality preserved in ClickHouse + Redis
+
+---
+
 ## 2025-11-13 - Phase 4 Complete: Symbol Statistics and Fail-Fast Architecture
 **Decision**: Implement Redis-based symbol statistics with fail-fast architecture (no graceful fallbacks)
 **Context**: Phase 4 (Read-Side Migration) completion with symbol tracking for billion-scale knowledge bases

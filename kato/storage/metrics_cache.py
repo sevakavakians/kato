@@ -287,15 +287,13 @@ class CachedMetricsCalculator:
         self.cache_manager = cache_manager
 
     async def normalized_entropy_cached(self, state: list[str],
-                                total_symbols: int,
-                                symbol_probabilities: dict[str, float]) -> float:
+                                total_symbols: int) -> float:
         """
         Calculate normalized entropy with caching.
 
         Args:
             state: Current state symbols
             total_symbols: Total number of symbols in dataset
-            symbol_probabilities: Probability mapping for symbols
 
         Returns:
             Normalized entropy value
@@ -303,10 +301,7 @@ class CachedMetricsCalculator:
         # Generate cache key parameters
         cache_params = {
             "state_hash": hashlib.md5(str(sorted(state)).encode(), usedforsecurity=False).hexdigest(),
-            "total_symbols": total_symbols,
-            "probabilities_hash": hashlib.md5(
-                str(sorted(symbol_probabilities.items())).encode(), usedforsecurity=False
-            ).hexdigest()
+            "total_symbols": total_symbols
         }
 
         # Try to get cached value
@@ -321,7 +316,7 @@ class CachedMetricsCalculator:
         from kato.informatics.metrics import normalized_entropy
 
         try:
-            result = normalized_entropy(state, total_symbols, symbol_probabilities)
+            result = normalized_entropy(state, total_symbols)
             calculation_time = time.time() - start_time
 
             # Cache the result
@@ -335,13 +330,15 @@ class CachedMetricsCalculator:
             return 0.0
 
     async def global_normalized_entropy_cached(self, state: list[str],
-                                     symbol_probability_cache: dict[str, float]) -> float:
+                                     symbol_probability_cache: dict[str, float],
+                                     total_symbols: int) -> float:
         """
         Calculate global normalized entropy with caching.
 
         Args:
             state: Current state symbols
             symbol_probability_cache: Cached symbol probabilities
+            total_symbols: Total number of unique symbols in the system
 
         Returns:
             Global normalized entropy value
@@ -350,7 +347,8 @@ class CachedMetricsCalculator:
             "state_hash": hashlib.md5(str(sorted(state)).encode(), usedforsecurity=False).hexdigest(),
             "cache_hash": hashlib.md5(
                 str(sorted(symbol_probability_cache.items())).encode(), usedforsecurity=False
-            ).hexdigest()
+            ).hexdigest(),
+            "total_symbols": total_symbols
         }
 
         cached_value = await self.cache_manager.get_cached_metric("global_normalized_entropy", **cache_params)
@@ -362,7 +360,7 @@ class CachedMetricsCalculator:
         from kato.informatics.metrics import global_normalized_entropy
 
         try:
-            result = global_normalized_entropy(state, symbol_probability_cache)
+            result = global_normalized_entropy(state, symbol_probability_cache, total_symbols)
             calculation_time = time.time() - start_time
 
             await self.cache_manager.cache_metric("global_normalized_entropy", result, **cache_params)
@@ -374,20 +372,20 @@ class CachedMetricsCalculator:
             logger.warning(f"Global normalized entropy calculation failed: {e}")
             return 0.0
 
-    async def conditional_probability_cached(self, present: list[list[str]],
+    async def conditional_probability_cached(self, state: list[str],
                                            symbol_probabilities: dict[str, float]) -> float:
         """
         Calculate conditional probability with caching.
 
         Args:
-            present: Present state events
+            state: State symbols (flat list)
             symbol_probabilities: Symbol probability mapping
 
         Returns:
             Conditional probability value
         """
         cache_params = {
-            "present_hash": hashlib.md5(str(present).encode(), usedforsecurity=False).hexdigest(),
+            "state_hash": hashlib.md5(str(sorted(state)).encode(), usedforsecurity=False).hexdigest(),
             "probabilities_hash": hashlib.md5(
                 str(sorted(symbol_probabilities.items())).encode(), usedforsecurity=False
             ).hexdigest()
@@ -402,7 +400,7 @@ class CachedMetricsCalculator:
         from kato.informatics.metrics import conditionalProbability
 
         try:
-            result = conditionalProbability(present, symbol_probabilities)
+            result = conditionalProbability(state, symbol_probabilities)
             calculation_time = time.time() - start_time
 
             await self.cache_manager.cache_metric("conditional_probability", result, **cache_params)

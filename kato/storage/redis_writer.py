@@ -404,3 +404,80 @@ class RedisWriter:
         except Exception as e:
             logger.error(f"Failed to get all symbols for {self.kb_id}: {e}")
             raise
+
+    def write_prediction(self, unique_id: str, predictions: list) -> bool:
+        """
+        Store predictions in Redis for later retrieval.
+
+        Args:
+            unique_id: Unique identifier for this prediction state
+            predictions: List of prediction dictionaries
+
+        Returns:
+            True if write successful
+
+        Raises:
+            Exception: If write fails
+        """
+        try:
+            prediction_key = f"{self.kb_id}:prediction:{unique_id}"
+            self.client.set(prediction_key, json.dumps(predictions))
+            logger.debug(f"Wrote predictions for unique_id {unique_id} to Redis (kb_id={self.kb_id})")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to write predictions for unique_id {unique_id}: {e}")
+            raise
+
+    def get_predictions(self, unique_id: str) -> list:
+        """
+        Retrieve predictions by unique_id.
+
+        Args:
+            unique_id: Unique identifier for prediction state
+
+        Returns:
+            List of prediction dictionaries (empty list if not found)
+
+        Raises:
+            Exception: If retrieval fails
+        """
+        try:
+            prediction_key = f"{self.kb_id}:prediction:{unique_id}"
+            predictions = self.client.get(prediction_key)
+
+            if predictions:
+                return json.loads(predictions)
+            return []
+
+        except Exception as e:
+            logger.error(f"Failed to get predictions for unique_id {unique_id}: {e}")
+            return []
+
+    def delete_all_predictions(self) -> int:
+        """
+        Delete all prediction keys for this kb_id.
+
+        Returns:
+            Number of prediction keys deleted
+
+        Raises:
+            Exception: If deletion fails
+        """
+        try:
+            # Find all prediction keys for this kb_id
+            pattern = f"{self.kb_id}:prediction:*"
+            keys = list(self.client.scan_iter(match=pattern, count=1000))
+
+            if not keys:
+                logger.debug(f"No prediction keys found for kb_id: {self.kb_id}")
+                return 0
+
+            # Delete all prediction keys
+            deleted = self.client.delete(*keys)
+            logger.debug(f"Deleted {deleted} prediction keys for kb_id: {self.kb_id}")
+            return deleted
+
+        except Exception as e:
+            logger.error(f"Failed to delete predictions for {self.kb_id}: {e}")
+            raise

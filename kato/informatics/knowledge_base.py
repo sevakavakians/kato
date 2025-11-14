@@ -97,6 +97,7 @@ class SuperKnowledgeBase:
             self.patterns_kb = self._create_patterns_kb_interface()
             self.symbols_kb = self._create_symbols_kb_interface()
             self.metadata = self._create_metadata_interface()
+            self.predictions_kb = self._create_predictions_kb_interface()
 
             logger.info(f"SuperKnowledgeBase initialized for {self.id} with ClickHouse + Redis")
         except Exception as e:
@@ -251,6 +252,64 @@ class SuperKnowledgeBase:
                 return 0
 
         return MetadataInterface(self)
+
+    def _create_predictions_kb_interface(self):
+        """Create Redis-backed predictions interface for storing predictions by unique_id."""
+        class PredictionsKBInterface:
+            def __init__(self, parent):
+                self.parent = parent
+
+            def insert_one(self, document):
+                """
+                Store predictions with unique_id.
+
+                Expected document format: {'unique_id': str, 'predictions': list}
+
+                Returns:
+                    InsertResult with inserted_id
+                """
+                if 'unique_id' not in document or 'predictions' not in document:
+                    logger.warning("predictions_kb.insert_one() called without 'unique_id' or 'predictions'")
+                    return type('InsertResult', (), {'inserted_id': None})()
+
+                unique_id = document['unique_id']
+                predictions = document['predictions']
+
+                self.parent.redis_writer.write_prediction(unique_id, predictions)
+                return type('InsertResult', (), {'inserted_id': unique_id})()
+
+            def find(self, filter=None, **kwargs):
+                """
+                Find predictions matching filter.
+
+                Expected filter format: {'unique_id': str}
+
+                Returns:
+                    List of prediction documents (each with 'unique_id' and 'predictions')
+                """
+                if not filter or 'unique_id' not in filter:
+                    # Return empty list if no unique_id specified
+                    return []
+
+                unique_id = filter['unique_id']
+                predictions = self.parent.redis_writer.get_predictions(unique_id)
+
+                if predictions:
+                    # Return list of documents matching MongoDB format
+                    return [{'unique_id': unique_id, 'predictions': predictions}]
+                return []
+
+            def delete_many(self, query):
+                """
+                Delete all predictions (called during memory clear).
+
+                Returns:
+                    DeleteResult with deleted_count
+                """
+                deleted_count = self.parent.redis_writer.delete_all_predictions()
+                return type('DeleteResult', (), {'deleted_count': deleted_count})()
+
+        return PredictionsKBInterface(self)
 
     def clear_all_memory(self):
         """

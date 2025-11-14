@@ -160,7 +160,7 @@ class KatoProcessor:
         """Retrieve vector values - delegates to pattern operations"""
         return self.pattern_operations.get_vector(name)
 
-    def clear_stm(self):
+    async def clear_stm(self):
         """Clear STM - delegates to memory manager"""
         self.memory_manager.clear_stm()
         self.predictions = []
@@ -170,7 +170,7 @@ class KatoProcessor:
         # Publish clear event to distributed STM if available
         if self.distributed_stm_manager:
             try:
-                asyncio.run(self.distributed_stm_manager.clear_stm_distributed())
+                await self.distributed_stm_manager.clear_stm_distributed()
             except Exception as e:
                 logger.warning(f"Failed to publish clear STM to distributed STM: {e}")
         self.current_emotives = self.memory_manager.current_emotives
@@ -236,7 +236,7 @@ class KatoProcessor:
         # Publish to distributed STM if available
         if self.distributed_stm_manager and data:
             try:
-                asyncio.run(self.distributed_stm_manager.observe_distributed(data))
+                await self.distributed_stm_manager.observe_distributed(data)
             except Exception as e:
                 logger.warning(f"Failed to publish observation to distributed STM: {e}")
 

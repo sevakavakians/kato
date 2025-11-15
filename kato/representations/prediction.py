@@ -36,9 +36,8 @@ class Prediction(dict):
             self['snr'] = float((2.0 * len(self['matches']) - total_extras) / denominator)
         else:
             self['snr'] = float(0)  # Default to 0 when no matches or extras
-        self['entropy'] = float(0)
-        self['normalized_entropy'] = float(0)
-        self['global_normalized_entropy'] = float(0)
+        # Note: entropy, normalized_entropy, global_normalized_entropy, and confluence
+        # are calculated in pattern_processor.py and set via prediction.update()
         self['confluence'] = float(0)
         self['predictive_information'] = float(0)  # Excess entropy / mutual information between past and future
         self['sequence'] = _pattern['pattern_data']

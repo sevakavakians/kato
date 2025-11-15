@@ -63,7 +63,7 @@ class LengthFilter(PatternFilter):
             SQL query string filtering by length bounds
         """
         query = f"""
-        SELECT name, pattern_data
+        SELECT name, pattern_data, length
         FROM patterns_data
         WHERE length BETWEEN {self.min_length} AND {self.max_length}
         """

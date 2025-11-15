@@ -4,6 +4,7 @@ import itertools
 import logging
 from collections import Counter, deque
 from itertools import chain
+from math import log2
 from operator import itemgetter
 from os import environ
 from typing import Any, Optional
@@ -608,7 +609,6 @@ class PatternProcessor:
         try:
             # Pre-calculate symbol probability cache using optimized aggregation pipeline
             symbol_probability_cache = {}
-            symbol_frequency_cache = Counter()
             total_ensemble_pattern_frequencies = 0
 
             # Load all symbols using optimized aggregation pipeline
@@ -626,10 +626,9 @@ class PatternProcessor:
                 if missing_symbols_calc and isinstance(missing_symbols_calc[0], list):
                     missing_symbols_calc = [s for event in missing_symbols_calc for s in event]
                 for symbol in itertools.chain(prediction['matches'], missing_symbols_calc):
-                    if symbol not in symbol_probability_cache or symbol not in symbol_frequency_cache:
+                    if symbol not in symbol_probability_cache:
                         if symbol not in symbol_cache:
                             symbol_probability_cache[symbol] = 0
-                            symbol_frequency_cache[symbol] = 0
                             continue
                         symbol_data = symbol_cache[symbol]
                         if total_symbols_in_patterns_frequencies > 0:
@@ -637,12 +636,6 @@ class PatternProcessor:
                         else:
                             symbol_probability = 0.0
                         symbol_probability_cache[symbol] = symbol_probability
-                        symbol_frequency_cache[symbol] += symbol_data['frequency']
-
-            symbol_frequency_in_state = Counter(state)
-            for symbol in symbol_frequency_in_state:
-                if symbol not in symbol_frequency_cache:
-                    symbol_frequency_cache[symbol] = 0
 
             if total_ensemble_pattern_frequencies == 0:
                 logger.warning(f" {self.name} [ PatternProcessor predictPattern (async) ] total_ensemble_pattern_frequencies is 0")
@@ -718,8 +711,22 @@ class PatternProcessor:
                     logger.error(f"ZeroDivisionError in average_emotives: emotives={prediction['emotives']}, error={e}")
                     raise
 
+                # Calculate Shannon entropy of the pattern's symbol distribution
+                pattern_symbols = [s for event in prediction['present'] for s in event]
+                if pattern_symbols:
+                    symbol_counts = Counter(pattern_symbols)
+                    total = len(pattern_symbols)
+                    entropy_val = 0.0
+                    for count in symbol_counts.values():
+                        if count > 0:
+                            p = count / total
+                            entropy_val -= p * log2(p)
+                else:
+                    entropy_val = 0.0
+
                 # Update prediction with calculated values
                 prediction.update({
+                    'entropy': entropy_val,
                     'normalized_entropy': normalized_entropy_val,
                     'global_normalized_entropy': global_normalized_entropy_val,
                     'itfdf_similarity': itfdf_similarity,
@@ -741,6 +748,58 @@ class PatternProcessor:
                     if 'predictive_information' not in prediction:
                         prediction['predictive_information'] = 0.0
                 self.future_potentials = []
+
+            # Calculate Bayesian posterior probabilities for ensemble
+            # Uses Bayes' theorem: P(pattern|obs) = P(obs|pattern) × P(pattern) / P(obs)
+            try:
+                # Calculate sum of frequencies (for prior probabilities)
+                sum_ensemble_frequencies = sum(p.get('frequency', 1) for p in causal_patterns)
+
+                if sum_ensemble_frequencies > 0:
+                    # Calculate evidence: P(obs) = Σ P(obs|pattern) × P(pattern)
+                    # Where P(obs|pattern) = similarity and P(pattern) = frequency/total_freq
+                    evidence_sum = sum(
+                        p['similarity'] * (p.get('frequency', 1) / sum_ensemble_frequencies)
+                        for p in causal_patterns
+                    )
+
+                    # Calculate posterior for each prediction
+                    for prediction in causal_patterns:
+                        frequency = prediction.get('frequency', 1)
+                        similarity = prediction['similarity']
+
+                        # Prior: P(pattern) = frequency / total_frequencies
+                        prior = frequency / sum_ensemble_frequencies
+
+                        # Likelihood: P(obs|pattern) = similarity score
+                        likelihood = similarity
+
+                        # Posterior: P(pattern|obs) using Bayes' theorem
+                        if evidence_sum > 0:
+                            posterior = (likelihood * prior) / evidence_sum
+                        else:
+                            posterior = 0.0
+
+                        # Store Bayesian metrics
+                        prediction['bayesian_posterior'] = posterior
+                        prediction['bayesian_prior'] = prior
+                        prediction['bayesian_likelihood'] = likelihood
+                else:
+                    # No valid frequencies - set all Bayesian metrics to 0
+                    for prediction in causal_patterns:
+                        prediction['bayesian_posterior'] = 0.0
+                        prediction['bayesian_prior'] = 0.0
+                        prediction['bayesian_likelihood'] = prediction['similarity']
+
+                logger.debug(f"Calculated Bayesian posteriors for {len(causal_patterns)} predictions")
+
+            except Exception as e:
+                logger.error(f"Error in Bayesian posterior calculation: {e}")
+                # Set Bayesian metrics to 0 if calculation fails
+                for prediction in causal_patterns:
+                    prediction['bayesian_posterior'] = 0.0
+                    prediction['bayesian_prior'] = 0.0
+                    prediction['bayesian_likelihood'] = prediction.get('similarity', 0.0)
 
             # Calculate potential using direct formula (overwrites any potential from calculate_ensemble_predictive_information)
             # potential = (evidence + confidence) * snr + itfdf_similarity + (1/(fragmentation + 1))

@@ -71,7 +71,7 @@ class JaccardFilter(PatternFilter):
         stm_array = f"[{stm_tokens_str}]"
 
         query = f"""
-        SELECT name, pattern_data
+        SELECT name, pattern_data, length
         FROM patterns_data
         WHERE (
             -- Calculate intersection size

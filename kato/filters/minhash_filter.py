@@ -124,7 +124,7 @@ class MinHashFilter(PatternFilter):
         bands_array = f"[{bands_str}]"
 
         query = f"""
-        SELECT name, pattern_data, minhash_sig
+        SELECT name, pattern_data, length, minhash_sig
         FROM patterns_data
         WHERE hasAny(lsh_bands, {bands_array})
         """

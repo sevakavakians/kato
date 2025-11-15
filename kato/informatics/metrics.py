@@ -1,4 +1,5 @@
 import logging
+from collections import Counter
 from functools import reduce
 from math import log, log10
 from operator import add
@@ -218,7 +219,9 @@ def normalized_entropy(state: list[str], total_symbols: int) -> float:
         state_length = len(state)
         if state_length == 0:  # Extra protection
             return 0.0
-        return sum([expectation(state.count(symbol) / state_length, total_symbols) for symbol in state])
+        # Optimized: Use Counter to count symbols once (O(N) instead of O(N²))
+        symbol_counts = Counter(state)
+        return sum([expectation(count / state_length, total_symbols) for count in symbol_counts.values()])
     except ZeroDivisionError as e:
         import logging
         logger = logging.getLogger(__name__)

@@ -637,6 +637,8 @@ class PatternProcessor:
                             symbol_probability = 0.0
                         symbol_probability_cache[symbol] = symbol_probability
 
+            symbol_frequency_in_state = Counter(state)
+
             if total_ensemble_pattern_frequencies == 0:
                 logger.warning(f" {self.name} [ PatternProcessor predictPattern (async) ] total_ensemble_pattern_frequencies is 0")
 

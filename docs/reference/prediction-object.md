@@ -128,31 +128,56 @@ A Prediction Object is generated when KATO's pattern recognition engine identifi
 **Purpose**: Weights predictions by both local frequency and global rarity, similar to TF-IDF in document retrieval.
 
 ### 20. **predictive_information** (float)
-**Description**: Measures how much information this specific pattern contributes to predicting its future relative to other patterns in the ensemble.  
-**Formula**: Based on ensemble-wide statistics and pattern frequencies using information-theoretic mutual information principles.  
-**Range**: 0.0 to 1.0 (normalized)  
+**Description**: Measures how much information this specific pattern contributes to predicting its future relative to other patterns in the ensemble.
+**Formula**: Based on ensemble-wide statistics and pattern frequencies using information-theoretic mutual information principles.
+**Range**: 0.0 to 1.0 (normalized)
 **Purpose**: Quantifies the predictive value of this pattern for its anticipated future events. Higher values indicate more reliable predictions.
 
-### 21. **potential** (float)
+### 21. **bayesian_posterior** (float)
+**Description**: Posterior probability that this pattern generated the observation, calculated using Bayes' theorem.
+**Formula**: `P(pattern|obs) = P(obs|pattern) × P(pattern) / P(obs)`
+  where:
+  - `P(obs|pattern)` = similarity (likelihood)
+  - `P(pattern)` = frequency / total_frequencies (prior)
+  - `P(obs)` = Σ(similarity × prior) across all patterns (evidence)
+**Range**: 0.0 to 1.0
+**Purpose**: Provides a rigorous probabilistic interpretation of pattern likelihood. The posterior represents the probability that this specific pattern was the generative source of the current observation, accounting for both how well it matches (likelihood) and how common it is (prior). **Posteriors sum to 1.0 across the ensemble**, making them true probability distributions.
+**Use Case**: Ideal for probabilistic decision-making, uncertainty quantification, and when you need predictions that are directly interpretable as probabilities.
+
+### 22. **bayesian_prior** (float)
+**Description**: Prior probability of this pattern occurring before observing current data.
+**Formula**: `P(pattern) = frequency / Σ(all_frequencies)`
+**Range**: 0.0 to 1.0
+**Purpose**: Represents the base rate of this pattern in the knowledge base. Patterns learned more frequently have higher priors, reflecting their greater prevalence in training data. This captures the "how common is this pattern?" question independent of the current observation.
+**Interpretation**: A prior of 0.5 means this pattern accounts for 50% of all learned patterns (by frequency). Priors across all patterns in the ensemble sum to 1.0.
+
+### 23. **bayesian_likelihood** (float)
+**Description**: Likelihood of observing the current data given this pattern.
+**Formula**: `P(obs|pattern) = similarity`
+**Range**: 0.0 to 1.0
+**Purpose**: Quantifies how well this pattern explains the observation, equivalent to the similarity score but framed probabilistically. This is the "how well does the pattern fit the data?" component of Bayes' theorem.
+**Note**: Identical to the `similarity` field but explicitly labeled as a likelihood for Bayesian interpretation.
+
+### 24. **potential** (float)
 **Description**: Primary composite ranking metric combining multiple pattern quality measures.
 **Formula**: `potential = (evidence + confidence) * snr + itfdf_similarity + (1/(fragmentation + 1))`
-**Range**: Typically 0.0 to ~3.0 (unbounded positive)
+**Range**: Unbounded. Typically 0.0 to ~3.0 for quality matches. Can be negative when SNR < 0 (excessive noise/extras in observation), indicating low-quality or spurious matches.
 **Purpose**: Default ranking metric that balances multiple dimensions:
 - Match completeness (evidence + confidence)
 - Signal quality (snr)
 - Frequency-weighted similarity (itfdf_similarity)
 - Pattern cohesion (fragmentation term)
 
-**Configuration**: Can be replaced as ranking metric using `rank_sort_algo` parameter. Alternative rankings include similarity, evidence, confidence, predictive_information, and others.
+**Configuration**: Can be replaced as ranking metric using `rank_sort_algo` parameter. Alternative rankings include similarity, evidence, confidence, predictive_information, bayesian_posterior, and others.
 
-### 22. **emotives** (map<string, float>)
-**Description**: Emotional or utility values associated with this pattern.  
-**Structure**: Dictionary mapping emotive names to float values.  
-**Purpose**: Allows patterns to carry emotional salience or utility information for decision-making.  
+### 25. **emotives** (map<string, float>)
+**Description**: Emotional or utility values associated with this pattern.
+**Structure**: Dictionary mapping emotive names to float values.
+**Purpose**: Allows patterns to carry emotional salience or utility information for decision-making.
 **Example**: `{"utility": 50.0, "danger": -10.0}`
 
-### 23. **pattern** (internal, not in protobuf)
-**Description**: Full pattern structure from the pattern (used internally during prediction construction).  
+### 26. **pattern** (internal, not in protobuf)
+**Description**: Full pattern structure from the pattern (used internally during prediction construction).
 **Purpose**: Internal reference to complete pattern for temporal field extraction.
 
 ## Metric Categories
@@ -172,13 +197,22 @@ A Prediction Object is generated when KATO's pattern recognition engine identifi
 - **confluence**: Meaningfulness of patterns
 - **predictive_information**: Pattern's contribution to future prediction
 
+### Probabilistic/Bayesian Metrics
+- **bayesian_posterior**: P(pattern|observation) - probability this pattern generated the observation
+- **bayesian_prior**: P(pattern) - base rate frequency of this pattern
+- **bayesian_likelihood**: P(observation|pattern) - how well pattern explains observation
+
 ### Composite Metrics
 - **potential**: Multi-dimensional ranking metric (default sorting key)
 - **itfdf_similarity**: Frequency-weighted importance
 
 ## Usage Notes
 
-1. **Prediction Selection**: When multiple predictions are generated, use `potential` as the default ranking metric. The formula `potential = (evidence + confidence) * snr + itfdf_similarity + (1/(fragmentation + 1))` provides balanced ranking across multiple quality dimensions. Alternative ranking metrics can be selected via `rank_sort_algo` configuration to optimize for specific use cases (e.g., `similarity` for best matches, `frequency` for common patterns, `predictive_information` for information-theoretic ranking).
+1. **Prediction Selection**: When multiple predictions are generated, use `potential` as the default ranking metric. The formula `potential = (evidence + confidence) * snr + itfdf_similarity + (1/(fragmentation + 1))` provides balanced ranking across multiple quality dimensions. Alternative ranking metrics can be selected via `rank_sort_algo` configuration to optimize for specific use cases:
+   - `similarity`: Best pattern matches by similarity score
+   - `frequency`: Most common patterns
+   - `predictive_information`: Information-theoretic ranking
+   - `bayesian_posterior`: Probabilistic ranking (recommended for uncertainty quantification)
 
 2. **Confidence vs Evidence**: 
    - `confidence` measures match quality in the current context
@@ -190,6 +224,12 @@ A Prediction Object is generated when KATO's pattern recognition engine identifi
 
 5. **Information Metrics**: Entropy, normalized entropy, and confluence provide theoretical grounding in information theory, useful for advanced analysis of prediction quality.
 
+6. **Bayesian Metrics**: The posterior, prior, and likelihood metrics provide rigorous probabilistic interpretation:
+   - **Posteriors sum to 1.0**: Unlike other metrics, Bayesian posteriors form a proper probability distribution across the prediction ensemble
+   - **Interpretable as probabilities**: A posterior of 0.75 means "75% confidence this pattern generated the observation"
+   - **Combines evidence types**: Automatically balances pattern frequency (prior) with observation fit (likelihood)
+   - **Ideal for decision-making**: When you need to weight predictions by their probability or calculate expected utilities
+
 ## Mathematical Foundations
 
 The Prediction Object incorporates several mathematical concepts:
@@ -199,5 +239,6 @@ The Prediction Object incorporates several mathematical concepts:
 - **Information Retrieval**: TF-IDF adapted for pattern prediction
 - **Signal Processing**: Signal-to-Noise Ratio for match quality
 - **Probability Theory**: Confluence as conditional probability
+- **Bayesian Inference**: Bayes' theorem for posterior probability calculation, combining prior beliefs (pattern frequency) with likelihood (similarity) to compute rigorous posterior probabilities
 
 These metrics work together to provide a comprehensive assessment of pattern matching quality, temporal relationships, and predictive confidence in the KATO cognitive processing system.

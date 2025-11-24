@@ -79,7 +79,7 @@ class FilterPipelineExecutor:
             Set of all pattern names in the knowledge base
         """
         query = f"""
-            SELECT name, pattern_data
+            SELECT name, pattern_data, length
             FROM patterns_data
             WHERE kb_id = '{self.kb_id}'
         """
@@ -92,6 +92,7 @@ class FilterPipelineExecutor:
             for row in result.result_rows:
                 name = row[0]
                 pattern_data = row[1] if len(row) > 1 else None
+                length = row[2] if len(row) > 2 else 0
 
                 all_patterns.add(name)
 
@@ -105,6 +106,9 @@ class FilterPipelineExecutor:
                     self.patterns_cache[name]['pattern_data'] = pattern_data
                     # Store flattened version for similarity matching
                     self.patterns_cache[name]['pattern_data_flat'] = list(chain(*pattern_data))
+
+                # Cache length for evidence calculation
+                self.patterns_cache[name]['length'] = length
 
             logger.info(f"Retrieved {len(all_patterns)} patterns from database (no filtering)")
             return all_patterns

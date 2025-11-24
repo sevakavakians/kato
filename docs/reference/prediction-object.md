@@ -180,6 +180,19 @@ A Prediction Object is generated when KATO's pattern recognition engine identifi
 **Description**: Full pattern structure from the pattern (used internally during prediction construction).
 **Purpose**: Internal reference to complete pattern for temporal field extraction.
 
+### 27. **tfidf_score** (float)
+**Description**: TF-IDF (Term Frequency - Inverse Document Frequency) score measuring pattern distinctiveness.
+**Formula**:
+- For each symbol in pattern: `TF(symbol) = count(symbol in pattern) / pattern_length`
+- `IDF(symbol) = log2(total_unique_patterns / patterns_containing_symbol) + 1`
+- `TFIDF(symbol) = TF(symbol) × IDF(symbol)`
+- `tfidf_score = mean(TFIDF for all unique symbols in pattern)`
+**Range**: Typically 0.0 to ~2.0 (unbounded positive)
+**Purpose**: Identifies patterns containing distinctive/rare symbols. High scores indicate patterns with uncommon symbols that are frequent within the pattern itself. Useful for finding unique, informative patterns.
+**Interpretation**:
+- High TF-IDF: Pattern contains rare symbols that appear frequently within it (distinctive)
+- Low TF-IDF: Pattern contains mostly common symbols (generic)
+
 ## Metric Categories
 
 ### Matching Metrics
@@ -205,6 +218,7 @@ A Prediction Object is generated when KATO's pattern recognition engine identifi
 ### Composite Metrics
 - **potential**: Multi-dimensional ranking metric (default sorting key)
 - **itfdf_similarity**: Frequency-weighted importance
+- **tfidf_score**: TF-IDF measure of pattern distinctiveness
 
 ## Usage Notes
 

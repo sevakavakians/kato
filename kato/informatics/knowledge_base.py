@@ -441,7 +441,9 @@ class SuperKnowledgeBase:
                 # Update global totals for new pattern
                 self.redis_writer.increment_global_symbol_count(symbol_count)
                 self.redis_writer.increment_global_pattern_count(1)
-                logger.debug(f"[HYBRID] Updated global totals: {len(symbol_counts)} unique symbols, {symbol_count} total, +1 pattern")
+                # Increment unique pattern count (only for NEW patterns)
+                self.redis_writer.increment_unique_pattern_count(1)
+                logger.debug(f"[HYBRID] Updated global totals: {len(symbol_counts)} unique symbols, {symbol_count} total, +1 pattern, +1 unique")
 
                 logger.info(f"[HYBRID] Successfully learned new pattern {pattern_object.name} to ClickHouse + Redis")
                 return True  # New pattern

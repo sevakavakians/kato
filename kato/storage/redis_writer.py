@@ -220,7 +220,7 @@ class RedisWriter:
         Get global metadata totals for this kb_id.
 
         Returns:
-            Dictionary with total_symbols_in_patterns_frequencies and total_pattern_frequencies
+            Dictionary with total_symbols_in_patterns_frequencies, total_pattern_frequencies, and total_unique_patterns
         """
         try:
             # Get total_symbols_in_patterns_frequencies
@@ -231,16 +231,22 @@ class RedisWriter:
             patterns_key = f"{self.kb_id}:global:total_pattern_frequencies"
             patterns_total = self.client.get(patterns_key)
 
+            # Get total_unique_patterns (NEW)
+            unique_patterns_key = f"{self.kb_id}:global:total_unique_patterns"
+            unique_patterns_total = self.client.get(unique_patterns_key)
+
             return {
                 'total_symbols_in_patterns_frequencies': int(symbols_total) if symbols_total else 0,
-                'total_pattern_frequencies': int(patterns_total) if patterns_total else 0
+                'total_pattern_frequencies': int(patterns_total) if patterns_total else 0,
+                'total_unique_patterns': int(unique_patterns_total) if unique_patterns_total else 0
             }
 
         except Exception as e:
             logger.error(f"Failed to get global metadata for {self.kb_id}: {e}")
             return {
                 'total_symbols_in_patterns_frequencies': 0,
-                'total_pattern_frequencies': 0
+                'total_pattern_frequencies': 0,
+                'total_unique_patterns': 0
             }
 
     def increment_global_symbol_count(self, count: int) -> int:
@@ -281,6 +287,32 @@ class RedisWriter:
 
         except Exception as e:
             logger.error(f"Failed to increment global pattern count: {e}")
+            raise
+
+    def increment_unique_pattern_count(self, count: int = 1) -> int:
+        """
+        Increment total unique patterns counter (NOT frequency-weighted).
+
+        This is different from total_pattern_frequencies which is frequency-weighted.
+        Used for TF-IDF IDF calculation and proper probability calculations.
+
+        Args:
+            count: Number to increment by (typically 1 for each NEW pattern)
+
+        Returns:
+            New total value after increment
+
+        Raises:
+            Exception: If increment fails
+        """
+        try:
+            key = f"{self.kb_id}:global:total_unique_patterns"
+            new_total = self.client.incrby(key, count)
+            logger.debug(f"Incremented unique pattern count by {count} to {new_total}")
+            return new_total
+
+        except Exception as e:
+            logger.error(f"Failed to increment unique pattern count: {e}")
             raise
 
     def increment_symbol_frequency(self, symbol: str, count: int = 1) -> int:

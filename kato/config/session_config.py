@@ -120,7 +120,7 @@ class SessionConfiguration:
                     'fragmentation', 'frequency', 'normalized_entropy',
                     'global_normalized_entropy', 'itfdf_similarity', 'confluence',
                     'predictive_information', 'bayesian_posterior', 'bayesian_prior',
-                    'bayesian_likelihood'
+                    'bayesian_likelihood', 'tfidf_score'
                 ]
                 if self.rank_sort_algo not in valid_algorithms:
                     logger.error(f"Invalid rank_sort_algo: {self.rank_sort_algo}")

@@ -513,27 +513,25 @@ class PatternProcessor:
         symbol_stats = self.query_manager.get_symbol_frequencies_batch([symbol])
         return symbol_stats.get(symbol, 0)
 
-    def symbolProbability(self, symbol: str, total_symbols_in_patterns_frequencies: int) -> float:
+    def symbolProbability(self, symbol: str, total_unique_patterns: int) -> float:
         """Calculate the probability of a symbol appearing in patterns.
 
         Args:
             symbol: Symbol name to calculate probability for.
-            total_symbols_in_patterns_frequencies: Total frequency count across all symbols.
+            total_unique_patterns: Total number of unique patterns (NOT frequency-weighted).
 
         Returns:
             Probability value between 0.0 and 1.0.
         """
-        # We can either look at using the probability of a symbol to appear anywhere in the KB, which means it can also appear
-        # multiple times in one pattern, or we can look at the probability of a symbol to appear in any pattern, regardless
-        # of the number of times it appears within any one pattern.
-        # We can also look at coming up with a formula to account for both to affect the potential.
+        # FIX: Use pattern_member_frequency / total_unique_patterns for compatible units
+        # This gives us the probability that a randomly selected pattern contains this symbol
 
         # Use batch query for better performance
         # No fallback - fail fast if Redis is unavailable
         symbol_stats = self.query_manager.get_symbol_frequencies_batch([symbol])
         symbol_data = symbol_stats.get(symbol, {})
         pattern_member_frequency = symbol_data.get('pattern_member_frequency', 0)
-        return float(pattern_member_frequency / total_symbols_in_patterns_frequencies) if total_symbols_in_patterns_frequencies > 0 else 0.0
+        return float(pattern_member_frequency / total_unique_patterns) if total_unique_patterns > 0 else 0.0
 
     def patternProbability(self, freq: int, total_pattern_frequencies: int) -> float:
         """Calculate the probability of a pattern based on its frequency.
@@ -611,6 +609,12 @@ class PatternProcessor:
             symbol_probability_cache = {}
             total_ensemble_pattern_frequencies = 0
 
+            # Load global metadata from Redis (NEW)
+            global_metadata = self.superkb.redis_writer.get_global_metadata()
+            total_symbols_in_patterns_frequencies = global_metadata.get('total_symbols_in_patterns_frequencies', 0)
+            total_pattern_frequencies = global_metadata.get('total_pattern_frequencies', 0)
+            total_unique_patterns = global_metadata.get('total_unique_patterns', 1)  # Use 1 to avoid div by zero
+
             # Load all symbols using optimized aggregation pipeline
             # No fallback - fail fast if Redis is unavailable
             symbol_cache = self.query_manager.get_all_symbols_optimized(
@@ -631,8 +635,10 @@ class PatternProcessor:
                             symbol_probability_cache[symbol] = 0
                             continue
                         symbol_data = symbol_cache[symbol]
-                        if total_symbols_in_patterns_frequencies > 0:
-                            symbol_probability = float(symbol_data['pattern_member_frequency'] / total_symbols_in_patterns_frequencies)
+                        # FIX: Use total_unique_patterns for pattern-based probability (compatible units)
+                        if total_unique_patterns > 0:
+                            # Probability that a random pattern contains this symbol
+                            symbol_probability = float(symbol_data['pattern_member_frequency'] / total_unique_patterns)
                         else:
                             symbol_probability = 0.0
                         symbol_probability_cache[symbol] = symbol_probability
@@ -726,13 +732,43 @@ class PatternProcessor:
                 else:
                     entropy_val = 0.0
 
+                # Calculate TF-IDF score for this pattern
+                tfidf_scores = []
+                unique_symbols = set(pattern_symbols)
+                pattern_length = len(pattern_symbols)
+
+                if pattern_length > 0 and total_unique_patterns > 0:
+                    for symbol in unique_symbols:
+                        # Term Frequency: count of symbol in this pattern / pattern length
+                        tf = pattern_symbols.count(symbol) / pattern_length
+
+                        # Inverse Document Frequency: log(total patterns / patterns containing symbol) + 1
+                        # Get symbol statistics from cache
+                        if symbol in symbol_probability_cache:
+                            # We already calculated probabilities, so back-calculate pattern_member_frequency
+                            patterns_with_symbol = int(symbol_probability_cache[symbol] * total_unique_patterns)
+                            if patterns_with_symbol == 0:
+                                patterns_with_symbol = 1  # Avoid division by zero
+                        else:
+                            # Symbol not in cache, use default
+                            patterns_with_symbol = 1
+
+                        idf = log2(total_unique_patterns / patterns_with_symbol) + 1
+                        tfidf_scores.append(tf * idf)
+
+                    # Use mean aggregation for pattern-level TF-IDF
+                    tfidf_score = sum(tfidf_scores) / len(tfidf_scores) if tfidf_scores else 0.0
+                else:
+                    tfidf_score = 0.0
+
                 # Update prediction with calculated values
                 prediction.update({
                     'entropy': entropy_val,
                     'normalized_entropy': normalized_entropy_val,
                     'global_normalized_entropy': global_normalized_entropy_val,
                     'itfdf_similarity': itfdf_similarity,
-                    'confluence': confluence_val
+                    'confluence': confluence_val,
+                    'tfidf_score': tfidf_score  # NEW metric
                 })
 
                 # Remove pattern_data to save bandwidth

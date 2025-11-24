@@ -176,7 +176,7 @@ git add .
 git commit -m "feat(gpu): implement symbol vocabulary encoder
 
 - Bidirectional symbol↔int mapping
-- MongoDB persistence
+- Database persistence
 - Dynamic vocabulary growth
 - Thread-safe operations"
 

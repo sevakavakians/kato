@@ -282,7 +282,7 @@ Integrate GPU acceleration while:
 | Date | Version | Changes |
 |------|---------|---------|
 | 2025-10-27 | 2.0 | Phase 1 & 2 implementation complete |
-|            |     | - Symbol encoder with MongoDB persistence |
+|            |     | - Symbol encoder with database persistence |
 |            |     | - Comprehensive benchmark suite |
 |            |     | - RapidFuzz integration (8-10x speedup) |
 |            |     | - 88+ tests (38 GPU + 50+ RapidFuzz) |

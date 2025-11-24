@@ -7,7 +7,7 @@ Comprehensive guide to scaling KATO for production workloads with horizontal and
 KATO supports multiple scaling approaches:
 - **Horizontal Scaling**: Add more KATO instances
 - **Vertical Scaling**: Increase resources per instance
-- **Database Scaling**: Scale MongoDB, Qdrant, Redis
+- **Database Scaling**: Scale ClickHouse, Qdrant, Redis
 - **Auto-Scaling**: Dynamic scaling based on load
 
 ## Scaling Architecture
@@ -30,8 +30,8 @@ KATO supports multiple scaling approaches:
         ┌────────────────────┼────────────────────┐
         │                    │                    │
   ┌─────▼─────┐       ┌──────▼──────┐     ┌──────▼──────┐
-  │ MongoDB   │       │   Qdrant    │     │   Redis     │
-  │ ReplicaSet│       │   Cluster   │     │  Sentinel   │
+  │ ClickHouse│       │   Qdrant    │     │   Redis     │
+  │  Cluster  │       │   Cluster   │     │  Sentinel   │
   └───────────┘       └─────────────┘     └─────────────┘
 ```
 
@@ -66,7 +66,9 @@ services:
     container_name: kato-1
     environment:
       - PROCESSOR_ID=kato-1
-      - MONGO_BASE_URL=mongodb://mongo-kb:27017
+      - CLICKHOUSE_HOST=kato-clickhouse
+      - CLICKHOUSE_PORT=8123
+      - CLICKHOUSE_DB=kato
       - QDRANT_HOST=qdrant-kb
       - REDIS_URL=redis://redis-kb:6379/0
     deploy:
@@ -85,7 +87,9 @@ services:
     container_name: kato-2
     environment:
       - PROCESSOR_ID=kato-2
-      - MONGO_BASE_URL=mongodb://mongo-kb:27017
+      - CLICKHOUSE_HOST=kato-clickhouse
+      - CLICKHOUSE_PORT=8123
+      - CLICKHOUSE_DB=kato
       - QDRANT_HOST=qdrant-kb
       - REDIS_URL=redis://redis-kb:6379/0
     deploy:
@@ -104,7 +108,9 @@ services:
     container_name: kato-3
     environment:
       - PROCESSOR_ID=kato-3
-      - MONGO_BASE_URL=mongodb://mongo-kb:27017
+      - CLICKHOUSE_HOST=kato-clickhouse
+      - CLICKHOUSE_PORT=8123
+      - CLICKHOUSE_DB=kato
       - QDRANT_HOST=qdrant-kb
       - REDIS_URL=redis://redis-kb:6379/0
     deploy:
@@ -119,9 +125,9 @@ services:
       - kato-network
 
   # Shared databases
-  mongo-kb:
-    image: mongo:6.0
-    # ... MongoDB configuration
+  kato-clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    # ... ClickHouse configuration
 
   qdrant-kb:
     image: qdrant/qdrant:latest
@@ -444,91 +450,130 @@ docker-compose up -d kato
 
 ## Database Scaling
 
-### MongoDB Scaling
+### ClickHouse Scaling
 
-#### Replica Set (High Availability)
+#### Vertical Scaling (Single Node)
 
 **docker-compose.yml**:
 ```yaml
 services:
-  mongo-primary:
-    image: mongo:6.0
-    command: >
-      mongod --replSet rs0 --bind_ip_all
+  kato-clickhouse:
+    image: clickhouse/clickhouse-server:latest
     volumes:
-      - mongo-primary-data:/data/db
-
-  mongo-secondary-1:
-    image: mongo:6.0
-    command: >
-      mongod --replSet rs0 --bind_ip_all
-    volumes:
-      - mongo-secondary-1-data:/data/db
-
-  mongo-secondary-2:
-    image: mongo:6.0
-    command: >
-      mongod --replSet rs0 --bind_ip_all
-    volumes:
-      - mongo-secondary-2-data:/data/db
-
-  mongo-arbiter:
-    image: mongo:6.0
-    command: >
-      mongod --replSet rs0 --bind_ip_all
+      - kato-clickhouse-data:/var/lib/clickhouse
+    environment:
+      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
+    deploy:
+      resources:
+        limits:
+          cpus: '8.0'
+          memory: 16G
+        reservations:
+          cpus: '4.0'
+          memory: 8G
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
 ```
 
-**Initialize replica set**:
-```bash
-docker exec -it mongo-primary mongo
-> rs.initiate({
-    _id: "rs0",
-    members: [
-      { _id: 0, host: "mongo-primary:27017", priority: 2 },
-      { _id: 1, host: "mongo-secondary-1:27017", priority: 1 },
-      { _id: 2, host: "mongo-secondary-2:27017", priority: 1 },
-      { _id: 3, host: "mongo-arbiter:27017", arbiterOnly: true }
-    ]
-  })
+**When to use**:
+- Datasets < 1TB
+- Single region deployment
+- Simplified operations
+- Cost optimization
+
+#### Cluster Mode (Horizontal Scaling)
+
+**For datasets >1TB or high availability**:
+
+**docker-compose.yml**:
+```yaml
+services:
+  # ClickHouse cluster with 2 shards, 2 replicas each
+  clickhouse-01:
+    image: clickhouse/clickhouse-server:latest
+    volumes:
+      - ./clickhouse-config/config.xml:/etc/clickhouse-server/config.d/cluster.xml
+      - clickhouse-01-data:/var/lib/clickhouse
+    networks:
+      - kato-network
+
+  clickhouse-02:
+    image: clickhouse/clickhouse-server:latest
+    volumes:
+      - ./clickhouse-config/config.xml:/etc/clickhouse-server/config.d/cluster.xml
+      - clickhouse-02-data:/var/lib/clickhouse
+    networks:
+      - kato-network
+
+  clickhouse-03:
+    image: clickhouse/clickhouse-server:latest
+    volumes:
+      - ./clickhouse-config/config.xml:/etc/clickhouse-server/config.d/cluster.xml
+      - clickhouse-03-data:/var/lib/clickhouse
+    networks:
+      - kato-network
+
+  clickhouse-04:
+    image: clickhouse/clickhouse-server:latest
+    volumes:
+      - ./clickhouse-config/config.xml:/etc/clickhouse-server/config.d/cluster.xml
+      - clickhouse-04-data:/var/lib/clickhouse
+    networks:
+      - kato-network
+
+  # ClickHouse Keeper for coordination
+  clickhouse-keeper:
+    image: clickhouse/clickhouse-keeper:latest
+    volumes:
+      - clickhouse-keeper-data:/var/lib/clickhouse-keeper
+    networks:
+      - kato-network
+```
+
+**cluster.xml configuration**:
+```xml
+<clickhouse>
+    <remote_servers>
+        <kato_cluster>
+            <shard>
+                <replica>
+                    <host>clickhouse-01</host>
+                    <port>9000</port>
+                </replica>
+                <replica>
+                    <host>clickhouse-02</host>
+                    <port>9000</port>
+                </replica>
+            </shard>
+            <shard>
+                <replica>
+                    <host>clickhouse-03</host>
+                    <port>9000</port>
+                </replica>
+                <replica>
+                    <host>clickhouse-04</host>
+                    <port>9000</port>
+                </replica>
+            </shard>
+        </kato_cluster>
+    </remote_servers>
+</clickhouse>
 ```
 
 **Update KATO configuration**:
 ```bash
-MONGO_BASE_URL=mongodb://mongo-primary:27017,mongo-secondary-1:27017,mongo-secondary-2:27017/?replicaSet=rs0
+CLICKHOUSE_HOST=clickhouse-01,clickhouse-02,clickhouse-03,clickhouse-04
+CLICKHOUSE_PORT=8123
+CLICKHOUSE_CLUSTER=kato_cluster
 ```
 
-#### Sharding (Horizontal Scaling)
-
-**For datasets >100GB**:
-```yaml
-services:
-  # Config servers
-  config-server-1:
-    image: mongo:6.0
-    command: mongod --configsvr --replSet configReplSet
-  config-server-2:
-    image: mongo:6.0
-    command: mongod --configsvr --replSet configReplSet
-  config-server-3:
-    image: mongo:6.0
-    command: mongod --configsvr --replSet configReplSet
-
-  # Query routers
-  mongos-1:
-    image: mongo:6.0
-    command: mongos --configdb configReplSet/config-server-1:27019,config-server-2:27019,config-server-3:27019
-  mongos-2:
-    image: mongo:6.0
-    command: mongos --configdb configReplSet/config-server-1:27019,config-server-2:27019,config-server-3:27019
-
-  # Shards
-  shard1-primary:
-    image: mongo:6.0
-    command: mongod --shardsvr --replSet shard1
-  shard2-primary:
-    image: mongo:6.0
-    command: mongod --shardsvr --replSet shard2
-```
+**When to use**:
+- Datasets > 1TB
+- High availability requirements
+- Multi-region deployment
+- Need for read scaling
 
 ### Qdrant Scaling
 
@@ -643,10 +688,10 @@ Example:
 - 2KB average size per pattern
 = 2GB storage
 
-MongoDB scaling:
-- <10GB: Single instance
-- 10-100GB: Replica set (3 nodes)
-- >100GB: Sharded cluster
+ClickHouse scaling:
+- <100GB: Single instance
+- 100GB-1TB: Vertical scaling (more CPU/RAM)
+- >1TB: Cluster with sharding
 ```
 
 **Memory Requirements**:

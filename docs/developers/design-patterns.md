@@ -68,23 +68,28 @@ def test_processor_with_custom_settings():
 
 **Implementation**:
 ```python
-# storage/super_knowledge_base.py
-class SuperKnowledgeBase:
-    """Adapter for MongoDB pattern storage."""
+# storage/clickhouse_writer.py
+class ClickHouseWriter:
+    """Adapter for ClickHouse pattern storage."""
 
-    def __init__(self, node_id: str, settings: Settings):
-        self.node_id = node_id
-        self.client = AsyncIOMotorClient(settings.database.mongo_url)
-        self.db = self.client[f"node_{node_id}_kato"]
+    def __init__(self, kb_id: str, settings: Settings):
+        self.kb_id = kb_id
+        self.client = Client(
+            host=settings.clickhouse.host,
+            port=settings.clickhouse.port,
+            database=settings.clickhouse.database
+        )
 
     async def store_pattern(self, pattern: Pattern) -> None:
         """Store pattern (unified interface)."""
-        await self.patterns_kb.insert_one(pattern.to_dict())
+        await self.patterns_table.insert([pattern.to_dict()])
 
     async def get_pattern(self, pattern_name: str) -> Optional[Pattern]:
         """Retrieve pattern (unified interface)."""
-        doc = await self.patterns_kb.find_one({"_id": pattern_name})
-        return Pattern.from_dict(doc) if doc else None
+        result = await self.patterns_table.select_one(
+            where=f"name = '{pattern_name}' AND kb_id = '{self.kb_id}'"
+        )
+        return Pattern.from_dict(result) if result else None
 
 # storage/qdrant_manager.py
 class QdrantManager:
@@ -116,7 +121,7 @@ class QdrantManager:
 **Usage**:
 ```python
 # Workers don't care about storage implementation
-pattern_processor.storage.store_pattern(pattern)  # Could be MongoDB, Redis, etc.
+pattern_processor.storage.store_pattern(pattern)  # Could be ClickHouse, Redis, etc.
 vector_processor.storage.store_vector(vector)     # Could be Qdrant, Pinecone, etc.
 ```
 
@@ -202,26 +207,26 @@ class PatternSearcher:
 class KnowledgeBaseRepository:
     """Repository for pattern data access."""
 
-    def __init__(self, storage: SuperKnowledgeBase):
+    def __init__(self, storage: ClickHouseWriter):
         self.storage = storage
 
     async def find_by_length(self, min_length: int, max_length: int) -> list[Pattern]:
         """Find patterns by length range."""
-        return await self.storage.find_patterns({
-            "length": {"$gte": min_length, "$lte": max_length}
-        })
+        return await self.storage.find_patterns(
+            where=f"length >= {min_length} AND length <= {max_length}"
+        )
 
     async def find_by_observation_count(self, min_count: int) -> list[Pattern]:
         """Find frequently observed patterns."""
-        return await self.storage.find_patterns({
-            "observation_count": {"$gte": min_count}
-        })
+        return await self.storage.find_patterns(
+            where=f"observation_count >= {min_count}"
+        )
 
     async def increment_observation_count(self, pattern_name: str) -> None:
         """Increment pattern observation counter."""
         await self.storage.update_pattern(
             pattern_name,
-            {"$inc": {"observation_count": 1}}
+            updates={"observation_count": "observation_count + 1"}
         )
 ```
 
@@ -331,7 +336,7 @@ class PatternObserver(ABC):
 class ObservationCountUpdater(PatternObserver):
     """Updates observation counts in database."""
 
-    def __init__(self, storage: SuperKnowledgeBase):
+    def __init__(self, storage: ClickHouseWriter):
         self.storage = storage
 
     def on_pattern_observed(self, pattern_name: str) -> None:
@@ -591,7 +596,7 @@ prediction = (PredictionBuilder()
                │
 ┌──────────────▼──────────────────────┐
 │  Data Access Layer (Storage)        │  ← Database operations
-│  - MongoDB adapter                  │
+│  - ClickHouse adapter               │
 │  - Qdrant adapter                   │
 │  - Redis adapter                    │
 └─────────────────────────────────────┘
@@ -618,10 +623,10 @@ prediction = (PredictionBuilder()
    │ Port   │   │ Port   │   │ Port   │
    └────┬───┘   └───┬────┘   └───┬────┘
         │           │            │
-   ┌────▼───┐   ┌───▼────┐   ┌───▼────┐
-   │FastAPI │   │MongoDB │   │Qdrant  │
-   │Adapter │   │Adapter │   │Adapter │
-   └────────┘   └────────┘   └────────┘
+   ┌────▼───┐   ┌───▼────────┐   ┌───▼────┐
+   │FastAPI │   │ClickHouse  │   │Qdrant  │
+   │Adapter │   │  Adapter   │   │Adapter │
+   └────────┘   └────────────┘   └────────┘
 ```
 
 ## Anti-Patterns to Avoid
@@ -633,9 +638,9 @@ class KatoProcessor:
     def observe(self): ...
     def learn(self): ...
     def predict(self): ...
-    def store_in_mongo(self): ...  # ❌ Storage responsibility
-    def search_vectors(self): ...   # ❌ Vector search responsibility
-    def calculate_metrics(self): ... # ❌ Metrics responsibility
+    def store_in_clickhouse(self): ...  # ❌ Storage responsibility
+    def search_vectors(self): ...       # ❌ Vector search responsibility
+    def calculate_metrics(self): ...    # ❌ Metrics responsibility
 ```
 
 **Good**: Separation of concerns
@@ -652,7 +657,7 @@ class KatoProcessor:
 ```python
 class PatternProcessor:
     def __init__(self):
-        self.storage = MongoDBStorage()  # ❌ Concrete dependency
+        self.storage = ClickHouseStorage()  # ❌ Concrete dependency
 ```
 
 **Good**: Depend on abstractions

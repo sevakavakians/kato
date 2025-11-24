@@ -8,7 +8,7 @@ KATO uses a simplified testing architecture where tests run in local Python and 
 
 ### 1. Start KATO Services
 ```bash
-# Start all services (MongoDB, Qdrant, Redis, KATO)
+# Start all services (ClickHouse, Qdrant, Redis, KATO)
 ./start.sh
 
 # Verify services are running
@@ -91,7 +91,8 @@ python -m pytest tests/tests/unit/ -n auto
 ### Test Isolation
 
 Each test automatically receives a unique session_id that ensures:
-- **MongoDB Isolation**: Database name = session_id
+- **ClickHouse Isolation**: kb_id partitioning per session
+- **Redis Isolation**: Key namespacing per session
 - **Qdrant Isolation**: Collection name = `vectors_{session_id}`
 - **No Cross-Contamination**: Tests cannot affect each other
 - **Parallel Safety**: Tests can run concurrently without issues
@@ -215,8 +216,8 @@ def test_with_debugging(kato_fixture):
 # View KATO service logs
 docker logs kato --tail 50
 
-# View MongoDB logs
-docker logs kato-mongodb --tail 50
+# View ClickHouse logs
+docker logs kato-clickhouse --tail 50
 
 # Follow logs in real-time
 docker logs -f kato

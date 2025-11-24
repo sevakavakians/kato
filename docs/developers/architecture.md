@@ -42,7 +42,7 @@ KATO (Knowledge Abstraction for Traceable Outcomes) is a deterministic memory an
          │                   │
          ▼                   ▼
 ┌─────────────────┐  ┌─────────────────┐  ┌──────────────┐
-│   MongoDB       │  │    Qdrant       │  │    Redis     │
+│  ClickHouse     │  │    Qdrant       │  │    Redis     │
 │   (Patterns)    │  │   (Vectors)     │  │  (Sessions)  │
 └─────────────────┘  └─────────────────┘  └──────────────┘
 ```
@@ -218,7 +218,7 @@ class PatternProcessor:
         # 1. Validate STM (min 2 events)
         # 2. Generate pattern hash
         # 3. Create Pattern object
-        # 4. Store in MongoDB
+        # 4. Store in ClickHouse
         # 5. Update indices
         return pattern
 
@@ -228,7 +228,7 @@ class PatternProcessor:
         threshold: float
     ) -> list[Pattern]:
         """Find matching patterns."""
-        # 1. Query MongoDB for candidates
+        # 1. Query ClickHouse for candidates
         # 2. Calculate similarity scores
         # 3. Filter by threshold
         # 4. Rank by potential
@@ -270,54 +270,53 @@ class VectorProcessor:
 
 **Location**: `kato/storage/`
 
-#### MongoDB (SuperKnowledgeBase)
+#### ClickHouse (Pattern Storage)
 
-**File**: `kato/storage/super_knowledge_base.py`
+**File**: `kato/storage/clickhouse_writer.py`
 
-**Database Structure**:
+**Table Structure**:
 ```
-MongoDB Server
-├── node_my_app_kato/          # Database per node_id
-│   ├── patterns               # Learned patterns
-│   ├── pattern_metadata       # Pattern statistics
-│   └── global_metadata        # Node metadata
-└── node_other_app_kato/
-    └── ...
+ClickHouse Database
+└── patterns                   # Partitioned by kb_id
+    ├── name (String)          # Pattern identifier
+    ├── kb_id (String)         # Node isolation key
+    ├── length (UInt32)        # Pattern length
+    ├── events (Array)         # Event sequences
+    ├── emotive_profile (String) # JSON emotives
+    ├── metadata (String)      # JSON metadata
+    ├── created_at (DateTime)  # Creation timestamp
+    ├── updated_at (DateTime)  # Update timestamp
+    └── observation_count (UInt32) # Frequency
 ```
 
-**Pattern Document**:
-```javascript
-{
-  _id: "PTN|a1b2c3d4e5f6",
-  length: 3,
-  events: [
-    ["coffee", "morning"],
-    ["commute", "train"],
-    ["arrive", "work"]
-  ],
-  emotive_profile: {
-    energy: [[-0.2], [0.0], [0.5]]
-  },
-  metadata: {},
-  created_at: ISODate("2025-11-13T10:00:00Z"),
-  updated_at: ISODate("2025-11-13T10:30:00Z"),
-  observation_count: 15
-}
+**Pattern Row**:
+```sql
+SELECT * FROM patterns WHERE name='abc123def456...' AND kb_id='my_app'
+-- Returns:
+-- name: "abc123def456..."
+-- kb_id: "my_app"
+-- length: 3
+-- events: [['coffee','morning'],['commute','train'],['arrive','work']]
+-- emotive_profile: '{"energy":[[-0.2],[0.0],[0.5]]}'
+-- observation_count: 15
 ```
 
 **Key Operations**:
 ```python
 # Store pattern
-kb.store_pattern(pattern)
+clickhouse_writer.store_pattern(pattern, kb_id)
 
 # Find patterns by ID
-pattern = kb.get_pattern("PTN|abc123")
+pattern = clickhouse_writer.get_pattern(name, kb_id)
 
-# Query patterns
-patterns = kb.find_patterns({"length": {"$lte": 10}})
+# Query patterns with filter pipeline
+patterns = clickhouse_writer.find_patterns(
+    kb_id=kb_id,
+    length_max=10
+)
 
 # Update observation count
-kb.increment_observation_count("PTN|abc123")
+clickhouse_writer.increment_observation_count(name, kb_id)
 ```
 
 #### Qdrant (Vector Store)
@@ -418,7 +417,7 @@ session_manager.delete_session(session_id)
 **File**: `kato/searches/pattern_search.py`
 
 **Algorithm**:
-1. **Candidate Retrieval**: Query MongoDB for potential matches
+1. **Candidate Retrieval**: Query ClickHouse for potential matches
 2. **Similarity Calculation**: Token-level or character-level matching
 3. **Threshold Filtering**: Filter by `recall_threshold`
 4. **Ranking**: Sort by `potential`, `similarity`, or `evidence`
@@ -475,7 +474,7 @@ class Settings(BaseSettings):
 from kato.config import get_settings
 
 settings = get_settings()
-print(settings.database.mongo_url)  # mongodb://localhost:27017
+print(settings.database.clickhouse_host)  # localhost
 print(settings.learning.recall_threshold)  # 0.1
 ```
 
@@ -511,7 +510,7 @@ print(settings.learning.recall_threshold)  # 0.1
    ├─→ PatternProcessor.learn_pattern()
    │   ├─→ Generate pattern hash
    │   ├─→ Create Pattern object
-   │   └─→ Store in MongoDB
+   │   └─→ Store in ClickHouse
    ├─→ VectorProcessor stores vectors (if any)
    └─→ Update indices
    ↓
@@ -526,7 +525,7 @@ print(settings.learning.recall_threshold)  # 0.1
 2. KatoProcessor.get_predictions()
    ├─→ Get current STM
    ├─→ PatternSearcher.search(stm, threshold)
-   │   ├─→ Query MongoDB for candidates
+   │   ├─→ Query ClickHouse for candidates
    │   ├─→ Calculate similarities
    │   └─→ Filter and rank
    ├─→ Format predictions (past/present/future)
@@ -555,7 +554,7 @@ print(settings.learning.recall_threshold)  # 0.1
    └───┬───┴───┬───┴───┬───┘
        ▼       ▼       ▼
    ┌────────────────────────┐
-   │  Shared MongoDB/Qdrant │
+   │  Shared ClickHouse/Qdrant/Redis │
    └────────────────────────┘
 ```
 
@@ -565,9 +564,10 @@ print(settings.learning.recall_threshold)  # 0.1
 
 ### Database Scaling
 
-**MongoDB**:
-- Replica sets for read scaling
-- Sharding by `node_id` for write scaling
+**ClickHouse**:
+- Distributed tables for horizontal scaling
+- Partitioning by `kb_id` for node isolation
+- Replication for high availability
 
 **Qdrant**:
 - Clustering for capacity
@@ -582,7 +582,7 @@ print(settings.learning.recall_threshold)  # 0.1
 ### Data Isolation
 
 **Node-Level Isolation**:
-- Each `node_id` gets separate MongoDB database
+- Each `kb_id` gets separate ClickHouse partition
 - Separate Qdrant collections
 - No cross-node data leakage
 
@@ -609,11 +609,18 @@ app.add_middleware(
 
 ### Optimization Points
 
-1. **MongoDB Indexing**:
-   ```javascript
-   db.patterns.createIndex({"_id": 1})  // Pattern ID
-   db.patterns.createIndex({"length": 1})  // Length queries
-   db.patterns.createIndex({"updated_at": -1})  // Recency
+1. **ClickHouse Indexing & Partitioning**:
+   ```sql
+   -- Primary key on (kb_id, name) for fast lookups
+   -- Partition by kb_id for node isolation
+   -- Bloom filter on name for billion-scale filtering
+   CREATE TABLE patterns (
+       name String,
+       kb_id String,
+       ...
+   ) ENGINE = MergeTree()
+   PARTITION BY kb_id
+   ORDER BY (kb_id, name);
    ```
 
 2. **Qdrant HNSW**:
@@ -627,10 +634,11 @@ app.add_middleware(
 
 3. **Connection Pooling**:
    ```python
-   # MongoDB pool
-   client = AsyncIOMotorClient(
-       mongo_url,
-       maxPoolSize=50
+   # ClickHouse client
+   from clickhouse_driver import Client
+   client = Client(
+       host=clickhouse_host,
+       port=clickhouse_port
    )
 
    # Qdrant reuse
@@ -680,7 +688,7 @@ GET /health
 
 {
   "status": "healthy",
-  "mongodb": "connected",
+  "clickhouse": "connected",
   "qdrant": "connected",
   "redis": "connected"
 }

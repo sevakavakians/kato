@@ -88,7 +88,7 @@ raise ObservationError(
 **Description**: Base for storage-related errors
 
 **Subclasses**:
-- `DatabaseError`: MongoDB operations failed
+- `DatabaseError`: ClickHouse operations failed
 - `VectorStoreError`: Qdrant operations failed
 - `CacheError`: Redis operations failed
 
@@ -96,8 +96,8 @@ raise ObservationError(
 
 ```python
 raise DatabaseError(
-    "Failed to connect to MongoDB",
-    context={"url": "mongodb://localhost:27017"}
+    "Failed to connect to ClickHouse",
+    context={"host": "localhost", "port": 8123}
 )
 ```
 

@@ -136,11 +136,11 @@ scrape_configs:
     metrics_path: '/metrics'
     scrape_interval: 10s
 
-  # MongoDB exporter
-  - job_name: 'mongodb'
+  # ClickHouse exporter
+  - job_name: 'clickhouse'
     static_configs:
       - targets:
-          - 'mongodb-exporter:9216'
+          - 'clickhouse-exporter:9116'
 
   # Redis exporter
   - job_name: 'redis'
@@ -253,20 +253,21 @@ async def metrics_middleware(request: Request, call_next):
 
 ### Database Exporters
 
-**MongoDB Exporter**:
+**ClickHouse Exporter**:
 ```yaml
 # docker-compose.yml
 services:
-  mongodb-exporter:
-    image: percona/mongodb_exporter:latest
-    container_name: mongodb-exporter
+  clickhouse-exporter:
+    image: clickhouse/clickhouse-exporter:latest
+    container_name: clickhouse-exporter
     ports:
-      - "9216:9216"
+      - "9116:9116"
     environment:
-      MONGODB_URI: mongodb://mongo-kb:27017
+      CLICKHOUSE_HOST: kato-clickhouse
+      CLICKHOUSE_PORT: 8123
     command:
-      - '--collect-all'
-      - '--mongodb.direct-connect=true'
+      - '--clickhouse.host=kato-clickhouse'
+      - '--clickhouse.port=8123'
     networks:
       - kato-network
 ```
@@ -418,8 +419,9 @@ curl -X POST http://localhost:3000/api/dashboards/db \
 - **Goroutines/Threads**: `process_threads_total`
 
 #### Database Metrics
-- **MongoDB connections**: `mongodb_connections{state="current"}`
-- **MongoDB operations**: `rate(mongodb_op_counters_total[1m])`
+- **ClickHouse queries**: `rate(clickhouse_query_total[1m])`
+- **ClickHouse query duration**: `clickhouse_query_duration_seconds`
+- **ClickHouse memory usage**: `clickhouse_memory_usage_bytes`
 - **Redis memory**: `redis_memory_used_bytes`
 - **Redis commands**: `rate(redis_commands_processed_total[1m])`
 
@@ -730,15 +732,15 @@ groups:
           summary: "High memory usage"
           description: "Memory usage is {{ $value | humanize }}B (threshold: 4GB)"
 
-      # MongoDB connection issues
-      - alert: MongoDBConnectionPoolExhausted
-        expr: mongodb_connections{state="current"} > mongodb_connections{state="available"} * 0.9
+      # ClickHouse connection issues
+      - alert: ClickHouseSlowQueries
+        expr: rate(clickhouse_query_duration_seconds_sum[5m]) / rate(clickhouse_query_duration_seconds_count[5m]) > 1.0
         for: 5m
         labels:
-          severity: critical
+          severity: warning
         annotations:
-          summary: "MongoDB connection pool near exhaustion"
-          description: "Current: {{ $value }}, Available: {{ .available }}"
+          summary: "ClickHouse queries are slow"
+          description: "Average query duration is {{ $value }}s (threshold: 1.0s)"
 
       # Redis memory
       - alert: RedisHighMemory
@@ -822,12 +824,12 @@ async def health_check():
         "checks": {}
     }
 
-    # Check MongoDB
+    # Check ClickHouse
     try:
-        await kb.client.admin.command('ping')
-        health_status["checks"]["mongodb"] = "healthy"
+        await clickhouse_client.execute("SELECT 1")
+        health_status["checks"]["clickhouse"] = "healthy"
     except Exception as e:
-        health_status["checks"]["mongodb"] = f"unhealthy: {str(e)}"
+        health_status["checks"]["clickhouse"] = f"unhealthy: {str(e)}"
         health_status["status"] = "unhealthy"
 
     # Check Qdrant

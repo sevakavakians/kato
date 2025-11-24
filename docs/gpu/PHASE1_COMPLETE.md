@@ -52,7 +52,7 @@ Phase 1 implementation is complete. All foundational infrastructure for GPU acce
 - Warmup iterations
 - Configurable test parameters
 - Quick mode (skip 1M patterns)
-- MongoDB cleanup after tests
+- Database cleanup after tests
 
 **Ready for:**
 - Execution once KATO services are running
@@ -67,18 +67,18 @@ Phase 1 implementation is complete. All foundational infrastructure for GPU acce
 **Created:**
 - `kato/gpu/encoder.py` (~330 lines) - SymbolVocabularyEncoder class
   - Bidirectional string ↔ integer mapping
-  - MongoDB persistence (metadata collection)
+  - Database persistence (metadata storage)
   - Dynamic vocabulary growth
   - Sequence encoding/decoding
   - Pattern encoding/decoding (events)
   - Padding support (-1 sentinel)
-  - Build from existing patterns (aggregation pipeline)
+  - Build from existing patterns (database queries)
   - Vocabulary statistics and management
 
 **Features:**
-- Thread-safe operations (MongoDB atomic updates)
+- Thread-safe operations (database atomic updates)
 - Deterministic ordering (alphabetical)
-- Efficient aggregation pipeline for bulk initialization
+- Efficient database queries for bulk initialization
 - Memory usage tracking
 - Clear vocabulary support
 
@@ -95,7 +95,7 @@ Phase 1 implementation is complete. All foundational infrastructure for GPU acce
 **Created:**
 - `tests/tests/gpu/__init__.py` - Test module initialization
 - `tests/tests/gpu/conftest.py` - Pytest fixtures
-  - `mongodb` fixture - Isolated database with cleanup
+  - `database` fixture - Isolated storage with cleanup
   - `encoder` fixture - Fresh encoder per test
   - `encoder_with_vocab` fixture - Pre-loaded encoder
 - `tests/tests/gpu/data_generators.py` - Test utilities
@@ -113,7 +113,7 @@ Phase 1 implementation is complete. All foundational infrastructure for GPU acce
 - Basic encoding/decoding
 - Sequence operations
 - Padding handling
-- MongoDB persistence
+- Database persistence
 - Large vocabularies (1000+ symbols)
 - Special characters
 - Pattern encoding/decoding
@@ -237,12 +237,12 @@ pytest tests/tests/gpu/ --cov=kato.gpu --cov-report=html
 **Expected:**
 - All 38 tests pass
 - Code coverage: >95% for encoder.py
-- No MongoDB connection errors
+- No database connection errors
 - Test execution time: <30 seconds
 
 **Possible Issues:**
-- MongoDB not running → Start with `./start.sh`
-- Port conflicts → Check MongoDB port 27017
+- Database services not running → Start with `./start.sh`
+- Port conflicts → Check service ports
 - Memory errors → Reduce test data size
 
 ---
@@ -254,7 +254,7 @@ pytest tests/tests/gpu/ --cov=kato.gpu --cov-report=html
 - [x] Baseline benchmarks ready to run
 - [x] Symbol encoder fully implemented
 - [x] Test suite comprehensive (38 test cases)
-- [x] MongoDB integration working
+- [x] Database integration working
 - [x] Documentation complete
 - [x] Code follows project conventions
 - [x] No breaking changes to existing code
@@ -324,7 +324,7 @@ Phase 1 implementation is **complete and ready for testing** on a GPU-enabled Li
 All deliverables have been implemented:
 - ✅ Environment setup infrastructure
 - ✅ Comprehensive baseline benchmarks
-- ✅ Symbol vocabulary encoder with MongoDB persistence
+- ✅ Symbol vocabulary encoder with database persistence
 - ✅ Extensive test suite (38 test cases)
 
 **Total Implementation:** ~1,800 lines of production code + tests

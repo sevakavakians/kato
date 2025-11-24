@@ -18,7 +18,7 @@ All learned structures in KATO are patterns, whether they represent time-ordered
 
 ### Building and Running
 ```bash
-# Start all services (MongoDB, Qdrant, Redis, KATO)
+# Start all services (ClickHouse, Qdrant, Redis, KATO)
 ./start.sh
 
 # Stop services
@@ -39,7 +39,7 @@ docker logs kato --tail 50               # Direct Docker logs
 ### Service URLs
 After running `./start.sh`:
 - **KATO Service**: http://localhost:8000
-- **MongoDB**: mongodb://localhost:27017
+- **ClickHouse**: http://localhost:8123
 - **Qdrant**: http://localhost:6333
 - **Redis**: redis://localhost:6379
 - **API Docs**: http://localhost:8000/docs
@@ -101,8 +101,9 @@ open http://localhost:8000/docs     # macOS
 xdg-open http://localhost:8000/docs # Linux
 
 # Check database connections
-docker exec kato-mongodb mongo --eval "db.adminCommand('ping')"
+curl http://localhost:8123/ping   # ClickHouse
 curl http://localhost:6333/health   # Qdrant
+docker exec kato-redis redis-cli ping   # Redis
 ```
 
 ## High-Level Architecture
@@ -111,7 +112,7 @@ curl http://localhost:6333/health   # Qdrant
 ```
 Client Request → FastAPI Service (Port 8000) → Embedded KATO Processor
                            ↓                                    ↓
-                    Async Processing              MongoDB, Qdrant & Redis
+                    Async Processing              ClickHouse, Qdrant & Redis
                            ↓                     (Isolated by session_id)
                     JSON Response
 ```
@@ -136,28 +137,31 @@ Client Request → FastAPI Service (Port 8000) → Embedded KATO Processor
    - Implements deterministic hashing for pattern identification
 
 3. **Storage Layer** (`kato/storage/`)
+   - **Pattern Storage**: ClickHouse with multi-stage filter pipeline (MinHash/LSH/Bloom)
+   - **Metadata Cache**: Redis for pattern frequency and emotive profiles
    - **Vector Storage**: Qdrant with HNSW indexing for 10-100x performance
    - **Session Storage**: Redis for fast session state management
-   - **Pattern Storage**: MongoDB for persistent pattern knowledge
-   - **Caching**: Redis for frequently accessed data
-   - Abstraction layer supports multiple backends
+   - Hybrid architecture for billion-scale performance
 
 ### Memory Architecture
 
 - **Short-Term Memory (STM)**: Temporary storage for current observation sequences
 - **Long-Term Memory**: Persistent storage with `PTRN|<sha1_hash>` identifiers
-- **Vector Storage**: Modern Qdrant database with collection per processor
+- **Pattern Storage**: ClickHouse partitioned by kb_id for node isolation
+- **Vector Storage**: Modern Qdrant database with collection per kb_id
 - **Pattern Hashing**: SHA1-based deterministic pattern identification
 
-### MongoDB Pattern Storage
+### ClickHouse Pattern Storage
 
-- **Unique Indexing**: Patterns indexed by SHA1 hash of pattern data
-- **Duplicate Prevention**: Uses `update_one` with `upsert=True` to prevent duplicates
+- **Partitioning**: Patterns partitioned by kb_id for node isolation
+- **Unique Indexing**: Primary key on (kb_id, name) with Bloom filter
+- **Multi-Stage Filter Pipeline**: MinHash → LSH → Bloom → ClickHouse for billion-scale
 - **Frequency Tracking**: Each re-learning of same pattern increments frequency counter
   - Minimum frequency = 1 (pattern must be learned at least once to exist)
   - Frequency increments each time the same pattern is re-learned
-- **Pattern Naming**: `PTRN|<sha1_hash>` where hash uniquely identifies the pattern
-- **Storage Guarantee**: Only one record per unique pattern in MongoDB
+  - Frequencies cached in Redis for fast access
+- **Pattern Naming**: Pattern names stored WITHOUT 'PTRN|' prefix (plain SHA1 hash)
+- **Storage Guarantee**: Only one record per unique pattern per kb_id
 
 ### Key Behavioral Properties
 
@@ -229,7 +233,7 @@ Client Request → FastAPI Service (Port 8000) → Embedded KATO Processor
    - **Fragmentation**: Can be -1, causing division by zero in potential calculations
    - **Pattern Frequencies**: All patterns have frequency ≥ 1 (no zero-frequency patterns exist)
    - **Empty State**: Normalized entropy calculations require non-empty state
-   - **Missing Metadata**: MongoDB metadata documents may be missing, causing None values
+   - **Missing Metadata**: Redis metadata keys may be missing, causing None values
    - **Total Ensemble Frequencies**: Can be 0 if no patterns match (even though each pattern has frequency ≥ 1)
 
 ## Testing Strategy
@@ -258,9 +262,12 @@ The codebase has comprehensive test coverage with 287 test functions across mult
 - `LOG_LEVEL`: DEBUG, INFO, WARNING, ERROR (default: INFO)
 
 #### Database Configuration
-- `MONGO_BASE_URL`: MongoDB connection string
+- `CLICKHOUSE_HOST`: ClickHouse host (default: localhost)
+- `CLICKHOUSE_PORT`: ClickHouse HTTP port (default: 8123)
+- `CLICKHOUSE_DB`: ClickHouse database name (default: kato)
 - `QDRANT_HOST`: Qdrant host (default: localhost)
 - `QDRANT_PORT`: Qdrant port (default: 6333)
+- `REDIS_URL`: Redis connection URL
 
 #### Learning Configuration
 - `MAX_PATTERN_LENGTH`: Auto-learn after N observations (0 = manual only, default: 0)
@@ -363,7 +370,7 @@ All predictions MUST contain these fields:
 1. Observation includes emotives dict
 2. Added to STM accumulator list
 3. Averaged when learning pattern
-4. Stored with MongoDB `$slice` operation
+4. Stored in Redis with rolling window (LPUSH/LTRIM)
 5. Retrieved and averaged in predictions
 
 ### Rolling Window Behavior
@@ -498,36 +505,40 @@ For regular development testing, use the local Python approach described above.
 ## Test Isolation Architecture
 
 ### Critical Requirement: Complete Database Isolation
-Each KATO instance MUST have complete isolation via unique processor_id to prevent cross-contamination between tests and production instances.
+Each KATO instance MUST have complete isolation via unique kb_id to prevent cross-contamination between tests and production instances.
 
 ### Database Isolation Strategy
-Each KATO instance uses its processor_id for complete database isolation:
+Each KATO instance uses its kb_id for complete database isolation:
 
-1. **MongoDB**: Database name = processor_id
-   - Patterns stored in `{processor_id}.patterns_kb`
-   - Symbols stored in `{processor_id}.symbols_kb`
-   - Predictions stored in `{processor_id}.predictions_kb`
-   - Metadata stored in `{processor_id}.metadata`
+1. **ClickHouse**: Partitioning by kb_id
+   - Patterns stored in `patterns` table partitioned by kb_id
+   - Primary key on (kb_id, name) ensures uniqueness
+   - Query filters automatically include kb_id for isolation
 
-2. **Qdrant**: Collection name = `vectors_{processor_id}`
+2. **Redis**: Key namespacing by kb_id
+   - Pattern frequencies: `freq:{kb_id}:{pattern_name}`
+   - Emotive profiles: `emotives:{kb_id}:{pattern_name}`
+   - Session state: `session:{session_id}`
+
+3. **Qdrant**: Collection name = `vectors_{kb_id}`
    - Vector embeddings isolated per instance
    - No cross-contamination between tests
    - Each instance has its own HNSW index
 
-3. **In-Memory Cache**: Per processor instance
+4. **In-Memory Cache**: Per processor instance
    - Cache is automatically isolated per processor
    - No shared state between processors
 
 ### Test Requirements
-- **Each test MUST use a unique processor_id**
+- **Each test MUST use a unique kb_id**
 - Format: `test_{test_name}_{timestamp}_{uuid}`
 - Example: `test_pattern_endpoint_1699123456789_a1b2c3d4`
 - **Fixture scope is 'function'** - each test gets fresh isolation
 - **Services must be running** before tests execute
 
 ### Production Requirements
-- **Each production instance MUST have unique processor_id**
-- Never share processor_ids between instances
+- **Each production instance MUST have unique kb_id**
+- Never share kb_ids between instances
 - Monitor for ID collisions
 - Use format: `{environment}_{service}_{timestamp}_{uuid}`
 
@@ -557,6 +568,6 @@ Without proper isolation:
 1. ❌ Editing planning-docs/ directly → ✅ Use project-manager
 2. ❌ Using test-analyst for local tests → ✅ Use `./run_tests.sh`
 3. ❌ Forgetting to start services before tests → ✅ Run `./start.sh` first
-4. ❌ Sharing processor_ids between tests → ✅ Each test gets unique processor_id
+4. ❌ Sharing kb_ids between tests → ✅ Each test gets unique kb_id
 - **ALWAYS** rebuild KATO docker image using no-cache options after **EVERY** code update and **BEFORE** testing.
 - Do **NOT** use MCPs for this project.

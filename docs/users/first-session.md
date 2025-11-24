@@ -77,7 +77,7 @@ export SESSION_ID="session-abc123def456"  # Use your actual session_id
 
 **Key Concepts**:
 - **session_id**: Temporary - expires after 1 hour (default)
-- **node_id**: Permanent - links to MongoDB database `node_{node_id}_kato`
+- **node_id**: Permanent - links to database namespace `node_{node_id}_kato`
 - Same **node_id** = Same trained patterns (always)
 
 ## Step 3: Send Observations
@@ -200,7 +200,7 @@ curl -X POST http://localhost:8000/sessions/$SESSION_ID/learn | jq .
 **What Just Happened**:
 1. KATO created a pattern from STM
 2. Pattern assigned unique name: `PTN|a1b2c3d4e5f6` (hash-based)
-3. Pattern stored in MongoDB database `node_tutorial_morning_routine_kato`
+3. Pattern stored in persistent database `node_tutorial_morning_routine_kato`
 4. Emotives stored as rolling windows (null = not observed)
 5. STM remains unchanged (not cleared)
 
@@ -419,10 +419,10 @@ curl http://localhost:8000/sessions/$SESSION_ID/predictions | jq .
 **Result**: Same predictions! Pattern persists across sessions.
 
 **Why This Works**:
-- `node_id` links to MongoDB database
-- Patterns stored permanently in MongoDB
-- New session reconnects to same database
-- Training is never lost (until you delete the database)
+- `node_id` links to persistent database
+- Patterns stored permanently in persistent storage
+- New session reconnects to same database namespace
+- Training is never lost (until you delete the data)
 
 ## Key Takeaways
 
@@ -433,7 +433,7 @@ curl http://localhost:8000/sessions/$SESSION_ID/predictions | jq .
 | **Lifetime** | Temporary (1 hour default) | Permanent |
 | **Stores** | STM, emotives, config | LTM patterns, vectors |
 | **Isolation** | Per-session unique | Shared across sessions |
-| **Persistence** | Redis (volatile) | MongoDB/Qdrant (persistent) |
+| **Persistence** | Redis (volatile) | Persistent database (patterns & vectors) |
 
 ### Learning Workflow
 
@@ -516,9 +516,8 @@ To remove tutorial data:
 # Stop KATO
 docker-compose down
 
-# Remove MongoDB database (tutorial data only)
-docker exec mongo-kb-$USER-1 mongo \
-  --eval 'db.getSiblingDB("node_tutorial_morning_routine_kato").dropDatabase()'
+# Remove tutorial data (requires admin access)
+# Contact system administrator to delete node_tutorial_morning_routine_kato namespace
 
 # Or remove all data
 docker-compose down -v  # WARNING: Deletes ALL patterns

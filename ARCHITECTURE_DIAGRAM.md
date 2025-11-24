@@ -23,7 +23,7 @@ graph TB
         end
 
         subgraph "Database Services"
-            MONGO[(MongoDB<br/>Port: 27017)]
+            CLICKHOUSE[(ClickHouse<br/>Port: 8123/9000)]
             QDRANT[(Qdrant<br/>Port: 6333/6334)]
         end
 
@@ -61,7 +61,8 @@ graph TB
 
         %% Storage Abstraction Layer
         subgraph "Storage Abstraction"
-            SUPER_KB[SuperKnowledgeBase<br/>DB Manager]
+            CH_WRITER[ClickHouseWriter<br/>Pattern Storage]
+            REDIS_WRITER[RedisWriter<br/>Metadata Cache]
             QDRANT_STORE[QdrantStore<br/>Vector Store]
             VEC_STORE[VectorStore Interface]
         end
@@ -114,12 +115,14 @@ graph TB
     VEC_PROC --> VEC_INDEX
     VEC_INDEX --> VEC_ENGINE
 
-    PAT_PROC --> SUPER_KB
+    PAT_PROC --> CH_WRITER
+    PAT_PROC --> REDIS_WRITER
     VEC_ENGINE --> VEC_STORE
     VEC_STORE --> QDRANT_STORE
 
-    SUPER_KB -->|processor_id isolation| MONGO
-    QDRANT_STORE -->|collection per processor| QDRANT
+    CH_WRITER -->|kb_id partitioning| CLICKHOUSE
+    REDIS_WRITER -->|metadata cache| REDIS
+    QDRANT_STORE -->|collection per kb_id| QDRANT
 
     KATO_PROC --> METRICS
     FASTAPI --> LOGGING
@@ -127,17 +130,19 @@ graph TB
 
     %% Configuration Dependencies
     SETTINGS -.->|inject| KATO_PROC
-    SETTINGS -.->|inject| SUPER_KB
+    SETTINGS -.->|inject| CH_WRITER
     API_CONFIG -.->|inject| FASTAPI
-    DB_CONFIG -.->|manage| MONGO
+    DB_CONFIG -.->|manage| CLICKHOUSE
     DB_CONFIG -.->|manage| QDRANT
+    DB_CONFIG -.->|manage| REDIS
 
     %% Network Connections
     KATO1 ---|Docker Network| NETWORK
     KATO2 ---|Docker Network| NETWORK
     KATO3 ---|Docker Network| NETWORK
-    MONGO ---|Docker Network| NETWORK
+    CLICKHOUSE ---|Docker Network| NETWORK
     QDRANT ---|Docker Network| NETWORK
+    REDIS ---|Docker Network| NETWORK
 
     %% Styling
     classDef api fill:#e1f5fe,stroke:#01579b,stroke-width:2px
@@ -152,7 +157,7 @@ graph TB
     class SUPER_KB,QDRANT_STORE,VEC_STORE storage
     class SETTINGS,API_CONFIG,DB_CONFIG config
     class METRICS,LOGGING,EXCEPTION,CACHE middleware
-    class MONGO,QDRANT database
+    class CLICKHOUSE,QDRANT,REDIS database
 ```
 
 ## Component Descriptions
@@ -233,18 +238,24 @@ High-performance search capabilities:
 ### 4. Storage Layer
 Database abstraction and management:
 
-- **SuperKnowledgeBase**: MongoDB manager
-  - Pattern storage with SHA1 hashing
-  - Symbol frequency tracking
-  - Metadata management
-  - Index optimization
-  
+- **ClickHouseWriter**: ClickHouse pattern storage
+  - Pattern data with SHA1 hashing
+  - Multi-stage filter pipeline (MinHash/LSH/Bloom)
+  - Partitioning by kb_id for isolation
+  - Billion-scale performance
+
+- **RedisWriter**: Redis metadata caching
+  - Pattern frequency counters
+  - Emotive profiles (rolling window)
+  - Fast metadata access
+  - Session state management
+
 - **QdrantStore**: Vector database implementation
   - HNSW index configuration
   - Quantization support
   - GPU acceleration ready
   - Collection management
-  
+
 - **VectorStore Interface**: Storage abstraction
   - Backend agnostic interface
   - Async operations
@@ -252,20 +263,28 @@ Database abstraction and management:
 
 ### 5. Database Services
 
-#### MongoDB
-- **Purpose**: Pattern and symbol storage
-- **Collections per processor_id**:
-  - `patterns_kb` - Learned patterns
-  - `symbols_kb` - Symbol frequencies
-  - `predictions_kb` - Prediction history
-  - `metadata` - System metadata
-- **Indexing**: Unique on pattern hash, compound for performance
+#### ClickHouse
+- **Purpose**: Pattern data storage with high-performance filtering
+- **Table Structure**:
+  - `patterns` - Learned patterns partitioned by kb_id
+  - Columns: name, kb_id, length, events, emotive_profile, metadata, observation_count
+- **Indexing**: Primary key on (kb_id, name) with Bloom filter
+- **Partitioning**: By kb_id for node isolation
+- **Performance**: Billion-scale with multi-stage filter pipeline
+
+#### Redis
+- **Purpose**: Pattern metadata caching and session state
+- **Data Structures**:
+  - Pattern frequency counters (per kb_id)
+  - Emotive profiles (rolling windows)
+  - Session state (TTL-based)
+- **Key Namespacing**: By session_id and kb_id for isolation
 
 #### Qdrant
 - **Purpose**: High-performance vector similarity search
 - **Features**:
   - HNSW indexing for fast search
-  - Collection per processor_id
+  - Collection per kb_id
   - Cosine similarity metric
   - Optional quantization
 
@@ -328,7 +347,7 @@ Comprehensive configuration management:
 
 ### Synchronous Communication
 1. **HTTP REST**: Client → FastAPI → KatoProcessor → Response
-2. **Database Queries**: Processors → MongoDB/Qdrant → Results
+2. **Database Queries**: Processors → ClickHouse/Qdrant/Redis → Results
 
 ### Asynchronous Communication
 1. **WebSocket**: Bidirectional real-time updates
@@ -342,21 +361,22 @@ Comprehensive configuration management:
 ## Deployment Architecture
 
 ### Docker Composition
-- **MongoDB**: Shared database service
+- **ClickHouse**: Shared database service (partitioned by kb_id)
+- **Redis**: Shared cache and session service
 - **Qdrant**: Shared vector database
 - **KATO Instances**: Multiple isolated processors
 - **Docker Network**: Bridge network for inter-service communication
 
 ### Scaling Strategy
-1. **Horizontal Scaling**: Add more KATO instances with unique IDs
-2. **Database Scaling**: MongoDB replica sets, Qdrant clustering
+1. **Horizontal Scaling**: Add more KATO instances with unique kb_id values
+2. **Database Scaling**: ClickHouse distributed tables, Qdrant clustering, Redis cluster
 3. **Load Balancing**: Optional Nginx for distribution
 
 ## Security Considerations
 
 1. **Database Security**:
-   - Write concern with majority acknowledgment
-   - Optional authentication
+   - ClickHouse authentication and access control
+   - Redis authentication (optional)
    - Network isolation
 
 2. **API Security**:
@@ -365,25 +385,31 @@ Comprehensive configuration management:
    - Rate limiting ready
 
 3. **Data Isolation**:
-   - Complete processor isolation
-   - No cross-contamination
+   - Complete kb_id isolation via partitioning
+   - No cross-contamination between nodes
    - Audit trail via trace IDs
 
 ## Performance Optimizations
 
-1. **Vector Search**:
+1. **Multi-Stage Filter Pipeline**:
+   - MinHash for billion-scale similarity at O(1)
+   - LSH bucketing for candidate reduction
+   - Bloom filters for fast existence checks
+   - ClickHouse partitioning for kb_id isolation
+
+2. **Vector Search**:
    - HNSW indexing for O(log n) search
-   - Result caching
+   - Result caching in Redis
    - Batch processing
 
-2. **Pattern Matching**:
-   - Indexed MongoDB queries
+3. **Pattern Matching**:
+   - ClickHouse partitioned queries
    - Parallel search workers
-   - Frequency-based pruning
+   - Frequency-based pruning from Redis
 
-3. **Memory Management**:
+4. **Memory Management**:
    - Deque for efficient STM
-   - Lazy database connections
+   - Redis metadata caching
    - Connection pooling
 
 ## Monitoring & Observability

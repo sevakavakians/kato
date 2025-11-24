@@ -21,7 +21,7 @@ cd kato
 ### 2. Start KATO
 
 ```bash
-# Start all services (MongoDB, Qdrant, Redis, KATO)
+# Start all services (ClickHouse, Qdrant, Redis, KATO)
 ./start.sh
 ```
 
@@ -120,8 +120,8 @@ KATO will predict the rest of the pattern!
 
 **What just happened?**
 - Your **session** (STM, emotives) is temporary - expires after 1 hour by default
-- Your **learned patterns** are permanent - stored in MongoDB forever
-- Your `node_id` ("my_first_kato") links to a specific MongoDB database
+- Your **learned patterns** are permanent - stored in the database forever
+- Your `node_id` ("my_first_kato") is your persistent identifier linking to your trained patterns
 
 **Reconnecting Later:**
 

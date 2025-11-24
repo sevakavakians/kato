@@ -857,7 +857,7 @@ class KATOClient:
         Get connection pool health and statistics.
 
         Returns:
-            Connection pool status for MongoDB, Redis, Qdrant
+            Connection pool status for database services
 
         Example:
             >>> status = client.get_connection_pools_status()

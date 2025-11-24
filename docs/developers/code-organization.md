@@ -104,19 +104,16 @@ Database adapters and storage abstractions.
 ```
 storage/
 ├── __init__.py
-├── super_knowledge_base.py  # MongoDB adapter
+├── clickhouse_writer.py     # ClickHouse adapter (pattern storage)
 ├── qdrant_manager.py        # Qdrant adapter
-├── redis_writer.py          # Redis adapter (sessions)
-├── aggregation_pipelines.py # MongoDB aggregations
-├── clickhouse_client.py     # ClickHouse adapter (hybrid)
+├── redis_writer.py          # Redis adapter (sessions + metadata)
 └── metrics_cache.py         # Metrics caching
 ```
 
 **Key Files**:
-- **super_knowledge_base.py**: Pattern storage in MongoDB
+- **clickhouse_writer.py**: Pattern storage in ClickHouse with multi-stage filter pipeline
 - **qdrant_manager.py**: Vector storage in Qdrant
-- **redis_writer.py**: Session and cache management
-- **clickhouse_client.py**: Read-optimized pattern queries (hybrid architecture)
+- **redis_writer.py**: Session management and pattern metadata (frequency, emotives)
 
 **Pattern**:
 All storage modules follow adapter pattern with consistent interfaces.
@@ -182,7 +179,7 @@ config/
 from kato.config import get_settings
 
 settings = get_settings()
-mongo_url = settings.database.mongo_url
+clickhouse_host = settings.database.clickhouse_host
 threshold = settings.learning.recall_threshold
 ```
 
@@ -265,7 +262,7 @@ KatoException (base)
 ├── SessionExpiredError
 ├── InvalidInputError
 ├── StorageError
-│   ├── MongoDBError
+│   ├── ClickHouseError
 │   ├── QdrantError
 │   └── RedisError
 └── ProcessingError

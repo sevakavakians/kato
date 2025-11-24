@@ -14,7 +14,7 @@ Complete guide to setting up a KATO development environment.
 ### Recommended Tools
 
 - **IDE**: PyCharm, VS Code, or similar
-- **MongoDB Compass**: Database GUI (optional)
+- **DBeaver**: Database GUI for ClickHouse/Redis (optional)
 - **Postman/Insomnia**: API testing (optional)
 
 ## Initial Setup
@@ -90,7 +90,9 @@ LOG_FORMAT=human
 ENVIRONMENT=development
 
 # Database Configuration
-MONGO_BASE_URL=mongodb://localhost:27017
+CLICKHOUSE_HOST=localhost
+CLICKHOUSE_PORT=8123
+CLICKHOUSE_DB=kato
 QDRANT_HOST=localhost
 QDRANT_PORT=6333
 REDIS_URL=redis://localhost:6379/0
@@ -115,7 +117,7 @@ EOF
 ### 5. Start Services
 
 ```bash
-# Start all services (MongoDB, Qdrant, Redis, KATO)
+# Start all services (ClickHouse, Qdrant, Redis, KATO)
 ./start.sh
 
 # Or manually with docker-compose
@@ -190,10 +192,12 @@ docker-compose up -d
 
 ```bash
 # Start dependencies only
-docker-compose up -d mongo-kb qdrant-kb redis-kb
+docker-compose up -d kato-clickhouse qdrant-kb redis-kb
 
 # Run KATO locally
-export MONGO_BASE_URL=mongodb://localhost:27017
+export CLICKHOUSE_HOST=localhost
+export CLICKHOUSE_PORT=8123
+export CLICKHOUSE_DB=kato
 export QDRANT_HOST=localhost
 export REDIS_URL=redis://localhost:6379/0
 
@@ -337,7 +341,9 @@ Create `.vscode/launch.json`:
         "--port", "8000"
       ],
       "env": {
-        "MONGO_BASE_URL": "mongodb://localhost:27017",
+        "CLICKHOUSE_HOST": "localhost",
+        "CLICKHOUSE_PORT": "8123",
+        "CLICKHOUSE_DB": "kato",
         "QDRANT_HOST": "localhost",
         "REDIS_URL": "redis://localhost:6379/0",
         "LOG_LEVEL": "DEBUG"
@@ -472,30 +478,32 @@ See [Debugging Guide](debugging.md) for advanced techniques.
 
 ## Database Access
 
-### MongoDB
+### ClickHouse
 
 ```bash
 # Connect with CLI
-docker exec -it mongo-kb-$USER-1 mongo
+docker exec -it kato-clickhouse clickhouse-client
 
 # Use specific database
-use node_my_app_kato
+USE kato
 
-# List collections
-show collections
+# List tables
+SHOW TABLES
 
 # Query patterns
-db.patterns.find().limit(10)
-db.patterns.count()
+SELECT * FROM patterns LIMIT 10
+SELECT count() FROM patterns
 ```
 
-### MongoDB Compass (GUI)
+### DBeaver (GUI)
 
 ```
-Connection String: mongodb://localhost:27017
+Host: localhost
+Port: 8123
+Database: kato
 ```
 
-Browse databases: `node_{node_id}_kato`
+Browse tables in the `kato` database
 
 ### Qdrant
 
@@ -567,7 +575,7 @@ docker version
 
 # Check port conflicts
 lsof -i :8000
-lsof -i :27017
+lsof -i :8123
 lsof -i :6333
 
 # Clean and rebuild
@@ -584,10 +592,10 @@ docker-compose ps  # All should be "Up"
 
 # Check service health
 curl http://localhost:8000/health
-docker exec mongo-kb-$USER-1 mongo --eval "db.version()"
+docker exec kato-clickhouse clickhouse-client --query "SELECT version()"
 
 # Clear test data
-docker exec mongo-kb-$USER-1 mongo --eval 'db.adminCommand({listDatabases: 1})' | grep test
+docker exec kato-clickhouse clickhouse-client --query "SHOW DATABASES" | grep test
 # Drop test databases if needed
 
 # Rerun with verbose output

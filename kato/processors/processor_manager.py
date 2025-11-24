@@ -2,7 +2,7 @@
 KATO Processor Management Implementation
 
 This module provides per-user processor isolation for true multi-user support.
-Each user gets their own KatoProcessor instance with isolated MongoDB and Qdrant databases.
+Each user gets their own KatoProcessor instance with isolated databases.
 
 Critical requirement: Each user maintains their own persistent knowledge base
 that survives across sessions.
@@ -28,7 +28,7 @@ class ProcessorManager:
     Manages KatoProcessor instances per user with complete database isolation.
 
     This is the core component that enables true multi-user support in KATO.
-    Each user gets their own MongoDB database and Qdrant collection.
+    Each user gets their own isolated database namespace and vector collection.
     """
 
     def __init__(
@@ -74,9 +74,9 @@ class ProcessorManager:
         Returns:
             Processor ID in format "{node_id}_{base_processor_id}"
         """
-        # Clean node_id to be MongoDB-safe
-        # MongoDB doesn't allow: / \ . " $ * < > : | ? in database names
-        # Also replace hyphens with underscores
+        # Clean node_id to be database-safe
+        # Most databases don't allow: / \ . " $ * < > : | ? in names
+        # Also replace hyphens with underscores for consistency
         safe_node_id = node_id
         for char in ['/', '\\', '.', '"', '$', '*', '<', '>', ':', '|', '?', '-', ' ']:
             safe_node_id = safe_node_id.replace(char, '_')
@@ -84,7 +84,7 @@ class ProcessorManager:
         # Clean base_processor_id too
         safe_base_id = self.base_processor_id.replace('-', '_')
 
-        # MongoDB database name limit is 64 characters but we use 60 for absolute safety
+        # Database name limit is typically 64 characters but we use 60 for absolute safety
         # Calculate the final name and ensure it fits
         full_name = f"{safe_node_id}_{safe_base_id}"
 
@@ -103,7 +103,7 @@ class ProcessorManager:
 
             # Log for debugging
             final_name = f"{safe_node_id}_{safe_base_id}"
-            logger.info(f"Truncated node_id for MongoDB: orig={node_id}, final={final_name}, len={len(final_name)}")
+            logger.info(f"Truncated node_id for database: orig={node_id}, final={final_name}, len={len(final_name)}")
 
         return f"{safe_node_id}_{safe_base_id}"
 
@@ -201,15 +201,15 @@ class ProcessorManager:
                 except Exception as e:
                     logger.error(f"Error cleaning Qdrant for {evicted_id}: {e}")
 
-            # Clean up MongoDB database (ONLY for test processors)
+            # Clean up pattern database (ONLY for test processors)
             if evicted_id.startswith('test_') and \
                hasattr(processor, 'pattern_processor') and \
                hasattr(processor.pattern_processor, 'superkb'):
                 try:
                     processor.pattern_processor.superkb.drop_database()
-                    logger.info(f"Cleaned up MongoDB database for {evicted_id}")
+                    logger.info(f"Cleaned up pattern database for {evicted_id}")
                 except Exception as e:
-                    logger.error(f"Error cleaning MongoDB for {evicted_id}: {e}")
+                    logger.error(f"Error cleaning pattern database for {evicted_id}: {e}")
 
             # Standard close (no-op but kept for compatibility)
             processor.pattern_processor.superkb.close()

@@ -72,7 +72,7 @@ watch -n 1 nvidia-smi
 ```python
 from kato.gpu.encoder import SymbolVocabularyEncoder
 
-encoder = SymbolVocabularyEncoder(mongodb.metadata)
+encoder = SymbolVocabularyEncoder(metadata_storage)
 
 # Encode
 encoded = encoder.encode_sequence(['hello', 'world'])
@@ -122,8 +122,8 @@ import pytest
 from kato.gpu.encoder import SymbolVocabularyEncoder
 
 @pytest.fixture
-def encoder(mongodb):
-    return SymbolVocabularyEncoder(mongodb.metadata)
+def encoder(metadata_storage):
+    return SymbolVocabularyEncoder(metadata_storage)
 
 def test_encode_decode(encoder):
     original = ["a", "b", "c"]

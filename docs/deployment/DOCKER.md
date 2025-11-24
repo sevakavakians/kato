@@ -40,21 +40,30 @@ docker-compose down
 KATO creates the following Docker resources:
 
 1. **Network**: `kato-network` - Isolated network for containers
-2. **MongoDB Container**: `mongo-kb-${USER}-1` - Shared persistent data storage
-3. **KATO Processor Containers**: Named by processor ID - Individual processors
-4. **Volume**: `kato-mongo-data` - MongoDB data persistence
+2. **ClickHouse Container**: `clickhouse` - Pattern data storage with multi-stage filter pipeline
+3. **Redis Container**: `redis` - Session management and pattern metadata
+4. **Qdrant Container**: `qdrant` - Vector embeddings storage
+5. **KATO Processor Containers**: Named by processor ID - Individual processors
+6. **Volumes**:
+   - `clickhouse-data` - ClickHouse data persistence
+   - `redis-data` - Redis data persistence
+   - `qdrant-data` - Qdrant data persistence
 
 ### Container Naming
 
 #### Single Instance Mode (Default)
 When started without specifying an ID, containers use default naming:
 - KATO API: `kato-api-${USER}-1`
-- MongoDB: `mongo-kb-${USER}-1`
+- ClickHouse: `clickhouse` (shared across all instances)
+- Redis: `redis` (shared across all instances)
+- Qdrant: `qdrant` (shared across all instances)
 
 #### Multi-Instance Mode
 When started with `--id` flag, containers are named by processor ID:
 - KATO Processor: `kato-${PROCESSOR_ID}`
-- MongoDB: `mongo-kb-${USER}-1` (shared across all instances)
+- ClickHouse: `clickhouse` (shared across all instances)
+- Redis: `redis` (shared across all instances)
+- Qdrant: `qdrant` (shared across all instances)
 
 Examples:
 ```bash
@@ -67,7 +76,7 @@ Examples:
 ### System Management
 
 #### start
-Start KATO processor instance(s) with MongoDB backend.
+Start KATO processor instance(s) with ClickHouse/Redis/Qdrant backend.
 
 ```bash
 # Start default instance
@@ -85,7 +94,7 @@ Start KATO processor instance(s) with MongoDB backend.
 Stop KATO instance(s) and automatically remove containers.
 
 ```bash
-# Stop all instances (prompts for MongoDB removal)
+# Stop all instances
 docker-compose down
 
 # Stop specific instance by ID or name
@@ -96,11 +105,9 @@ docker-compose down "Main"              # By name
 docker-compose down --id processor-1    # Specific ID
 docker-compose down --name "Main"       # Specific name
 docker-compose down --all               # All instances
-docker-compose down --all --with-mongo  # All + MongoDB
-docker-compose down --all --no-mongo    # All, keep MongoDB
 ```
 
-**Note**: Containers are automatically removed after stopping to prevent accumulation.
+**Note**: Containers are automatically removed after stopping to prevent accumulation. Storage services (ClickHouse, Redis, Qdrant) are shared and persist.
 
 #### list
 Show all registered KATO instances.
@@ -113,11 +120,12 @@ Output:
 ```
 KATO FastAPI Services Status:
 
-NAME           IMAGE         COMMAND                  SERVICE        STATUS    PORTS
-kato   kato:latest   "uvicorn kato.servic…"   kato   healthy   0.0.0.0:8001->8000/tcp
-kato-testing   kato:latest   "uvicorn kato.servic…"   kato-testing   healthy   0.0.0.0:8002->8000/tcp
-kato-mongodb   mongo:4.4     "docker-entrypoint.s…"   mongodb        healthy   0.0.0.0:27017->27017/tcp
-kato-qdrant    qdrant/qdrant "entrypoint.sh"          qdrant         running   0.0.0.0:6333->6333/tcp
+NAME           IMAGE               COMMAND                  SERVICE        STATUS    PORTS
+kato           kato:latest         "uvicorn kato.servic…"   kato           healthy   0.0.0.0:8001->8000/tcp
+kato-testing   kato:latest         "uvicorn kato.servic…"   kato-testing   healthy   0.0.0.0:8002->8000/tcp
+clickhouse     clickhouse/clickhouse-server   clickhouse         healthy   0.0.0.0:8123->8123/tcp
+redis          redis:7-alpine      redis-server             redis          healthy   0.0.0.0:6379->6379/tcp
+qdrant         qdrant/qdrant       entrypoint.sh            qdrant         running   0.0.0.0:6333->6333/tcp
 ```
 
 #### restart
@@ -166,8 +174,11 @@ View container logs.
 # KATO API logs
 docker-compose logs kato
 
-# MongoDB logs
-docker-compose logs mongo
+# ClickHouse logs
+docker-compose logs clickhouse
+
+# Redis logs
+docker-compose logs redis
 
 # All logs
 docker-compose logs all
@@ -207,13 +218,13 @@ docker-compose down processor-1
 docker ps -a | grep processor-1  # No results - container removed
 ```
 
-### MongoDB Container
+### Storage Containers
 
-MongoDB container is shared across all instances and handled separately:
+Storage containers (ClickHouse, Redis, Qdrant) are shared across all instances and persist:
 
-- **Preserved by default**: Stop commands don't remove MongoDB unless specified
-- **Explicit removal**: Use `--with-mongo` flag to also stop and remove MongoDB
-- **Manual removal**: `docker rm mongo-kb-${USER}-1`
+- **Preserved by default**: Stop commands don't remove storage containers
+- **Data persistence**: Volume data persists across container restarts
+- **Manual removal**: `docker-compose down -v` (removes volumes - use with caution)
 
 ## Docker Compose
 
@@ -223,11 +234,27 @@ MongoDB container is shared across all instances and handled separately:
 version: '3.8'
 
 services:
-  mongodb:
-    image: mongo:4.4
-    container_name: mongo-kb
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: clickhouse
     volumes:
-      - kato-mongo-data:/data/db
+      - clickhouse-data:/var/lib/clickhouse
+    networks:
+      - kato-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    volumes:
+      - redis-data:/data
+    networks:
+      - kato-network
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    volumes:
+      - qdrant-data:/qdrant/storage
     networks:
       - kato-network
 
@@ -237,12 +264,20 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - MONGO_BASE_URL=mongodb://mongodb:27017
+      - CLICKHOUSE_HOST=clickhouse
+      - CLICKHOUSE_PORT=8123
+      - CLICKHOUSE_DB=kato
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
       - LOG_LEVEL=INFO
       - PROCESSOR_ID=p46b6b076c
       - PROCESSOR_NAME=P1
     depends_on:
-      - mongodb
+      - clickhouse
+      - redis
+      - qdrant
     networks:
       - kato-network
 
@@ -251,7 +286,9 @@ networks:
     driver: bridge
 
 volumes:
-  kato-mongo-data:
+  clickhouse-data:
+  redis-data:
+  qdrant-data:
 ```
 
 ### Multi-Instance Deployment
@@ -283,11 +320,24 @@ For production deployments with predefined instances:
 version: '3.8'
 
 services:
-  mongodb:
-    image: mongo:4.4
-    container_name: mongo-kb
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
     volumes:
-      - kato-mongo-data:/data/db
+      - clickhouse-data:/var/lib/clickhouse
+    networks:
+      - kato-network
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis-data:/data
+    networks:
+      - kato-network
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    volumes:
+      - qdrant-data:/qdrant/storage
     networks:
       - kato-network
 
@@ -299,12 +349,17 @@ services:
     environment:
       - PROCESSOR_ID=sentiment
       - PROCESSOR_NAME=Sentiment
-      - MONGO_BASE_URL=mongodb://mongodb:27017
+      - CLICKHOUSE_HOST=clickhouse
+      - CLICKHOUSE_PORT=8123
+      - REDIS_HOST=redis
+      - QDRANT_HOST=qdrant
       - MAX_PREDICTIONS=50
     networks:
       - kato-network
     depends_on:
-      - mongodb
+      - clickhouse
+      - redis
+      - qdrant
 
   kato-classifier:
     image: kato:latest
@@ -315,14 +370,20 @@ services:
       - PROCESSOR_ID=classifier
       - PROCESSOR_NAME=Classifier
       - INDEXER_TYPE=VI
-      - MONGO_BASE_URL=mongodb://mongodb:27017
+      - CLICKHOUSE_HOST=clickhouse
+      - REDIS_HOST=redis
+      - QDRANT_HOST=qdrant
     networks:
       - kato-network
     depends_on:
-      - mongodb
+      - clickhouse
+      - redis
+      - qdrant
 
 volumes:
-  kato-mongo-data:
+  clickhouse-data:
+  redis-data:
+  qdrant-data:
 
 networks:
   kato-network:
@@ -378,7 +439,11 @@ CMD ["python", "-m", "kato.scripts.kato_engine"]
 - `PROCESSOR_NAME`: Human-readable processor name
 
 ### Optional Variables
-- `MONGO_BASE_URL`: MongoDB connection string (default: mongodb://localhost:27017)
+- `CLICKHOUSE_HOST`: ClickHouse host (default: localhost)
+- `CLICKHOUSE_PORT`: ClickHouse HTTP port (default: 8123)
+- `CLICKHOUSE_DB`: ClickHouse database name (default: kato)
+- `REDIS_HOST`: Redis host (default: localhost)
+- `REDIS_PORT`: Redis port (default: 6379)
 - `QDRANT_HOST`: Qdrant host (default: localhost)
 - `QDRANT_PORT`: Qdrant port (default: 6333)
 - `LOG_LEVEL`: Logging level (DEBUG, INFO, WARNING, ERROR)
@@ -389,8 +454,12 @@ CMD ["python", "-m", "kato.scripts.kato_engine"]
 # .env file
 PROCESSOR_ID=primary
 PROCESSOR_NAME=PrimaryProcessor
-MONGO_BASE_URL=mongodb://kato-mongodb:27017
-QDRANT_HOST=kato-qdrant
+CLICKHOUSE_HOST=clickhouse
+CLICKHOUSE_PORT=8123
+CLICKHOUSE_DB=kato
+REDIS_HOST=redis
+REDIS_PORT=6379
+QDRANT_HOST=qdrant
 QDRANT_PORT=6333
 LOG_LEVEL=INFO
 MAX_PREDICTIONS=100
@@ -421,8 +490,11 @@ curl http://localhost:8000/kato-api/ping
 # Check specific processor
 curl http://localhost:8000/p46b6b076c/ping
 
-# Check MongoDB connection
-docker exec mongo-kb mongo --eval "db.adminCommand('ping')"
+# Check ClickHouse connection
+docker exec clickhouse clickhouse-client --query "SELECT 1"
+
+# Check Redis connection
+docker exec redis redis-cli ping
 ```
 
 ## Resource Management
@@ -501,16 +573,22 @@ lsof -i :8000
 kill -9 <PID>
 ```
 
-#### MongoDB Connection Issues
+#### Storage Connection Issues
 ```bash
-# Check MongoDB status
-docker ps | grep mongo
+# Check ClickHouse status
+docker ps | grep clickhouse
+docker restart clickhouse
+docker logs clickhouse
 
-# Restart MongoDB
-docker restart mongo-kb-${USER}-1
+# Check Redis status
+docker ps | grep redis
+docker restart redis
+docker logs redis
 
-# Check MongoDB logs
-docker logs mongo-kb-${USER}-1
+# Check Qdrant status
+docker ps | grep qdrant
+docker restart qdrant
+docker logs qdrant
 ```
 
 #### Permission Denied
@@ -562,13 +640,16 @@ docker system prune -a --volumes
 ### Backup Strategy
 
 ```bash
-# Backup MongoDB data
-docker exec mongo-kb-${USER}-1 mongodump --out /backup
-docker cp mongo-kb-${USER}-1:/backup ./mongo-backup
+# Backup ClickHouse data
+docker exec clickhouse clickhouse-client --query "BACKUP DATABASE kato TO Disk('backups', 'backup.zip')"
+docker cp clickhouse:/var/lib/clickhouse/backups/backup.zip ./clickhouse-backup.zip
 
-# Restore MongoDB data
-docker cp ./mongo-backup mongo-kb-${USER}-1:/restore
-docker exec mongo-kb-${USER}-1 mongorestore /restore
+# Backup Redis data
+docker exec redis redis-cli SAVE
+docker cp redis:/data/dump.rdb ./redis-backup.rdb
+
+# Backup Qdrant data
+docker cp qdrant:/qdrant/storage ./qdrant-backup
 ```
 
 ## CI/CD Integration
@@ -691,9 +772,9 @@ Cluster Orchestrator (on host)
     ↓
 For each cluster:
     ├── KATO Instance (kato-cluster_<name>_<id>)
-    ├── MongoDB (mongo-cluster_<name>_<id>)
+    ├── ClickHouse (clickhouse-cluster_<name>_<id>)
+    ├── Redis (redis-cluster_<name>_<id>)
     ├── Qdrant (qdrant-cluster_<name>_<id>)
-    └── Redis (redis-cluster_<name>_<id>)
 ```
 
 ### Key Features
@@ -712,9 +793,10 @@ KATO_CLUSTER_MODE=true
 KATO_TEST_MODE=container
 KATO_PROCESSOR_ID=cluster_default_123456_abc
 KATO_API_URL=http://kato-cluster_default_123456_abc:8000
-MONGO_BASE_URL=mongodb://mongo-cluster_default_123456_abc:27017
-QDRANT_URL=http://qdrant-cluster_default_123456_abc:6333
+CLICKHOUSE_HOST=clickhouse-cluster_default_123456_abc
+CLICKHOUSE_PORT=8123
 REDIS_URL=redis://redis-cluster_default_123456_abc:6379
+QDRANT_URL=http://qdrant-cluster_default_123456_abc:6333
 ```
 
 ### Running Tests in CI/CD

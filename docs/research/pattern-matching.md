@@ -443,8 +443,9 @@ self.procs = multiprocessing.cpu_count()
 
 ### Database Considerations
 
-- Patterns are indexed by SHA1 hash for O(1) lookup
-- MongoDB queries use indexed fields
+- Patterns indexed by SHA1 hash for O(1) lookup
+- ClickHouse uses multi-stage filter pipeline (MinHash/LSH)
+- Redis provides fast metadata access
 - Qdrant uses HNSW algorithm for vector similarity
 
 ## See Also

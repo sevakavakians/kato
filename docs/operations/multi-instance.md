@@ -189,7 +189,8 @@ curl http://localhost:8000/processor-3/predictions
 ## Docker Networking
 
 All instances share:
-- **MongoDB**: Single MongoDB instance for all processors
+- **ClickHouse**: Shared ClickHouse instance for pattern storage
+- **Redis**: Shared Redis instance for session management
 - **Docker Network**: `kato-network` for inter-container communication
 
 Each instance has:
@@ -238,9 +239,9 @@ docker-compose down processor-1        # Stops and removes container
 docker-compose down "My Processor"     # Find by name, then remove
 
 # Stop all with options
-docker-compose down --all              # Stop all, prompt for MongoDB
-docker-compose down --all --with-mongo # Stop everything
-docker-compose down --all --no-mongo   # Keep MongoDB running
+docker-compose down --all              # Stop all, prompt for databases
+docker-compose down --all --with-db    # Stop everything including databases
+docker-compose down --all --no-db      # Keep databases running
 
 # Legacy commands still work
 docker-compose down                    # Same as --all

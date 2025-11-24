@@ -180,19 +180,19 @@ STM_MODE=ROLLING
 
 ## Database Optimization
 
-### MongoDB Tuning
+### ClickHouse Tuning
 
 #### Connection Pool Configuration
 
 ```bash
 # Default (small deployments)
-MONGO_CONNECTION_POOL_SIZE=50
+CLICKHOUSE_POOL_SIZE=50
 
 # Medium deployments (5-10 KATO instances)
-MONGO_CONNECTION_POOL_SIZE=100
+CLICKHOUSE_POOL_SIZE=100
 
 # Large deployments (10+ instances)
-MONGO_CONNECTION_POOL_SIZE=200
+CLICKHOUSE_POOL_SIZE=200
 ```
 
 **Calculate Pool Size**:
@@ -206,66 +206,80 @@ Example:
 = 10 × 10 × 1.2 = 120
 ```
 
-#### Index Optimization
+#### Query Optimization
 
-**Create Indexes**:
-```javascript
-// Connect to MongoDB
-use kato
-
-// Pattern indexes
-db.patterns_kb.createIndex({"processor_id": 1, "pattern_hash": 1}, {unique: true})
-db.patterns_kb.createIndex({"processor_id": 1, "frequency": -1})
-db.patterns_kb.createIndex({"processor_id": 1, "created_at": -1})
-db.patterns_kb.createIndex({"processor_id": 1, "length": 1})
-
-// Symbol indexes
-db.symbols_kb.createIndex({"processor_id": 1, "symbol": 1}, {unique: true})
-db.symbols_kb.createIndex({"processor_id": 1, "frequency": -1})
-
-// Compound indexes for common queries
-db.patterns_kb.createIndex({
-  "processor_id": 1,
-  "frequency": -1,
-  "created_at": -1
-})
+**Table Structure** (KATO uses optimized MergeTree tables):
+```sql
+-- Pattern table with optimal partitioning and indexing
+CREATE TABLE kato.patterns (
+    kb_id String,
+    name String,
+    data String,
+    frequency UInt32,
+    created_at DateTime,
+    INDEX kb_name_idx (kb_id, name) TYPE bloom_filter GRANULARITY 1
+) ENGINE = MergeTree()
+PARTITION BY toYYYYMM(created_at)
+ORDER BY (kb_id, name, created_at);
 ```
 
-**Verify Index Usage**:
-```javascript
-// Explain query plan
-db.patterns_kb.find({
-  processor_id: "kato-1",
-  frequency: {$gt: 10}
-}).explain("executionStats")
+**Verify Query Performance**:
+```sql
+-- Explain query plan
+EXPLAIN SELECT * FROM kato.patterns
+WHERE kb_id = 'kato-1' AND frequency > 10;
 
-// Check for collection scans (COLLSCAN)
-// Should see IXSCAN (index scan) instead
+-- Check query statistics
+SELECT
+    query,
+    query_duration_ms,
+    read_rows,
+    memory_usage
+FROM system.query_log
+WHERE type = 'QueryFinish'
+ORDER BY event_time DESC
+LIMIT 10;
 ```
 
-#### WiredTiger Cache Tuning
+#### Memory Configuration
+
+```xml
+<!-- clickhouse-config/config.xml -->
+<clickhouse>
+    <max_memory_usage>8589934592</max_memory_usage> <!-- 8GB -->
+    <max_bytes_before_external_group_by>4294967296</max_bytes_before_external_group_by> <!-- 4GB -->
+    <max_bytes_before_external_sort>4294967296</max_bytes_before_external_sort> <!-- 4GB -->
+</clickhouse>
+```
+
+**Memory Guidelines**:
+```
+ClickHouse Memory = Total RAM × 0.7
+
+Example:
+- 16GB RAM available
+= 16GB × 0.7 = ~11GB for ClickHouse
+```
+
+#### Resource Limits
 
 ```yaml
 # docker-compose.yml
 services:
-  mongo-kb:
-    image: mongo:6.0
-    command: >
-      --wiredTigerCacheSizeGB 4
-      --wiredTigerEngineConfigString="cache_size=4GB"
+  kato-clickhouse:
+    image: clickhouse/clickhouse-server:latest
     deploy:
       resources:
         limits:
-          memory: 6G  # Cache + overhead
-```
-
-**Cache Size Guidelines**:
-```
-Cache Size = (Total RAM × 0.5) - 1GB
-
-Example:
-- 8GB RAM available
-= (8GB × 0.5) - 1GB = 3GB cache
+          cpus: '4.0'
+          memory: 8G
+        reservations:
+          cpus: '2.0'
+          memory: 4G
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
 ```
 
 ### Qdrant Optimization
@@ -418,22 +432,25 @@ Example:
 
 ### Connection Pooling
 
-**MongoDB Connection Pool**:
+**ClickHouse Connection Pool**:
 ```python
-from pymongo import MongoClient
-from pymongo.errors import ConnectionFailure
+from clickhouse_driver import Client
+from urllib.parse import urlparse
 
-client = MongoClient(
-    MONGO_BASE_URL,
-    maxPoolSize=100,  # Max connections
-    minPoolSize=10,   # Min connections maintained
-    maxIdleTimeMS=30000,  # Close idle connections after 30s
-    serverSelectionTimeoutMS=5000,
-    connectTimeoutMS=5000,
-    socketTimeoutMS=30000,
-    retryWrites=True,
-    retryReads=True,
-    w='majority'  # Write concern
+client = Client(
+    host=CLICKHOUSE_HOST,
+    port=CLICKHOUSE_PORT,
+    database=CLICKHOUSE_DB,
+    user=CLICKHOUSE_USER,
+    password=CLICKHOUSE_PASSWORD,
+    settings={
+        'max_execution_time': 60,
+        'send_timeout': 300,
+        'receive_timeout': 300,
+        'max_query_size': 262144,
+        'max_ast_elements': 200000,
+    },
+    compression=True  # Enable compression for better network performance
 )
 ```
 
@@ -755,9 +772,9 @@ k6 run load-test.js
 - [ ] `KATO_USE_INDEXING` enabled
 
 ### Database
-- [ ] MongoDB indexes created
-- [ ] MongoDB connection pool sized appropriately
-- [ ] WiredTiger cache configured (50% of RAM - 1GB)
+- [ ] ClickHouse tables optimized (MergeTree with proper ORDER BY)
+- [ ] ClickHouse connection pool sized appropriately
+- [ ] ClickHouse memory limits configured (70% of RAM)
 - [ ] Qdrant HNSW parameters tuned
 - [ ] Qdrant quantization enabled (if memory-constrained)
 - [ ] Redis persistence configured

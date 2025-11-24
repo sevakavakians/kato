@@ -15,8 +15,8 @@ A **session** is a temporary workspace that contains:
 ### What is a Node?
 
 A **node_id** is a permanent identifier that links to:
-- **Long-term memory (LTM)**: Learned patterns in MongoDB
-- **Vector embeddings**: Stored in Qdrant
+- **Long-term memory (LTM)**: Learned patterns in persistent storage
+- **Vector embeddings**: Stored in vector database
 - **Pattern metadata**: Training history, statistics
 
 ### Session vs Node Comparison
@@ -24,7 +24,7 @@ A **node_id** is a permanent identifier that links to:
 | Aspect | Session (session_id) | Node (node_id) |
 |--------|---------------------|---------------|
 | **Lifetime** | Temporary (hours) | Permanent |
-| **Storage** | Redis (volatile) | MongoDB/Qdrant (persistent) |
+| **Storage** | Redis (volatile) | Persistent database (patterns & vectors) |
 | **Contains** | STM, emotives, config | Patterns, vectors, LTM |
 | **Unique** | Per connection | Shared across sessions |
 | **Expires** | Yes (configurable TTL) | Never (until deleted) |
@@ -143,8 +143,8 @@ Session becomes inaccessible after TTL elapses.
 - Need to create new session
 
 **Data Loss**:
-- ✅ **Patterns (LTM)**: Preserved in MongoDB
-- ✅ **Vectors**: Preserved in Qdrant
+- ✅ **Patterns (LTM)**: Preserved in persistent storage
+- ✅ **Vectors**: Preserved in vector database
 - ❌ **STM**: Lost (not stored in LTM until learned)
 - ❌ **Current emotives**: Lost
 - ❌ **Session config**: Lost (revert to defaults)
@@ -273,14 +273,14 @@ kato.observe(["test"])  # May auto-reconnect transparently
 
 ### Understanding node_id
 
-The `node_id` determines which MongoDB database is used:
+The `node_id` determines which database namespace is used:
 
 ```
 node_id: "chatbot_production"
 ↓
-MongoDB database: "node_chatbot_production_kato"
+Database namespace: "node_chatbot_production_kato"
 ↓
-Collections:
+Stored data:
   - patterns
   - pattern_metadata
   - global_metadata
@@ -312,16 +312,12 @@ kato2.create_session("user_bob")    # DB: node_user_bob_kato
 
 **Avoid**:
 - Special characters (use `_` not `-`)
-- Very long names (MongoDB database name limits)
+- Very long names (database name limits)
 - Spaces or unicode
 
 ### Listing Nodes
 
-```bash
-# MongoDB shell
-docker exec mongo-kb-$USER-1 mongo --eval 'db.adminCommand({listDatabases: 1})' \
-  | grep "node_"
-```
+Node listing requires direct database access or monitoring tools. See deployment documentation for database inspection procedures.
 
 ## Multiple Sessions Same Node
 
@@ -339,7 +335,7 @@ kato2.create_session("shared_knowledge")
 kato2.observe(["event_b"])
 
 # Both sessions:
-# - Share LTM patterns in MongoDB
+# - Share LTM patterns in persistent storage
 # - Have independent STM
 # - Have independent emotives
 # - Can have different configurations
@@ -385,7 +381,7 @@ curl -X PUT http://localhost:8000/sessions/{session_id}/config \
 
 Session configuration is **not persistent**:
 - Lost when session expires
-- Not stored in MongoDB
+- Not stored in database
 - Must be re-specified when creating new session
 
 **Workaround**:
@@ -417,13 +413,9 @@ Redis automatically removes expired sessions based on TTL.
 
 ### Deleting Node Data
 
-To completely remove a node's patterns:
+To completely remove a node's patterns, contact your system administrator or see deployment documentation for data deletion procedures.
 
-```bash
-# WARNING: Deletes all learned patterns!
-docker exec mongo-kb-$USER-1 mongo \
-  --eval 'db.getSiblingDB("node_my_app_kato").dropDatabase()'
-```
+**WARNING**: Deleting node data permanently removes all learned patterns!
 
 ## Best Practices
 

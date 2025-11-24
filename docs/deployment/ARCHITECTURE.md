@@ -55,8 +55,9 @@ KATO uses a distributed architecture with FastAPI services that provide direct a
         └────────────────────┼────────────────────┘
                              ▼
                  ┌──────────────────────┐
-                 │   MongoDB (Shared)   │
-                 │   Qdrant (Shared)    │
+                 │  ClickHouse (Shared) │
+                 │     Redis (Shared)   │
+                 │    Qdrant (Shared)   │
                  └──────────────────────┘
 ```
 
@@ -96,16 +97,22 @@ KATO uses a distributed architecture with FastAPI services that provide direct a
 
 ### 4. Storage Layer
 
-**MongoDB** (Required):
-- Pattern storage with SHA1 hash indexing
-- Long-term memory persistence
-- Metadata storage
-- Database isolation by session_id
+**ClickHouse** (Required):
+- Pattern data storage with multi-stage filter pipeline
+- Billion-scale performance via MinHash/LSH filtering
+- SHA1 hash-based pattern indexing
+- Node isolation via `kb_id` partitioning
 
-**Qdrant** (Optional but Recommended):
-- Vector similarity search
-- HNSW indexing for performance
-- Collection isolation by session_id
+**Redis** (Required):
+- Session management and TTL tracking
+- Pattern metadata (frequency, emotives)
+- Caching layer for performance
+- Key namespacing for isolation
+
+**Qdrant** (Required):
+- Vector similarity search with HNSW indexing
+- 768-dimensional embeddings
+- Collection-level isolation
 
 ## Data Flow
 
@@ -118,15 +125,15 @@ Client → FastAPI → KATO Processor → Short-Term Memory
 
 ### Learning Flow
 ```
-Client → FastAPI → Processor → Pattern Creation → MongoDB Storage
-                        ↓
+Client → FastAPI → Processor → Pattern Creation → ClickHouse Storage
+                        ↓                            + Redis Metadata
                  Frequency Updates
 ```
 
 ### Prediction Flow
 ```
-Client → FastAPI → Processor → Pattern Search → MongoDB/Qdrant
-                        ↓
+Client → FastAPI → Processor → Pattern Search → ClickHouse + Redis + Qdrant
+                        ↓                         (Multi-stage filtering)
                  Temporal Segmentation
                         ↓
                  Ranked Predictions
@@ -146,8 +153,12 @@ services:
     environment:
       - PROCESSOR_ID=primary
       - PROCESSOR_NAME=Primary
-      - MONGO_BASE_URL=mongodb://mongodb:27017
+      - CLICKHOUSE_HOST=clickhouse
+      - CLICKHOUSE_PORT=8123
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
       - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
       - LOG_LEVEL=INFO
     
   # Testing instance  
@@ -191,9 +202,11 @@ Advanced endpoints:
 
 Standard port allocations:
 - **8001**: Primary instance
-- **8002**: Testing instance  
+- **8002**: Testing instance
 - **8003**: Analytics instance
-- **27017**: MongoDB
+- **8123**: ClickHouse HTTP
+- **9000**: ClickHouse Native (optional)
+- **6379**: Redis
 - **6333**: Qdrant
 
 ## Network Architecture
@@ -205,11 +218,14 @@ Standard port allocations:
 ├── FastAPI Services (HTTP/WebSocket)    │
 │   └── Direct processor embedding       │
 │                                        │
-├── MongoDB Container                    │
-│   └── Database isolation by ID         │
+├── ClickHouse Container                 │
+│   └── Database isolation by kb_id      │
 │                                        │
-└── Qdrant Container (Optional)          │
-    └── Collection isolation by ID       │
+├── Redis Container                      │
+│   └── Key namespacing for isolation    │
+│                                        │
+└── Qdrant Container                     │
+    └── Collection isolation by kb_id    │
 ```
 
 ## Security Considerations
@@ -218,8 +234,9 @@ Standard port allocations:
 |-------|------------|
 | API | Rate limiting, input validation |
 | Processor | Isolated by session_id |
-| MongoDB | Database-level isolation |
-| Qdrant | Collection-level isolation |
+| ClickHouse | Database-level isolation via kb_id |
+| Redis | Key namespacing isolation |
+| Qdrant | Collection-level isolation via kb_id |
 | Network | Docker network isolation |
 
 ## Performance Characteristics
@@ -279,9 +296,11 @@ curl http://localhost:8000/metrics
    docker-compose ps
    ```
 
-2. **Database Connection**: Verify MongoDB is running
+2. **Database Connection**: Verify storage services are running
    ```bash
-   docker exec kato-mongodb mongo --eval "db.adminCommand('ping')"
+   docker exec clickhouse clickhouse-client --query "SELECT 1"
+   docker exec redis redis-cli ping
+   docker exec qdrant curl -f http://localhost:6333/health
    ```
 
 3. **Port Conflicts**: Check port usage

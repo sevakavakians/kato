@@ -395,44 +395,49 @@ CORS_CREDENTIALS=true  # Only if you need cookies/auth headers
 
 ## Database Security
 
-### MongoDB Authentication
+### ClickHouse Authentication
 
-**Enable Authentication**:
+**Enable Authentication** (Optional - ClickHouse can run without auth for internal networks):
 ```bash
-# Create admin user
-docker exec -it mongo-kb mongo admin
-> db.createUser({
-    user: "admin",
-    pwd: "secure_password_here",
-    roles: ["root"]
-  })
-
-# Create KATO user
-> use kato
-> db.createUser({
-    user: "kato_user",
-    pwd: "kato_password_here",
-    roles: [
-      { role: "readWrite", db: "kato" }
-    ]
-  })
+# Create users.xml configuration
+cat > clickhouse-config/users.xml <<EOF
+<clickhouse>
+    <users>
+        <kato_user>
+            <password>secure_password_here</password>
+            <networks>
+                <ip>::/0</ip>
+            </networks>
+            <profile>default</profile>
+            <quota>default</quota>
+            <databases>
+                <database>kato</database>
+            </databases>
+        </kato_user>
+    </users>
+</clickhouse>
+EOF
 ```
 
 **Docker Compose with Authentication**:
 ```yaml
 services:
-  mongo-kb:
-    image: mongo:6.0
+  kato-clickhouse:
+    image: clickhouse/clickhouse-server:latest
     environment:
-      MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: secure_password_here
-    command: --auth
+      CLICKHOUSE_USER: kato_user
+      CLICKHOUSE_PASSWORD: secure_password_here
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
     volumes:
-      - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+      - ./clickhouse-config/users.xml:/etc/clickhouse-server/users.d/users.xml:ro
 
   kato:
     environment:
-      MONGO_BASE_URL: mongodb://kato_user:kato_password_here@mongo-kb:27017/kato?authSource=kato
+      CLICKHOUSE_HOST: kato-clickhouse
+      CLICKHOUSE_PORT: 8123
+      CLICKHOUSE_DB: kato
+      CLICKHOUSE_USER: kato_user
+      CLICKHOUSE_PASSWORD: secure_password_here
 ```
 
 **Kubernetes Secret**:
@@ -440,35 +445,28 @@ services:
 apiVersion: v1
 kind: Secret
 metadata:
-  name: mongodb-secret
+  name: clickhouse-secret
   namespace: kato
 type: Opaque
 stringData:
   username: kato_user
   password: kato_password_here
-  connection_string: mongodb://kato_user:kato_password_here@mongo-kb:27017/kato?authSource=kato
+  database: kato
 ```
 
-### MongoDB Encryption at Rest
+### ClickHouse Encryption at Rest
 
-**Enable Encryption** (MongoDB Enterprise):
+**Enable Encryption** (ClickHouse supports encryption via filesystem-level encryption):
 ```yaml
-# docker-compose.yml
-services:
-  mongo-kb:
-    command: >
-      --enableEncryption
-      --encryptionKeyFile /data/keyfile
-      --auth
-    volumes:
-      - ./mongodb-keyfile:/data/keyfile:ro
+# Use encrypted volumes at the infrastructure level
+# Or use ClickHouse built-in encryption for specific columns:
+# CREATE TABLE patterns (
+#     name String,
+#     data String CODEC(AES_128_GCM_SIV)
+# ) ENGINE = MergeTree()
 ```
 
-**Generate Key File**:
-```bash
-openssl rand -base64 32 > mongodb-keyfile
-chmod 600 mongodb-keyfile
-```
+**Note**: For production, use filesystem-level encryption (LUKS, dm-crypt) or cloud provider encryption (AWS EBS, GCP persistent disks) for ClickHouse data volumes.
 
 ### Redis Security
 
@@ -540,7 +538,7 @@ services:
       - kato-frontend
       - kato-backend
 
-  mongo-kb:
+  kato-clickhouse:
     networks:
       - kato-backend  # Only accessible by KATO
 
@@ -597,14 +595,16 @@ spec:
     ports:
     - protocol: UDP
       port: 53
-  # Allow MongoDB
+  # Allow ClickHouse
   - to:
     - podSelector:
         matchLabels:
-          app: mongo-kb
+          app: kato-clickhouse
     ports:
     - protocol: TCP
-      port: 27017
+      port: 8123
+    - protocol: TCP
+      port: 9000
   # Allow Qdrant
   - to:
     - podSelector:
@@ -659,8 +659,8 @@ metadata:
   namespace: kato
 type: Opaque
 stringData:
-  MONGO_USERNAME: kato_user
-  MONGO_PASSWORD: secure_mongo_password
+  CLICKHOUSE_USER: kato_user
+  CLICKHOUSE_PASSWORD: secure_clickhouse_password
   REDIS_PASSWORD: secure_redis_password
   QDRANT_API_KEY: secure_qdrant_key
   API_KEYS: key1,key2,key3
@@ -728,7 +728,7 @@ def get_secret(secret_name: str) -> dict:
 
 # Load secrets at startup
 secrets = get_secret('kato/production/credentials')
-os.environ['MONGO_PASSWORD'] = secrets['mongo_password']
+os.environ['CLICKHOUSE_PASSWORD'] = secrets['clickhouse_password']
 os.environ['API_KEYS'] = secrets['api_keys']
 ```
 
@@ -786,15 +786,32 @@ async def create_session(request: Request):
 
 ### Enable Audit Logging
 
-**MongoDB Audit Log** (Enterprise):
-```yaml
-services:
-  mongo-kb:
-    command: >
-      --auditDestination file
-      --auditFormat JSON
-      --auditPath /var/log/mongodb/audit.json
-      --auditFilter '{"atype": {"$in": ["authenticate", "authCheck"]}}'
+**ClickHouse Audit Log**:
+```xml
+<!-- clickhouse-config/config.xml -->
+<clickhouse>
+    <query_log>
+        <database>system</database>
+        <table>query_log</table>
+        <partition_by>toYYYYMM(event_date)</partition_by>
+        <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    </query_log>
+</clickhouse>
+```
+
+**Query audit logs**:
+```sql
+SELECT
+    event_time,
+    user,
+    query,
+    query_duration_ms,
+    read_rows,
+    written_rows
+FROM system.query_log
+WHERE type = 'QueryFinish'
+ORDER BY event_time DESC
+LIMIT 100;
 ```
 
 **KATO Audit Logging**:

@@ -74,7 +74,7 @@ See [Docker Deployment](../operations/docker-deployment.md).
 | Aspect | session_id | node_id |
 |--------|------------|---------|
 | **Lifetime** | Temporary (hours) | Permanent |
-| **Storage** | Redis (volatile) | MongoDB/Qdrant (persistent) |
+| **Storage** | Redis (volatile) | Persistent database (patterns & vectors) |
 | **Contains** | STM, emotives | Patterns, vectors |
 | **Expires** | Yes (TTL) | No |
 
@@ -82,10 +82,10 @@ See [Docker Deployment](../operations/docker-deployment.md).
 
 ### Do my patterns persist when session expires?
 
-**Yes!** Patterns are permanently stored in MongoDB.
+**Yes!** Patterns are permanently stored persistently.
 
 - ✅ **Patterns (LTM)**: Preserved forever
-- ✅ **Vectors**: Preserved in Qdrant
+- ✅ **Vectors**: Preserved
 - ❌ **STM**: Lost (unless learned)
 - ❌ **Current emotives**: Lost
 
@@ -110,25 +110,16 @@ Use case: Multi-user app where all users share trained patterns.
 
 ### How do I backup my data?
 
-```bash
-# Backup MongoDB (patterns)
-docker exec mongo-kb-$USER-1 mongodump --out /backup
-docker cp mongo-kb-$USER-1:/backup ./kato-backup
-
-# Backup Qdrant (vectors) - optional
-docker cp qdrant-kb-$USER-1:/qdrant/storage ./qdrant-backup
-```
+Contact your system administrator to backup pattern data. KATO stores patterns and vectors in persistent databases that should be included in regular backup procedures.
 
 ### How do I delete all data?
 
 ```bash
-# Delete specific node's patterns
-docker exec mongo-kb-$USER-1 mongo \
-  --eval 'db.getSiblingDB("node_my_app_kato").dropDatabase()'
-
 # Delete ALL data (WARNING: permanent)
 docker-compose down -v
 ```
+
+For more granular data deletion, contact your system administrator.
 
 ## Patterns and Learning
 
@@ -148,7 +139,7 @@ See [Pattern Learning](pattern-learning.md).
 1. Send observations to build STM
 2. Call `/learn` endpoint (or auto-learn)
 3. KATO converts STM to pattern
-4. Pattern stored in MongoDB with unique hash name
+4. Pattern stored persistently with unique hash name
 
 See [Pattern Learning](pattern-learning.md).
 
@@ -179,10 +170,10 @@ kato.observe(["user:alice"])
 
 ### How many patterns can KATO handle?
 
-**Tested up to billions** with ClickHouse hybrid architecture. Performance:
+**Tested up to billions**. Performance:
 - **1K patterns**: Instant
 - **100K patterns**: <100ms
-- **1M+ patterns**: Requires optimization (indexing, ClickHouse)
+- **1M+ patterns**: Requires optimization (indexing)
 
 See [Performance Tuning](../operations/performance-tuning.md).
 
@@ -213,15 +204,15 @@ Common causes:
 1. **No matching patterns**: Nothing learned yet or wrong `node_id`
 2. **Threshold too high**: Lower `recall_threshold` (default: 0.1)
 3. **STM empty**: Send observations first
-4. **Patterns expired**: Check MongoDB has patterns
+4. **Patterns missing**: Check database has patterns
 
 **Debug**:
 ```bash
-# Check patterns exist
-docker exec mongo-kb-$USER-1 mongo node_my_app_kato --eval 'db.patterns.count()'
-
 # Lower threshold
 curl -X POST .../sessions -d '{"node_id": "...", "config": {"recall_threshold": 0.1}}'
+
+# Check patterns via API
+curl http://localhost:8000/sessions/{session_id}/patterns
 ```
 
 ### How do I improve prediction accuracy?
@@ -297,7 +288,7 @@ See [Performance Tuning](../operations/performance-tuning.md).
 ### Why are predictions slow?
 
 Common causes:
-1. **Too many patterns**: Enable indexing, use ClickHouse
+1. **Too many patterns**: Enable indexing
 2. **Low threshold**: Raises `recall_threshold`
 3. **Character matching**: Switch to `use_token_matching: true`
 4. **Large max_predictions**: Lower `max_predictions`
@@ -305,7 +296,7 @@ Common causes:
 ### Can KATO scale horizontally?
 
 **Yes!** Multiple KATO instances can:
-- Share MongoDB/Qdrant (read-only patterns)
+- Share persistent storage (read-only patterns)
 - Have isolated sessions (Redis)
 - Load balance via reverse proxy
 
@@ -332,8 +323,8 @@ See [Session Management](session-management.md#handling-session-expiry).
 docker-compose logs kato
 
 # Common fixes:
-# 1. Ensure MongoDB/Qdrant running
-docker-compose up -d mongo-kb qdrant-kb
+# 1. Ensure databases running
+docker-compose up -d
 
 # 2. Rebuild without cache
 docker-compose build --no-cache kato
@@ -401,7 +392,7 @@ No, REST API only. Use a GraphQL wrapper if needed.
 ### Can I run KATO serverless?
 
 Not recommended. KATO requires:
-- Persistent databases (MongoDB, Qdrant)
+- Persistent databases
 - Stateful sessions (Redis)
 - Continuous availability
 
@@ -409,14 +400,11 @@ Use containerized deployment instead.
 
 ## Advanced Topics
 
-### What's the ClickHouse hybrid architecture?
+### What's the hybrid architecture?
 
-**MongoDB + ClickHouse hybrid** for billion-scale patterns:
-- **MongoDB**: Write path (new patterns)
-- **ClickHouse**: Read path (queries)
-- **Automatic sync**: Background migration
+KATO uses a hybrid architecture for billion-scale patterns with optimized read and write paths.
 
-See [Hybrid Architecture](../integration/architecture-patterns.md).
+See [Hybrid Architecture](../HYBRID_ARCHITECTURE.md) for details.
 
 ### Can I use KATO for streaming data?
 

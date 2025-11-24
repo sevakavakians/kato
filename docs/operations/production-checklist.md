@@ -9,7 +9,7 @@ Comprehensive checklist for deploying KATO to production environments.
 #### Hardware/Cloud Resources
 - [ ] **Compute**: Minimum 4 CPU cores per KATO instance
 - [ ] **Memory**: Minimum 4GB RAM per KATO instance
-- [ ] **Storage**: 50GB+ for databases (MongoDB, Qdrant, Redis)
+- [ ] **Storage**: 50GB+ for databases (ClickHouse, Qdrant, Redis)
 - [ ] **Network**: 100Mbps+ bandwidth, <10ms internal latency
 - [ ] **Backup Storage**: 200GB+ for backup retention
 
@@ -33,7 +33,7 @@ Comprehensive checklist for deploying KATO to production environments.
 
 #### Authentication & Authorization
 - [ ] **API keys** generated and secured
-- [ ] **Database authentication** enabled (MongoDB, Redis)
+- [ ] **Database authentication** enabled (ClickHouse, Redis)
 - [ ] **Secret management** configured (Kubernetes secrets, Vault, etc.)
 - [ ] **Environment variables** secured (no secrets in git)
 - [ ] **User authentication** implemented if required
@@ -63,10 +63,10 @@ Comprehensive checklist for deploying KATO to production environments.
 - [ ] **KATO_USE_INDEXING** enabled
 
 #### Database Configuration
-- [ ] **MongoDB** connection URL configured
-- [ ] **MongoDB** connection pool size configured (50-100)
-- [ ] **MongoDB** indexes created and verified
-- [ ] **MongoDB** replica set configured (if high availability)
+- [ ] **ClickHouse** host and port configured
+- [ ] **ClickHouse** database created and initialized
+- [ ] **ClickHouse** tables created with proper schemas
+- [ ] **ClickHouse** cluster configured (if high availability)
 - [ ] **Qdrant** host and port configured
 - [ ] **Qdrant** collection settings optimized
 - [ ] **Redis** connection URL configured
@@ -110,7 +110,7 @@ Comprehensive checklist for deploying KATO to production environments.
 #### Metrics Collection
 - [ ] **Prometheus** or equivalent metrics system configured
 - [ ] **KATO metrics endpoint** (/metrics) exposed
-- [ ] **Database metrics** collected (MongoDB, Qdrant, Redis)
+- [ ] **Database metrics** collected (ClickHouse, Qdrant, Redis)
 - [ ] **System metrics** collected (CPU, memory, disk, network)
 - [ ] **Application metrics** collected (request rate, latency, errors)
 - [ ] **Custom business metrics** configured
@@ -146,7 +146,7 @@ Comprehensive checklist for deploying KATO to production environments.
 - [ ] **Backup retention** policy defined (30-90 days)
 - [ ] **Off-site backup storage** configured
 - [ ] **Backup encryption** enabled
-- [ ] **MongoDB backup** strategy implemented
+- [ ] **ClickHouse backup** strategy implemented
 - [ ] **Qdrant backup** strategy implemented
 - [ ] **Redis backup** strategy implemented (if critical)
 
@@ -234,9 +234,9 @@ Comprehensive checklist for deploying KATO to production environments.
 ### Deployment
 
 #### Database Deployment
-- [ ] **MongoDB** deployed and initialized
-- [ ] **MongoDB** indexes created
-- [ ] **MongoDB** connection tested
+- [ ] **ClickHouse** deployed and initialized
+- [ ] **ClickHouse** tables created
+- [ ] **ClickHouse** connection tested
 - [ ] **Qdrant** deployed and initialized
 - [ ] **Qdrant** connection tested
 - [ ] **Redis** deployed and initialized
@@ -330,11 +330,11 @@ Comprehensive checklist for deploying KATO to production environments.
 # Check KATO health
 curl https://kato.yourdomain.com/health
 
-# Check MongoDB
-docker exec mongo-kb mongo --eval "db.adminCommand('ping')"
+# Check ClickHouse
+curl "http://kato-clickhouse:8123/?query=SELECT%201"
 
 # Check Qdrant
-curl https://kato.yourdomain.com:6333/
+curl http://qdrant-kb:6333/
 
 # Check Redis
 docker exec redis-kb redis-cli ping

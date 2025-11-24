@@ -32,7 +32,7 @@ Every learned structure in KATO is identified by a unique hash: `PTRN|<sha1_hash
 🔄 **Stateful Processing** - Maintains context across observations  
 🎪 **Vector Database** - Modern vector search with Qdrant (10-100x faster)  
 👥 **Multi-User Sessions** - Complete STM isolation per user session  
-💾 **Write Guarantees** - MongoDB majority write concern prevents data loss  
+💾 **Write Guarantees** - ClickHouse and Redis ensure data durability  
 🔐 **Session Management** - Redis-backed sessions with TTL and isolation  
 📊 **Session Isolation** - Each session has completely isolated state  
 
@@ -42,7 +42,7 @@ Every learned structure in KATO is identified by a unique hash: `PTRN|<sha1_hash
 
 Combining KATO with black box stochastic processes such as Generative Pre-trained Transformer (GPT) models, Large Language Models (LLMs), Small Language Models (SLMs), and GPT-based reasoning models provides a layer of governance and control. These stochastic machine learning models suffer from issues like hallucinations, inconsistent outputs, hidden biases, high training and operational costs, and no assurances for guardrails or remediation attempts.
 
-KATO provides a deterministic machine learning algorithm that learns context + action + outcome patterns, effectively caching for reduced calls to expensive models. Additionally, it stores these patterns in a traceable database (typically MongoDB) allowing both real-time learning and updates. If an action taken by the agent needs to be corrected so that it isn't repeated given the same or similar context, the database can simply be edited with an alternative action.
+KATO provides a deterministic machine learning algorithm that learns context + action + outcome patterns, effectively caching for reduced calls to expensive models. Additionally, it stores these patterns in a traceable database (ClickHouse) allowing both real-time learning and updates. If an action taken by the agent needs to be corrected so that it isn't repeated given the same or similar context, the database can simply be edited with an alternative action.
 
 ## Performance Optimizations
 
@@ -57,7 +57,7 @@ KATO has been extensively optimized for production use with comprehensive perfor
 ### 🔧 Optimization Features
 - **Bloom Filter Pre-screening**: O(1) pattern candidate filtering eliminates 99% of unnecessary computations
 - **Redis Pattern Caching**: 80-90% cache hit rate for frequently accessed patterns
-- **MongoDB Aggregation Pipelines**: Server-side filtering and sorting reduces data transfer by 60%
+- **ClickHouse Filter Pipeline**: Multi-stage filtering (MinHash/LSH/Bloom) for billion-scale performance
 - **Connection Pool Optimization**: 60-80% reduction in connection overhead
 - **Distributed STM Management**: Redis Streams for scalable state coordination
 - **Async Parallel Processing**: Multi-core pattern matching with AsyncIO
@@ -84,7 +84,7 @@ See `docs/archive/optimizations/` for detailed benchmarks and implementation det
 - Docker and Docker Compose
 - Python 3.9+ (for local development)
 - 4GB+ RAM recommended
-- MongoDB (auto-started with Docker)
+- ClickHouse (auto-started with Docker)
 - Qdrant Vector Database (auto-started with Docker)
 - Redis (auto-started with Docker)
 
@@ -154,12 +154,12 @@ cd kato
 
 ### 2. Start Services
 ```bash
-# Start all services (includes MongoDB, Qdrant, Redis, KATO)
+# Start all services (includes ClickHouse, Qdrant, Redis, KATO)
 ./start.sh
 
 # Services will be available at:
 # - KATO Service: http://localhost:8000
-# - MongoDB: mongodb://localhost:27017
+# - ClickHouse: http://localhost:8123
 # - Qdrant: http://localhost:6333
 # - Redis: redis://localhost:6379
 ```
@@ -199,7 +199,7 @@ curl http://localhost:8000/sessions/$SESSION/stm
 
 **💾 Data Persistence Note:**
 - Your `node_id` ("alice") is your **persistent identifier** - using the same `node_id` later will reconnect to all trained patterns
-- Sessions (STM, emotives) are temporary and expire, but learned patterns in MongoDB persist forever
+- Sessions (STM, emotives) are temporary and expire, but learned patterns in ClickHouse persist forever
 - See [Database Persistence Guide](docs/users/database-persistence.md) for complete details
 
 #### Option B: Default Session API (backwards compatible)
@@ -396,7 +396,7 @@ KATO uses a simplified FastAPI architecture with embedded processors:
 ```
 Client Request → FastAPI Service (Port 8000) → Embedded KATO Processor
                            ↓                                    ↓
-                    Async Processing              MongoDB, Qdrant & Redis
+                    Async Processing              ClickHouse, Qdrant & Redis
                            ↓                       (Isolated by session_id)
                     JSON Response
 ```
@@ -411,7 +411,7 @@ Client Request → FastAPI Service (Port 8000) → Embedded KATO Processor
 ### Session Isolation
 Each session maintains complete isolation:
 - **Redis**: Session state isolated by session_id
-- **MongoDB**: Patterns isolated by session context
+- **ClickHouse**: Patterns isolated by kb_id partitioning
 - **Qdrant**: Vectors isolated by session collection
 - **In-Memory**: Per-session caches and state
 
@@ -423,7 +423,9 @@ KATO uses environment variables for configuration with Pydantic-based validation
 
 ```bash
 # Database
-MONGO_BASE_URL="mongodb://localhost:27017"
+CLICKHOUSE_HOST="localhost"
+CLICKHOUSE_PORT=8123
+CLICKHOUSE_DB="kato"
 QDRANT_HOST="localhost"
 REDIS_URL="redis://localhost:6379/0"
 
@@ -525,7 +527,7 @@ See [Performance Guide](docs/technical/PERFORMANCE.md) for optimization.
 ```bash
 # Check if ports are in use
 lsof -i :8000
-lsof -i :27017
+lsof -i :8123
 lsof -i :6333
 lsof -i :6379
 
@@ -558,23 +560,23 @@ docker volume prune -f
 ./start.sh
 ```
 
-#### MongoDB Init Container Exits After Startup
-**This is expected behavior.** The `mongodb-init` container is designed to:
-1. Start up when MongoDB is ready
-2. Initialize the MongoDB replica set configuration
+#### ClickHouse Init Container Exits After Startup
+**This is expected behavior.** The `clickhouse-init` container is designed to:
+1. Start up when ClickHouse is ready
+2. Initialize the ClickHouse database schema
 3. Exit successfully (with status code 0)
 4. Remain in "Exited" state
 
 This is an initialization container that only needs to run once. You can verify it completed successfully:
 ```bash
 # Check exit status (should show "Exited (0)")
-docker ps -a | grep mongodb-init
+docker ps -a | grep clickhouse-init
 
 # View initialization logs
-docker logs kato-mongodb-init
+docker logs kato-clickhouse-init
 ```
 
-The main MongoDB container (`kato-mongodb`) will continue running normally. Only the init container stops after completing its setup task.
+The main ClickHouse container (`kato-clickhouse`) will continue running normally. Only the init container stops after completing its setup task.
 
 See [Troubleshooting Guide](docs/technical/TROUBLESHOOTING.md) for more solutions.
 
@@ -609,7 +611,7 @@ Like GAIuS before it, KATO adheres to [ExCITE AI](https://medium.com/@sevakavaki
   - Pattern fragmentation equals -1
   - Total ensemble pattern frequencies equal 0 (when no patterns match)
   - State is empty in normalized entropy calculations
-  - MongoDB metadata documents are missing
+  - Redis metadata keys are missing
 - **Improved Error Handling**: Errors now provide detailed context instead of being masked with defaults
 - **Enhanced Recall Threshold**: Better handling of threshold=0.0 for comprehensive pattern matching
 

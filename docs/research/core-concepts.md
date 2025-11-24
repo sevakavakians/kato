@@ -147,33 +147,33 @@ stm = deque([
 
 **Purpose**: Persistent storage of learned patterns
 
-**Storage**: MongoDB with indexed collections
+**Storage**: ClickHouse (pattern data) + Redis (metadata/cache)
 
 **Structure**:
-```javascript
-{
-  _id: "PTN|a1b2c3d4e5f6",
-  length: 3,
-  events: [
+```python
+pattern = {
+  "name": "PTN|a1b2c3d4e5f6",
+  "length": 3,
+  "events": [
     ["morning", "coffee"],
     ["commute", "train"],
     ["work", "arrive"]
   ],
-  emotive_profile: {
-    energy: [[-0.2], [0.0], [0.5]]
+  "emotive_profile": {
+    "energy": [[-0.2], [0.0], [0.5]]
   },
-  metadata: {},
-  frequency: 42,
-  created_at: ISODate("2025-11-13"),
-  updated_at: ISODate("2025-11-13")
+  "metadata": {},
+  "frequency": 42,
+  "created_at": "2025-11-13T00:00:00Z",
+  "updated_at": "2025-11-13T00:00:00Z"
 }
 ```
 
 **Operations**:
-- **Store**: Add new patterns
-- **Update**: Increment frequency counters
-- **Query**: Retrieve matching patterns
-- **Search**: Find similar patterns
+- **Store**: Add new patterns (ClickHouse)
+- **Update**: Increment frequency counters (Redis)
+- **Query**: Retrieve matching patterns (multi-stage filter)
+- **Search**: Find similar patterns (hybrid search)
 
 ## Determinism
 

@@ -789,9 +789,9 @@ For complete list of environment variables, see [Environment Variables Reference
 - `LOG_FORMAT`: json, human
 
 **Database**:
-- `MONGO_BASE_URL`: mongodb://host:port
 - `QDRANT_HOST`: qdrant host
 - `REDIS_URL`: redis://host:port/db
+- `CLICKHOUSE_HOST`: clickhouse host
 
 **Learning**:
 - `MAX_PATTERN_LENGTH`: Auto-learn length (0 = manual)
@@ -814,7 +814,7 @@ environment: production
 log_level: INFO
 
 database:
-  mongo_base_url: mongodb://mongo-cluster:27017
+  clickhouse_host: clickhouse-cluster
   qdrant_host: qdrant-cluster
   redis_url: redis://redis-cluster:6379/0
 
@@ -863,7 +863,7 @@ docker-compose logs kato | grep "Configuration warning"
 ```
 
 **Common Warnings**:
-- Using localhost MongoDB in production
+- Using localhost databases in production
 - CORS allows all origins in production
 - Auto-learning with unlimited pattern length
 - Large batch size may cause memory issues

@@ -230,7 +230,7 @@ Did any change break backward compatibility?
 
 **Example changes:**
 - Fixed pattern matching calculation bug
-- Optimized MongoDB query performance
+- Optimized ClickHouse query performance
 - Updated README documentation
 - Fixed test flakiness
 

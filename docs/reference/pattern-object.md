@@ -4,7 +4,7 @@ Complete specification for KATO pattern data structures.
 
 ## Overview
 
-Patterns are learned sequences stored in MongoDB as long-term memory (LTM). Each pattern represents knowledge extracted from observations.
+Patterns are learned sequences stored in ClickHouse as long-term memory (LTM). Each pattern represents knowledge extracted from observations.
 
 ## Pattern Structure
 
@@ -175,7 +175,7 @@ pattern_name = learn()
 ### 3. Retrieval
 
 ```bash
-GET /pattern/PTRN|abc123...?node_id=user_alice
+GET /pattern/PTRN|abc123...?kb_id=user_alice
 ```
 
 **Response**:
@@ -189,40 +189,41 @@ GET /pattern/PTRN|abc123...?node_id=user_alice
     "emotives": {...},
     "metadata": {...}
   },
-  "node_id": "user_alice"
+  "kb_id": "user_alice"
 }
 ```
 
 ## Storage
 
-### MongoDB
+### ClickHouse
 
-**Database**: Per `node_id` (e.g., `node_user_alice`)
+**Database**: Shared `kato` database
 
-**Collection**: `patterns`
+**Table**: `patterns` (partitioned by `kb_id`)
 
-**Index**: Unique index on `name` field
+**Index**: Primary key on `(kb_id, name)` with Bloom filter
 
-**Document**:
+**Row**:
 
-```json
-{
-  "_id": ObjectId("..."),
-  "name": "PTRN|abc123...",
-  "data": [...],
-  "frequency": 5,
-  "emotives": {...},
-  "metadata": {...},
-  "created_at": "2025-11-13T12:00:00Z",
-  "updated_at": "2025-11-13T14:30:00Z"
-}
+```sql
+SELECT * FROM patterns WHERE kb_id='user_alice' AND name='abc123...'
+
+-- Returns:
+-- name: "abc123..."
+-- kb_id: "user_alice"
+-- data: [["login"],["dashboard"],["logout"]]
+-- frequency: 5
+-- emotives: '{"confidence":[0.8,0.9,0.7]}'
+-- metadata: '{"source":["web","mobile"]}'
+-- created_at: "2025-11-13 12:00:00"
+-- updated_at: "2025-11-13 14:30:00"
 ```
 
 ### Qdrant (Vectors)
 
 If pattern contains vector-derived symbols (`VCTR|hash`):
 
-**Collection**: `vectors_<node_id>`
+**Collection**: `vectors_<kb_id>`
 
 **Vector Storage**: 768-dimensional embeddings
 

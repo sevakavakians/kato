@@ -19,12 +19,15 @@ Complete reference for all KATO environment variables.
 
 ## Database Configuration
 
-### MongoDB
+### ClickHouse
 
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
-| `MONGO_BASE_URL` | string | `mongodb://localhost:27017` | MongoDB connection URL |
-| `MONGO_TIMEOUT` | integer | `5000` | Connection timeout in milliseconds (1000-30000) |
+| `CLICKHOUSE_HOST` | string | `localhost` | ClickHouse host address |
+| `CLICKHOUSE_PORT` | integer | `8123` | ClickHouse HTTP port (8123) or native port (9000) |
+| `CLICKHOUSE_DB` | string | `kato` | ClickHouse database name |
+| `CLICKHOUSE_USER` | string | `default` | ClickHouse username |
+| `CLICKHOUSE_PASSWORD` | string | `` | ClickHouse password (optional) |
 
 ### Qdrant
 
@@ -44,13 +47,6 @@ Complete reference for all KATO environment variables.
 | `REDIS_PORT` | integer | `6379` | Redis port (deprecated) |
 | `REDIS_ENABLED` | boolean | `false` | Enable Redis caching |
 
-### ClickHouse (Hybrid Architecture)
-
-| Variable | Type | Default | Description |
-|----------|------|---------|-------------|
-| `CLICKHOUSE_HOST` | string | `localhost` | ClickHouse host address |
-| `CLICKHOUSE_PORT` | integer | `8123` | ClickHouse HTTP port |
-| `CLICKHOUSE_DB` | string | `kato` | ClickHouse database name |
 
 ## Learning Configuration
 
@@ -97,7 +93,9 @@ Complete reference for all KATO environment variables.
 # .env.development
 LOG_LEVEL=DEBUG
 LOG_FORMAT=human
-MONGO_BASE_URL=mongodb://localhost:27017
+CLICKHOUSE_HOST=localhost
+CLICKHOUSE_PORT=8123
+CLICKHOUSE_DB=kato
 QDRANT_HOST=localhost
 REDIS_URL=redis://localhost:6379/0
 MAX_PATTERN_LENGTH=0
@@ -110,7 +108,9 @@ RECALL_THRESHOLD=0.1
 # .env.production
 LOG_LEVEL=INFO
 LOG_FORMAT=json
-MONGO_BASE_URL=mongodb://mongo-cluster:27017
+CLICKHOUSE_HOST=clickhouse-cluster
+CLICKHOUSE_PORT=8123
+CLICKHOUSE_DB=kato
 QDRANT_HOST=qdrant-cluster
 REDIS_URL=redis://redis-cluster:6379/0
 MAX_PATTERN_LENGTH=10

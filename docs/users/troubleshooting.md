@@ -252,10 +252,11 @@ docker stats kato-api-${USER}-1
 # Increase if needed in docker-compose.yml
 ```
 
-3. Verify MongoDB connection:
+3. Verify database connections:
 ```bash
-docker logs mongo-kb-${USER}-1
-docker exec mongo-kb-${USER}-1 mongo --eval "db.adminCommand('ping')"
+# Check database services are running
+docker-compose ps
+docker-compose logs
 ```
 
 ### API Issues
@@ -424,38 +425,6 @@ docker stats --no-stream
 curl -X POST http://localhost:8000/clear-all
 ```
 
-### MongoDB Issues
-
-#### Connection Failed
-
-**Symptoms:**
-- "MongoDB connection refused"
-- "Unable to connect to database"
-
-**Solutions:**
-
-1. Check MongoDB container:
-```bash
-docker ps | grep mongo
-docker logs mongo-kb-${USER}-1
-```
-
-2. Test connection:
-```bash
-docker exec mongo-kb-${USER}-1 mongo --eval "db.version()"
-```
-
-3. Restart MongoDB:
-```bash
-docker restart mongo-kb-${USER}-1
-```
-
-4. Check data volume:
-```bash
-docker volume ls | grep mongo
-docker volume inspect kato-mongo-data
-```
-
 ### Testing Issues (Clustered Test Harness)
 
 #### Clustered Tests Not Running
@@ -494,7 +463,7 @@ cat tests/tests/fixtures/test_clusters.py | grep test_patterns
 #### Database Connection Issues in Tests
 
 **Symptoms:**
-- Tests timeout connecting to MongoDB/Qdrant
+- Tests timeout connecting to databases
 - "Connection refused" errors
 - Tests hang at database operations
 
@@ -512,12 +481,13 @@ docker inspect kato-cluster_default_<id> | grep NetworkMode
 
 3. Verify database containers are running:
 ```bash
-docker ps | grep -E "(mongo|qdrant|redis)-cluster"
+docker ps | grep cluster
+docker-compose ps
 ```
 
 4. Check environment variables in test container:
 ```bash
-docker exec <test-container> env | grep -E "(MONGO|QDRANT|REDIS)"
+docker exec <test-container> env | grep -E "(QDRANT|REDIS|CLICKHOUSE)"
 ```
 
 #### Result Aggregation Shows Zero
@@ -771,26 +741,19 @@ docker-compose build
 
 ### Data Recovery
 
-```bash
-# Backup MongoDB data
-docker exec mongo-kb-${USER}-1 mongodump --out /backup
-docker cp mongo-kb-${USER}-1:/backup ./mongo-backup
-
-# Restore MongoDB data
-docker cp ./mongo-backup mongo-kb-${USER}-1:/restore
-docker exec mongo-kb-${USER}-1 mongorestore /restore
-```
+Contact your system administrator to restore data from backups. KATO's persistent databases should be included in regular backup procedures.
 
 ### Emergency Shutdown
 
 ```bash
 # Force stop all KATO containers
 docker stop $(docker ps -q --filter "name=kato")
-docker stop $(docker ps -q --filter "name=mongo-kb")
 
 # Remove all KATO containers
 docker rm -f $(docker ps -aq --filter "name=kato")
-docker rm -f $(docker ps -aq --filter "name=mongo-kb")
+
+# Or use docker-compose
+docker-compose down
 ```
 
 ## Diagnostic Scripts
@@ -813,9 +776,6 @@ docker ps | grep -q kato && echo "Running" || echo "Not Running"
 
 echo -n "KATO Testing: "
 docker ps | grep -q kato-testing && echo "Running" || echo "Not Running"
-
-echo -n "MongoDB Container: "
-docker ps | grep -q kato-mongodb && echo "Running" || echo "Not Running"
 
 # Check API
 echo -n "API Health: "
@@ -907,8 +867,8 @@ docker-compose version
 docker logs kato --tail 1000 > kato.log
 docker logs kato-testing --tail 1000 > kato-testing.log
 
-# MongoDB logs
-docker logs kato-mongodb --tail 1000 > mongo.log
+# Database logs
+docker-compose logs --tail 1000 > database.log
 
 # Container details
 docker inspect kato > container-primary.json

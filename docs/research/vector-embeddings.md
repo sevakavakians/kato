@@ -267,7 +267,7 @@ def form_pattern_with_vectors(observations):
     1. Convert vectors to symbols
     2. Store vectors in Qdrant
     3. Create pattern with vector symbols
-    4. Store pattern in MongoDB
+    4. Store pattern in persistent storage
     """
     events = []
 
@@ -298,7 +298,7 @@ Two-stage matching process:
 
 **Stage 1: Symbolic Filter**
 ```python
-# Fast symbolic query in MongoDB
+# Fast symbolic query in pattern database
 candidates = kb.find_patterns({
     "events": {"$elemMatch": {"$in": ["VCTR|a1b2c3"]}}
 })

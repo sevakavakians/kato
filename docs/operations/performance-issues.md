@@ -93,33 +93,41 @@ curl http://localhost:8000/sessions/{session_id}/predictions | jq '.present | le
 
 **Symptoms**:
 - Slow database operations in logs
-- High MongoDB CPU
-- Missing indexes
+- High ClickHouse CPU
+- Missing indexes or inefficient queries
 
 **Diagnosis**:
-```javascript
-// Connect to MongoDB
-use kato
+```bash
+# Check slow queries in ClickHouse
+curl "http://kato-clickhouse:8123/" --data "
+  SELECT query, elapsed, read_rows, read_bytes
+  FROM system.query_log
+  WHERE type = 'QueryFinish'
+    AND elapsed > 0.1
+  ORDER BY event_time DESC
+  LIMIT 10
+"
 
-// Check slow queries
-db.setProfilingLevel(2, { slowms: 100 })
-db.system.profile.find().sort({ ts: -1 }).limit(10)
-
-// Check index usage
-db.patterns_kb.find({processor_id: "kato-1"}).explain("executionStats")
-
-// Look for COLLSCAN (bad) instead of IXSCAN (good)
+# Check table structure and indexes
+curl "http://kato-clickhouse:8123/" --data "
+  SHOW CREATE TABLE kato.patterns
+"
 ```
 
 **Solution**:
-```javascript
-// Create missing indexes
-db.patterns_kb.createIndex({"processor_id": 1, "pattern_hash": 1}, {unique: true})
-db.patterns_kb.createIndex({"processor_id": 1, "frequency": -1})
-db.patterns_kb.createIndex({"processor_id": 1, "created_at": -1})
+```bash
+# Optimize table structure with proper indexes
+curl "http://kato-clickhouse:8123/" --data "
+  OPTIMIZE TABLE kato.patterns FINAL
+"
 
-// Verify index creation
-db.patterns_kb.getIndexes()
+# Check if indexes are being used
+curl "http://kato-clickhouse:8123/" --data "
+  EXPLAIN indexes = 1
+  SELECT * FROM kato.patterns
+  WHERE kb_id = 'kato-1'
+    AND frequency > 10
+"
 ```
 
 #### 3. Slow Vector Search
@@ -385,75 +393,76 @@ class PatternCache:
 
 ## Database Performance Issues
 
-### MongoDB Performance
+### ClickHouse Performance
 
 **Symptoms**:
 - Slow queries (>100ms)
-- High MongoDB CPU
-- Connection pool exhausted
+- High ClickHouse CPU
+- High memory usage
 
 **Diagnosis**:
-```javascript
-// Check current operations
-db.currentOp()
+```bash
+# Check current operations
+curl "http://kato-clickhouse:8123/" --data "
+  SELECT query, elapsed, memory_usage
+  FROM system.processes
+  WHERE elapsed > 1
+"
 
-// Check slow queries
-db.system.profile.find({millis: {$gt: 100}}).sort({ts: -1}).limit(10)
+# Check slow queries
+curl "http://kato-clickhouse:8123/" --data "
+  SELECT query, query_duration_ms, read_rows
+  FROM system.query_log
+  WHERE type = 'QueryFinish'
+    AND query_duration_ms > 100
+  ORDER BY event_time DESC
+  LIMIT 10
+"
 
-// Check connection pool
-db.serverStatus().connections
-
-// Check working set size
-db.serverStatus().wiredTiger.cache
+# Check table sizes
+curl "http://kato-clickhouse:8123/" --data "
+  SELECT
+    table,
+    formatReadableSize(sum(bytes)) as size,
+    sum(rows) as rows
+  FROM system.parts
+  WHERE database = 'kato'
+  GROUP BY table
+"
 ```
 
 **Solutions**:
 
-#### 1. Connection Pool Exhausted
+#### 1. Optimize Table Structure
 
 ```bash
-# Increase pool size
-MONGO_CONNECTION_POOL_SIZE=100  # from 50
+# Use appropriate engine and partitioning
+curl "http://kato-clickhouse:8123/" --data "
+  ALTER TABLE kato.patterns
+  MODIFY SETTING parts_to_throw_insert = 300
+"
 
-# Check current connections
-docker exec mongo-kb mongo --eval "db.serverStatus().connections"
-
-# Should see:
-# {
-#   "current": 45,
-#   "available": 55,
-#   "totalCreated": 120
-# }
+# Optimize table (merge parts)
+curl "http://kato-clickhouse:8123/" --data "
+  OPTIMIZE TABLE kato.patterns FINAL
+"
 ```
 
-#### 2. Lock Contention
+#### 2. Add Materialized Views for Common Queries
 
-```javascript
-// Check locks
-db.serverStatus().locks
-
-// Enable profiling
-db.setProfilingLevel(1, { slowms: 100 })
-
-// Identify problematic queries
-db.system.profile.find({
-  lockStats: {$exists: true}
-}).sort({ts: -1})
-```
-
-**Solution**:
-```javascript
-// Use write concern majority (already default)
-db.patterns_kb.insertOne(
-  {...},
-  { writeConcern: { w: "majority", wtimeout: 5000 } }
-)
-
-// Batch writes
-db.patterns_kb.insertMany(
-  [...],
-  { ordered: false }  // Parallel writes
-)
+```bash
+# Create materialized view for frequency aggregations
+curl "http://kato-clickhouse:8123/" --data "
+  CREATE MATERIALIZED VIEW IF NOT EXISTS kato.pattern_frequencies
+  ENGINE = SummingMergeTree()
+  ORDER BY (kb_id, pattern_name)
+  AS SELECT
+    kb_id,
+    pattern_name,
+    count() as frequency
+  FROM kato.patterns
+  GROUP BY kb_id, pattern_name
+"
 ```
 
 ### Qdrant Performance
@@ -512,7 +521,7 @@ client.update_collection(
 **Diagnosis**:
 ```bash
 # Test internal network
-docker exec kato ping mongo-kb
+docker exec kato ping kato-clickhouse
 docker exec kato ping qdrant-kb
 docker exec kato ping redis-kb
 
@@ -647,8 +656,10 @@ nice -n 19 ionice -c3 /scripts/maintenance.sh
 
 **Diagnosis**:
 ```bash
-# Check MongoDB connections
-docker exec mongo-kb mongo --eval "db.serverStatus().connections"
+# Check ClickHouse connections
+curl "http://kato-clickhouse:8123/" --data "
+  SELECT count() FROM system.processes
+"
 
 # Check Redis connections
 docker exec redis-kb redis-cli CLIENT LIST | wc -l
@@ -662,8 +673,8 @@ docker logs kato | grep -i "connection"
 #### 1. Increase Pool Size
 
 ```bash
-# MongoDB
-MONGO_CONNECTION_POOL_SIZE=200  # from 50
+# ClickHouse max connections (in config.xml)
+# <max_connections>1000</max_connections>
 
 # Redis
 REDIS_MAX_CONNECTIONS=100  # from 50
@@ -722,10 +733,10 @@ groups:
 
       # Slow database queries
       - alert: SlowDatabaseQueries
-        expr: rate(mongodb_op_latencies_latency_total[5m]) > 100
+        expr: rate(clickhouse_query_duration_seconds[5m]) > 0.1
         for: 5m
         annotations:
-          summary: "Slow MongoDB queries: {{ $value }}ms"
+          summary: "Slow ClickHouse queries: {{ $value }}s"
 ```
 
 ### Performance Regression Testing

@@ -45,19 +45,24 @@ KATO uses environment variables for configuration. These can be set in:
 
 ## Database Configuration
 
-### MONGO_BASE_URL
-- **Type**: String (MongoDB connection string)
-- **Default**: `mongodb://localhost:27017`
-- **Description**: MongoDB connection string
-- **Example**: `mongodb://mongo:27017`, `mongodb://user:pass@host:27017`
-- **Notes**: Each processor creates its own database named after PROCESSOR_ID
+### CLICKHOUSE_HOST
+- **Type**: String
+- **Default**: `localhost`
+- **Description**: ClickHouse database host for pattern storage
+- **Example**: `kato-clickhouse`, `192.168.1.100`
 
-### MONGO_TIMEOUT
+### CLICKHOUSE_PORT
 - **Type**: Integer
-- **Default**: `5000`
-- **Range**: `1000` to `30000`
-- **Description**: MongoDB connection timeout in milliseconds
-- **Example**: `5000`, `10000`
+- **Default**: `8123`
+- **Range**: `1` to `65535`
+- **Description**: ClickHouse HTTP port
+- **Example**: `8123`
+
+### CLICKHOUSE_DB
+- **Type**: String
+- **Default**: `kato`
+- **Description**: ClickHouse database name
+- **Example**: `kato`, `kato_production`
 
 ### QDRANT_HOST
 - **Type**: String
@@ -148,7 +153,7 @@ KATO uses environment variables for configuration. These can be set in:
 
 **How PERSISTENCE Works:**
 - Each pattern maintains arrays of emotive values (one array per emotive type)
-- Arrays are limited to PERSISTENCE length using MongoDB's `$slice` operator
+- Arrays are limited to PERSISTENCE length using a rolling window
 - When a pattern is re-learned with new emotive values, oldest values drop off
 - This creates a rolling window that adapts to changing contexts
 
@@ -441,7 +446,9 @@ KATO uses environment variables for configuration. These can be set in:
 environment:
   - PROCESSOR_ID=primary
   - PROCESSOR_NAME=PrimaryProcessor
-  - MONGO_BASE_URL=mongodb://mongodb:27017
+  - CLICKHOUSE_HOST=kato-clickhouse
+  - CLICKHOUSE_PORT=8123
+  - CLICKHOUSE_DB=kato
   - QDRANT_HOST=qdrant
   - QDRANT_PORT=6333
   - REDIS_URL=redis://redis:6379
@@ -458,7 +465,9 @@ environment:
 environment:
   - PROCESSOR_ID=testing
   - PROCESSOR_NAME=TestingProcessor
-  - MONGO_BASE_URL=mongodb://mongodb:27017
+  - CLICKHOUSE_HOST=kato-clickhouse
+  - CLICKHOUSE_PORT=8123
+  - CLICKHOUSE_DB=kato
   - QDRANT_HOST=qdrant
   - QDRANT_PORT=6333
   - REDIS_URL=redis://redis:6379
@@ -475,7 +484,9 @@ environment:
 environment:
   - PROCESSOR_ID=analytics
   - PROCESSOR_NAME=AnalyticsProcessor
-  - MONGO_BASE_URL=mongodb://mongodb:27017
+  - CLICKHOUSE_HOST=kato-clickhouse
+  - CLICKHOUSE_PORT=8123
+  - CLICKHOUSE_DB=kato
   - QDRANT_HOST=qdrant
   - QDRANT_PORT=6333
   - REDIS_URL=redis://redis:6379

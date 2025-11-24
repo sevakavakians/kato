@@ -444,32 +444,6 @@ kato.observe([context, "morning", "routine"])
 
 ## Pattern Storage
 
-### MongoDB Structure
-
-```javascript
-// Database: node_{node_id}_kato
-// Collection: patterns
-
-{
-  _id: "PTN|a1b2c3d4e5f6",
-  length: 3,
-  events: [
-    ["coffee", "morning"],
-    ["commute", "train"],
-    ["arrive", "work"]
-  ],
-  emotive_profile: {
-    energy: [[-0.2], [0.0], [0.5]]
-  },
-  metadata: {
-    location: [["home"], ["transit"], ["office"]]
-  },
-  created_at: ISODate("2025-11-13T10:00:00Z"),
-  updated_at: ISODate("2025-11-13T10:30:00Z"),
-  observation_count: 15  // Times this pattern was learned
-}
-```
-
 ### Vector Storage (Qdrant)
 
 If pattern contains vectors, stored in Qdrant with pattern_name as payload:
@@ -492,29 +466,9 @@ If pattern contains vectors, stored in Qdrant with pattern_name as payload:
 ### List Patterns
 
 ```python
-# Not directly exposed via API - use MongoDB
-# Connect to MongoDB and query patterns collection
-
-import pymongo
-client = pymongo.MongoClient("mongodb://localhost:27017")
-db = client["node_my_app_kato"]
-patterns = db.patterns.find().limit(10)
-
-for pattern in patterns:
-    print(f"{pattern['_id']}: {pattern['length']} events")
-```
-
-### Pattern Statistics
-
-```python
-# Get pattern count
-count = db.patterns.count_documents({})
-
-# Get patterns by length
-long_patterns = db.patterns.find({"length": {"$gte": 10}})
-
-# Get recently updated patterns
-recent = db.patterns.find().sort("updated_at", -1).limit(10)
+# Pattern inspection not directly exposed via API
+# Use internal storage queries for administrative access
+# Contact system administrator for pattern statistics
 ```
 
 ## Best Practices
@@ -536,14 +490,14 @@ recent = db.patterns.find().sort("updated_at", -1).limit(10)
 
 1. **Clear STM** after learning for clean boundaries
 2. **Rolling STM** for overlapping patterns
-3. **Monitor pattern count** - MongoDB storage grows with patterns
+3. **Monitor pattern count** - pattern storage grows with patterns
 4. **Periodic cleanup** for obsolete patterns
 
 ### Performance
 
 1. **Batch observations** before learning when possible
 2. **Avoid learning after every observation** (use auto-learn)
-3. **Index MongoDB** for faster retrieval
+3. **Index pattern storage** for faster retrieval
 4. **Monitor learning latency** - increases with pattern count
 
 ## Troubleshooting
@@ -555,7 +509,7 @@ recent = db.patterns.find().sort("updated_at", -1).limit(10)
 **Causes**:
 - STM is empty
 - STM has only 1 event (minimum: 2)
-- MongoDB connection failed
+- Database connection failed
 
 **Solution**:
 ```python
@@ -582,7 +536,7 @@ else:
 kato.create_session("my_app", config={"recall_threshold": 0.1})
 
 # Verify patterns exist
-# Check MongoDB: db.patterns.find()
+# Contact system administrator for pattern verification
 
 # Verify correct node_id
 info = kato.get_session_info()
@@ -598,7 +552,7 @@ print(f"Connected to: {info['node_id']}")
 **If happening**:
 - Check if patterns are truly identical
 - Verify emotive values (patterns with different emotives have same name but accumulated values)
-- Check `observation_count` field in MongoDB
+- Check observation count in pattern metadata
 
 ## Related Documentation
 

@@ -15,7 +15,7 @@ All patterns are identified by a unique hash: `PTRN|<sha1_hash>` where the hash 
 Temporary storage for current observation sequences. STM is a deque (double-ended queue) containing events that haven't been learned yet. When STM reaches `MAX_PATTERN_LENGTH`, auto-learning may be triggered.
 
 ### LTM (Long-Term Memory)
-Persistent storage of learned patterns in MongoDB. Each pattern is stored with its frequency, emotives, and structural data.
+Persistent storage of learned patterns in ClickHouse. Each pattern is stored with its frequency, emotives, and structural data.
 
 ### Event
 A single observation unit containing one or more symbols. Events are represented as lists of strings, e.g., `["hello", "world"]`. Events can contain:
@@ -178,22 +178,23 @@ Optimized pattern matching engine:
 
 ## Database Terms
 
-### MongoDB Collections
-- **patterns_kb**: Stores pattern structures and metadata
-- **symbols_kb**: Stores symbol frequency and probability data
-- **predictions_kb**: Stores prediction results
-- **metadata**: Stores processor metadata
+### ClickHouse Tables
+- **patterns**: Stores pattern structures and metadata (partitioned by kb_id)
+  - Columns: name, kb_id, length, events, emotive_profile, metadata, observation_count
+  - Indexing: Primary key on (kb_id, name) with Bloom filter
+  - Partitioning: By kb_id for node isolation
 
 ### Qdrant Collections
-Vector database collections named `vectors_{session_id}` storing:
+Vector database collections named `vectors_{kb_id}` storing:
 - Vector embeddings
 - Associated metadata
 - HNSW index for fast similarity search
 
 ### Processor Isolation
-Each processor instance uses a unique `session_id` for complete database isolation:
-- MongoDB: Database name = session_id
-- Qdrant: Collection name = `vectors_{session_id}`
+Each processor instance uses a unique `kb_id` for complete database isolation:
+- ClickHouse: Partitioning by kb_id provides data isolation
+- Redis: Key namespacing by session_id
+- Qdrant: Collection name = `vectors_{kb_id}`
 - Prevents cross-contamination between instances
 
 ## Configuration Terms
@@ -202,7 +203,7 @@ Each processor instance uses a unique `session_id` for complete database isolati
 Rolling window size for emotive value history in patterns. Each pattern maintains arrays of emotive values (one per emotive type) limited to PERSISTENCE length. When patterns are re-learned with new emotives, oldest values drop off, creating an adaptive window. Lower values (1-5) enable fast adaptation, higher values (10+) provide longer memory but slower adaptation to changes.
 
 ### Rolling Window
-A data structure mechanism used for emotives storage where a fixed-size array maintains the most recent N values (controlled by PERSISTENCE). When new values are added beyond the limit, the oldest values are automatically removed. Implemented using MongoDB's `$slice` operator to maintain array bounds.
+A data structure mechanism used for emotives storage where a fixed-size array maintains the most recent N values (controlled by PERSISTENCE). When new values are added beyond the limit, the oldest values are automatically removed. Implemented using Redis lists with LPUSH/LTRIM operations to maintain array bounds.
 
 ### Smoothness
 Smoothing factor for pattern matching algorithms. Higher values provide more lenient matching.

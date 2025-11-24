@@ -589,8 +589,8 @@ def get_weighted_predictions(predictions):
     now = time.time()
 
     for pred in predictions['predictions']:
-        # Fetch pattern from MongoDB
-        pattern = db.patterns.find_one({"_id": pred['pattern_name']})
+        # Fetch pattern metadata from storage
+        pattern = fetch_pattern_metadata(pred['pattern_name'])
         updated_at = pattern['updated_at'].timestamp()
 
         # Decay factor (newer = higher weight)

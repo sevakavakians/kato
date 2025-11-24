@@ -42,12 +42,12 @@ KATO can be deployed on Kubernetes for enterprise-scale deployments with feature
     │           │            │
     └───────────┴────────────┘
                 │
-    ┌───────────┴───────────┐
-    │                       │
-┌───▼────┐  ┌──────────┐  ┌─▼──────┐
-│MongoDB │  │  Qdrant  │  │ Redis  │
-│StatefulSet│StatefulSet │StatefulSet
-└────────┘  └──────────┘  └────────┘
+    ┌───────────┴───────────────────┐
+    │                               │
+┌───▼─────────┐  ┌──────────┐  ┌──▼─────┐
+│ ClickHouse  │  │  Qdrant  │  │ Redis  │
+│ StatefulSet │  │StatefulSet │StatefulSet
+└─────────────┘  └──────────┘  └────────┘
 ```
 
 ## Quick Start with Manifests
@@ -90,7 +90,9 @@ data:
   KATO_USE_FAST_MATCHING: "true"
   KATO_USE_INDEXING: "true"
   # Database hosts use service DNS
-  MONGO_BASE_URL: "mongodb://mongo-kb:27017"
+  CLICKHOUSE_HOST: "kato-clickhouse"
+  CLICKHOUSE_PORT: "8123"
+  CLICKHOUSE_DB: "kato"
   QDRANT_HOST: "qdrant-kb"
   REDIS_URL: "redis://redis-kb:6379/0"
 ```
@@ -110,8 +112,8 @@ metadata:
   namespace: kato
 type: Opaque
 stringData:
-  MONGO_USERNAME: "kato_user"
-  MONGO_PASSWORD: "secure_password_here"
+  CLICKHOUSE_USER: "kato_user"
+  CLICKHOUSE_PASSWORD: "secure_password_here"
   API_KEY: "your_api_key_here"
 ```
 
@@ -119,55 +121,64 @@ stringData:
 kubectl apply -f secrets.yaml
 ```
 
-### 4. MongoDB StatefulSet
+### 4. ClickHouse StatefulSet
 
 ```yaml
-# mongodb-statefulset.yaml
+# clickhouse-statefulset.yaml
 apiVersion: v1
 kind: Service
 metadata:
-  name: mongo-kb
+  name: kato-clickhouse
   namespace: kato
 spec:
   ports:
-  - port: 27017
-    targetPort: 27017
+  - port: 8123
+    targetPort: 8123
+    name: http
+  - port: 9000
+    targetPort: 9000
+    name: native
   clusterIP: None
   selector:
-    app: mongo-kb
+    app: kato-clickhouse
 ---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: mongo-kb
+  name: kato-clickhouse
   namespace: kato
 spec:
-  serviceName: mongo-kb
+  serviceName: kato-clickhouse
   replicas: 1
   selector:
     matchLabels:
-      app: mongo-kb
+      app: kato-clickhouse
   template:
     metadata:
       labels:
-        app: mongo-kb
+        app: kato-clickhouse
     spec:
       containers:
-      - name: mongo
-        image: mongo:6.0
+      - name: clickhouse
+        image: clickhouse/clickhouse-server:latest
         ports:
-        - containerPort: 27017
+        - containerPort: 8123
+          name: http
+        - containerPort: 9000
+          name: native
         env:
-        - name: MONGO_INITDB_ROOT_USERNAME
+        - name: CLICKHOUSE_DB
+          value: "kato"
+        - name: CLICKHOUSE_USER
           valueFrom:
             secretKeyRef:
               name: kato-secrets
-              key: MONGO_USERNAME
-        - name: MONGO_INITDB_ROOT_PASSWORD
+              key: CLICKHOUSE_USER
+        - name: CLICKHOUSE_PASSWORD
           valueFrom:
             secretKeyRef:
               name: kato-secrets
-              key: MONGO_PASSWORD
+              key: CLICKHOUSE_PASSWORD
         resources:
           requests:
             memory: "2Gi"
@@ -176,11 +187,11 @@ spec:
             memory: "4Gi"
             cpu: "2"
         volumeMounts:
-        - name: mongo-data
-          mountPath: /data/db
+        - name: clickhouse-data
+          mountPath: /var/lib/clickhouse
   volumeClaimTemplates:
   - metadata:
-      name: mongo-data
+      name: clickhouse-data
     spec:
       accessModes: [ "ReadWriteOnce" ]
       resources:
@@ -189,7 +200,7 @@ spec:
 ```
 
 ```bash
-kubectl apply -f mongodb-statefulset.yaml
+kubectl apply -f clickhouse-statefulset.yaml
 ```
 
 ### 5. Qdrant StatefulSet
@@ -456,7 +467,7 @@ kato-chart/
 │   ├── namespace.yaml
 │   ├── configmap.yaml
 │   ├── secrets.yaml
-│   ├── mongodb.yaml
+│   ├── clickhouse.yaml
 │   ├── qdrant.yaml
 │   ├── redis.yaml
 │   ├── deployment.yaml
@@ -506,8 +517,8 @@ kato:
     recallThreshold: 0.3
     sessionTTL: 7200
 
-# MongoDB Configuration
-mongodb:
+# ClickHouse Configuration
+clickhouse:
   enabled: true
   replicas: 1
   persistence:
@@ -688,10 +699,12 @@ spec:
   - to:
     - podSelector:
         matchLabels:
-          app: mongo-kb
+          app: kato-clickhouse
     ports:
     - protocol: TCP
-      port: 27017
+      port: 8123
+    - protocol: TCP
+      port: 9000
   - to:
     - podSelector:
         matchLabels:
@@ -756,7 +769,7 @@ spec:
 kubectl apply -f namespace.yaml
 kubectl apply -f configmap.yaml
 kubectl apply -f secrets.yaml
-kubectl apply -f mongodb-statefulset.yaml
+kubectl apply -f clickhouse-statefulset.yaml
 kubectl apply -f qdrant-statefulset.yaml
 kubectl apply -f redis-statefulset.yaml
 kubectl apply -f kato-deployment.yaml
@@ -795,12 +808,12 @@ NAMESPACE="kato"
 BACKUP_DIR="/backups/kato-$(date +%Y%m%d)"
 mkdir -p $BACKUP_DIR
 
-# Backup MongoDB
-kubectl exec -n $NAMESPACE statefulset/mongo-kb -- \
-  mongodump --archive=/tmp/mongo-backup.gz --gzip
+# Backup ClickHouse
+kubectl exec -n $NAMESPACE statefulset/kato-clickhouse -- \
+  clickhouse-client --query "BACKUP DATABASE kato TO Disk('backups', 'backup.zip')"
 
-kubectl cp $NAMESPACE/mongo-kb-0:/tmp/mongo-backup.gz \
-  $BACKUP_DIR/mongo-backup.gz
+kubectl cp $NAMESPACE/kato-clickhouse-0:/var/lib/clickhouse/backups/backup.zip \
+  $BACKUP_DIR/clickhouse-backup.zip
 
 # Backup Qdrant
 kubectl exec -n $NAMESPACE statefulset/qdrant-kb -- \
@@ -837,9 +850,9 @@ kubectl logs <pod-name> -n kato --previous
 ### Database Connection Issues
 
 ```bash
-# Test MongoDB connectivity
+# Test ClickHouse connectivity
 kubectl exec -it deployment/kato -n kato -- \
-  curl -v telnet://mongo-kb:27017
+  curl http://kato-clickhouse:8123/?query=SELECT%201
 
 # Test Qdrant connectivity
 kubectl exec -it deployment/kato -n kato -- \

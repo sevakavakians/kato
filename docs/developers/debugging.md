@@ -314,36 +314,35 @@ docker logs kato | grep "my-debug-trace"
 
 ## Database Debugging
 
-### MongoDB Inspection
+### ClickHouse Inspection
 
 ```bash
-# Connect to MongoDB
-docker exec -it kato-mongodb mongosh
+# Connect to ClickHouse
+docker exec -it kato-clickhouse clickhouse-client
 
-# Switch to database
-use node_test_app_kato
+# Use database
+USE kato
 
-# Show collections
-show collections
+# Show tables
+SHOW TABLES
 
 # Query patterns
-db.patterns.find({}).limit(5).pretty()
+SELECT * FROM patterns LIMIT 5
 
 # Find specific pattern
-db.patterns.findOne({"_id": "PTN|abc123"})
+SELECT * FROM patterns WHERE name = 'abc123'
 
 # Count patterns
-db.patterns.countDocuments({})
+SELECT count() FROM patterns
 
-# Check indices
-db.patterns.getIndexes()
+# Show table structure
+DESCRIBE patterns
 
 # Explain query (performance debugging)
-db.patterns.find({"length": 3}).explain("executionStats")
+EXPLAIN SELECT * FROM patterns WHERE length = 3
 
-# View slow queries
-db.setProfilingLevel(2)  # Profile all queries
-db.system.profile.find().sort({ts: -1}).limit(10)
+# View query log
+SELECT * FROM system.query_log ORDER BY event_time DESC LIMIT 10
 ```
 
 ### Qdrant Inspection
@@ -478,7 +477,7 @@ print(f"Memory: {process.memory_info().rss / 1024 / 1024:.2f} MB")
 ### Issue: Database Connection Lost
 
 **Symptoms**:
-- `pymongo.errors.ServerSelectionTimeoutError`
+- `clickhouse_driver.errors.NetworkError`
 - `QdrantException: Connection failed`
 
 **Debug Steps**:
@@ -487,12 +486,12 @@ print(f"Memory: {process.memory_info().rss / 1024 / 1024:.2f} MB")
 docker-compose ps
 
 # Check service logs
-docker logs kato-mongodb --tail 50
+docker logs kato-clickhouse --tail 50
 docker logs kato-qdrant --tail 50
 
 # Test connections manually
-# MongoDB
-docker exec -it kato-mongodb mongosh --eval "db.runCommand({ping: 1})"
+# ClickHouse
+docker exec -it kato-clickhouse clickhouse-client --query "SELECT 1"
 
 # Qdrant
 curl http://localhost:6333/collections
@@ -510,10 +509,11 @@ from tenacity import retry, stop_after_attempt, wait_exponential
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=1, max=10)
 )
-def connect_to_mongodb():
-    client = AsyncIOMotorClient(mongo_url)
+def connect_to_clickhouse():
+    from clickhouse_driver import Client
+    client = Client(host=clickhouse_host, port=clickhouse_port)
     # Verify connection
-    client.admin.command('ping')
+    client.execute('SELECT 1')
     return client
 ```
 
@@ -556,16 +556,23 @@ def test_predictions_are_deterministic(kato_fixture):
 
 ### Enable Query Profiling
 
-**MongoDB**:
-```javascript
-// Enable profiling
-db.setProfilingLevel(2)  // Log all queries
+**ClickHouse**:
+```sql
+-- Enable query logging
+SET log_queries = 1;
 
-// View slow queries
-db.system.profile.find({millis: {$gt: 100}}).sort({ts: -1})
+-- View query log
+SELECT * FROM system.query_log
+WHERE query_duration_ms > 100
+ORDER BY event_time DESC
+LIMIT 10;
 
-// Disable profiling
-db.setProfilingLevel(0)
+-- Check slow queries
+SELECT query, query_duration_ms
+FROM system.query_log
+WHERE type = 'QueryFinish'
+ORDER BY query_duration_ms DESC
+LIMIT 10;
 ```
 
 ### Benchmark Specific Operations

@@ -19,7 +19,7 @@ Pattern metadata in KATO provides **contextual tags and attributes** for learned
 - **Format**: Dictionary mapping string keys to any value type
 - **Storage**: All values converted to strings and stored as unique lists
 - **Purpose**: Track pattern provenance, categories, and contextual information
-- **Association**: Stored with learned patterns in MongoDB
+- **Association**: Stored with learned patterns in persistent storage
 - **Accumulation**: Set-union behavior - values accumulate, duplicates filtered
 - **Persistence**: Metadata persists indefinitely (no rolling window)
 
@@ -57,14 +57,14 @@ The metadata processing system flows through multiple components:
 ┌─────────────────▼───────────────────────────┐
 │      SuperKnowledgeBase                     │
 │   • Converts values to strings              │
-│   • Uses MongoDB $addToSet operation        │
+│   • Uses set-union storage operation        │
 │   • Ensures unique values per key           │
 └─────────────────┬───────────────────────────┘
                   │
 ┌─────────────────▼───────────────────────────┐
-│           MongoDB Storage                   │
-│   • patterns_kb collection                  │
-│   • metadata field as dict of string arrays │
+│        Persistent Storage                   │
+│   • ClickHouse patterns table               │
+│   • Redis metadata cache                    │
 │   • No expiration (permanent storage)       │
 └─────────────────┬───────────────────────────┘
                   │
@@ -124,15 +124,17 @@ merged = accumulate_metadata(self.metadata)
 
 ### 4. Storage with Set-Union
 
-```javascript
-// MongoDB update with $addToSet
-{
-    "$addToSet": {
-        "metadata.book": {"$each": ["Alice"]},
-        "metadata.chapter": {"$each": ["1", "2"]},
-        "metadata.author": {"$each": ["Lewis Carroll"]}
+```python
+# Database update with set-union semantics
+# Ensures unique values per metadata key
+storage.update_pattern_metadata(
+    pattern_name="PTRN|abc",
+    metadata={
+        "book": ["Alice"],
+        "chapter": ["1", "2"],
+        "author": ["Lewis Carroll"]
     }
-}
+)
 ```
 
 ### 5. Pattern Storage Evolution
@@ -181,12 +183,11 @@ pattern = {
 
 ## Storage Mechanism
 
-### MongoDB Schema
+### Pattern Data Schema
 
-```javascript
-// Pattern document structure
-{
-    "_id": ObjectId("..."),
+```python
+# Pattern storage structure
+pattern = {
     "name": "PTRN|sha1_hash",
     "pattern_data": [["A"], ["B", "C"]],
     "frequency": 5,
@@ -203,24 +204,17 @@ pattern = {
 ### Update Operation
 
 ```python
-# MongoDB update with upsert
-self.patterns_kb.update_one(
-    {"name": pattern.name},
-    {
-        "$setOnInsert": {
-            "pattern_data": pattern.pattern_data,
-            "length": pattern.length,
-            "metadata": {}  # Initialize if new pattern
-        },
-        "$inc": {"frequency": 1},
-        "$addToSet": {
-            # Add each metadata key's values uniquely
-            "metadata.book": {"$each": ["Alice", "Through the Looking Glass"]},
-            "metadata.chapter": {"$each": ["1", "2"]},
-            "metadata.author": {"$each": ["Lewis Carroll"]}
-        }
-    },
-    upsert=True
+# Pattern update with upsert semantics
+storage.upsert_pattern(
+    name=pattern.name,
+    pattern_data=pattern.pattern_data,
+    frequency_increment=1,
+    metadata_updates={
+        # Add each metadata key's values uniquely (set-union)
+        "book": ["Alice", "Through the Looking Glass"],
+        "chapter": ["1", "2"],
+        "author": ["Lewis Carroll"]
+    }
 )
 ```
 
@@ -671,24 +665,20 @@ metadata = {'session_id': 'abc123', 'user_id': 'user456'}
    - Patterns must be re-learned with metadata
    - Existing patterns won't retroactively gain metadata
 
-3. **Check MongoDB directly**:
-   ```bash
-   db.patterns_kb.findOne({'name': 'PTRN|...'}, {'metadata': 1})
-   ```
+3. **Check storage directly**:
+   - Query pattern storage to verify metadata field
+   - Use KATO API: `GET /patterns/{pattern_name}`
 
 ### Issue: Duplicate Values in Metadata
 
 **Symptom**: Same value appears multiple times in metadata lists
 
-**Solution**: This should not happen - check MongoDB operations
+**Solution**: This should not happen - check storage operations
 
-```bash
-# Check pattern metadata
-db.patterns_kb.findOne({'name': 'PTRN|...'}, {'metadata': 1})
-
-# Expected: Unique values per key
-# If duplicates found, this is a bug
-```
+- Query pattern storage to verify unique values
+- Check pattern via API: `GET /patterns/{pattern_name}`
+- Expected: Unique values per key
+- If duplicates found, this is a bug
 
 ### Issue: Metadata Keys Changing
 
@@ -756,28 +746,25 @@ flag = pattern['metadata']['flag'][0] == 'True'
 - `kato/workers/memory_manager.py`: Processing
 - `kato/workers/pattern_processor.py`: Accumulation
 - `kato/informatics/metrics.py`: Merging function
-- `kato/informatics/knowledge_base.py`: Storage with $addToSet
+- `kato/storage/clickhouse_writer.py`: ClickHouse storage
+- `kato/storage/redis_writer.py`: Redis metadata cache
 - `kato/api/schemas/observation.py`: API schema
 
-### MongoDB Operations
+### Storage Operations
 
-```javascript
-// Storage with $addToSet
-db.patterns_kb.update(
-    { "name": "PTRN|hash" },
-    {
-        "$addToSet": {
-            "metadata.book": {"$each": ["Alice", "Wonderland"]},
-            "metadata.chapter": {"$each": ["1", "2"]}
-        }
+```python
+# Storage with set-union semantics
+storage.update_pattern_metadata(
+    pattern_name="PTRN|hash",
+    metadata={
+        "book": ["Alice", "Wonderland"],
+        "chapter": ["1", "2"]
     }
 )
 
-// Retrieval
-db.patterns_kb.findOne(
-    { "name": "PTRN|hash" },
-    { "metadata": 1 }
-)
+# Retrieval
+pattern = storage.get_pattern("PTRN|hash")
+metadata = pattern.metadata
 ```
 
 ## See Also

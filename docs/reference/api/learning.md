@@ -9,7 +9,7 @@ Learning converts sequences in short-term memory (STM) into persistent patterns 
 **Key Concepts**:
 - **Manual Learning**: Explicit `learn` endpoint call
 - **Auto-Learning**: Automatic when STM reaches `max_pattern_length`
-- **Pattern Persistence**: Patterns stored permanently in MongoDB
+- **Pattern Persistence**: Patterns stored permanently in ClickHouse
 - **Pattern Frequency**: Incremented when same pattern re-learned
 
 ## Endpoints
@@ -140,9 +140,9 @@ POST /sessions/{session_id}/clear-all
 curl -X POST http://localhost:8000/sessions/$SESSION_ID/clear-all
 ```
 
-**⚠️ WARNING**: This deletes ALL learned patterns for the session's `node_id`. This affects:
-- All sessions with the same `node_id`
-- All learned patterns in MongoDB
+**⚠️ WARNING**: This deletes ALL learned patterns for the session's `kb_id`. This affects:
+- All sessions with the same `kb_id`
+- All learned patterns in ClickHouse
 - All vector embeddings in Qdrant
 
 **Use Cases**:
@@ -150,7 +150,7 @@ curl -X POST http://localhost:8000/sessions/$SESSION_ID/clear-all
 - Starting over with training data
 - Development/testing cleanup
 
-**Production Note**: Use with extreme caution in production. Consider using separate `node_id` values for isolation instead.
+**Production Note**: Use with extreme caution in production. Consider using separate `kb_id` values for isolation instead.
 
 ---
 

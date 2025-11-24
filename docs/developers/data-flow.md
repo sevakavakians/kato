@@ -256,12 +256,11 @@ def learn_pattern(self, stm: list[list[str]], emotives: dict) -> Pattern:
         observation_count=1
     )
 
-    # Step 4: Store in MongoDB
-    self.superkb.store_pattern(pattern)
+    # Step 4: Store in ClickHouse (primary storage)
+    self.clickhouse_client.store_pattern(pattern)
 
-    # Step 5: Store in ClickHouse (hybrid architecture)
-    if self.clickhouse_client:
-        self.clickhouse_client.store_pattern(pattern)
+    # Step 5: Update Redis metadata
+    self.redis_writer.update_pattern_metadata(pattern)
 
     # Step 6: Update indices
     self._update_indices(pattern)
@@ -275,26 +274,25 @@ def learn_pattern(self, stm: list[list[str]], emotives: dict) -> Pattern:
 ```
 Pattern Object
       ↓
-MongoDB (write-optimized, source of truth)
-      ├─> patterns collection
-      │   {
-      │     _id: "PTN|abc123",
-      │     length: 3,
-      │     events: [["hello"], ["world"], ["!"]],
-      │     created_at: ISODate(...),
-      │     observation_count: 1
-      │   }
-      │
-      ↓
-ClickHouse (read-optimized, hybrid architecture)
-      └─> patterns table (flattened for fast queries)
+ClickHouse (primary pattern storage)
+      └─> patterns table (columnar storage for fast queries)
           {
-            pattern_name: "PTN|abc123",
+            name: "abc123",  # Stored WITHOUT 'PTRN|' prefix
+            kb_id: "my_app",
             length: 3,
             event_0_string_0: "hello",
             event_1_string_0: "world",
             event_2_string_0: "!",
-            created_at: DateTime(...)
+            created_at: DateTime(...),
+            observation_count: 1
+          }
+      ↓
+Redis (pattern metadata & caching)
+      └─> pattern:{kb_id}:{pattern_name} (hash)
+          {
+            frequency: 1,
+            last_observed: timestamp,
+            emotives: JSON
           }
 ```
 
@@ -352,21 +350,15 @@ def search_patterns(
 def _get_candidates(self, query_stm: list[list[str]]) -> list[Pattern]:
     """Retrieve candidate patterns from storage."""
 
-    # MongoDB query for length-based filtering
-    query = {
-        "length": {"$gte": len(query_stm)},  # Pattern must be at least STM length
-        "$or": [
-            # Token-based filtering
-            {"events.0": {"$in": query_stm[0]}},  # First event has overlap
-            {"events.1": {"$in": query_stm[1] if len(query_stm) > 1 else []}},
-        ]
-    }
-
-    # Use ClickHouse for read-heavy workloads (hybrid architecture)
-    if self.use_clickhouse:
-        candidates = self.clickhouse_client.search_patterns(query_stm)
-    else:
-        candidates = self.mongodb.find_patterns(query)
+    # ClickHouse query with multi-stage filter pipeline
+    # Stage 1: MinHash/LSH bloom filter for fast rejection
+    # Stage 2: Length-based filtering
+    # Stage 3: Token overlap filtering
+    candidates = self.clickhouse_client.search_patterns(
+        query_stm=query_stm,
+        kb_id=self.kb_id,
+        min_length=len(query_stm)
+    )
 
     return candidates
 ```

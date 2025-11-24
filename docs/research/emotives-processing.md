@@ -57,14 +57,14 @@ The emotives processing system flows through multiple components:
                   │
 ┌─────────────────▼───────────────────────────┐
 │      SuperKnowledgeBase                     │
-│   • Stores with MongoDB $slice operation    │
+│   • Stores with rolling window logic        │
 │   • Maintains rolling window per pattern    │
 │   • Filters zero values                     │
 └─────────────────┬───────────────────────────┘
                   │
 ┌─────────────────▼───────────────────────────┐
-│           MongoDB Storage                   │
-│   • patterns_kb collection                  │
+│        Persistent Storage                   │
+│   • Redis emotives cache                    │
 │   • emotives field as array of dicts        │
 │   • Limited by PERSISTENCE parameter        │
 └─────────────────┬───────────────────────────┘
@@ -124,16 +124,13 @@ averaged = average_emotives(self.emotives)
 
 ### 4. Storage with Rolling Window
 
-```javascript
-// MongoDB update with $slice
-{
-    "$push": {
-        "emotives": {
-            "$each": [averaged_emotives],
-            "$slice": -5  // Keep last 5 (PERSISTENCE=5)
-        }
-    }
-}
+```python
+# Database update with rolling window
+storage.update_pattern_emotives(
+    pattern_name="PTRN|abc",
+    emotives=averaged_emotives,
+    persistence=5  # Keep last 5 entries
+)
 ```
 
 ### 5. Pattern Storage Evolution
@@ -186,12 +183,11 @@ prediction = {
 
 ## Storage Mechanism
 
-### MongoDB Schema
+### Pattern Data Schema
 
-```javascript
-// Pattern document structure
-{
-    "_id": ObjectId("..."),
+```python
+# Pattern storage structure
+pattern = {
     "name": "PTRN|sha1_hash",
     "pattern_data": [["A"], ["B", "C"]],
     "frequency": 5,
@@ -200,30 +196,22 @@ prediction = {
         {"joy": 0.7},
         {"confidence": 0.9, "arousal": 0.3}
     ]
-    // emotives array limited by PERSISTENCE
+    # emotives array limited by PERSISTENCE
 }
 ```
 
 ### Update Operation
 
 ```python
-# MongoDB update with upsert
-self.patterns_kb.update_one(
-    {"name": pattern.name},
-    {
-        "$setOnInsert": {
-            "pattern_data": pattern.pattern_data,
-            "length": pattern.length
-        },
-        "$inc": {"frequency": 1},
-        "$push": {
-            "emotives": {
-                "$each": [emotives_dict],
-                "$slice": -1 * self.persistence  # Rolling window
-            }
-        }
-    },
-    upsert=True
+# Pattern update with upsert and rolling window
+storage.upsert_pattern(
+    name=pattern.name,
+    pattern_data=pattern.pattern_data,
+    frequency_increment=1,
+    emotives_update={
+        "new_entry": emotives_dict,
+        "persistence": self.persistence  # Rolling window size
+    }
 )
 ```
 
@@ -663,8 +651,8 @@ Emotives provide context but don't directly control behavior:
 
 3. Inspect stored pattern:
    ```python
-   # Check MongoDB directly
-   pattern = patterns_kb.find_one({'name': 'PTRN|...'})
+   # Check storage via API or direct query
+   pattern = api.get_pattern('PTRN|...')
    print(pattern['emotives'])  # See rolling window
    ```
 
@@ -716,30 +704,22 @@ export PERSISTENCE=10  # More stable averaging
 - `kato/workers/memory_manager.py`: Processing
 - `kato/workers/pattern_processor.py`: Accumulation
 - `kato/informatics/metrics.py`: Averaging function
-- `kato/informatics/knowledge_base.py`: Storage with $slice
+- `kato/storage/redis_writer.py`: Redis emotives storage
 - `kato/representations/prediction.py`: Output format
 
-### MongoDB Operations
+### Storage Operations
 
-```javascript
-// Storage with rolling window
-db.patterns_kb.update(
-    { "name": "PTRN|hash" },
-    {
-        "$push": {
-            "emotives": {
-                "$each": [{"joy": 0.8}],
-                "$slice": -5  // Keep last 5
-            }
-        }
-    }
+```python
+# Storage with rolling window
+storage.update_pattern_emotives(
+    pattern_name="PTRN|hash",
+    emotives={"joy": 0.8},
+    persistence=5  # Keep last 5
 )
 
-// Retrieval
-db.patterns_kb.findOne(
-    { "name": "PTRN|hash" },
-    { "emotives": 1 }
-)
+# Retrieval
+pattern = storage.get_pattern("PTRN|hash")
+emotives = pattern.emotives
 ```
 
 ## See Also

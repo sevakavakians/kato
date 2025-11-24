@@ -24,10 +24,11 @@ Complete installation instructions for KATO on various platforms.
 
 KATO requires the following ports to be available:
 - **8000**: KATO API (default, configurable)
-- **27017**: MongoDB
+- **8123**: ClickHouse HTTP
+- **9000**: ClickHouse Native (optional)
 - **6333**: Qdrant HTTP
 - **6334**: Qdrant gRPC
-- **6379**: Redis (optional)
+- **6379**: Redis
 
 ## Installation Methods
 
@@ -75,7 +76,7 @@ cd kato
 #### 3. Start KATO
 
 ```bash
-# Start all services (KATO, MongoDB, Qdrant, Redis)
+# Start all services (KATO, ClickHouse, Qdrant, Redis)
 ./start.sh
 ```
 
@@ -103,11 +104,11 @@ curl http://localhost:8000/health
 For more control over the deployment:
 
 ```bash
-# Start MongoDB
-docker run -d --name kato-mongodb \
-  -p 27017:27017 \
-  -v kato-mongo-data:/data/db \
-  mongo:6.0
+# Start ClickHouse
+docker run -d --name kato-clickhouse \
+  -p 8123:8123 -p 9000:9000 \
+  -v kato-clickhouse-data:/var/lib/clickhouse \
+  clickhouse/clickhouse-server:latest
 
 # Start Qdrant
 docker run -d --name kato-qdrant \
@@ -115,7 +116,7 @@ docker run -d --name kato-qdrant \
   -v kato-qdrant-data:/qdrant/storage \
   qdrant/qdrant:latest
 
-# Start Redis (optional)
+# Start Redis
 docker run -d --name kato-redis \
   -p 6379:6379 \
   redis:7-alpine
@@ -126,9 +127,11 @@ docker build -t kato:latest .
 # Start KATO
 docker run -d --name kato \
   -p 8000:8000 \
-  -e MONGO_BASE_URL=mongodb://host.docker.internal:27017 \
+  -e CLICKHOUSE_HOST=host.docker.internal \
+  -e CLICKHOUSE_PORT=8123 \
+  -e CLICKHOUSE_DB=kato \
   -e QDRANT_HOST=host.docker.internal \
-  -e REDIS_URL=redis://host.docker.internal:6379/0 \
+  -e REDIS_URL=redis://host.docker.internal:6379 \
   kato:latest
 ```
 
@@ -150,10 +153,12 @@ LOG_LEVEL=INFO
 LOG_FORMAT=human
 
 # Database Configuration
-MONGO_BASE_URL=mongodb://localhost:27017
+CLICKHOUSE_HOST=localhost
+CLICKHOUSE_PORT=8123
+CLICKHOUSE_DB=kato
 QDRANT_HOST=localhost
 QDRANT_PORT=6333
-REDIS_URL=redis://localhost:6379/0
+REDIS_URL=redis://localhost:6379
 
 # Learning Configuration
 MAX_PATTERN_LENGTH=0
@@ -189,9 +194,9 @@ docker-compose ps
 # Expected output:
 # NAME                STATUS
 # kato                Up (healthy)
-# mongo-kb            Up
-# qdrant-kb           Up
-# redis-kb            Up (optional)
+# kato-clickhouse     Up
+# kato-qdrant         Up
+# kato-redis          Up
 ```
 
 ### Access API Documentation
@@ -250,17 +255,16 @@ docker-compose build --no-cache
 ./start.sh
 ```
 
-**Important**: Data in MongoDB and Qdrant persists across upgrades via Docker volumes.
+**Important**: Data in ClickHouse, Redis, and Qdrant persists across upgrades via Docker volumes.
 
 ### Backup Before Upgrade
 
 ```bash
-# Backup MongoDB
-docker exec mongo-kb-$USER-1 mongodump --out /backup
-docker cp mongo-kb-$USER-1:/backup ./kato-backup-$(date +%Y%m%d)
+# Backup ClickHouse data
+docker exec kato-clickhouse clickhouse-client --query "BACKUP DATABASE kato TO Disk('backups', 'backup-$(date +%Y%m%d)')"
 
-# Backup Qdrant (optional - can recreate from MongoDB)
-docker cp qdrant-kb-$USER-1:/qdrant/storage ./qdrant-backup-$(date +%Y%m%d)
+# Backup Qdrant (optional - can recreate from ClickHouse)
+docker cp kato-qdrant:/qdrant/storage ./qdrant-backup-$(date +%Y%m%d)
 ```
 
 ## Uninstalling KATO
@@ -282,7 +286,7 @@ docker-compose down -v
 
 # Remove Docker images
 docker rmi kato:latest
-docker rmi mongo:6.0
+docker rmi clickhouse/clickhouse-server:latest
 docker rmi qdrant/qdrant:latest
 docker rmi redis:7-alpine
 ```
@@ -338,8 +342,8 @@ sudo ./start.sh
 docker-compose logs kato
 
 # Common fixes:
-# 1. Ensure MongoDB/Qdrant are running first
-docker-compose up -d mongo-kb qdrant-kb
+# 1. Ensure ClickHouse/Qdrant/Redis are running first
+docker-compose up -d clickhouse qdrant redis
 docker-compose up -d kato
 
 # 2. Rebuild without cache

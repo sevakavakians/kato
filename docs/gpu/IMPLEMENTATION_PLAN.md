@@ -52,7 +52,7 @@
 **Dependencies:**
 - CUDA Toolkit 12.x installed
 - CuPy library compatibility verified
-- MongoDB access for pattern data
+- Database access for pattern data (ClickHouse/Redis)
 - Test dataset (1K, 10K, 100K, 1M, 10M patterns)
 
 **Acceptance Criteria:**
@@ -76,7 +76,7 @@
 1. Replace all difflib usage with RapidFuzz
 2. Improve candidate filtering (Bloom filter + length index)
 3. Better caching strategies (Redis pipeline)
-4. Optimize MongoDB aggregation queries
+4. Optimize database query performance
 
 **Expected Speedup:** 5-10x over current baseline
 
@@ -259,7 +259,8 @@
                ▼
 ┌─────────────────────────────────────────────────────┐
 │ Storage Layer                                        │
-│ - MongoDB (patterns_kb) - source of truth           │
+│ - ClickHouse (pattern data) - source of truth       │
+│ - Redis (metadata/cache)                            │
 │ - Symbol vocabulary persistence                     │
 └─────────────────────────────────────────────────────┘
 ```
@@ -276,7 +277,7 @@
 6. Merge & filter by threshold
 7. Sort by similarity/potential
 8. Return pattern hash names
-9. Fetch full records from MongoDB
+9. Fetch full records from pattern storage
 10. Build Prediction objects
 11. Return to client
 ```
@@ -284,12 +285,13 @@
 **Learning Path:**
 ```
 1. New pattern created from STM
-2. Store in MongoDB (source of truth)
-3. Add to CPU tier (0.1ms)
-4. Check sync triggers:
+2. Store in ClickHouse (source of truth)
+3. Cache metadata in Redis
+4. Add to CPU tier (0.1ms)
+5. Check sync triggers:
    - If CPU tier >= 1000: Promote batch to GPU
    - Background worker also checks periodically
-5. Continue serving queries (CPU tier used for new patterns)
+6. Continue serving queries (CPU tier used for new patterns)
 ```
 
 ### **Memory Layout**
@@ -418,14 +420,14 @@ scripts/
 
 **Key Features:**
 - Deterministic symbol ordering (alphabetically sorted)
-- Persistent vocabulary (stored in MongoDB metadata collection)
+- Persistent vocabulary (stored in metadata storage)
 - Dynamic growth (new symbols added as encountered)
 - Thread-safe operations
 - Efficient encoding/decoding
 
 **Interface:**
 ```python
-encoder = SymbolVocabularyEncoder(mongodb_symbols_kb)
+encoder = SymbolVocabularyEncoder(metadata_storage)
 
 # Encoding
 encoded = encoder.encode_sequence(['hello', 'world', 'VCTR|abc'])
@@ -439,10 +441,10 @@ decoded = encoder.decode_sequence(encoded)
 vocab_size = encoder.vocab_size  # e.g., 50,000 unique symbols
 ```
 
-**MongoDB Storage:**
-```json
-{
-  "_id": "...",
+**Database Storage:**
+```python
+# Vocabulary storage structure
+vocabulary = {
   "class": "gpu_vocabulary",
   "symbol_to_id": {"hello": 123, "world": 456, ...},
   "id_to_symbol": {"123": "hello", "456": "world", ...},
@@ -610,7 +612,7 @@ matcher.add_new_pattern("PTRN|new", encoded_sequence)
 
 **Encoder Tests** (`test_encoder.py`):
 - Symbol encoding/decoding correctness
-- Vocabulary persistence (save/load from MongoDB)
+- Vocabulary persistence (save/load from database)
 - New symbol handling
 - Edge cases (empty strings, special characters, very long symbols)
 

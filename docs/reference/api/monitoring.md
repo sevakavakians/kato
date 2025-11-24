@@ -171,10 +171,10 @@ GET /metrics
     "disk_percent": 35.1
   },
   "databases": {
-    "mongodb": {
+    "clickhouse": {
       "operations": 5000,
       "errors": 0,
-      "avg_response_time": 5.2
+      "avg_response_time": 3.8
     },
     "qdrant": {
       "operations": 3000,
@@ -225,7 +225,7 @@ GET /stats?minutes=10
     ],
     "kato_memory_usage_percent": [...],
     "sessions_created": [...],
-    "mongodb_operations": [...]
+    "clickhouse_operations": [...]
   },
   "summary": {
     "sessions": {...},
@@ -280,7 +280,7 @@ curl "http://localhost:8000/metrics/kato_cpu_usage_percent?minutes=30"
 - `kato_disk_usage_percent`
 - `sessions_created`
 - `sessions_deleted`
-- `mongodb_operations`
+- `clickhouse_operations`
 - `qdrant_operations`
 - `redis_operations`
 
@@ -300,7 +300,7 @@ GET /connection-pools
 {
   "status": "healthy",
   "health": {
-    "mongodb": {
+    "clickhouse": {
       "healthy": true,
       "active_connections": 5,
       "available_connections": 45
@@ -317,7 +317,7 @@ GET /connection-pools
     }
   },
   "pool_statistics": {
-    "mongodb": {
+    "clickhouse": {
       "total_created": 50,
       "total_destroyed": 0,
       "peak_usage": 12

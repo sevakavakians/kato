@@ -30,10 +30,10 @@ All parameters can be specified directly when starting KATO:
 | `--api-key` | string | none | API key for authentication |
 
 **Multi-Instance Notes:**
-- Each instance must have a unique `--id` 
+- Each instance must have a unique `--id`
 - Container names are derived from the ID: `kato-${PROCESSOR_ID}`
 - Ports are automatically allocated if defaults are in use
-- All instances share the same MongoDB but maintain separate memory
+- All instances share the same ClickHouse/Redis/Qdrant storage but maintain separate memory
 
 ### Machine Learning Parameters
 
@@ -230,7 +230,7 @@ EOF
 
 **Default**: `kato`
 
-**Purpose**: Part of the database naming convention for MongoDB and Qdrant isolation.
+**Purpose**: Part of the database naming convention for ClickHouse and Qdrant isolation.
 
 **⚠️ CRITICAL WARNING**: **Never change `SERVICE_NAME` in production!**
 
@@ -243,12 +243,12 @@ database_name = {node_id}_{SERVICE_NAME}
 ```bash
 # Default SERVICE_NAME='kato'
 node_id: "alice"
-→ MongoDB database: "alice_kato"
+→ ClickHouse database: "alice_kato"
 → Qdrant collection: "vectors_alice_kato"
 
 # If you change SERVICE_NAME to 'production'
 node_id: "alice"
-→ MongoDB database: "alice_production"  # DIFFERENT DATABASE!
+→ ClickHouse database: "alice_production"  # DIFFERENT DATABASE!
 → Previous training in "alice_kato" is NO LONGER ACCESSIBLE!
 ```
 
@@ -268,10 +268,9 @@ environment:
 **If You Must Change:**
 You'll need to manually migrate all databases:
 ```bash
-# For each node_id, rename MongoDB databases
-mongo
-use alice_kato
-db.copyDatabase("alice_kato", "alice_newname")
+# For each node_id, migrate ClickHouse databases
+clickhouse-client --query "CREATE DATABASE alice_newname AS alice_kato"
+clickhouse-client --query "INSERT INTO alice_newname.patterns SELECT * FROM alice_kato.patterns"
 # Repeat for every node...
 # Also requires Qdrant collection migration
 ```

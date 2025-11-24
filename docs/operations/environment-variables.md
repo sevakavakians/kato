@@ -128,74 +128,64 @@ LOG_OUTPUT=/var/log/kato/app.log    # File-based
 
 ## Database Configuration
 
-### MongoDB
+### ClickHouse (Hybrid Architecture)
 
-#### MONGO_BASE_URL
-**Type**: string | **Default**: `mongodb://localhost:27017` | **Required**: Yes
+#### CLICKHOUSE_HOST
+**Type**: string | **Default**: `localhost` | **Required**: Yes
 
 ```bash
-# Single instance
-MONGO_BASE_URL=mongodb://mongo-kb:27017
+# Standard connection
+CLICKHOUSE_HOST=kato-clickhouse
 
-# Replica set (production)
-MONGO_BASE_URL=mongodb://mongo1:27017,mongo2:27017,mongo3:27017/?replicaSet=rs0
-
-# With authentication
-MONGO_BASE_URL=mongodb://user:password@mongo-kb:27017/kato?authSource=admin
-
-# Atlas (MongoDB Cloud)
-MONGO_BASE_URL=mongodb+srv://user:password@cluster.mongodb.net/kato?retryWrites=true&w=majority
+# IP address
+CLICKHOUSE_HOST=192.168.1.100
 ```
 
 **Operational Context**:
-- Use replica sets for production (high availability)
-- Include `authSource=admin` for authentication
-- For Atlas, use connection string from dashboard
+- Used for billion-scale pattern storage
+- Part of hybrid architecture (ClickHouse + Redis)
+- Provides high-performance read path for pattern queries
 
-**Connection String Parameters**:
+#### CLICKHOUSE_PORT
+**Type**: integer | **Default**: `8123` | **Required**: Yes
+
 ```bash
-MONGO_BASE_URL=mongodb://mongo:27017/kato?\
-  replicaSet=rs0&\
-  authSource=admin&\
-  retryWrites=true&\
-  w=majority&\
-  maxPoolSize=100&\
-  minPoolSize=10&\
-  maxIdleTimeMS=30000&\
-  serverSelectionTimeoutMS=5000
+CLICKHOUSE_PORT=8123  # HTTP interface (default)
+CLICKHOUSE_PORT=9000  # Native interface (for higher performance)
 ```
+
+**Operational Context**:
+- Port 8123: HTTP interface (standard, easier debugging)
+- Port 9000: Native protocol (faster, use for production)
+- Ensure firewall allows chosen port
+
+#### CLICKHOUSE_DB
+**Type**: string | **Default**: `kato` | **Required**: Yes
+
+```bash
+CLICKHOUSE_DB=kato             # Development
+CLICKHOUSE_DB=kato_production  # Production
+CLICKHOUSE_DB=kato_staging     # Staging
+```
+
+**Operational Context**:
+- Database name for pattern storage
+- Use environment-specific names for isolation
+- Must exist before KATO starts (created by migrations)
 
 **Troubleshooting**:
 ```bash
 # Test connection
-docker exec kato python -c "
-from pymongo import MongoClient
-client = MongoClient('$MONGO_BASE_URL')
-print(client.admin.command('ping'))
-"
+curl "http://kato-clickhouse:8123/?query=SELECT%201"
 
-# Check connection pool
-docker exec mongo-kb mongo --eval "db.serverStatus().connections"
+# Check database exists
+curl "http://kato-clickhouse:8123/" \
+  --data "SHOW DATABASES"
+
+# Check table stats
+curl "http://kato-clickhouse:8123/" \
+  --data "SELECT count() FROM kato.patterns"
 ```
-
-#### MONGO_TIMEOUT
-**Type**: integer | **Default**: `5000` | **Range**: 1000-30000 (ms)
-
-```bash
-MONGO_TIMEOUT=5000   # Standard
-MONGO_TIMEOUT=10000  # High-latency networks
-```
-
-**Operational Context**:
-- Increase for high-latency connections (cross-region)
-- Decrease for fast local networks (low latency tolerance)
-- Values too low cause false failures
-- Values too high delay error detection
-
-**Production Recommendations**:
-- **Local/Same-Region**: 5000ms
-- **Cross-Region**: 10000-15000ms
-- **Internet/Atlas**: 15000-30000ms
 
 ### Qdrant
 
@@ -305,40 +295,6 @@ REDIS_ENABLED=false  # Disable (testing/minimal setup)
 - Minimal testing environments
 - Cost-sensitive deployments
 
-## ClickHouse (Hybrid Architecture)
-
-### CLICKHOUSE_HOST / CLICKHOUSE_PORT / CLICKHOUSE_DB
-**Type**: string, integer, string | **Default**: `localhost`, `8123`, `kato`
-
-```bash
-CLICKHOUSE_HOST=clickhouse-kb
-CLICKHOUSE_PORT=8123  # HTTP interface
-CLICKHOUSE_DB=kato
-```
-
-**Operational Context**:
-- Required for billion-scale pattern storage
-- Uses read-side of hybrid architecture
-- Write still goes to MongoDB (write-side)
-
-**Production Configuration**:
-```bash
-CLICKHOUSE_HOST=clickhouse-cluster
-CLICKHOUSE_PORT=8123
-CLICKHOUSE_DB=kato_production
-CLICKHOUSE_USER=kato_user
-CLICKHOUSE_PASSWORD=secure_password
-```
-
-**Troubleshooting**:
-```bash
-# Test connection
-curl "http://clickhouse-kb:8123/?query=SELECT%201"
-
-# Check table stats
-curl "http://clickhouse-kb:8123/" \
-  --data "SELECT count() FROM kato.patterns"
-```
 
 ## Learning Configuration
 
@@ -550,7 +506,9 @@ LOG_LEVEL=DEBUG
 LOG_FORMAT=human
 LOG_OUTPUT=stdout
 
-MONGO_BASE_URL=mongodb://localhost:27017
+CLICKHOUSE_HOST=localhost
+CLICKHOUSE_PORT=8123
+CLICKHOUSE_DB=kato
 QDRANT_HOST=localhost
 QDRANT_PORT=6333
 REDIS_URL=redis://localhost:6379/0
@@ -573,7 +531,9 @@ LOG_LEVEL=INFO
 LOG_FORMAT=json
 LOG_OUTPUT=stdout
 
-MONGO_BASE_URL=mongodb://mongo-staging:27017
+CLICKHOUSE_HOST=kato-clickhouse-staging
+CLICKHOUSE_PORT=8123
+CLICKHOUSE_DB=kato_staging
 QDRANT_HOST=qdrant-staging
 QDRANT_PORT=6333
 REDIS_URL=redis://redis-staging:6379/0
@@ -600,9 +560,12 @@ LOG_LEVEL=INFO
 LOG_FORMAT=json
 LOG_OUTPUT=stdout
 
-# High-availability MongoDB replica set
-MONGO_BASE_URL=mongodb://mongo1:27017,mongo2:27017,mongo3:27017/?replicaSet=rs0&authSource=admin
-MONGO_TIMEOUT=5000
+# ClickHouse cluster
+CLICKHOUSE_HOST=kato-clickhouse-cluster
+CLICKHOUSE_PORT=9000  # Native protocol for production
+CLICKHOUSE_DB=kato_production
+CLICKHOUSE_USER=kato_user
+CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}  # From secrets
 
 # Qdrant cluster
 QDRANT_HOST=qdrant-cluster
@@ -652,8 +615,8 @@ docker-compose restart kato
 
 ### Database Connection Errors
 ```bash
-# Test MongoDB
-docker exec kato python -c "from pymongo import MongoClient; print(MongoClient(os.environ['MONGO_BASE_URL']).admin.command('ping'))"
+# Test ClickHouse
+curl "http://${CLICKHOUSE_HOST}:${CLICKHOUSE_PORT}/?query=SELECT%201"
 
 # Test Qdrant
 curl http://${QDRANT_HOST}:${QDRANT_PORT}/

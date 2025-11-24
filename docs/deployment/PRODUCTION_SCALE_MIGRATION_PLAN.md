@@ -57,7 +57,7 @@ Uvicorn Worker  Uvicorn Worker  Uvicorn Worker
     ↓               ↓               ↓
 FastAPI App     FastAPI App     FastAPI App
     ↓               ↓               ↓
-MongoDB, Redis, Qdrant (Shared Resources)
+ClickHouse, Redis, Qdrant (Shared Resources)
 ```
 
 **Why This Works:**
@@ -78,7 +78,7 @@ Pod 1           Pod 2           Pod 3
     ↓               ↓               ↓
 FastAPI App     FastAPI App     FastAPI App
     ↓               ↓               ↓
-MongoDB, Redis, Qdrant (Shared Resources)
+ClickHouse, Redis, Qdrant (Shared Resources)
 ```
 
 **Why This Works:**
@@ -194,20 +194,20 @@ environment:
 version: '3.8'
 
 services:
-  # MongoDB shared by all sessions
-  mongodb:
-    image: mongo:4.4
-    container_name: kato-mongodb
+  # ClickHouse shared by all sessions
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: clickhouse
     ports:
-      - "27017:27017"
+      - "8123:8123"
+      - "9000:9000"
     volumes:
-      - mongo-data:/data/db
+      - clickhouse-data:/var/lib/clickhouse
     networks:
       - kato-network
     restart: unless-stopped
-    command: mongod --wiredTigerCacheSizeGB 2
     healthcheck:
-      test: ["CMD", "mongo", "--eval", "db.adminCommand('ping')", "--quiet"]
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
       interval: 15s
       timeout: 10s
       retries: 20
@@ -256,10 +256,13 @@ services:
     container_name: kato
     environment:
       - SERVICE_NAME=kato
-      - MONGO_BASE_URL=mongodb://mongodb:27017
+      - CLICKHOUSE_HOST=clickhouse
+      - CLICKHOUSE_PORT=8123
+      - CLICKHOUSE_DB=kato
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
-      - REDIS_URL=redis://redis:6379
       - LOG_LEVEL=INFO
       - SESSION_TTL=3600
       - SESSION_AUTO_EXTEND=true
@@ -274,12 +277,12 @@ services:
     networks:
       - kato-network
     depends_on:
-      mongodb:
+      clickhouse:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       qdrant:
         condition: service_started
-      redis:
-        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5).read()"]
@@ -295,9 +298,9 @@ networks:
         - subnet: 172.28.0.0/16
 
 volumes:
-  mongo-data:
-  qdrant-data:
+  clickhouse-data:
   redis-data:
+  qdrant-data:
 ```
 
 #### Benefits
@@ -358,10 +361,16 @@ spec:
         env:
         - name: SERVICE_NAME
           value: "kato"
-        - name: MONGO_BASE_URL
-          value: "mongodb://mongodb:27017"
-        - name: REDIS_URL
-          value: "redis://redis:6379"
+        - name: CLICKHOUSE_HOST
+          value: "clickhouse"
+        - name: CLICKHOUSE_PORT
+          value: "8123"
+        - name: CLICKHOUSE_DB
+          value: "kato"
+        - name: REDIS_HOST
+          value: "redis"
+        - name: REDIS_PORT
+          value: "6379"
         - name: QDRANT_HOST
           value: "qdrant"
         - name: QDRANT_PORT

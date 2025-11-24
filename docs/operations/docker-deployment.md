@@ -6,9 +6,9 @@ Complete guide to deploying KATO with Docker and Docker Compose.
 
 KATO uses Docker Compose for orchestrating multiple services:
 - **KATO API**: FastAPI application
-- **MongoDB**: Pattern and symbol storage
+- **ClickHouse**: Pattern data storage with multi-stage filter pipeline
 - **Qdrant**: Vector similarity search
-- **Redis**: Session and cache management
+- **Redis**: Session management, pattern metadata, and caching
 
 ## Quick Start
 
@@ -50,13 +50,15 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - MONGO_BASE_URL=mongodb://mongo-kb:27017
+      - CLICKHOUSE_HOST=kato-clickhouse
+      - CLICKHOUSE_PORT=8123
+      - CLICKHOUSE_DB=kato
       - QDRANT_HOST=qdrant-kb
       - REDIS_URL=redis://redis-kb:6379/0
       - LOG_LEVEL=INFO
       - ENVIRONMENT=production
     depends_on:
-      - mongo-kb
+      - kato-clickhouse
       - qdrant-kb
       - redis-kb
     restart: unless-stopped
@@ -69,18 +71,22 @@ services:
       retries: 3
       start_period: 40s
 
-  # MongoDB Service
-  mongo-kb:
-    image: mongo:6.0
-    container_name: mongo-kb
+  # ClickHouse Service
+  kato-clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: kato-clickhouse
     ports:
-      - "27017:27017"
+      - "8123:8123"
+      - "9000:9000"
     volumes:
-      - kato-mongo-data:/data/db
+      - kato-clickhouse-data:/var/lib/clickhouse
     restart: unless-stopped
     networks:
       - kato-network
-    command: --wiredTigerCacheSizeGB 2
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
 
   # Qdrant Service
   qdrant-kb:
@@ -109,7 +115,7 @@ services:
     command: redis-server --appendonly yes
 
 volumes:
-  kato-mongo-data:
+  kato-clickhouse-data:
   kato-qdrant-data:
   kato-redis-data:
 
@@ -192,8 +198,9 @@ CORS_ENABLED=true
 CORS_ORIGINS=https://yourdomain.com
 
 # Database Configuration
-MONGO_BASE_URL=mongodb://mongo-kb:27017
-MONGO_TIMEOUT=5000
+CLICKHOUSE_HOST=kato-clickhouse
+CLICKHOUSE_PORT=8123
+CLICKHOUSE_DB=kato
 QDRANT_HOST=qdrant-kb
 QDRANT_PORT=6333
 REDIS_URL=redis://redis-kb:6379/0
@@ -297,11 +304,14 @@ server {
 ### Backup Volumes
 
 ```bash
-# Backup MongoDB
+# Backup ClickHouse
 docker run --rm \
-  -v kato-mongo-data:/data \
+  -v kato-clickhouse-data:/data \
   -v $(pwd)/backups:/backup \
-  alpine tar czf /backup/mongo-$(date +%Y%m%d).tar.gz /data
+  alpine tar czf /backup/clickhouse-$(date +%Y%m%d).tar.gz /data
+
+# Or use ClickHouse native backup
+docker exec kato-clickhouse clickhouse-client --query="BACKUP DATABASE kato TO Disk('backups', 'backup-$(date +%Y%m%d).zip')"
 
 # Backup Qdrant
 docker run --rm \
@@ -319,14 +329,17 @@ docker run --rm \
 ### Restore Volumes
 
 ```bash
-# Restore MongoDB
+# Restore ClickHouse
 docker run --rm \
-  -v kato-mongo-data:/data \
+  -v kato-clickhouse-data:/data \
   -v $(pwd)/backups:/backup \
-  alpine tar xzf /backup/mongo-20251113.tar.gz -C /
+  alpine tar xzf /backup/clickhouse-20251113.tar.gz -C /
+
+# Or use ClickHouse native restore
+docker exec kato-clickhouse clickhouse-client --query="RESTORE DATABASE kato FROM Disk('backups', 'backup-20251113.zip')"
 
 # Restart services
-docker-compose restart mongo-kb
+docker-compose restart kato-clickhouse
 ```
 
 ## Resource Limits
@@ -346,7 +359,7 @@ services:
           cpus: '1.0'
           memory: 2G
 
-  mongo-kb:
+  kato-clickhouse:
     deploy:
       resources:
         limits:
@@ -382,9 +395,9 @@ if [ "$KATO_HEALTH" != "healthy" ]; then
     exit 1
 fi
 
-# Check MongoDB
-if ! docker exec mongo-kb mongo --eval "db.adminCommand('ping')" > /dev/null 2>&1; then
-    echo "MongoDB unhealthy"
+# Check ClickHouse
+if ! docker exec kato-clickhouse clickhouse-client --query "SELECT 1" > /dev/null 2>&1; then
+    echo "ClickHouse unhealthy"
     exit 1
 fi
 
@@ -483,15 +496,15 @@ docker-compose config
 docker network inspect kato-network
 
 # Test connectivity
-docker exec kato ping mongo-kb
+docker exec kato ping kato-clickhouse
 docker exec kato ping qdrant-kb
 ```
 
 ### Database Connection Issues
 
 ```bash
-# Test MongoDB connection
-docker exec mongo-kb mongo --eval "db.adminCommand('ping')"
+# Test ClickHouse connection
+docker exec kato-clickhouse clickhouse-client --query "SELECT version()"
 
 # Test Qdrant connection
 curl http://localhost:6333/
@@ -513,7 +526,7 @@ docker exec redis-kb redis-cli ping
 
 - [ ] Set ENVIRONMENT=production
 - [ ] Configure proper CORS_ORIGINS
-- [ ] Set strong MongoDB authentication
+- [ ] Set strong ClickHouse authentication (if enabled)
 - [ ] Enable Redis persistence (AOF)
 - [ ] Configure backup strategy
 - [ ] Set up log aggregation

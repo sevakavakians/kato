@@ -67,7 +67,7 @@ This mapping makes sense because:
 
 ### 3.1 Empirical Probability Estimation
 
-Given KATO's pattern storage in MongoDB with frequency counters:
+Given KATO's pattern storage with frequency counters:
 
 ```python
 # Joint probability of present-future pair

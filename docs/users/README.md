@@ -53,7 +53,7 @@ Welcome to the KATO user documentation! This section helps you get started with 
 - Emotives provide emotional context
 
 **Patterns**: Learned sequences from observations
-- Stored permanently in MongoDB
+- Stored permanently
 - Identified by SHA1 hash
 - Include frequency, emotives, and metadata
 

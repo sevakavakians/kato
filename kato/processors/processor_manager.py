@@ -107,6 +107,27 @@ class ProcessorManager:
 
         return f"{safe_node_id}_{safe_base_id}"
 
+    def get_processor_lock(self, node_id: str) -> asyncio.Lock:
+        """
+        Get the lock for a specific processor.
+
+        This lock should be acquired before using the processor to ensure
+        thread-safe access when multiple sessions share the same processor.
+
+        Args:
+            node_id: Node identifier
+
+        Returns:
+            asyncio.Lock for the processor
+        """
+        processor_id = self._get_processor_id(node_id)
+
+        # Ensure lock exists
+        if processor_id not in self.processor_locks:
+            self.processor_locks[processor_id] = asyncio.Lock()
+
+        return self.processor_locks[processor_id]
+
     async def get_processor(self, node_id: str, session_config: Optional[SessionConfiguration] = None) -> KatoProcessor:
         """
         Get or create a processor for a specific node.

@@ -1,7 +1,15 @@
 """
-Memory Manager for KATO
-Handles Short-Term Memory (STM) and Long-Term Memory (LTM) operations.
-Extracted from KatoProcessor for better modularity.
+Memory Manager for KATO - STATELESS VERSION
+
+Provides stateless helper functions for memory operations.
+All functions take state as input and return new state as output.
+No mutation of state - follows functional programming principles.
+
+ARCHITECTURE: After v3.0 stateless refactor
+- No instance variables for session state
+- All methods are static or class methods
+- State is passed as parameters
+- State is returned as new objects (no mutation)
 """
 
 import logging
@@ -15,79 +23,77 @@ logger = logging.getLogger('kato.workers.memory_manager')
 
 class MemoryManager:
     """
-    Manages memory operations for KATO processor.
+    Stateless memory operation helpers for KATO processor.
 
-    This class handles:
-    - STM (Short-Term Memory) state management
-    - Variable resets and initialization
-    - Memory clearing operations
-    - Emotives accumulation and averaging
+    This class provides pure functions for:
+    - STM state transformations
+    - Emotives processing and accumulation
+    - Metadata processing and accumulation
+    - Percept data construction
+
+    All methods are stateless - they take state as input and return new state.
+    No instance variables hold session-specific state.
     """
 
     def __init__(self, pattern_processor, vector_processor):
         """
-        Initialize memory manager with references to processors.
+        Initialize memory manager with references to LTM processors.
 
         Args:
-            pattern_processor: Reference to pattern processor for STM operations
-            vector_processor: Reference to vector processor for vector memory operations
+            pattern_processor: Reference to pattern processor (for LTM operations only)
+            vector_processor: Reference to vector processor (for LTM operations only)
+
+        Note: These references are for LTM operations (shared by design).
+              Session-specific state is NOT stored here.
         """
         self.pattern_processor = pattern_processor
         self.vector_processor = vector_processor
+        logger.debug("MemoryManager initialized (stateless)")
 
-        # Initialize state variables
-        self.symbols: list[str] = []
-        self.current_emotives: dict[str, float] = {}
-        self.emotives_accumulator: list[dict[str, float]] = []  # v2.0: For session isolation
-        self.metadata_accumulator: list[dict[str, Any]] = []  # v2.0: For session isolation
-        self.last_command: str = ""
-        self.percept_data: dict[str, Any] = {}
-        self.percept_data_vector: Optional[list[float]] = None
-        self.time: int = 0
+    # =========================================================================
+    # STATE CREATION AND RESET
+    # =========================================================================
 
-        logger.debug("MemoryManager initialized")
-
-    def reset_primitive_variables(self) -> None:
+    @staticmethod
+    def create_empty_state() -> dict[str, Any]:
         """
-        Reset primitive variables to their initial state.
+        Create an empty session state dictionary.
 
-        This is called when clearing STM or starting fresh observations.
-        Does not affect the time counter or pattern memory.
+        Returns:
+            Dictionary with all session state variables initialized to empty/zero
         """
-        try:
-            self.symbols = []
-            self.current_emotives = {}
-            self.emotives_accumulator = []  # v2.0: Reset emotives accumulator
-            self.metadata_accumulator = []  # v2.0: Reset metadata accumulator
-            self.last_command = ""
-            self.pattern_processor.v_identified = []
-            self.percept_data = {}
-            self.percept_data_vector = None
-        except Exception as e:
-            raise MemoryOperationError(
-                f"Failed to reset primitive variables: {str(e)}",
-                memory_type="STM",
-                operation="reset_variables"
-            )
+        return {
+            'symbols': [],
+            'current_emotives': {},
+            'emotives_accumulator': [],
+            'metadata_accumulator': [],
+            'last_command': "",
+            'percept_data': {},
+            'percept_data_vector': None,
+            'time': 0
+        }
 
-    def clear_stm(self) -> None:
+    def clear_stm(self, pattern_processor) -> None:
         """
-        Clear Short-Term Memory.
+        Clear STM in pattern processor (LTM operation).
 
-        Resets STM in pattern processor and clears associated state variables.
-        This does not affect learned patterns in long-term memory.
+        This is a side effect operation that clears the pattern processor's STM.
+        Does NOT clear session state - that should be done by caller.
+
+        Args:
+            pattern_processor: Pattern processor to clear STM from
+
+        Raises:
+            MemoryOperationError: If clearing fails
         """
         try:
-            # Reset primitive variables
-            self.reset_primitive_variables()
+            # Clear STM in pattern processor (LTM side effect)
+            pattern_processor.clear_stm()
 
-            # Clear symbols list
-            self.symbols = []
+            # Also clear v_identified (pattern matching state)
+            pattern_processor.v_identified = []
 
-            # Clear STM in pattern processor
-            self.pattern_processor.clear_stm()
-
-            logger.info("STM cleared successfully")
+            logger.info("Pattern processor STM cleared successfully")
         except Exception as e:
             raise MemoryOperationError(
                 f"Failed to clear STM: {str(e)}",
@@ -95,38 +101,33 @@ class MemoryManager:
                 operation="clear"
             )
 
-    def clear_all_memory(self) -> None:
+    def clear_all_memory(self, pattern_processor, vector_processor) -> None:
         """
-        Clear all memory (both STM and LTM).
+        Clear all memory (both STM and LTM) - SIDE EFFECT operation.
 
-        This is a complete memory wipe including:
-        - Short-term memory (STM)
+        This is a destructive operation that clears:
+        - Short-term memory (STM) in pattern processor
         - Long-term memory (patterns in database)
         - Vector memory
-        - All state variables
-        - Time counter reset
+
+        Session state should be reset by caller using create_empty_state().
+
+        Args:
+            pattern_processor: Pattern processor to clear
+            vector_processor: Vector processor to clear
+
+        Raises:
+            MemoryOperationError: If clearing fails
 
         WARNING: This operation cannot be undone and will delete all learned patterns.
         """
         try:
-            # Reset time counter
-            self.time = 0
-
-            # Clear command history
-            self.last_command = ""
-
-            # Clear emotives
-            self.current_emotives = {}
-
-            # Clear STM
-            self.clear_stm()
-
             # Clear pattern processor memory (includes database operations)
-            self.pattern_processor.superkb.clear_all_memory()
-            self.pattern_processor.clear_all_memory()
+            pattern_processor.superkb.clear_all_memory()
+            pattern_processor.clear_all_memory()
 
             # Clear vector processor memory
-            self.vector_processor.clear_all_memory()
+            vector_processor.clear_all_memory()
 
             logger.info("All memory cleared successfully (STM and LTM)")
         except Exception as e:
@@ -136,67 +137,125 @@ class MemoryManager:
                 operation="clear"
             )
 
-    def increment_time(self) -> None:
-        """
-        Increment the internal time counter.
+    # =========================================================================
+    # TIME OPERATIONS (Pure functions)
+    # =========================================================================
 
-        This counter tracks the number of observations processed.
+    @staticmethod
+    def increment_time(current_time: int) -> int:
         """
-        self.time += 1
+        Increment time counter.
 
-    def process_emotives(self, emotives: dict[str, float]) -> None:
+        Args:
+            current_time: Current time value
+
+        Returns:
+            New time value (current_time + 1)
+        """
+        return current_time + 1
+
+    # =========================================================================
+    # EMOTIVES OPERATIONS (Pure functions)
+    # =========================================================================
+
+    @staticmethod
+    def process_emotives(
+        emotives_accumulator: list[dict[str, float]],
+        new_emotives: dict[str, float]
+    ) -> tuple[list[dict[str, float]], dict[str, float]]:
         """
         Process and accumulate emotives data.
 
         Args:
-            emotives: Dictionary of emotive values to process
+            emotives_accumulator: Current list of accumulated emotives
+            new_emotives: New emotives to add
 
-        Updates:
-            - Adds emotives to pattern processor's accumulator
-            - Calculates and stores averaged emotives in current_emotives
+        Returns:
+            Tuple of:
+            - Updated emotives_accumulator (with new_emotives appended)
+            - current_emotives (averaged over all accumulated emotives)
+
+        Raises:
+            MemoryOperationError: If processing fails
         """
         try:
-            if emotives:
-                # Add to pattern processor's emotives list
-                self.pattern_processor.emotives += [emotives]
+            if not new_emotives:
+                # No new emotives, return unchanged
+                current_avg = average_emotives(emotives_accumulator) if emotives_accumulator else {}
+                return emotives_accumulator, current_avg
 
-                # Calculate average of all accumulated emotives
-                self.current_emotives = average_emotives(self.pattern_processor.emotives)
+            # Create new accumulator with new emotives appended
+            new_accumulator = emotives_accumulator.copy()
+            new_accumulator.append(new_emotives)
+
+            # Calculate average of all accumulated emotives
+            current_avg = average_emotives(new_accumulator)
+
+            return new_accumulator, current_avg
+
         except Exception as e:
             raise MemoryOperationError(
                 f"Failed to process emotives: {str(e)}",
                 memory_type="STM",
                 operation="process_emotives",
-                context={"emotives_count": len(emotives) if emotives else 0}
+                context={"emotives_count": len(new_emotives) if new_emotives else 0}
             )
 
-    def process_metadata(self, metadata: dict[str, Any]) -> None:
+    # =========================================================================
+    # METADATA OPERATIONS (Pure functions)
+    # =========================================================================
+
+    @staticmethod
+    def process_metadata(
+        metadata_accumulator: list[dict[str, Any]],
+        new_metadata: dict[str, Any]
+    ) -> list[dict[str, Any]]:
         """
         Process and accumulate metadata.
 
         Args:
-            metadata: Dictionary of metadata to process
+            metadata_accumulator: Current list of accumulated metadata
+            new_metadata: New metadata to add
 
-        Updates:
-            - Adds metadata to pattern processor's accumulator
+        Returns:
+            Updated metadata_accumulator (with new_metadata appended)
+
+        Raises:
+            MemoryOperationError: If processing fails
         """
         try:
-            if metadata:
-                # Add to pattern processor's metadata list
-                self.pattern_processor.metadata += [metadata]
+            if not new_metadata:
+                # No new metadata, return unchanged
+                return metadata_accumulator
+
+            # Create new accumulator with new metadata appended
+            new_accumulator = metadata_accumulator.copy()
+            new_accumulator.append(new_metadata)
+
+            return new_accumulator
+
         except Exception as e:
             raise MemoryOperationError(
                 f"Failed to process metadata: {str(e)}",
                 memory_type="STM",
                 operation="process_metadata",
-                context={"metadata_keys": len(metadata) if metadata else 0}
+                context={"metadata_keys": len(new_metadata) if new_metadata else 0}
             )
 
-    def update_percept_data(self, strings: list[str], vectors: list[list[float]],
-                           emotives: dict[str, float], path: list[str],
-                           metadata: dict[str, Any]) -> None:
+    # =========================================================================
+    # PERCEPT DATA OPERATIONS (Pure functions)
+    # =========================================================================
+
+    @staticmethod
+    def build_percept_data(
+        strings: list[str],
+        vectors: list[list[float]],
+        emotives: dict[str, float],
+        path: list[str],
+        metadata: dict[str, Any]
+    ) -> dict[str, Any]:
         """
-        Update the current percept data.
+        Build percept data dictionary from observation components.
 
         Args:
             strings: String observations
@@ -204,8 +263,11 @@ class MemoryManager:
             emotives: Emotional values
             path: Processing path
             metadata: Additional metadata
+
+        Returns:
+            Percept data dictionary
         """
-        self.percept_data = {
+        return {
             'strings': strings,
             'vectors': vectors,
             'emotives': emotives,
@@ -213,35 +275,88 @@ class MemoryManager:
             'metadata': metadata
         }
 
-    def get_stm_state(self) -> list[list[str]]:
+    # =========================================================================
+    # STM STATE OPERATIONS (Read operations)
+    # =========================================================================
+
+    @staticmethod
+    def get_stm_from_pattern_processor(pattern_processor) -> list[list[str]]:
         """
-        Get the current STM state.
+        Get STM from pattern processor.
+
+        This reads the current STM from the pattern processor.
+        Note: In stateless architecture, STM should primarily live in SessionState,
+        but pattern processor may maintain a working copy during processing.
+
+        Args:
+            pattern_processor: Pattern processor to read STM from
 
         Returns:
             Current STM as list of symbol lists
         """
-        return list(self.pattern_processor.STM)
+        return list(pattern_processor.STM)
 
-    def get_stm_length(self) -> int:
+    @staticmethod
+    def get_stm_length(stm: list[list[str]]) -> int:
         """
-        Get the current length of STM.
+        Get the length of STM.
+
+        Args:
+            stm: Short-term memory as list of events
 
         Returns:
             Number of events in STM
         """
-        return len(self.pattern_processor.STM)
+        return len(stm)
 
-    def set_stm_tail_context(self, tail_event: list[str]) -> None:
+    def set_stm_in_pattern_processor(
+        self,
+        pattern_processor,
+        stm: list[list[str]]
+    ) -> None:
         """
-        Set STM with a tail event for context continuity.
+        Set STM in pattern processor (side effect operation).
+
+        This is used to load session STM into pattern processor for processing.
+        After stateless refactor, this should only be called when loading
+        session state into processor for a specific operation.
+
+        Args:
+            pattern_processor: Pattern processor to update
+            stm: STM to set
+
+        Raises:
+            MemoryOperationError: If setting fails
+        """
+        try:
+            pattern_processor.setSTM(stm)
+            logger.debug(f"STM set in pattern processor ({len(stm)} events)")
+        except Exception as e:
+            raise MemoryOperationError(
+                f"Failed to set STM in pattern processor: {str(e)}",
+                memory_type="STM",
+                operation="set_stm"
+            )
+
+    def set_stm_tail_context(
+        self,
+        pattern_processor,
+        tail_event: list[str]
+    ) -> None:
+        """
+        Set STM with a tail event for context continuity (side effect operation).
 
         Used during auto-learning to maintain context between learned patterns.
 
         Args:
+            pattern_processor: Pattern processor to update
             tail_event: The last event to keep as context
+
+        Raises:
+            MemoryOperationError: If setting fails
         """
         try:
-            self.pattern_processor.setSTM([tail_event])
+            pattern_processor.setSTM([tail_event])
             logger.debug(f"STM tail context set with {len(tail_event)} symbols")
         except Exception as e:
             raise MemoryOperationError(
@@ -249,3 +364,36 @@ class MemoryManager:
                 memory_type="STM",
                 operation="set_tail_context"
             )
+
+    # =========================================================================
+    # SYMBOL OPERATIONS (Pure functions)
+    # =========================================================================
+
+    @staticmethod
+    def add_symbols(
+        current_symbols: list[str],
+        new_symbols: list[str]
+    ) -> list[str]:
+        """
+        Add new symbols to symbol list.
+
+        Args:
+            current_symbols: Current symbol list
+            new_symbols: New symbols to add
+
+        Returns:
+            Updated symbol list (current_symbols + new_symbols)
+        """
+        result = current_symbols.copy()
+        result.extend(new_symbols)
+        return result
+
+    @staticmethod
+    def clear_symbols() -> list[str]:
+        """
+        Create empty symbol list.
+
+        Returns:
+            Empty list
+        """
+        return []

@@ -1,5 +1,191 @@
 # DECISIONS.md - Architectural & Design Decision Log
 *Append-Only Log - Started: 2025-08-29*
+*Last Updated: 2025-11-25*
+
+---
+
+## 2025-11-25 - DECISION-007: Stateless Processor Architecture
+**Decision**: Refactor KatoProcessor from stateful to stateless architecture
+**Status**: ACTIVE - Implementation in progress
+
+### Context
+**Critical Bug Discovered**: Session isolation broken in KATO v3.0.
+
+**Root Cause**: `KatoProcessor` holds session state as instance variables:
+```python
+class KatoProcessor:
+    def __init__(self):
+        self.stm = []           # SHARED across sessions!
+        self.emotives = []      # SHARED across sessions!
+        self.percept_data = []  # SHARED across sessions!
+```
+
+**Impact**: Multiple sessions with same `node_id` share the same processor instance, causing session data to leak between sessions.
+
+**Current Workaround**: Implemented processor locks to force sequential processing:
+```python
+async with processor_locks[processor_id]:
+    processor.observe(observation)
+```
+
+**Problems with Locks**:
+- Architectural band-aid (not a proper fix)
+- Forces sequential processing (concurrency bottleneck)
+- Doesn't scale horizontally
+- Violates web application best practices
+- 5-10x performance penalty
+
+### Alternatives Considered
+
+#### Alternative 1: Separate Processor Per Session
+**Approach**: Create new `KatoProcessor` instance for each session.
+
+**Pros**:
+- Simple implementation
+- Complete session isolation
+
+**Cons**:
+- Massive memory overhead (duplicate processors)
+- Doesn't share learned patterns (defeats LTM purpose)
+- Breaks node_id semantic (nodes should share knowledge)
+- Not scalable
+
+**Rejected**: Violates KATO's design principle of shared knowledge bases.
+
+#### Alternative 2: Keep Locks, Improve Performance
+**Approach**: Keep stateful design but optimize lock granularity.
+
+**Pros**:
+- Minimal code changes
+- Preserves current architecture
+
+**Cons**:
+- Still sequential processing (fundamental bottleneck)
+- Doesn't solve root cause
+- Technical debt accumulation
+- Doesn't scale horizontally
+- Still 5-10x slower than stateless
+
+**Rejected**: Band-aid solution, not architecturally sound.
+
+#### Alternative 3: Stateless Processor (CHOSEN)
+**Approach**: Refactor processor to be stateless (standard web pattern).
+
+**Pros**:
+- ✅ Architecturally correct (follows web best practices)
+- ✅ True concurrent processing (no locks)
+- ✅ Horizontal scalability
+- ✅ 5-10x performance improvement
+- ✅ Simpler code (no lock management)
+- ✅ Session isolation guaranteed
+- ✅ Aligns with modern microservice patterns
+
+**Cons**:
+- Significant refactor required (2-3 days)
+- Need to update all 7 session endpoints
+- Need to refactor core processing components
+- Testing effort required
+
+**Chosen**: This is the correct architectural solution.
+
+### Decision
+
+**Make KatoProcessor stateless using functional programming pattern**:
+
+```python
+# NEW (stateless)
+class KatoProcessor:
+    def observe(self, session_state: SessionState, observation: Observation) -> SessionState:
+        new_stm = MemoryManager.add_to_stm(session_state.stm, observation)
+        return SessionState(stm=new_stm, ltm=session_state.ltm, ...)
+```
+
+**Key Principles**:
+1. Processors accept session state as parameters
+2. Processors return new state as results
+3. No instance variable mutations
+4. No locks needed
+5. Pure functional processing
+
+### Consequences
+
+#### Positive Consequences
+1. **Session Isolation**: Guaranteed by design (state passed as parameters)
+2. **True Concurrency**: No locks, unlimited parallel processing
+3. **Performance**: 5-10x throughput improvement expected
+4. **Scalability**: Horizontal scaling becomes trivial
+5. **Simplicity**: No lock management, cleaner code
+6. **Best Practices**: Aligns with standard web application architecture
+7. **Testability**: Easier to test (pure functions)
+
+#### Negative Consequences
+1. **Refactoring Effort**: 2-3 days of development work
+2. **Testing Effort**: Comprehensive test updates required
+3. **Documentation**: Need to update architecture docs
+4. **Learning Curve**: Team needs to understand stateless pattern
+
+#### Migration Impact
+- **API**: No breaking changes (internal refactor only)
+- **Performance**: Temporary disruption during implementation
+- **Users**: Transparent (no user-visible changes)
+- **Database**: No schema changes required
+
+### Implementation Plan
+
+**Phase 1**: Core Refactoring (1-2 days)
+- Make MemoryManager stateless
+- Update KatoProcessor to accept SessionState
+- Update all 7 session endpoints
+- Remove all processor locks
+- Update helper modules
+
+**Phase 2**: Testing (1 day)
+- Update test fixtures
+- Verify session isolation
+- Update gene references
+- Create new tests
+
+**Phase 3**: Documentation (0.5 days)
+- Update architecture docs
+- Remove MongoDB references
+- Update configuration docs
+
+**Phase 4**: Verification (0.5 days)
+- Full test suite
+- Stress testing
+- Performance benchmarking
+
+**Phase 5**: Cleanup (0.25 days)
+- Remove obsolete code
+- Add ADR-001
+- Update CLAUDE.md
+
+### Success Metrics
+- ✅ All tests pass (100%)
+- ✅ Session isolation verified (no data leaks)
+- ✅ 5-10x throughput improvement
+- ✅ 50-80% latency reduction
+- ✅ Zero lock contention
+- ✅ Linear scaling with concurrent sessions
+
+### Related Decisions
+- **DECISION-006**: Hybrid ClickHouse + Redis Architecture (storage layer)
+- **DECISION-005**: Session-based API architecture (API layer)
+- **DECISION-004**: Redis session persistence (session management)
+
+### References
+- Initiative Plan: `planning-docs/initiatives/stateless-processor-refactor.md`
+- Architecture Decision Record: `docs/architecture-decisions/ADR-001-stateless-processor.md` (to be created)
+- Hybrid Architecture: `docs/HYBRID_ARCHITECTURE.md`
+
+**Timeline**:
+- Started: 2025-11-25
+- Expected Completion: 2025-11-28
+- Status: Phase 1 starting
+
+**Confidence**: High - Well-understood pattern, clear implementation path
+**Risk**: Medium - Significant refactor, but comprehensive testing will validate
+**Reversibility**: High - Git-based rollback if needed
 
 ---
 

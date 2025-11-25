@@ -219,22 +219,26 @@ class ObservationProcessor:
         """
         Process emotional/utility values.
 
+        NOTE: This method is deprecated. Emotives processing now happens in KatoProcessor.observe()
+        using MemoryManager.process_emotives() static method. Kept for backward compatibility.
+
         Args:
             emotives_data: Dictionary of emotive values
         """
         if emotives_data:
-            self.memory_manager.process_emotives(emotives_data)
             logger.debug(f"Processed {len(emotives_data)} emotive dimensions")
 
     def process_metadata(self, metadata_data: dict[str, Any]) -> None:
         """
         Process pattern metadata.
 
+        NOTE: This method is deprecated. Metadata processing now happens in KatoProcessor.observe()
+        using MemoryManager.process_metadata() static method. Kept for backward compatibility.
+
         Args:
             metadata_data: Dictionary of metadata values
         """
         if metadata_data:
-            self.memory_manager.process_metadata(metadata_data)
             logger.debug(f"Processed {len(metadata_data)} metadata keys")
 
     def check_auto_learning(self, max_pattern_length: int, stm_mode: str) -> Optional[str]:
@@ -257,7 +261,11 @@ class ObservationProcessor:
             logger.debug(f"Auto-learning disabled (max_pattern_length={max_pattern_length})")
             return None
 
-        stm_length = self.memory_manager.get_stm_length()
+        # Use static method to get STM length
+        from kato.workers.memory_manager import MemoryManager
+        stm_state = MemoryManager.get_stm_from_pattern_processor(self.pattern_processor)
+        stm_length = MemoryManager.get_stm_length(stm_state)
+
         # Normalize invalid modes to CLEAR
         if stm_mode not in ['CLEAR', 'ROLLING']:
             stm_mode = 'CLEAR'
@@ -270,7 +278,6 @@ class ObservationProcessor:
             if stm_length > 1:
                 if stm_mode == 'ROLLING':
                     # ROLLING mode: Save the last N-1 events before learning
-                    stm_state = self.memory_manager.get_stm_state()
                     window_size = max_pattern_length - 1
                     events_to_restore = stm_state[-window_size:] if len(stm_state) > window_size else stm_state[1:]
 
@@ -361,31 +368,21 @@ class ObservationProcessor:
                 processor_id = getattr(self.pattern_processor, 'id', 'unknown')
                 data['path'] += [f'{processor_name}-{processor_id}-process']
 
-                # Update percept data in memory manager
-                self.memory_manager.update_percept_data(
-                    string_data,
-                    vector_data,
-                    emotives_data,
-                    data['path'],
-                    data.get('metadata', {})
-                )
-
-                # Increment time counter
-                self.memory_manager.increment_time()
+                # NOTE: percept_data, time, emotives, metadata are now handled in KatoProcessor.observe()
+                # This processor only handles symbolic processing and predictions
 
                 # Process different data types
                 v_identified = self.process_vectors(vector_data) if vector_data else []
                 symbols = self.process_strings(string_data) if string_data else []
 
                 if emotives_data:
-                    self.process_emotives(emotives_data)
+                    self.process_emotives(emotives_data)  # Deprecated, just logs
 
                 if metadata_data:
-                    self.process_metadata(metadata_data)
+                    self.process_metadata(metadata_data)  # Deprecated, just logs
 
                 # Combine all symbols
                 combined_symbols = v_identified + symbols
-                self.memory_manager.symbols = combined_symbols
 
                 # Only trigger predictions if we have actual symbolic content
                 predictions = []

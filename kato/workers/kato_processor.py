@@ -39,8 +39,6 @@ class KatoProcessor:
         self.agent_name = os.environ.get('SERVICE_NAME', 'kato')
         logger.info(f" Starting KatoProcessor ID: {self.id}, Name: {self.name}")
 
-        self.time = 0
-
         # Use all available processors for parallel searches
         self.procs_for_searches = int(cpu_count())
 
@@ -86,17 +84,6 @@ class KatoProcessor:
             self.pattern_processor.sort, self.pattern_processor.max_pattern_length,
             settings.processing.process_predictions
         )
-
-        # Initialize state through memory manager
-        self.memory_manager.reset_primitive_variables()
-
-        # Expose commonly accessed attributes for backward compatibility
-        self.symbols = self.memory_manager.symbols
-        self.current_emotives = self.memory_manager.current_emotives
-        self.percept_data = self.memory_manager.percept_data
-        self.time = self.memory_manager.time
-
-        self.predictions = []
 
         logger.info(f" {self.name}-{self.id} kato processor, ready!")
         return
@@ -188,9 +175,41 @@ class KatoProcessor:
         self.percept_data = self.memory_manager.percept_data
         return
 
-    def learn(self):
-        """Learn pattern - delegates to pattern operations"""
-        return self.pattern_operations.learn_pattern()
+    def learn(
+        self,
+        *,
+        session_state: 'SessionState',
+        keep_tail: bool = False
+    ) -> tuple[str, list[list[str]]]:
+        """
+        Learn a pattern from session STM and return updated STM.
+
+        STATELESS: Takes session state, returns pattern name and new STM.
+        Does NOT mutate processor or session_state.
+
+        Args:
+            session_state: Current session state with STM to learn
+            keep_tail: Whether to keep last event in STM after learning (for rolling mode)
+
+        Returns:
+            Tuple of (pattern_name, new_stm):
+            - pattern_name: Name of learned pattern (or None if learning failed)
+            - new_stm: Updated STM after learning
+        """
+        # BRIDGE: Load session STM into pattern processor temporarily
+        self.memory_manager.set_stm_in_pattern_processor(
+            self.pattern_processor,
+            session_state.stm
+        )
+
+        # TODO (Phase 1.7): Update pattern_operations to be stateless
+        # For now, it reads from pattern_processor.STM and mutates it
+        pattern_name = self.pattern_operations.learn_pattern(keep_tail=keep_tail)
+
+        # Extract new STM after learning
+        new_stm = MemoryManager.get_stm_from_pattern_processor(self.pattern_processor)
+
+        return pattern_name, new_stm
 
     def delete_pattern(self, name):
         """Delete pattern - delegates to pattern operations"""
@@ -200,9 +219,18 @@ class KatoProcessor:
         """Update pattern - delegates to pattern operations"""
         return self.pattern_operations.update_pattern(name, frequency, emotives)
 
-    async def observe(self, data=None, config: SessionConfiguration = None):
+    async def observe(
+        self,
+        observation: dict,
+        *,
+        session_state: 'SessionState',
+        config: SessionConfiguration
+    ) -> dict:
         """
-        Process incoming observations - delegates to observation processor.
+        Process incoming observations and return updated session state.
+
+        STATELESS: Takes session state as input, returns new state as output.
+        Does NOT mutate processor instance or session_state input.
 
         This is the main entry point for new sensory data. It handles:
         - String symbols (already in symbolic form)
@@ -211,79 +239,125 @@ class KatoProcessor:
         - Auto-learning when max_pattern_length is reached
 
         Args:
-            data: Observation data
+            observation: Observation data (strings, vectors, emotives, metadata)
+            session_state: Current session state (SessionState from Redis)
             config: SessionConfiguration for session-specific behavior (REQUIRED)
 
-        Raises:
-            ValueError: If config is None (config is required for all operations)
+        Returns:
+            Dictionary with updated state:
+            {
+                'status': 'observed',
+                'stm': list[list[str]],              # New STM
+                'time': int,                         # New time
+                'emotives_accumulator': list[dict],  # New emotives
+                'metadata_accumulator': list[dict],  # New metadata
+                'percept_data': dict,                # New percept
+                'predictions': list,                 # New predictions
+                'auto_learned_pattern': str | None,  # If auto-learn triggered
+                'unique_id': str,
+                'symbols': list[str],                # Combined symbols
+                'instance_id': str
+            }
         """
-        if config is None:
-            raise ValueError(
-                "SessionConfiguration is required for observe(). "
-                "KATO processors no longer have default config - all config must come from sessions."
-            )
+        # BRIDGE: Load session STM into pattern processor temporarily
+        # (Until observation_processor is made stateless in Phase 1.6)
+        self.memory_manager.set_stm_in_pattern_processor(
+            self.pattern_processor,
+            session_state.stm
+        )
 
-        # Process observation through the observation processor
-        result = await self.observation_processor.process_observation(data, config=config)
+        # TODO (Phase 1.6): Update observation_processor to accept session_state
+        # For now, it will mutate memory_manager state (legacy behavior)
+        result = await self.observation_processor.process_observation(observation, config=config)
 
-        # Update local state from result
-        self.predictions = result.get('predictions', [])
-        self.symbols = self.memory_manager.symbols
-        self.current_emotives = self.memory_manager.current_emotives
-        self.percept_data = self.memory_manager.percept_data
-        self.time = self.memory_manager.time
+        # BRIDGE: Extract new state from pattern processor and helpers
+        new_stm = MemoryManager.get_stm_from_pattern_processor(self.pattern_processor)
+        new_time = MemoryManager.increment_time(session_state.time)
+
+        # Process emotives using stateless helper
+        new_emotives_acc, new_current_emotives = MemoryManager.process_emotives(
+            session_state.emotives_accumulator,
+            observation.get('emotives', {})
+        )
+
+        # Process metadata using stateless helper
+        new_metadata_acc = MemoryManager.process_metadata(
+            session_state.metadata_accumulator,
+            observation.get('metadata', {})
+        )
+
+        # Build percept data using stateless helper
+        new_percept = MemoryManager.build_percept_data(
+            strings=observation.get('strings', []),
+            vectors=observation.get('vectors', []),
+            emotives=new_current_emotives,
+            path=result.get('path', []),
+            metadata=observation.get('metadata', {})
+        )
 
         # Publish to distributed STM if available
-        if self.distributed_stm_manager and data:
+        if self.distributed_stm_manager and observation:
             try:
-                await self.distributed_stm_manager.observe_distributed(data)
+                await self.distributed_stm_manager.observe_distributed(observation)
             except Exception as e:
                 logger.warning(f"Failed to publish observation to distributed STM: {e}")
 
-        # Return format expected by callers
+        # Return new state (no mutation of inputs)
         return {
             'status': 'observed',
-            'unique_id': result['unique_id'],
+            'stm': new_stm,
+            'time': new_time,
+            'emotives_accumulator': new_emotives_acc,
+            'metadata_accumulator': new_metadata_acc,
+            'percept_data': new_percept,
+            'predictions': result.get('predictions', []),
             'auto_learned_pattern': result.get('auto_learned_pattern'),
-            'symbols': result.get('symbols', []),  # Include combined symbols (strings + VCTR names)
-            'time': self.time,
+            'unique_id': result.get('unique_id', observation.get('unique_id', '')),
+            'symbols': result.get('symbols', []),
             'instance_id': self.id
         }
 
-    async def get_predictions(self, unique_id=None, config: SessionConfiguration = None):
+    async def get_predictions(
+        self,
+        *,
+        session_state: 'SessionState',
+        config: SessionConfiguration,
+        unique_id: str = None
+    ) -> list:
         """
-        Retrieve predictions - delegates to pattern operations.
+        Get predictions based on session STM.
 
-        If no ID provided, generates predictions based on current STM.
-        Otherwise queries the database for stored predictions.
+        STATELESS: Takes session state, returns predictions.
+        Does NOT mutate processor or session_state.
+
+        If unique_id provided, retrieves stored predictions from database.
+        Otherwise generates new predictions based on current STM.
 
         Args:
+            session_state: Current session state
+            config: Session configuration (recall threshold, max predictions, etc.)
             unique_id: Optional unique ID to retrieve stored predictions
-            config: SessionConfiguration for session-specific behavior (REQUIRED for new predictions)
 
-        Raises:
-            ValueError: If config is None and generating new predictions
+        Returns:
+            List of prediction objects
         """
-        if unique_id is None:
-            unique_id = {}
-        uid = None
         if unique_id:
-            uid = unique_id.get('unique_id')
+            # Retrieve stored predictions from database (no state needed)
+            return self.pattern_operations.get_predictions(unique_id)
 
-        if not uid:
-            # Generate predictions with provided config
-            if config is None:
-                raise ValueError(
-                    "SessionConfiguration is required for get_predictions(). "
-                    "KATO processors no longer have default config - all config must come from sessions."
-                )
-            return await self.pattern_operations.get_predictions_with_config(
-                stm=self.memory_manager.get_stm_state(),
-                config=config
-            )
-        else:
-            # Delegate to pattern operations for database query (no config needed for retrieval)
-            return self.pattern_operations.get_predictions(uid)
+        # Generate new predictions from current STM
+        # BRIDGE: Load session STM into pattern processor temporarily
+        self.memory_manager.set_stm_in_pattern_processor(
+            self.pattern_processor,
+            session_state.stm
+        )
+
+        # TODO (Phase 1.7): Update pattern_operations to accept session_state
+        # For now, use get_predictions_with_config which reads from pattern_processor.STM
+        return await self.pattern_operations.get_predictions_with_config(
+            stm=session_state.stm,
+            config=config
+        )
 
     def get_stm(self):
         """Get the current short-term memory - delegates to memory manager"""

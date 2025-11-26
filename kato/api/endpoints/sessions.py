@@ -405,23 +405,8 @@ async def get_session_stm(session_id: str):
         logger.warning(f"Session {session_id} not found")
         raise HTTPException(404, detail=f"Session {session_id} not found or expired")
 
-    # If session STM is empty but processor might have state, sync from processor
-    if not session.stm:
-        try:
-            processor = await app_state.processor_manager.get_processor(session.node_id, session.session_config)
-            processor_lock = app_state.processor_manager.get_processor_lock(session.node_id)
-            async with processor_lock:
-                processor_stm = processor.get_stm()
-                if processor_stm:
-                    logger.info(f"Session STM empty but processor has {len(processor_stm)} events, syncing to session")
-                    session.stm = processor_stm
-                    session.emotives_accumulator = processor.get_emotives_accumulator()
-                    session.metadata_accumulator = processor.get_metadata_accumulator()
-                    session.time = processor.time
-            if processor_stm:
-                await app_state.session_manager.update_session(session)
-        except Exception as sync_error:
-            logger.warning(f"Failed to sync processor STM to session: {sync_error}")
+    # NOTE: With stateless processors, session is the source of truth
+    # No need to sync from processor (processor doesn't hold state)
 
     logger.debug(f"Successfully retrieved session {session_id}")
     return STMResponse(
@@ -476,12 +461,8 @@ async def clear_session_stm(session_id: str):
     if not session:
         raise HTTPException(404, detail=f"Session {session_id} not found")
 
-    # Clear the processor's STM with proper locking
-    processor = await app_state.processor_manager.get_processor(session.node_id, session.session_config)
-    processor_lock = app_state.processor_manager.get_processor_lock(session.node_id)
-    async with processor_lock:
-        await processor.clear_stm()
-
+    # NOTE: With stateless processors, just clear session STM in Redis
+    # No need to clear processor STM (processor doesn't hold state)
     cleared = await app_state.session_manager.clear_session_stm(session_id)
 
     if not cleared:
@@ -499,11 +480,10 @@ async def clear_session_all_memory(session_id: str):
     if not session:
         raise HTTPException(404, detail=f"Session {session_id} not found")
 
-    # Clear the processor's all memory (STM + learned patterns) with proper locking
+    # Clear the processor's all memory (STM + learned patterns)
+    # NO LOCK NEEDED - clear_all_memory is a database side-effect operation (clears LTM)
     processor = await app_state.processor_manager.get_processor(session.node_id, session.session_config)
-    processor_lock = app_state.processor_manager.get_processor_lock(session.node_id)
-    async with processor_lock:
-        processor.clear_all_memory()
+    processor.clear_all_memory()
 
     # Clear session STM and emotives
     cleared = await app_state.session_manager.clear_session_stm(session_id)

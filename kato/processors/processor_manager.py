@@ -51,7 +51,6 @@ class ProcessorManager:
 
         # OrderedDict for LRU cache behavior
         self.processors: OrderedDict[str, dict[str, Any]] = OrderedDict()
-        self.processor_locks: dict[str, asyncio.Lock] = {}
         self.settings = get_settings()
         self.config_service = get_configuration_service(self.settings)
 
@@ -107,27 +106,6 @@ class ProcessorManager:
 
         return f"{safe_node_id}_{safe_base_id}"
 
-    def get_processor_lock(self, node_id: str) -> asyncio.Lock:
-        """
-        Get the lock for a specific processor.
-
-        This lock should be acquired before using the processor to ensure
-        thread-safe access when multiple sessions share the same processor.
-
-        Args:
-            node_id: Node identifier
-
-        Returns:
-            asyncio.Lock for the processor
-        """
-        processor_id = self._get_processor_id(node_id)
-
-        # Ensure lock exists
-        if processor_id not in self.processor_locks:
-            self.processor_locks[processor_id] = asyncio.Lock()
-
-        return self.processor_locks[processor_id]
-
     async def get_processor(self, node_id: str, session_config: Optional[SessionConfiguration] = None) -> KatoProcessor:
         """
         Get or create a processor for a specific node.
@@ -157,38 +135,34 @@ class ProcessorManager:
             return processor
 
         # Need to create new processor
-        if processor_id not in self.processor_locks:
-            self.processor_locks[processor_id] = asyncio.Lock()
+        # Double-check for race condition (multiple coroutines may try to create simultaneously)
+        if processor_id in self.processors:
+            processor_info = self.processors[processor_id]
+            processor_info['last_accessed'] = datetime.now(timezone.utc)
+            self.processors.move_to_end(processor_id)
+            return processor_info['processor']
 
-        async with self.processor_locks[processor_id]:
-            # Double-check after acquiring lock
-            if processor_id in self.processors:
-                processor_info = self.processors[processor_id]
-                processor_info['last_accessed'] = datetime.now(timezone.utc)
-                self.processors.move_to_end(processor_id)
-                return processor_info['processor']
+        # Create new processor
+        logger.info(f"Creating new processor for node {node_id}")
 
-            # Create new processor
-            logger.info(f"Creating new processor for node {node_id}")
+        # Create processor instance with minimal parameters
+        # Configuration is now session-based only - no processor-level config
+        processor = KatoProcessor(
+            name=f"Node-{node_id}",
+            processor_id=processor_id,
+            settings=self.settings
+        )
 
-            # Create processor instance with minimal parameters
-            # Configuration is now session-based only - no processor-level config
-            processor = KatoProcessor(
-                name=f"Node-{node_id}",
-                processor_id=processor_id,
-                settings=self.settings
-            )
+        # Initialize async components
+        await processor.initialize_async_components()
 
-            # Initialize async components
-            await processor.initialize_async_components()
-
-            # Store in cache
-            self.processors[processor_id] = {
-                'processor': processor,
-                'node_id': node_id,
-                'created_at': datetime.now(timezone.utc),
-                'last_accessed': datetime.now(timezone.utc),
-                'access_count': 1
+        # Store in cache
+        self.processors[processor_id] = {
+            'processor': processor,
+            'node_id': node_id,
+            'created_at': datetime.now(timezone.utc),
+            'last_accessed': datetime.now(timezone.utc),
+            'access_count': 1
             }
 
             # Enforce max processors limit (LRU eviction)
@@ -238,10 +212,6 @@ class ProcessorManager:
         except Exception as e:
             logger.error(f"Error cleaning up processor {evicted_id}: {e}")
 
-        # Remove lock
-        if evicted_id in self.processor_locks:
-            del self.processor_locks[evicted_id]
-
         logger.info(
             f"Evicted processor {evicted_id} for node {evicted_info['node_id']} "
             f"(created: {evicted_info['created_at']}, accesses: {evicted_info['access_count']})"
@@ -270,10 +240,6 @@ class ProcessorManager:
         except Exception as e:
             logger.error(f"Error closing processor {processor_id}: {e}")
 
-        # Remove lock
-        if processor_id in self.processor_locks:
-            del self.processor_locks[processor_id]
-
         logger.info(f"Removed processor {processor_id} for node {node_id}")
         return True
 
@@ -300,10 +266,6 @@ class ProcessorManager:
                 processor_info['processor'].pattern_processor.superkb.close()
             except Exception as e:
                 logger.error(f"Error closing processor {processor_id}: {e}")
-
-            # Remove lock
-            if processor_id in self.processor_locks:
-                del self.processor_locks[processor_id]
 
             logger.info(
                 f"Expired processor {processor_id} for node {processor_info['node_id']} "
@@ -370,7 +332,6 @@ class ProcessorManager:
                 logger.error(f"Error closing processor {processor_id}: {e}")
 
         self.processors.clear()
-        self.processor_locks.clear()
 
         logger.info("ProcessorManager shutdown complete")
 

@@ -62,12 +62,15 @@ class PatternOperations:
             LearningError: If pattern learning fails
         """
         try:
+            # Use static method to get STM from pattern processor
+            from kato.workers.memory_manager import MemoryManager
+
             # Save tail event if needed BEFORE learning (which normally clears STM)
             tail_event = None
 
             if keep_tail and not keep_stm_for_rolling:
                 # For tail mode: only save the last event
-                stm_state = self.memory_manager.get_stm_state()
+                stm_state = MemoryManager.get_stm_from_pattern_processor(self.pattern_processor)
                 if len(stm_state) > 1:
                     tail_event = stm_state[-1]
 
@@ -84,7 +87,7 @@ class PatternOperations:
                 logger.debug("Rolling mode: STM cleared after learning, will be maintained by rolling window logic")
             elif tail_event:
                 # Tail mode: only restore the last event
-                self.memory_manager.set_stm_tail_context(tail_event)
+                self.memory_manager.set_stm_tail_context(self.pattern_processor, tail_event)
 
             if pattern_name:
                 full_name = f"PTRN|{pattern_name}"
@@ -96,7 +99,7 @@ class PatternOperations:
             return ""
 
         except Exception as e:
-            stm_state = self.memory_manager.get_stm_state()
+            stm_state = MemoryManager.get_stm_from_pattern_processor(self.pattern_processor)
             raise LearningError(
                 f"Failed to learn pattern: {str(e)}",
                 stm_state=stm_state,

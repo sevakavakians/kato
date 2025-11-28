@@ -71,11 +71,13 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        - name: MONGODB_URI
+        - name: CLICKHOUSE_HOST
+          value: "clickhouse.default.svc.cluster.local"
+        - name: CLICKHOUSE_PASSWORD
           valueFrom:
             secretKeyRef:
               name: kato-secrets
-              key: mongodb-uri
+              key: clickhouse-password
         - name: REDIS_HOST
           value: "redis.default.svc.cluster.local"
         - name: QDRANT_HOST
@@ -216,8 +218,8 @@ service {
       proxy {
         upstreams = [
           {
-            destination_name = "mongodb"
-            local_bind_port  = 27017
+            destination_name = "clickhouse"
+            local_bind_port  = 9000
           },
           {
             destination_name = "redis"
@@ -631,7 +633,8 @@ metadata:
   name: kato-secrets
 type: Opaque
 stringData:
-  mongodb-uri: "mongodb://username:password@mongodb:27017/kato"
+  clickhouse-host: "clickhouse"
+  clickhouse-password: "secure-password-here"
   redis-password: "secure-password-here"
 ```
 

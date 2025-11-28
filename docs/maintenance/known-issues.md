@@ -146,17 +146,16 @@ See [Configuration Management](CONFIGURATION_MANAGEMENT.md) for details.
 ---
 
 ### 8. Additional Vector Database Backends
-**Status**: Architecture Ready  
-**Priority**: Low  
+**Status**: Architecture Ready
+**Priority**: Low
 
 **Current Support**:
 - ✅ Qdrant (primary, implemented)
-- ✅ MongoDB (legacy, implemented)
 - ⏳ FAISS (planned)
 - ⏳ Milvus (planned)
 - ⏳ Weaviate (planned)
 
-Factory pattern in place at `kato/storage/factory.py`
+Factory pattern can be implemented if needed
 
 ---
 

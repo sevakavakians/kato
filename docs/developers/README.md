@@ -22,7 +22,7 @@ Welcome to the KATO developer documentation! This section provides everything yo
 - **[Testing Guide](testing.md)** - Running and writing tests
 - **[Debugging Guide](debugging.md)** - Common debugging scenarios
 - **[Performance Profiling](performance-profiling.md)** - Optimizing KATO
-- **[Database Management](database-management.md)** - Working with MongoDB and Qdrant
+- **[Database Management](database-management.md)** - Working with ClickHouse, Redis, and Qdrant
 
 ## 🎯 Quick Navigation by Task
 

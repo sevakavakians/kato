@@ -8,29 +8,29 @@ import time
 
 
 def test_api_gene_update_stm_mode(kato_fixture):
-    """Test updating STM_MODE through the genes API."""
+    """Test updating STM_MODE through the config API."""
     kato_fixture.clear_all_memory()
 
     # Test updating to ROLLING mode
-    result = kato_fixture.update_genes({'stm_mode': 'ROLLING'})
+    result = kato_fixture.update_config({'stm_mode': 'ROLLING'})
     assert result.get('status') == 'okay', f"Failed to update STM_MODE: {result}"
 
     # Verify the change took effect
-    genes = kato_fixture.get_genes()
-    assert genes.get('stm_mode') == 'ROLLING', f"STM_MODE not updated in genes: {genes}"
+    config = kato_fixture.get_config()
+    assert config.get('stm_mode') == 'ROLLING', f"STM_MODE not updated in config: {config}"
 
     # Test updating back to CLEAR mode
-    result = kato_fixture.update_genes({'stm_mode': 'CLEAR'})
+    result = kato_fixture.update_config({'stm_mode': 'CLEAR'})
     assert result.get('status') == 'okay', f"Failed to update STM_MODE back to CLEAR: {result}"
 
-    genes = kato_fixture.get_genes()
-    assert genes.get('stm_mode') == 'CLEAR', f"STM_MODE not updated back to CLEAR: {genes}"
+    config = kato_fixture.get_config()
+    assert config.get('stm_mode') == 'CLEAR', f"STM_MODE not updated back to CLEAR: {config}"
 
 
 def test_streaming_data_scenario(kato_fixture):
     """Test rolling window with streaming data pattern."""
     kato_fixture.clear_all_memory()
-    kato_fixture.update_genes({
+    kato_fixture.update_config({
         'max_pattern_length': 4,
         'stm_mode': 'ROLLING'
     })
@@ -68,7 +68,7 @@ def test_streaming_data_scenario(kato_fixture):
 def test_pattern_prediction_with_rolling_mode(kato_fixture):
     """Test that rolling mode improves pattern predictions."""
     kato_fixture.clear_all_memory()
-    kato_fixture.update_genes({
+    kato_fixture.update_config({
         'max_pattern_length': 3,
         'stm_mode': 'ROLLING'
     })
@@ -106,7 +106,7 @@ def test_pattern_prediction_with_rolling_mode(kato_fixture):
 def test_time_series_pattern_learning(kato_fixture):
     """Test rolling window with time-series like patterns."""
     kato_fixture.clear_all_memory()
-    kato_fixture.update_genes({
+    kato_fixture.update_config({
         'max_pattern_length': 5,
         'stm_mode': 'ROLLING'
     })
@@ -137,7 +137,7 @@ def test_time_series_pattern_learning(kato_fixture):
 def test_multi_modal_rolling_window(kato_fixture):
     """Test rolling window with multi-modal data (strings + vectors + emotives)."""
     kato_fixture.clear_all_memory()
-    kato_fixture.update_genes({
+    kato_fixture.update_config({
         'max_pattern_length': 3,
         'stm_mode': 'ROLLING'
     })
@@ -183,7 +183,7 @@ def test_multi_modal_rolling_window(kato_fixture):
 def test_bulk_observation_with_rolling_mode(kato_fixture):
     """Test rolling window with bulk observation API."""
     kato_fixture.clear_all_memory()
-    kato_fixture.update_genes({
+    kato_fixture.update_config({
         'max_pattern_length': 3,
         'stm_mode': 'ROLLING'
     })
@@ -213,7 +213,7 @@ def test_bulk_observation_with_rolling_mode(kato_fixture):
 def test_rolling_mode_memory_efficiency(kato_fixture):
     """Test that rolling mode doesn't cause memory bloat with continuous learning."""
     kato_fixture.clear_all_memory()
-    kato_fixture.update_genes({
+    kato_fixture.update_config({
         'max_pattern_length': 4,
         'stm_mode': 'ROLLING'
     })
@@ -252,7 +252,7 @@ def test_mode_switching_during_operation(kato_fixture):
     kato_fixture.clear_all_memory()
 
     # Start with CLEAR mode
-    kato_fixture.update_genes({
+    kato_fixture.update_config({
         'max_pattern_length': 3,
         'stm_mode': 'CLEAR'
     })
@@ -266,7 +266,7 @@ def test_mode_switching_during_operation(kato_fixture):
     assert len(stm) == 0, f"CLEAR mode should empty STM, got: {stm}"
 
     # Switch to ROLLING mode
-    kato_fixture.update_genes({'stm_mode': 'ROLLING'})
+    kato_fixture.update_config({'stm_mode': 'ROLLING'})
 
     # Add more events
     for event in ['switch4', 'switch5', 'switch6']:

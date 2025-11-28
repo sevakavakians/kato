@@ -206,9 +206,6 @@ class EndpointConfig(BaseSettings):
 
     # Advanced endpoints
     pattern_enabled: bool = Field(True, env='ENDPOINT_PATTERN_ENABLED')
-    genes_enabled: bool = Field(True, env='ENDPOINT_GENES_ENABLED')
-    percept_enabled: bool = Field(True, env='ENDPOINT_PERCEPT_ENABLED')
-    cognition_enabled: bool = Field(True, env='ENDPOINT_COGNITION_ENABLED')
 
     # Batch processing
     batch_size_limit: int = Field(1000, env='ENDPOINT_BATCH_SIZE_LIMIT')

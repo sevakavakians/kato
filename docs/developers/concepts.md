@@ -148,24 +148,25 @@ Long-Term Memory (LTM) is KATO's **permanent knowledge storage** that persists a
 - Frequency tracking for repeated patterns
 
 **Database Isolation:**
-Each `node_id` gets its own isolated MongoDB database:
+Each `kb_id` gets its own isolated storage partition:
 ```
-node_id: "alice"
-→ MongoDB database: "alice_kato" (default SERVICE_NAME)
+kb_id: "alice"
+→ ClickHouse partition: WHERE kb_id = 'alice'
+→ Redis namespace: pattern:alice:*
 → All of Alice's learned patterns stored here permanently
 ```
 
 **Key Differences from STM:**
 - **STM**: Temporary (expires with session), stored in Redis
-- **LTM**: Permanent (until explicitly deleted), stored in MongoDB
+- **LTM**: Permanent (until explicitly deleted), stored in ClickHouse
 
 **Reconnecting to Trained Data:**
-Using the same `node_id` in a new session automatically accesses all previously learned patterns:
+Using the same `kb_id` in a new session automatically accesses all previously learned patterns:
 ```bash
-# Day 1: Train with node_id="alice"
-# Patterns stored in MongoDB database "alice_kato"
+# Day 1: Train with kb_id="alice"
+# Patterns stored in ClickHouse with kb_id partition
 
-# Day 7: Create new session with node_id="alice"
+# Day 7: Create new session with kb_id="alice"
 # KATO immediately has access to all Day 1 patterns!
 ```
 

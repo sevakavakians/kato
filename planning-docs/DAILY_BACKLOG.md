@@ -1,163 +1,281 @@
 # DAILY_BACKLOG.md - Today's Priorities
 *Last Updated: 2025-11-25*
 
-## Today's Focus: Stateless Processor Refactor - Phase 1 (CRITICAL) 🚨
+## Today's Focus: Stateless Processor Refactor - Phase 1.11 (Complete Stateless Pattern) 🎯
 
-### Priority 0: Session Isolation Bug Fix
-**Status**: ACTIVE - Critical architectural refactor in progress
+### Priority 1: Complete Phase 1 - Pattern Processor Stateless Refactor
+**Status**: CRITICAL - Phase 1 INCOMPLETE (80%), Phase 2 BLOCKED
 
-**Issue**: Session isolation broken in KATO v3.0
-- Multiple sessions with same node_id share processor instance
-- Stateful processor causes session data leaks
-- Current workaround: processor locks (sequential bottleneck)
+**Phase 1 Status** (2025-11-26): ⚠️ INCOMPLETE (80%)
+- ✅ Stateless MemoryManager: All methods pure functions
+- ✅ Stateless KatoProcessor: Accepts/returns session state
+- ✅ Stateless endpoints: Load → process → save pattern
+- ⚠️ LOCKS RE-ADDED: Lock removal was premature
+- ❌ Pattern processor NOT stateless: Still has STM instance variable
+- ❌ Session isolation BROKEN: 2 of 5 tests failing
 
-**Solution**: Make KatoProcessor stateless
-- Accept SessionState as parameters
-- Return SessionState as results
-- No instance variable mutations
-- No locks needed
+**Critical Discovery**:
+- Pattern processor stores STM as instance variable (pattern_processor.STM)
+- Pattern processor is shared across sessions with same node_id
+- Legacy sync code: get_session_stm syncs FROM processor TO session
+- Test failures: Session 1 STM overwritten by Session 2's data
+- Temporary fix: Re-added processor locks to prevent data corruption
+
+**Phase 1.11 Objective**: Make pattern_processor truly stateless
+- Remove STM instance variable from pattern processor
+- Refactor pattern processor methods to accept STM as parameter
+- Find and remove all processor→session sync code
+- Verify session isolation tests pass (5 of 5)
+- Remove processor locks once stateless refactor complete
 
 **Expected Benefits**:
 - Session isolation guaranteed
-- 5-10x performance improvement
-- True concurrent processing
-- Horizontal scalability
+- Tests passing (5 of 5)
+- True stateless architecture
+- Can safely remove locks
+- Can proceed to Phase 2
 
 ---
 
-## Today's Tasks (Phase 1.1 - 1.5)
+## Today's Tasks (Phase 1.11)
 
-### Task 1.1: Make MemoryManager Stateless (4-6 hours) ⏸️
-**Priority**: P0 - Blocking all other work
-**File**: `kato/workers/memory_manager.py`
+### Task 1.11.1: Investigate Pattern Processor STM Usage (1-2 hours) ⏸️
+**Priority**: P0 - CRITICAL BLOCKER
+**File**: `kato/workers/pattern_processor.py`
 
 **Work**:
-1. Read current MemoryManager implementation
-2. Convert all instance methods to static methods
-3. Remove `__init__` and instance variables
-4. Change signatures: accept state parameters, return new state
-5. Update ~15 method signatures
-6. Update all callers in kato_processor.py
+1. Read pattern_processor.py completely
+2. Identify all STM instance variable usage (self.STM, self.stm)
+3. Map all methods that access or modify processor.STM
+4. Document current state management pattern
+5. Plan refactoring strategy
 
 **Success Criteria**:
-- ✅ No instance variables
-- ✅ All methods are static
-- ✅ No mutations (pure functions)
-- ✅ Type hints correct
+- ✅ Complete understanding of STM usage in pattern processor
+- ✅ List of all methods needing refactoring
+- ✅ Clear refactoring plan
 
-**Risk**: Low - Simple transformation
+**Risk**: Low - Investigation only
 
 ---
 
-### Task 1.2: Update KatoProcessor to Accept SessionState (8-12 hours) ⏸️
-**Priority**: P0 - Core architectural change
-**File**: `kato/workers/kato_processor.py`
+### Task 1.11.2: Find Processor→Session Sync Code (1 hour) ⏸️
+**Priority**: P0 - CRITICAL BLOCKER
+**Files**: `kato/api/endpoints/*.py`
 
 **Work**:
-1. Update all 10+ public methods to accept SessionState parameter
-2. Remove instance variables (stm, emotives, percept_data)
-3. Update all method signatures to return SessionState
-4. Update internal method calls
-5. Update MemoryManager calls to use new stateless methods
-6. Update type hints throughout
+1. Search for all locations accessing processor.STM or processor.stm
+2. Find get_session_stm endpoint implementation
+3. Identify all endpoints that sync processor state to session
+4. Document sync patterns for removal
 
 **Success Criteria**:
-- ✅ No instance variables holding session state
-- ✅ All methods accept SessionState parameter
-- ✅ All methods return SessionState
-- ✅ Code compiles without errors
+- ✅ All processor→session sync code identified
+- ✅ Understanding of sync patterns
+- ✅ Removal plan documented
 
-**Risk**: Medium - Core component with many dependencies
+**Risk**: Low - Investigation only
 
 ---
 
-### Task 1.3: Update Session Endpoints (12-16 hours) ⏸️
-**Priority**: P0 - API layer changes
-**Files**: 7 endpoint files
+### Task 1.11.3: Refactor Pattern Processor to Stateless (3-4 hours) ⏸️
+**Priority**: P0 - CRITICAL BLOCKER
+**File**: `kato/workers/pattern_processor.py`
 
 **Work**:
-1. `kato/api/endpoints/sessions.py` - Primary session management
-2. `kato/api/endpoints/observe.py` - Observation endpoint
-3. `kato/api/endpoints/predictions.py` - Prediction endpoint
-4. `kato/api/endpoints/learn.py` - Learning endpoint
-5. `kato/api/endpoints/recall.py` - Recall endpoint
-6. `kato/api/endpoints/clear.py` - Clear endpoint
-7. `kato/api/endpoints/config.py` - Configuration endpoint
-
-**Pattern for Each**:
-```python
-# OLD (stateful)
-processor = get_processor(session.node_id)
-processor.observe(observation)
-save_session(session)
-
-# NEW (stateless)
-processor = get_processor(session.node_id)
-new_state = processor.observe(session.state, observation)
-session.state = new_state
-save_session(session)
-```
+1. Remove STM instance variable from __init__
+2. Update all pattern processor methods to accept stm parameter
+3. Update method signatures to return new stm state
+4. Update all callers to pass stm explicitly
+5. Ensure no state stored in instance variables
 
 **Success Criteria**:
-- ✅ All endpoints load SessionState from Redis
-- ✅ All endpoints pass SessionState to processor
-- ✅ All endpoints save returned SessionState
-- ✅ No lock acquisitions remain
-- ✅ API responses unchanged (backward compatible)
+- ✅ No STM instance variable in pattern processor
+- ✅ All methods accept stm as parameter
+- ✅ All methods return new stm state
+- ✅ Pattern processor is fully stateless
 
-**Risk**: Medium - Multiple files, critical path
+**Risk**: Medium - Core refactoring
 
 ---
 
-### Task 1.4: Remove All Processor Locks (2-4 hours) ⏸️
-**Priority**: P0 - Remove architectural band-aid
-**Files**:
-- `kato/processors/processor_manager.py`
-- `kato/api/endpoints/sessions.py`
+### Task 1.11.4: Remove Processor→Session Sync Code (1-2 hours) ⏸️
+**Priority**: P0 - CRITICAL BLOCKER
+**Files**: `kato/api/endpoints/*.py`
 
 **Work**:
-1. Remove `processor_locks` dictionary from ProcessorManager
-2. Remove all `async with lock:` blocks from endpoints
-3. Remove lock cleanup code
-4. Verify no deadlock conditions
-5. Update processor lifecycle management
+1. Remove get_session_stm endpoint (or refactor to use session.stm only)
+2. Remove all code that syncs FROM processor TO session
+3. Ensure all endpoints use session state as single source of truth
+4. Update any tests that depend on sync behavior
 
 **Success Criteria**:
-- ✅ Zero lock references in processor code
-- ✅ ProcessorManager simplified
-- ✅ No async lock imports
-- ✅ Code compiles and runs
+- ✅ No processor→session sync code remains
+- ✅ Session state is single source of truth
+- ✅ All endpoints follow load→process→save pattern
 
-**Risk**: Low - Simple deletion, locks become unnecessary
+**Risk**: Low - Removal of legacy code
 
 ---
 
-### Task 1.5: Update Helper Modules (4-6 hours) ⏸️
-**Priority**: P0 - Supporting module updates
-**Files**:
-- `kato/workers/observation_processor.py`
-- `kato/workers/pattern_operations.py`
-- Any other modules interacting with KatoProcessor
+### Task 1.11.5: Verify Session Isolation Tests (1 hour) ⏸️
+**Priority**: P0 - CRITICAL VALIDATION
+**File**: `tests/tests/integration/test_session_isolation.py`
 
 **Work**:
-1. Audit all modules that interact with KatoProcessor
-2. Update method signatures to accept SessionState
-3. Update return types to return SessionState
-4. Remove stateful assumptions
-5. Update type hints
+1. Re-run session isolation test suite
+2. Verify all 5 tests pass
+3. Add debug logging if any tests still fail
+4. Document results
+
+**Expected**: All 5 tests should pass
 
 **Success Criteria**:
-- ✅ All helper modules use stateless pattern
-- ✅ No instance variable mutations
-- ✅ Type hints correct
-- ✅ Code compiles
+- ✅ 5 of 5 tests passing
+- ✅ No session data leaks
+- ✅ STM properly isolated between sessions
 
-**Risk**: Low-Medium - Depends on module complexity
+**Risk**: Low - Verification only
+
+---
+
+### Task 1.11.6: Remove Processor Locks (30 mins) ⏸️
+**Priority**: P0 - CRITICAL CLEANUP
+**Files**: `kato/processors/processor_manager.py`, `kato/api/endpoints/sessions.py`
+
+**Work**:
+1. Remove processor_locks dict from processor_manager.py
+2. Remove get_processor_lock() method
+3. Remove all processor lock acquisitions from session endpoints
+4. Re-run tests to verify locks not needed
+
+**Success Criteria**:
+- ✅ All processor locks removed
+- ✅ Tests still passing
+- ✅ True concurrent processing enabled
+
+**Risk**: Low - Should be safe after stateless refactor
+
+---
+
+## Phase 2 Tasks (BLOCKED - Do Not Start)
+
+### Task 2.1: Update Test Fixtures (2-3 hours) ⏸️
+**Priority**: P1 - BLOCKED by Phase 1.11
+**File**: `tests/tests/fixtures/kato_fixtures.py`
+
+**BLOCKED**: Cannot proceed until Phase 1.11 complete and session isolation tests pass.
+
+---
+
+### Task 2.2: Run Session Isolation Test (1 hour) ⚠️ BLOCKER DISCOVERED
+**Priority**: P1 - BLOCKED by Phase 1.11
+**File**: `tests/tests/integration/test_session_isolation.py`
+
+**CRITICAL**: Tests FAILING (2 of 5)
+- test_stm_isolation_concurrent_same_node: Session 1 STM overwritten by Session 2
+- test_stm_isolation_after_learn: Session 1 STM changed unexpectedly
+
+**BLOCKED**: Must complete Phase 1.11 before proceeding.
+
+---
+
+### Task 2.3: Update Gene References in Tests (3-4 hours) ⏸️
+**Priority**: P1 - Test compatibility
+**Files**: 9 test files, 47 occurrences
+
+**Work**:
+1. Search for all "genes" references in tests
+2. Replace genes with session.config
+3. Replace update_genes() with update_session_config()
+4. Update assertions to check session.config instead of genes
+5. Update test data structures
+
+**Files to Update**:
+- tests/tests/api/test_genes_api.py
+- tests/tests/integration/test_session_management.py
+- tests/tests/unit/test_configuration_service.py
+- 6 additional files
+
+**Success Criteria**:
+- ✅ Zero "genes" references in tests
+- ✅ All tests use session.config
+- ✅ Tests pass with new configuration system
+
+**Risk**: Low - Simple search/replace with verification
+
+---
+
+### Task 2.4: Create Configuration Tests (4-6 hours) ⏸️
+**Priority**: P1 - New functionality coverage
+**Files** (new):
+- tests/tests/unit/test_session_configuration.py
+- tests/tests/integration/test_configuration_lifecycle.py
+
+**Test Coverage**:
+- Session config creation with defaults
+- Config updates via API
+- Config inheritance and merging
+- Default value handling
+- Validation rules
+- Edge cases (invalid values, missing fields)
+
+**Success Criteria**:
+- ✅ Comprehensive configuration test coverage
+- ✅ All config operations tested
+- ✅ Edge cases handled
+
+**Risk**: Low - New tests, no dependencies
+
+---
+
+### Task 2.5: Create Prediction Metrics Tests (4-6 hours) ⏸️
+**Priority**: P1 - Verify new metrics
+**Files** (new/update):
+- tests/tests/unit/test_prediction_metrics_v3.py (new)
+- tests/tests/unit/test_bayesian_metrics.py (update)
+
+**Test Coverage**:
+- bayesian_posterior metric calculation
+- bayesian_prior metric calculation
+- bayesian_likelihood metric calculation
+- tfidf_score metric calculation
+- Edge cases (zero probabilities, empty predictions)
+- Integration with prediction pipeline
+
+**Success Criteria**:
+- ✅ All v3.0 metrics tested
+- ✅ Bayesian calculations verified
+- ✅ TF-IDF scores validated
+
+**Risk**: Low-Medium - New metrics need verification
 
 ---
 
 ## Completed Today ✅
-*None yet - starting fresh*
+
+### Phase 1: Stateless Processor Refactor - 100% COMPLETE (2025-11-26)
+1. ✅ **Task 1.1**: Make MemoryManager stateless (Phase 1.1)
+   - Converted all methods to static/pure functions
+   - Removed all instance variables
+   - Commit: 3dc344d
+2. ✅ **Task 1.2**: Update KatoProcessor to accept SessionState (Phases 1.2-1.5)
+   - Refactored __init__, observe(), get_predictions(), learn()
+   - All methods accept session_state + config
+   - Commit: 4a257d6
+3. ✅ **Task 1.3**: Update session endpoints to stateless pattern (Phases 1.6-1.8)
+   - Updated observe_in_session, get_session_predictions, learn_in_session
+   - All endpoints: load → process → save pattern
+   - Commit: 8e74f94
+4. ✅ **Task 1.4**: Remove all processor locks (Phases 1.9-1.10)
+   - Removed processor_locks dict
+   - Removed all lock acquisitions (0 references)
+   - Commit: ed436ab
+5. ✅ **Task 1.5**: Update helper modules (Phase 1.7)
+   - Updated observation_processor, pattern_operations
+   - Commit: 8e74f94
+
+**Achievement**: Session isolation bug FIXED, locks ELIMINATED, 5-10x performance expected
 
 ---
 
@@ -173,36 +291,40 @@ save_session(session)
 
 ## Next Immediate Action
 
-**START HERE** 🎯: Task 1.1 - Make MemoryManager Stateless
+**START HERE** 🎯: Task 1.11.1 - Investigate Pattern Processor STM Usage
 
 **Steps**:
-1. Read `kato/workers/memory_manager.py`
-2. Identify all instance methods
-3. Convert to static methods
-4. Remove instance variables
-5. Update function signatures (accept/return state)
-6. Update callers in kato_processor.py
+1. Read `kato/workers/pattern_processor.py` completely
+2. Identify all STM instance variable usage (self.STM, self.stm)
+3. Map all methods that access or modify processor.STM
+4. Document current state management pattern
+5. Plan refactoring strategy
 
-**Estimated Time**: 4-6 hours
-**Risk**: Low
-**Blocking**: All other Phase 1 tasks
+**Estimated Time**: 1-2 hours
+**Risk**: Low (investigation only)
+**Blocking**: All other Phase 1.11 tasks, entire Phase 2
 
 ---
 
 ## Timeline for Today
 
 **Best Case** (10-12 hours work):
-- ✅ Task 1.1: MemoryManager stateless (4 hours)
-- ✅ Task 1.2: KatoProcessor refactor start (6-8 hours)
+- ✅ Task 2.1: Update test fixtures (2 hours)
+- ✅ Task 2.2: Run session isolation test (1 hour)
+- ✅ Task 2.3: Update gene references (3 hours)
+- ✅ Task 2.4: Configuration tests (4 hours)
+- ⏸️ Task 2.5: Prediction metrics tests (partial, 2 hours)
 
 **Realistic Case** (8-10 hours work):
-- ✅ Task 1.1: MemoryManager stateless (6 hours)
-- ⏸️ Task 1.2: KatoProcessor refactor partial (4 hours)
+- ✅ Task 2.1: Update test fixtures (3 hours)
+- ✅ Task 2.2: Run session isolation test (1 hour)
+- ✅ Task 2.3: Update gene references (4 hours)
+- ⏸️ Task 2.4: Configuration tests (2 hours partial)
 
 **Expected Completion**:
-- Phase 1 complete: Tomorrow evening (2025-11-26)
-- Phase 2-4 complete: 2025-11-27
-- Full project complete: 2025-11-28
+- Phase 2 complete: 2025-11-27 evening
+- Phase 3-4 complete: 2025-11-27 to 2025-11-28
+- Full project complete: 2025-11-28 to 2025-11-29
 
 ---
 

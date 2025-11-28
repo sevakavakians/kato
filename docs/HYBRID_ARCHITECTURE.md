@@ -6,12 +6,11 @@ KATO's hybrid architecture provides **100-300x performance improvement** for pat
 
 - **ClickHouse**: Pattern data with multi-stage filtering (billions → thousands)
 - **Redis**: Pattern metadata (emotives, frequency, metadata) with fast K/V lookups
-- **MongoDB**: Fallback for backward compatibility
 
 ## Architecture Design
 
 ### Problem Solved
-MongoDB times out after 5 seconds when scanning millions of patterns. At billion-scale, this becomes infeasible.
+Traditional document databases time out after 5 seconds when scanning millions of patterns. At billion-scale, this becomes infeasible.
 
 ### Solution
 **Multi-stage filtering pipeline** that reduces candidate patterns before loading into RAM:
@@ -26,13 +25,12 @@ Billions (ClickHouse) → Millions (LSH) → Thousands (Jaccard) → Hundreds (R
 |----------|--------|---------------|
 | **ClickHouse** | `pattern_data`, length, tokens, MinHash, LSH bands | Full-table scans with WHERE clause pushdown |
 | **Redis** | `emotives`, `metadata`, `frequency` | Fast point lookups by pattern name |
-| **MongoDB** | Everything (backward compatibility) | General-purpose document storage |
 
 ## Node Isolation via kb_id
 
 ### Critical Requirement
 
-**KATO requires complete data isolation between different nodes/processors/knowledge bases.** This matches MongoDB's architecture where each processor had its own database (e.g., `node0`, `node1`, `processor_123`).
+**KATO requires complete data isolation between different nodes/processors/knowledge bases.** Each node requires its own isolated data space to prevent cross-contamination.
 
 The hybrid architecture implements this isolation via the **`kb_id` (Knowledge Base Identifier)** parameter.
 
@@ -413,32 +411,34 @@ state = ['token1', 'token2', 'token3']
 predictions = searcher.causalBelief(state)
 ```
 
-### 4. Fallback Behavior
+### 4. Error Handling
 
-The system automatically falls back to MongoDB if:
-- ClickHouse is not available
-- Redis is not available
-- SessionConfig is not provided
-- Filter pipeline execution fails
+**IMPORTANT**: As of KATO v3.0, MongoDB is no longer supported. The system requires ClickHouse + Redis.
+
+If ClickHouse or Redis are unavailable:
+- The system will raise an error
+- Check service health via `/health` endpoint
+- Ensure all required services are running
 
 ```python
-# MongoDB-only mode (no hybrid params)
+# Hybrid architecture (required in v3.0+)
 searcher = PatternSearcher(
     kb_id='my_kb',
     max_predictions=100,
-    recall_threshold=0.1
+    recall_threshold=0.1,
+    clickhouse_client=clickhouse_client,  # Required
+    redis_client=redis_client              # Required
 )
-# Uses existing MongoDB-based pattern matching
 ```
 
 ## Performance
 
-### Expected Improvements
+### Performance Improvements (vs. v2.x MongoDB)
 
-| Patterns | MongoDB | Hybrid (ClickHouse/Redis) | Speedup |
-|----------|---------|---------------------------|---------|
-| 1M       | ~5s     | ~200ms                    | 25x     |
-| 10M      | ~50s    | ~300ms                    | 166x    |
+| Patterns | v2.x (MongoDB) | v3.0+ (ClickHouse/Redis) | Speedup |
+|----------|----------------|--------------------------|---------|
+| 1M       | ~5s            | ~200ms                   | 25x     |
+| 10M      | ~50s           | ~300ms                   | 166x    |
 | 100M     | Timeout | ~500ms                    | 300x+   |
 | 1B       | Timeout | ~1s                       | ∞       |
 
@@ -513,11 +513,11 @@ except:
 ### Filter Pipeline Errors
 
 If filter pipeline fails, check logs for:
-- Missing columns in ClickHouse (run migration script)
-- Missing data in Redis (run migration script)
+- Missing columns in ClickHouse (run migration script if upgrading from v2.x)
+- Missing data in Redis (run migration script if upgrading from v2.x)
 - Invalid filter configuration (check SessionConfig validation)
 
-System will automatically fall back to MongoDB on errors.
+**Note**: System will raise an error if ClickHouse or Redis are unavailable (no MongoDB fallback in v3.0+).
 
 ## Migration Scripts
 
@@ -571,10 +571,10 @@ Options:
    - Log metrics to monitoring system
    - Alert on unusual reductions or slow stages
 
-5. **Keep MongoDB for fallback**
-   - Don't remove MongoDB even after migration
-   - System falls back automatically on errors
-   - Provides disaster recovery path
+5. **Backup ClickHouse data regularly**
+   - ClickHouse is the primary pattern storage (no MongoDB fallback in v3.0+)
+   - Use ClickHouse backup tools for disaster recovery
+   - Test restore procedures periodically
 
 ## Implementation Status
 

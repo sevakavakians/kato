@@ -155,7 +155,7 @@ def test_max_pattern_length(kato_fixture):
     """Test that max_pattern_length limit is enforced."""
     # Note: In current, max_pattern_length is configured at service startup, not dynamically
     # This test validates that STM can hold multiple observations
-    kato_fixture.clear_short_term_memory()  # Only clear short-term memory, not genes
+    kato_fixture.clear_short_term_memory()  # Only clear short-term memory, not config
 
     # In current, gene updates don't work dynamically - skip this specific behavior
     # Instead, test that STM accumulates observations correctly

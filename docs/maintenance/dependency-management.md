@@ -39,7 +39,7 @@ certifi==2023.11.17  # transitive dependency
 
 **Production Dependencies:**
 - FastAPI ecosystem (fastapi, uvicorn, httpx)
-- Storage (pymongo, redis, qdrant-client)
+- Storage (clickhouse-connect, redis, qdrant-client)
 - Configuration (pydantic-settings)
 - Utilities (python-multipart, python-jose)
 

@@ -125,7 +125,7 @@ class TestRapidFuzzThreshold:
         kato.learn()
 
         # Set high threshold
-        kato.update_genes({'recall_threshold': 0.9})
+        kato.update_config({'recall_threshold': 0.9})
 
         # Query with low similarity
         kato.clear_stm()
@@ -137,7 +137,7 @@ class TestRapidFuzzThreshold:
         assert len(predictions) == 0
 
         # Lower threshold
-        kato.update_genes({'recall_threshold': 0.3})
+        kato.update_config({'recall_threshold': 0.3})
 
         # Same query
         kato.clear_stm()
@@ -167,7 +167,7 @@ class TestRapidFuzzThreshold:
 
         # Query
         kato.clear_stm()
-        kato.update_genes({'recall_threshold': 0.5})
+        kato.update_config({'recall_threshold': 0.5})
         kato.observe({'strings': ['A', 'B']})
 
         predictions = kato.get_predictions()

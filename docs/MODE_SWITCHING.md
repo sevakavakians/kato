@@ -2,24 +2,25 @@
 
 ## Overview
 
-KATO now supports easy switching between MongoDB-only and hybrid (ClickHouse/Redis) architectures via the `./start.sh mode` command.
+KATO v3.0+ uses a ClickHouse + Redis hybrid architecture. This document describes the filter pipeline configuration and optimization options.
 
 ## Quick Start
 
-### Check Current Mode
+### Check Current Configuration
 ```bash
-./start.sh mode
+./start.sh status
 ```
 
 Output:
 ```
-[INFO] Current architecture mode: mongodb (default)
+[INFO] KATO v3.0+ - ClickHouse/Redis Hybrid Architecture
 
-Available modes:
-  mongodb - MongoDB-only mode (default, stable)
-  hybrid  - ClickHouse/Redis hybrid mode (100-300x faster)
+Services:
+  ✓ ClickHouse - Pattern storage with multi-stage filtering
+  ✓ Redis - Session management and metadata caching
+  ✓ Qdrant - Vector embeddings
 
-Usage: ./start.sh mode [mongodb|hybrid]
+Performance: 100-300x improvement over previous architectures
 ```
 
 ### Switch to Hybrid Mode

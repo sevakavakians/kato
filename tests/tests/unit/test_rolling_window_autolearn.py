@@ -11,7 +11,7 @@ def test_clear_mode_behavior(kato_fixture):
     kato_fixture.clear_all_memory()
 
     # Set auto-learn parameters for CLEAR mode
-    kato_fixture.update_genes({
+    kato_fixture.update_config({
         'max_pattern_length': 3,
         'stm_mode': 'CLEAR'
     })
@@ -37,7 +37,7 @@ def test_rolling_mode_behavior(kato_fixture):
     kato_fixture.clear_all_memory()
 
     # Set auto-learn parameters for ROLLING mode
-    kato_fixture.update_genes({
+    kato_fixture.update_config({
         'max_pattern_length': 3,
         'stm_mode': 'ROLLING'
     })
@@ -64,7 +64,7 @@ def test_rolling_mode_continuous_learning(kato_fixture):
     kato_fixture.clear_all_memory()
 
     # Set auto-learn for rolling mode
-    kato_fixture.update_genes({
+    kato_fixture.update_config({
         'max_pattern_length': 3,
         'stm_mode': 'ROLLING'
     })
@@ -96,7 +96,7 @@ def test_rolling_vs_clear_pattern_differences(kato_fixture):
     """Test that ROLLING mode learns more patterns than CLEAR mode."""
     # Test CLEAR mode first
     kato_fixture.clear_all_memory()
-    kato_fixture.update_genes({
+    kato_fixture.update_config({
         'max_pattern_length': 3,
         'stm_mode': 'CLEAR'
     })
@@ -110,7 +110,7 @@ def test_rolling_vs_clear_pattern_differences(kato_fixture):
 
     # Test ROLLING mode
     kato_fixture.clear_all_memory()
-    kato_fixture.update_genes({
+    kato_fixture.update_config({
         'max_pattern_length': 3,
         'stm_mode': 'ROLLING'
     })
@@ -135,7 +135,7 @@ def test_rolling_mode_with_different_window_sizes(kato_fixture):
 
     for case in test_cases:
         kato_fixture.clear_all_memory()
-        kato_fixture.update_genes({
+        kato_fixture.update_config({
             'max_pattern_length': case['window_size'],
             'stm_mode': 'ROLLING'
         })
@@ -151,7 +151,7 @@ def test_rolling_mode_with_different_window_sizes(kato_fixture):
 def test_rolling_mode_disabled_when_max_pattern_length_zero(kato_fixture):
     """Test that rolling mode is disabled when max_pattern_length is 0."""
     kato_fixture.clear_all_memory()
-    kato_fixture.update_genes({
+    kato_fixture.update_config({
         'max_pattern_length': 0,  # Disabled
         'stm_mode': 'ROLLING'
     })
@@ -170,7 +170,7 @@ def test_rolling_mode_disabled_when_max_pattern_length_zero(kato_fixture):
 def test_mixed_event_sizes_rolling_mode(kato_fixture):
     """Test ROLLING mode with events containing multiple symbols."""
     kato_fixture.clear_all_memory()
-    kato_fixture.update_genes({
+    kato_fixture.update_config({
         'max_pattern_length': 3,
         'stm_mode': 'ROLLING'
     })
@@ -197,7 +197,7 @@ def test_mixed_event_sizes_rolling_mode(kato_fixture):
 def test_invalid_stm_mode_defaults_to_clear(kato_fixture):
     """Test that invalid STM_MODE values default to CLEAR behavior."""
     kato_fixture.clear_all_memory()
-    kato_fixture.update_genes({
+    kato_fixture.update_config({
         'max_pattern_length': 3,
         'stm_mode': 'INVALID_MODE'  # Should default to CLEAR
     })

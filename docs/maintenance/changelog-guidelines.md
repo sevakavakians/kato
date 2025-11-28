@@ -156,7 +156,7 @@ For **performance improvements** (optional category).
 ### Performance
 - 3.57x throughput improvement in prediction generation
 - 72% latency reduction in pattern matching
-- Optimized MongoDB query patterns
+- Optimized ClickHouse query patterns
 ```
 
 ## Writing Guidelines
@@ -325,7 +325,7 @@ git log v3.0.0..HEAD --oneline | grep "^perf:"    # → Performance
 ### Performance
 - 3.5x faster prediction generation through optimized queries
 - Reduced Redis memory usage by 40% with improved serialization
-- MongoDB query optimization reduces latency by 50ms
+- ClickHouse query optimization reduces latency by 50ms
 
 ### Documentation
 - Added comprehensive integration examples

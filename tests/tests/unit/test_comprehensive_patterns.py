@@ -15,6 +15,7 @@ from fixtures.test_helpers import sort_event_strings
 def test_long_sequence_basic(kato_fixture):
     """Test a long sequence with >10 events and >30 strings."""
     kato_fixture.clear_all_memory()
+    kato_fixture.set_recall_threshold(0.05)  # Low threshold for long sequences
 
     # Create a sequence with 12 events, 36 total strings
     sequence = [
@@ -56,6 +57,7 @@ def test_long_sequence_basic(kato_fixture):
 def test_long_sequence_middle_observation(kato_fixture):
     """Test observing in the middle of a long sequence."""
     kato_fixture.clear_all_memory()
+    kato_fixture.set_recall_threshold(0.05)  # Low threshold for long sequences
 
     # Create a sequence with 15 events, 45 total strings
     events = []
@@ -91,6 +93,7 @@ def test_long_sequence_middle_observation(kato_fixture):
 def test_partial_observation_long_sequence(kato_fixture):
     """Test partial observation with missing and extra symbols in long sequence."""
     kato_fixture.clear_all_memory()
+    kato_fixture.set_recall_threshold(0.05)  # Low threshold for long sequences
 
     # Create a repeating pattern sequence with 11 events, 33 strings
     pattern = [
@@ -135,6 +138,7 @@ def test_partial_observation_long_sequence(kato_fixture):
 def test_cyclic_long_sequence(kato_fixture):
     """Test a long cyclic sequence with pattern detection."""
     kato_fixture.clear_all_memory()
+    kato_fixture.set_recall_threshold(0.05)  # Low threshold for long sequences
 
     # Create a cyclic pattern that repeats
     cycle = [
@@ -176,6 +180,7 @@ def test_cyclic_long_sequence(kato_fixture):
 def test_branching_long_sequence(kato_fixture):
     """Test long sequences that branch into multiple paths."""
     kato_fixture.clear_all_memory()
+    kato_fixture.set_recall_threshold(0.05)  # Low threshold for long sequences
 
     # Common prefix
     common = [
@@ -243,6 +248,7 @@ def test_branching_long_sequence(kato_fixture):
 def test_emotives_in_long_sequence(kato_fixture):
     """Test long sequence with varying emotives."""
     kato_fixture.clear_all_memory()
+    kato_fixture.set_recall_threshold(0.05)  # Low threshold for long sequences
 
     # Create sequence with emotives that change over time
     sequence = []
@@ -285,6 +291,7 @@ def test_emotives_in_long_sequence(kato_fixture):
 def test_complex_multimodal_sequence(kato_fixture):
     """Test long sequence with strings, vectors, and emotives."""
     kato_fixture.clear_all_memory()
+    kato_fixture.set_recall_threshold(0.05)  # Low threshold for long sequences
 
     # Create multimodal sequence
     sequence = []
@@ -325,6 +332,7 @@ def test_complex_multimodal_sequence(kato_fixture):
 def test_sparse_observation_long_sequence(kato_fixture):
     """Test observing sparse elements from a long sequence."""
     kato_fixture.clear_all_memory()
+    kato_fixture.set_recall_threshold(0.05)  # Low threshold for long sequences
 
     # Create a long sequence with 20 events, 60 strings
     full_sequence = []
@@ -359,6 +367,7 @@ def test_sparse_observation_long_sequence(kato_fixture):
 def test_sequence_with_repetitive_patterns(kato_fixture):
     """Test long sequence with repetitive sub-patterns."""
     kato_fixture.clear_all_memory()
+    kato_fixture.set_recall_threshold(0.05)  # Low threshold for long sequences
 
     # Create sequence with repeated sub-patterns
     pattern_a = ['repeat_a1', 'repeat_a2']

@@ -35,7 +35,8 @@ Security best practices for developing, deploying, and maintaining KATO.
 ❌ **Never do this:**
 ```python
 # Hardcoded secrets (NEVER!)
-MONGODB_URI = "mongodb://admin:password123@localhost:27017"
+CLICKHOUSE_HOST = "clickhouse"
+CLICKHOUSE_PASSWORD = "password123"
 API_KEY = "sk-abc123..."
 ```
 
@@ -44,14 +45,16 @@ API_KEY = "sk-abc123..."
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
-    mongodb_uri: str
+    clickhouse_host: str
+    clickhouse_password: str
     api_key: str
 
     class Config:
         env_file = ".env"
 
 # .env file (never committed)
-MONGODB_URI=mongodb://admin:secure_password@localhost:27017
+CLICKHOUSE_HOST=clickhouse
+CLICKHOUSE_PASSWORD=secure_password
 API_KEY=sk-...
 
 # .gitignore
@@ -87,12 +90,15 @@ class ObservationRequest(BaseModel):
 ### SQL Injection Prevention
 
 ```python
-# MongoDB (use parameterized queries)
+# ClickHouse (use parameterized queries)
 # Good
-patterns = db.patterns.find({"node_id": node_id})
+patterns = clickhouse_client.query(
+    "SELECT * FROM patterns_data WHERE kb_id = %(kb_id)s",
+    {"kb_id": kb_id}
+)
 
 # Bad (string concatenation)
-# query = f"SELECT * FROM patterns WHERE node_id = '{node_id}'"
+# query = f"SELECT * FROM patterns_data WHERE kb_id = '{kb_id}'"
 ```
 
 ### Authentication & Authorization
@@ -131,17 +137,18 @@ services:
   kato:
     image: ghcr.io/sevakavakians/kato:3.0.0
     environment:
-      - MONGODB_URI=${MONGODB_URI}  # From environment
+      - CLICKHOUSE_HOST=${CLICKHOUSE_HOST}  # From environment
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
     secrets:
-      - mongodb_password
+      - clickhouse_password
     # Don't expose unnecessary ports
     ports:
       - "127.0.0.1:8000:8000"  # Bind to localhost only
 
 secrets:
-  mongodb_password:
-    file: ./secrets/mongodb_password.txt
+  clickhouse_password:
+    file: ./secrets/clickhouse_password.txt
 ```
 
 ### HTTPS/TLS
@@ -193,10 +200,10 @@ spec:
   - to:
     - podSelector:
         matchLabels:
-          app: mongodb
+          app: clickhouse
     ports:
     - protocol: TCP
-      port: 27017
+      port: 9000
 ```
 
 ## Data Security

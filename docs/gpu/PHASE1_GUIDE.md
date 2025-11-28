@@ -143,7 +143,7 @@ from pathlib import Path
 from typing import List, Dict, Any
 
 import numpy as np
-from pymongo import MongoClient
+import clickhouse_connect
 
 # Import KATO components
 import sys
@@ -225,24 +225,29 @@ class BenchmarkRunner:
         print(f"Generating {pattern_count:,} test patterns...")
         patterns = self.generate_test_patterns(pattern_count)
 
-        # Store in MongoDB
-        print("Storing patterns in MongoDB...")
-        mongo_client = MongoClient("mongodb://localhost:27017")
-        kb = mongo_client[self.processor_id]
+        # Store in ClickHouse
+        print("Storing patterns in ClickHouse...")
+        clickhouse_client = clickhouse_connect.get_client(
+            host='localhost',
+            port=8123
+        )
 
-        # Clear existing
-        kb.patterns_kb.delete_many({})
-        kb.symbols_kb.delete_many({})
-        kb.metadata.delete_many({})
-
-        # Insert patterns
+        # Insert patterns (batch operation for performance)
+        data = []
         for pattern in patterns:
-            kb.patterns_kb.insert_one({
-                "name": pattern.name,
-                "pattern_data": pattern.pattern_data,
-                "frequency": 1,
-                "length": len(list(chain(*pattern.pattern_data)))
-            })
+            data.append([
+                pattern.name,
+                self.processor_id,
+                len(list(chain(*pattern.pattern_data))),
+                1  # frequency
+            ])
+
+        if data:
+            clickhouse_client.insert(
+                "kato.patterns_data",
+                data,
+                column_names=["name", "kb_id", "length", "observation_count"]
+            )
 
         # Create searcher
         print("Initializing pattern searcher...")
@@ -497,14 +502,14 @@ __all__ = ["SymbolVocabularyEncoder"]
 Symbol Vocabulary Encoder for GPU Pattern Matching.
 
 Converts string symbols to integer IDs for efficient GPU processing.
-Maintains bidirectional mapping with MongoDB persistence.
+Maintains bidirectional mapping with Redis persistence.
 """
 
 import logging
 from typing import Dict, List, Optional
 
 import numpy as np
-from pymongo.collection import Collection
+import redis
 
 logger = logging.getLogger('kato.gpu.encoder')
 
@@ -520,14 +525,16 @@ class SymbolVocabularyEncoder:
         next_id: Next available ID for new symbols
     """
 
-    def __init__(self, mongodb_metadata: Collection):
+    def __init__(self, redis_client: redis.Redis, kb_id: str):
         """
-        Initialize encoder with MongoDB backend.
+        Initialize encoder with Redis backend.
 
         Args:
-            mongodb_metadata: MongoDB metadata collection for persistence
+            redis_client: Redis client for persistence
+            kb_id: Knowledge base identifier for key namespacing
         """
-        self.mongodb = mongodb_metadata
+        self.redis = redis_client
+        self.kb_id = kb_id
         self.symbol_to_id: Dict[str, int] = {}
         self.id_to_symbol: Dict[int, str] = {}
         self.next_id: int = 0
@@ -543,32 +550,36 @@ class SymbolVocabularyEncoder:
         return len(self.symbol_to_id)
 
     def _load_vocabulary(self):
-        """Load vocabulary from MongoDB."""
-        vocab_doc = self.mongodb.find_one({"class": "gpu_vocabulary"})
+        """Load vocabulary from Redis."""
+        key = f"gpu_vocab:{self.kb_id}"
+        vocab_data = self.redis.hgetall(key)
 
-        if vocab_doc:
+        if vocab_data:
             # Load existing vocabulary
-            self.symbol_to_id = vocab_doc['symbol_to_id']
-            self.id_to_symbol = {int(k): v for k, v in vocab_doc['id_to_symbol'].items()}
-            self.next_id = vocab_doc['next_id']
+            import json
+            self.symbol_to_id = json.loads(vocab_data.get(b'symbol_to_id', b'{}').decode())
+            self.id_to_symbol = {
+                int(k): v for k, v in
+                json.loads(vocab_data.get(b'id_to_symbol', b'{}').decode()).items()
+            }
+            self.next_id = int(vocab_data.get(b'next_id', b'0').decode())
             logger.info(f"Loaded vocabulary: {self.vocab_size} symbols")
         else:
             # Initialize empty vocabulary
             logger.info("No existing vocabulary found, starting fresh")
 
     def _save_vocabulary(self):
-        """Persist vocabulary to MongoDB."""
-        self.mongodb.update_one(
-            {"class": "gpu_vocabulary"},
-            {
-                "$set": {
-                    "symbol_to_id": self.symbol_to_id,
-                    "id_to_symbol": {str(k): v for k, v in self.id_to_symbol.items()},
-                    "vocab_size": self.vocab_size,
-                    "next_id": self.next_id
-                }
-            },
-            upsert=True
+        """Persist vocabulary to Redis."""
+        import json
+        key = f"gpu_vocab:{self.kb_id}"
+        self.redis.hset(
+            key,
+            mapping={
+                "symbol_to_id": json.dumps(self.symbol_to_id),
+                "id_to_symbol": json.dumps({str(k): v for k, v in self.id_to_symbol.items()}),
+                "vocab_size": str(self.vocab_size),
+                "next_id": str(self.next_id)
+            }
         )
 
     def encode_symbol(self, symbol: str) -> int:
@@ -637,33 +648,40 @@ class SymbolVocabularyEncoder:
                     symbols.append(symbol)
         return symbols
 
-    def build_from_patterns(self, patterns_collection: Collection):
+    def build_from_patterns(self, clickhouse_client):
         """
-        Build vocabulary from existing patterns in MongoDB.
+        Build vocabulary from existing patterns in ClickHouse.
 
         Scans all patterns and creates mappings for all unique symbols.
         Uses deterministic ordering (alphabetically sorted).
 
         Args:
-            patterns_collection: MongoDB patterns_kb collection
+            clickhouse_client: ClickHouse client instance
         """
         logger.info("Building vocabulary from patterns...")
 
-        # Aggregate unique symbols
-        pipeline = [
-            {"$project": {"pattern_data": 1}},
-            {"$unwind": "$pattern_data"},
-            {"$unwind": "$pattern_data"},
-            {"$group": {"_id": "$pattern_data"}},
-            {"$sort": {"_id": 1}}  # Alphabetical order (deterministic)
-        ]
-
-        unique_symbols = patterns_collection.aggregate(pipeline)
+        # Query unique symbols from all event columns
+        # ClickHouse stores events in separate columns (event_0_string_0, etc.)
+        result = clickhouse_client.query(
+            f"""
+            SELECT DISTINCT event_value
+            FROM (
+                SELECT arrayJoin(
+                    arrayConcat(
+                        CAST([event_0_string_0, event_1_string_0, event_2_string_0], 'Array(String)')
+                    )
+                ) AS event_value
+                FROM kato.patterns_data
+                WHERE kb_id = '{self.kb_id}'
+            )
+            ORDER BY event_value
+            """
+        )
 
         # Assign IDs
-        for doc in unique_symbols:
-            symbol = doc['_id']
-            if symbol not in self.symbol_to_id:
+        for row in result.result_rows:
+            symbol = row[0]
+            if symbol and symbol not in self.symbol_to_id:
                 self.symbol_to_id[symbol] = self.next_id
                 self.id_to_symbol[self.next_id] = symbol
                 self.next_id += 1
@@ -764,32 +782,32 @@ def flatten_pattern(pattern: List[List[str]]) -> List[str]:
 
 import pytest
 import numpy as np
-from pymongo import MongoClient
+import redis
 
 from kato.gpu.encoder import SymbolVocabularyEncoder
 from tests.tests.gpu.data_generators import generate_test_symbols
 
 
 @pytest.fixture
-def mongodb():
-    """MongoDB test database."""
-    client = MongoClient("mongodb://localhost:27017")
-    db = client["test_gpu_encoder"]
+def redis_client():
+    """Redis test client."""
+    client = redis.Redis(host='localhost', port=6379, db=0)
 
-    # Clear before test
-    db.metadata.delete_many({})
+    # Clear test keys before test
+    for key in client.scan_iter("gpu_vocab:test_*"):
+        client.delete(key)
 
-    yield db
+    yield client
 
     # Cleanup
-    db.metadata.delete_many({})
-    client.close()
+    for key in client.scan_iter("gpu_vocab:test_*"):
+        client.delete(key)
 
 
 @pytest.fixture
-def encoder(mongodb):
+def encoder(redis_client):
     """Create encoder instance."""
-    return SymbolVocabularyEncoder(mongodb.metadata)
+    return SymbolVocabularyEncoder(redis_client, kb_id="test_encoder")
 
 
 def test_encode_single_symbol(encoder):
@@ -848,15 +866,17 @@ def test_decode_sequence(encoder):
     assert decoded == original
 
 
-def test_persistence(mongodb):
-    """Test vocabulary persists to MongoDB."""
+def test_persistence(redis_client):
+    """Test vocabulary persists to Redis."""
+    kb_id = "test_persistence"
+
     # Create encoder and add symbols
-    encoder1 = SymbolVocabularyEncoder(mongodb.metadata)
+    encoder1 = SymbolVocabularyEncoder(redis_client, kb_id=kb_id)
     encoder1.encode_symbol("symbol1")
     encoder1.encode_symbol("symbol2")
 
     # Create new encoder (should load saved vocab)
-    encoder2 = SymbolVocabularyEncoder(mongodb.metadata)
+    encoder2 = SymbolVocabularyEncoder(redis_client, kb_id=kb_id)
 
     assert encoder2.vocab_size == 2
     assert encoder2.encode_symbol("symbol1") == encoder1.encode_symbol("symbol1")

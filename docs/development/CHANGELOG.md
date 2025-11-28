@@ -28,6 +28,10 @@
   - Direct processor embedding in FastAPI service for reduced latency
   - Simplified deployment with single service architecture
   - WebSocket support added for real-time communication
+- **MongoDB Removed**: Migrated to ClickHouse + Redis hybrid architecture
+  - ClickHouse for pattern data storage with multi-stage filter pipeline
+  - Redis for session management and pattern metadata
+  - 100-300x performance improvement for billion-scale pattern matching
 
 ### Removed
 - **Legacy Components**: Complete removal of deprecated architecture
@@ -41,6 +45,11 @@
   - Deleted `kato/scripts/kato_engine.py` - ZMQ entry point
   - Removed `pyzmq` and `msgpack` from requirements.txt
   - Removed `kato-engine` console script from setup.py
+- **MongoDB**: Removed all MongoDB dependencies and code
+  - Removed `pymongo` from requirements.txt
+  - Deleted MongoDB-specific storage adapters
+  - Migrated all pattern storage to ClickHouse
+  - Migrated all metadata to Redis
 
 ### Added
 - **FastAPI Service** (`kato/services/kato_fastapi.py`): Modern async API

@@ -4,9 +4,10 @@
 
 ---
 
-## 2025-11-25 - DECISION-007: Stateless Processor Architecture
+## 2025-11-26 - DECISION-007: Stateless Processor Architecture - Phase 1 INCOMPLETE
 **Decision**: Refactor KatoProcessor from stateful to stateless architecture
-**Status**: ACTIVE - Implementation in progress
+**Status**: PHASE 1 INCOMPLETE (80%) - Critical issues discovered, lock removal reverted
+**Updated**: 2025-11-26 - Knowledge refinement (assumption corrected with verified facts)
 
 ### Context
 **Critical Bug Discovered**: Session isolation broken in KATO v3.0.
@@ -180,12 +181,57 @@ class KatoProcessor:
 
 **Timeline**:
 - Started: 2025-11-25
-- Expected Completion: 2025-11-28
-- Status: Phase 1 starting
+- Phase 1 Status: INCOMPLETE (80% complete, 10 of 11 tasks done)
+- Expected Phase 1 Completion: 2025-11-27 (after Phase 1.11)
+- Expected Full Completion: 2025-11-29 to 2025-11-30
+- Status: Phase 1 INCOMPLETE ⚠️, Phase 2 BLOCKED
 
-**Confidence**: High - Well-understood pattern, clear implementation path
-**Risk**: Medium - Significant refactor, but comprehensive testing will validate
-**Reversibility**: High - Git-based rollback if needed
+**Phase 1 Progress Summary** (2025-11-26):
+- **MemoryManager**: ✅ All methods converted to static/pure functions (Commit: 3dc344d)
+- **KatoProcessor**: ✅ All methods accept/return session_state (Commit: 4a257d6)
+- **Endpoints**: ✅ All session endpoints use stateless pattern (Commit: 8e74f94)
+- **Locks**: ⚠️ REVERTED - Lock removal was premature, re-added temporarily
+- **Pattern Processor**: ❌ NOT STATELESS - Still has STM instance variable (shared across sessions)
+- **Helper Modules**: ✅ observation_processor, pattern_operations updated (Commit: 8e74f94)
+- **Files Modified**: 6 core files (memory_manager, kato_processor, sessions, processor_manager, observation_processor, pattern_operations)
+- **Duration**: ~30 hours actual + ~8-10 hours remaining for Phase 1.11
+
+**Critical Discovery** (2025-11-26):
+**ASSUMPTION CORRECTED**: Phase 1 was reported as "100% complete" but testing revealed critical incompleteness.
+
+**Root Cause**:
+1. Pattern processor stores STM as instance variable (`pattern_processor.STM`)
+2. Pattern processor is shared across sessions with same `node_id` (by design for LTM sharing)
+3. Legacy sync code: `get_session_stm` endpoint syncs FROM processor TO session
+4. This causes sessions to contaminate each other's STM data
+
+**Test Failures** (2 of 5 session isolation tests failing):
+- `test_stm_isolation_concurrent_same_node`: Session 1 STM overwritten with Session 2's data
+- `test_stm_isolation_after_learn`: Session 1 STM changed from `[['hello'], ['world']]` to `[['foo'], ['bar']]`
+
+**Fix Applied**:
+- Re-added processor-level locks (temporary fix to prevent data corruption)
+- Added debug logging to track session save/load operations
+- Docker image rebuilding with fixes
+
+**Phase 1.11 Required** (New Task - 8-10 hours):
+1. Investigate pattern_processor.py STM usage (1-2 hours)
+2. Find all processor→session sync code (1 hour)
+3. Refactor pattern processor to be stateless (3-4 hours)
+4. Remove processor→session sync code (1-2 hours)
+5. Verify session isolation tests pass (1 hour)
+6. Remove processor locks (30 mins)
+
+**Architecture Status**:
+- ⚠️ LOCKS RE-ADDED: Temporarily restored to fix session isolation bug
+- ⚠️ SEQUENTIAL PROCESSING: Still bottlenecked until pattern_processor is stateless
+- ❌ SESSION ISOLATION: Tests failing - STM leaking between sessions
+- ⏸️ TRUE CONCURRENCY: Blocked until pattern_processor refactor complete
+- ⏸️ HORIZONTAL SCALABILITY: Blocked until stateless pattern complete
+
+**Confidence**: Medium - Core architecture mostly correct, but critical component (pattern_processor) needs refactoring
+**Risk**: Medium - Additional refactoring required, but pattern is well-understood
+**Reversibility**: High - Git-based rollback if needed, locks prevent data corruption during fix
 
 ---
 

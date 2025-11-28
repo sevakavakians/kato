@@ -288,7 +288,7 @@ def test_hybrid_max_predictions_limit(hybrid_kato_fixture):
         hybrid_kato_fixture.learn()
 
     # Set low max_predictions via session config
-    hybrid_kato_fixture.update_genes({'max_predictions': 5})
+    hybrid_kato_fixture.update_config({'max_predictions': 5})
 
     # Query with low recall threshold to potentially match many patterns
     hybrid_kato_fixture.set_recall_threshold(0.1)

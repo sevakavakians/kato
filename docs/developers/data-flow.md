@@ -564,8 +564,8 @@ Observation Processing:  5-15ms
 
 Pattern Learning:        50-200ms
   ├─ Hash generation:    5ms
-  ├─ MongoDB write:      30-100ms
-  ├─ ClickHouse write:   10-50ms
+  ├─ ClickHouse write:   20-80ms
+  ├─ Redis metadata:     5-20ms
   └─ Index update:       5-50ms
 
 Pattern Matching:        100-500ms

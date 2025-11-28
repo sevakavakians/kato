@@ -320,26 +320,43 @@ session.mount('http://', adapter)
 
 ## Database Optimization
 
-### MongoDB Indexes
+### ClickHouse Performance
 
-```javascript
-// Create indexes for faster queries
-db.patterns.createIndex({"session_id": 1, "name": 1})
-db.patterns.createIndex({"frequency": -1})
-db.patterns.createIndex({"created_at": -1})
+```sql
+-- ClickHouse uses columnar storage optimized for analytical queries
+-- Multi-stage filter pipeline handles billion-scale patterns efficiently
+
+-- Check table statistics
+SELECT
+    table,
+    formatReadableSize(total_bytes) AS total_size,
+    formatReadableQuantity(total_rows) AS total_rows
+FROM system.tables
+WHERE database = 'kato';
+
+-- Analyze query performance
+SELECT
+    query,
+    query_duration_ms,
+    read_rows,
+    result_rows
+FROM system.query_log
+WHERE type = 'QueryFinish'
+  AND query_duration_ms > 100
+ORDER BY query_duration_ms DESC
+LIMIT 10;
 ```
 
 ### Connection Pooling
 
 ```python
-# MongoDB connection pool
-from pymongo import MongoClient
+# ClickHouse connection pool
+import clickhouse_connect
 
-client = MongoClient(
-    'mongodb://localhost:27017/',
-    maxPoolSize=50,
-    minPoolSize=10,
-    maxIdleTimeMS=30000
+client = clickhouse_connect.get_client(
+    host='localhost',
+    port=8123,
+    pool_size=50
 )
 ```
 

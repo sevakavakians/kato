@@ -96,7 +96,7 @@ class KatoProcessor:
     pass
 
 class SuperKnowledgeBase:
-    """MongoDB knowledge base manager."""
+    """ClickHouse knowledge base manager."""
     pass
 ```
 
@@ -310,7 +310,7 @@ from collections import defaultdict
 from typing import Any, Optional
 
 # Third-party
-import pymongo
+import clickhouse_connect
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
@@ -590,7 +590,7 @@ def test_observe_adds_to_stm(kato_processor):
 
 ```python
 # Good - explain why
-# Use exponential backoff to avoid overwhelming MongoDB during bulk inserts
+# Use exponential backoff to avoid overwhelming ClickHouse during bulk inserts
 retry_delay = min(base_delay * (2 ** attempt), max_delay)
 
 # Good - clarify complex logic
@@ -610,7 +610,7 @@ counter += 1
 # TODO: Add support for multi-modal pattern matching
 # FIXME: Race condition when clearing STM during learning
 # NOTE: This assumes patterns are pre-sorted
-# HACK: Temporary workaround for MongoDB connection pool issue
+# HACK: Temporary workaround for filter pipeline optimization
 ```
 
 ## Code Smells to Avoid

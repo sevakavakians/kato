@@ -2,7 +2,7 @@
 
 ## Overview
 
-The hybrid ClickHouse/Redis architecture implements **node isolation** via the `kb_id` (Knowledge Base Identifier) parameter. This ensures that patterns from different nodes/processors/knowledge bases remain completely isolated, matching MongoDB's database-level isolation semantics.
+The hybrid ClickHouse/Redis architecture implements **node isolation** via the `kb_id` (Knowledge Base Identifier) parameter. This ensures that patterns from different nodes/processors/knowledge bases remain completely isolated through physical data separation.
 
 ## Problem Solved
 

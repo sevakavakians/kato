@@ -20,7 +20,7 @@ KATO's configuration management system provides a robust, type-safe way to confi
 Settings (Main Configuration Class)
 ├── ProcessorConfig      # Instance identification and naming
 ├── LoggingConfig        # Logging levels, formats, and outputs
-├── DatabaseConfig       # MongoDB, Qdrant, and Redis connections
+├── DatabaseConfig       # ClickHouse, Qdrant, and Redis connections
 ├── LearningConfig       # Pattern learning and memory parameters
 ├── ProcessingConfig     # Prediction and pattern processing
 ├── PerformanceConfig    # Optimization and tuning settings

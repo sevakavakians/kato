@@ -223,63 +223,60 @@ test_pattern_matching_benchmark    145.2    198.5    165.3    12.4   163.8
 
 ## Database Optimization
 
-### MongoDB Indexing
+### ClickHouse Optimization
 
-**Check Current Indices**:
-```javascript
-// Connect to MongoDB
-docker exec -it kato-mongodb mongosh
+**Check Query Performance**:
+```bash
+# Connect to ClickHouse
+docker exec -it kato-clickhouse clickhouse-client
 
-use node_my_app_kato
-db.patterns.getIndexes()
+# View query log
+SELECT
+    query,
+    query_duration_ms,
+    read_rows,
+    result_rows
+FROM system.query_log
+WHERE type = 'QueryFinish'
+  AND query_duration_ms > 100
+ORDER BY query_duration_ms DESC
+LIMIT 10;
 ```
 
-**Create Optimal Indices**:
-```javascript
-// Pattern ID (created automatically)
-db.patterns.createIndex({"_id": 1})
+**Optimize Table Structure**:
+```sql
+-- ClickHouse uses columnar storage optimized for analytical queries
+-- Multi-stage filter pipeline handles billion-scale patterns efficiently
 
-// Length-based queries
-db.patterns.createIndex({"length": 1})
+-- Check table statistics
+SELECT
+    table,
+    formatReadableSize(total_bytes) AS total_size,
+    formatReadableQuantity(total_rows) AS total_rows
+FROM system.tables
+WHERE database = 'kato';
 
-// Temporal queries
-db.patterns.createIndex({"created_at": -1})
-db.patterns.createIndex({"updated_at": -1})
-
-// Observation count (for ranking)
-db.patterns.createIndex({"observation_count": -1})
-
-// Compound index for common query patterns
-db.patterns.createIndex({"length": 1, "observation_count": -1})
-
-// Event-based queries (first event)
-db.patterns.createIndex({"events.0": 1})
-
-// Text search (if needed)
-db.patterns.createIndex({"events": "text"})
+-- Analyze query plan
+EXPLAIN SELECT * FROM kato.patterns_data WHERE kb_id = 'my_app' AND length = 3;
 ```
 
-**Analyze Query Performance**:
-```javascript
-// Explain query plan
-db.patterns.find({"length": 3}).explain("executionStats")
+**Monitor Performance**:
+```sql
+-- View active queries
+SELECT
+    query_id,
+    user,
+    query,
+    elapsed
+FROM system.processes;
 
-// Look for:
-// - "stage": "IXSCAN" (good - using index)
-// - "stage": "COLLSCAN" (bad - full collection scan)
-// - "executionTimeMillis": < 100ms (target)
-```
-
-**Enable Query Profiling**:
-```javascript
-// Profile slow queries (>100ms)
-db.setProfilingLevel(1, {slowms: 100})
-
-// View slow queries
-db.system.profile.find().sort({ts: -1}).limit(10).pretty()
-
-// Disable profiling
-db.setProfilingLevel(0)
+-- Check filter pipeline effectiveness
+SELECT
+    event_type,
+    count() as occurrences
+FROM system.query_log
+WHERE has(arrayMap(x -> x.1, ProfileEvents), 'FilteredRows')
+GROUP BY event_type;
 ```
 
 ### Qdrant Optimization

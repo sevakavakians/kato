@@ -48,25 +48,6 @@ class ResolvedConfiguration:
     source_node_id: Optional[str] = None
     overrides_applied: dict[str, Any] = None
 
-    def to_genes_dict(self) -> dict[str, Any]:
-        """
-        Convert to genes dictionary format for API responses.
-
-        Returns:
-            Dictionary in the format expected by gene APIs
-        """
-        return {
-            'recall_threshold': self.recall_threshold,
-            'persistence': self.persistence,
-            'max_pattern_length': self.max_pattern_length,
-            'stm_mode': self.stm_mode,
-            'max_predictions': self.max_predictions,
-            'sort': self.sort_symbols,
-            'process_predictions': self.process_predictions,
-            'use_token_matching': self.use_token_matching,
-            'rank_sort_algo': self.rank_sort_algo
-        }
-
 
 class ConfigurationService:
     """
@@ -267,28 +248,6 @@ class ConfigurationService:
                 errors['rank_sort_algo'] = f'Must be one of: {", ".join(valid_algorithms)}'
 
         return errors
-
-    def get_configuration_info(self, session_config: Optional[SessionConfiguration] = None) -> dict[str, Any]:
-        """
-        Get comprehensive configuration information including defaults and overrides.
-
-        Args:
-            session_config: Optional session configuration
-
-        Returns:
-            Dictionary with configuration details, defaults, and overrides
-        """
-        defaults = self.get_default_configuration()
-        resolved = self.resolve_configuration(session_config)
-
-        return {
-            'defaults': defaults,
-            'resolved': resolved.to_genes_dict(),
-            'overrides_applied': resolved.overrides_applied or {},
-            'has_overrides': bool(resolved.overrides_applied),
-            'source_session': resolved.source_session_id,
-            'source_node': resolved.source_node_id
-        }
 
 
 # Global configuration service instance (singleton pattern)

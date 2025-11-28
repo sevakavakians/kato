@@ -59,32 +59,33 @@ isolation = TenantIsolation("http://localhost:8000")
 session_id = isolation.create_tenant_session("acme-corp", "user-123")
 ```
 
-### Pattern 2: Database Per Tenant
+### Pattern 2: Isolated KATO Instance Per Tenant
 
 ```python
-class DatabasePerTenant:
-    """Separate MongoDB database per tenant"""
+class InstancePerTenant:
+    """Separate KATO instance per tenant"""
 
-    def __init__(self, kato_base_url: str, mongo_host: str):
+    def __init__(self, kato_base_url: str, clickhouse_host: str):
         self.kato_base_url = kato_base_url
-        self.mongo_host = mongo_host
+        self.clickhouse_host = clickhouse_host
         self.tenant_configs = {}
 
-    def configure_tenant(self, tenant_id: str, db_name: str):
+    def configure_tenant(self, tenant_id: str, kb_id: str):
         """Configure KATO instance for tenant"""
-        # Start KATO instance with tenant-specific MongoDB
+        # Start KATO instance with tenant-specific kb_id
         import subprocess
 
         env = {
             "PROCESSOR_ID": f"kato-{tenant_id}",
-            "MONGODB_URI": f"mongodb://{self.mongo_host}/{db_name}",
+            "CLICKHOUSE_HOST": self.clickhouse_host,
+            "KB_ID": kb_id,
             "API_PORT": str(8000 + hash(tenant_id) % 1000)
         }
 
         # Would typically use docker-compose or k8s to start instance
         # This is conceptual example
         self.tenant_configs[tenant_id] = {
-            "database": db_name,
+            "kb_id": kb_id,
             "port": env["API_PORT"]
         }
 
@@ -148,53 +149,61 @@ node_id = strategy.hierarchical("bigco", "engineering", "charlie")
 ### Querying by Node ID Pattern
 
 ```python
-from pymongo import MongoClient
+import clickhouse_connect
 from typing import List, Dict
 
 class NodeIDQueryManager:
-    """Query patterns by node_id prefix"""
+    """Query patterns by kb_id prefix"""
 
-    def __init__(self, mongo_uri: str):
-        self.client = MongoClient(mongo_uri)
-        self.db = self.client["kato"]
+    def __init__(self, clickhouse_host: str, clickhouse_port: int = 8123):
+        self.client = clickhouse_connect.get_client(
+            host=clickhouse_host,
+            port=clickhouse_port
+        )
 
     def get_patterns_for_tenant(self, tenant_id: str) -> List[Dict]:
         """Get all patterns for tenant"""
-        return list(self.db["patterns"].find({
-            "node_id": {"$regex": f"^tenant:{tenant_id}:"}
-        }))
+        result = self.client.query(
+            "SELECT * FROM kato.patterns_data WHERE kb_id LIKE %(prefix)s",
+            {"prefix": f"tenant:{tenant_id}:%"}
+        )
+        return [dict(zip(result.column_names, row)) for row in result.result_rows]
 
     def get_patterns_for_team(self, team_id: str) -> List[Dict]:
         """Get team's shared patterns"""
-        return list(self.db["patterns"].find({
-            "node_id": f"team:{team_id}:shared"
-        }))
+        result = self.client.query(
+            "SELECT * FROM kato.patterns_data WHERE kb_id = %(kb_id)s",
+            {"kb_id": f"team:{team_id}:shared"}
+        )
+        return [dict(zip(result.column_names, row)) for row in result.result_rows]
 
     def get_user_patterns_across_tenants(self, user_id: str) -> Dict[str, List]:
         """Get user's patterns grouped by tenant"""
-        patterns = self.db["patterns"].find({
-            "node_id": {"$regex": f":user:{user_id}$"}
-        })
+        result = self.client.query(
+            "SELECT * FROM kato.patterns_data WHERE kb_id LIKE %(suffix)s",
+            {"suffix": f"%:user:{user_id}"}
+        )
 
         grouped = {}
-        for pattern in patterns:
-            # Extract tenant from node_id
-            parts = pattern["node_id"].split(":")
+        for row in result.result_rows:
+            row_dict = dict(zip(result.column_names, row))
+            # Extract tenant from kb_id
+            parts = row_dict["kb_id"].split(":")
             if len(parts) >= 2 and parts[0] == "tenant":
                 tenant_id = parts[1]
                 if tenant_id not in grouped:
                     grouped[tenant_id] = []
-                grouped[tenant_id].append(pattern)
+                grouped[tenant_id].append(row_dict)
 
         return grouped
 
     def delete_tenant_data(self, tenant_id: str):
         """Delete all data for tenant"""
-        # Delete patterns
-        result = self.db["patterns"].delete_many({
-            "node_id": {"$regex": f"^tenant:{tenant_id}:"}
-        })
-        return result.deleted_count
+        # Delete patterns (use ALTER DELETE for ClickHouse)
+        result = self.client.command(
+            f"ALTER TABLE kato.patterns_data DELETE WHERE kb_id LIKE 'tenant:{tenant_id}:%'"
+        )
+        return result
 ```
 
 ## Data Security
@@ -292,63 +301,72 @@ class AccessControlledKatoClient:
         return response.json()["session_id"]
 ```
 
-## MongoDB Isolation Strategies
+## ClickHouse Isolation Strategies
 
-### Collection-Level Isolation
+### KB_ID Partitioning
 
 ```python
-class CollectionIsolationStrategy:
-    """Use separate collections per tenant"""
+class KBIDIsolation:
+    """Use kb_id partitioning for tenant isolation"""
 
-    def __init__(self, mongo_uri: str):
-        self.client = MongoClient(mongo_uri)
-        self.db = self.client["kato"]
-
-    def get_tenant_collection(self, tenant_id: str):
-        """Get or create collection for tenant"""
-        collection_name = f"patterns_tenant_{tenant_id}"
-        return self.db[collection_name]
+    def __init__(self, clickhouse_host: str, clickhouse_port: int = 8123):
+        self.client = clickhouse_connect.get_client(
+            host=clickhouse_host,
+            port=clickhouse_port
+        )
 
     def store_pattern(self, tenant_id: str, pattern: dict):
-        """Store pattern in tenant's collection"""
-        collection = self.get_tenant_collection(tenant_id)
-        collection.insert_one(pattern)
+        """Store pattern with tenant kb_id"""
+        kb_id = f"tenant_{tenant_id}"
+        self.client.insert(
+            "kato.patterns_data",
+            [[
+                pattern["name"],
+                kb_id,
+                pattern["length"],
+                pattern["observation_count"],
+                # ... other fields
+            ]],
+            column_names=["name", "kb_id", "length", "observation_count"]
+        )
 
     def get_patterns(self, tenant_id: str) -> list:
         """Get all patterns for tenant"""
-        collection = self.get_tenant_collection(tenant_id)
-        return list(collection.find())
+        kb_id = f"tenant_{tenant_id}"
+        result = self.client.query(
+            "SELECT * FROM kato.patterns_data WHERE kb_id = %(kb_id)s",
+            {"kb_id": kb_id}
+        )
+        return result.result_rows
 ```
 
-### Index-Based Isolation
+### Filter Pipeline Optimization
 
 ```python
-class IndexedIsolation:
-    """Optimize queries with compound indexes"""
+class OptimizedIsolation:
+    """Optimize queries with multi-stage filter pipeline"""
 
-    def __init__(self, mongo_uri: str):
-        self.client = MongoClient(mongo_uri)
-        self.db = self.client["kato"]
-
-    def create_isolation_indexes(self):
-        """Create indexes for efficient isolation queries"""
-        patterns = self.db["patterns"]
-
-        # Compound index on node_id prefix
-        patterns.create_index([("node_id", 1)])
-
-        # Partial index for tenant data
-        patterns.create_index(
-            [("node_id", 1), ("created_at", -1)],
-            partialFilterExpression={"node_id": {"$regex": "^tenant:"}}
+    def __init__(self, clickhouse_host: str, clickhouse_port: int = 8123):
+        self.client = clickhouse_connect.get_client(
+            host=clickhouse_host,
+            port=clickhouse_port
         )
 
     def query_tenant_patterns(self, tenant_id: str, limit: int = 100):
-        """Efficiently query tenant patterns"""
-        return self.db["patterns"].find(
-            {"node_id": {"$regex": f"^tenant:{tenant_id}:"}},
-            limit=limit
-        ).sort("created_at", -1)
+        """Efficiently query tenant patterns using filter pipeline"""
+        kb_id = f"tenant_{tenant_id}"
+
+        # ClickHouse uses multi-stage filtering automatically
+        result = self.client.query(
+            """
+            SELECT * FROM kato.patterns_data
+            WHERE kb_id = %(kb_id)s
+            ORDER BY created_at DESC
+            LIMIT %(limit)s
+            """,
+            {"kb_id": kb_id, "limit": limit}
+        )
+        return result.result_rows
 ```
 
 ## Redis Isolation

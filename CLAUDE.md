@@ -35,6 +35,32 @@ KATO (Knowledge Abstraction for Traceable Outcomes) is a deterministic memory an
 
 See [docs/HYBRID_ARCHITECTURE.md](docs/HYBRID_ARCHITECTURE.md) for complete details.
 
+### Stateless Processor Architecture (v3.0+)
+**IMPORTANT**: KATO processors use a **stateless, functional programming pattern**:
+- **No Instance Mutations**: Processor methods never mutate instance variables
+- **Config-as-Parameter**: Configuration passed as parameters, not stored in processor state
+- **State Passed Explicitly**: Session state passed as input, new state returned as output
+- **True Concurrency**: No locks required, unlimited concurrent sessions per node_id
+- **Horizontal Scalability**: Processors are fully stateless and can be scaled horizontally
+
+**Pattern**:
+```python
+# OLD (v2.x - stateful, with locks)
+processor.observe(observation)  # MUTATES self.stm
+predictions = processor.get_predictions()  # READS self.stm
+
+# NEW (v3.0+ - stateless, no locks)
+new_state = processor.observe(observation, session_state, config)  # PURE FUNCTION
+predictions = processor.get_predictions(session_state=session_state, config=config)  # PURE FUNCTION
+```
+
+**Benefits**:
+- ✅ Complete session isolation (no data leaks between sessions)
+- ✅ Zero lock contention (true concurrent execution)
+- ✅ Simplified debugging (no hidden state)
+- ✅ Deterministic behavior (same inputs → same outputs)
+- ✅ Horizontal scaling (stateless processors can be replicated)
+
 ## Essential Development Commands
 
 ### Dependency Management
@@ -99,6 +125,8 @@ Storage Layer (Hybrid Architecture)
 ```
 
 **Complete Architecture**: See [ARCHITECTURE_DIAGRAM.md](ARCHITECTURE_DIAGRAM.md) and [docs/developers/architecture.md](docs/developers/architecture.md)
+
+**Architecture Decisions**: See [docs/architecture-decisions/ADR-001-stateless-processor.md](docs/architecture-decisions/ADR-001-stateless-processor.md)
 
 ## Important Files and Locations
 

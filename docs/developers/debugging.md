@@ -59,7 +59,7 @@ docker logs kato | jq 'select(.pattern_name == "PTN|abc123")'
 docker logs kato --tail 100 -f
 
 # View specific service
-docker logs kato-mongodb --tail 50
+docker logs kato-clickhouse --tail 50
 docker logs kato-qdrant --tail 50
 docker logs kato-redis --tail 50
 

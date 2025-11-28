@@ -221,7 +221,7 @@ ws://kato:8000/ws/events
   "data": {
     "error_type": "database_connection" | "pattern_matching" | "memory_limit",
     "severity": "error" | "warning" | "critical",
-    "message": "MongoDB connection lost",
+    "message": "ClickHouse connection lost",
     "affected_component": "session_manager",
     "metadata": {}
   }

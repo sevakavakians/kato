@@ -26,7 +26,7 @@ def test_token_matching_filters_low_similarity_correctly(kato_fixture):
     kato.clear_all_memory()
 
     # Set high recall threshold
-    kato.update_genes({'recall_threshold': 0.6})
+    kato.update_config({'recall_threshold': 0.6})
 
     # Learn a pattern
     pattern_tokens = ['token1', 'token2', 'token3', 'token4', 'token5', 'token6', 'token7', 'token8']
@@ -66,7 +66,7 @@ def test_high_recall_threshold_filters_garbage_predictions(kato_fixture):
     kato.clear_all_memory()
 
     # Set very high recall threshold
-    kato.update_genes({'recall_threshold': 0.8})
+    kato.update_config({'recall_threshold': 0.8})
 
     # Learn multiple patterns
     patterns = [

@@ -422,7 +422,7 @@ select = ["E", "F", "I"]
 ```
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
-pymongo==4.5.0
+clickhouse-connect==0.6.0
 qdrant-client==1.6.4
 redis==5.0.1
 pydantic==2.5.0

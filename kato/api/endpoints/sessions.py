@@ -330,57 +330,45 @@ async def observe_in_session(
         processor = await app_state.processor_manager.get_processor(session.node_id, session.session_config)
         logger.info(f"DEBUG CONCURRENT: Got processor with ID: {processor.id}")
 
-        # Get processor lock to prevent concurrent STM mutations
-        # NOTE: This is required because pattern_processor.STM is shared state
-        # TODO: Remove this lock once observation_processor is made fully stateless
-        processor_lock = await app_state.processor_manager.get_processor_lock(session.node_id)
+        # Process observation - NO PROCESSOR LOCK NEEDED (stateless processor)
+        # Processor accepts session state as parameter and returns new state
+        observation = {
+            'strings': data.strings,
+            'vectors': data.vectors,
+            'emotives': data.emotives,
+            'metadata': data.metadata,
+            'unique_id': f"obs-{uuid.uuid4().hex}",
+            'source': 'session'
+        }
 
-        # Nested lock structure:
-        # - Session lock: Protects session state read/write from Redis
-        # - Processor lock: Protects processor.STM mutations (shared across sessions with same node_id)
-        # Different sessions can run concurrently (different session locks)
-        # Sessions with same node_id will serialize on processor lock
-        async with processor_lock:
-            # Process observation with processor lock held
-            # Processor accepts session state as parameter and returns new state
-            observation = {
-                'strings': data.strings,
-                'vectors': data.vectors,
-                'emotives': data.emotives,
-                'metadata': data.metadata,
-                'unique_id': f"obs-{uuid.uuid4().hex}",
-                'source': 'session'
-            }
+        try:
+            # Call stateless observe() - pass session state, get new state back
+            result = await processor.observe(
+                observation,
+                session_state=session,
+                config=session.session_config
+            )
+        except Exception as e:
+            # Import VectorDimensionError to check exception type
+            from kato.exceptions import VectorDimensionError
 
-            try:
-                # Call stateless observe() - pass session state, get new state back
-                result = await processor.observe(
-                    observation,
-                    session_state=session,
-                    config=session.session_config
+            # Check if this is a vector dimension error
+            if isinstance(e, VectorDimensionError):
+                logger.error(f"Vector dimension error in session {session_id}: {e}")
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "error": "VectorDimensionError",
+                        "message": str(e),
+                        "expected_dimension": e.context.get('expected_dimension'),
+                        "actual_dimension": e.context.get('actual_dimension'),
+                        "vector_name": e.context.get('vector_name')
+                    }
                 )
-            except Exception as e:
-                # Import VectorDimensionError to check exception type
-                from kato.exceptions import VectorDimensionError
-
-                # Check if this is a vector dimension error
-                if isinstance(e, VectorDimensionError):
-                    logger.error(f"Vector dimension error in session {session_id}: {e}")
-                    raise HTTPException(
-                        status_code=400,
-                        detail={
-                            "error": "VectorDimensionError",
-                            "message": str(e),
-                            "expected_dimension": e.context.get('expected_dimension'),
-                            "actual_dimension": e.context.get('actual_dimension'),
-                            "vector_name": e.context.get('vector_name')
-                        }
-                    )
-                # Re-raise other exceptions
-                raise
+            # Re-raise other exceptions
+            raise
 
         # Update session with new state returned by processor
-        # (processor lock released, but session lock still held)
         logger.info(f"DEBUG: Updating session with new state from processor")
         session.stm = result['stm']
         session.emotives_accumulator = result['emotives_accumulator']
@@ -445,16 +433,13 @@ async def learn_in_session(session_id: str):
     processor = await app_state.processor_manager.get_processor(session.node_id, session.session_config)
 
     lock = await app_state.session_manager.get_session_lock(session_id)
-    processor_lock = await app_state.processor_manager.get_processor_lock(session.node_id)
 
     async with lock:
-        # Acquire processor lock to prevent concurrent STM mutations
-        # (pattern_processor.STM is shared across sessions with same node_id)
-        async with processor_lock:
-            # Learn pattern - stateless call returns (pattern_name, new_stm)
-            pattern_name, new_stm = processor.learn(session_state=session)
+        # NO PROCESSOR LOCK NEEDED (stateless processor)
+        # Learn pattern - stateless call returns (pattern_name, new_stm)
+        pattern_name, new_stm = processor.learn(session_state=session)
 
-        # Update session state (processor lock released)
+        # Update session state
         session.stm = new_stm
 
         await app_state.session_manager.update_session(session)
@@ -574,129 +559,127 @@ async def observe_sequence_in_session(
 
         # Get processor for this session
         processor = await app_state.processor_manager.get_processor(session.node_id, session.session_config)
-        processor_lock = await app_state.processor_manager.get_processor_lock(session.node_id)
 
-        # Acquire processor lock for entire sequence processing
-        # This prevents concurrent sessions from interleaving STM mutations
-        async with processor_lock:
-            logger.info(f"Processing sequence of {len(data.observations)} observations in session {session_id}")
+        # NO PROCESSOR LOCK NEEDED (stateless processor)
+        # Process entire sequence with stateless state chaining
+        logger.info(f"Processing sequence of {len(data.observations)} observations in session {session_id}")
 
-            # Start heartbeat for large batches to prevent session expiration during long operations
-            heartbeat_task = None
-            if len(data.observations) > 50:  # Start heartbeat for batches >50 observations
-                heartbeat_task = asyncio.create_task(_session_heartbeat(interval_seconds=30))
-                logger.debug(f"Started session heartbeat for {len(data.observations)} observations")
+        # Start heartbeat for large batches to prevent session expiration during long operations
+        heartbeat_task = None
+        if len(data.observations) > 50:  # Start heartbeat for batches >50 observations
+            heartbeat_task = asyncio.create_task(_session_heartbeat(interval_seconds=30))
+            logger.debug(f"Started session heartbeat for {len(data.observations)} observations")
 
-            results = []
-            initial_stm_length = len(session.stm)
-            auto_learned_patterns = []
+        results = []
+        initial_stm_length = len(session.stm)
+        auto_learned_patterns = []
 
-            # Track current session state through sequence (stateless approach)
-            current_state = session
+        # Track current session state through sequence (stateless approach)
+        current_state = session
 
-            try:
-                for i, obs_data in enumerate(data.observations):
-                    # Clear STM before each observation if isolation requested
-                    if data.clear_stm_between and i > 0:
-                        from kato.workers.memory_manager import MemoryManager
-                        current_state.stm = MemoryManager.clear_symbols()
-                        logger.debug(f"Cleared STM for isolated observation {i}")
+        try:
+            for i, obs_data in enumerate(data.observations):
+                # Clear STM before each observation if isolation requested
+                if data.clear_stm_between and i > 0:
+                    from kato.workers.memory_manager import MemoryManager
+                    current_state.stm = MemoryManager.clear_symbols()
+                    logger.debug(f"Cleared STM for isolated observation {i}")
 
-                    observation = {
-                        'strings': obs_data.strings,
-                        'vectors': obs_data.vectors,
-                        'emotives': obs_data.emotives,
-                        'metadata': obs_data.metadata,
-                        'unique_id': obs_data.unique_id or f"seq-obs-{uuid.uuid4().hex}",
-                        'source': 'sequence'
-                    }
+                observation = {
+                    'strings': obs_data.strings,
+                    'vectors': obs_data.vectors,
+                    'emotives': obs_data.emotives,
+                    'metadata': obs_data.metadata,
+                    'unique_id': obs_data.unique_id or f"seq-obs-{uuid.uuid4().hex}",
+                    'source': 'sequence'
+                }
 
-                    try:
-                        # Stateless observe() - pass current state, get new state back
-                        result = await processor.observe(
-                            observation,
-                            session_state=current_state,
-                            config=session.session_config
+                try:
+                    # Stateless observe() - pass current state, get new state back
+                    result = await processor.observe(
+                        observation,
+                        session_state=current_state,
+                        config=session.session_config
+                    )
+                except Exception as e:
+                    # Import VectorDimensionError to check exception type
+                    from kato.exceptions import VectorDimensionError
+
+                    # Cancel heartbeat before raising
+                    if heartbeat_task:
+                        heartbeat_task.cancel()
+                        try:
+                            await heartbeat_task
+                        except asyncio.CancelledError:
+                            pass
+
+                    # Check if this is a vector dimension error
+                    if isinstance(e, VectorDimensionError):
+                        logger.error(f"Vector dimension error at observation {i} in session {session_id}: {e}")
+                        raise HTTPException(
+                            status_code=400,
+                            detail={
+                                "error": "VectorDimensionError",
+                                "message": str(e),
+                                "observation_index": i,
+                                "expected_dimension": e.context.get('expected_dimension'),
+                                "actual_dimension": e.context.get('actual_dimension'),
+                                "vector_name": e.context.get('vector_name')
+                            }
                         )
-                    except Exception as e:
-                        # Import VectorDimensionError to check exception type
-                        from kato.exceptions import VectorDimensionError
+                    # Re-raise other exceptions
+                    raise
 
-                        # Cancel heartbeat before raising
-                        if heartbeat_task:
-                            heartbeat_task.cancel()
-                            try:
-                                await heartbeat_task
-                            except asyncio.CancelledError:
-                                pass
+                # Update current state with result (stateless chaining)
+                current_state.stm = result['stm']
+                current_state.time = result['time']
+                current_state.emotives_accumulator = result['emotives_accumulator']
+                current_state.metadata_accumulator = result['metadata_accumulator']
+                current_state.percept_data = result['percept_data']
+                current_state.predictions = result.get('predictions', [])
 
-                        # Check if this is a vector dimension error
-                        if isinstance(e, VectorDimensionError):
-                            logger.error(f"Vector dimension error at observation {i} in session {session_id}: {e}")
-                            raise HTTPException(
-                                status_code=400,
-                                detail={
-                                    "error": "VectorDimensionError",
-                                    "message": str(e),
-                                    "observation_index": i,
-                                    "expected_dimension": e.context.get('expected_dimension'),
-                                    "actual_dimension": e.context.get('actual_dimension'),
-                                    "vector_name": e.context.get('vector_name')
-                                }
-                            )
-                        # Re-raise other exceptions
-                        raise
+                # Learn after each if requested
+                if data.learn_after_each and current_state.stm:
+                    pattern_name, new_stm = processor.learn(session_state=current_state)
+                    current_state.stm = new_stm
+                    auto_learned_patterns.append(pattern_name)
 
-                    # Update current state with result (stateless chaining)
-                    current_state.stm = result['stm']
-                    current_state.time = result['time']
-                    current_state.emotives_accumulator = result['emotives_accumulator']
-                    current_state.metadata_accumulator = result['metadata_accumulator']
-                    current_state.percept_data = result['percept_data']
-                    current_state.predictions = result.get('predictions', [])
+                # Track auto-learned patterns from auto-learning
+                if result.get('auto_learned_pattern'):
+                    auto_learned_patterns.append(result['auto_learned_pattern'])
 
-                    # Learn after each if requested
-                    if data.learn_after_each and current_state.stm:
-                        pattern_name, new_stm = processor.learn(session_state=current_state)
-                        current_state.stm = new_stm
-                        auto_learned_patterns.append(pattern_name)
+                observation_result = {
+                    "status": "okay",
+                    "sequence_position": i,
+                    "stm_length": len(current_state.stm),
+                    "time": current_state.time,
+                    "unique_id": observation['unique_id'],
+                    "auto_learned_pattern": result.get('auto_learned_pattern')
+                }
+                results.append(observation_result)
 
-                    # Track auto-learned patterns from auto-learning
-                    if result.get('auto_learned_pattern'):
-                        auto_learned_patterns.append(result['auto_learned_pattern'])
+            # Learn from final STM if requested and STM is not empty
+            final_learned_pattern = None
+            if data.learn_at_end and current_state.stm:
+                try:
+                    final_learned_pattern, new_stm = processor.learn(session_state=current_state)
+                    current_state.stm = new_stm
+                    auto_learned_patterns.append(final_learned_pattern)
+                    logger.info(f"Learned final pattern: {final_learned_pattern}")
+                except Exception as learn_error:
+                    logger.warning(f"Failed to learn final pattern: {learn_error}")
 
-                    observation_result = {
-                        "status": "okay",
-                        "sequence_position": i,
-                        "stm_length": len(current_state.stm),
-                        "time": current_state.time,
-                        "unique_id": observation['unique_id'],
-                        "auto_learned_pattern": result.get('auto_learned_pattern')
-                    }
-                    results.append(observation_result)
+            final_stm_length = len(current_state.stm)
 
-                # Learn from final STM if requested and STM is not empty
-                final_learned_pattern = None
-                if data.learn_at_end and current_state.stm:
-                    try:
-                        final_learned_pattern, new_stm = processor.learn(session_state=current_state)
-                        current_state.stm = new_stm
-                        auto_learned_patterns.append(final_learned_pattern)
-                        logger.info(f"Learned final pattern: {final_learned_pattern}")
-                    except Exception as learn_error:
-                        logger.warning(f"Failed to learn final pattern: {learn_error}")
-
-                final_stm_length = len(current_state.stm)
-
-            finally:
-                # Always cancel the heartbeat task if it was started
-                if heartbeat_task and not heartbeat_task.done():
-                    heartbeat_task.cancel()
-                    try:
-                        await heartbeat_task
-                    except asyncio.CancelledError:
-                        pass
-                    logger.debug(f"Cancelled heartbeat for session {session_id}")
+        finally:
+            # Always cancel the heartbeat task if it was started
+            if heartbeat_task and not heartbeat_task.done():
+                heartbeat_task.cancel()
+                try:
+                    await heartbeat_task
+                except asyncio.CancelledError:
+                    pass
+                logger.debug(f"Cancelled heartbeat for session {session_id}")
 
         # Update session with final state (current_state has all updates from sequence)
         session.stm = current_state.stm
@@ -736,21 +719,19 @@ async def get_session_predictions(session_id: str):
     processor = await app_state.processor_manager.get_processor(session.node_id, session.session_config)
 
     lock = await app_state.session_manager.get_session_lock(session_id)
-    processor_lock = await app_state.processor_manager.get_processor_lock(session.node_id)
 
     async with lock:
-        # Acquire processor lock to prevent concurrent STM mutations
-        async with processor_lock:
-            # Get predictions with session state - stateless call
-            predictions = await processor.get_predictions(
-                session_state=session,
-                config=session.session_config
-            )
+        # NO PROCESSOR LOCK NEEDED (stateless processor)
+        # Get predictions with session state - stateless call
+        predictions = await processor.get_predictions(
+            session_state=session,
+            config=session.session_config
+        )
 
-            # Get future_potentials from the pattern processor if available
-            future_potentials = None
-            if hasattr(processor.pattern_processor, 'future_potentials'):
-                future_potentials = processor.pattern_processor.future_potentials
+        # Get future_potentials from the pattern processor if available
+        future_potentials = None
+        if hasattr(processor.pattern_processor, 'future_potentials'):
+            future_potentials = processor.pattern_processor.future_potentials
 
     return PredictionsResponse(
         predictions=predictions,

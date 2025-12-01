@@ -375,3 +375,4 @@ Claude Code automatically:
 
 **Last Updated**: November 2025
 **KATO Version**: 3.0+
+- remember to not create locks for this project. Remember to not regress when working on this project.

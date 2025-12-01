@@ -166,13 +166,9 @@ class KatoProcessor:
 
     def clear_all_memory(self):
         """Clear all memory - delegates to memory manager"""
-        self.memory_manager.clear_all_memory()
+        self.memory_manager.clear_all_memory(self.pattern_processor, self.vector_processor)
         self.predictions = []
-        # Update local references
-        self.time = self.memory_manager.time
-        self.symbols = self.memory_manager.symbols
-        self.current_emotives = self.memory_manager.current_emotives
-        self.percept_data = self.memory_manager.percept_data
+        # Note: In stateless architecture, we don't maintain local state
         return
 
     def learn(
@@ -201,6 +197,10 @@ class KatoProcessor:
             self.pattern_processor,
             session_state.stm
         )
+
+        # BRIDGE: Load emotives and metadata accumulators from session state
+        self.pattern_processor.emotives = session_state.emotives_accumulator
+        self.pattern_processor.metadata = session_state.metadata_accumulator
 
         # TODO (Phase 1.7): Update pattern_operations to be stateless
         # For now, it reads from pattern_processor.STM and mutates it

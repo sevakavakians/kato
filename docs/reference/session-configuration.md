@@ -13,7 +13,7 @@ Session configuration allows per-session customization of KATO's behavior. Each 
 | Parameter | Type | Range | Default | Description |
 |-----------|------|-------|---------|-------------|
 | `max_pattern_length` | integer | 0+ | 0 | Auto-learn when STM reaches this length (0=manual only) |
-| `persistence` | integer | 1-100 | 20 | Emotive rolling window size |
+| `persistence` | integer | 1-100 | 5 | Emotive rolling window size |
 | `recall_threshold` | float | 0.0-1.0 | 0.1 | Pattern matching sensitivity threshold |
 | `stm_mode` | string | CLEAR\|ROLLING | CLEAR | STM behavior after auto-learning |
 
@@ -61,7 +61,7 @@ The `rank_sort_algo` parameter controls how predictions are sorted and prioritiz
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `filter_pipeline` | array[string] | ["length", "jaccard", "bloom", "minhash", "rapidfuzz"] | Ordered list of filter stages |
+| `filter_pipeline` | array[string] | [] | Ordered list of filter stages (empty = no pre-filtering) |
 
 **Valid Filters**: `length`, `jaccard`, `bloom`, `minhash`, `rapidfuzz`
 
@@ -146,7 +146,7 @@ The `rank_sort_algo` parameter controls how predictions are sorted and prioritiz
   "max_pattern_length": 10,
   "stm_mode": "ROLLING",
   "recall_threshold": 0.3,
-  "persistence": 20,
+  "persistence": 5,
   "rank_sort_algo": "evidence",
   "max_predictions": 100
 }

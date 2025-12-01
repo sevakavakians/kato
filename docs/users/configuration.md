@@ -371,7 +371,7 @@ Ordered list of filter stages to execute.
 
 ```json
 {
-  "filter_pipeline": ["length", "jaccard", "rapidfuzz"]
+  "filter_pipeline": []
 }
 ```
 
@@ -382,7 +382,7 @@ Ordered list of filter stages to execute.
 - **bloom**: Bloom filter for fast set membership (fastest, probabilistic)
 - **rapidfuzz**: High-precision similarity scoring (slower, most accurate)
 
-**Default Pipeline**: `["length", "jaccard", "rapidfuzz"]`
+**Default Pipeline**: `[]` (no pre-filtering - all patterns pass to matching algorithm)
 
 **Pipeline Strategy**:
 1. **Database filters first** (length, jaccard, minhash, bloom) - run in ClickHouse
@@ -599,9 +599,7 @@ Filter 'rapidfuzz': 234 candidates (45.2ms)
 **High-Precision Pipeline** (quality over speed):
 ```json
 {
-  "filter_pipeline": ["length", "jaccard", "rapidfuzz"],
-  "length_min_ratio": 0.7,
-  "jaccard_threshold": 0.5,
+  "filter_pipeline": [],
   "recall_threshold": 0.8,
   "max_predictions": 10
 }
@@ -708,8 +706,7 @@ KATO_USE_OPTIMIZED=true
   "sort_symbols": true,
   "use_token_matching": true,
   "rank_sort_algo": "potential",
-  "filter_pipeline": ["length", "jaccard", "rapidfuzz"],
-  "jaccard_threshold": 0.2
+  "filter_pipeline": []
 }
 ```
 
@@ -722,9 +719,7 @@ KATO_USE_OPTIMIZED=true
   "sort_symbols": false,
   "use_token_matching": true,
   "rank_sort_algo": "similarity",
-  "filter_pipeline": ["length", "jaccard", "rapidfuzz"],
-  "jaccard_threshold": 0.7,
-  "length_min_ratio": 0.8
+  "filter_pipeline": []
 }
 ```
 
@@ -737,7 +732,7 @@ KATO_USE_OPTIMIZED=true
   "sort_symbols": true,
   "use_token_matching": true,
   "rank_sort_algo": "evidence",
-  "filter_pipeline": ["length", "jaccard", "rapidfuzz"]
+  "filter_pipeline": []
 }
 ```
 

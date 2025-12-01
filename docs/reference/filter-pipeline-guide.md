@@ -16,6 +16,33 @@ KATO's filter pipeline is a multi-stage system that efficiently reduces billions
 1. **Filtering Phase**: Database and Python-side filters reduce candidates (billions → hundreds)
 2. **Matching Phase**: RapidFuzz performs final similarity calculation on filtered candidates
 
+### Default Configuration (v3.0+)
+
+**IMPORTANT**: As of KATO v3.0, the **default filter pipeline is empty** (`filter_pipeline: []`).
+
+```json
+{
+  "filter_pipeline": []  // Default: No pre-filtering
+}
+```
+
+**What this means:**
+- **No pre-filtering stage** - all patterns in the database pass directly to the pattern matching algorithm
+- The core pattern matching algorithm still runs (this is NOT "return all patterns")
+- You must **explicitly configure a filter pipeline** if you want pre-filtering optimization
+
+**When to use empty pipeline:**
+- Small pattern databases (<10K patterns)
+- Development and testing
+- When you want maximum recall and don't mind slower queries
+
+**When to configure filters:**
+- Large pattern databases (>100K patterns)
+- Production systems requiring low latency
+- When you need to scale to millions/billions of patterns
+
+See [Filter Selection Guide](#filter-selection-guide) for choosing the right filters for your use case.
+
 ### Why Filtering is Critical
 
 Without filtering, pattern matching would require:

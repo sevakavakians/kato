@@ -163,17 +163,17 @@ class ProcessorManager:
             'created_at': datetime.now(timezone.utc),
             'last_accessed': datetime.now(timezone.utc),
             'access_count': 1
-            }
+        }
 
-            # Enforce max processors limit (LRU eviction)
-            if len(self.processors) > self.max_processors:
-                self._evict_oldest()
+        # Enforce max processors limit (LRU eviction)
+        if len(self.processors) > self.max_processors:
+            self._evict_oldest()
 
-            # Start cleanup task if not running
-            if not self._cleanup_task:
-                self._cleanup_task = asyncio.create_task(self._cleanup_loop())
+        # Start cleanup task if not running
+        if not self._cleanup_task:
+            self._cleanup_task = asyncio.create_task(self._cleanup_loop())
 
-            return processor
+        return processor
 
     def _evict_oldest(self):
         """Evict the least recently used processor with resource cleanup."""

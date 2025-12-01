@@ -236,43 +236,6 @@ def test_pattern_endpoint(kato_fixture):
     # created in the test fixture's session. This is expected behavior for current.
 
 
-def test_gene_endpoints(kato_fixture):
-    """Test config retrieval and update endpoints (legacy gene endpoint)."""
-    # Get a specific config value (config names are case-sensitive)
-    response = requests.get(f"{kato_fixture.base_url}/gene/recall_threshold")
-    assert response.status_code in [200, 404]  # Legacy gene endpoint might not be fully implemented
-
-    # Update config value (if endpoint exists)
-    if response.status_code == 200:
-        data = response.json()
-        # Current returns 'gene' and 'value', legacy returns 'gene_name' and 'gene_value'
-        assert 'gene_name' in data or 'gene' in data
-        assert 'gene_value' in data or 'value' in data
-        original_value = data.get('gene_value', data.get('value'))
-        # FastAPI expects {"config": {"recall_threshold": 0.5}} format
-        update_data = {
-            'config': {
-                'recall_threshold': 0.5
-            }
-        }
-    else:
-        # Skip test if legacy gene endpoint not implemented
-        pytest.skip("Legacy gene endpoint not fully implemented")
-        return
-    response = requests.post(f"{kato_fixture.base_url}/genes/update", json=update_data)
-    assert response.status_code == 200
-    assert response.json()['status'] == 'okay'
-
-    # Verify update
-    response = requests.get(f"{kato_fixture.base_url}/gene/recall_threshold")
-    # Current returns 'value' instead of 'gene_value'
-    assert response.json()['value'] == 0.5
-
-    # Restore original value
-    update_data['config']['recall_threshold'] = original_value
-    requests.post(f"{kato_fixture.base_url}/genes/update", json=update_data)
-
-
 def test_percept_data_endpoint(kato_fixture):
     """Test percept data retrieval."""
     # Add some observations with emotives

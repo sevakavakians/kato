@@ -298,7 +298,7 @@ Rolling window of emotive values:
 }
 ```
 
-Window size controlled by `persistence` parameter (default: 20).
+Window size controlled by `persistence` parameter (default: 5).
 
 ### Pattern Metadata
 

@@ -163,7 +163,7 @@ curl http://localhost:8000/health
 ./start.sh \
   --name "ResearchProcessor" \
   --max-seq-length 5000 \
-  --persistence 20 \
+  --persistence 5 \
   --smoothness 5 \
   --quiescence 5 \
   --log-level DEBUG

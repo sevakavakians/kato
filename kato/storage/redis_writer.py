@@ -58,13 +58,13 @@ class RedisWriter:
             freq_key = f"{self.kb_id}:frequency:{pattern_name}"
             self.client.set(freq_key, frequency)
 
-            # Store emotives as JSON if provided
-            if emotives:
+            # Store emotives as JSON if provided (even if empty dict)
+            if emotives is not None:
                 emotives_key = f"{self.kb_id}:emotives:{pattern_name}"
                 self.client.set(emotives_key, json.dumps(emotives))
 
-            # Store metadata as JSON if provided
-            if metadata:
+            # Store metadata as JSON if provided (even if empty dict)
+            if metadata is not None:
                 metadata_key = f"{self.kb_id}:metadata:{pattern_name}"
                 self.client.set(metadata_key, json.dumps(metadata))
 
@@ -153,16 +153,16 @@ class RedisWriter:
             freq = self.client.get(freq_key)
             result['frequency'] = int(freq) if freq else 0
 
-            # Get emotives
+            # Get emotives (include even if empty dict)
             emotives_key = f"{self.kb_id}:emotives:{pattern_name}"
             emotives = self.client.get(emotives_key)
-            if emotives:
+            if emotives is not None:
                 result['emotives'] = json.loads(emotives)
 
-            # Get metadata
+            # Get metadata (include even if empty dict)
             metadata_key = f"{self.kb_id}:metadata:{pattern_name}"
             metadata = self.client.get(metadata_key)
-            if metadata:
+            if metadata is not None:
                 result['metadata'] = json.loads(metadata)
 
             return result

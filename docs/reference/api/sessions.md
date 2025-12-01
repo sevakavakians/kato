@@ -322,7 +322,7 @@ Sessions can have custom configuration that overrides system defaults.
   "sort_symbols": true,               // Symbol sorting
   "max_pattern_length": 10,           // Auto-learning trigger
   "stm_mode": "CLEAR",                // STM mode after learning
-  "persistence": 20                   // Emotive window size
+  "persistence": 5                    // Emotive window size
 }
 ```
 

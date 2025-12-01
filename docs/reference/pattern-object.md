@@ -102,7 +102,7 @@ frequency=100 # Learned 100 times (very common)
 ```
 
 **Rules**:
-- Window size controlled by `persistence` parameter (default: 20)
+- Window size controlled by `persistence` parameter (default: 5)
 - Values can be positive, negative, integer, or float
 - Arrays grow to `persistence` size, then oldest values removed
 - Retrieved as averages in predictions

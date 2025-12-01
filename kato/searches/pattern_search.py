@@ -1119,6 +1119,14 @@ class PatternSearcher:
         """
         predictions = []
 
+        # Import RedisWriter for loading pattern metadata
+        from kato.storage.redis_writer import RedisWriter
+
+        # Create RedisWriter for loading emotives and metadata
+        redis_writer = None
+        if self.redis_client:
+            redis_writer = RedisWriter(self.kb_id, self.redis_client)
+
         for result in batch:
             if len(result) >= 8:
                 pattern_hash, pattern, matching_intersection, past, present, missing, extras, similarity, number_of_blocks = result[:9]
@@ -1132,12 +1140,19 @@ class PatternSearcher:
                 # Hybrid architecture: pattern data already in filter_executor cache from pipeline
                 pattern_dict = self.filter_executor.patterns_cache.get(pattern_hash, {})
                 if pattern_dict:
+                    # Load metadata (frequency, emotives, metadata) from Redis
+                    metadata = {}
+                    if redis_writer:
+                        metadata = redis_writer.get_metadata(pattern_hash)
+
                     # Reconstruct pattern_data dict for Prediction object
                     pattern_data = {
                         'name': pattern_hash,
                         'pattern_data': pattern_dict.get('pattern_data', []),
                         'length': pattern_dict.get('length', 0),
-                        'frequency': 1  # Frequency will be fetched from Redis if needed
+                        'frequency': metadata.get('frequency', 1),  # Load from Redis
+                        'emotives': metadata.get('emotives', {}),   # Load emotives from Redis
+                        'metadata': metadata.get('metadata', {})    # Load metadata from Redis
                     }
 
                 if pattern_data:

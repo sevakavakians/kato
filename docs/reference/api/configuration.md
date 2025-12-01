@@ -33,7 +33,7 @@ POST /sessions/{session_id}/config
     "sort_symbols": true,
     "max_pattern_length": 10,
     "stm_mode": "CLEAR",
-    "persistence": 20
+    "persistence": 5
   }
 }
 ```
@@ -91,7 +91,7 @@ GET /sessions/{session_id}/config
     "process_predictions": true,
     "use_token_matching": true,
     "rank_sort_algo": "potential",
-    "filter_pipeline": ["length", "jaccard", "rapidfuzz"],
+    "filter_pipeline": [],
     "length_min_ratio": 0.5,
     "length_max_ratio": 2.0,
     "jaccard_threshold": 0.3,
@@ -134,7 +134,7 @@ curl http://localhost:8000/sessions/$SESSION_ID/config
 | Parameter | Type | Range | Default | Description |
 |-----------|------|-------|---------|-------------|
 | `max_pattern_length` | integer | 0+ | 0 | Auto-learn when STM reaches this length (0=manual) |
-| `persistence` | integer | 1-100 | 20 | Emotive rolling window size |
+| `persistence` | integer | 1-100 | 5 | Emotive rolling window size |
 | `recall_threshold` | float | 0.0-1.0 | 0.1 | Pattern matching sensitivity |
 | `stm_mode` | string | CLEAR\|ROLLING | CLEAR | STM mode after auto-learning |
 
@@ -153,7 +153,7 @@ curl http://localhost:8000/sessions/$SESSION_ID/config
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `filter_pipeline` | array[string] | ["length", "jaccard", "rapidfuzz"] | Ordered filter stages |
+| `filter_pipeline` | array[string] | [] | Ordered filter stages |
 | `length_min_ratio` | float | 0.5 | Min pattern length as ratio of STM |
 | `length_max_ratio` | float | 2.0 | Max pattern length as ratio of STM |
 | `jaccard_threshold` | float | 0.3 | Minimum Jaccard similarity |
@@ -205,7 +205,7 @@ curl -X POST http://localhost:8000/sessions \
     "process_predictions": true,
     "use_token_matching": true,
     "rank_sort_algo": "similarity",
-    "filter_pipeline": ["length", "jaccard", "rapidfuzz"],
+    "filter_pipeline": [],
     "length_min_ratio": 0.5,
     "length_max_ratio": 2.0,
     "jaccard_threshold": 0.3,
@@ -267,8 +267,7 @@ For applications requiring exact matches:
     "use_token_matching": true,
     "rank_sort_algo": "similarity",
     "max_predictions": 10,
-    "filter_pipeline": ["length", "jaccard", "rapidfuzz"],
-    "jaccard_threshold": 0.8
+    "filter_pipeline": []
   }
 }
 ```
@@ -463,7 +462,7 @@ curl -X POST http://localhost:8000/sessions/$SESSION_ID/config \
 {"persistence": 5}
 
 # Medium-term (default)
-{"persistence": 20}
+{"persistence": 5}
 
 # Long-term history
 {"persistence": 100}

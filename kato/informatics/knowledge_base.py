@@ -380,6 +380,42 @@ class SuperKnowledgeBase:
                 self.redis_writer.increment_frequency(pattern_object.name)
                 logger.info(f"[HYBRID] Incremented frequency for pattern {pattern_object.name}")
 
+                # Update/merge emotives and metadata if provided
+                if emotives or metadata:
+                    # Get existing metadata
+                    existing_meta = self.redis_writer.get_metadata(pattern_object.name)
+
+                    # Merge emotives (average new values with existing)
+                    if emotives:
+                        existing_emotives = existing_meta.get('emotives', {})
+                        # For re-learning, we could average or just update
+                        # For now, let's update with new values
+                        merged_emotives = {**existing_emotives, **emotives}
+                        self.redis_writer.write_metadata(
+                            pattern_name=pattern_object.name,
+                            frequency=existing_frequency + 1,
+                            emotives=merged_emotives,
+                            metadata=existing_meta.get('metadata')
+                        )
+
+                    # Merge metadata (accumulate unique values)
+                    if metadata:
+                        existing_metadata = existing_meta.get('metadata', {})
+                        # Merge metadata: combine lists and keep unique values
+                        merged_metadata = {}
+                        all_keys = set(existing_metadata.keys()) | set(metadata.keys())
+                        for key in all_keys:
+                            existing_values = set(existing_metadata.get(key, []))
+                            new_values = set(metadata.get(key, []))
+                            merged_metadata[key] = sorted(list(existing_values | new_values))
+
+                        self.redis_writer.write_metadata(
+                            pattern_name=pattern_object.name,
+                            frequency=existing_frequency + 1,
+                            emotives=existing_meta.get('emotives'),
+                            metadata=merged_metadata
+                        )
+
                 # Update symbol statistics (pattern seen again)
                 from itertools import chain
                 from collections import Counter
@@ -414,8 +450,8 @@ class SuperKnowledgeBase:
                 self.redis_writer.write_metadata(
                     pattern_name=pattern_object.name,
                     frequency=1,
-                    emotives=emotives if emotives else None,
-                    metadata=metadata if metadata else None
+                    emotives=emotives,  # Pass through even if empty dict
+                    metadata=metadata   # Pass through even if empty dict
                 )
                 logger.info(f"[HYBRID] Redis write completed for {pattern_object.name}")
 

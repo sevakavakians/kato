@@ -211,7 +211,7 @@ class PatternProcessor:
 
                     # Create default session config for filter pipeline
                     session_config = SessionConfiguration(
-                        filter_pipeline=['minhash', 'length', 'jaccard', 'rapidfuzz'],
+                        filter_pipeline=[],
                         minhash_threshold=0.7,
                         length_min_ratio=0.5,
                         length_max_ratio=2.0,
@@ -232,8 +232,8 @@ class PatternProcessor:
                     logger.info("=" * 60)
                     logger.info("✓ HYBRID ARCHITECTURE CONFIGURED SUCCESSFULLY")
                     logger.info("=" * 60)
-                    logger.info("Filter pipeline: ['minhash', 'length', 'jaccard', 'rapidfuzz']")
-                    logger.info("Performance: 100-300x improvement expected")
+                    logger.info("Filter pipeline: [] (no filtering - returns all patterns)")
+                    logger.info("Performance: Unfiltered pattern retrieval")
                     logger.info("=" * 60)
 
             except Exception as e:
@@ -713,8 +713,12 @@ class PatternProcessor:
                     confluence_val = 0.0
 
                 # Average emotives (convert from list of dicts to single dict)
+                # Note: Emotives from Redis storage are already averaged (dict),
+                # while emotives from in-memory patterns are lists that need averaging
                 try:
-                    prediction['emotives'] = average_emotives(prediction['emotives'])
+                    if isinstance(prediction['emotives'], list):
+                        prediction['emotives'] = average_emotives(prediction['emotives'])
+                    # else: already a dict from storage, keep as-is
                 except ZeroDivisionError as e:
                     logger.error(f"ZeroDivisionError in average_emotives: emotives={prediction['emotives']}, error={e}")
                     raise

@@ -68,7 +68,7 @@ class FilterPipelineExecutor:
             return self.config.filter_pipeline
 
         # Default pipeline if not configured
-        return ["length", "jaccard", "rapidfuzz"]
+        return []
 
     def _get_all_patterns(self) -> Set[str]:
         """

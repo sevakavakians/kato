@@ -367,10 +367,10 @@ class PatternProcessor:
         self.STM.clear()  # Reset short-term memory after learning
 
         if len(pattern) > 1:  # Only learn multi-event patterns
-            # Store pattern with averaged emotives and accumulated metadata from all events
+            # Store pattern with emotives as rolling window list and accumulated metadata
             x = self.patterns_kb.learnPattern(
                 pattern,
-                emotives=average_emotives(self.emotives),
+                emotives=self.emotives,  # Keep as list - do NOT average before storage
                 metadata=accumulate_metadata(self.metadata) if self.metadata else {}
             )
 

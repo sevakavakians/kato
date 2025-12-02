@@ -36,7 +36,7 @@ class RedisWriter:
         logger.debug(f"RedisWriter initialized for kb_id: {kb_id}")
 
     def write_metadata(self, pattern_name: str, frequency: int = 1,
-                      emotives: Optional[dict] = None,
+                      emotives: Optional[list[dict]] = None,
                       metadata: Optional[dict] = None) -> bool:
         """
         Store pattern metadata in Redis with kb_id namespacing.

@@ -357,7 +357,7 @@ class SuperKnowledgeBase:
             True if this is a new pattern, False if pattern already existed
         """
         if emotives is None:
-            emotives = {}
+            emotives = []  # Emotives are stored as rolling window lists, not dicts
         if metadata is None:
             metadata = {}
 
@@ -366,9 +366,12 @@ class SuperKnowledgeBase:
 
             # Track available emotives
             if emotives:
-                self.emotives_available.update(emotives.keys())
-                # Filter out zero emotives
-                emotives = {k: v for k, v in emotives.items() if v != 0}
+                # Extract all emotive keys from rolling window list
+                if isinstance(emotives, list):
+                    for emotive_dict in emotives:
+                        if isinstance(emotive_dict, dict):
+                            self.emotives_available.update(emotive_dict.keys())
+                # No filtering needed - store raw list as rolling window
 
             # Check if pattern already exists in Redis
             logger.info(f"[HYBRID] Checking if pattern exists in Redis: {pattern_object.name}")
@@ -385,36 +388,48 @@ class SuperKnowledgeBase:
                     # Get existing metadata
                     existing_meta = self.redis_writer.get_metadata(pattern_object.name)
 
-                    # Merge emotives (average new values with existing)
+                    # Process emotives: append to rolling window list
+                    updated_emotives = existing_meta.get('emotives', [])
                     if emotives:
-                        existing_emotives = existing_meta.get('emotives', {})
-                        # For re-learning, we could average or just update
-                        # For now, let's update with new values
-                        merged_emotives = {**existing_emotives, **emotives}
-                        self.redis_writer.write_metadata(
-                            pattern_name=pattern_object.name,
-                            frequency=existing_frequency + 1,
-                            emotives=merged_emotives,
-                            metadata=existing_meta.get('metadata')
-                        )
+                        # Ensure we're working with a list
+                        if not isinstance(updated_emotives, list):
+                            updated_emotives = []  # Reset if corrupted
 
-                    # Merge metadata (accumulate unique values)
+                        # Append new emotives to rolling window
+                        if isinstance(emotives, list):
+                            updated_emotives.extend(emotives)  # Extend with list
+                        else:
+                            # Shouldn't happen after Change 1, but handle gracefully
+                            logger.warning(f"Received non-list emotives during re-learning: {type(emotives)}")
+                            updated_emotives.append(emotives)
+
+                        # Enforce PERSISTENCE rolling window (default 5)
+                        # Get persistence from settings
+                        persistence = self.settings.learning.persistence if hasattr(self, 'settings') else 5
+                        if len(updated_emotives) > persistence:
+                            updated_emotives = updated_emotives[-persistence:]  # Keep last N entries
+                            logger.debug(f"Trimmed emotives to {persistence} entries for pattern {pattern_object.name}")
+
+                    # Process metadata: accumulate unique values
+                    updated_metadata = existing_meta.get('metadata', {})
                     if metadata:
-                        existing_metadata = existing_meta.get('metadata', {})
                         # Merge metadata: combine lists and keep unique values
                         merged_metadata = {}
-                        all_keys = set(existing_metadata.keys()) | set(metadata.keys())
+                        all_keys = set(updated_metadata.keys()) | set(metadata.keys())
                         for key in all_keys:
-                            existing_values = set(existing_metadata.get(key, []))
+                            existing_values = set(updated_metadata.get(key, []))
                             new_values = set(metadata.get(key, []))
                             merged_metadata[key] = sorted(list(existing_values | new_values))
+                        updated_metadata = merged_metadata
 
-                        self.redis_writer.write_metadata(
-                            pattern_name=pattern_object.name,
-                            frequency=existing_frequency + 1,
-                            emotives=existing_meta.get('emotives'),
-                            metadata=merged_metadata
-                        )
+                    # Write both emotives and metadata together
+                    self.redis_writer.write_metadata(
+                        pattern_name=pattern_object.name,
+                        frequency=existing_frequency + 1,
+                        emotives=updated_emotives,  # List with rolling window enforced
+                        metadata=updated_metadata
+                    )
+                    logger.debug(f"Updated emotives (len={len(updated_emotives)}) and metadata for pattern {pattern_object.name}")
 
                 # Update symbol statistics (pattern seen again)
                 from itertools import chain
@@ -450,8 +465,8 @@ class SuperKnowledgeBase:
                 self.redis_writer.write_metadata(
                     pattern_name=pattern_object.name,
                     frequency=1,
-                    emotives=emotives,  # Pass through even if empty dict
-                    metadata=metadata   # Pass through even if empty dict
+                    emotives=emotives if emotives else [],  # Store as list (rolling window)
+                    metadata=metadata if metadata else {}
                 )
                 logger.info(f"[HYBRID] Redis write completed for {pattern_object.name}")
 

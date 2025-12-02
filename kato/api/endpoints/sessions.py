@@ -790,19 +790,18 @@ async def get_session_cognition_data(session_id: str):
     if not session:
         raise HTTPException(404, detail=f"Session {session_id} not found or expired")
 
-    # Get processor to access current symbols
+    # Get processor to access cognition data
     processor = await app_state.processor_manager.get_processor(session.node_id, session.session_config)
 
-    # Set processor state to session's state to get accurate symbols
-    processor.set_stm(session.stm)
+    # Use processor's stateless get_cognition_data method
+    cognition_data = processor.get_cognition_data(session)
+
+    # Add predictions and time from session
+    cognition_data['predictions'] = session.predictions
+    cognition_data['time'] = session.time
 
     return {
-        "cognition_data": {
-            "predictions": session.predictions,
-            "emotives": session.emotives_accumulator,
-            "symbols": processor.memory_manager.symbols,
-            "time": session.time
-        },
+        "cognition_data": cognition_data,
         "session_id": session_id,
         "node_id": session.node_id
     }

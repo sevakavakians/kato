@@ -59,13 +59,16 @@ async def get_percept_data(
     node_id: Optional[str] = Query(None, description="Node identifier")
 ):
     """
-    Get current percept data from processor.
+    DEPRECATED: Get current percept data from processor.
+
+    This endpoint is deprecated in v3.0+ stateless architecture.
+    Use session-based endpoint: GET /sessions/{session_id}/percept-data instead.
 
     Args:
         node_id: Node identifier (defaults to header-based node_id)
 
     Returns:
-        Percept data and node_id
+        Empty percept data and deprecation warning
     """
     from kato.services.kato_fastapi import app_state, get_node_id_from_request
 
@@ -75,12 +78,11 @@ async def get_percept_data(
 
     processor = await app_state.processor_manager.get_processor(node_id)
 
-    try:
-        percept_data = processor.get_percept_data()
-        return {"percept_data": percept_data, "node_id": processor.id}
-    except Exception as e:
-        logger.error(f"Error getting percept data: {e}")
-        raise HTTPException(status_code=500, detail=f"Percept data retrieval failed: {str(e)}")
+    return {
+        "percept_data": {},
+        "node_id": processor.id,
+        "warning": "This endpoint is deprecated. Use /sessions/{session_id}/percept-data for session-aware data."
+    }
 
 
 @router.get("/cognition-data")
@@ -89,13 +91,16 @@ async def get_cognition_data(
     node_id: Optional[str] = Query(None, description="Node identifier")
 ):
     """
-    Get current cognition data from processor.
+    DEPRECATED: Get current cognition data from processor.
+
+    This endpoint is deprecated in v3.0+ stateless architecture.
+    Use session-based endpoint: GET /sessions/{session_id}/cognition-data instead.
 
     Args:
         node_id: Node identifier (defaults to header-based node_id)
 
     Returns:
-        Cognition data and node_id
+        Empty cognition data and deprecation warning
     """
     from kato.services.kato_fastapi import app_state, get_node_id_from_request
 
@@ -105,9 +110,18 @@ async def get_cognition_data(
 
     processor = await app_state.processor_manager.get_processor(node_id)
 
-    try:
-        cognition_data = processor.cognition_data
-        return {"cognition_data": cognition_data, "node_id": processor.id}
-    except Exception as e:
-        logger.error(f"Error getting cognition data: {e}")
-        raise HTTPException(status_code=500, detail=f"Cognition data retrieval failed: {str(e)}")
+    return {
+        "cognition_data": {
+            "predictions": [],
+            "emotives": {},
+            "symbols": [],
+            "command": "",
+            "metadata": {},
+            "path": [],
+            "strings": [],
+            "vectors": [],
+            "short_term_memory": []
+        },
+        "node_id": processor.id,
+        "warning": "This endpoint is deprecated. Use /sessions/{session_id}/cognition-data for session-aware data."
+    }

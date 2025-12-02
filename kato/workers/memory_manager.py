@@ -267,8 +267,11 @@ class MemoryManager:
         Returns:
             Percept data dictionary
         """
+        # Sort strings alphabetically (consistent with KATO's event sorting behavior)
+        sorted_strings = sorted(strings) if strings else []
+
         return {
-            'strings': strings,
+            'strings': sorted_strings,
             'vectors': vectors,
             'emotives': emotives,
             'path': path,

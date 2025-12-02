@@ -846,11 +846,13 @@ class TestSessionPerceptCognitionIsolation:
         session1_id = session1['session_id']
         session2_id = session2['session_id']
 
-        # Session 1 observes A and gets predictions
+        # Session 1 observes A and B (needs 2+ strings for predictions)
         await kato_client.observe_in_session(session1_id, {"strings": ["A"]})
+        await kato_client.observe_in_session(session1_id, {"strings": ["B"]})
 
-        # Session 2 observes X and gets predictions (no match expected)
+        # Session 2 observes X and Y (no match expected)
         await kato_client.observe_in_session(session2_id, {"strings": ["X"]})
+        await kato_client.observe_in_session(session2_id, {"strings": ["Y"]})
 
         # Get cognition_data for both sessions
         cognition1_response = await kato_client.get(f"/sessions/{session1_id}/cognition-data")

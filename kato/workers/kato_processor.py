@@ -120,14 +120,8 @@ class KatoProcessor:
         self._async_initialization_pending = False
         logger.info(f"Async initialization completed for processor {self.id}")
 
-    def __primitive_variables_reset__(self):
-        """Reset primitive variables - delegates to memory manager"""
-        self.memory_manager.reset_primitive_variables()
-        # Update local references
-        self.symbols = self.memory_manager.symbols
-        self.current_emotives = self.memory_manager.current_emotives
-        self.percept_data = self.memory_manager.percept_data
-        return
+    # __primitive_variables_reset__() removed - deprecated in stateless architecture
+    # All variable resets now handled via SessionState initialization
 
     def _process_vectors_(self, vector_data):
         """Process vectors - delegates to observation processor"""
@@ -148,11 +142,13 @@ class KatoProcessor:
         return self.pattern_operations.get_vector(name)
 
     async def clear_stm(self):
-        """Clear STM - delegates to memory manager"""
+        """
+        Clear STM - delegates to memory manager.
+
+        Note: In stateless architecture, this only clears processor-level temporary state.
+        Session state (STM, emotives, predictions) is cleared separately via SessionState.
+        """
         self.memory_manager.clear_stm()
-        self.predictions = []
-        # Update local references
-        self.symbols = self.memory_manager.symbols
 
         # Publish clear event to distributed STM if available
         if self.distributed_stm_manager:
@@ -160,8 +156,6 @@ class KatoProcessor:
                 await self.distributed_stm_manager.clear_stm_distributed()
             except Exception as e:
                 logger.warning(f"Failed to publish clear STM to distributed STM: {e}")
-        self.current_emotives = self.memory_manager.current_emotives
-        self.percept_data = self.memory_manager.percept_data
         return
 
     def clear_all_memory(self):
@@ -366,23 +360,48 @@ class KatoProcessor:
         logger.debug(f"get_stm returning: {stm_data}")
         return stm_data
 
-    def get_percept_data(self):
-        """Return percept data"""
-        return self.memory_manager.percept_data
+    def get_percept_data(self, session_state: 'SessionState' = None):
+        """
+        Return percept data from session state.
 
-    @property
-    def cognition_data(self):
-        """Return cognition data"""
+        Args:
+            session_state: Optional session state containing percept data
+
+        Returns:
+            Percept data dict if session_state provided, empty dict otherwise
+        """
+        if session_state:
+            return session_state.percept_data
+        return {}
+
+    def get_cognition_data(self, session_state: 'SessionState'):
+        """
+        Return cognition data from session state.
+
+        Args:
+            session_state: Session state containing cognition data
+
+        Returns:
+            Dictionary with cognition data including predictions, emotives, symbols, etc.
+        """
+        from itertools import chain
+
+        # Extract symbols from current STM
+        symbols = list(chain(*session_state.stm)) if session_state.stm else []
+
+        # Get current emotives (last entry in accumulator)
+        current_emotives = session_state.emotives_accumulator[-1] if session_state.emotives_accumulator else {}
+
         return {
-            'predictions': self.predictions,
-            'emotives': self.memory_manager.current_emotives,
-            'symbols': self.memory_manager.symbols,
-            'command': self.memory_manager.last_command,
+            'predictions': [],  # Predictions managed by API layer, not processor
+            'emotives': current_emotives,
+            'symbols': symbols,
+            'command': '',  # Command tracking removed in stateless architecture
             'metadata': {},
             'path': [],
             'strings': [],
             'vectors': [],
-            'short_term_memory': self.memory_manager.get_stm_state()
+            'short_term_memory': list(session_state.stm)
         }
 
     # ========================================================================

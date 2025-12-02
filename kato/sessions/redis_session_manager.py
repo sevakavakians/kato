@@ -721,6 +721,8 @@ class RedisSessionManager(session_manager_module.SessionManager):
             'emotives_accumulator': session.emotives_accumulator,
             'metadata_accumulator': session.metadata_accumulator,
             'time': session.time,
+            'percept_data': session.percept_data,  # v3.0: session-isolated percept
+            'predictions': session.predictions,  # v3.0: session-isolated predictions
             'metadata': session.metadata,
             'access_count': session.access_count,
             'max_stm_size': session.max_stm_size,

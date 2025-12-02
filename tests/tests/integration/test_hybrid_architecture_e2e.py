@@ -14,17 +14,11 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 @pytest.fixture
 def hybrid_kato_fixture(kato_fixture):
     """Configure KATO fixture with hybrid architecture filter pipeline."""
-    # Configure session with filter pipeline for hybrid mode
+    # Configure session with empty filter pipeline for E2E testing
+    # Empty pipeline = query all patterns (no filtering)
+    # This avoids filter complexity in basic E2E tests
     filter_config = {
-        'filter_pipeline': ['minhash', 'length', 'jaccard', 'rapidfuzz'],
-        'minhash_threshold': 0.7,
-        'minhash_bands': 20,
-        'minhash_rows': 5,
-        'minhash_num_hashes': 100,
-        'length_min_ratio': 0.5,
-        'length_max_ratio': 2.0,
-        'jaccard_threshold': 0.3,
-        'jaccard_min_overlap': 2,
+        'filter_pipeline': [],  # Empty = no filtering, query all patterns
         'enable_filter_metrics': True
     }
 

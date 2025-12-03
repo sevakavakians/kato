@@ -128,7 +128,7 @@ class PatternProcessor:
                         "  2. Connection failed (check: curl http://localhost:8123/ping)\n"
                         "  3. Environment variables incorrect (CLICKHOUSE_HOST, CLICKHOUSE_PORT)\n"
                         "  4. clickhouse-connect library not installed\n"
-                        "Run: docker-compose logs clickhouse"
+                        "Run: docker compose logs clickhouse"
                     )
                     logger.error(error_msg)
                     if strict_mode:
@@ -164,7 +164,7 @@ class PatternProcessor:
                         "  2. Connection failed (check: docker exec kato-redis redis-cli ping)\n"
                         "  3. Environment variables incorrect (REDIS_URL)\n"
                         "  4. redis library not installed\n"
-                        "Run: docker-compose logs redis"
+                        "Run: docker compose logs redis"
                     )
                     logger.error(error_msg)
                     if strict_mode:

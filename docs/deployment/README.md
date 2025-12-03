@@ -7,7 +7,7 @@ This directory contains guides for deploying KATO in various environments.
 ### Current Deployment
 
 - **[Docker Deployment Guide](DOCKER.md)** - Complete guide for Docker-based deployment
-  - Quick start with docker-compose
+  - Quick start with docker compose
   - Container management
   - Multi-instance deployment
   - Health checks and monitoring
@@ -54,13 +54,13 @@ curl http://localhost:8000/health
 
 ```bash
 # Build production image
-docker-compose build --no-cache
+docker compose build --no-cache
 
 # Start all services
-docker-compose up -d
+docker compose up -d
 
 # Check status
-docker-compose ps
+docker compose ps
 ```
 
 ### Production (Future - PSMP)

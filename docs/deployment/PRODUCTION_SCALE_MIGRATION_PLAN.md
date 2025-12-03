@@ -169,7 +169,7 @@ CMD ["gunicorn", "kato.services.kato_fastapi:app", \
 --workers 8   # Moderate (2x cores)
 --workers 16  # Aggressive (4x cores)
 
-# Dynamic calculation in docker-compose:
+# Dynamic calculation in docker compose:
 environment:
   - GUNICORN_WORKERS=${GUNICORN_WORKERS:-4}
 ```
@@ -187,10 +187,10 @@ environment:
 | `--graceful-timeout` | `30` | Time for worker to finish in-flight requests before force kill |
 | `--keepalive` | `5` | Keep-alive timeout for persistent connections |
 
-#### Production docker-compose.yml
+#### Production docker compose.yml
 
 ```yaml
-# docker-compose.production.yml
+# docker compose.production.yml
 version: '3.8'
 
 services:
@@ -581,7 +581,7 @@ server {
 
 **Testing:**
 ```bash
-docker-compose build --no-cache kato
+docker compose build --no-cache kato
 ./start.sh restart
 # Monitor: docker logs kato -f | grep "Shutting down"
 ```
@@ -589,8 +589,8 @@ docker-compose build --no-cache kato
 **Rollback:**
 ```bash
 git checkout HEAD -- Dockerfile
-docker-compose build --no-cache
-docker-compose restart
+docker compose build --no-cache
+docker compose restart
 ```
 
 ### Phase 1: Production Multi-Worker (1-2 Weeks)
@@ -607,18 +607,18 @@ pip-compile --output-file=requirements.lock requirements.txt
 
 2. Create `Dockerfile.production` (see Option 1 above)
 
-3. Create `docker-compose.production.yml` (see Option 1 above)
+3. Create `docker compose.production.yml` (see Option 1 above)
 
 **Testing:**
 ```bash
-docker-compose -f docker-compose.production.yml build
-docker-compose -f docker-compose.production.yml up -d
+docker compose -f docker compose.production.yml build
+docker compose -f docker compose.production.yml up -d
 docker logs kato | grep "Booting worker"  # Should show 4 workers
 ```
 
 **Rollback:**
 ```bash
-docker-compose -f docker-compose.yml up -d
+docker compose -f docker compose.yml up -d
 ```
 
 ### Phase 2: Reverse Proxy & SSL (2-4 Weeks)
@@ -629,7 +629,7 @@ docker-compose -f docker-compose.yml up -d
 
 1. Create `nginx/nginx.conf` (see Option 3 above)
 
-2. Add Nginx to `docker-compose.production.yml`:
+2. Add Nginx to `docker compose.production.yml`:
 ```yaml
 services:
   nginx:
@@ -662,7 +662,7 @@ ab -n 1000 -c 100 https://localhost/health  # Test rate limiting
 
 **Rollback:**
 ```bash
-docker-compose -f docker-compose.production.yml down nginx
+docker compose -f docker compose.production.yml down nginx
 # Re-expose KATO ports directly
 ```
 

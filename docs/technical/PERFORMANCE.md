@@ -365,7 +365,7 @@ client = clickhouse_connect.get_client(
 ### Resource Limits
 
 ```yaml
-# docker-compose.yml
+# docker compose.yml
 services:
   kato:
     mem_limit: 2g

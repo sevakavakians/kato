@@ -32,7 +32,7 @@ curl http://localhost:8000/health
 If this fails, ensure services are running:
 ```bash
 ./start.sh
-docker-compose ps  # All services should show "Up"
+docker compose ps  # All services should show "Up"
 ```
 
 ## Step 2: Create a Session
@@ -514,13 +514,13 @@ To remove tutorial data:
 
 ```bash
 # Stop KATO
-docker-compose down
+docker compose down
 
 # Remove tutorial data (requires admin access)
 # Contact system administrator to delete node_tutorial_morning_routine_kato namespace
 
 # Or remove all data
-docker-compose down -v  # WARNING: Deletes ALL patterns
+docker compose down -v  # WARNING: Deletes ALL patterns
 ```
 
 ---

@@ -328,7 +328,7 @@ def kato_services():
     """Start KATO services once per test session."""
     subprocess.run(["./start.sh"], check=True)
     yield
-    subprocess.run(["docker-compose", "down"], check=True)
+    subprocess.run(["docker compose", "down"], check=True)
 
 @pytest.fixture
 def unique_processor_id():

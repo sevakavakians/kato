@@ -255,7 +255,7 @@ export KATO_USE_TOKEN_MATCHING=false  # Character (default, fastest)
 export KATO_USE_TOKEN_MATCHING=true   # Token (exact compatibility)
 
 # Then restart services
-docker-compose restart kato
+docker compose restart kato
 ```
 
 **Recommendation**: Keep character mode (default) for production. Only use token mode when exact difflib compatibility is required.
@@ -321,7 +321,7 @@ docker logs kato | grep "fast_matching"
 ```bash
 pip install rapidfuzz>=3.0.0
 # Or rebuild Docker container
-docker-compose build --no-cache kato
+docker compose build --no-cache kato
 ```
 
 ### Performance Not Improved
@@ -413,6 +413,6 @@ RapidFuzz provides **5-10x speedup** for KATO pattern matching through:
 
 **Activation:**
 ```bash
-docker-compose build --no-cache kato
+docker compose build --no-cache kato
 ./start.sh
 ```

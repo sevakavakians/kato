@@ -135,16 +135,16 @@ The `SERVICE_NAME` environment variable is part of the database naming formula. 
 
 ```bash
 # Initial training with default SERVICE_NAME='kato'
-docker-compose up -d
+docker compose up -d
 # Creates namespace: "alice_kato"
 # User trains patterns...
 ```
 
 ```bash
-# Later, someone changes docker-compose.yml
+# Later, someone changes docker compose.yml
 environment:
   - SERVICE_NAME=production  # ❌ CHANGED!
-docker-compose restart
+docker compose restart
 ```
 
 ```bash
@@ -159,7 +159,7 @@ curl -X POST http://localhost:8000/sessions -d '{"node_id": "alice"}'
 **1. Set SERVICE_NAME Once (Recommended: Use Default)**
 
 ```yaml
-# docker-compose.yml
+# docker compose.yml
 environment:
   - SERVICE_NAME=kato  # ✅ Use default, never change
 ```

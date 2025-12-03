@@ -419,7 +419,7 @@ jobs:
         
     - name: Start KATO
       run: |
-        docker-compose build
+        docker compose build
         ./start.sh start
         
     - name: Run stress tests

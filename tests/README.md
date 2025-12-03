@@ -6,7 +6,7 @@ This directory contains the complete test suite for KATO. For comprehensive test
 
 ## Test Infrastructure: Docker Container
 
-When you run the test suite, a single KATO container is automatically started via docker-compose.yml:
+When you run the test suite, a single KATO container is automatically started via docker compose.yml:
 
 ### **kato** (Port 8000)
 - **Purpose**: All testing and development

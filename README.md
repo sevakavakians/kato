@@ -124,7 +124,7 @@ docker pull ghcr.io/sevakavakians/kato:latest
 
 #### Use with Docker Compose
 
-Modify your `docker-compose.yml` to use pre-built images:
+Modify your `docker compose.yml` to use pre-built images:
 
 ```yaml
 services:
@@ -243,13 +243,13 @@ Learn more in [Core Concepts](docs/developers/concepts.md) or [User Guide](docs/
 ./start.sh
 
 # Stop all services
-docker-compose down
+docker compose down
 
 # Restart services
-docker-compose restart
+docker compose restart
 
 # Check status
-docker-compose ps
+docker compose ps
 ```
 
 ### Health Monitoring
@@ -258,8 +258,8 @@ docker-compose ps
 curl http://localhost:8000/health
 
 # View logs
-docker-compose logs                # All services
-docker-compose logs kato           # KATO service
+docker compose logs                # All services
+docker compose logs kato           # KATO service
 docker logs kato --tail 50         # Direct Docker logs
 ```
 
@@ -532,20 +532,20 @@ lsof -i :6333
 lsof -i :6379
 
 # Clean restart
-docker-compose down
-docker-compose up -d
+docker compose down
+docker compose up -d
 ```
 
 #### Tests Failing
 ```bash
 # Ensure services are running
-docker-compose ps
+docker compose ps
 
 # Check service health
 curl http://localhost:8000/health
 
 # Restart if needed
-docker-compose restart
+docker compose restart
 ```
 
 #### Memory Issues
@@ -555,7 +555,7 @@ docker system df
 docker system prune -f
 
 # Restart with fresh state
-docker-compose down
+docker compose down
 docker volume prune -f
 ./start.sh
 ```

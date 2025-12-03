@@ -44,7 +44,7 @@ case "$COMMAND" in
         validate_service "$SERVICE"
         if [[ "$SERVICE" == "all" ]]; then
             print_info "Starting all KATO services..."
-            docker-compose up -d
+            docker compose up -d
             print_info "Waiting for services to be ready..."
             sleep 5
 
@@ -58,7 +58,7 @@ case "$COMMAND" in
             fi
         else
             print_info "Starting $SERVICE..."
-            docker-compose up -d "$SERVICE"
+            docker compose up -d "$SERVICE"
             print_info "$SERVICE started"
         fi
         ;;
@@ -67,11 +67,11 @@ case "$COMMAND" in
         validate_service "$SERVICE"
         if [[ "$SERVICE" == "all" ]]; then
             print_info "Stopping all KATO services..."
-            docker-compose down
+            docker compose down
             print_info "All services stopped"
         else
             print_info "Stopping $SERVICE..."
-            docker-compose stop "$SERVICE"
+            docker compose stop "$SERVICE"
             print_info "$SERVICE stopped"
         fi
         ;;
@@ -80,11 +80,11 @@ case "$COMMAND" in
         validate_service "$SERVICE"
         if [[ "$SERVICE" == "all" ]]; then
             print_info "Restarting all KATO services..."
-            docker-compose restart
+            docker compose restart
             print_info "All services restarted"
         else
             print_info "Restarting $SERVICE..."
-            docker-compose restart "$SERVICE"
+            docker compose restart "$SERVICE"
             print_info "$SERVICE restarted"
         fi
         ;;
@@ -92,10 +92,10 @@ case "$COMMAND" in
     build)
         if [[ "$SERVICE" == "all" ]]; then
             print_info "Building all Docker images..."
-            docker-compose build
+            docker compose build
         else
             print_info "Building $SERVICE image..."
-            docker-compose build "$SERVICE"
+            docker compose build "$SERVICE"
         fi
         print_info "Build complete"
         ;;
@@ -104,18 +104,18 @@ case "$COMMAND" in
         SERVICE=${2:-kato}
         LINES=${3:-50}
         print_info "Showing last $LINES lines of logs for $SERVICE..."
-        docker-compose logs --tail="$LINES" "$SERVICE"
+        docker compose logs --tail="$LINES" "$SERVICE"
         ;;
 
     follow)
         SERVICE=${2:-kato}
         print_info "Following logs for $SERVICE (Ctrl+C to stop)..."
-        docker-compose logs -f "$SERVICE"
+        docker compose logs -f "$SERVICE"
         ;;
 
     status)
         print_info "Checking service status..."
-        docker-compose ps
+        docker compose ps
 
         # Check KATO health
         echo ""
@@ -190,7 +190,7 @@ case "$COMMAND" in
         read -r response
         if [[ "$response" == "y" || "$response" == "Y" ]]; then
             print_info "Cleaning up KATO services..."
-            docker-compose down -v
+            docker compose down -v
             print_info "Cleanup complete"
         else
             print_info "Cleanup cancelled"
@@ -223,13 +223,13 @@ case "$COMMAND" in
         read -r response
         if [[ "$response" == "DELETE EVERYTHING" ]]; then
             print_info "Stopping all services..."
-            docker-compose down
+            docker compose down
 
             print_info "Removing all volumes..."
             docker volume rm kato_qdrant-data kato_redis-data kato_clickhouse-data kato_clickhouse-logs 2>/dev/null || print_warn "Some volumes may not exist"
 
             print_info "Starting fresh services..."
-            docker-compose up -d
+            docker compose up -d
 
             print_info "Waiting for services to be ready..."
             sleep 5

@@ -362,7 +362,7 @@ docker push ghcr.io/sevakavakians/kato:latest
 
 # 3. Update deployments
 # Kubernetes: kubectl set image deployment/kato kato=ghcr.io/sevakavakians/kato:3.0.0
-# Docker Compose: update docker-compose.yml and restart
+# Docker Compose: update docker compose.yml and restart
 ```
 
 ### Git Rollback

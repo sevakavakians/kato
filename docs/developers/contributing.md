@@ -302,7 +302,7 @@ logger.debug(f"Short-term memory state: {short_term_memory}")
 ./kato-manager.sh shell
 
 # View logs
-docker-compose logs kato -f
+docker compose logs kato -f
 ```
 
 ## Pull Request Process

@@ -82,7 +82,7 @@ class InstancePerTenant:
             "API_PORT": str(8000 + hash(tenant_id) % 1000)
         }
 
-        # Would typically use docker-compose or k8s to start instance
+        # Would typically use docker compose or k8s to start instance
         # This is conceptual example
         self.tenant_configs[tenant_id] = {
             "kb_id": kb_id,

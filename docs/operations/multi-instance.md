@@ -55,7 +55,7 @@ curl -X PUT http://localhost:8000/sessions/{session_id}/config \
   -d '{"recall_threshold": 0.5}'
 
 # Check system status
-docker-compose ps
+docker compose ps
 ```
 
 **Important**: The `stop` command now automatically removes containers after stopping them, preventing container accumulation. Instances are also removed from the registry.
@@ -235,16 +235,16 @@ This prevents accumulation of stopped containers and keeps your system clean.
 
 ```bash
 # Stop by ID or name
-docker-compose down processor-1        # Stops and removes container
-docker-compose down "My Processor"     # Find by name, then remove
+docker compose down processor-1        # Stops and removes container
+docker compose down "My Processor"     # Find by name, then remove
 
 # Stop all with options
-docker-compose down --all              # Stop all, prompt for databases
-docker-compose down --all --with-db    # Stop everything including databases
-docker-compose down --all --no-db      # Keep databases running
+docker compose down --all              # Stop all, prompt for databases
+docker compose down --all --with-db    # Stop everything including databases
+docker compose down --all --no-db      # Keep databases running
 
 # Legacy commands still work
-docker-compose down                    # Same as --all
+docker compose down                    # Same as --all
 ```
 
 ## Troubleshooting

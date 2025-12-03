@@ -246,7 +246,7 @@ pip install cupy-cuda11x  # for CUDA 11.x
 nvidia-docker --version
 
 # Use correct compose file
-docker-compose -f docker-compose.gpu.yml up
+docker compose -f docker compose.gpu.yml up
 ```
 
 ### **Issue: Tests failing - GPU vs Python results differ**

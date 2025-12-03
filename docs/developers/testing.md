@@ -12,7 +12,7 @@ KATO uses a simplified testing architecture where tests run in local Python and 
 ./start.sh
 
 # Verify services are running
-docker-compose ps
+docker compose ps
 
 # Check health
 curl http://localhost:8000/health  # Should return {"status": "healthy", ...}
@@ -228,7 +228,7 @@ docker logs -f kato
 #### Services Not Running
 ```bash
 # Check if services are up
-docker-compose ps
+docker compose ps
 
 # If not running, start them
 ./start.sh
@@ -245,16 +245,16 @@ lsof -i :27017
 lsof -i :6333
 lsof -i :6379
 
-# Stop conflicting services or change ports in docker-compose.yml
+# Stop conflicting services or change ports in docker compose.yml
 ```
 
 #### Test Failures After Code Changes
 ```bash
 # Rebuild Docker image after code changes
-docker-compose build
+docker compose build
 
 # Restart services
-docker-compose restart
+docker compose restart
 
 # Then run tests
 ./run_tests.sh --no-start --no-stop
@@ -265,7 +265,7 @@ For systematic troubleshooting of test failures, see the [Test Troubleshooting G
 #### Database Issues
 ```bash
 # Clean restart with fresh databases
-docker-compose down
+docker compose down
 docker volume prune -f  # WARNING: Removes all unused volumes
 ./start.sh
 ```
@@ -317,7 +317,7 @@ jobs:
       
       - name: Build and start services
         run: |
-          docker-compose build
+          docker compose build
           ./start.sh
           
       - name: Set up Python
@@ -336,7 +336,7 @@ jobs:
           
       - name: Stop services
         if: always()
-        run: docker-compose down
+        run: docker compose down
 ```
 
 ## Test Coverage

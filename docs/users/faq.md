@@ -116,7 +116,7 @@ Contact your system administrator to backup pattern data. KATO stores patterns a
 
 ```bash
 # Delete ALL data (WARNING: permanent)
-docker-compose down -v
+docker compose down -v
 ```
 
 For more granular data deletion, contact your system administrator.
@@ -320,14 +320,14 @@ See [Session Management](session-management.md#handling-session-expiry).
 
 ```bash
 # Check logs
-docker-compose logs kato
+docker compose logs kato
 
 # Common fixes:
 # 1. Ensure databases running
-docker-compose up -d
+docker compose up -d
 
 # 2. Rebuild without cache
-docker-compose build --no-cache kato
+docker compose build --no-cache kato
 ./start.sh
 ```
 
@@ -338,7 +338,7 @@ See [Troubleshooting Guide](troubleshooting.md).
 ```bash
 # Ensure services running
 ./start.sh
-docker-compose ps  # All should be "Up"
+docker compose ps  # All should be "Up"
 
 # Run tests
 ./run_tests.sh --no-start --no-stop
@@ -464,7 +464,7 @@ See [Vector Embeddings](../research/vector-embeddings.md).
    - KATO version
    - Steps to reproduce
    - Expected vs actual behavior
-   - Logs (`docker-compose logs kato`)
+   - Logs (`docker compose logs kato`)
 
 ### How do I request a feature?
 

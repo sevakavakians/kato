@@ -39,7 +39,7 @@ Last Updated: 2025-09-06
 - Can use Primary and Testing instances for all functionality
 
 **Next Steps**:
-- Investigate docker-compose.yml configuration for analytics service
+- Investigate docker compose.yml configuration for analytics service
 - Check port conflicts or resource constraints
 - Verify if analytics-specific settings are causing startup issues
 
@@ -62,7 +62,7 @@ Last Updated: 2025-09-06
 ### 3. Docker Compose Version Warning
 **Status**: Active  
 **Severity**: Minimal  
-**Location**: `docker-compose.yml` files
+**Location**: `docker compose.yml` files
 
 **Warning Message**:
 ```
@@ -70,7 +70,7 @@ the attribute `version` is obsolete, it will be ignored
 ```
 
 **Fix Needed**:
-- Remove `version: '3.8'` from docker-compose files
+- Remove `version: '3.8'` from docker compose files
 - Update to latest compose file format
 
 ---
@@ -140,7 +140,7 @@ See [Configuration Management](CONFIGURATION_MANAGEMENT.md) for details.
 
 **To Enable**:
 1. Install NVIDIA Container Toolkit
-2. Uncomment GPU section in docker-compose.yml
+2. Uncomment GPU section in docker compose.yml
 3. Set appropriate GPU device IDs
 
 ---

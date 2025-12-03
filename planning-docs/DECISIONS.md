@@ -270,12 +270,12 @@ class KatoProcessor:
 - Remove MongoDB environment variables from `kato/config/settings.py`:
   - MONGO_DB, MONGO_COLLECTION, MONGO_HOST, MONGO_PORT
   - MONGO_USERNAME, MONGO_PASSWORD (if present)
-- Update `docker-compose.yml` environment section:
+- Update `docker compose.yml` environment section:
   - Remove MONGO_* environment variable references
   - Verify ClickHouse and Redis variables remain
 
 **Sub-Phase 3: Infrastructure Cleanup** (30 min)
-- Remove MongoDB service from `docker-compose.yml`:
+- Remove MongoDB service from `docker compose.yml`:
   - Remove `mongo:` service definition
   - Remove MongoDB volume mounts
   - Remove MongoDB network references
@@ -285,7 +285,7 @@ class KatoProcessor:
   - Verify no other packages depend on pymongo
 
 **Sub-Phase 4: Testing & Verification** (1-2 hours)
-- Rebuild containers: `docker-compose build --no-cache kato`
+- Rebuild containers: `docker compose build --no-cache kato`
   - Verify build succeeds without MongoDB dependencies
   - Verify no import errors for pymongo
 - Run integration tests: `./run_tests.sh --no-start --no-stop tests/tests/integration/`
@@ -321,7 +321,7 @@ class KatoProcessor:
 **Success Criteria**:
 - No MongoDB imports in codebase (grep verification)
 - Tests passing (9/11+ integration tests, same as Phase 4 baseline)
-- MongoDB service not in docker-compose.yml
+- MongoDB service not in docker compose.yml
 - No MongoDB connection attempts in logs
 - Pattern learning and predictions working (regression check)
 - Container builds successfully without pymongo
@@ -332,7 +332,7 @@ class KatoProcessor:
 - MODIFY: `kato/informatics/knowledge_base.py` (remove learnAssociation, StubCollections)
 - MODIFY: `kato/searches/pattern_search.py` (remove MongoDB mode)
 - MODIFY: `kato/config/settings.py` (remove MONGO_* env vars)
-- MODIFY: `docker-compose.yml` (remove MongoDB service, env vars)
+- MODIFY: `docker compose.yml` (remove MongoDB service, env vars)
 - MODIFY: `requirements.txt` (remove pymongo)
 - UPDATE: `ARCHITECTURE_DIAGRAM.md` (remove MongoDB references)
 - UPDATE: Relevant documentation files
@@ -822,7 +822,7 @@ self.client.insert('kato.patterns_data', [list(row.values())], column_names=list
 - Individual service management now supported (./start.sh start mongodb, etc.)
 **Files Modified**:
 - /kato/services/sessions.py (async await fixes)
-- docker-compose.yml (MongoDB healthcheck configuration)
+- docker compose.yml (MongoDB healthcheck configuration)
 - /kato/storage/connection_manager.py (error diagnostics)
 - start.sh (service control enhancements)
 **Confidence**: Very High - All critical async issues resolved, test suite validates fixes
@@ -1290,7 +1290,7 @@ KATO's filter pipeline system pre-filters pattern candidates before core matchin
 
 **Implementation Phases** (6-7 weeks total):
 - **Phase 1 (COMPLETED 2025-11-11)**: Infrastructure foundation
-  - Added ClickHouse service to docker-compose.yml
+  - Added ClickHouse service to docker compose.yml
   - Created ClickHouse schema (patterns_data table, indexes, LSH buckets)
   - Configured Redis persistence (RDB + AOF hybrid)
   - Extended ConnectionManager with ClickHouse support
@@ -1315,7 +1315,7 @@ KATO's filter pipeline system pre-filters pattern candidates before core matchin
 - config/redis.conf (RDB + AOF persistence configuration)
 
 **Files Modified** (Phase 1):
-- docker-compose.yml (added ClickHouse service, updated Redis config)
+- docker compose.yml (added ClickHouse service, updated Redis config)
 - kato/storage/connection_manager.py (extended with ClickHouse support)
 - requirements.txt (added clickhouse-connect, datasketch)
 
@@ -1358,7 +1358,7 @@ session_config = {
 ---
 
 ## 2025-11-12 - Hybrid Architecture Verified - Tests Run in Hybrid Mode by Default
-**Decision**: Set KATO_ARCHITECTURE_MODE=hybrid as default in docker-compose.yml, making hybrid architecture the standard test environment
+**Decision**: Set KATO_ARCHITECTURE_MODE=hybrid as default in docker compose.yml, making hybrid architecture the standard test environment
 **Rationale**:
 - Phase 1 infrastructure complete and verified working
 - All 43 tests run successfully in hybrid mode (96.9% pass rate)
@@ -1369,7 +1369,7 @@ session_config = {
 - Production-ready architecture should be the default testing mode
 
 **Configuration Changes Made**:
-1. **docker-compose.yml**: Changed `KATO_ARCHITECTURE_MODE` default from `mongodb` to `hybrid`
+1. **docker compose.yml**: Changed `KATO_ARCHITECTURE_MODE` default from `mongodb` to `hybrid`
 2. **config/redis.conf**: Disabled `protected-mode` for Docker network isolation, added `bind 0.0.0.0 ::` for container access
 3. **kato/config/settings.py**: Added ClickHouse configuration fields (`CLICKHOUSE_HOST`, `CLICKHOUSE_PORT`, `CLICKHOUSE_DB`) to DatabaseConfig
 
@@ -1391,7 +1391,7 @@ session_config = {
 - **Positive**: All future development uses production-ready architecture, catches hybrid-specific issues early
 - **Positive**: Tests validate full filter pipeline functionality automatically
 - **Positive**: Reduces MongoDB load, improves test performance with ClickHouse
-- **Neutral**: Requires ClickHouse service running (already in docker-compose.yml)
+- **Neutral**: Requires ClickHouse service running (already in docker compose.yml)
 - **Risk**: Low - backward compatible fallback ensures tests work if hybrid unavailable
 
 **Phase Status Update**:

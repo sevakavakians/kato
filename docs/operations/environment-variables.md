@@ -610,7 +610,7 @@ docker exec kato env | grep KATO
 curl http://localhost:8000/admin/config
 
 # Restart to apply changes
-docker-compose restart kato
+docker compose restart kato
 ```
 
 ### Database Connection Errors

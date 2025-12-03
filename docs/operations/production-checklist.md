@@ -343,7 +343,7 @@ docker exec redis-kb redis-cli ping
 ### Monitoring
 ```bash
 # Check logs
-docker-compose logs -f kato
+docker compose logs -f kato
 kubectl logs -f deployment/kato -n kato
 
 # Check resource usage

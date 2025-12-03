@@ -120,11 +120,11 @@ EOF
 # Start all services (ClickHouse, Qdrant, Redis, KATO)
 ./start.sh
 
-# Or manually with docker-compose
-docker-compose up -d
+# Or manually with docker compose
+docker compose up -d
 
 # Verify services are running
-docker-compose ps
+docker compose ps
 ```
 
 ### 6. Verify Installation
@@ -160,7 +160,7 @@ kato/
 │   └── api/               # API tests
 ├── docs/                  # Documentation
 ├── scripts/               # Utility scripts
-├── docker-compose.yml     # Docker services
+├── docker compose.yml     # Docker services
 ├── Dockerfile             # KATO container
 ├── requirements.txt       # Python dependencies
 ├── requirements.lock      # Locked dependencies
@@ -178,21 +178,21 @@ kato/
 ./start.sh
 
 # View logs
-docker-compose logs -f kato
+docker compose logs -f kato
 
 # Restart after code changes
-docker-compose restart kato
+docker compose restart kato
 
 # Rebuild after dependency changes
-docker-compose build --no-cache kato
-docker-compose up -d
+docker compose build --no-cache kato
+docker compose up -d
 ```
 
 #### Option 2: Local Python (Advanced)
 
 ```bash
 # Start dependencies only
-docker-compose up -d kato-clickhouse qdrant-kb redis-kb
+docker compose up -d kato-clickhouse qdrant-kb redis-kb
 
 # Run KATO locally
 export CLICKHOUSE_HOST=localhost
@@ -227,7 +227,7 @@ python -m uvicorn kato.api.main:app --reload --port 8000
 3. **Test changes**
    ```bash
    # Restart KATO to pick up changes
-   docker-compose restart kato
+   docker compose restart kato
 
    # Run affected tests
    python -m pytest tests/unit/test_my_module.py -v
@@ -436,13 +436,13 @@ pre-commit run --all-files
 
 ```bash
 # Follow KATO logs
-docker-compose logs -f kato
+docker compose logs -f kato
 
 # All logs
-docker-compose logs
+docker compose logs
 
 # Last 100 lines
-docker-compose logs --tail 100 kato
+docker compose logs --tail 100 kato
 ```
 
 ### Python Debugger
@@ -543,10 +543,10 @@ echo "new-package==1.0.0" >> requirements.txt
 pip-compile --output-file=requirements.lock requirements.txt
 
 # 3. Rebuild Docker image
-docker-compose build --no-cache kato
+docker compose build --no-cache kato
 
 # 4. Restart services
-docker-compose up -d
+docker compose up -d
 ```
 
 ### Upgrading Dependencies
@@ -579,7 +579,7 @@ lsof -i :8123
 lsof -i :6333
 
 # Clean and rebuild
-docker-compose down
+docker compose down
 docker system prune -f
 ./start.sh
 ```
@@ -588,7 +588,7 @@ docker system prune -f
 
 ```bash
 # Ensure services are running
-docker-compose ps  # All should be "Up"
+docker compose ps  # All should be "Up"
 
 # Check service health
 curl http://localhost:8000/health

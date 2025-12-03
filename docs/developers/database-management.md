@@ -326,7 +326,7 @@ MEMORY USAGE session:abc123
 
 ### Redis Persistence
 
-**Configure Persistence** (docker-compose.yml):
+**Configure Persistence** (docker compose.yml):
 ```yaml
 redis:
   image: redis:7-alpine
@@ -350,13 +350,13 @@ docker cp kato-redis:/data/appendonly.aof ./redis_backup_$(date +%Y%m%d).aof
 **Restore Redis**:
 ```bash
 # Stop Redis
-docker-compose stop redis
+docker compose stop redis
 
 # Copy backup to container
 docker cp redis_backup.rdb kato-redis:/data/dump.rdb
 
 # Start Redis
-docker-compose start redis
+docker compose start redis
 ```
 
 ## Qdrant Management
@@ -555,7 +555,7 @@ docker logs kato-clickhouse --tail 100
 docker exec kato-clickhouse clickhouse-client --query "SELECT 1"
 
 # Restart ClickHouse
-docker-compose restart clickhouse
+docker compose restart clickhouse
 ```
 
 ### Redis Issues
@@ -571,7 +571,7 @@ docker logs kato-redis --tail 100
 docker exec kato-redis redis-cli INFO memory
 
 # Restart Redis
-docker-compose restart redis
+docker compose restart redis
 ```
 
 ### Qdrant Issues
@@ -584,7 +584,7 @@ curl http://localhost:6333/
 docker logs kato-qdrant --tail 100
 
 # Restart Qdrant
-docker-compose restart qdrant
+docker compose restart qdrant
 ```
 
 ### Database Cleanup
@@ -594,7 +594,7 @@ docker-compose restart qdrant
 # WARNING: This deletes ALL data
 
 # Stop services
-docker-compose down
+docker compose down
 
 # Remove volumes
 docker volume rm kato_clickhouse_data
@@ -611,7 +611,7 @@ docker volume rm kato_redis_data
 
 **Replica Sets** (high availability):
 ```yaml
-# docker-compose.yml
+# docker compose.yml
 clickhouse:
   image: clickhouse/clickhouse-server
   deploy:

@@ -290,7 +290,7 @@ filter_pipeline=['minhash', 'length', 'jaccard', 'bloom', 'rapidfuzz']
 
 ```bash
 # Start ClickHouse, Redis, MongoDB
-docker-compose up -d
+docker compose up -d
 
 # Verify services
 curl http://localhost:8123/  # ClickHouse
@@ -494,7 +494,7 @@ client = get_clickhouse_client()
 if client:
     print("ClickHouse connected")
 else:
-    print("ClickHouse not available - check docker-compose services")
+    print("ClickHouse not available - check docker compose services")
 ```
 
 ### Redis Connection Errors
@@ -507,7 +507,7 @@ try:
     r.ping()
     print("Redis connected")
 except:
-    print("Redis not available - check docker-compose services")
+    print("Redis not available - check docker compose services")
 ```
 
 ### Filter Pipeline Errors

@@ -208,7 +208,7 @@ If issues arise, disable RapidFuzz:
 export KATO_USE_FAST_MATCHING=false
 
 # Restart services
-docker-compose restart kato
+docker compose restart kato
 
 # Verify fallback to difflib
 docker logs kato | grep "fast_matching=False"

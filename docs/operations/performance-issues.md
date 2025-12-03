@@ -78,7 +78,7 @@ RECALL_THRESHOLD=0.5  # from 0.1
 MAX_PREDICTIONS=50  # from 500
 
 # Restart KATO
-docker-compose restart kato
+docker compose restart kato
 ```
 
 **Verify**:
@@ -251,7 +251,7 @@ KATO_USE_FAST_MATCHING=true
 KATO_USE_TOKEN_MATCHING=true
 
 # Restart KATO
-docker-compose restart kato
+docker compose restart kato
 ```
 
 #### 3. Excessive Logging

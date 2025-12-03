@@ -108,11 +108,11 @@ matches = process.extract(
 ```bash
 # Enable RapidFuzz (default)
 export KATO_USE_FAST_MATCHING=true
-docker-compose up
+docker compose up
 
 # Disable RapidFuzz (use difflib)
 export KATO_USE_FAST_MATCHING=false
-docker-compose up
+docker compose up
 
 # Check which matcher is active
 docker logs kato | grep "fast_matching"
@@ -134,7 +134,7 @@ rapidfuzz>=3.0.0  # Fast string matching (5-10x speedup over difflib)
 
 **Docker:** Automatically installed during container build
 ```bash
-docker-compose build --no-cache kato
+docker compose build --no-cache kato
 ./start.sh
 ```
 
@@ -212,7 +212,7 @@ pytest tests/tests/unit/test_rapidfuzz_integration.py --cov=kato.searches --cov-
 **Solution:**
 ```bash
 # Rebuild Docker container
-docker-compose build --no-cache kato
+docker compose build --no-cache kato
 ./start.sh
 
 # Or install locally
@@ -316,7 +316,7 @@ else:
 
 **Activation:**
 ```bash
-docker-compose build --no-cache kato
+docker compose build --no-cache kato
 ./start.sh
 # RapidFuzz now active!
 ```

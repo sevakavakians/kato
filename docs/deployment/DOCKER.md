@@ -20,19 +20,19 @@ chmod +x kato-manager.sh
 ### Basic Commands
 ```bash
 # Build Docker image
-docker-compose build
+docker compose build
 
 # Start KATO system
 ./start.sh
 
 # Check status
-docker-compose ps
+docker compose ps
 
 # View logs
-docker-compose logs
+docker compose logs
 
 # Stop system
-docker-compose down
+docker compose down
 ```
 
 ## Docker Architecture
@@ -95,16 +95,16 @@ Stop KATO instance(s) and automatically remove containers.
 
 ```bash
 # Stop all instances
-docker-compose down
+docker compose down
 
 # Stop specific instance by ID or name
-docker-compose down processor-1         # By ID
-docker-compose down "Main"              # By name
+docker compose down processor-1         # By ID
+docker compose down "Main"              # By name
 
 # Stop with explicit options
-docker-compose down --id processor-1    # Specific ID
-docker-compose down --name "Main"       # Specific name
-docker-compose down --all               # All instances
+docker compose down --id processor-1    # Specific ID
+docker compose down --name "Main"       # Specific name
+docker compose down --all               # All instances
 ```
 
 **Note**: Containers are automatically removed after stopping to prevent accumulation. Storage services (ClickHouse, Redis, Qdrant) are shared and persist.
@@ -132,17 +132,17 @@ qdrant         qdrant/qdrant       entrypoint.sh            qdrant         runni
 Restart KATO system (stop + start).
 
 ```bash
-docker-compose restart
+docker compose restart
 ```
 
 #### build
 Build or rebuild KATO Docker image.
 
 ```bash
-docker-compose build
+docker compose build
 
 # Force rebuild with no cache
-docker-compose build --no-cache
+docker compose build --no-cache
 ```
 
 #### clean
@@ -158,7 +158,7 @@ Complete cleanup of containers, images, and volumes.
 Show status of all KATO containers and services.
 
 ```bash
-docker-compose ps
+docker compose ps
 ```
 
 Output shows:
@@ -172,19 +172,19 @@ View container logs.
 
 ```bash
 # KATO API logs
-docker-compose logs kato
+docker compose logs kato
 
 # ClickHouse logs
-docker-compose logs clickhouse
+docker compose logs clickhouse
 
 # Redis logs
-docker-compose logs redis
+docker compose logs redis
 
 # All logs
-docker-compose logs all
+docker compose logs all
 
 # Follow logs (real-time)
-docker-compose logs kato -f
+docker compose logs kato -f
 ```
 
 #### shell
@@ -214,7 +214,7 @@ KATO now implements automatic container cleanup to prevent Docker resource accum
 docker ps -a | grep kato
 
 # After using stop command - container is removed
-docker-compose down processor-1
+docker compose down processor-1
 docker ps -a | grep processor-1  # No results - container removed
 ```
 
@@ -224,11 +224,11 @@ Storage containers (ClickHouse, Redis, Qdrant) are shared across all instances a
 
 - **Preserved by default**: Stop commands don't remove storage containers
 - **Data persistence**: Volume data persists across container restarts
-- **Manual removal**: `docker-compose down -v` (removes volumes - use with caution)
+- **Manual removal**: `docker compose down -v` (removes volumes - use with caution)
 
 ## Docker Compose
 
-### Basic docker-compose.yml
+### Basic docker compose.yml
 
 ```yaml
 version: '3.8'
@@ -312,7 +312,7 @@ curl http://localhost:8000/classifier/ping
 curl http://localhost:8000/learner/ping
 ```
 
-#### Using docker-compose-multi.yml
+#### Using docker compose-multi.yml
 
 For production deployments with predefined instances:
 
@@ -392,7 +392,7 @@ networks:
 
 Deploy with:
 ```bash
-docker-compose -f docker-compose-multi.yml up -d
+docker compose -f docker compose-multi.yml up -d
 ```
 
 ## Dockerfile
@@ -470,7 +470,7 @@ RECALL_THRESHOLD=0.1
 
 ### Docker Health Check
 
-Add to Dockerfile or docker-compose.yml:
+Add to Dockerfile or docker compose.yml:
 
 ```yaml
 healthcheck:
@@ -502,7 +502,7 @@ docker exec redis redis-cli ping
 ### Memory Limits
 
 ```yaml
-# docker-compose.yml
+# docker compose.yml
 services:
   kato-api:
     mem_limit: 2g
@@ -526,7 +526,7 @@ services:
 # Set log level via environment
 LOG_LEVEL=DEBUG ./start.sh
 
-# Or in docker-compose.yml
+# Or in docker compose.yml
 environment:
   - LOG_LEVEL=DEBUG
 ```
@@ -541,7 +541,7 @@ Logs are stored in:
 ### Log Rotation
 
 ```yaml
-# docker-compose.yml
+# docker compose.yml
 logging:
   driver: "json-file"
   options:
@@ -559,7 +559,7 @@ logging:
 docker logs kato-api-${USER}-1
 
 # Rebuild image
-docker-compose build --no-cache
+docker compose build --no-cache
 ./start.sh
 ```
 
@@ -668,7 +668,7 @@ jobs:
       - uses: actions/checkout@v2
       
       - name: Build KATO
-        run: docker-compose build
+        run: docker compose build
       
       - name: Start KATO
         run: ./start.sh
@@ -679,7 +679,7 @@ jobs:
           ./kato-manager.sh test
       
       - name: Stop KATO
-        run: docker-compose down
+        run: docker compose down
 ```
 
 ### Docker Hub Publishing

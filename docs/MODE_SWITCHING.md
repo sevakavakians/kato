@@ -286,7 +286,7 @@ echo "KATO_STRICT_MODE=true" >> .env
 ./start.sh restart kato
 
 # Or set inline for one-time testing
-KATO_STRICT_MODE=true docker-compose up -d kato
+KATO_STRICT_MODE=true docker compose up -d kato
 ```
 
 **Strict Mode Behavior:**
@@ -317,7 +317,7 @@ Possible causes:
   2. Connection failed (check: curl http://localhost:8123/ping)
   3. Environment variables incorrect (CLICKHOUSE_HOST, CLICKHOUSE_PORT)
   4. clickhouse-connect library not installed
-Run: docker-compose logs clickhouse
+Run: docker compose logs clickhouse
 ============================================================
 ```
 
@@ -331,7 +331,7 @@ curl http://localhost:8123/ping
 # Expected: Ok.
 
 # Check logs
-docker-compose logs clickhouse
+docker compose logs clickhouse
 
 # Restart if needed
 ./start.sh restart clickhouse
@@ -346,7 +346,7 @@ Possible causes:
   2. Connection failed (check: docker exec kato-redis redis-cli ping)
   3. Environment variables incorrect (REDIS_URL)
   4. redis library not installed
-Run: docker-compose logs redis
+Run: docker compose logs redis
 ```
 
 **How to Fix:**
@@ -359,7 +359,7 @@ docker exec kato-redis redis-cli ping
 # Expected: PONG
 
 # Check logs
-docker-compose logs redis
+docker compose logs redis
 
 # Restart if needed
 ./start.sh restart redis

@@ -72,10 +72,10 @@ pytest tests/
 pip-audit --requirement requirements.lock
 
 # 7. Update Docker image
-docker-compose build --no-cache kato
+docker compose build --no-cache kato
 
 # 8. Test Docker image
-docker-compose up -d
+docker compose up -d
 curl http://localhost:8000/health
 
 # 9. Commit changes

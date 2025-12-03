@@ -51,7 +51,7 @@ Security is critical for production KATO deployments. This guide covers authenti
 
 **Docker with Nginx Proxy**:
 ```yaml
-# docker-compose.yml
+# docker compose.yml
 version: '3.8'
 
 services:
@@ -472,7 +472,7 @@ stringData:
 
 **Enable Authentication**:
 ```yaml
-# docker-compose.yml
+# docker compose.yml
 services:
   redis-kb:
     command: redis-server --requirepass secure_redis_password_here --appendonly yes
@@ -498,7 +498,7 @@ REDIS_URL=redis://kato_user:kato_password@redis-kb:6379/0
 
 **Enable API Key**:
 ```yaml
-# docker-compose.yml
+# docker compose.yml
 services:
   qdrant-kb:
     environment:
@@ -522,7 +522,7 @@ client = QdrantClient(
 ### Docker Network Policies
 
 ```yaml
-# docker-compose.yml
+# docker compose.yml
 version: '3.8'
 
 networks:

@@ -39,7 +39,7 @@ KATO supports multiple scaling approaches:
 
 ### Docker Compose Multi-Instance
 
-**docker-compose.yml**:
+**docker compose.yml**:
 ```yaml
 version: '3.8'
 
@@ -204,7 +204,7 @@ server {
 
 **Deploy**:
 ```bash
-docker-compose up -d --scale kato-1=1 --scale kato-2=1 --scale kato-3=1
+docker compose up -d --scale kato-1=1 --scale kato-2=1 --scale kato-3=1
 ```
 
 ### Kubernetes Horizontal Scaling
@@ -432,7 +432,7 @@ kubectl edit deployment/kato -n kato
 
 **Docker Compose**:
 ```yaml
-# Update docker-compose.yml
+# Update docker compose.yml
 services:
   kato:
     deploy:
@@ -445,7 +445,7 @@ services:
           memory: 4G
 
 # Restart service
-docker-compose up -d kato
+docker compose up -d kato
 ```
 
 ## Database Scaling
@@ -454,7 +454,7 @@ docker-compose up -d kato
 
 #### Vertical Scaling (Single Node)
 
-**docker-compose.yml**:
+**docker compose.yml**:
 ```yaml
 services:
   kato-clickhouse:
@@ -487,7 +487,7 @@ services:
 
 **For datasets >1TB or high availability**:
 
-**docker-compose.yml**:
+**docker compose.yml**:
 ```yaml
 services:
   # ClickHouse cluster with 2 shards, 2 replicas each
@@ -579,7 +579,7 @@ CLICKHOUSE_CLUSTER=kato_cluster
 
 #### Cluster Mode
 
-**docker-compose.yml**:
+**docker compose.yml**:
 ```yaml
 services:
   qdrant-node-1:
@@ -613,7 +613,7 @@ services:
 
 #### Sentinel (High Availability)
 
-**docker-compose.yml**:
+**docker compose.yml**:
 ```yaml
 services:
   redis-master:

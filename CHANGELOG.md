@@ -100,7 +100,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Vector database change from custom implementation to Qdrant
 
 **Migration Steps:**
-1. Update docker-compose.yml to use new service configuration
+1. Update docker compose.yml to use new service configuration
 2. Migrate existing patterns to Qdrant (migration script provided)
 3. Update client code to use session-based endpoints
 4. Review and update configuration for new defaults

@@ -394,8 +394,8 @@
 
 **Completed Work**:
 1. ✅ Code Cleanup: Removed unused methods (knowledge_base.py), removed MongoDB connection code (connection_manager.py), removed MongoDB mode (pattern_search.py)
-2. ✅ Configuration Cleanup: Removed MongoDB env vars (settings.py), removed MongoDB service (docker-compose.yml)
-3. ✅ Infrastructure Cleanup: Removed MongoDB service, volumes, dependencies (docker-compose.yml), removed pymongo (requirements.txt)
+2. ✅ Configuration Cleanup: Removed MongoDB env vars (settings.py), removed MongoDB service (docker compose.yml)
+3. ✅ Infrastructure Cleanup: Removed MongoDB service, volumes, dependencies (docker compose.yml), removed pymongo (requirements.txt)
 4. ⏸️ Testing & Verification: Deferred to user (rebuild, test, verify)
 
 **Git Commit**:
@@ -406,7 +406,7 @@
 - Net change: -374 lines
 
 **Files Modified**:
-1. docker-compose.yml - Removed MongoDB service, volumes, dependencies
+1. docker compose.yml - Removed MongoDB service, volumes, dependencies
 2. kato/config/settings.py - Removed MONGO_BASE_URL, MONGO_TIMEOUT
 3. kato/informatics/knowledge_base.py - Removed unused methods
 4. kato/searches/pattern_search.py - Removed MongoDB mode, made hybrid required
@@ -422,8 +422,8 @@
 - ✅ Fail-fast architecture enforced (no fallback)
 
 **User Actions Required**:
-1. Rebuild container: `docker-compose build --no-cache kato`
-2. Restart services: `docker-compose up -d`
+1. Rebuild container: `docker compose build --no-cache kato`
+2. Restart services: `docker compose up -d`
 3. Run integration tests: `./run_tests.sh --no-start --no-stop`
 4. Verify logs: No MongoDB connection attempts should appear
 
@@ -488,7 +488,7 @@
      - Modify: kato/informatics/knowledge_base.py (remove learnAssociation, StubCollections)
      - Modify: kato/searches/pattern_search.py (remove MongoDB mode)
      - Modify: kato/config/settings.py (remove MONGO_* env vars)
-     - Modify: docker-compose.yml (remove MongoDB service, env vars)
+     - Modify: docker compose.yml (remove MongoDB service, env vars)
      - Modify: requirements.txt (remove pymongo)
    - Added comprehensive success criteria (7 checkboxes)
    - Moved ClickHouse + Redis section down to maintain context
@@ -547,13 +547,13 @@
 - MODIFY: kato/informatics/knowledge_base.py (remove learnAssociation, StubCollections)
 - MODIFY: kato/searches/pattern_search.py (remove MongoDB mode)
 - MODIFY: kato/config/settings.py (remove MONGO_* env vars)
-- MODIFY: docker-compose.yml (remove MongoDB service)
+- MODIFY: docker compose.yml (remove MongoDB service)
 - MODIFY: requirements.txt (remove pymongo)
 
 **Success Criteria**:
 - No MongoDB imports in codebase
 - Tests passing (9/11+ integration tests)
-- MongoDB service not in docker-compose.yml
+- MongoDB service not in docker compose.yml
 - No MongoDB connection attempts in logs
 - Pattern learning and predictions working
 - Container builds successfully without pymongo

@@ -29,7 +29,7 @@ cd kato
 
 ```bash
 # Check system status
-docker-compose ps
+docker compose ps
 
 # Test the API
 curl http://localhost:8000/health
@@ -171,20 +171,20 @@ For complete details, see [Database Persistence Guide](database-persistence.md).
 
 ```bash
 # Follow KATO logs
-docker-compose logs -f kato
+docker compose logs -f kato
 
 # Check all service logs
-docker-compose logs
+docker compose logs
 ```
 
 ### Stop KATO
 
 ```bash
 # Stop all services
-docker-compose down
+docker compose down
 
 # Stop and remove volumes (WARNING: deletes all data)
-docker-compose down -v
+docker compose down -v
 ```
 
 ## Python Client Example
@@ -284,10 +284,10 @@ Start Docker Desktop, then run `./start.sh`
 ### Container Won't Start
 ```bash
 # Check logs
-docker-compose logs kato
+docker compose logs kato
 
 # Rebuild if needed
-docker-compose build --no-cache kato
+docker compose build --no-cache kato
 ./start.sh
 ```
 

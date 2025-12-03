@@ -335,7 +335,7 @@ curl http://localhost:8000/status
 
 **Solution**: Ensure environment variables are set before container starts:
 ```yaml
-# docker-compose.yml
+# docker compose.yml
 environment:
   - MONGO_BASE_URL=mongodb://mongodb:27017  # Use service name, not localhost
 ```
@@ -357,7 +357,7 @@ export RECALL_THRESHOLD=1.5  # Invalid - will cause error
 
 **Solution**: Restart the service - configuration is loaded at startup:
 ```bash
-docker-compose restart
+docker compose restart
 ```
 
 #### 4. Docker Network Issues

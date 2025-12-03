@@ -65,7 +65,7 @@ Production monitoring for KATO includes:
 
 **Docker Compose**:
 ```yaml
-# docker-compose.yml
+# docker compose.yml
 version: '3.8'
 
 services:
@@ -255,7 +255,7 @@ async def metrics_middleware(request: Request, call_next):
 
 **ClickHouse Exporter**:
 ```yaml
-# docker-compose.yml
+# docker compose.yml
 services:
   clickhouse-exporter:
     image: clickhouse/clickhouse-exporter:latest

@@ -35,7 +35,7 @@ curl http://localhost:8000/health
 
 ## Docker Compose Configuration
 
-### docker-compose.yml
+### docker compose.yml
 
 ```yaml
 version: '3.8'
@@ -228,19 +228,19 @@ CONNECTION_POOL_SIZE=50
 
 ```bash
 # Start services
-docker-compose up -d
+docker compose up -d
 
 # View logs
-docker-compose logs -f
+docker compose logs -f
 
 # Check status
-docker-compose ps
+docker compose ps
 ```
 
 ### Multi-Instance Deployment
 
 ```yaml
-# docker-compose.yml with multiple KATO instances
+# docker compose.yml with multiple KATO instances
 services:
   kato-1:
     <<: *kato-service
@@ -339,12 +339,12 @@ docker run --rm \
 docker exec kato-clickhouse clickhouse-client --query="RESTORE DATABASE kato FROM Disk('backups', 'backup-20251113.zip')"
 
 # Restart services
-docker-compose restart kato-clickhouse
+docker compose restart kato-clickhouse
 ```
 
 ## Resource Limits
 
-### docker-compose.yml with limits
+### docker compose.yml with limits
 
 ```yaml
 services:
@@ -422,7 +422,7 @@ echo "All services healthy"
 ### Centralized Logging
 
 ```yaml
-# docker-compose.yml with logging
+# docker compose.yml with logging
 services:
   kato:
     logging:
@@ -436,13 +436,13 @@ services:
 
 ```bash
 # View all logs
-docker-compose logs
+docker compose logs
 
 # Follow specific service
-docker-compose logs -f kato
+docker compose logs -f kato
 
 # Export logs
-docker-compose logs --no-color > kato-logs-$(date +%Y%m%d).log
+docker compose logs --no-color > kato-logs-$(date +%Y%m%d).log
 ```
 
 ## Updates and Maintenance
@@ -454,13 +454,13 @@ docker-compose logs --no-color > kato-logs-$(date +%Y%m%d).log
 git pull origin main
 
 # Rebuild image
-docker-compose build --no-cache kato
+docker compose build --no-cache kato
 
 # Restart with zero downtime (if using multiple instances)
-docker-compose up -d --no-deps --scale kato=2 kato
+docker compose up -d --no-deps --scale kato=2 kato
 
 # Or simple restart
-docker-compose restart kato
+docker compose restart kato
 ```
 
 ### Update Dependencies
@@ -470,8 +470,8 @@ docker-compose restart kato
 pip-compile --output-file=requirements.lock requirements.txt
 
 # Rebuild image
-docker-compose build --no-cache kato
-docker-compose up -d
+docker compose build --no-cache kato
+docker compose up -d
 ```
 
 ## Troubleshooting
@@ -480,13 +480,13 @@ docker-compose up -d
 
 ```bash
 # Check logs
-docker-compose logs kato
+docker compose logs kato
 
 # Check resource usage
 docker stats
 
 # Verify configuration
-docker-compose config
+docker compose config
 ```
 
 ### Network Issues

@@ -215,6 +215,6 @@ TFIDF = TF * IDF
 
 ### To Deploy
 
-1. Rebuild KATO container: `docker-compose build --no-cache kato`
+1. Rebuild KATO container: `docker compose build --no-cache kato`
 2. Run migration for existing data: `python scripts/migrate_unique_patterns_count.py`
 3. Test TF-IDF ranking: Set `rank_sort_algo: 'tfidf_score'` in session config

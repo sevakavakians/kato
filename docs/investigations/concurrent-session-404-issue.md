@@ -477,8 +477,8 @@ docker logs kato --tail 100
 ### Test Commands
 ```bash
 # Rebuild and test
-docker-compose build --no-cache kato
-docker-compose up -d
+docker compose build --no-cache kato
+docker compose up -d
 python -m pytest tests/tests/integration/test_session_management.py::TestSessionIsolation::test_concurrent_session_operations -xvs
 
 # Isolated concurrent test

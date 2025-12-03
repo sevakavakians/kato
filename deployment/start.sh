@@ -47,7 +47,7 @@ case "$COMMAND" in
         validate_service "$SERVICE"
         if [[ "$SERVICE" == "all" ]]; then
             print_info "Starting all KATO services..."
-            docker-compose -f "$SCRIPT_DIR/docker-compose.yml" up -d
+            docker compose -f "$SCRIPT_DIR/docker compose.yml" up -d
             print_info "Waiting for services to be ready..."
             sleep 5
 
@@ -61,7 +61,7 @@ case "$COMMAND" in
             fi
         else
             print_info "Starting $SERVICE..."
-            docker-compose -f "$SCRIPT_DIR/docker-compose.yml" up -d "$SERVICE"
+            docker compose -f "$SCRIPT_DIR/docker compose.yml" up -d "$SERVICE"
             print_info "$SERVICE started"
         fi
         ;;
@@ -70,11 +70,11 @@ case "$COMMAND" in
         validate_service "$SERVICE"
         if [[ "$SERVICE" == "all" ]]; then
             print_info "Stopping all KATO services..."
-            docker-compose -f "$SCRIPT_DIR/docker-compose.yml" down
+            docker compose -f "$SCRIPT_DIR/docker compose.yml" down
             print_info "All services stopped"
         else
             print_info "Stopping $SERVICE..."
-            docker-compose -f "$SCRIPT_DIR/docker-compose.yml" stop "$SERVICE"
+            docker compose -f "$SCRIPT_DIR/docker compose.yml" stop "$SERVICE"
             print_info "$SERVICE stopped"
         fi
         ;;
@@ -83,11 +83,11 @@ case "$COMMAND" in
         validate_service "$SERVICE"
         if [[ "$SERVICE" == "all" ]]; then
             print_info "Restarting all KATO services..."
-            docker-compose -f "$SCRIPT_DIR/docker-compose.yml" restart
+            docker compose -f "$SCRIPT_DIR/docker compose.yml" restart
             print_info "All services restarted"
         else
             print_info "Restarting $SERVICE..."
-            docker-compose -f "$SCRIPT_DIR/docker-compose.yml" restart "$SERVICE"
+            docker compose -f "$SCRIPT_DIR/docker compose.yml" restart "$SERVICE"
             print_info "$SERVICE restarted"
         fi
         ;;
@@ -102,7 +102,7 @@ case "$COMMAND" in
         print_info "Updating KATO to latest version..."
         docker pull ghcr.io/sevakavakians/kato:latest
         print_info "Restarting KATO service..."
-        docker-compose -f "$SCRIPT_DIR/docker-compose.yml" up -d kato
+        docker compose -f "$SCRIPT_DIR/docker compose.yml" up -d kato
         print_info "✓ KATO updated and restarted"
         ;;
 
@@ -110,18 +110,18 @@ case "$COMMAND" in
         SERVICE=${2:-kato}
         LINES=${3:-50}
         print_info "Showing last $LINES lines of logs for $SERVICE..."
-        docker-compose -f "$SCRIPT_DIR/docker-compose.yml" logs --tail="$LINES" "$SERVICE"
+        docker compose -f "$SCRIPT_DIR/docker compose.yml" logs --tail="$LINES" "$SERVICE"
         ;;
 
     follow)
         SERVICE=${2:-kato}
         print_info "Following logs for $SERVICE (Ctrl+C to stop)..."
-        docker-compose -f "$SCRIPT_DIR/docker-compose.yml" logs -f "$SERVICE"
+        docker compose -f "$SCRIPT_DIR/docker compose.yml" logs -f "$SERVICE"
         ;;
 
     status)
         print_info "Checking service status..."
-        docker-compose -f "$SCRIPT_DIR/docker-compose.yml" ps
+        docker compose -f "$SCRIPT_DIR/docker compose.yml" ps
 
         # Check KATO health
         echo ""
@@ -201,7 +201,7 @@ case "$COMMAND" in
         read -r response
         if [[ "$response" == "y" || "$response" == "Y" ]]; then
             print_info "Cleaning up KATO services..."
-            docker-compose -f "$SCRIPT_DIR/docker-compose.yml" down -v
+            docker compose -f "$SCRIPT_DIR/docker compose.yml" down -v
             print_info "Cleanup complete"
         else
             print_info "Cleanup cancelled"

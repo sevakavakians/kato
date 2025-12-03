@@ -260,7 +260,7 @@ node_id: "alice"
 
 **Best Practice:**
 ```yaml
-# docker-compose.yml - Set once, never change
+# docker compose.yml - Set once, never change
 environment:
   - SERVICE_NAME=kato  # ✅ Use default, lock this value forever
 ```
@@ -543,7 +543,7 @@ Begin with defaults and adjust based on performance:
 Use logs and metrics to fine-tune:
 ```bash
 ./start.sh --log-level DEBUG
-docker-compose logs kato -f
+docker compose logs kato -f
 ```
 
 ### 4. Document Your Configuration

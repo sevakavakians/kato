@@ -9,6 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Quick Links by Task
 
 - **Getting started with KATO**: [docs/users/quick-start.md](docs/users/quick-start.md)
+- **Code examples**: [examples/README.md](examples/README.md) - Python client, token matching, hierarchical training
 - **Understanding architecture**: [docs/developers/architecture.md](docs/developers/architecture.md) + [ARCHITECTURE_DIAGRAM.md](ARCHITECTURE_DIAGRAM.md)
 - **Hybrid architecture (ClickHouse + Redis)**: [docs/HYBRID_ARCHITECTURE.md](docs/HYBRID_ARCHITECTURE.md)
 - **Node isolation (kb_id)**: [docs/KB_ID_ISOLATION.md](docs/KB_ID_ISOLATION.md)
@@ -19,6 +20,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Release management**: [docs/maintenance/releasing.md](docs/maintenance/releasing.md)
 - **API reference**: [docs/reference/api/](docs/reference/api/)
 - **Configuration reference**: [docs/reference/configuration-vars.md](docs/reference/configuration-vars.md)
+- **Historical documentation**: [docs/archive/](docs/archive/) - Past optimizations, evaluations, and completed phases
 
 ## Project Overview
 
@@ -67,16 +69,16 @@ predictions = processor.get_predictions(session_state=session_state, config=conf
 ```bash
 # After editing requirements.txt, regenerate lock file
 pip-compile --output-file=requirements.lock requirements.txt
-docker-compose build --no-cache kato
+docker compose build --no-cache kato
 ```
 
 ### Building and Running
 ```bash
 ./start.sh                    # Start all services
-docker-compose down           # Stop services
-docker-compose restart        # Restart services
-docker-compose ps             # Check status
-docker-compose logs kato      # View logs
+docker compose down           # Stop services
+docker compose restart        # Restart services
+docker compose ps             # Check status
+docker compose logs kato      # View logs
 ```
 
 ### Service URLs
@@ -314,7 +316,7 @@ Claude Code automatically:
 ## Common Development Workflow
 
 1. Make changes to source files in `kato/`
-2. Restart services: `docker-compose restart`
+2. Restart services: `docker compose restart`
 3. Run tests: `./run_tests.sh --no-start --no-stop`
 4. Debug with print statements or debugger (tests run locally)
 5. Commit changes when tests pass
@@ -324,7 +326,7 @@ Claude Code automatically:
 
 - **ALWAYS** update `requirements.lock` after modifying `requirements.txt`
 - **NEVER** edit `planning-docs/` files directly (use project-manager agent)
-- **ALWAYS** rebuild KATO docker image after code updates: `docker-compose build --no-cache kato`
+- **ALWAYS** rebuild KATO docker image after code updates: `docker compose build --no-cache kato`
 - **Services must be running** before tests: `./start.sh` (ClickHouse, Redis, Qdrant)
 - **Each test needs unique processor_id** for isolation
 - **Do NOT use MCPs** for this project
@@ -339,6 +341,7 @@ Claude Code automatically:
 - Quick Start: [docs/users/quick-start.md](docs/users/quick-start.md)
 - API Reference: [docs/users/api-reference.md](docs/users/api-reference.md)
 - Core Concepts: [docs/users/concepts.md](docs/users/concepts.md)
+- Code Examples: [examples/README.md](examples/README.md)
 
 **Developers**:
 - Contributing: [docs/developers/contributing.md](docs/developers/contributing.md)
@@ -346,6 +349,7 @@ Claude Code automatically:
 - Hybrid Architecture: [docs/HYBRID_ARCHITECTURE.md](docs/HYBRID_ARCHITECTURE.md)
 - KB ID Isolation: [docs/KB_ID_ISOLATION.md](docs/KB_ID_ISOLATION.md)
 - Testing: [docs/developers/testing.md](docs/developers/testing.md)
+- Architecture Decisions: [docs/architecture-decisions/](docs/architecture-decisions/)
 
 **Operations**:
 - Deployment: [docs/operations/docker-deployment.md](docs/operations/docker-deployment.md)
@@ -364,7 +368,13 @@ Claude Code automatically:
 
 **Maintenance**:
 - Release Process: [docs/maintenance/releasing.md](docs/maintenance/releasing.md)
+- Security Review: [docs/maintenance/security-review-baseline.md](docs/maintenance/security-review-baseline.md)
 - Known Issues: [docs/maintenance/known-issues.md](docs/maintenance/known-issues.md)
+
+**Historical**:
+- Archived Documentation: [docs/archive/](docs/archive/)
+- Past Optimizations: [docs/archive/optimizations/](docs/archive/optimizations/)
+- Client Library Evaluation: [docs/archive/evaluations/client-library-evaluation-2024/](docs/archive/evaluations/client-library-evaluation-2024/)
 
 **Reference**:
 - API Reference: [docs/reference/api/](docs/reference/api/)

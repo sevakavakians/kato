@@ -245,7 +245,7 @@ import debugpy
 debugpy.listen(("0.0.0.0", 5678))
 # debugpy.wait_for_client()  # Optional: pause until debugger attaches
 
-# In docker-compose.yml, expose port
+# In docker compose.yml, expose port
 services:
   kato:
     ports:
@@ -483,7 +483,7 @@ print(f"Memory: {process.memory_info().rss / 1024 / 1024:.2f} MB")
 **Debug Steps**:
 ```bash
 # Check if services are running
-docker-compose ps
+docker compose ps
 
 # Check service logs
 docker logs kato-clickhouse --tail 50

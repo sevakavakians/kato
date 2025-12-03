@@ -318,7 +318,7 @@ The PERSISTENCE parameter controls the rolling window size for emotive storage.
 # Environment variable
 export PERSISTENCE=5
 
-# In docker-compose.yml
+# In docker compose.yml
 environment:
   - PERSISTENCE=5
 

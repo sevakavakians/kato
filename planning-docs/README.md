@@ -17,7 +17,7 @@ This directory contains planning and design documentation for the KATO (Knowledg
 ### System Status Check
 ```bash
 # Check KATO system status
-docker-compose ps
+docker compose ps
 
 # Run all tests
 ./run_tests.sh
@@ -34,10 +34,10 @@ curl http://localhost:8000/health
 ./start.sh
 
 # Stop services
-docker-compose down
+docker compose down
 
 # Build and restart
-docker-compose up -d --build
+docker compose up -d --build
 
 # Run all tests
 ./run_tests.sh
@@ -48,7 +48,7 @@ docker-compose up -d --build
 ./run_tests.sh tests/tests/api/
 
 # View logs
-docker-compose logs
+docker compose logs
 docker logs kato --tail 50
 ```
 
@@ -64,7 +64,7 @@ docker logs kato --tail 50
 vim kato/workers/kato_processor.py
 
 # 2. Rebuild and restart
-docker-compose up -d --build
+docker compose up -d --build
 
 # 3. Run relevant tests
 ./run_tests.sh tests/tests/unit/test_processor.py
@@ -81,8 +81,8 @@ docker-compose up -d --build
 5. Document decisions in **DECISIONS.md** if architectural
 
 #### Troubleshooting
-- Check service status: `docker-compose ps`
-- View system logs: `docker-compose logs`
+- Check service status: `docker compose ps`
+- View system logs: `docker compose logs`
 - Test basic functionality: `curl http://localhost:8000/health`
 - Run specific failing tests: `./run_tests.sh tests/tests/unit/test_failing.py`
 

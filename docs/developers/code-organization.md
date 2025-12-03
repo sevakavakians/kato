@@ -27,7 +27,7 @@ kato/
 │   └── api/                 # API endpoint tests
 ├── docs/                     # Documentation
 ├── scripts/                  # Utility scripts
-├── docker-compose.yml        # Docker services
+├── docker compose.yml        # Docker services
 ├── Dockerfile               # KATO container image
 ├── requirements.txt         # Python dependencies
 ├── requirements.lock        # Locked dependencies

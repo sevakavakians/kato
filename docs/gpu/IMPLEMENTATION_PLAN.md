@@ -399,7 +399,7 @@ docs/gpu/
 
 docker/
 ├── Dockerfile.gpu               # GPU-enabled image
-└── docker-compose.gpu.yml       # GPU service config
+└── docker compose.gpu.yml       # GPU service config
 
 scripts/
 ├── setup_gpu_dev.sh            # Dev environment setup

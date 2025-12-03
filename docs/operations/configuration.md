@@ -13,7 +13,7 @@ Complete reference for all KATO configuration options and environment variables.
 - [Logging Configuration](#logging-configuration)
 - [Session Configuration](#session-configuration)
 - [Environment & Deployment](#environment--deployment)
-- [Docker Compose Examples](#docker-compose-configuration-examples)
+- [Docker Compose Examples](#docker compose-configuration-examples)
 - [Configuration Profiles](#configuration-profiles)
 - [Runtime Configuration Updates](#runtime-configuration-updates)
 - [Best Practices](#configuration-best-practices)
@@ -117,7 +117,7 @@ KATO uses environment variables for configuration. These can be set in:
 - **Default**: Constructed from REDIS_HOST and REDIS_PORT
 - **Description**: Full Redis connection URL (alternative to HOST/PORT)
 - **Example**: `redis://redis:6379`, `redis://localhost:6379/0`
-- **Notes**: Used in docker-compose for session management
+- **Notes**: Used in docker compose for session management
 
 ## Learning Configuration
 

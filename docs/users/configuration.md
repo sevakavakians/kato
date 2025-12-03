@@ -835,7 +835,7 @@ processing:
 export KATO_CONFIG_FILE=/path/to/config.yaml
 ./start.sh
 
-# Or in docker-compose.yml
+# Or in docker compose.yml
 environment:
   - KATO_CONFIG_FILE=/etc/kato/config.yaml
 ```
@@ -854,7 +854,7 @@ curl http://localhost:8000/sessions/{session_id} | jq '.config'
 KATO validates configuration on startup:
 
 ```bash
-docker-compose logs kato | grep "Configuration warning"
+docker compose logs kato | grep "Configuration warning"
 ```
 
 **Common Warnings**:

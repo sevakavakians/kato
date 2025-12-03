@@ -264,7 +264,7 @@ Example:
 #### Resource Limits
 
 ```yaml
-# docker-compose.yml
+# docker compose.yml
 services:
   kato-clickhouse:
     image: clickhouse/clickhouse-server:latest

@@ -8,7 +8,7 @@ Comprehensive guide for diagnosing and resolving common KATO issues.
 
 ```bash
 # Check if KATO is running
-docker-compose ps
+docker compose ps
 
 # Check API health
 curl http://localhost:8000/health
@@ -17,7 +17,7 @@ curl http://localhost:8000/health
 curl http://localhost:8000/status
 
 # View recent logs
-docker-compose logs kato --tail 50
+docker compose logs kato --tail 50
 ```
 
 ## Common Issues and Solutions
@@ -108,7 +108,7 @@ netstat -tulpn | grep 8000
 3. Stop conflicting instance:
 ```bash
 ./kato-manager.sh list
-docker-compose down conflicting-processor  # By ID or name
+docker compose down conflicting-processor  # By ID or name
 ```
 
 #### Stopped Containers Not Removed
@@ -124,7 +124,7 @@ docker-compose down conflicting-processor  # By ID or name
 1. Use the updated stop command:
 ```bash
 # New stop command removes containers automatically
-docker-compose down processor-1
+docker compose down processor-1
 ```
 
 2. Clean up old stopped containers manually:
@@ -158,7 +158,7 @@ docker logs kato-testing --tail 20
 
 2. Restart container to reset state:
 ```bash
-docker-compose restart
+docker compose restart
 ```
 
 3. Verify service health:
@@ -186,7 +186,7 @@ cd tests
 ```bash
 docker images | grep kato
 # If missing, build once:
-docker-compose build
+docker compose build
 ```
 
 3. Skip virtual environment if causing issues:
@@ -221,7 +221,7 @@ lsof -i :8000
 3. Rebuild image:
 ```bash
 ./kato-manager.sh clean
-docker-compose build --no-cache
+docker compose build --no-cache
 ./start.sh
 ```
 
@@ -249,14 +249,14 @@ docker logs kato-api-${USER}-1 --tail 100
 2. Check memory limits:
 ```bash
 docker stats kato-api-${USER}-1
-# Increase if needed in docker-compose.yml
+# Increase if needed in docker compose.yml
 ```
 
 3. Verify database connections:
 ```bash
 # Check database services are running
-docker-compose ps
-docker-compose logs
+docker compose ps
+docker compose logs
 ```
 
 ### API Issues
@@ -339,7 +339,7 @@ docker stats kato-api-${USER}-1
 
 2. Optimize configuration:
 ```bash
-docker-compose restart \
+docker compose restart \
   --indexer-type VI \
   --max-predictions 50 \
   --recall-threshold 0.3
@@ -372,7 +372,7 @@ curl -X POST http://localhost:8000/clear-all
 
 2. Limit pattern length:
 ```bash
-docker-compose restart --max-seq-length 100
+docker compose restart --max-seq-length 100
 ```
 
 3. Reduce pattern count:
@@ -404,7 +404,7 @@ docker logs kato | grep "Processing time"
 
 3. Restart to clear state:
 ```bash
-docker-compose restart
+docker compose restart
 ```
 
 #### Memory Issues
@@ -482,7 +482,7 @@ docker inspect kato-cluster_default_<id> | grep NetworkMode
 3. Verify database containers are running:
 ```bash
 docker ps | grep cluster
-docker-compose ps
+docker compose ps
 ```
 
 4. Check environment variables in test container:
@@ -596,8 +596,8 @@ TestCluster(
 ```bash
 docker system prune -f
 docker rmi kato:latest
-docker-compose build --no-cache
-docker-compose restart
+docker compose build --no-cache
+docker compose restart
 ```
 
 2. **Test Isolation Issues with Gene Values**
@@ -733,9 +733,9 @@ docker logs kato-api-${USER}-1 > kato-debug.log 2>&1
 
 ```bash
 # Complete cleanup and restart
-docker-compose down
+docker compose down
 ./kato-manager.sh clean
-docker-compose build
+docker compose build
 ./start.sh
 ```
 
@@ -752,8 +752,8 @@ docker stop $(docker ps -q --filter "name=kato")
 # Remove all KATO containers
 docker rm -f $(docker ps -aq --filter "name=kato")
 
-# Or use docker-compose
-docker-compose down
+# Or use docker compose
+docker compose down
 ```
 
 ## Diagnostic Scripts
@@ -861,14 +861,14 @@ When reporting issues, collect:
 # System info
 uname -a
 docker version
-docker-compose version
+docker compose version
 
 # KATO logs
 docker logs kato --tail 1000 > kato.log
 docker logs kato-testing --tail 1000 > kato-testing.log
 
 # Database logs
-docker-compose logs --tail 1000 > database.log
+docker compose logs --tail 1000 > database.log
 
 # Container details
 docker inspect kato > container-primary.json
@@ -899,7 +899,7 @@ docker logs kato-api-${USER}-1 2>&1 | rotatelogs -n 5 /var/log/kato.log 86400
 2. **Clear old data periodically**
 ```bash
 # Weekly cleanup script
-docker-compose down
+docker compose down
 docker system prune -a --volumes
 ./start.sh
 ```
@@ -907,8 +907,8 @@ docker system prune -a --volumes
 3. **Update regularly**
 ```bash
 git pull
-docker-compose build
-docker-compose restart
+docker compose build
+docker compose restart
 ```
 
 ### Monitoring Setup

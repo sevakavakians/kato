@@ -274,7 +274,7 @@ curl -X PUT localhost:8000/gpu/config \
   -d '{"enabled": false}'
 
 # Restart services
-docker-compose restart
+docker compose restart
 ```
 
 ---

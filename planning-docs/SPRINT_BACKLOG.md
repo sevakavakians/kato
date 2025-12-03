@@ -35,12 +35,12 @@ Phase 4 (Symbol Statistics & Fail-Fast Architecture) is 100% complete. The Click
 - [ ] Remove MongoDB environment variables from `kato/config/settings.py`
   - MONGO_DB, MONGO_COLLECTION, MONGO_HOST, MONGO_PORT
   - MONGO_USERNAME, MONGO_PASSWORD (if present)
-- [ ] Update docker-compose.yml environment section
+- [ ] Update docker compose.yml environment section
   - Remove MONGO_* environment variable references
   - Verify ClickHouse and Redis variables remain
 
 #### Sub-Phase 3: Infrastructure Cleanup (30 min)
-- [ ] Remove MongoDB service from `docker-compose.yml`
+- [ ] Remove MongoDB service from `docker compose.yml`
   - Remove `mongo:` service definition
   - Remove MongoDB volume mounts
   - Remove MongoDB network references
@@ -51,7 +51,7 @@ Phase 4 (Symbol Statistics & Fail-Fast Architecture) is 100% complete. The Click
 
 #### Sub-Phase 4: Testing & Verification (1-2 hours)
 - [ ] Rebuild containers
-  - `docker-compose build --no-cache kato`
+  - `docker compose build --no-cache kato`
   - Verify build succeeds without MongoDB dependencies
 - [ ] Run integration tests
   - Target: 9/11+ tests passing (baseline from Phase 4)
@@ -68,7 +68,7 @@ Phase 4 (Symbol Statistics & Fail-Fast Architecture) is 100% complete. The Click
 #### Success Criteria
 - ✅ No MongoDB imports in codebase
 - ✅ Tests passing (9/11+ integration tests)
-- ✅ MongoDB service not in docker-compose.yml
+- ✅ MongoDB service not in docker compose.yml
 - ✅ No MongoDB connection attempts in logs
 - ✅ Pattern learning and predictions working
 - ✅ Container builds successfully without pymongo
@@ -86,21 +86,21 @@ Phase 4 (Symbol Statistics & Fail-Fast Architecture) is 100% complete. The Click
 **Objective**: Replace MongoDB with hybrid architecture for 100-300x performance improvement
 
 #### Phase 1: Infrastructure Foundation ✅ VERIFIED (2025-11-12)
-- [x] Add ClickHouse service to docker-compose.yml
+- [x] Add ClickHouse service to docker compose.yml
 - [x] Create ClickHouse schema (patterns_data table with MergeTree engine)
 - [x] Design indexes (length, token_set, minhash_sig with bloom filters)
 - [x] Create LSH buckets table for MinHash locality-sensitive hashing
 - [x] Configure Redis persistence (RDB + AOF hybrid mode)
 - [x] Extend ConnectionManager with ClickHouse client support
 - [x] Add dependencies (clickhouse-connect>=0.7.0, datasketch>=1.6.0)
-- [x] **VERIFIED**: Changed KATO_ARCHITECTURE_MODE default to 'hybrid' in docker-compose.yml
+- [x] **VERIFIED**: Changed KATO_ARCHITECTURE_MODE default to 'hybrid' in docker compose.yml
 - [x] **VERIFIED**: Fixed Redis networking (disabled protected-mode for Docker)
 - [x] **VERIFIED**: Added ClickHouse config to kato/config/settings.py
 - [x] **VERIFIED**: All 43 tests run successfully in hybrid mode (96.9% pass rate)
 - [x] **VERIFIED**: Filter pipeline functional with 4-stage filtering
 - **Status**: ✅ Complete + VERIFIED
 - **Files Created**: 3 (config/clickhouse/init.sql, users.xml, config/redis.conf)
-- **Files Modified**: 4 (docker-compose.yml, connection_manager.py, settings.py, requirements.txt)
+- **Files Modified**: 4 (docker compose.yml, connection_manager.py, settings.py, requirements.txt)
 - **Test Results**: 12/12 hybrid-specific tests passing, 31/32 integration tests passing
 - **Performance**: ClickHouse 37.5ms response time, filter pipeline operational
 

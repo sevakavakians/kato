@@ -47,7 +47,7 @@ Users can configure:
 ### Completed Tasks
 
 1. **ClickHouse Service Integration** ✅
-   - Added ClickHouse service to docker-compose.yml
+   - Added ClickHouse service to docker compose.yml
    - Port: 8123 (HTTP), 9000 (Native)
    - Image: clickhouse/clickhouse-server:latest
    - Healthcheck: Configured with proper intervals
@@ -80,7 +80,7 @@ Users can configure:
 - `config/redis.conf` - RDB + AOF persistence configuration
 
 ### Files Modified (Phase 1)
-- `docker-compose.yml` - Added ClickHouse service, updated Redis configuration
+- `docker compose.yml` - Added ClickHouse service, updated Redis configuration
 - `kato/storage/connection_manager.py` - Extended with ClickHouse support
 - `requirements.txt` - Added clickhouse-connect and datasketch
 
@@ -314,12 +314,12 @@ Phase 4 (Symbol Statistics & Fail-Fast Architecture) is 100% complete. The Click
 - [x] Removed MongoDB environment variables from `kato/config/settings.py`:
   - Removed MONGO_BASE_URL configuration
   - Removed MONGO_TIMEOUT configuration
-- [x] Removed MongoDB service from docker-compose.yml:
+- [x] Removed MongoDB service from docker compose.yml:
   - Removed MongoDB container service
   - Removed MongoDB environment variables
 
 #### ✅ Sub-Phase 3: Infrastructure Cleanup
-- [x] Removed MongoDB service from `docker-compose.yml`:
+- [x] Removed MongoDB service from `docker compose.yml`:
   - Removed MongoDB service definition
   - Removed MongoDB volumes
   - Removed MongoDB dependencies
@@ -330,14 +330,14 @@ Phase 4 (Symbol Statistics & Fail-Fast Architecture) is 100% complete. The Click
 #### ⏸️ Sub-Phase 4: Testing & Verification (Deferred to User)
 - Testing and verification deferred to user per request
 - User actions required:
-  1. Rebuild containers: `docker-compose build --no-cache kato`
-  2. Restart services: `docker-compose up -d`
+  1. Rebuild containers: `docker compose build --no-cache kato`
+  2. Restart services: `docker compose up -d`
   3. Run integration tests: `./run_tests.sh --no-start --no-stop`
   4. Verify logs: No MongoDB connection attempts should appear
 
 ### Success Criteria ✅
 - ✅ No MongoDB imports in codebase
-- ✅ MongoDB service removed from docker-compose.yml
+- ✅ MongoDB service removed from docker compose.yml
 - ✅ pymongo removed from requirements.txt
 - ✅ Code compiles without errors
 - ✅ Hybrid architecture required and validated
@@ -352,7 +352,7 @@ Phase 4 (Symbol Statistics & Fail-Fast Architecture) is 100% complete. The Click
 - 455 deletions(-)
 
 ### Files Modified
-1. `docker-compose.yml` - Removed MongoDB service, volumes, dependencies
+1. `docker compose.yml` - Removed MongoDB service, volumes, dependencies
 2. `kato/config/settings.py` - Removed MONGO_BASE_URL, MONGO_TIMEOUT
 3. `kato/informatics/knowledge_base.py` - Removed unused methods (learnAssociation, associative_action_kb, predictions_kb, __akb_repr__)
 4. `kato/searches/pattern_search.py` - Removed MongoDB mode, made hybrid required
@@ -541,7 +541,7 @@ result = client.query("SELECT * FROM patterns_data WHERE length BETWEEN 5 AND 10
   - ✅ Testing Complete (9/11 integration tests passing, 82% pass rate)
 - ✅ MongoDB Removal Follow-up - 100% Complete (4 hours)
   - ✅ All MongoDB code removed (connection_manager.py cleaned)
-  - ✅ All MongoDB configuration removed (settings.py, docker-compose.yml)
+  - ✅ All MongoDB configuration removed (settings.py, docker compose.yml)
   - ✅ All MongoDB dependencies removed (pymongo from requirements.txt)
   - ✅ Hybrid architecture now mandatory (no fallback)
   - ✅ Git commit created (2bb9880)

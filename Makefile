@@ -55,16 +55,16 @@ pre-commit: ## Run pre-commit hooks on all files
 	pre-commit run --all-files
 
 docker-build: ## Build Docker image (no cache)
-	docker-compose build --no-cache
+	docker compose build --no-cache
 
 docker-up: ## Start Docker services
 	./start.sh
 
 docker-down: ## Stop Docker services
-	docker-compose down
+	docker compose down
 
 docker-restart: ## Restart Docker services
-	docker-compose restart
+	docker compose restart
 
 docker-logs: ## View Docker logs
-	docker-compose logs -f kato
+	docker compose logs -f kato

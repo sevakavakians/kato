@@ -132,7 +132,7 @@ async def create_session(user=Depends(verify_token)):
 ### Environment Configuration
 
 ```yaml
-# docker-compose.yml
+# docker compose.yml
 services:
   kato:
     image: ghcr.io/sevakavakians/kato:3.0.0

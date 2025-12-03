@@ -61,8 +61,8 @@ Phase 4 (Symbol Statistics & Fail-Fast Architecture) of the ClickHouse + Redis h
 
 **Impact**: Cleaner configuration, no MongoDB-specific env vars
 
-#### docker-compose.yml - Removed MongoDB Service
-**File**: `docker-compose.yml`
+#### docker compose.yml - Removed MongoDB Service
+**File**: `docker compose.yml`
 
 **Changes**:
 1. Removed MongoDB service definition
@@ -73,15 +73,15 @@ Phase 4 (Symbol Statistics & Fail-Fast Architecture) of the ClickHouse + Redis h
 
 ### Sub-Phase 3: Infrastructure Cleanup ✅
 
-#### docker-compose.yml - Complete MongoDB Removal
-**File**: `docker-compose.yml`
+#### docker compose.yml - Complete MongoDB Removal
+**File**: `docker compose.yml`
 
 **Changes**:
 1. Removed MongoDB service
 2. Removed MongoDB volumes
 3. Removed MongoDB dependencies from KATO service
 
-**Impact**: Simplified docker-compose.yml, 2 databases instead of 3
+**Impact**: Simplified docker compose.yml, 2 databases instead of 3
 
 #### requirements.txt - Removed pymongo Dependency
 **File**: `requirements.txt`
@@ -98,8 +98,8 @@ Phase 4 (Symbol Statistics & Fail-Fast Architecture) of the ClickHouse + Redis h
 **Status**: Deferred to user per request
 
 **User Actions Required**:
-1. Rebuild containers: `docker-compose build --no-cache kato`
-2. Restart services: `docker-compose up -d`
+1. Rebuild containers: `docker compose build --no-cache kato`
+2. Restart services: `docker compose up -d`
 3. Run integration tests: `./run_tests.sh --no-start --no-stop`
 4. Verify logs: No MongoDB connection attempts should appear
 
@@ -107,7 +107,7 @@ Phase 4 (Symbol Statistics & Fail-Fast Architecture) of the ClickHouse + Redis h
 
 ### Met ✅
 - ✅ No MongoDB imports in codebase
-- ✅ MongoDB service removed from docker-compose.yml
+- ✅ MongoDB service removed from docker compose.yml
 - ✅ pymongo removed from requirements.txt
 - ✅ Code compiles without errors
 - ✅ Hybrid architecture required and validated
@@ -130,7 +130,7 @@ Phase 4 (Symbol Statistics & Fail-Fast Architecture) of the ClickHouse + Redis h
 
 ## Files Modified
 
-1. **docker-compose.yml**
+1. **docker compose.yml**
    - Removed MongoDB service, volumes, dependencies
    - Impact: Simplified orchestration
 
@@ -169,7 +169,7 @@ Phase 4 (Symbol Statistics & Fail-Fast Architecture) of the ClickHouse + Redis h
 - **Imports Cleaned**: pymongo removed from all files
 
 ### Container Footprint ✅
-- **Service Reduction**: MongoDB service removed from docker-compose.yml
+- **Service Reduction**: MongoDB service removed from docker compose.yml
 - **Volume Reduction**: MongoDB volumes removed
 - **Dependency Reduction**: pymongo removed from requirements.txt
 - **Container Size**: Smaller KATO container image (fewer dependencies)
@@ -200,8 +200,8 @@ Phase 4 (Symbol Statistics & Fail-Fast Architecture) of the ClickHouse + Redis h
 ## Next Steps
 
 ### User Actions Required
-1. **Rebuild Container**: `docker-compose build --no-cache kato`
-2. **Restart Services**: `docker-compose up -d`
+1. **Rebuild Container**: `docker compose build --no-cache kato`
+2. **Restart Services**: `docker compose up -d`
 3. **Run Integration Tests**: `./run_tests.sh --no-start --no-stop`
 4. **Verify Logs**: Check for MongoDB connection attempts (should be none)
 

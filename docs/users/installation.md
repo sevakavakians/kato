@@ -53,7 +53,7 @@ sudo sh get-docker.sh
 
 # Install Docker Compose
 sudo apt-get update
-sudo apt-get install docker-compose-plugin
+sudo apt-get install docker compose-plugin
 
 # Add user to docker group
 sudo usermod -aG docker $USER
@@ -90,7 +90,7 @@ The startup script will:
 
 ```bash
 # Check service status
-docker-compose ps
+docker compose ps
 
 # Test KATO API
 curl http://localhost:8000/health
@@ -189,7 +189,7 @@ echo "PORT=9000" >> .env
 
 ```bash
 # Check all services are running
-docker-compose ps
+docker compose ps
 
 # Expected output:
 # NAME                STATUS
@@ -243,13 +243,13 @@ For complete walkthrough, see [First Session Guide](first-session.md).
 
 ```bash
 # Stop KATO
-docker-compose down
+docker compose down
 
 # Pull latest changes
 git pull
 
 # Rebuild images
-docker-compose build --no-cache
+docker compose build --no-cache
 
 # Restart KATO
 ./start.sh
@@ -273,7 +273,7 @@ docker cp kato-qdrant:/qdrant/storage ./qdrant-backup-$(date +%Y%m%d)
 
 ```bash
 # Stop and remove containers
-docker-compose down
+docker compose down
 ```
 
 Data persists in Docker volumes and can be restored by running `./start.sh` again.
@@ -282,7 +282,7 @@ Data persists in Docker volumes and can be restored by running `./start.sh` agai
 
 ```bash
 # Stop and remove everything
-docker-compose down -v
+docker compose down -v
 
 # Remove Docker images
 docker rmi kato:latest
@@ -339,15 +339,15 @@ sudo ./start.sh
 **Solution**:
 ```bash
 # Check logs
-docker-compose logs kato
+docker compose logs kato
 
 # Common fixes:
 # 1. Ensure ClickHouse/Qdrant/Redis are running first
-docker-compose up -d clickhouse qdrant redis
-docker-compose up -d kato
+docker compose up -d clickhouse qdrant redis
+docker compose up -d kato
 
 # 2. Rebuild without cache
-docker-compose build --no-cache kato
+docker compose build --no-cache kato
 ./start.sh
 ```
 

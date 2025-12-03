@@ -78,7 +78,7 @@ Choose the deployment method that best fits your needs:
 - ✅ Clean separation from development environment
 
 **Files included:**
-- `docker-compose.yml` - Service orchestration
+- `docker compose.yml` - Service orchestration
 - `start.sh` - Management script
 - `.env.example` - Configuration template
 - `README.md` - This documentation
@@ -119,7 +119,7 @@ cd kato/deployment
 
 ### Option 3: Manual Docker Commands
 
-**Best for:** Custom setups, testing, environments without docker-compose
+**Best for:** Custom setups, testing, environments without docker compose
 
 **No files required** - just run these commands:
 
@@ -214,7 +214,7 @@ docker volume rm kato-mongo-data kato-qdrant-data kato-redis-data
 
 **Advantages:**
 - ✅ No files required at all
-- ✅ Works without docker-compose
+- ✅ Works without docker compose
 - ✅ Full control over every parameter
 - ✅ Easy to customize and modify
 - ✅ Good for scripting and automation
@@ -327,7 +327,7 @@ See `.env.example` for all configurable options including:
 
 ### Port Customization
 
-To use different ports, edit `docker-compose.yml`:
+To use different ports, edit `docker compose.yml`:
 
 ```yaml
 ports:
@@ -462,7 +462,7 @@ curl http://localhost:8000/metrics
 ### Out of Memory
 
 1. **Reduce MongoDB cache:**
-   Edit `docker-compose.yml`:
+   Edit `docker compose.yml`:
    ```yaml
    command: mongod --wiredTigerCacheSizeGB 1
    ```
@@ -486,7 +486,7 @@ curl http://localhost:8000/metrics
 ### Security
 
 1. **Network Isolation:**
-   - Remove port exposures in `docker-compose.yml`
+   - Remove port exposures in `docker compose.yml`
    - Use reverse proxy (nginx, Traefik) for public access
    - Enable TLS/SSL certificates
 
@@ -508,7 +508,7 @@ curl http://localhost:8000/metrics
    - Session affinity/sticky sessions
 
 2. **Resource Limits:**
-   Add to `docker-compose.yml`:
+   Add to `docker compose.yml`:
    ```yaml
    deploy:
      resources:
@@ -620,11 +620,11 @@ image: ghcr.io/sevakavakians/kato:latest
 # - Preserve all data (MongoDB, Qdrant, Redis)
 ```
 
-#### Method 2: Change Version in docker-compose.yml
+#### Method 2: Change Version in docker compose.yml
 
 ```bash
-# 1. Edit docker-compose.yml
-vim docker-compose.yml
+# 1. Edit docker compose.yml
+vim docker compose.yml
 
 # Change:
 #   image: ghcr.io/sevakavakians/kato:2.0.0
@@ -697,11 +697,11 @@ docker stop kato
 docker rm kato
 
 # 2. Start previous version
-# (Update version number in docker-compose.yml or docker run command)
+# (Update version number in docker compose.yml or docker run command)
 ./start.sh start
 
-# Or with docker-compose
-docker-compose up -d kato
+# Or with docker compose
+docker compose up -d kato
 ```
 
 Data in MongoDB, Qdrant, and Redis volumes is preserved during version changes.

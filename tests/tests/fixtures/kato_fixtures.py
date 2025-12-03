@@ -245,7 +245,7 @@ class KATOFastAPIFixture:
                 print("\n" + "="*60)
                 print("WARNING: No KATO services found!")
                 print("Start a KATO FastAPI service with:")
-                print("  docker-compose -f docker-compose.fastapi.yml up kato-testing")
+                print("  docker compose -f docker compose.fastapi.yml up kato-testing")
                 print("Or run locally with:")
                 print("  PROCESSOR_ID=testing uvicorn kato.services.kato_fastapi:app")
                 print("="*60 + "\n")

@@ -293,7 +293,7 @@ curl http://localhost:8000/metrics
 1. **Connection Refused**: Check service status
    ```bash
    docker ps
-   docker-compose ps
+   docker compose ps
    ```
 
 2. **Database Connection**: Verify storage services are running

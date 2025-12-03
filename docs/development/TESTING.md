@@ -280,7 +280,7 @@ def test_with_custom_config(kato_fixture):
 #### Database Connection Issues
 - **Issue**: Tests timeout connecting to MongoDB/Qdrant
 - **Solution**: Check KATO logs: `docker logs kato-api-$(whoami)-1`
-- **Solution**: Restart KATO: `docker-compose restart`
+- **Solution**: Restart KATO: `docker compose restart`
 
 #### Test Isolation Issues
 - **Issue**: Tests affect each other

@@ -994,6 +994,232 @@ self.client.insert('kato.patterns_data', [list(row.values())], column_names=list
 
 ---
 
+## 2025-11-29 - DECISION-008: Filter Pipeline Default Changed to Empty (Breaking Change)
+**Decision**: Change default filter pipeline from `["length", "jaccard", "rapidfuzz"]` to `[]` (empty)
+**Status**: COMPLETE - All code and documentation updated
+**Classification**: BREAKING CHANGE
+
+### Context
+KATO's filter pipeline system pre-filters pattern candidates before core matching to improve performance at scale. The previous default (`["length", "jaccard", "rapidfuzz"]`) was applied automatically to all sessions unless explicitly overridden.
+
+### Problem with Previous Default
+**Issue**: Default filtering reduced recall by filtering out potentially valid matches
+**Impact**: Users unaware of filtering might miss relevant patterns
+**Philosophy Conflict**: KATO prioritizes transparency and explainability - implicit filtering violates this principle
+
+### Decision
+**Change default filter pipeline to `[]` (empty list)**
+
+**Behavior**:
+- Empty pipeline = no pre-filtering
+- All patterns pass to core matching algorithm
+- Maximum recall by default
+- Users must explicitly opt-in to filtering
+
+### Rationale
+1. **Transparency First**: Users should know filtering is happening (not hidden by defaults)
+2. **Maximum Recall**: Small datasets (<100K patterns) don't need filtering and benefit from complete pattern evaluation
+3. **Explicit Configuration**: Users with large-scale deployments (>100K patterns) understand their performance needs and can configure appropriately
+4. **Simpler Mental Model**: Empty default is easier to understand than complex multi-stage default
+5. **Debugging**: Easier to diagnose issues when default behavior is "no filtering"
+
+### Alternatives Considered
+
+#### Alternative 1: Keep Existing Default
+**Approach**: Maintain `["length", "jaccard", "rapidfuzz"]` as default
+
+**Pros**:
+- No breaking change
+- Better default performance for large datasets
+- Existing users unaffected
+
+**Cons**:
+- Reduces recall by default (filters out valid matches)
+- Violates transparency principle (hidden filtering)
+- Users may not know they're missing results
+- Harder to debug (filtering applied implicitly)
+
+**Rejected**: Conflicts with KATO's core transparency philosophy
+
+#### Alternative 2: Smart Defaults Based on Pattern Count
+**Approach**: Auto-enable filtering when pattern count exceeds threshold (e.g., 100K)
+
+**Pros**:
+- Best of both worlds (performance + recall)
+- Adapts to scale automatically
+
+**Cons**:
+- Complex implementation (needs pattern count tracking)
+- Non-deterministic behavior (changes based on data size)
+- Harder to predict system behavior
+- More difficult to debug
+
+**Rejected**: Adds complexity without clear benefit, harder to reason about
+
+#### Alternative 3: Make Filter Pipeline Required (No Default)
+**Approach**: Force users to explicitly set filter pipeline on session creation
+
+**Pros**:
+- Maximum explicitness
+- No hidden behavior
+
+**Cons**:
+- Poor developer experience (extra config for every session)
+- Breaking change with no backward compatibility
+- Overkill for most use cases
+
+**Rejected**: Too harsh, empty default provides good DX
+
+### Implementation
+
+**Code Changes (3 files)**:
+1. `kato/filters/executor.py:71`
+   ```python
+   # OLD
+   return ["length", "jaccard", "rapidfuzz"]
+   # NEW
+   return []
+   ```
+
+2. `kato/config/configuration_service.py:100`
+   ```python
+   # OLD
+   filter_pipeline=["length", "jaccard", "rapidfuzz"]
+   # NEW
+   filter_pipeline=[]
+   ```
+
+3. `kato/workers/pattern_processor.py:214`
+   ```python
+   # OLD
+   pipeline = config.get("filter_pipeline", ["length", "jaccard", "rapidfuzz"])
+   # NEW
+   pipeline = config.get("filter_pipeline", [])
+   ```
+
+**Documentation Updates (4 files)**:
+1. `docs/users/configuration.md` - 6 references updated
+2. `docs/reference/api/configuration.md` - 4 examples updated
+3. `docs/reference/session-configuration.md:64` - Table definition updated
+4. `docs/reference/filter-pipeline-guide.md` - New section explaining default behavior
+
+### Migration Path
+
+**For Small Deployments (<100K patterns)**:
+- No action required
+- Will benefit from maximum recall with acceptable performance
+
+**For Large Deployments (>100K patterns)**:
+- Add explicit filter pipeline configuration:
+  ```python
+  session_config = {
+      "filter_pipeline": ["length", "jaccard", "rapidfuzz"],
+      "length_max_deviation": 2,
+      "jaccard_min_similarity": 0.7
+  }
+  ```
+
+**For Production Systems**:
+- Review current configuration
+- Add explicit filter pipeline if relying on defaults
+- Test performance and recall trade-offs
+- Document chosen configuration
+
+### Consequences
+
+#### Positive Consequences
+1. **Maximum Transparency**: Users know exactly what filtering (if any) is applied
+2. **Better Defaults**: Maximum recall for small datasets (most common use case)
+3. **Explicit Opt-In**: Performance-critical users configure filtering knowingly
+4. **Easier Debugging**: No hidden filtering to confuse troubleshooting
+5. **Simpler Mental Model**: Empty = no filtering (obvious behavior)
+6. **Philosophy Alignment**: Matches KATO's transparency and explainability goals
+
+#### Negative Consequences
+1. **Breaking Change**: Production systems using defaults may see performance degradation
+2. **User Education**: Need to communicate when/why to enable filtering
+3. **Performance Risk**: Large deployments without explicit config will slow down
+4. **Migration Burden**: Users need to update configurations
+
+#### Mitigation Strategies
+1. **Comprehensive Documentation**: All docs updated with new default and migration path
+2. **Clear Communication**: Breaking change flagged in release notes
+3. **Migration Guide**: Step-by-step instructions for affected users
+4. **Performance Monitoring**: Recommend users with >100K patterns add filtering
+
+### Impact Assessment
+
+**Systems Affected**:
+- Production systems relying on default filtering behavior
+- Systems with >100K patterns (performance degradation without explicit config)
+- New deployments (will get new default)
+
+**Systems Unaffected**:
+- Systems with explicit `filter_pipeline` configuration (already overriding default)
+- Small-scale deployments (<10K patterns, performance acceptable without filtering)
+- Test environments (typically small data volumes)
+
+**Performance Impact**:
+- Small datasets (<10K): Negligible (core matching fast enough)
+- Medium datasets (10K-100K): Minor (10-100ms increase, acceptable)
+- Large datasets (>100K): Significant (100ms-1s+, filtering recommended)
+- Billion-scale: Critical (must configure filtering for acceptable performance)
+
+### Verification
+
+**Code Verification**:
+- ✅ All 3 code files updated consistently
+- ✅ Default return values changed to `[]`
+- ✅ No hardcoded fallbacks to old default
+
+**Documentation Verification**:
+- ✅ All 4 documentation files updated
+- ✅ Examples show empty default
+- ✅ Migration path documented
+- ✅ Performance recommendations added
+
+**Testing**:
+- ✅ Default behavior tested (empty pipeline)
+- ✅ Explicit configuration tested (custom pipeline)
+- ✅ Performance acceptable for small datasets
+
+### Related Decisions
+- **DECISION-006**: Hybrid ClickHouse + Redis Architecture (filter pipeline infrastructure)
+- **DECISION-007**: Stateless Processor Architecture (session configuration system)
+
+### References
+- Filter Pipeline Guide: `docs/reference/filter-pipeline-guide.md`
+- Session Configuration: `docs/reference/session-configuration.md`
+- Configuration API: `docs/reference/api/configuration.md`
+- User Configuration Guide: `docs/users/configuration.md`
+
+**Timeline**:
+- Decided: 2025-11-29
+- Implemented: 2025-11-29
+- Documented: 2025-11-29
+- Status: COMPLETE ✅
+
+**Confidence**: Very High
+- Change is intentional and well-reasoned
+- All code and documentation updated consistently
+- Clear migration path provided
+- Aligns with KATO's core philosophy
+
+**Risk**: Medium
+- **Breaking change** for production users relying on defaults
+- **Performance impact** for large-scale systems without explicit configuration
+- Mitigated by comprehensive documentation and clear communication
+
+**Reversibility**: High
+- Users can restore old behavior with explicit configuration
+- No data migrations required
+- Configuration-only change
+- Can be reverted in code if necessary (git revert)
+
+**Key Principle**: KATO prioritizes transparency and explainability over convenience. Empty default ensures users knowingly configure filtering when needed.
+
+---
+
 ## Template for New Decisions
 ```
 ## YYYY-MM-DD HH:MM - [Decision Title]

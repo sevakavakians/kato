@@ -248,6 +248,15 @@ Make KatoProcessor stateless following standard web application patterns:
 - **Related Work**: planning-docs/initiatives/hybrid-clickhouse-redis.md (v3.0 architecture)
 
 ## Recent Achievements
+- **Filter Pipeline Default Changed to Empty - COMPLETE** (2025-11-29): ✅ BREAKING CHANGE IMPLEMENTATION
+  - **Breaking Change**: Default filter pipeline changed from `["length", "jaccard", "rapidfuzz"]` to `[]`
+  - **Rationale**: Maximum transparency and recall by default, explicit opt-in for filtering
+  - **Code Changes**: 3 files updated (executor.py, configuration_service.py, pattern_processor.py)
+  - **Documentation**: 4 files updated with new default and migration guidance
+  - **Impact**: Production systems with >100K patterns should add explicit filter pipeline configuration
+  - **Philosophy**: Aligns with KATO's transparency principle (no hidden filtering)
+  - **Reversibility**: High - users can restore old behavior with explicit config
+  - **Decision**: Documented as DECISION-008 in DECISIONS.md
 - **Stateless Processor Refactor Phase 3 - COMPLETE** (2025-11-28): ✅ DOCUMENTATION CLEANUP
   - **MongoDB References Removed**: ~200 references across 24 documentation files
   - **Critical Files Updated**: HYBRID_ARCHITECTURE.md (4), KB_ID_ISOLATION.md (1), configuration-management.md (1)

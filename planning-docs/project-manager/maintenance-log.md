@@ -1716,3 +1716,137 @@ All future KATO endpoints must be session-based from the start. Direct processor
 **Duration**: < 5 seconds (automated documentation update)
 **Success**: ✅ All planning documents updated successfully
 
+---
+
+## 2025-11-29 - Documentation Bug Fix: Persistence Default Correction
+
+**Trigger**: Task completion event - Documentation inconsistency fix (persistence default value)
+
+**Event Type**: Documentation bug fix (non-code)
+
+**Context**: Documentation incorrectly stated default `persistence = 20` while code default was `persistence = 5`
+
+**Issue Summary**:
+- **Code Default**: `persistence = 5` (kato/config/settings.py:183) ✅ CORRECT
+- **Documentation**: Incorrectly stated `persistence = 20` in 9 locations ❌ INCORRECT
+- **Impact**: User confusion, incorrect configuration assumptions
+
+**Fix Applied**:
+Updated all 9 documentation locations to correctly reflect the code default of `persistence = 5`
+
+**Documentation Files Modified** (9 references):
+1. `docs/reference/api/utility.md:301` - Updated comment
+2. `docs/reference/pattern-object.md:105` - Updated rules section
+3. `docs/reference/api/configuration.md:36` - Updated JSON example
+4. `docs/reference/api/configuration.md:137` - Updated table entry
+5. `docs/reference/api/configuration.md:465` - Updated code example
+6. `docs/deployment/CONFIGURATION.md:166` - Updated CLI example
+7. `docs/reference/api/sessions.md:325` - Updated JSON example
+8. `docs/reference/session-configuration.md:16` - Updated table entry
+9. `docs/reference/session-configuration.md:149` - Updated JSON example
+
+**Verification**:
+- ✅ Code default verified at `kato/config/settings.py:183` (unchanged, already correct)
+- ✅ All 9 documentation references updated consistently
+- ✅ No code changes required (documentation-only fix)
+- ✅ No breaking changes (code was already correct at 5)
+
+**Impact Assessment**:
+- **User Experience**: Improved - Documentation now matches code behavior
+- **Migration Required**: None - Code was already correct at 5
+- **Breaking Changes**: None - Documentation bug fix only
+- **Confusion Reduction**: Significant - Eliminates discrepancy between docs and code
+
+**Classification**: Documentation Bug Fix (Non-Breaking)
+
+**Confidence**: Very High - All documentation references updated consistently to match verified code default
+
+**Related Work**:
+- Related to DECISION-008 (Filter Pipeline Default Changed) - Similar documentation consistency improvement
+- Part of ongoing documentation accuracy initiative
+
+**Time Spent**: Not tracked (user-completed documentation fix)
+
+**Files Modified by User** (not agent):
+- 9 documentation files updated by user prior to triggering project-manager
+
+**Agent Actions**:
+- Logged documentation fix completion in maintenance log
+- No planning document updates required (documentation-only fix, no active initiative)
+
+**Next Steps**: None - Documentation now consistent with code
+
+**Key Takeaway**: Documentation accuracy is critical for user experience. Regular documentation audits should verify consistency with code defaults.
+
+---
+
+*Agent execution time: < 5 seconds*
+*Response type: Silent operation (maintenance log update only)*
+
+---
+
+## 2025-12-01 - Bugfix: Processor Manager Indentation Error
+
+**Trigger**: Task completion event - Critical bugfix (container restart loop resolved)
+
+**Event Type**: Bugfix completion (P0 - Service Down)
+
+**Context**: KATO container stuck in restart loop due to IndentationError in `processor_manager.py`
+
+**Issue Summary**:
+- **Symptom**: Container restart loop, service completely down
+- **Error**: IndentationError at line 169 in `kato/processors/processor_manager.py`
+- **Root Cause**: Lines 168-176 had incorrect indentation (4 extra spaces)
+- **Impact**: Zero availability, production service down
+- **Severity**: CRITICAL (P0)
+
+**Fix Applied**:
+Corrected indentation in `processor_manager.py` lines 168-176 by dedenting 4 spaces to align with function body level (rather than appearing inside dictionary definition).
+
+**Files Modified**:
+1. `/Users/sevakavakians/PROGRAMMING/kato/kato/processors/processor_manager.py` (lines 168-176 corrected)
+
+**Verification**:
+- ✅ Docker container rebuilt successfully
+- ✅ Container started without errors
+- ✅ Container status: healthy (no restart loop)
+- ✅ No IndentationError in logs
+- ✅ Normal startup sequence observed
+
+**Resolution Time**: ~30 minutes (rapid fix)
+
+**Impact Assessment**:
+- **User Experience**: Service restored, zero downtime post-fix
+- **Migration Required**: None - container rebuild only
+- **Breaking Changes**: None - syntax error fix
+- **Prevention**: Consider adding pre-commit Python syntax validation (pylint/flake8)
+
+**Classification**: Bugfix (Syntax Error, Critical Severity)
+
+**Confidence**: Very High - Container now starts successfully with no errors
+
+**Related Work**:
+- Likely introduced during recent stateless processor refactoring work
+- Context: Phases 1-5 of stateless processor refactor (multiple processor_manager.py edits)
+
+**Time Spent**: ~30 minutes (detection + fix + rebuild + verification)
+
+**Completion Archive Created**:
+- File: `planning-docs/completed/bugs/2025-12-01-processor-manager-indentation-error.md`
+- Comprehensive documentation with before/after code comparison
+- Root cause analysis and prevention recommendations
+
+**Agent Actions**:
+- Created completion archive in bugs/ folder
+- Logged bugfix completion in maintenance log
+- No planning document updates required (no active initiative affected)
+
+**Next Steps**: None - Bug resolved, service operational
+
+**Key Takeaway**: Indentation errors can cause complete service outages but are typically straightforward to diagnose and fix. Consider adding pre-commit syntax validation to catch these during development.
+
+---
+
+*Agent execution time: < 5 seconds*
+*Response type: Silent operation (bugfix completion logged)*
+

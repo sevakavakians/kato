@@ -655,6 +655,138 @@ class KATOFastAPIFixture:
         response.raise_for_status()
         return response.json()
 
+    def _get_actual_kb_id(self, node_id: str, base_id: str = "kato") -> str:
+        """
+        Get the actual kb_id used by ProcessorManager after truncation.
+
+        This replicates the logic from ProcessorManager._get_processor_id() to ensure
+        that test fixtures query Redis with the same kb_id that was used for storage.
+
+        Args:
+            node_id: The node identifier (usually self.processor_id)
+            base_id: Base processor ID (default: "kato")
+
+        Returns:
+            The actual kb_id after truncation (if needed)
+        """
+        import hashlib
+
+        # Clean node_id (remove unsafe characters)
+        safe_node_id = node_id
+        for char in ['/', '\\', '.', '"', '$', '*', '<', '>', ':', '|', '?', '-', ' ']:
+            safe_node_id = safe_node_id.replace(char, '_')
+
+        # Clean base_id
+        safe_base_id = base_id.replace('-', '_')
+
+        # Check if truncation is needed (60 char limit)
+        full_name = f"{safe_node_id}_{safe_base_id}"
+
+        if len(full_name) > 60:
+            # Truncate using same logic as ProcessorManager
+            node_hash = hashlib.md5(safe_node_id.encode(), usedforsecurity=False).hexdigest()[:8]
+            max_node_length = 60 - len(safe_base_id) - 1 - 8 - 1
+            truncated_node = safe_node_id[:max_node_length]
+            return f"{truncated_node}_{node_hash}_{safe_base_id}"
+
+        return full_name
+
+    def get_redis_emotives(self, pattern_name: str) -> Optional[list[dict]]:
+        """
+        Get emotives directly from Redis for validation.
+
+        This bypasses the API and knowledge_base layers to validate actual storage.
+
+        Args:
+            pattern_name: Pattern name (with or without PTRN| prefix)
+
+        Returns:
+            List of emotive dicts if found, None if key doesn't exist
+        """
+        import redis
+
+        # Strip PTRN| prefix if present
+        clean_name = pattern_name[5:] if pattern_name.startswith('PTRN|') else pattern_name
+
+        # Use the actual kb_id (with truncation if needed)
+        kb_id = self._get_actual_kb_id(self.processor_id)
+
+        # Connect to Redis
+        redis_client = redis.Redis(host='localhost', port=6379, decode_responses=True)
+
+        # Query emotives key
+        emotives_key = f"{kb_id}:emotives:{clean_name}"
+        emotives_value = redis_client.get(emotives_key)
+
+        if emotives_value is None:
+            return None
+
+        return json.loads(emotives_value)
+
+    def get_redis_metadata(self, pattern_name: str) -> Optional[dict]:
+        """
+        Get metadata directly from Redis for validation.
+
+        This bypasses the API and knowledge_base layers to validate actual storage.
+
+        Args:
+            pattern_name: Pattern name (with or without PTRN| prefix)
+
+        Returns:
+            Metadata dict if found, None if key doesn't exist
+        """
+        import redis
+
+        # Strip PTRN| prefix if present
+        clean_name = pattern_name[5:] if pattern_name.startswith('PTRN|') else pattern_name
+
+        # Use the actual kb_id (with truncation if needed)
+        kb_id = self._get_actual_kb_id(self.processor_id)
+
+        # Connect to Redis
+        redis_client = redis.Redis(host='localhost', port=6379, decode_responses=True)
+
+        # Query metadata key
+        metadata_key = f"{kb_id}:metadata:{clean_name}"
+        metadata_value = redis_client.get(metadata_key)
+
+        if metadata_value is None:
+            return None
+
+        return json.loads(metadata_value)
+
+    def get_redis_frequency(self, pattern_name: str) -> int:
+        """
+        Get frequency directly from Redis for validation.
+
+        This bypasses the API and knowledge_base layers to validate actual storage.
+
+        Args:
+            pattern_name: Pattern name (with or without PTRN| prefix)
+
+        Returns:
+            Frequency count (0 if key doesn't exist)
+        """
+        import redis
+
+        # Strip PTRN| prefix if present
+        clean_name = pattern_name[5:] if pattern_name.startswith('PTRN|') else pattern_name
+
+        # Use the actual kb_id (with truncation if needed)
+        kb_id = self._get_actual_kb_id(self.processor_id)
+
+        # Connect to Redis
+        redis_client = redis.Redis(host='localhost', port=6379, decode_responses=True)
+
+        # Query frequency key
+        freq_key = f"{kb_id}:frequency:{clean_name}"
+        freq_value = redis_client.get(freq_key)
+
+        if freq_value is None:
+            return 0
+
+        return int(freq_value)
+
 
 # Pytest fixtures
 @pytest.fixture(scope="function")

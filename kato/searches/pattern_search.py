@@ -108,8 +108,43 @@ class InformationExtractor:
         self.use_token_matching = use_token_matching
         self.fast_matcher = FastSequenceMatcher() if use_fast_matcher else None
 
+    def _fuzzy_match_tokens(self, token1: str, token2: str) -> float:
+        """
+        Calculate fuzzy similarity between two tokens using RapidFuzz.
+
+        Args:
+            token1: First token
+            token2: Second token
+
+        Returns:
+            Similarity score (0.0-1.0)
+        """
+        # Handle None or empty inputs
+        if token1 is None or token2 is None:
+            return 0.0
+
+        if token1 == token2:
+            return 1.0
+
+        if RAPIDFUZZ_AVAILABLE:
+            try:
+                ratio = fuzz.ratio(token1, token2)
+                if ratio is None:
+                    return 0.0
+                return ratio / 100.0
+            except Exception:
+                return 0.0
+        else:
+            # Fallback to difflib
+            try:
+                import difflib as difflib_module
+                ratio = difflib_module.SequenceMatcher(None, token1, token2).ratio()
+                return ratio if ratio is not None else 0.0
+            except Exception:
+                return 0.0
+
     def extract_prediction_info(self, pattern: list[str], state: list[str],
-                               cutoff: float) -> Optional[tuple[list[str], list[str], list[str], list[str], list[str], list[str], float, int]]:
+                               cutoff: float, fuzzy_token_threshold: float = 0.0) -> Optional[tuple[list[str], list[str], list[str], list[str], list[str], list[str], float, int, list[dict]]]:
         """
         Extract prediction information using optimized algorithms.
 
@@ -117,19 +152,28 @@ class InformationExtractor:
             pattern: Pattern data as list of symbols.
             state: Current state sequence to match against.
             cutoff: Similarity threshold (0.0 to 1.0).
+            fuzzy_token_threshold: Fuzzy token matching threshold (0.0-1.0, 0.0=disabled).
 
         Returns:
             Tuple containing:
                 - pattern: Original pattern data
-                - matching_intersection: Symbols that matched
+                - matching_intersection: Symbols that matched (exact + fuzzy)
                 - past: Pattern elements before first match
                 - present: Pattern elements in matching region
                 - missing: Pattern elements not found in state
                 - extras: State elements not in pattern
                 - similarity: Calculated similarity ratio
                 - number_of_blocks: Number of matching blocks
+                - anomalies: List of fuzzy matches with similarity scores
             Returns None if similarity is below cutoff.
         """
+        # Defensive: ensure parameters are never None
+        if cutoff is None:
+            logger.error("CRITICAL: cutoff is None in extract_prediction_info! Using default 0.1")
+            cutoff = 0.1
+        if fuzzy_token_threshold is None:
+            fuzzy_token_threshold = 0.0
+
         if self.use_fast_matcher and RAPIDFUZZ_AVAILABLE:
             if self.use_token_matching:
                 # Token-level matching: EXACT difflib compatibility
@@ -153,22 +197,60 @@ class InformationExtractor:
         if similarity < cutoff:
             return None
 
-        # Extract detailed match information (same as original)
-        matcher = difflib.SequenceMatcher()
-        matcher.set_seq1(pattern)
-        matcher.set_seq2(state)
-
+        # Extract detailed match information with optional fuzzy matching
+        anomalies = []  # NEW: Track fuzzy matches that aren't exact
         matching_intersection = []
-        matching_blocks = matcher.get_matching_blocks()
 
-        for block in matching_blocks[:-1]:  # Skip terminator
-            (i, j, n) = tuple(block)
-            matching_intersection += state[j:j+n]
+        # Use fuzzy matching if enabled
+        if fuzzy_token_threshold > 0.0:
+            # Build fuzzy matching map: state_token -> (pattern_token, similarity)
+            fuzzy_matches = {}
+
+            for state_token in state:
+                best_match = None
+                best_similarity = 0.0
+
+                for pattern_token in pattern:
+                    token_similarity = self._fuzzy_match_tokens(state_token, pattern_token)
+                    if token_similarity >= fuzzy_token_threshold and token_similarity > best_similarity:
+                        best_match = pattern_token
+                        best_similarity = token_similarity
+
+                if best_match:
+                    fuzzy_matches[state_token] = (best_match, best_similarity)
+                    matching_intersection.append(state_token)
+
+                    # Track anomaly if not exact match
+                    if state_token != best_match:
+                        anomalies.append({
+                            'observed': state_token,
+                            'expected': best_match,
+                            'similarity': best_similarity
+                        })
+
+            # Build a simple matcher for temporal region extraction
+            # Use pattern positions of matched tokens
+            matcher = difflib.SequenceMatcher()
+            matcher.set_seq1(pattern)
+            matcher.set_seq2(state)
+            matching_blocks = matcher.get_matching_blocks()
+            num_actual_blocks = len(matching_blocks) - 1
+
+        else:
+            # Original exact matching logic (backward compatible)
+            matcher = difflib.SequenceMatcher()
+            matcher.set_seq1(pattern)
+            matcher.set_seq2(state)
+            matching_blocks = matcher.get_matching_blocks()
+
+            for block in matching_blocks[:-1]:  # Skip terminator
+                (i, j, n) = tuple(block)
+                matching_intersection += state[j:j+n]
+
+            num_actual_blocks = len(matching_blocks) - 1
 
         # Extract temporal regions
         # matching_blocks includes a terminator at the end, so actual matches = len(matching_blocks) - 1
-        num_actual_blocks = len(matching_blocks) - 1
-
         if num_actual_blocks >= 2:
             # We have at least 2 actual matching blocks
             (i0, j0, n0) = tuple(matching_blocks[0])
@@ -191,23 +273,38 @@ class InformationExtractor:
 
         number_of_blocks = num_actual_blocks
 
-        # Extract anomalies (missing and extras) using original approach
+        # Extract missing and extras (respecting fuzzy matches)
         missing = []
         extras = []
 
-        if present:
-            matcher.set_seq1(present)
-            # seq2 already has the full state set from earlier
-            diffs = list(matcher.compare())
+        if fuzzy_token_threshold > 0.0:
+            # Calculate missing: pattern tokens (in present) with no fuzzy match in state
+            fuzzy_matches_map = {fuzzy_matches.get(st, (None, 0))[0]: st for st in state if st in fuzzy_matches}
+            flattened_present = list(chain(*present)) if present and len(present) > 0 and isinstance(present[0], list) else present
 
-            for diff in diffs:
-                if diff.startswith("- "):
-                    missing.append(diff[2:])
-                elif diff.startswith("+ "):
-                    extras.append(diff[2:])
+            for pattern_token in flattened_present:
+                if pattern_token not in fuzzy_matches_map:
+                    missing.append(pattern_token)
+
+            # Calculate extras: state tokens with no fuzzy match in pattern
+            for state_token in state:
+                if state_token not in fuzzy_matches:
+                    extras.append(state_token)
+        else:
+            # Original exact matching for missing/extras
+            if present:
+                matcher.set_seq1(present)
+                # seq2 already has the full state set from earlier
+                diffs = list(matcher.compare())
+
+                for diff in diffs:
+                    if diff.startswith("- "):
+                        missing.append(diff[2:])
+                    elif diff.startswith("+ "):
+                        extras.append(diff[2:])
 
         return (pattern, matching_intersection, past, present,
-                missing, extras, similarity, number_of_blocks)
+                missing, extras, similarity, number_of_blocks, anomalies)
 
 
 class PatternSearcher:
@@ -248,7 +345,12 @@ class PatternSearcher:
 
         self.kb_id = kwargs["kb_id"]
         self.max_predictions = kwargs["max_predictions"]
-        self.recall_threshold = kwargs["recall_threshold"]
+        # Ensure recall_threshold is never None - defensive programming
+        recall_threshold_value = kwargs.get("recall_threshold")
+        if recall_threshold_value is None:
+            logger.error("CRITICAL: recall_threshold is None in PatternSearcher initialization! Using default 0.1")
+            recall_threshold_value = 0.1
+        self.recall_threshold = float(recall_threshold_value)
 
         # ClickHouse/Redis hybrid architecture (REQUIRED)
         self.session_config = kwargs.get("session_config", None)
@@ -627,8 +729,8 @@ class PatternSearcher:
         # Build Prediction objects
         active_list = []
         for result in results:
-            if len(result) >= 8:  # Ensure we have all required fields
-                pattern_hash, pattern, matching_intersection, past, present, missing, extras, similarity, number_of_blocks = result[:9]
+            if len(result) >= 9:  # Ensure we have all required fields (including anomalies)
+                pattern_hash, pattern, matching_intersection, past, present, missing, extras, similarity, number_of_blocks, anomalies = result[:10]
 
                 # Fetch pattern data from hybrid architecture cache
                 if self.filter_executor is None:
@@ -645,6 +747,7 @@ class PatternSearcher:
                         extras,
                         similarity,
                         number_of_blocks,
+                        anomalies=anomalies,
                         stm_events=stm_events
                     )
                     active_list.append(pred)
@@ -654,7 +757,7 @@ class PatternSearcher:
         below_threshold_count = 0
         for pred in active_list:
             if 'similarity' in pred:
-                if pred['similarity'] >= self.recall_threshold:
+                if pred['similarity'] >= (self.recall_threshold if self.recall_threshold is not None else 0.1):
                     filtered_list.append(pred)
                 else:
                     # DEFENSIVE: Pattern below threshold detected - should have been filtered earlier
@@ -742,12 +845,17 @@ class PatternSearcher:
                 similarity = score / 100.0
 
                 # Double-check threshold (should be redundant with score_cutoff)
-                if similarity >= self.recall_threshold:
+                if similarity >= (self.recall_threshold if self.recall_threshold is not None else 0.1):
                     pattern_seq = self.patterns_cache[pattern_id]
 
+                    # Get fuzzy_token_threshold from session config
+                    fuzzy_token_threshold = getattr(self.session_config, 'fuzzy_token_threshold', 0.0) if self.session_config else 0.0
+
                     # Extract detailed info for prediction
+                    # Defensive: ensure recall_threshold is never None
+                    recall_threshold_safe = self.recall_threshold if self.recall_threshold is not None else 0.1
                     info = self.extractor.extract_prediction_info(
-                        pattern_seq, state, self.recall_threshold)
+                        pattern_seq, state, recall_threshold_safe, fuzzy_token_threshold)
 
                     logger.info(f"DEBUG: extract_prediction_info returned info={'NOT_NONE' if info else 'NONE'} for pattern_id={pattern_id[:20]}...")
 
@@ -775,7 +883,7 @@ class PatternSearcher:
                 pattern_matcher.set_seq1(pattern_seq)
                 similarity = pattern_matcher.ratio()
 
-                if similarity >= self.recall_threshold:
+                if similarity >= (self.recall_threshold if self.recall_threshold is not None else 0.1):
                     # Extract detailed information
                     matching_intersection = []
                     matching_blocks = pattern_matcher.get_matching_blocks()
@@ -828,9 +936,9 @@ class PatternSearcher:
                         results.append((
                             pattern_id, pattern_seq, matching_intersection,
                             past, present, missing, extras,
-                            similarity, number_of_blocks
+                            similarity, number_of_blocks, []  # anomalies (empty for non-fuzzy matching)
                         ))
-                    elif self.recall_threshold == 0.0:
+                    elif (self.recall_threshold if self.recall_threshold is not None else 0.1) == 0.0:
                         # Special case: threshold 0.0 should include even non-matching patterns
                         past = []
                         present = pattern_seq
@@ -841,7 +949,7 @@ class PatternSearcher:
                         results.append((
                             pattern_id, pattern_seq, matching_intersection,
                             past, present, missing, extras,
-                            similarity, number_of_blocks
+                            similarity, number_of_blocks, []  # anomalies (empty for non-fuzzy matching)
                         ))
 
     async def causalBeliefAsync(self, state: list[str],
@@ -918,7 +1026,9 @@ class PatternSearcher:
                     batch_results = future.result()
                     all_results.extend(batch_results)
                 except Exception as e:
+                    import traceback
                     logger.error(f"Error processing batch: {e}")
+                    logger.error(f"Traceback: {traceback.format_exc()}")
 
         logger.debug(f"Found {len(all_results)} matches above threshold (async parallel)")
 
@@ -930,7 +1040,7 @@ class PatternSearcher:
         below_threshold_count = 0
         for pred in active_list:
             similarity = pred.get('similarity', 0)
-            if similarity >= self.recall_threshold:
+            if similarity >= (self.recall_threshold if self.recall_threshold is not None else 0.1):
                 filtered_list.append(pred)
             else:
                 # DEFENSIVE: Pattern below threshold detected - should have been filtered earlier
@@ -1016,12 +1126,17 @@ class PatternSearcher:
             for _choice_str, score, pattern_id in matches:
                 similarity = score / 100.0
                 # Double-check threshold (should be redundant with score_cutoff)
-                if similarity >= self.recall_threshold:
+                if similarity >= (self.recall_threshold if self.recall_threshold is not None else 0.1):
                     pattern_seq = self.patterns_cache[pattern_id]
 
+                    # Get fuzzy_token_threshold from session config
+                    fuzzy_token_threshold = getattr(self.session_config, 'fuzzy_token_threshold', 0.0) if self.session_config else 0.0
+
                     # Extract detailed info for prediction
+                    # Defensive: ensure recall_threshold is never None
+                    recall_threshold_safe = self.recall_threshold if self.recall_threshold is not None else 0.1
                     info = self.extractor.extract_prediction_info(
-                        pattern_seq, state, self.recall_threshold)
+                        pattern_seq, state, recall_threshold_safe, fuzzy_token_threshold)
 
                     logger.info(f"DEBUG: extract_prediction_info returned info={'NOT_NONE' if info else 'NONE'} for pattern_id={pattern_id[:20]}...")
 
@@ -1031,7 +1146,7 @@ class PatternSearcher:
                         batch_results.append((
                             pattern_id, pattern_seq, info[1],  # matching_intersection
                             info[2], info[3], info[4], info[5],  # past, present, missing, extras
-                            info[6], info[7]  # similarity (from extract_prediction_info), number_of_blocks
+                            info[6], info[7], info[8]  # similarity (from extract_prediction_info), number_of_blocks, anomalies
                         ))
 
         return batch_results
@@ -1053,17 +1168,22 @@ class PatternSearcher:
             if pattern_id in self.patterns_cache:
                 pattern_seq = self.patterns_cache[pattern_id]
 
-                # Use original matching
-                info = self.extractor.extract_prediction_info(
-                    pattern_seq, state, self.recall_threshold)
+                # Get fuzzy_token_threshold from session config
+                fuzzy_token_threshold = getattr(self.session_config, 'fuzzy_token_threshold', 0.0) if self.session_config else 0.0
 
-                if info and len(info) >= 8:
+                # Use original matching
+                # Defensive: ensure recall_threshold is never None
+                recall_threshold_safe = self.recall_threshold if self.recall_threshold is not None else 0.1
+                info = self.extractor.extract_prediction_info(
+                    pattern_seq, state, recall_threshold_safe, fuzzy_token_threshold)
+
+                if info and len(info) >= 9:
                     similarity = info[6] if len(info) > 6 else 0.0
-                    if similarity >= self.recall_threshold:
+                    if similarity >= (self.recall_threshold if self.recall_threshold is not None else 0.1):
                         batch_results.append((
                             pattern_id, pattern_seq, info[1],  # matching_intersection
                             info[2], info[3], info[4], info[5],  # past, present, missing, extras
-                            similarity, info[7] if len(info) > 7 else 0  # similarity, number_of_blocks
+                            similarity, info[7] if len(info) > 7 else 0, info[8] if len(info) > 8 else []  # similarity, number_of_blocks, anomalies
                         ))
 
         return batch_results
@@ -1128,8 +1248,8 @@ class PatternSearcher:
             redis_writer = RedisWriter(self.kb_id, self.redis_client)
 
         for result in batch:
-            if len(result) >= 8:
-                pattern_hash, pattern, matching_intersection, past, present, missing, extras, similarity, number_of_blocks = result[:9]
+            if len(result) >= 9:  # Ensure we have all required fields (including anomalies)
+                pattern_hash, pattern, matching_intersection, past, present, missing, extras, similarity, number_of_blocks, anomalies = result[:10]
 
                 # Fetch pattern data from ClickHouse + Redis (hybrid architecture REQUIRED)
                 pattern_data = None
@@ -1164,6 +1284,7 @@ class PatternSearcher:
                         extras,
                         similarity,
                         number_of_blocks,
+                        anomalies=anomalies,
                         stm_events=stm_events
                     )
                     predictions.append(pred)

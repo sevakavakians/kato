@@ -403,12 +403,10 @@ class SuperKnowledgeBase:
                             logger.warning(f"Received non-list emotives during re-learning: {type(emotives)}")
                             updated_emotives.append(emotives)
 
-                        # Enforce PERSISTENCE rolling window (default 5)
-                        # Get persistence from settings
-                        persistence = self.settings.learning.persistence if hasattr(self, 'settings') else 5
-                        if len(updated_emotives) > persistence:
-                            updated_emotives = updated_emotives[-persistence:]  # Keep last N entries
-                            logger.debug(f"Trimmed emotives to {persistence} entries for pattern {pattern_object.name}")
+                        # Enforce PERSISTENCE rolling window
+                        if len(updated_emotives) > self.persistence:
+                            updated_emotives = updated_emotives[-self.persistence:]  # Keep last N entries
+                            logger.debug(f"Trimmed emotives to {self.persistence} entries for pattern {pattern_object.name}")
 
                     # Process metadata: accumulate unique values
                     updated_metadata = existing_meta.get('metadata', {})
@@ -460,12 +458,21 @@ class SuperKnowledgeBase:
                 self.clickhouse_writer.write_pattern(pattern_object)
                 logger.info(f"[HYBRID] ClickHouse write completed for {pattern_object.name}")
 
+                # Enforce persistence window for NEW patterns (same as re-learned patterns)
+                trimmed_emotives = emotives if emotives else []
+                logger.info(f"[HYBRID] NEW pattern emotives before trim: len={len(trimmed_emotives)}, persistence={self.persistence}")
+                if isinstance(trimmed_emotives, list) and len(trimmed_emotives) > self.persistence:
+                    trimmed_emotives = trimmed_emotives[-self.persistence:]  # Keep last N entries
+                    logger.info(f"[HYBRID] Trimmed emotives from {len(emotives)} to {self.persistence} entries for NEW pattern {pattern_object.name}")
+                else:
+                    logger.info(f"[HYBRID] No trim needed, len={len(trimmed_emotives)} <= persistence={self.persistence}")
+
                 # Write metadata to Redis
                 logger.info(f"[HYBRID] Writing metadata to Redis: {pattern_object.name}")
                 self.redis_writer.write_metadata(
                     pattern_name=pattern_object.name,
                     frequency=1,
-                    emotives=emotives if emotives else [],  # Store as list (rolling window)
+                    emotives=trimmed_emotives,  # Store as list (rolling window enforced)
                     metadata=metadata if metadata else {}
                 )
                 logger.info(f"[HYBRID] Redis write completed for {pattern_object.name}")

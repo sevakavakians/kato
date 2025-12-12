@@ -63,8 +63,8 @@ The metadata processing system flows through multiple components:
                   │
 ┌─────────────────▼───────────────────────────┐
 │        Persistent Storage                   │
-│   • ClickHouse patterns table               │
-│   • Redis metadata cache                    │
+│   • Redis metadata storage (primary)        │
+│   • ClickHouse stores pattern_data only     │
 │   • No expiration (permanent storage)       │
 └─────────────────┬───────────────────────────┘
                   │
@@ -183,16 +183,28 @@ pattern = {
 
 ## Storage Mechanism
 
+### Hybrid Architecture
+
+KATO uses a **hybrid storage architecture** for patterns:
+
+- **ClickHouse**: Stores `pattern_data` (sequences) and indexing structures (MinHash, LSH)
+- **Redis**: Stores `metadata`, `emotives`, and `frequency` (primary storage, not a cache)
+
+This separation enables:
+- ✅ Billion-scale pattern matching (ClickHouse optimized for filtering)
+- ✅ Fast metadata/emotives lookups (Redis K/V operations)
+- ✅ Node isolation via `kb_id` partitioning/namespacing
+
 ### Pattern Data Schema
 
 ```python
-# Pattern storage structure
+# Pattern storage structure (logical view)
 pattern = {
     "name": "PTRN|sha1_hash",
-    "pattern_data": [["A"], ["B", "C"]],
-    "frequency": 5,
-    "emotives": [...],
-    "metadata": {
+    "pattern_data": [["A"], ["B", "C"]],  # Stored in ClickHouse
+    "frequency": 5,                        # Stored in Redis
+    "emotives": [...],                     # Stored in Redis
+    "metadata": {                          # Stored in Redis
         "book": ["Alice in Wonderland", "Through the Looking Glass"],
         "chapter": ["1", "2", "3"],
         "author": ["Lewis Carroll"],
@@ -746,8 +758,8 @@ flag = pattern['metadata']['flag'][0] == 'True'
 - `kato/workers/memory_manager.py`: Processing
 - `kato/workers/pattern_processor.py`: Accumulation
 - `kato/informatics/metrics.py`: Merging function
-- `kato/storage/clickhouse_writer.py`: ClickHouse storage
-- `kato/storage/redis_writer.py`: Redis metadata cache
+- `kato/storage/clickhouse_writer.py`: ClickHouse pattern_data storage
+- `kato/storage/redis_writer.py`: Redis metadata storage (primary)
 - `kato/api/schemas/observation.py`: API schema
 
 ### Storage Operations

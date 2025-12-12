@@ -695,22 +695,19 @@ class PatternProcessor:
                     itfdf_similarity = 0.0
 
                 # Calculate confluence with conditional probability caching if available
-                try:
-                    if self.cached_calculator and len(_present) > 0:
-                        try:
-                            # Use cached conditional probability calculation
-                            conditional_prob = await self.cached_calculator.conditional_probability_cached(
-                                _present, symbol_probability_cache
-                            )
-                            confluence_val = _p_e_h * (1 - conditional_prob)
-                        except Exception as e:
-                            logger.debug(f"Cached conditional probability failed: {e}, falling back to direct calculation")
-                            confluence_val = _p_e_h * (1 - confluence(_present, symbol_probability_cache))
-                    else:
+                # Let exceptions propagate - client should receive HTTP 500 on calculation failure
+                if self.cached_calculator and len(_present) > 0:
+                    try:
+                        # Use cached conditional probability calculation
+                        conditional_prob = await self.cached_calculator.conditional_probability_cached(
+                            _present, symbol_probability_cache
+                        )
+                        confluence_val = _p_e_h * (1 - conditional_prob)
+                    except Exception as e:
+                        logger.debug(f"Cached conditional probability failed: {e}, falling back to direct calculation")
                         confluence_val = _p_e_h * (1 - confluence(_present, symbol_probability_cache))
-                except Exception as e:
-                    logger.debug(f"Error calculating confluence: {e}")
-                    confluence_val = 0.0
+                else:
+                    confluence_val = _p_e_h * (1 - confluence(_present, symbol_probability_cache))
 
                 # Average emotives (convert from list of dicts to single dict)
                 # Note: Emotives from Redis storage are already averaged (dict),
@@ -786,55 +783,47 @@ class PatternProcessor:
 
             # Calculate Bayesian posterior probabilities for ensemble
             # Uses Bayes' theorem: P(pattern|obs) = P(obs|pattern) × P(pattern) / P(obs)
-            try:
-                # Calculate sum of frequencies (for prior probabilities)
-                sum_ensemble_frequencies = sum(p.get('frequency', 1) for p in causal_patterns)
+            # Let exceptions propagate - client should receive HTTP 500 on calculation failure
+            # Calculate sum of frequencies (for prior probabilities)
+            sum_ensemble_frequencies = sum(p.get('frequency', 1) for p in causal_patterns)
 
-                if sum_ensemble_frequencies > 0:
-                    # Calculate evidence: P(obs) = Σ P(obs|pattern) × P(pattern)
-                    # Where P(obs|pattern) = similarity and P(pattern) = frequency/total_freq
-                    evidence_sum = sum(
-                        p['similarity'] * (p.get('frequency', 1) / sum_ensemble_frequencies)
-                        for p in causal_patterns
-                    )
+            if sum_ensemble_frequencies > 0:
+                # Calculate evidence: P(obs) = Σ P(obs|pattern) × P(pattern)
+                # Where P(obs|pattern) = similarity and P(pattern) = frequency/total_freq
+                evidence_sum = sum(
+                    p['similarity'] * (p.get('frequency', 1) / sum_ensemble_frequencies)
+                    for p in causal_patterns
+                )
 
-                    # Calculate posterior for each prediction
-                    for prediction in causal_patterns:
-                        frequency = prediction.get('frequency', 1)
-                        similarity = prediction['similarity']
+                # Calculate posterior for each prediction
+                for prediction in causal_patterns:
+                    frequency = prediction.get('frequency', 1)
+                    similarity = prediction['similarity']
 
-                        # Prior: P(pattern) = frequency / total_frequencies
-                        prior = frequency / sum_ensemble_frequencies
+                    # Prior: P(pattern) = frequency / total_frequencies
+                    prior = frequency / sum_ensemble_frequencies
 
-                        # Likelihood: P(obs|pattern) = similarity score
-                        likelihood = similarity
+                    # Likelihood: P(obs|pattern) = similarity score
+                    likelihood = similarity
 
-                        # Posterior: P(pattern|obs) using Bayes' theorem
-                        if evidence_sum > 0:
-                            posterior = (likelihood * prior) / evidence_sum
-                        else:
-                            posterior = 0.0
+                    # Posterior: P(pattern|obs) using Bayes' theorem
+                    if evidence_sum > 0:
+                        posterior = (likelihood * prior) / evidence_sum
+                    else:
+                        posterior = 0.0
 
-                        # Store Bayesian metrics
-                        prediction['bayesian_posterior'] = posterior
-                        prediction['bayesian_prior'] = prior
-                        prediction['bayesian_likelihood'] = likelihood
-                else:
-                    # No valid frequencies - set all Bayesian metrics to 0
-                    for prediction in causal_patterns:
-                        prediction['bayesian_posterior'] = 0.0
-                        prediction['bayesian_prior'] = 0.0
-                        prediction['bayesian_likelihood'] = prediction['similarity']
-
-                logger.debug(f"Calculated Bayesian posteriors for {len(causal_patterns)} predictions")
-
-            except Exception as e:
-                logger.error(f"Error in Bayesian posterior calculation: {e}")
-                # Set Bayesian metrics to 0 if calculation fails
+                    # Store Bayesian metrics
+                    prediction['bayesian_posterior'] = posterior
+                    prediction['bayesian_prior'] = prior
+                    prediction['bayesian_likelihood'] = likelihood
+            else:
+                # No valid frequencies - set all Bayesian metrics to 0
                 for prediction in causal_patterns:
                     prediction['bayesian_posterior'] = 0.0
                     prediction['bayesian_prior'] = 0.0
-                    prediction['bayesian_likelihood'] = prediction.get('similarity', 0.0)
+                    prediction['bayesian_likelihood'] = prediction['similarity']
+
+            logger.debug(f"Calculated Bayesian posteriors for {len(causal_patterns)} predictions")
 
             # Calculate potential using direct formula (overwrites any potential from calculate_ensemble_predictive_information)
             # potential = (evidence + confidence) * snr + itfdf_similarity + (1/(fragmentation + 1))

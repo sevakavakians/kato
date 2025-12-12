@@ -241,6 +241,31 @@ def test_prediction_with_emotives(kato_fixture):
     pattern_name = kato_fixture.learn()
     assert pattern_name is not None, "Should have learned a pattern"
 
+    # Validate emotives are stored in the pattern
+    pattern_result = kato_fixture.get_pattern(pattern_name)
+    assert pattern_result['status'] == 'okay', "Should retrieve pattern successfully"
+    pattern = pattern_result['pattern']
+    assert 'emotives' in pattern, "Pattern should have emotives field"
+    assert isinstance(pattern['emotives'], list), "Emotives should be stored as a list (rolling window)"
+    assert len(pattern['emotives']) == 3, f"Should have 3 emotive dicts (one per observation), got {len(pattern['emotives'])}"
+    # Validate each emotive dict has the expected keys
+    assert pattern['emotives'][0] == {'joy': 0.9, 'energy': 0.8}, "First emotive should match"
+    assert pattern['emotives'][1] == {'joy': 0.1, 'energy': 0.2}, "Second emotive should match"
+    assert pattern['emotives'][2] == {'joy': 0.5, 'energy': 0.5}, "Third emotive should match"
+
+    # CRITICAL: Validate emotives are ACTUALLY stored in Redis (not just API/cache response)
+    redis_emotives = kato_fixture.get_redis_emotives(pattern_name)
+    assert redis_emotives is not None, "Emotives key should exist in Redis"
+    assert isinstance(redis_emotives, list), "Redis emotives should be a list"
+    assert len(redis_emotives) == 3, f"Redis should have 3 emotive dicts, got {len(redis_emotives)}"
+    assert redis_emotives[0] == {'joy': 0.9, 'energy': 0.8}, "First Redis emotive should match"
+    assert redis_emotives[1] == {'joy': 0.1, 'energy': 0.2}, "Second Redis emotive should match"
+    assert redis_emotives[2] == {'joy': 0.5, 'energy': 0.5}, "Third Redis emotive should match"
+
+    # Validate frequency is stored in Redis
+    redis_freq = kato_fixture.get_redis_frequency(pattern_name)
+    assert redis_freq > 0, "Frequency should be stored in Redis"
+
     # Clear short-term memory and observe to trigger predictions (KATO requires 2+ strings)
     kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': ['happy'], 'vectors': [], 'emotives': {'joy': 0.9, 'energy': 0.8}})

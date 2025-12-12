@@ -122,11 +122,15 @@ class RapidFuzzFilter(PatternFilter):
 
             # Calculate similarity using extractor
             try:
+                # Get fuzzy_token_threshold from config
+                fuzzy_token_threshold = getattr(self.config, 'fuzzy_token_threshold', 0.0) if hasattr(self, 'config') else 0.0
+
                 # Use extractor's extract_prediction_info for consistency
                 prediction_info = self.extractor.extract_prediction_info(
                     pattern_data,
                     self.state,
-                    cutoff=self.recall_threshold
+                    cutoff=self.recall_threshold,
+                    fuzzy_token_threshold=fuzzy_token_threshold
                 )
 
                 # If prediction_info is not None, similarity >= threshold

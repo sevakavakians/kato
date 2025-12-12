@@ -38,6 +38,7 @@ class SessionConfiguration:
     sort_symbols: Optional[bool] = None  # Whether to sort symbols alphabetically
     process_predictions: Optional[bool] = None  # Whether to process predictions
     use_token_matching: Optional[bool] = None  # Token-level vs character-level matching
+    fuzzy_token_threshold: Optional[float] = None  # 0.0-1.0 (fuzzy token matching threshold, 0=disabled)
     rank_sort_algo: Optional[str] = None  # Ranking algorithm for predictions (e.g., 'potential', 'similarity')
 
     # Filter Pipeline Configuration
@@ -97,6 +98,11 @@ class SessionConfiguration:
             # Validate max_predictions
             if self.max_predictions is not None and not 1 <= self.max_predictions <= 10000:
                 logger.error(f"Invalid max_predictions: {self.max_predictions}")
+                return False
+
+            # Validate fuzzy_token_threshold
+            if self.fuzzy_token_threshold is not None and not 0.0 <= self.fuzzy_token_threshold <= 1.0:
+                logger.error(f"Invalid fuzzy_token_threshold: {self.fuzzy_token_threshold}")
                 return False
 
             # Validate indexer_type
@@ -269,7 +275,7 @@ class SessionConfiguration:
         valid_fields = {
             'max_pattern_length', 'persistence', 'recall_threshold', 'stm_mode',
             'indexer_type', 'max_predictions', 'sort_symbols', 'process_predictions',
-            'use_token_matching', 'rank_sort_algo', 'session_id', 'node_id', 'version',
+            'use_token_matching', 'fuzzy_token_threshold', 'rank_sort_algo', 'session_id', 'node_id', 'version',
             # Filter pipeline fields
             'filter_pipeline', 'length_min_ratio', 'length_max_ratio',
             'jaccard_threshold', 'jaccard_min_overlap',
@@ -306,7 +312,7 @@ class SessionConfiguration:
         config_keys = [
             'max_pattern_length', 'persistence', 'recall_threshold',
             'indexer_type', 'max_predictions', 'sort_symbols', 'process_predictions',
-            'use_token_matching', 'stm_mode', 'rank_sort_algo',
+            'use_token_matching', 'fuzzy_token_threshold', 'stm_mode', 'rank_sort_algo',
             # Filter pipeline configuration
             'filter_pipeline', 'length_min_ratio', 'length_max_ratio',
             'jaccard_threshold', 'jaccard_min_overlap',
@@ -339,7 +345,7 @@ class SessionConfiguration:
         config_keys = [
             'max_pattern_length', 'persistence', 'recall_threshold',
             'indexer_type', 'max_predictions', 'sort_symbols', 'process_predictions',
-            'use_token_matching', 'stm_mode', 'rank_sort_algo',
+            'use_token_matching', 'fuzzy_token_threshold', 'stm_mode', 'rank_sort_algo',
             # Filter pipeline configuration
             'filter_pipeline', 'length_min_ratio', 'length_max_ratio',
             'jaccard_threshold', 'jaccard_min_overlap',

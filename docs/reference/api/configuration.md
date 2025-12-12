@@ -90,6 +90,7 @@ GET /sessions/{session_id}/config
     "sort_symbols": true,
     "process_predictions": true,
     "use_token_matching": true,
+    "fuzzy_token_threshold": 0.0,
     "rank_sort_algo": "potential",
     "filter_pipeline": [],
     "length_min_ratio": 0.5,
@@ -146,6 +147,7 @@ curl http://localhost:8000/sessions/$SESSION_ID/config
 | `max_predictions` | integer | 1-10000 | 100 | Maximum predictions to return |
 | `sort_symbols` | boolean | true\|false | true | Sort symbols alphanumerically |
 | `use_token_matching` | boolean | true\|false | true | Token-level (true) vs character-level (false) |
+| `fuzzy_token_threshold` | float | 0.0-1.0 | 0.0 | Fuzzy token matching threshold (0.0=disabled) |
 | `process_predictions` | boolean | true\|false | true | Whether to process predictions |
 | `rank_sort_algo` | string | See [Session Config](../session-configuration.md#prediction-ranking) | potential | Prediction ranking metric |
 
@@ -204,6 +206,7 @@ curl -X POST http://localhost:8000/sessions \
     "sort_symbols": true,
     "process_predictions": true,
     "use_token_matching": true,
+    "fuzzy_token_threshold": 0.0,
     "rank_sort_algo": "similarity",
     "filter_pipeline": [],
     "length_min_ratio": 0.5,
@@ -363,6 +366,60 @@ For millions of patterns with scalable filtering:
 - Millions of learned patterns
 - High-throughput prediction systems
 - Scalable similarity search
+
+### Fuzzy Matching Mode
+
+For handling typos and misspellings in user input:
+
+```json
+{
+  "config": {
+    "fuzzy_token_threshold": 0.85,
+    "use_token_matching": true,
+    "recall_threshold": 0.3,
+    "max_predictions": 100,
+    "rank_sort_algo": "potential"
+  }
+}
+```
+
+**Use Cases**:
+- User input validation with typo tolerance
+- OCR text processing with recognition errors
+- Search systems with spelling mistake tolerance
+- Data quality monitoring and cleaning
+
+**Example**:
+
+```bash
+# Create session with fuzzy matching enabled
+SESSION_ID=$(curl -s -X POST http://localhost:8000/sessions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "node_id": "fuzzy_user",
+    "config": {"fuzzy_token_threshold": 0.85}
+  }' | jq -r '.session_id')
+
+# Learn correct spellings
+curl -X POST http://localhost:8000/sessions/$SESSION_ID/observe \
+  -d '{"strings": ["apple", "banana", "cherry"]}'
+curl -X POST http://localhost:8000/sessions/$SESSION_ID/learn
+
+# Query with typos - still matches!
+curl -X POST http://localhost:8000/sessions/$SESSION_ID/clear-stm
+curl -X POST http://localhost:8000/sessions/$SESSION_ID/observe \
+  -d '{"strings": ["apple", "bannana", "chery"]}'  # Typos!
+
+# Get predictions - check anomalies field for fuzzy matches
+curl http://localhost:8000/sessions/$SESSION_ID/predictions | jq '.[0].anomalies'
+# Output: [{"observed": "bannana", "expected": "banana", "similarity": 0.93}, ...]
+```
+
+**Recommended Thresholds**:
+- `0.80`: Moderate tolerance (1-2 character errors)
+- `0.85`: **Recommended** - balanced fuzzy matching
+- `0.90`: Conservative (single character variations)
+- `0.95`: Very strict (minimal fuzzy matching)
 
 ---
 

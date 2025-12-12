@@ -155,6 +155,105 @@ export KATO_USE_TOKEN_MATCHING=true
 
 **Recommendation**: Use character-level for production (default) unless you specifically need exact difflib compatibility.
 
+#### 2.4 Fuzzy Token Matching
+
+**Purpose**: Handle misspellings, typos, and minor token variations during pattern matching.
+
+**Location**: `kato/searches/pattern_search.py` (`InformationExtractor.extract_prediction_info`)
+
+Fuzzy token matching allows KATO to match similar-but-not-identical tokens, treating them as matches when their similarity exceeds a configured threshold. This is particularly useful for handling:
+- User input with typos (`"bannana"` → `"banana"`)
+- OCR errors
+- Transliteration variations
+- Spelling mistakes
+
+**Configuration**:
+```python
+# Session configuration
+{
+  "fuzzy_token_threshold": 0.85  # 0.0-1.0, where 0.0 = disabled (exact matching only)
+}
+```
+
+**Algorithm**:
+1. For each observed token in STM
+2. Compare against all pattern tokens using `fuzz.ratio()` (RapidFuzz)
+3. If similarity ≥ threshold, treat as match
+4. Select best match (highest similarity) per observed token
+5. Track non-exact matches in `anomalies` field
+
+**Similarity Calculation**:
+```python
+from rapidfuzz import fuzz
+
+similarity = fuzz.ratio("bannana", "banana") / 100.0  # Returns 0.93
+```
+
+**Anomalies Tracking**:
+
+Fuzzy matches generate anomaly records in prediction objects:
+```json
+{
+  "matches": ["bannana", "cherry"],  // Includes fuzzy matches
+  "anomalies": [
+    {
+      "observed": "bannana",
+      "expected": "banana",
+      "similarity": 0.93
+    }
+  ],
+  "missing": [],  // Fuzzy-matched tokens NOT in missing
+  "extras": []    // Fuzzy-matched tokens NOT in extras
+}
+```
+
+**Behavior**:
+- **Threshold = 0.0** (default): Exact matching only, anomalies always empty
+- **Threshold > 0.0**: Tokens with similarity ≥ threshold are treated as matches
+- **Below threshold**: Tokens treated as mismatches, appear in `missing`/`extras`
+- **Exact matches**: Do not generate anomaly entries (only fuzzy matches tracked)
+
+**Performance**:
+- Uses RapidFuzz for 5-10x faster similarity calculation vs difflib
+- Complexity: O(n×m) where n=STM tokens, m=pattern tokens per candidate
+- Recommendation: Use filter pipeline to reduce candidates before fuzzy matching
+- Minimal overhead when disabled (threshold=0.0)
+
+**Example**:
+```python
+# Pattern: ['apple', 'banana', 'cherry']
+# Observation: ['apple', 'bannana', 'chery']
+# Threshold: 0.85
+
+# Results:
+# - 'apple' → 'apple' (exact match, similarity=1.0)
+# - 'bannana' → 'banana' (fuzzy match, similarity=0.93)
+# - 'chery' → 'cherry' (fuzzy match, similarity=0.91)
+
+# Prediction:
+{
+  "matches": ["apple", "bannana", "chery"],
+  "anomalies": [
+    {"observed": "bannana", "expected": "banana", "similarity": 0.93},
+    {"observed": "chery", "expected": "cherry", "similarity": 0.91}
+  ],
+  "missing": [],  // All tokens fuzzy-matched
+  "extras": []
+}
+```
+
+**Recommended Thresholds**:
+- **0.80**: Moderate tolerance (1-2 character errors)
+- **0.85**: Recommended default for most applications
+- **0.90**: Conservative (single character variations)
+- **0.95**: Very strict (capitalization, punctuation only)
+
+**Compatibility**:
+- Works with both token-level and character-level matching modes
+- Compatible with all filter pipeline configurations
+- Integrates with RapidFuzzFilter for efficient candidate filtering
+- Full backward compatibility (default threshold=0.0 maintains exact matching)
+
 ### 3. Indexing Layer
 
 **Location**: `kato/searches/index_manager.py`

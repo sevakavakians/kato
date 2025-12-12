@@ -8,7 +8,7 @@ Predictions represent KATO's forecasts based on pattern matching between current
 
 Each prediction contains:
 - **Temporal segmentation**: past/present/future
-- **Match analysis**: matches/missing/extras
+- **Match analysis**: matches/missing/extras/anomalies
 - **Information metrics**: confidence, evidence, similarity, SNR, entropy, potential
 - **Pattern metadata**: frequency, emotives, metadata
 
@@ -34,6 +34,7 @@ GET /sessions/{session_id}/predictions
       "matches": ["hello", "world"],
       "missing": ["goodbye"],
       "extras": ["unexpected"],
+      "anomalies": [],
       "past": [["start"]],
       "present": [["hello", "world", "goodbye"]],
       "future": [["end"]],
@@ -114,6 +115,7 @@ future: [["middle"]]                  # After last match (nothing after "end")
 | `matches` | array[string] | Symbols present in both observation and pattern |
 | `missing` | array[string] | Pattern symbols NOT observed (from present events) |
 | `extras` | array[string] | Observed symbols NOT in pattern |
+| `anomalies` | array[object] | Fuzzy token matches with similarity scores (when fuzzy matching enabled) |
 
 **Example**:
 
@@ -124,7 +126,38 @@ Observing: ["a", "c", "x"]
 matches: ["a", "c"]      # In both
 missing: ["b", "d"]      # In pattern, not observed
 extras: ["x"]            # Observed, not in pattern
+anomalies: []            # No fuzzy matches (exact matching only)
 ```
+
+**Anomalies Field**:
+
+When fuzzy token matching is enabled (`fuzzy_token_threshold` > 0.0), the `anomalies` array documents non-exact matches:
+
+```json
+{
+  "anomalies": [
+    {
+      "observed": "bannana",
+      "expected": "banana",
+      "similarity": 0.93
+    },
+    {
+      "observed": "chery",
+      "expected": "cherry",
+      "similarity": 0.91
+    }
+  ]
+}
+```
+
+**Key Points**:
+- Empty array `[]` when fuzzy matching disabled (default)
+- Empty array `[]` when all matches are exact
+- Fuzzy-matched tokens appear in `matches`, not in `missing` or `extras`
+- Only non-exact matches generate anomaly entries
+- Similarity scores range from 0.0 (no match) to 1.0 (exact match)
+
+**See**: [Configuration API](configuration.md#fuzzy-matching-mode) for fuzzy matching setup
 
 ### Information Metrics
 

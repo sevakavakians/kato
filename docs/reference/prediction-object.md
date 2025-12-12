@@ -176,11 +176,42 @@ A Prediction Object is generated when KATO's pattern recognition engine identifi
 **Purpose**: Allows patterns to carry emotional salience or utility information for decision-making.
 **Example**: `{"utility": 50.0, "danger": -10.0}`
 
-### 26. **pattern** (internal, not in protobuf)
+### 26. **anomalies** (array of objects)
+**Description**: List of fuzzy token matches documenting non-exact matches when fuzzy token matching is enabled.
+**Structure**: Array of objects, each containing:
+  - `observed` (string): The token that was actually observed
+  - `expected` (string): The pattern token that was fuzzy-matched
+  - `similarity` (float): Similarity score between observed and expected (0.0-1.0)
+**Purpose**: Provides transparency about which tokens were fuzzy-matched versus exact-matched, enabling detection of data quality issues like typos and misspellings.
+**Example**:
+```json
+"anomalies": [
+  {
+    "observed": "bannana",
+    "expected": "banana",
+    "similarity": 0.93
+  },
+  {
+    "observed": "chery",
+    "expected": "cherry",
+    "similarity": 0.91
+  }
+]
+```
+**Behavior**:
+- Empty array `[]` when fuzzy matching is disabled (`fuzzy_token_threshold=0.0`)
+- Empty array `[]` when all matches are exact
+- Contains entries only for non-exact fuzzy matches (exact matches don't generate anomaly entries)
+- Fuzzy-matched tokens appear in `matches` field, not in `missing` or `extras`
+- Tokens below fuzzy threshold appear in `missing`/`extras` as normal mismatches
+
+**Configuration**: Enable via `fuzzy_token_threshold` parameter (see [Session Configuration](session-configuration.md#fuzzy-token-matching))
+
+### 27. **pattern** (internal, not in protobuf)
 **Description**: Full pattern structure from the pattern (used internally during prediction construction).
 **Purpose**: Internal reference to complete pattern for temporal field extraction.
 
-### 27. **tfidf_score** (float)
+### 28. **tfidf_score** (float)
 **Description**: TF-IDF (Term Frequency - Inverse Document Frequency) score measuring pattern distinctiveness.
 **Formula**:
 - For each symbol in pattern: `TF(symbol) = count(symbol in pattern) / pattern_length`
@@ -197,6 +228,7 @@ A Prediction Object is generated when KATO's pattern recognition engine identifi
 
 ### Matching Metrics
 - **matches, missing, extras**: Direct comparison between expected and observed
+- **anomalies**: Fuzzy token matches with similarity scores (when fuzzy matching enabled)
 - **confidence, evidence**: Proportional matching scores
 - **similarity, snr**: Quality of the match
 

@@ -433,6 +433,30 @@ def test_multimodal_pattern_persistence(kato_fixture):
 
     assert len(patterns_learned) == 50, f"Should have 50 patterns, got {len(patterns_learned)}"
 
+    # Validate emotive patterns have emotives stored
+    # Check first 3 emotive patterns as samples
+    for pattern_type, idx, pattern_name in patterns_learned:
+        if pattern_type == 'emotive' and idx < 3:
+            # Strip PTRN| prefix if present
+            clean_pattern_name = pattern_name[5:] if pattern_name.startswith('PTRN|') else pattern_name
+            pattern_response = requests.get(f"{base_url}/pattern/{clean_pattern_name}?node_id={node_id}")
+            pattern_response.raise_for_status()
+            response_json = pattern_response.json()
+
+            # API returns: {"pattern": {"status": "okay", "pattern": {...}}, "node_id": "..."}
+            pattern_wrapper = response_json['pattern']
+            assert pattern_wrapper['status'] == 'okay', f"Emotive pattern {idx} retrieval should succeed"
+            pattern = pattern_wrapper['pattern']
+            assert 'emotives' in pattern, f"Emotive pattern {idx} should have emotives field"
+            assert isinstance(pattern['emotives'], list), f"Emotive pattern {idx} should have emotives as list"
+            assert len(pattern['emotives']) > 0, f"Emotive pattern {idx} should have non-empty emotives list"
+            # Each observation had emotives with 'joy' and 'confidence' keys
+            # Since we have 2 observations per pattern, we should have 2 emotive dicts
+            assert len(pattern['emotives']) == 2, f"Emotive pattern {idx} should have 2 emotive dicts, got {len(pattern['emotives'])}"
+            for emotive_dict in pattern['emotives']:
+                assert 'joy' in emotive_dict, f"Emotive pattern {idx} should have 'joy' key"
+                assert 'confidence' in emotive_dict, f"Emotive pattern {idx} should have 'confidence' key"
+
     # Delete session
     delete_session(base_url, session1_id)
 
@@ -703,7 +727,28 @@ def test_emotive_persistence_with_rolling_window(kato_fixture):
 
     requests.post(f"{base_url}/sessions/{session1_id}/observe", json=obs1)
     requests.post(f"{base_url}/sessions/{session1_id}/observe", json=obs2)
-    requests.post(f"{base_url}/sessions/{session1_id}/learn")
+    learn_response = requests.post(f"{base_url}/sessions/{session1_id}/learn")
+    learn_response.raise_for_status()
+    pattern_name = learn_response.json()['pattern_name']
+
+    # Validate emotives are stored in pattern (Session 1)
+    # Strip PTRN| prefix if present for API call
+    clean_pattern_name = pattern_name[5:] if pattern_name.startswith('PTRN|') else pattern_name
+    pattern_response = requests.get(f"{base_url}/pattern/{clean_pattern_name}?node_id={node_id}")
+    pattern_response.raise_for_status()
+    response_json = pattern_response.json()
+
+    # API returns: {"pattern": {"status": "okay", "pattern": {...}}, "node_id": "..."}
+    assert 'pattern' in response_json, "Response should contain pattern field"
+    pattern_wrapper = response_json['pattern']
+    assert pattern_wrapper['status'] == 'okay', "Pattern retrieval should succeed"
+    pattern = pattern_wrapper['pattern']
+    assert 'emotives' in pattern, "Pattern should have emotives field"
+    assert isinstance(pattern['emotives'], list), "Emotives should be a list (rolling window)"
+    assert len(pattern['emotives']) == 2, f"Should have 2 emotive dicts, got {len(pattern['emotives'])}"
+    # Verify the emotives values from first learning
+    assert pattern['emotives'][0] == {'happiness': 0.8}, f"First emotive should be {{'happiness': 0.8}}, got {pattern['emotives'][0]}"
+    assert pattern['emotives'][1] == {'happiness': 0.7}, f"Second emotive should be {{'happiness': 0.7}}, got {pattern['emotives'][1]}"
 
     delete_session(base_url, session1_id)
 
@@ -716,9 +761,35 @@ def test_emotive_persistence_with_rolling_window(kato_fixture):
 
     requests.post(f"{base_url}/sessions/{session2_id}/observe", json=obs1)
     requests.post(f"{base_url}/sessions/{session2_id}/observe", json=obs2)
-    requests.post(f"{base_url}/sessions/{session2_id}/learn")
+    learn_response2 = requests.post(f"{base_url}/sessions/{session2_id}/learn")
+    learn_response2.raise_for_status()
+    pattern_name2 = learn_response2.json()['pattern_name']
 
-    # Get predictions and check emotives exist
+    # Should be same pattern (same hash)
+    clean_pattern_name2 = pattern_name2[5:] if pattern_name2.startswith('PTRN|') else pattern_name2
+    assert clean_pattern_name == clean_pattern_name2, "Should learn the same pattern"
+
+    # Validate emotives are stored in pattern (Session 2 - should have merged rolling window)
+    pattern_response2 = requests.get(f"{base_url}/pattern/{clean_pattern_name}?node_id={node_id}")
+    pattern_response2.raise_for_status()
+    response_json2 = pattern_response2.json()
+
+    pattern_wrapper2 = response_json2['pattern']
+    assert pattern_wrapper2['status'] == 'okay', "Pattern retrieval should succeed"
+    pattern2 = pattern_wrapper2['pattern']
+    assert 'emotives' in pattern2, "Pattern should still have emotives field after re-learning"
+    assert isinstance(pattern2['emotives'], list), "Emotives should be a list (rolling window)"
+    # After re-learning same pattern, rolling window should contain emotives from both sessions
+    # Original: [{'happiness': 0.8}, {'happiness': 0.7}]
+    # New:      [{'happiness': 0.2}, {'happiness': 0.3}]
+    # Result:   [{'happiness': 0.8}, {'happiness': 0.7}, {'happiness': 0.2}, {'happiness': 0.3}]
+    assert len(pattern2['emotives']) == 4, f"Should have 4 emotive dicts after re-learning, got {len(pattern2['emotives'])}"
+    assert pattern2['emotives'][0] == {'happiness': 0.8}, f"Expected first emotive from session 1"
+    assert pattern2['emotives'][1] == {'happiness': 0.7}, f"Expected second emotive from session 1"
+    assert pattern2['emotives'][2] == {'happiness': 0.2}, f"Expected first emotive from session 2"
+    assert pattern2['emotives'][3] == {'happiness': 0.3}, f"Expected second emotive from session 2"
+
+    # Get predictions and check emotives exist in predictions too
     preds = get_predictions_for_session(
         base_url, session2_id,
         observed_events=[['happy_start']]
@@ -726,8 +797,7 @@ def test_emotive_persistence_with_rolling_window(kato_fixture):
 
     if preds:
         emotives = preds[0].get('emotives', {})
-        assert 'happiness' in emotives, "Emotives should persist in pattern"
-        # The averaged value should reflect both learning sessions
+        assert 'happiness' in emotives, "Emotives should persist in pattern predictions"
 
     delete_session(base_url, session2_id)
 

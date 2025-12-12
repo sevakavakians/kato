@@ -73,6 +73,26 @@ def test_observe_with_emotives(kato_fixture):
     pattern_name = kato_fixture.learn()
     assert pattern_name is not None
 
+    # Validate emotives are stored in the pattern
+    pattern_result = kato_fixture.get_pattern(pattern_name)
+    assert pattern_result['status'] == 'okay', "Should retrieve pattern successfully"
+    pattern = pattern_result['pattern']
+    assert 'emotives' in pattern, "Pattern should have emotives field"
+    assert isinstance(pattern['emotives'], list), "Emotives should be stored as a list (rolling window)"
+    assert len(pattern['emotives']) == 3, f"Should have 3 emotive dicts, got {len(pattern['emotives'])}"
+    # Validate the emotives values
+    assert pattern['emotives'][0] == {'happiness': 0.8, 'confidence': 0.6}, "First emotive should match"
+    assert pattern['emotives'][1] == {'happiness': 0.9, 'confidence': 0.7}, "Second emotive should match"
+    assert pattern['emotives'][2] == {'happiness': 0.7, 'confidence': 0.8}, "Third emotive should match"
+
+    # CRITICAL: Validate emotives are ACTUALLY stored in Redis
+    redis_emotives = kato_fixture.get_redis_emotives(pattern_name)
+    assert redis_emotives is not None, "Emotives key should exist in Redis"
+    assert len(redis_emotives) == 3, f"Redis should have 3 emotive dicts, got {len(redis_emotives)}"
+    assert redis_emotives[0] == {'happiness': 0.8, 'confidence': 0.6}, "First Redis emotive should match"
+    assert redis_emotives[1] == {'happiness': 0.9, 'confidence': 0.7}, "Second Redis emotive should match"
+    assert redis_emotives[2] == {'happiness': 0.7, 'confidence': 0.8}, "Third Redis emotive should match"
+
     # Now observe to trigger predictions (KATO requires 2+ strings)
     kato_fixture.observe({
         'strings': ['hello'],

@@ -3,7 +3,7 @@ from itertools import chain
 
 class Prediction(dict):
     "Pattern prediction."
-    def __init__(self, _pattern, matching_intersection, past, present, missing, extras, similarity, number_of_blocks, stm_events=None):
+    def __init__(self, _pattern, matching_intersection, past, present, missing, extras, similarity, number_of_blocks, anomalies=None, stm_events=None):
         super().__init__(self)
         self['type'] = 'prototypical'
         self['name'] = _pattern['name']
@@ -20,6 +20,7 @@ class Prediction(dict):
         self['present'] = present
         self['missing'] = missing
         self['extras'] = extras
+        self['anomalies'] = anomalies if anomalies else []
         self['potential'] = float(0)
         self['evidence'] = float(len(self['matches'])/_pattern["length"]) if _pattern["length"] > 0 else 0.0
         self['similarity'] = similarity

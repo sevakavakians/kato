@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Fuzzy Token Matching**: Token-level similarity matching with configurable threshold (0.0-1.0)
+  - Uses RapidFuzz for 5-10x faster similarity calculation vs difflib
+  - Configurable via `fuzzy_token_threshold` parameter (default: 0.0, disabled)
+  - New `anomalies` field in predictions tracking fuzzy matches with similarity scores
+  - Handles typos, misspellings, and minor token variations
+  - Recommended threshold: 0.85 for balanced fuzzy matching
 - Container image versioning with semantic version tags
 - OCI-compliant image labels for metadata
 - `build-and-push.sh` script for automated multi-tag builds

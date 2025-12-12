@@ -47,6 +47,16 @@ def test_observe_with_metadata(kato_fixture):
     assert 'chapter' in metadata
     assert set(metadata['chapter']) == {'1', '2'}
 
+    # CRITICAL: Validate metadata is ACTUALLY stored in Redis
+    redis_metadata = kato_fixture.get_redis_metadata(pattern_name)
+    assert redis_metadata is not None, "Metadata key should exist in Redis"
+    assert 'book' in redis_metadata, "Redis should have 'book' metadata"
+    assert set(redis_metadata['book']) == {'title1', 'title2'}, "Redis book metadata should match"
+    assert 'author' in redis_metadata, "Redis should have 'author' metadata"
+    assert redis_metadata['author'] == ['Smith'], "Redis author metadata should match"
+    assert 'chapter' in redis_metadata, "Redis should have 'chapter' metadata"
+    assert set(redis_metadata['chapter']) == {'1', '2'}, "Redis chapter metadata should match"
+
 
 def test_metadata_duplicate_handling(kato_fixture):
     """Test that duplicate metadata values are not added."""

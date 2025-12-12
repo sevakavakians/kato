@@ -779,17 +779,10 @@ class PatternProcessor:
                 prediction.pop('pattern_data', None)
 
             # Calculate ensemble-based predictive information for metrics
-            try:
-                causal_patterns, future_potentials = calculate_ensemble_predictive_information(causal_patterns)
-                # Store future_potentials for the API response
-                self.future_potentials = future_potentials
-            except Exception as e:
-                logger.error(f"Error in ensemble predictive information calculation: {e}")
-                # Set predictive_information to 0 if calculation fails
-                for prediction in causal_patterns:
-                    if 'predictive_information' not in prediction:
-                        prediction['predictive_information'] = 0.0
-                self.future_potentials = []
+            # Let exceptions propagate - client should receive HTTP 500 on calculation failure
+            causal_patterns, future_potentials = calculate_ensemble_predictive_information(causal_patterns)
+            # Store future_potentials for the API response
+            self.future_potentials = future_potentials
 
             # Calculate Bayesian posterior probabilities for ensemble
             # Uses Bayes' theorem: P(pattern|obs) = P(obs|pattern) × P(pattern) / P(obs)

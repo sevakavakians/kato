@@ -207,6 +207,26 @@ def test_memory_with_emotives(kato_fixture):
     assert pattern_name is not None, "Should have learned a model"
     assert pattern_name.startswith('PTRN|'), "Pattern name should have PTRN| prefix"
 
+    # Validate emotives are stored in the pattern
+    pattern_result = kato_fixture.get_pattern(pattern_name)
+    assert pattern_result['status'] == 'okay', "Should retrieve pattern successfully"
+    pattern = pattern_result['pattern']
+    assert 'emotives' in pattern, "Pattern should have emotives field"
+    assert isinstance(pattern['emotives'], list), "Emotives should be stored as a list (rolling window)"
+    assert len(pattern['emotives']) == 3, f"Should have 3 emotive dicts, got {len(pattern['emotives'])}"
+    # Validate the emotives values match what was observed
+    assert pattern['emotives'][0] == {'happiness': 0.1, 'confidence': 0.2}, "First emotive should match"
+    assert pattern['emotives'][1] == {'happiness': 0.5, 'confidence': 0.6}, "Second emotive should match"
+    assert pattern['emotives'][2] == {'happiness': 0.9, 'confidence': 0.8}, "Third emotive should match"
+
+    # CRITICAL: Validate emotives are ACTUALLY stored in Redis
+    redis_emotives = kato_fixture.get_redis_emotives(pattern_name)
+    assert redis_emotives is not None, "Emotives key should exist in Redis"
+    assert len(redis_emotives) == 3, f"Redis should have 3 emotive dicts, got {len(redis_emotives)}"
+    assert redis_emotives[0] == {'happiness': 0.1, 'confidence': 0.2}, "First Redis emotive should match"
+    assert redis_emotives[1] == {'happiness': 0.5, 'confidence': 0.6}, "Second Redis emotive should match"
+    assert redis_emotives[2] == {'happiness': 0.9, 'confidence': 0.8}, "Third Redis emotive should match"
+
     # Clear short-term memory and observe first two elements to trigger predictions (KATO requires 2+ strings)
     kato_fixture.clear_short_term_memory()
     kato_fixture.observe({

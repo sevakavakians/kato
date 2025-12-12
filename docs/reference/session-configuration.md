@@ -26,6 +26,7 @@ Session configuration allows per-session customization of KATO's behavior. Each 
 | `sort_symbols` | boolean | true\|false | true | Sort symbols alphabetically within events |
 | `process_predictions` | boolean | true\|false | true | Enable prediction processing |
 | `use_token_matching` | boolean | true\|false | true | Token-level (true) vs character-level (false) matching |
+| `fuzzy_token_threshold` | float | 0.0-1.0 | 0.0 | Fuzzy token matching threshold (0.0=disabled, exact matching only) |
 | `rank_sort_algo` | string | See below | potential | Prediction ranking metric |
 
 ### Prediction Ranking
@@ -105,6 +106,77 @@ The `rank_sort_algo` parameter controls how predictions are sorted and prioritiz
 |-----------|------|-------|---------|-------------|
 | `max_candidates_per_stage` | integer | 100+ | 100000 | Safety limit per filter stage |
 | `enable_filter_metrics` | boolean | true\|false | true | Log filter timing and counts |
+
+## Fuzzy Token Matching
+
+KATO supports fuzzy token-to-token matching for handling misspellings, typos, and minor variations in observed data. When enabled, tokens are compared using similarity scoring, and matches above the threshold are treated as valid matches.
+
+### Configuration
+
+| Parameter | Type | Range | Default | Description |
+|-----------|------|-------|---------|-------------|
+| `fuzzy_token_threshold` | float | 0.0-1.0 | 0.0 | Similarity threshold for fuzzy matching (0.0 = disabled) |
+
+**How It Works:**
+- **Disabled (threshold=0.0)**: Only exact token matches are considered (default behavior)
+- **Enabled (threshold>0.0)**: Tokens with similarity ≥ threshold are treated as matches
+- **Similarity Calculation**: Uses RapidFuzz `fuzz.ratio()` for fast string comparison (0.0-1.0 scale)
+
+**Example:**
+```json
+{
+  "fuzzy_token_threshold": 0.85
+}
+```
+
+With threshold=0.85, the following fuzzy matches would occur:
+- `"bannana"` → `"banana"` (similarity ~0.93) ✓ Match
+- `"chery"` → `"cherry"` (similarity ~0.91) ✓ Match
+- `"wrld"` → `"world"` (similarity ~0.80) ✗ Below threshold
+
+### Anomalies Field
+
+When fuzzy matching is enabled, predictions include an `anomalies` array documenting non-exact matches:
+
+```json
+{
+  "anomalies": [
+    {
+      "observed": "bannana",
+      "expected": "banana",
+      "similarity": 0.93
+    },
+    {
+      "observed": "chery",
+      "expected": "cherry",
+      "similarity": 0.91
+    }
+  ]
+}
+```
+
+**Key Points:**
+- Fuzzy-matched tokens appear in `matches`, not `missing` or `extras`
+- Only non-exact matches appear in `anomalies` (exact matches have no anomaly entry)
+- Tokens below threshold are treated as mismatches and appear in `missing`/`extras`
+- The anomalies field is always present (empty array when fuzzy matching disabled)
+
+### Recommended Thresholds
+
+| Threshold | Tolerance Level | Use Case |
+|-----------|----------------|----------|
+| 0.0 | Exact only | Production systems requiring precision |
+| 0.80 | Moderate | Handling minor typos (1-2 character errors) |
+| 0.85 | **Recommended** | Balanced fuzzy matching for most applications |
+| 0.90 | Conservative | Near-exact matches only (single character variations) |
+| 0.95 | Very strict | Minimal fuzzy matching (capitalization, punctuation) |
+
+### Performance Considerations
+
+- **Library**: Uses RapidFuzz for 5-10x faster similarity calculation vs difflib
+- **Overhead**: Minimal performance impact when disabled (threshold=0.0)
+- **Active Matching**: O(n×m) where n=STM tokens, m=pattern tokens per candidate
+- **Recommendation**: Use with `filter_pipeline` to reduce candidates before fuzzy matching
 
 ## Configuration Presets
 

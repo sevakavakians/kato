@@ -251,6 +251,11 @@ class ProcessingConfig(BaseSettings):
         json_schema_extra={'env': 'KATO_USE_TOKEN_MATCHING'},
         description="Use token-level matching (True) vs character-level matching (False)"
     )
+    fuzzy_token_threshold: float = Field(
+        0.0,
+        json_schema_extra={'env': 'KATO_FUZZY_TOKEN_THRESHOLD'},
+        description="Fuzzy token matching threshold (0.0-1.0, 0.0=disabled). Tokens above threshold are fuzzy matched."
+    )
     rank_sort_algo: str = Field(
         'potential',
         json_schema_extra={'env': 'RANK_SORT_ALGO'},

@@ -68,6 +68,7 @@ Complete reference for all KATO environment variables.
 | `SORT` | boolean | `true` | Sort symbols alphabetically |
 | `PROCESS_PREDICTIONS` | boolean | `true` | Enable prediction processing |
 | `KATO_USE_TOKEN_MATCHING` | boolean | `true` | Token-level (true) vs character-level (false) |
+| `KATO_FUZZY_TOKEN_THRESHOLD` | float | `0.0` | Fuzzy token matching threshold (0.0-1.0, 0.0=disabled) |
 | `RANK_SORT_ALGO` | string | `potential` | Prediction ranking metric |
 
 ## Performance Configuration

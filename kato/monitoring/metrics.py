@@ -178,9 +178,9 @@ class MetricsCollector:
 
         # Database metrics
         self.register_metric(
-            "kato_mongodb_connections",
+            "kato_clickhouse_connections",
             "gauge",
-            "Number of MongoDB connections"
+            "Number of ClickHouse connections"
         )
         self.register_metric(
             "kato_qdrant_connections",
@@ -456,10 +456,10 @@ class MetricsCollector:
                 "disk_percent": self._get_metric_value(all_metrics, "kato_disk_usage_percent")
             },
             "databases": {
-                "mongodb": {
-                    "operations": self._get_metric_value(all_metrics, "mongodb_operations"),
-                    "errors": self._get_metric_value(all_metrics, "mongodb_errors"),
-                    "avg_response_time": self._get_metric_value(all_metrics, "mongodb_response_time", "average_1m")
+                "clickhouse": {
+                    "operations": self._get_metric_value(all_metrics, "clickhouse_operations"),
+                    "errors": self._get_metric_value(all_metrics, "clickhouse_errors"),
+                    "avg_response_time": self._get_metric_value(all_metrics, "clickhouse_response_time", "average_1m")
                 },
                 "qdrant": {
                     "operations": self._get_metric_value(all_metrics, "qdrant_operations"),
@@ -497,7 +497,7 @@ class MetricsCollector:
             rates["sessions_per_minute"] = rate * 60
 
         # Database operation rates
-        for db in ["mongodb", "qdrant", "redis"]:
+        for db in ["clickhouse", "qdrant", "redis"]:
             metric_name = f"{db}_operations"
             if metric_name in self.metrics:
                 rate = self.metrics[metric_name].get_rate(60) or 0

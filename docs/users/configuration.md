@@ -125,6 +125,94 @@ curl -X POST http://localhost:8000/sessions \
 
 **Recommendation**: Always use `true` (token-level) unless matching raw document text.
 
+#### fuzzy_token_threshold
+
+Enable fuzzy token matching to handle typos and misspellings (0.0-1.0).
+
+```json
+{
+  "fuzzy_token_threshold": 0.85
+}
+```
+
+**Values**:
+- **0.0**: Disabled (default) - exact token matching only
+- **0.80**: Moderate - handles 1-2 character errors
+- **0.85**: **Recommended** - balanced fuzzy matching
+- **0.90**: Conservative - single character variations only
+- **0.95**: Very strict - minimal fuzzy matching
+
+**How It Works**:
+
+When enabled, KATO will treat similar tokens as matches if their similarity score exceeds the threshold:
+
+```python
+# Pattern learned with: ['apple', 'banana', 'cherry']
+# User observes with typos: ['apple', 'bannana', 'chery']
+
+# With fuzzy_token_threshold=0.85:
+# - 'apple' → 'apple' (exact match, similarity=1.0) ✓
+# - 'bannana' → 'banana' (fuzzy match, similarity=0.93) ✓
+# - 'chery' → 'cherry' (fuzzy match, similarity=0.91) ✓
+# Result: Pattern matched successfully!
+
+# With fuzzy_token_threshold=0.0 (disabled):
+# - Only 'apple' matches exactly
+# - 'bannana' and 'chery' treated as extras
+# Result: Partial match only
+```
+
+**Anomalies Tracking**:
+
+Fuzzy matches are tracked in the `anomalies` field of predictions:
+
+```json
+{
+  "matches": ["apple", "bannana", "chery"],
+  "anomalies": [
+    {
+      "observed": "bannana",
+      "expected": "banana",
+      "similarity": 0.93
+    },
+    {
+      "observed": "chery",
+      "expected": "cherry",
+      "similarity": 0.91
+    }
+  ]
+}
+```
+
+**Use Cases**:
+- **User input validation**: Detect typos in forms
+- **OCR processing**: Handle recognition errors
+- **Search tolerance**: Match queries with spelling mistakes
+- **Data cleaning**: Identify inconsistent data entry
+
+**Example - Enable Fuzzy Matching**:
+```bash
+# Create session with fuzzy matching
+curl -X POST http://localhost:8000/sessions \
+  -d '{
+    "node_id": "fuzzy_app",
+    "config": {
+      "fuzzy_token_threshold": 0.85,
+      "recall_threshold": 0.3
+    }
+  }'
+```
+
+**Performance**:
+- Uses RapidFuzz library (5-10x faster than difflib)
+- Minimal overhead when disabled (threshold=0.0)
+- Recommended: Use with moderate `recall_threshold` (0.3-0.5)
+
+**Compatibility**:
+- Works with both token-level and character-level matching modes
+- Compatible with all filter pipeline configurations
+- Anomalies field always present (empty array when disabled)
+
 ### Prediction Control
 
 #### max_predictions

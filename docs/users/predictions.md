@@ -205,6 +205,97 @@ predictions = kato.get_predictions()
 # Flags new behavior not in original pattern
 ```
 
+### anomalies
+
+**Fuzzy token matches with similarity scores** (when fuzzy matching is enabled).
+
+**Structure**: Array of objects documenting non-exact matches.
+
+```json
+{
+  "anomalies": [
+    {
+      "observed": "bannana",
+      "expected": "banana",
+      "similarity": 0.93
+    }
+  ]
+}
+```
+
+**When Present**:
+- Empty array `[]` when fuzzy matching is disabled (`fuzzy_token_threshold=0.0`)
+- Empty array `[]` when all matches are exact
+- Contains entries for tokens that were fuzzy-matched (not exact)
+
+**Use Cases**:
+- **Data quality monitoring**: Detect typos in user input
+- **OCR error detection**: Identify recognition mistakes
+- **Spelling correction**: Flag misspelled terms
+- **Anomaly tracking**: Monitor data consistency issues
+
+**Example - Typo Detection**:
+```python
+# Enable fuzzy matching
+kato.update_config({'fuzzy_token_threshold': 0.85})
+
+# Learn correct spelling
+kato.observe(['apple', 'banana', 'cherry'])
+kato.learn()
+
+# User enters with typos
+kato.clear_stm()
+kato.observe(['apple', 'bannana', 'chery'])
+predictions = kato.get_predictions()
+
+# predictions[0]:
+{
+  "matches": ["apple", "bannana", "chery"],  # All matched (exact + fuzzy)
+  "missing": [],  # Nothing missing (fuzzy matches count)
+  "extras": [],   # Nothing extra
+  "anomalies": [
+    {"observed": "bannana", "expected": "banana", "similarity": 0.93},
+    {"observed": "chery", "expected": "cherry", "similarity": 0.91}
+  ]
+}
+# ↑ Anomalies highlight the fuzzy matches for review
+```
+
+**Example - Data Quality Alert**:
+```python
+# Check for data quality issues
+predictions = kato.get_predictions()
+for pred in predictions:
+    if pred['anomalies']:
+        print(f"⚠️ Data quality alert!")
+        for anomaly in pred['anomalies']:
+            print(f"  Found '{anomaly['observed']}' "
+                  f"(expected '{anomaly['expected']}', "
+                  f"similarity: {anomaly['similarity']:.2f})")
+```
+
+**Configuration**:
+```python
+# Enable fuzzy matching and anomaly tracking
+kato.update_config({
+    'fuzzy_token_threshold': 0.85,  # 0.0 = disabled, 0.85 = recommended
+    'recall_threshold': 0.3          # Pattern matching threshold
+})
+```
+
+**Key Points**:
+- Fuzzy-matched tokens appear in `matches` (treated as valid matches)
+- Only non-exact matches generate anomaly entries (exact matches don't)
+- Tokens below fuzzy threshold appear in `missing`/`extras` (not fuzzy-matched)
+- The `similarity` score shows how similar observed vs expected (0.0-1.0)
+- Higher threshold = stricter matching (fewer fuzzy matches)
+
+**Recommended Thresholds**:
+- **0.80**: Moderate (handles 1-2 character typos)
+- **0.85**: Balanced (recommended default)
+- **0.90**: Conservative (single character variations)
+- **0.95**: Strict (capitalization/punctuation only)
+
 ## Prediction Metrics
 
 ### similarity

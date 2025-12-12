@@ -183,7 +183,7 @@ async def get_distributed_stm_stats():
         sample_processor = None
 
         # Try to get a sample processor to check distributed STM
-        if 'active_processors' in processor_stats and processor_stats['active_processors'] > 0:
+        if 'total_processors' in processor_stats and processor_stats['total_processors'] > 0:
             # Get first available processor
             for _processor_id, processor_info in app_state.processor_manager.processors.items():
                 processor = processor_info['processor']
@@ -201,7 +201,7 @@ async def get_distributed_stm_stats():
                 "performance_stats": stm_stats,
                 "processor_info": {
                     "sample_processor_id": sample_processor.id,
-                    "total_active_processors": processor_stats.get('active_processors', 0)
+                    "total_active_processors": processor_stats.get('total_processors', 0)
                 },
                 "expected_improvements": {
                     "stm_coordination_overhead_reduction": "50-70%",
@@ -216,7 +216,7 @@ async def get_distributed_stm_stats():
                 "distributed_stm_enabled": False,
                 "reason": "No processors with distributed STM available",
                 "processor_info": {
-                    "total_active_processors": processor_stats.get('active_processors', 0)
+                    "total_active_processors": processor_stats.get('total_processors', 0)
                 },
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
@@ -259,7 +259,7 @@ async def get_comprehensive_metrics():
                 "performance": {"total_requests": 0, "total_errors": 0, "error_rate": 0.0, "average_response_time": 0.0},
                 "resources": {"cpu_percent": 0.0, "memory_percent": 0.0, "disk_percent": 0.0},
                 "databases": {
-                    "mongodb": {"operations": 0, "errors": 0, "avg_response_time": 0.0},
+                    "clickhouse": {"operations": 0, "errors": 0, "avg_response_time": 0.0},
                     "qdrant": {"operations": 0, "errors": 0, "avg_response_time": 0.0},
                     "redis": {"operations": 0, "errors": 0, "avg_response_time": 0.0}
                 },
@@ -312,7 +312,7 @@ async def get_stats(minutes: int = 10):
             "kato_disk_usage_percent", "load_average_1m", "kato_requests_total",
             "kato_request_duration_seconds", "kato_errors_total", "sessions_created",
             "sessions_deleted", "session_operations",
-            "mongodb_operations", "mongodb_response_time", "mongodb_errors",
+            "clickhouse_operations", "clickhouse_response_time", "clickhouse_errors",
             "qdrant_operations", "qdrant_response_time", "qdrant_errors",
             "redis_operations", "redis_response_time", "redis_errors"
         ]
@@ -406,11 +406,11 @@ async def connection_pools_status():
             "health": health_status,
             "pool_statistics": pool_stats,
             "connection_optimization": {
-                "mongodb": {
+                "clickhouse": {
                     "pool_size_optimized": True,
                     "connection_reuse": True,
                     "health_monitoring": True,
-                    "features": ["retry_writes", "compression", "connection_pooling"]
+                    "features": ["http_client", "compression", "connection_pooling"]
                 },
                 "redis": {
                     "pool_size_optimized": True,

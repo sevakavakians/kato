@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0] - 2025-12-12
+
 ### Added
 - **Fuzzy Token Matching**: Token-level similarity matching with configurable threshold (0.0-1.0)
   - Uses RapidFuzz for 5-10x faster similarity calculation vs difflib
@@ -14,6 +16,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - New `anomalies` field in predictions tracking fuzzy matches with similarity scores
   - Handles typos, misspellings, and minor token variations
   - Recommended threshold: 0.85 for balanced fuzzy matching
+  - Complete documentation across 9 documentation files
+
+### Changed
+- Removed exception masking in metric calculations for better error visibility
+
+### Documentation
+- Updated reference docs: configuration-vars.md, session-configuration.md, prediction-object.md
+- Updated API docs: api/configuration.md, api/predictions.md
+- Updated research docs: pattern-matching.md
+- Updated user docs: configuration.md, predictions.md
+
+## [3.0.2] - 2025-11-13
+
+### Added
 - Container image versioning with semantic version tags
 - OCI-compliant image labels for metadata
 - `build-and-push.sh` script for automated multi-tag builds
@@ -22,7 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - RELEASING.md for release process documentation
 
 ### Changed
-- Standardized version to 2.0.0 across all files (pyproject.toml, setup.py, __init__.py)
+- Standardized version to 3.0.2 across all files (pyproject.toml, setup.py, __init__.py)
 - Enhanced Dockerfile with version build arguments
 
 ## [2.0.0] - 2025-10-31

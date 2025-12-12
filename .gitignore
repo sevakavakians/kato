@@ -92,4 +92,5 @@ benchmarks/results/*.csv
 *.prof
 *.nvprof
 *.qdrep
-*.nvvp
+*.nvvptests/tests/unit/test_debug_predictions.py
+tests/tests/unit/test_storage_validation.py

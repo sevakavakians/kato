@@ -191,19 +191,17 @@ class PatternProcessor:
 
                 # Configure hybrid mode if both clients available
                 if clickhouse_client and redis_client and arch_mode == 'hybrid':
-                    # Check if data is migrated
+                    # Check pattern data status
                     try:
                         pattern_count = clickhouse_client.query("SELECT COUNT(*) FROM kato.patterns_data").result_rows[0][0]
                         logger.info(f"ClickHouse patterns_data table: {pattern_count:,} rows")
 
                         if pattern_count == 0:
-                            logger.warning(
-                                "⚠️  WARNING: patterns_data table is EMPTY!\n"
-                                "  Hybrid mode will return no results until data is migrated.\n"
-                                "  Run: python scripts/migrate_mongodb_to_clickhouse.py"
+                            logger.info(
+                                "ℹ️  patterns_data table is empty (fresh deployment or migration pending).\n"
+                                "  Patterns will accumulate as you train the system.\n"
+                                "  If upgrading from v2.x with MongoDB data, run: python scripts/migrate_mongodb_to_clickhouse.py"
                             )
-                            if strict_mode:
-                                raise RuntimeError("ClickHouse table empty - run migration first")
                     except Exception as check_error:
                         logger.error(f"Failed to check patterns_data: {check_error}")
                         if strict_mode:

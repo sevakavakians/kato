@@ -9,6 +9,8 @@ services:
     volumes:
       - clickhouse-data:/var/lib/clickhouse
       - clickhouse-logs:/var/log/clickhouse-server
+      - ./config/clickhouse/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./config/clickhouse/users.xml:/etc/clickhouse-server/users.xml:ro
     networks:
       - kato-network
     restart: unless-stopped
@@ -78,6 +80,9 @@ services:
       - LOG_LEVEL=INFO
       - SESSION_TTL=3600
       - SESSION_AUTO_EXTEND=true
+      # Architecture mode configuration
+      - KATO_ARCHITECTURE_MODE=${KATO_ARCHITECTURE_MODE:-hybrid}
+      - KATO_STRICT_MODE=${KATO_STRICT_MODE:-true}
       # Performance optimizations for hierarchical training
       - KATO_BATCH_SIZE=10000
       - CONNECTION_POOL_SIZE=50
@@ -168,6 +173,10 @@ networks:
 
 volumes:
   clickhouse-data:
+    name: kato_clickhouse-data
   clickhouse-logs:
+    name: kato_clickhouse-logs
   qdrant-data:
+    name: kato_qdrant-data
   redis-data:
+    name: kato_redis-data

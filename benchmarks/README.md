@@ -202,10 +202,10 @@ python benchmarks/gpu_benchmarks.py --quick
 
 ## Troubleshooting
 
-**MongoDB connection errors:**
+**ClickHouse connection errors:**
 ```bash
 # Check services
-docker ps | grep mongo
+docker ps | grep clickhouse
 
 # Start services
 ./start.sh

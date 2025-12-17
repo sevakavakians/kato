@@ -5,7 +5,7 @@
 2. [Multi-Tenancy Patterns](#multi-tenancy-patterns)
 3. [Node ID Isolation](#node-id-isolation)
 4. [Data Security](#data-security)
-5. [MongoDB Isolation Strategies](#mongodb-isolation-strategies)
+5. [ClickHouse Isolation Strategies](#clickhouse-isolation-strategies)
 6. [Redis Isolation](#redis-isolation)
 7. [Qdrant Vector Isolation](#qdrant-vector-isolation)
 8. [Best Practices](#best-practices)
@@ -44,15 +44,15 @@ class TenantIsolation:
 
     def get_tenant_patterns(self, tenant_id: str) -> list:
         """Get all patterns for tenant"""
-        # Query MongoDB directly for patterns with node_id prefix
-        from pymongo import MongoClient
+        # Query ClickHouse directly for patterns with kb_id prefix
+        import clickhouse_connect
 
-        client = MongoClient("mongodb://localhost:27017")
-        db = client["kato"]
-        patterns = db["patterns"].find({
-            "node_id": {"$regex": f"^tenant-{tenant_id}:"}
-        })
-        return list(patterns)
+        client = clickhouse_connect.get_client(host="localhost", port=8123)
+        result = client.query(
+            "SELECT * FROM kato.patterns_data WHERE kb_id LIKE %(prefix)s",
+            {"prefix": f"tenant-{tenant_id}:%"}
+        )
+        return [dict(zip(result.column_names, row)) for row in result.result_rows]
 
 # Usage
 isolation = TenantIsolation("http://localhost:8000")

@@ -41,16 +41,16 @@ KATO (Knowledge Abstraction for Traceable Outcomes) is a deterministic AI system
                          ┌────────────────┼────────────────┐
                          ▼                ▼                ▼
                  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
-                 │   MongoDB    │ │    Qdrant    │ │    Redis     │
-                 │   Storage    │ │   Vector DB  │ │    Cache     │
+                 │  ClickHouse  │ │    Qdrant    │ │    Redis     │
+                 │ Pattern Data │ │   Vector DB  │ │ Metadata/Cache│
                  └──────────────┘ └──────────────┘ └──────────────┘
 ```
 
 ### Key Architectural Improvements
 1. **Multi-User Session Isolation**: Complete STM isolation per user session
-2. **Redis Integration**: Session state management with TTL support  
-3. **Connection Pooling**: Production-grade database connection management
-4. **Write Durability**: MongoDB write concern changed from w=0 to w=majority
+2. **Hybrid Storage Architecture**: ClickHouse for pattern data + Redis for metadata/sessions
+3. **High-Performance Pattern Storage**: ClickHouse columnar storage with multi-stage filter pipeline
+4. **Connection Pooling**: Production-grade database connection management
 5. **Direct Embedding**: FastAPI with embedded processor (no ZMQ overhead)
 6. **Session Middleware**: Automatic session handling in API layer
 
@@ -78,9 +78,9 @@ graph TB
         end
 
         subgraph "Database Services"
-            MONGO[(MongoDB 4.4<br/>Port: 27017<br/>Write Concern majority)]
+            CLICKHOUSE[(ClickHouse<br/>Ports: 8123 HTTP, 9000 Native<br/>Pattern Data Storage)]
             QDRANT[(Qdrant<br/>Port: 6333<br/>Vector Storage)]
-            REDIS[(Redis 7<br/>Port: 6379<br/>Session Store)]
+            REDIS[(Redis 7<br/>Port: 6379<br/>Session + Metadata)]
         end
 
         NETWORK[Docker Network<br/>kato-network]
@@ -110,7 +110,7 @@ graph TB
 
         %% Connection Pool Layer
         subgraph "Resilience Layer"
-            MONGO_POOL[MongoConnectionPool<br/>Connection Pooling<br/>Write Concern majority<br/>Health Checks]
+            CH_CLIENT[ClickHouse Client<br/>Connection Pooling<br/>Multi-stage Filter Pipeline<br/>Health Checks]
             QDRANT_POOL[QdrantConnectionPool<br/>Connection Management<br/>Auto-reconnect]
         end
 
@@ -129,9 +129,9 @@ graph TB
 
         %% Search & Storage
         subgraph "Search & Storage"
-            PAT_SEARCH[PatternSearcher]
+            PAT_SEARCH[PatternSearcher<br/>Filter Pipeline]
             VEC_ENGINE[VectorSearchEngine<br/>Modern Search]
-            SUPER_KB[SuperKnowledgeBase<br/>Write Concern majority]
+            CH_WRITER[ClickHouse Writer<br/>Async Batch Inserts]
             QDRANT_STORE[QdrantStore]
         end
     end
@@ -218,12 +218,14 @@ self.short_term_memory = {
     "emotives": {...}  # Emotional context
 }
 
-# Long-Term Memory Pattern (MongoDB)
+# Long-Term Memory Pattern (ClickHouse for data, Redis for metadata)
+# ClickHouse stores pattern data
+# Redis stores frequency and emotives metadata
 "PTRN|<sha1_hash>": {
-    "pattern": [["sorted", "strings"], ["more", "strings"]],
-    "frequency": 5,  # Minimum 1, increments on re-learning
-    "metadata": {...},
-    "created_at": "2025-01-24T10:30:00"
+    "pattern": [["sorted", "strings"], ["more", "strings"]],  # ClickHouse
+    "frequency": 5,  # Redis (minimum 1, increments on re-learning)
+    "metadata": {...},  # ClickHouse
+    "created_at": "2025-01-24T10:30:00"  # ClickHouse
 }
 ```
 
@@ -269,12 +271,12 @@ self.short_term_memory = {
 
 ### 5. Resilience Layer
 
-#### MongoConnectionPool
-- Connection pooling (10-50 connections)
-- Write concern changed from w=0 to w=majority
+#### ClickHouse Client
+- Connection pooling for high-performance queries
+- Multi-stage filter pipeline (MinHash LSH → exact matching)
 - Automatic reconnection on failure
-- Health checks every 5 seconds
-- Retry logic for reads and writes
+- Health checks and monitoring
+- Async batch inserts for write efficiency
 
 #### QdrantConnectionPool
 - Managed connection pool
@@ -291,7 +293,8 @@ User 2 → Session B → STM[['foo'], ['bar']]    → Predictions B
 User 3 → Session C → STM[['test'], ['data']]   → Predictions C
 
 All sessions share:
-- Same MongoDB (different processor_id namespaces)
+- Same ClickHouse database (kb_id partitioning for node isolation)
+- Same Redis instance (key namespacing for isolation)
 - Same Qdrant collections
 - Same KATO instance
 
@@ -299,6 +302,7 @@ But maintain complete isolation through:
 - Session-specific STM
 - Session-specific emotives
 - Session-specific time counters
+- kb_id-based data partitioning
 ```
 
 ## Data Flow Patterns
@@ -316,7 +320,7 @@ But maintain complete isolation through:
 ### Prediction Flow (FastAPI Architecture)
 1. Client requests prediction with recall threshold
 2. Session state loaded from Redis
-3. STM context used to search MongoDB patterns
+3. STM context used to search ClickHouse patterns (multi-stage filter pipeline)
 4. Vector similarity search in Qdrant
 5. Temporal segmentation applied (past/present/future)
 6. Prediction metrics calculated (normalized entropy, confidence, etc.)
@@ -324,8 +328,8 @@ But maintain complete isolation through:
 
 ### Learning Flow
 1. Client triggers learn endpoint (or auto-triggered)
-2. STM patterns transferred to MongoDB long-term storage
-3. Pattern frequency incremented if already exists
+2. STM patterns transferred to ClickHouse long-term storage (async batch insert)
+3. Pattern frequency incremented in Redis if already exists
 4. Deterministic SHA1 hash prevents duplicates
 5. STM cleared after successful learning (both manual and auto-learn)
 
@@ -365,20 +369,25 @@ services:
       - MAX_PATTERN_LENGTH=50  # Auto-learn
       - RECALL_THRESHOLD=0.5   # Higher threshold
 
-  mongodb:
-    image: mongo:latest
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
     ports:
-      - "27017:27017"
+      - "8123:8123"  # HTTP interface
+      - "9000:9000"  # Native client
     volumes:
-      - mongodb_data:/data/db
-      
+      - clickhouse_data:/var/lib/clickhouse
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+
   qdrant:
     image: qdrant/qdrant
     ports:
       - "6333:6333"
     volumes:
       - qdrant_storage:/qdrant/storage
-      
+
   redis:
     image: redis:7
     ports:
@@ -388,7 +397,8 @@ services:
 ```
 
 ### Multi-Instance Isolation
-- **Database Isolation**: Each instance uses processor_id as database name
+- **Database Isolation**: ClickHouse uses kb_id partitioning for node isolation
+- **Metadata Isolation**: Redis uses key namespacing per processor_id
 - **Vector Isolation**: Separate Qdrant collections per processor (`vectors_{processor_id}`)
 - **Session Isolation**: Redis-backed session state per user
 - **Memory Isolation**: Independent STM and processing per instance
@@ -400,9 +410,9 @@ services:
 1. **Direct Embedding**: Eliminated ZMQ overhead (~10ms response time maintained)
 2. **Vector Indexing**: HNSW for O(log n) search in Qdrant
 3. **Async I/O**: Native FastAPI async for non-blocking request handling
-4. **Database Efficiency**: MongoDB with proper indexing on pattern hashes
-5. **Session Caching**: Redis for sub-millisecond session retrieval
-6. **Connection Pooling**: 10-50x reduction in connection overhead
+4. **High-Performance Storage**: ClickHouse columnar storage with multi-stage filter pipeline
+5. **Session Caching**: Redis for sub-millisecond session retrieval and metadata
+6. **Connection Pooling**: Efficient connection management for all databases
 
 ### Performance Achievements
 - **Response Time**: ~10ms average (maintained through migration)
@@ -429,7 +439,9 @@ LOG_LEVEL=INFO
 
 # Service Endpoints
 API_PORT=8000
-MONGO_BASE_URL=mongodb://mongodb:27017
+CLICKHOUSE_HOST=clickhouse
+CLICKHOUSE_PORT=9000
+CLICKHOUSE_DB=kato
 QDRANT_HOST=qdrant
 QDRANT_PORT=6333
 REDIS_URL=redis://localhost:6379
@@ -438,7 +450,6 @@ REDIS_URL=redis://localhost:6379
 ENABLE_V2_FEATURES=true
 SESSION_TTL=3600
 REDIS_URL=redis://localhost:6379
-MONGO_POOL_SIZE=50
 HEALTH_CHECK_INTERVAL=5
 
 # Performance Tuning
@@ -448,10 +459,10 @@ VECTOR_BATCH_SIZE=100
 CACHE_TTL=3600
 
 # Database Configuration
-# MongoDB write concern: w=majority, j=true (was w=0)
-# Connection pooling: 10-50 connections (was single)
+# ClickHouse: Async batch inserts, multi-stage filter pipeline
+# Redis: Pattern frequency and emotives metadata storage
+# Connection pooling: Efficient connection management
 # Retry logic: Enabled for reads and writes
-# Compression: snappy, zlib enabled
 ```
 
 ### Feature Flags
@@ -463,15 +474,15 @@ CACHE_TTL=3600
 ### FastAPI Migration Status (Completed 2025-09-04)
 
 #### Completed
-✅ **Architecture Migration**: Complete system migration from REST/ZMQ to FastAPI  
-✅ **Test Suite Restoration**: Fixed all 43 failing tests (now 286/287 passing)  
-✅ **Performance Validation**: Maintained ~10ms response time  
-✅ **Database Compatibility**: Resolved Qdrant and MongoDB integration issues  
-✅ **Async/Sync Boundaries**: Fixed complex synchronization problems  
-✅ **API Consistency**: Updated endpoint formats and response fields  
-✅ **WebSocket Support**: Added websocket-client dependency  
-✅ **Deployment Simplification**: Single service architecture  
-✅ **Session Management**: Multi-user isolation with Redis backend  
+✅ **Architecture Migration**: Complete system migration from REST/ZMQ to FastAPI
+✅ **Test Suite Restoration**: Fixed all 43 failing tests (now 286/287 passing)
+✅ **Performance Validation**: Maintained ~10ms response time
+✅ **Storage Migration**: Migrated from MongoDB to ClickHouse + Redis hybrid architecture
+✅ **Async/Sync Boundaries**: Fixed complex synchronization problems
+✅ **API Consistency**: Updated endpoint formats and response fields
+✅ **WebSocket Support**: Added websocket-client dependency
+✅ **Deployment Simplification**: Single service architecture
+✅ **Session Management**: Multi-user isolation with Redis backend
 ✅ **Connection Pooling**: Production-grade database connections  
 
 #### Migration Benefits Realized
@@ -519,9 +530,9 @@ CACHE_TTL=3600
 
 ### Health Checks
 - FastAPI: `/health` endpoint
-- Database: MongoDB connection status
+- ClickHouse: Database connection and query health
 - Qdrant: Collection statistics
-- Redis: Connection pool health
+- Redis: Connection pool health and metadata access
 - Session Manager: Active session count
 
 ## Development Guidelines

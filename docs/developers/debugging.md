@@ -660,8 +660,8 @@ docker logs kato | jq -r '.error_type' | sort | uniq -c
 # Watch active sessions
 watch -n 1 'curl -s localhost:8000/sessions/count | jq'
 
-# Monitor MongoDB queries
-watch -n 2 'docker exec kato-mongodb mongosh --quiet --eval "db.currentOp()"'
+# Monitor ClickHouse queries
+watch -n 2 'docker exec kato-clickhouse clickhouse-client --query "SELECT query, elapsed, read_rows FROM system.processes WHERE query NOT LIKE '\''%system.processes%'\''"'
 ```
 
 ## Related Documentation

@@ -369,7 +369,7 @@ async def observe_in_session(
             raise
 
         # Update session with new state returned by processor
-        logger.info(f"DEBUG: Updating session with new state from processor")
+        logger.debug(f"Updating session with new state from processor")
         session.stm = result['stm']
         session.emotives_accumulator = result['emotives_accumulator']
         session.metadata_accumulator = result['metadata_accumulator']
@@ -378,7 +378,7 @@ async def observe_in_session(
         session.predictions = result.get('predictions', [])
 
         # Save updated session (outside processor lock but inside session lock)
-        logger.info(f"DEBUG: Saving session with STM: {session.stm}")
+        logger.debug(f"Saving session with STM: {session.stm}")
         await app_state.session_manager.update_session(session)
 
     return ObservationResult(

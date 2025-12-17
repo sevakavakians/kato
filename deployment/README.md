@@ -15,7 +15,7 @@ KATO (Knowledge Abstraction for Traceable Outcomes) is a deterministic memory an
 - Docker Engine 20.10+ or Docker Desktop
 - Docker Compose 2.0+
 - 4GB+ available RAM
-- Ports available: 8000, 27017, 6333, 6379
+- Ports available: 8000, 8123, 9000, 6333, 6379, 3001 (optional)
 
 ### Fastest Setup
 
@@ -25,16 +25,17 @@ curl -L https://github.com/sevakavakians/kato/archive/main.tar.gz | tar xz
 cd kato-main/deployment
 
 # Start all services
-./start.sh start
+./kato-manager.sh start
 
 # Verify
-./start.sh status
+./kato-manager.sh status
 ```
 
 **Access KATO:**
 - API: http://localhost:8000
 - Interactive Docs: http://localhost:8000/docs
 - Health Check: http://localhost:8000/health
+- Dashboard UI: http://localhost:3001 (optional monitoring interface)
 
 **See [Deployment Options](#deployment-options) below for alternative installation methods.**
 
@@ -62,24 +63,24 @@ Choose the deployment method that best fits your needs:
 2. **On the remote machine:**
    ```bash
    cd /opt/kato
-   ./start.sh start
+   ./kato-manager.sh start
    ```
 
 3. **Verify installation:**
    ```bash
-   ./start.sh status
+   ./kato-manager.sh status
    ```
 
 **Advantages:**
 - ✅ Minimal footprint (only 4 small files needed)
 - ✅ No source code required
-- ✅ Easy to manage with included `start.sh` script
-- ✅ Simple updates: `./start.sh update`
+- ✅ Easy to manage with included `kato-manager.sh` script
+- ✅ Simple updates: `./kato-manager.sh update`
 - ✅ Clean separation from development environment
 
 **Files included:**
-- `docker compose.yml` - Service orchestration
-- `start.sh` - Management script
+- `docker-compose.yml` - Service orchestration
+- `kato-manager.sh` - Management script
 - `.env.example` - Configuration template
 - `README.md` - This documentation
 
@@ -93,22 +94,22 @@ Choose the deployment method that best fits your needs:
 # Using curl
 curl -L https://github.com/sevakavakians/kato/archive/main.tar.gz | tar xz
 cd kato-main/deployment
-./start.sh start
+./kato-manager.sh start
 
 # Using wget
 wget -O- https://github.com/sevakavakians/kato/archive/main.tar.gz | tar xz
 cd kato-main/deployment
-./start.sh start
+./kato-manager.sh start
 
 # Download specific version
 curl -L https://github.com/sevakavakians/kato/archive/v1.2.3.tar.gz | tar xz
 cd kato-1.2.3/deployment
-./start.sh start
+./kato-manager.sh start
 
 # Clone entire repository
 git clone https://github.com/sevakavakians/kato.git
 cd kato/deployment
-./start.sh start
+./kato-manager.sh start
 ```
 
 **Advantages:**
@@ -127,15 +128,16 @@ cd kato/deployment
 # 1. Create network
 docker network create kato-network --subnet 172.28.0.0/16
 
-# 2. Start MongoDB
+# 2. Start ClickHouse
 docker run -d \
-  --name kato-mongodb \
+  --name kato-clickhouse \
   --network kato-network \
-  -p 27017:27017 \
-  -v kato-mongo-data:/data/db \
+  -p 8123:8123 \
+  -p 9000:9000 \
+  -v kato-clickhouse-data:/var/lib/clickhouse \
   --restart unless-stopped \
-  mongo:4.4 \
-  mongod --wiredTigerCacheSizeGB 2
+  --ulimit nofile=262144:262144 \
+  clickhouse/clickhouse-server:latest
 
 # 3. Start Qdrant
 docker run -d \
@@ -166,7 +168,9 @@ docker run -d \
   -p 8000:8000 \
   --restart unless-stopped \
   -e SERVICE_NAME=kato \
-  -e MONGO_BASE_URL=mongodb://kato-mongodb:27017 \
+  -e CLICKHOUSE_HOST=kato-clickhouse \
+  -e CLICKHOUSE_PORT=9000 \
+  -e CLICKHOUSE_DB=kato \
   -e QDRANT_HOST=kato-qdrant \
   -e QDRANT_PORT=6333 \
   -e REDIS_URL=redis://kato-redis:6379 \
@@ -178,9 +182,29 @@ docker run -d \
   -e REQUEST_TIMEOUT=120.0 \
   ghcr.io/sevakavakians/kato:latest
 
-# 7. Check health
+# 7. Start Dashboard (Optional)
+docker run -d \
+  --name kato-dashboard \
+  --network kato-network \
+  -p 3001:3001 \
+  --restart unless-stopped \
+  -e KATO_API_URL=http://kato:8000 \
+  -e CLICKHOUSE_HOST=kato-clickhouse \
+  -e CLICKHOUSE_HTTP_PORT=8123 \
+  -e CLICKHOUSE_DB=kato \
+  -e QDRANT_URL=http://kato-qdrant:6333 \
+  -e REDIS_URL=redis://kato-redis:6379 \
+  -e USE_HYBRID_PATTERNS=true \
+  -e ADMIN_USERNAME=admin \
+  -e ADMIN_PASSWORD=changeme \
+  -e SECRET_KEY=change-this-in-production \
+  -v /var/run/docker.sock:/var/run/docker.sock:rw \
+  ghcr.io/sevakavakians/kato-dashboard:latest
+
+# 8. Check health
 sleep 5
 curl http://localhost:8000/health
+curl http://localhost:3001/health  # Dashboard health (if started)
 ```
 
 **Management commands:**
@@ -188,16 +212,18 @@ curl http://localhost:8000/health
 # View logs
 docker logs kato --tail 50
 docker logs kato -f
+docker logs kato-dashboard --tail 50  # Dashboard logs
 
 # Restart services
 docker restart kato
-docker restart kato-mongodb kato-qdrant kato-redis
+docker restart kato-dashboard
+docker restart kato-clickhouse kato-qdrant kato-redis
 
 # Stop all services
-docker stop kato kato-mongodb kato-qdrant kato-redis
+docker stop kato kato-dashboard kato-clickhouse kato-qdrant kato-redis
 
 # Start all services
-docker start kato-mongodb kato-qdrant kato-redis kato
+docker start kato-clickhouse kato-qdrant kato-redis kato kato-dashboard
 
 # Update KATO
 docker pull ghcr.io/sevakavakians/kato:latest
@@ -205,11 +231,17 @@ docker stop kato
 docker rm kato
 # Then run the KATO docker run command again (step 6 above)
 
+# Update Dashboard
+docker pull ghcr.io/sevakavakians/kato-dashboard:latest
+docker stop kato-dashboard
+docker rm kato-dashboard
+# Then run the Dashboard docker run command again (step 7 above)
+
 # Clean up everything
-docker stop kato kato-mongodb kato-qdrant kato-redis
-docker rm kato kato-mongodb kato-qdrant kato-redis
+docker stop kato kato-dashboard kato-clickhouse kato-qdrant kato-redis
+docker rm kato kato-dashboard kato-clickhouse kato-qdrant kato-redis
 docker network rm kato-network
-docker volume rm kato-mongo-data kato-qdrant-data kato-redis-data
+docker volume rm kato-clickhouse-data kato-qdrant-data kato-redis-data
 ```
 
 **Advantages:**
@@ -230,9 +262,9 @@ docker volume rm kato-mongo-data kato-qdrant-data kato-redis-data
 |---------|---------------|---------------------|---------------|
 | **Files needed** | 4 files | Internet access | None |
 | **Setup complexity** | Low | Low | Medium |
-| **Management ease** | Excellent (`start.sh`) | Excellent (`start.sh`) | Manual |
+| **Management ease** | Excellent (`kato-manager.sh`) | Excellent (`kato-manager.sh`) | Manual |
 | **Customization** | Easy (edit files) | Easy (edit files) | Very Easy (modify commands) |
-| **Updates** | `./start.sh update` | `./start.sh update` | Manual pull & restart |
+| **Updates** | `./kato-manager.sh update` | `./kato-manager.sh update` | Manual pull & restart |
 | **Best for** | Production servers | Quick testing | Custom setups |
 | **Version control** | Manual | Easy (git tags) | Manual |
 
@@ -248,59 +280,59 @@ docker volume rm kato-mongo-data kato-qdrant-data kato-redis-data
 
 ```bash
 # Start all services
-./start.sh start
+./kato-manager.sh start
 
 # Stop all services
-./start.sh stop
+./kato-manager.sh stop
 
 # Restart all services
-./start.sh restart
+./kato-manager.sh restart
 
 # Check service status
-./start.sh status
+./kato-manager.sh status
 ```
 
 ### Individual Services
 
 ```bash
 # Start/stop/restart individual services
-./start.sh start mongodb
-./start.sh restart kato
-./start.sh stop redis
+./kato-manager.sh start clickhouse
+./kato-manager.sh restart kato
+./kato-manager.sh stop redis
 ```
 
 ### Updates
 
 ```bash
 # Update KATO to latest version
-./start.sh update
+./kato-manager.sh update
 
 # Or manually pull and restart
-./start.sh pull
-./start.sh restart kato
+./kato-manager.sh pull
+./kato-manager.sh restart kato
 ```
 
 ### Logs
 
 ```bash
 # View recent logs (default: 50 lines)
-./start.sh logs kato
+./kato-manager.sh logs kato
 
 # View more lines
-./start.sh logs kato 200
+./kato-manager.sh logs kato 200
 
 # Follow logs in real-time
-./start.sh follow kato
+./kato-manager.sh follow kato
 ```
 
 ### Data Management
 
 ```bash
 # Clear all data (keeps services running)
-./start.sh clean-data
+./kato-manager.sh clean-data
 
 # Remove all containers and volumes
-./start.sh clean
+./kato-manager.sh clean
 ```
 
 ## Configuration
@@ -312,7 +344,7 @@ Create a `.env` file to customize settings:
 ```bash
 cp .env.example .env
 # Edit .env with your preferred settings
-./start.sh restart
+./kato-manager.sh restart
 ```
 
 ### Available Settings
@@ -327,7 +359,7 @@ See `.env.example` for all configurable options including:
 
 ### Port Customization
 
-To use different ports, edit `docker compose.yml`:
+To use different ports, edit `docker-compose.yml`:
 
 ```yaml
 ports:
@@ -336,17 +368,17 @@ ports:
 
 ## Architecture
 
-KATO deployment includes four services:
+KATO deployment includes five services:
 
 1. **KATO Service** (Port 8000)
    - FastAPI application serving the AI engine
    - Processes observations and generates predictions
    - Uses pre-built image from `ghcr.io/sevakavakians/kato:latest`
 
-2. **MongoDB** (Port 27017)
-   - Persistent pattern storage
-   - Session-isolated databases
-   - 2GB WiredTiger cache
+2. **ClickHouse** (Ports 8123 HTTP, 9000 Native)
+   - High-performance columnar pattern data storage
+   - Multi-stage filter pipeline for billion-scale performance
+   - kb_id partitioning for node isolation
 
 3. **Qdrant** (Port 6333)
    - Vector database for semantic search
@@ -354,7 +386,14 @@ KATO deployment includes four services:
 
 4. **Redis** (Port 6379)
    - Session state management
+   - Pattern metadata (frequency, emotives)
    - High-speed caching
+
+5. **Dashboard** (Port 3001) - Optional
+   - Web-based monitoring and management interface
+   - Real-time metrics visualization
+   - Session and database management
+   - Uses pre-built image from `ghcr.io/sevakavakians/kato-dashboard:latest`
 
 All services communicate via a private Docker network (`kato-network`) and persist data in Docker volumes.
 
@@ -389,6 +428,86 @@ Visit http://localhost:8000/docs for:
 - Request/response schemas
 - Authentication details
 
+## Dashboard (Optional)
+
+KATO Dashboard provides a web-based monitoring and management interface for comprehensive system oversight.
+
+### Features
+
+- **Real-Time Monitoring**: Live system metrics, performance stats, and resource usage
+- **Session Management**: View and manage active KATO sessions with detailed insights
+- **Database Analytics**: Browse and analyze ClickHouse patterns, Qdrant vectors, and Redis cache
+- **Performance Insights**: Detailed charts and visualizations for system performance
+- **Pattern Analysis**: Explore learned patterns, frequencies, and emotive data
+- **Container Monitoring**: Real-time Docker container stats and health checks
+
+### Access
+
+- **Dashboard UI**: http://localhost:3001
+- **Default Login**: `admin` / `changeme` (⚠️ **CHANGE IN PRODUCTION!**)
+
+### Managing Dashboard
+
+The dashboard starts automatically with other services:
+
+```bash
+# Start all services (including dashboard)
+./kato-manager.sh start
+
+# Start dashboard separately
+./kato-manager.sh start dashboard
+
+# Check dashboard status
+./kato-manager.sh status
+
+# View dashboard logs
+./kato-manager.sh logs dashboard
+
+# Stop dashboard (keeps KATO running)
+./kato-manager.sh stop dashboard
+```
+
+### Security
+
+⚠️ **IMPORTANT**: Change default credentials before production deployment!
+
+Edit `.env` file:
+```env
+DASHBOARD_ADMIN_USERNAME=your-username
+DASHBOARD_ADMIN_PASSWORD=your-secure-password
+DASHBOARD_SECRET_KEY=your-random-secret-key
+```
+
+Then restart:
+```bash
+./kato-manager.sh restart dashboard
+```
+
+### Features Overview
+
+| Feature | Description |
+|---------|-------------|
+| **System Metrics** | CPU, memory, disk usage for all containers |
+| **Session Browser** | View active sessions, STM contents, and configurations |
+| **Pattern Explorer** | Search and analyze patterns across all knowledgebases |
+| **Database Tools** | Direct access to ClickHouse, Qdrant, and Redis data |
+| **Performance Charts** | Historical trends and real-time performance graphs |
+| **Container Stats** | Per-container resource monitoring via Docker API |
+
+### Optional Service
+
+The dashboard is **completely optional**. KATO functions normally without it:
+- Dashboard provides monitoring/management UI only
+- Stopping the dashboard doesn't affect KATO operations
+- Can be started/stopped independently: `./kato-manager.sh stop dashboard`
+
+### Docker Socket Access
+
+The dashboard requires access to the Docker socket (`/var/run/docker.sock`) for container monitoring:
+- **Security Note**: This grants the dashboard access to the Docker daemon
+- **Production**: Consider using a Docker socket proxy for restricted access
+- **Alternative**: Remove volume mount in `docker-compose.yml` to disable container stats
+
 ## Monitoring
 
 ### Health Checks
@@ -398,20 +517,20 @@ Visit http://localhost:8000/docs for:
 curl http://localhost:8000/health
 
 # Detailed status
-./start.sh status
+./kato-manager.sh status
 ```
 
 ### Service Logs
 
 ```bash
 # All services
-./start.sh logs
+./kato-manager.sh logs
 
 # Specific service
-./start.sh logs mongodb
+./kato-manager.sh logs clickhouse
 
 # Real-time logs
-./start.sh follow kato
+./kato-manager.sh follow kato
 ```
 
 ### Metrics
@@ -427,7 +546,7 @@ curl http://localhost:8000/metrics
 
 1. **Check if ports are available:**
    ```bash
-   lsof -i :8000 -i :27017 -i :6333 -i :6379
+   lsof -i :8000 -i :8123 -i :9000 -i :6333 -i :6379
    ```
 
 2. **Check Docker resources:**
@@ -436,35 +555,36 @@ curl http://localhost:8000/metrics
 
 3. **View logs for errors:**
    ```bash
-   ./start.sh logs
+   ./kato-manager.sh logs
    ```
 
 ### KATO Not Responding
 
 1. **Check service status:**
    ```bash
-   ./start.sh status
+   ./kato-manager.sh status
    docker logs kato --tail 50
    ```
 
 2. **Verify dependencies:**
    ```bash
-   docker exec kato-mongodb mongo --eval "db.adminCommand('ping')"
+   docker exec kato-clickhouse clickhouse-client --query "SELECT 1"
    curl http://localhost:6333/health
    docker exec kato-redis redis-cli ping
    ```
 
 3. **Restart services:**
    ```bash
-   ./start.sh restart
+   ./kato-manager.sh restart
    ```
 
 ### Out of Memory
 
-1. **Reduce MongoDB cache:**
-   Edit `docker compose.yml`:
+1. **Adjust ClickHouse memory settings:**
+   Edit `docker-compose.yml`:
    ```yaml
-   command: mongod --wiredTigerCacheSizeGB 1
+   environment:
+     - CLICKHOUSE_MAX_MEMORY_USAGE=4000000000  # 4GB
    ```
 
 2. **Reduce batch size:**
@@ -477,8 +597,8 @@ curl http://localhost:8000/metrics
 
 ```bash
 # Clear all data and restart
-./start.sh clean-data
-./start.sh restart
+./kato-manager.sh clean-data
+./kato-manager.sh restart
 ```
 
 ## Production Considerations
@@ -486,14 +606,14 @@ curl http://localhost:8000/metrics
 ### Security
 
 1. **Network Isolation:**
-   - Remove port exposures in `docker compose.yml`
+   - Remove port exposures in `docker-compose.yml`
    - Use reverse proxy (nginx, Traefik) for public access
    - Enable TLS/SSL certificates
 
 2. **Database Security:**
-   - Configure MongoDB authentication
+   - Configure ClickHouse authentication and user permissions
    - Use strong passwords
-   - Enable access control
+   - Enable access control and network restrictions
 
 3. **API Security:**
    - Implement authentication middleware
@@ -508,7 +628,7 @@ curl http://localhost:8000/metrics
    - Session affinity/sticky sessions
 
 2. **Resource Limits:**
-   Add to `docker compose.yml`:
+   Add to `docker-compose.yml`:
    ```yaml
    deploy:
      resources:
@@ -521,8 +641,8 @@ curl http://localhost:8000/metrics
 
 1. **Database Backups:**
    ```bash
-   # MongoDB
-   docker exec kato-mongodb mongodump --out /data/backup
+   # ClickHouse (use backup command or freeze tables)
+   docker exec kato-clickhouse clickhouse-client --query "BACKUP DATABASE kato TO Disk('backups', 'backup.zip')"
 
    # Qdrant
    docker exec kato-qdrant sh -c 'tar -czf /qdrant/backup.tar.gz /qdrant/storage'
@@ -530,8 +650,8 @@ curl http://localhost:8000/metrics
 
 2. **Volume Backups:**
    ```bash
-   docker run --rm -v kato_mongo-data:/data -v $(pwd):/backup \
-     alpine tar -czf /backup/mongo-backup.tar.gz /data
+   docker run --rm -v kato-clickhouse-data:/data -v $(pwd):/backup \
+     alpine tar -czf /backup/clickhouse-backup.tar.gz /data
    ```
 
 ### Monitoring
@@ -610,21 +730,21 @@ image: ghcr.io/sevakavakians/kato:latest
 
 ```bash
 # Update to latest version of current tag
-./start.sh update
+./kato-manager.sh update
 
 # This will:
 # - Pull latest image for your configured tag
 # - Gracefully stop KATO service
 # - Remove old container
 # - Start with new image
-# - Preserve all data (MongoDB, Qdrant, Redis)
+# - Preserve all data (ClickHouse, Qdrant, Redis)
 ```
 
-#### Method 2: Change Version in docker compose.yml
+#### Method 2: Change Version in docker-compose.yml
 
 ```bash
-# 1. Edit docker compose.yml
-vim docker compose.yml
+# 1. Edit docker-compose.yml
+vim docker-compose.yml
 
 # Change:
 #   image: ghcr.io/sevakavakians/kato:2.0.0
@@ -632,8 +752,8 @@ vim docker compose.yml
 #   image: ghcr.io/sevakavakians/kato:2.1.0
 
 # 2. Pull and restart
-./start.sh pull
-./start.sh restart kato
+./kato-manager.sh pull
+./kato-manager.sh restart kato
 ```
 
 #### Method 3: Manual Docker Commands
@@ -653,7 +773,9 @@ docker run -d \
   -p 8000:8000 \
   --restart unless-stopped \
   -e SERVICE_NAME=kato \
-  -e MONGO_BASE_URL=mongodb://kato-mongodb:27017 \
+  -e CLICKHOUSE_HOST=kato-clickhouse \
+  -e CLICKHOUSE_PORT=9000 \
+  -e CLICKHOUSE_DB=kato \
   -e QDRANT_HOST=kato-qdrant \
   -e QDRANT_PORT=6333 \
   -e REDIS_URL=redis://kato-redis:6379 \
@@ -697,14 +819,14 @@ docker stop kato
 docker rm kato
 
 # 2. Start previous version
-# (Update version number in docker compose.yml or docker run command)
-./start.sh start
+# (Update version number in docker-compose.yml or docker run command)
+./kato-manager.sh start
 
 # Or with docker compose
 docker compose up -d kato
 ```
 
-Data in MongoDB, Qdrant, and Redis volumes is preserved during version changes.
+Data in ClickHouse, Qdrant, and Redis volumes is preserved during version changes.
 
 ### Pre-Release Versions
 

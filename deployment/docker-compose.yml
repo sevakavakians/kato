@@ -1,23 +1,30 @@
 services:
-  # MongoDB shared by all sessions
-  mongodb:
-    image: mongo:4.4
-    container_name: kato-mongodb
+  # ClickHouse for pattern data storage
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: kato-clickhouse
     ports:
-      - "27017:27017"
+      - "8123:8123"  # HTTP interface
+      - "9000:9000"  # Native client interface
     volumes:
-      - mongo-data:/data/db
+      - clickhouse-data:/var/lib/clickhouse
+      - clickhouse-logs:/var/log/clickhouse-server
     networks:
       - kato-network
     restart: unless-stopped
-    # Increased memory for large-scale hierarchical training
-    command: mongod --wiredTigerCacheSizeGB 2
+    environment:
+      - CLICKHOUSE_DB=kato
+      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
     healthcheck:
-      test: ["CMD", "mongo", "--eval", "db.adminCommand('ping')", "--quiet"]
-      interval: 15s
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      interval: 30s
       timeout: 10s
-      retries: 20
-      start_period: 180s
+      retries: 5
+      start_period: 30s
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
 
   # Qdrant vector database
   qdrant:
@@ -31,11 +38,11 @@ services:
       - kato-network
     restart: unless-stopped
 
-  # Redis for session storage
+  # Redis for session storage and pattern metadata
   redis:
     image: redis:7-alpine
     container_name: kato-redis
-    command: redis-server --save "" --appendonly no  # Disable persistence for faster operations
+    command: redis-server --save 60 1000 --appendonly yes
     ports:
       - "6379:6379"
     volumes:
@@ -52,19 +59,22 @@ services:
   # KATO Service - Using pre-built container image
   # Image available at: https://github.com/sevakavakians/kato/pkgs/container/kato
   # Version options:
-  #   - ghcr.io/sevakavakians/kato:2.0.0   # Pin to specific version (recommended for production)
-  #   - ghcr.io/sevakavakians/kato:2.0     # Auto-receive patches (2.0.1, 2.0.2, etc.)
-  #   - ghcr.io/sevakavakians/kato:2       # Auto-receive minor updates (2.1.0, 2.2.0, etc.)
+  #   - ghcr.io/sevakavakians/kato:3.1.0   # Pin to specific version (recommended for production)
+  #   - ghcr.io/sevakavakians/kato:3.1     # Auto-receive patches (3.1.1, 3.1.2, etc.)
+  #   - ghcr.io/sevakavakians/kato:3       # Auto-receive minor updates (3.2.0, 3.3.0, etc.)
   #   - ghcr.io/sevakavakians/kato:latest  # Always use latest (development only)
   kato:
-    image: ghcr.io/sevakavakians/kato:2.0.0
+    image: ghcr.io/sevakavakians/kato:latest
     container_name: kato
     environment:
       - SERVICE_NAME=kato
-      - MONGO_BASE_URL=mongodb://mongodb:27017
+      - CLICKHOUSE_HOST=clickhouse
+      - CLICKHOUSE_PORT=8123
+      - CLICKHOUSE_DB=kato
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
       - REDIS_URL=redis://redis:6379
+      - REDIS_ENABLED=true
       - LOG_LEVEL=INFO
       - SESSION_TTL=3600
       - SESSION_AUTO_EXTEND=true
@@ -77,7 +87,7 @@ services:
     networks:
       - kato-network
     depends_on:
-      mongodb:
+      clickhouse:
         condition: service_healthy
       qdrant:
         condition: service_started
@@ -90,6 +100,64 @@ services:
       timeout: 10s
       retries: 3
 
+  # KATO Dashboard - Optional web-based monitoring and management interface
+  # Image available at: https://github.com/sevakavakians/kato-dashboard/pkgs/container/kato-dashboard
+  # Version options:
+  #   - ghcr.io/sevakavakians/kato-dashboard:0.1.0   # Pin to specific version (recommended)
+  #   - ghcr.io/sevakavakians/kato-dashboard:0.1     # Auto-receive patches
+  #   - ghcr.io/sevakavakians/kato-dashboard:0       # Auto-receive minor updates
+  #   - ghcr.io/sevakavakians/kato-dashboard:latest  # Always use latest
+  dashboard:
+    image: ghcr.io/sevakavakians/kato-dashboard:latest
+    container_name: kato-dashboard
+    environment:
+      # KATO API connection
+      - KATO_API_URL=http://kato:8000
+      # ClickHouse configuration
+      - CLICKHOUSE_HOST=clickhouse
+      - CLICKHOUSE_HTTP_PORT=8123
+      - CLICKHOUSE_DB=kato
+      - CLICKHOUSE_USER=default
+      - CLICKHOUSE_PASSWORD=
+      # Qdrant connection
+      - QDRANT_URL=http://qdrant:6333
+      # Redis connection
+      - REDIS_URL=redis://redis:6379
+      # Hybrid architecture mode
+      - USE_HYBRID_PATTERNS=true
+      - DATABASE_READ_ONLY=false
+      # Security (CHANGE IN PRODUCTION!)
+      - ADMIN_USERNAME=${DASHBOARD_ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${DASHBOARD_ADMIN_PASSWORD:-changeme}
+      - SECRET_KEY=${DASHBOARD_SECRET_KEY:-change-this-in-production-to-something-secure}
+      # CORS
+      - CORS_ORIGINS=http://localhost:3001,http://localhost:8080
+      # Cache
+      - CACHE_TTL_SECONDS=30
+      - MAX_CACHE_SIZE=1000
+    ports:
+      - "3001:3001"
+    volumes:
+      # Docker socket access for container monitoring
+      # Security Note: Grants container access to Docker daemon
+      - /var/run/docker.sock:/var/run/docker.sock:rw
+    networks:
+      - kato-network
+    depends_on:
+      kato:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
 networks:
   kato-network:
     driver: bridge
@@ -98,6 +166,7 @@ networks:
         - subnet: 172.28.0.0/16
 
 volumes:
-  mongo-data:
+  clickhouse-data:
+  clickhouse-logs:
   qdrant-data:
   redis-data:

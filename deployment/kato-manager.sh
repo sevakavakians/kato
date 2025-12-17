@@ -27,7 +27,7 @@ print_error() {
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 # Available services
-ALL_SERVICES="mongodb redis qdrant kato"
+ALL_SERVICES="clickhouse redis qdrant kato dashboard"
 
 # Command to execute
 COMMAND=${1:-help}
@@ -47,7 +47,7 @@ case "$COMMAND" in
         validate_service "$SERVICE"
         if [[ "$SERVICE" == "all" ]]; then
             print_info "Starting all KATO services..."
-            docker compose -f "$SCRIPT_DIR/docker compose.yml" up -d
+            docker compose -f "$SCRIPT_DIR/docker-compose.yml" up -d
             print_info "Waiting for services to be ready..."
             sleep 5
 
@@ -61,7 +61,7 @@ case "$COMMAND" in
             fi
         else
             print_info "Starting $SERVICE..."
-            docker compose -f "$SCRIPT_DIR/docker compose.yml" up -d "$SERVICE"
+            docker compose -f "$SCRIPT_DIR/docker-compose.yml" up -d "$SERVICE"
             print_info "$SERVICE started"
         fi
         ;;
@@ -70,11 +70,11 @@ case "$COMMAND" in
         validate_service "$SERVICE"
         if [[ "$SERVICE" == "all" ]]; then
             print_info "Stopping all KATO services..."
-            docker compose -f "$SCRIPT_DIR/docker compose.yml" down
+            docker compose -f "$SCRIPT_DIR/docker-compose.yml" down
             print_info "All services stopped"
         else
             print_info "Stopping $SERVICE..."
-            docker compose -f "$SCRIPT_DIR/docker compose.yml" stop "$SERVICE"
+            docker compose -f "$SCRIPT_DIR/docker-compose.yml" stop "$SERVICE"
             print_info "$SERVICE stopped"
         fi
         ;;
@@ -83,11 +83,11 @@ case "$COMMAND" in
         validate_service "$SERVICE"
         if [[ "$SERVICE" == "all" ]]; then
             print_info "Restarting all KATO services..."
-            docker compose -f "$SCRIPT_DIR/docker compose.yml" restart
+            docker compose -f "$SCRIPT_DIR/docker-compose.yml" restart
             print_info "All services restarted"
         else
             print_info "Restarting $SERVICE..."
-            docker compose -f "$SCRIPT_DIR/docker compose.yml" restart "$SERVICE"
+            docker compose -f "$SCRIPT_DIR/docker-compose.yml" restart "$SERVICE"
             print_info "$SERVICE restarted"
         fi
         ;;
@@ -95,14 +95,14 @@ case "$COMMAND" in
     pull)
         print_info "Pulling latest KATO image from registry..."
         docker pull ghcr.io/sevakavakians/kato:latest
-        print_info "Image updated. Run './start.sh restart kato' to use the new version"
+        print_info "Image updated. Run './kato-manager.sh restart kato' to use the new version"
         ;;
 
     update)
         print_info "Updating KATO to latest version..."
         docker pull ghcr.io/sevakavakians/kato:latest
         print_info "Restarting KATO service..."
-        docker compose -f "$SCRIPT_DIR/docker compose.yml" up -d kato
+        docker compose -f "$SCRIPT_DIR/docker-compose.yml" up -d kato
         print_info "✓ KATO updated and restarted"
         ;;
 
@@ -110,18 +110,18 @@ case "$COMMAND" in
         SERVICE=${2:-kato}
         LINES=${3:-50}
         print_info "Showing last $LINES lines of logs for $SERVICE..."
-        docker compose -f "$SCRIPT_DIR/docker compose.yml" logs --tail="$LINES" "$SERVICE"
+        docker compose -f "$SCRIPT_DIR/docker-compose.yml" logs --tail="$LINES" "$SERVICE"
         ;;
 
     follow)
         SERVICE=${2:-kato}
         print_info "Following logs for $SERVICE (Ctrl+C to stop)..."
-        docker compose -f "$SCRIPT_DIR/docker compose.yml" logs -f "$SERVICE"
+        docker compose -f "$SCRIPT_DIR/docker-compose.yml" logs -f "$SERVICE"
         ;;
 
     status)
         print_info "Checking service status..."
-        docker compose -f "$SCRIPT_DIR/docker compose.yml" ps
+        docker compose -f "$SCRIPT_DIR/docker-compose.yml" ps
 
         # Check KATO health
         echo ""
@@ -131,12 +131,12 @@ case "$COMMAND" in
             print_warn "✗ KATO API is not responding"
         fi
 
-        # Check MongoDB
-        if docker exec kato-mongodb mongo --eval "db.adminCommand('ping')" > /dev/null 2>&1; then
-            print_info "✓ MongoDB is healthy"
+        # Check ClickHouse
+        if curl -s http://localhost:8123/ping > /dev/null 2>&1; then
+            print_info "✓ ClickHouse is healthy"
         else
-            print_warn "✗ MongoDB is not responding"
-            print_info "  Check: docker logs kato-mongodb --tail 50"
+            print_warn "✗ ClickHouse is not responding"
+            print_info "  Check: docker logs kato-clickhouse --tail 50"
         fi
 
         # Check Qdrant
@@ -152,26 +152,27 @@ case "$COMMAND" in
         else
             print_warn "✗ Redis is not responding"
         fi
+
+        # Check Dashboard (optional)
+        if curl -s http://localhost:3001/health > /dev/null 2>&1; then
+            print_info "✓ Dashboard is healthy (optional)"
+        else
+            print_warn "✗ Dashboard is not responding (optional - may not be started)"
+        fi
         ;;
 
     clean-data)
-        print_warn "⚠️  This will DELETE ALL DATA in MongoDB, Qdrant, and Redis!"
+        print_warn "⚠️  This will DELETE ALL DATA in ClickHouse, Qdrant, and Redis!"
         print_warn "Services will remain running but all databases will be cleared."
         echo -e "${RED}Are you absolutely sure? (yes/N)${NC}"
         read -r response
         if [[ "$response" == "yes" ]]; then
             print_info "Clearing all database data..."
 
-            # Clear MongoDB - drop all non-system databases
-            print_info "Clearing MongoDB databases..."
-            docker exec kato-mongodb mongo --eval "
-                db.getMongo().getDBNames().forEach(function(dbName) {
-                    if (dbName !== 'admin' && dbName !== 'config' && dbName !== 'local') {
-                        print('Dropping database: ' + dbName);
-                        db.getSiblingDB(dbName).dropDatabase();
-                    }
-                });
-            " || print_error "Failed to clear MongoDB"
+            # Clear ClickHouse - drop all tables in kato database
+            print_info "Clearing ClickHouse database..."
+            docker exec kato-clickhouse clickhouse-client --query "DROP DATABASE IF EXISTS kato" || print_error "Failed to drop ClickHouse database"
+            docker exec kato-clickhouse clickhouse-client --query "CREATE DATABASE kato" || print_error "Failed to recreate ClickHouse database"
 
             # Clear Qdrant - delete all collections
             print_info "Clearing Qdrant collections..."
@@ -190,7 +191,7 @@ case "$COMMAND" in
             docker exec kato-redis redis-cli FLUSHALL || print_error "Failed to clear Redis"
 
             print_info "✓ All database data has been cleared!"
-            print_warn "Services are still running. Use './start.sh restart' if needed."
+            print_warn "Services are still running. Use './kato-manager.sh restart' if needed."
         else
             print_info "Data cleanup cancelled"
         fi
@@ -201,7 +202,7 @@ case "$COMMAND" in
         read -r response
         if [[ "$response" == "y" || "$response" == "Y" ]]; then
             print_info "Cleaning up KATO services..."
-            docker compose -f "$SCRIPT_DIR/docker compose.yml" down -v
+            docker compose -f "$SCRIPT_DIR/docker-compose.yml" down -v
             print_info "Cleanup complete"
         else
             print_info "Cleanup cancelled"
@@ -211,7 +212,7 @@ case "$COMMAND" in
     help|*)
         echo "KATO Deployment Manager"
         echo ""
-        echo "Usage: ./start.sh [COMMAND] [SERVICE] [OPTIONS]"
+        echo "Usage: ./kato-manager.sh [COMMAND] [SERVICE] [OPTIONS]"
         echo ""
         echo "Commands:"
         echo "  start [SERVICE]    - Start service(s) (default: all)"
@@ -222,21 +223,25 @@ case "$COMMAND" in
         echo "  logs [SERVICE] [N] - Show last N lines of logs (default: kato, 50 lines)"
         echo "  follow [SERVICE]   - Follow logs in real-time (default: kato)"
         echo "  status             - Check all service status"
-        echo "  clean-data         - Delete all data in MongoDB, Qdrant, and Redis"
+        echo "  clean-data         - Delete all data in ClickHouse, Qdrant, and Redis"
         echo "  clean              - Remove all containers and volumes"
         echo "  help               - Show this help message"
         echo ""
         echo "Services: $ALL_SERVICES"
         echo ""
         echo "Examples:"
-        echo "  ./start.sh start              # Start all services"
-        echo "  ./start.sh update             # Update KATO to latest version"
-        echo "  ./start.sh status             # Check all services"
-        echo "  ./start.sh logs kato 100      # Show last 100 lines from KATO"
-        echo "  ./start.sh follow kato        # Follow KATO logs in real-time"
-        echo "  ./start.sh restart kato       # Restart only KATO"
-        echo "  ./start.sh clean-data         # Clear all database data"
+        echo "  ./kato-manager.sh start              # Start all services (including dashboard)"
+        echo "  ./kato-manager.sh start dashboard    # Start dashboard only"
+        echo "  ./kato-manager.sh update             # Update KATO to latest version"
+        echo "  ./kato-manager.sh status             # Check all services"
+        echo "  ./kato-manager.sh logs kato 100      # Show last 100 lines from KATO"
+        echo "  ./kato-manager.sh follow dashboard   # Follow dashboard logs in real-time"
+        echo "  ./kato-manager.sh restart kato       # Restart only KATO"
+        echo "  ./kato-manager.sh stop dashboard     # Stop dashboard (keeps KATO running)"
+        echo "  ./kato-manager.sh clean-data         # Clear all database data"
         echo ""
-        echo "Documentation: http://localhost:8000/docs (when running)"
+        echo "Documentation:"
+        echo "  KATO API:  http://localhost:8000/docs (when running)"
+        echo "  Dashboard: http://localhost:3001 (when running)"
         ;;
 esac

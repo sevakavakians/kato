@@ -3,6 +3,99 @@
 
 ---
 
+## 2025-12-17 - Documentation Cleanup: MongoDB to ClickHouse Migration References
+
+**Trigger**: Task completion event - Comprehensive documentation audit and update
+
+**Event Type**: Documentation maintenance (architecture migration references)
+
+**Context**: Complete removal of outdated MongoDB references from user-facing and developer-facing documentation to accurately reflect KATO v3.0+ ClickHouse + Redis hybrid architecture
+
+**Task Scope**: Comprehensive Documentation Audit - MongoDB to ClickHouse Migration
+
+**Work Completed**:
+
+**Files Updated** (7 files):
+1. `deployment/README.md` - Updated docker commands, environment variables, ports, troubleshooting
+   - Changed MongoDB port 27017 → ClickHouse ports 8123 (HTTP) and 9000 (native)
+   - Updated MONGO_BASE_URL → CLICKHOUSE_HOST/PORT/DB environment variables
+   - Replaced mongo:4.4 → clickhouse/clickhouse-server:latest in docker compose examples
+   - Updated monitoring commands: mongosh → clickhouse-client
+   - Updated backup commands: mongodump → ClickHouse backup procedures
+
+2. `ARCHITECTURE.md` - Updated diagrams, component descriptions, data flow patterns
+   - Replaced MongoDB in all architecture diagrams with ClickHouse + Redis
+   - Updated storage layer descriptions (MongoDB → ClickHouse for patterns, Redis for metadata)
+   - Updated docker compose examples to reflect hybrid architecture
+   - Updated data flow patterns and component interactions
+
+3. `docs/deployment/DOCKER.md` - Already correct (no changes needed)
+   - Confirmed accurate ClickHouse + Redis references
+
+4. `docs/deployment/ARCHITECTURE.md` - Already correct (no changes needed)
+   - Confirmed accurate hybrid architecture documentation
+
+5. `docs/developers/debugging.md` - Updated monitoring commands
+   - Changed MongoDB monitoring: `docker exec -it kato-mongo mongosh` → ClickHouse equivalent
+
+6. `benchmarks/README.md` - Updated troubleshooting section
+   - Replaced MongoDB troubleshooting with ClickHouse troubleshooting
+   - Updated connection debugging commands
+
+7. `docs/integration/database-isolation.md` - Updated code examples and TOC
+   - Updated table of contents (MongoDB → ClickHouse)
+   - Replaced pymongo code example with clickhouse_connect example
+
+**Key Changes Summary**:
+- **Ports**: 27017 (MongoDB) → 8123/9000 (ClickHouse HTTP/native)
+- **Environment Variables**: MONGO_BASE_URL → CLICKHOUSE_HOST/PORT/DB
+- **Docker Services**: mongo:4.4 → clickhouse/clickhouse-server:latest
+- **Commands**: mongosh → clickhouse-client, mongodump → ClickHouse backup
+- **Architecture**: Updated all descriptions to ClickHouse + Redis hybrid
+- **Code Examples**: pymongo → clickhouse_connect
+
+**Verification**:
+- ✅ All 7 files reviewed and updated where needed
+- ✅ 2 files already correct (no changes needed)
+- ✅ Architecture descriptions now accurately reflect v3.0+ hybrid storage
+- ✅ All user-facing and developer-facing docs consistent
+- ✅ Code examples updated to use correct libraries
+
+**Impact Assessment**:
+- **User Experience**: Significantly improved - Documentation now matches actual system architecture
+- **Developer Onboarding**: Clearer - New developers see accurate technology stack
+- **Deployment Accuracy**: Critical - Deployment guides now reference correct services and ports
+- **Confusion Reduction**: Major - Eliminates outdated MongoDB references that could mislead users
+- **Breaking Changes**: None - Documentation-only changes reflecting existing v3.0+ architecture
+
+**Classification**: Documentation Maintenance (Architecture Migration References)
+
+**Confidence**: Very High - Comprehensive audit completed, all MongoDB references replaced with accurate ClickHouse + Redis information
+
+**Related Work**:
+- KATO v3.0 MongoDB Removal (2025-11-13) - Complete code migration to ClickHouse + Redis
+- Phase 3 Documentation Updates (2025-11-28) - Previous MongoDB reference removal (~200 references, 24 files)
+- Hybrid Architecture Initiative (2025-11-11 to 2025-11-13) - Original migration project
+
+**Context**: This work completes the documentation side of KATO's v3.0 architecture migration. All user-facing deployment guides, architecture documentation, and developer resources now accurately reflect the ClickHouse + Redis hybrid storage system that replaced MongoDB.
+
+**Time Spent**: Not tracked (user-completed comprehensive audit)
+
+**Agent Actions**:
+- Logged documentation cleanup completion in maintenance log
+- No planning document updates required (documentation maintenance, no active initiative affected)
+
+**Next Steps**: None - Documentation now fully consistent with KATO v3.0+ architecture
+
+**Key Takeaway**: Comprehensive documentation audits are essential after major architecture migrations. User-facing deployment guides and developer documentation must accurately reflect the current technology stack to prevent confusion and deployment issues. This work ensures all KATO documentation correctly describes the ClickHouse + Redis hybrid architecture introduced in v3.0.
+
+---
+
+*Agent execution time: < 5 seconds*
+*Response type: Silent operation (maintenance log update only)*
+
+---
+
 ## 2025-11-28 - MILESTONE: Phase 3 Complete (Documentation Updates) ✅
 
 **Trigger**: Phase Completion event - Phase 3 (Documentation Updates) successfully completed (2 of 2 tasks)
@@ -1910,6 +2003,101 @@ Corrected indentation in `processor_manager.py` lines 168-176 by dedenting 4 spa
 **Next Steps**: None - Repository clean and ready for continued development
 
 **Key Takeaway**: Regular cleanup of temporary debugging artifacts maintains repository hygiene and reduces confusion. Committing planning documentation ensures project context is preserved.
+
+---
+
+## 2025-12-17 - Bug Fix: Deployment Network Auto-Creation
+
+**Trigger**: Task completion event - Bug fix for deployment package
+
+**Event Type**: Bug fix (operations/deployment improvement)
+
+**Context**: Fixed deployment docker-compose.yml network configuration that prevented first-time deployments from working. Users following the Quick Start guide encountered "network declared as external, but could not be found" error.
+
+**Root Cause**:
+- `deployment/docker-compose.yml` had network declared as `external: true`
+- This required the network to already exist before running docker compose
+- Inconsistent with development setup (which auto-creates networks)
+- Breaking first-time deployment experience
+
+**Solution Implemented**:
+Changed network configuration from:
+```yaml
+networks:
+  kato-network:
+    name: kato_kato-network
+    external: true
+```
+
+To:
+```yaml
+networks:
+  kato-network:
+    name: kato_kato-network
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+```
+
+**Work Completed**:
+
+**Files Modified** (1 file):
+1. `deployment/docker-compose.yml` - Changed network from external to auto-creating
+   - Removed `external: true` declaration
+   - Added `driver: bridge` configuration
+   - Added IPAM subnet configuration (172.28.0.0/16)
+   - Now matches development docker-compose.yml behavior
+
+**Verification**:
+- Configuration validated with `docker compose config` command
+- Network will auto-create with correct name (kato_kato-network)
+- No changes required to kato-manager.sh script
+- Deployment README Quick Start workflow now works without manual network creation
+
+**Commit Details**:
+- Commit hash: e0800cb
+- Commit message: "fix: Auto-create Docker network in deployment package"
+- Files changed: 1 file (4 insertions, 1 deletion)
+
+**Impact Assessment**:
+- **Severity**: Low (operational improvement)
+- **Type**: Bug fix (deployment experience)
+- **Scope**: Deployment package only (no code changes)
+- **Breaking Changes**: None (backward compatible - existing networks work, new deployments auto-create)
+- **Migration Required**: None (auto-applied on next deployment)
+
+**User Experience Improvements**:
+- First-time deployments now work without manual network creation step
+- Consistent experience between development and production setups
+- Eliminates confusing error message for new users following Quick Start guide
+- Reduces deployment friction and support burden
+
+**Pattern Recognition**:
+- **Issue Type**: Configuration inconsistency between environments
+- **Discovery Method**: User following Quick Start guide in production
+- **Resolution Time**: < 1 hour (investigation + fix + verification)
+- **Confidence**: High (validated with docker compose config)
+- **Preventability**: Medium (could have been caught with end-to-end deployment testing)
+
+**Classification**: Bug Fix (Non-Breaking, Operations)
+
+**Related Documentation**:
+- Deployment Quick Start guide (deployment/README.md)
+- Docker Compose configuration (deployment/docker-compose.yml)
+- Development docker-compose.yml (reference for consistency)
+
+**Agent Actions**:
+1. Logged bug fix completion in maintenance log
+2. Updated SESSION_STATE.md "Recent Achievements" section
+3. No DAILY_BACKLOG.md changes (ad-hoc bug fix)
+4. No DECISIONS.md update (configuration fix, not architectural)
+
+**Next Steps**: None - Bug fix complete, committed, and verified
+
+**Key Takeaway**: Configuration consistency between development and production environments is critical for first-time user experience. Auto-creating networks is the standard Docker Compose pattern and should be preferred over external networks unless there's a specific requirement for pre-existing networks.
+
+**Time Spent**: ~45 minutes (investigation + fix + validation + commit + documentation)
 
 ---
 

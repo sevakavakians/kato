@@ -248,6 +248,13 @@ Make KatoProcessor stateless following standard web application patterns:
 - **Related Work**: planning-docs/initiatives/hybrid-clickhouse-redis.md (v3.0 architecture)
 
 ## Recent Achievements
+- **Deployment Network Auto-Creation Bug Fix - COMPLETE** (2025-12-17): ✅ OPERATIONS IMPROVEMENT
+  - **Bug**: Users following Quick Start guide encountered "network declared as external, but could not be found" error
+  - **Root Cause**: deployment/docker-compose.yml required pre-existing network (external: true)
+  - **Fix**: Changed to auto-creating network with bridge driver and IPAM config (matches development setup)
+  - **Impact**: First-time deployments now work without manual network creation step
+  - **Verification**: Configuration validated, no changes required to kato-manager.sh
+  - **Commit**: e0800cb - "fix: Auto-create Docker network in deployment package"
 - **Filter Pipeline Default Changed to Empty - COMPLETE** (2025-11-29): ✅ BREAKING CHANGE IMPLEMENTATION
   - **Breaking Change**: Default filter pipeline changed from `["length", "jaccard", "rapidfuzz"]` to `[]`
   - **Rationale**: Maximum transparency and recall by default, explicit opt-in for filtering

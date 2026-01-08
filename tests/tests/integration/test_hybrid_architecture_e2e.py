@@ -334,12 +334,12 @@ def test_hybrid_empty_state_handling(hybrid_kato_fixture):
         hybrid_kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
     hybrid_kato_fixture.learn()
 
-    # Query with only 1 string (below minimum for predictions)
+    # Query with only 1 string (now supported via fast path)
     hybrid_kato_fixture.observe({'strings': ['empty'], 'vectors': [], 'emotives': {}})
     predictions = hybrid_kato_fixture.get_predictions()
 
-    # Should return empty list (KATO requires 2+ strings)
-    assert len(predictions) == 0, "Should return no predictions with only 1 string"
+    # Should return predictions (KATO now supports 1+ strings with optimized fast path)
+    assert len(predictions) > 0, "Should return predictions with 1 string (fast path optimization)"
 
 
 def test_hybrid_backward_compatibility(kato_fixture):

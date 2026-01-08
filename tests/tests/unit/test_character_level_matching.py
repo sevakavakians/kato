@@ -329,14 +329,14 @@ class TestEdgeCases:
         kato.observe({'strings': ['a', 'b', 'c']})
         kato.learn()
 
-        # Query with single token (need ≥2 for predictions)
+        # Query with single token (now supported via fast path)
         kato.clear_stm()
         kato.observe({'strings': ['a']})
 
         predictions = kato.get_predictions()
 
-        # Single token is insufficient (KATO requires ≥2 tokens in STM)
-        assert len(predictions) == 0
+        # Single token should now generate predictions (fast path optimization)
+        assert len(predictions) > 0
 
     def test_character_level_special_characters(self, kato_fixture):
         """Test character-level matching with special characters."""

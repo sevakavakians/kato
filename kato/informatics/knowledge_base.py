@@ -443,6 +443,8 @@ class SuperKnowledgeBase:
                 # Increment symbol frequency for each symbol by its count in pattern
                 for symbol, count in symbol_counts.items():
                     self.redis_writer.increment_symbol_frequency(symbol, count)
+                    # Ensure symbol-to-pattern mapping exists (idempotent operation)
+                    self.redis_writer.add_symbol_to_pattern_mapping(symbol, pattern_object.name)
                     logger.debug(f"[HYBRID] Incremented symbol frequency for {symbol} by {count}")
 
                 # Increment global symbol count (pattern seen again)
@@ -494,7 +496,9 @@ class SuperKnowledgeBase:
                     self.redis_writer.increment_symbol_frequency(symbol, count)
                     # Increment pattern_member_frequency by 1 (this pattern contains this symbol)
                     self.redis_writer.increment_pattern_member_frequency(symbol, 1)
-                    logger.debug(f"[HYBRID] Tracked symbol {symbol}: freq+{count}, pmf+1")
+                    # Add symbol-to-pattern mapping for fast single-symbol lookups
+                    self.redis_writer.add_symbol_to_pattern_mapping(symbol, pattern_object.name)
+                    logger.debug(f"[HYBRID] Tracked symbol {symbol}: freq+{count}, pmf+1, added to index")
 
                 # Update global totals for new pattern
                 self.redis_writer.increment_global_symbol_count(symbol_count)

@@ -513,3 +513,102 @@ class RedisWriter:
         except Exception as e:
             logger.error(f"Failed to delete predictions for {self.kb_id}: {e}")
             raise
+
+    def add_symbol_to_pattern_mapping(self, symbol: str, pattern_name: str) -> int:
+        """
+        Add a symbol-to-pattern mapping in Redis.
+
+        Creates a SET containing all pattern names that contain this symbol.
+        Used for fast single-symbol prediction lookups.
+
+        Args:
+            symbol: Symbol name
+            pattern_name: Pattern name (hash)
+
+        Returns:
+            Number of elements added to the set (1 if new, 0 if already exists)
+
+        Raises:
+            Exception: If add fails
+        """
+        try:
+            key = f"{self.kb_id}:symbol_to_patterns:{symbol}"
+            result = self.client.sadd(key, pattern_name)
+            logger.debug(f"Added pattern {pattern_name} to symbol index for '{symbol}'")
+            return result
+
+        except Exception as e:
+            logger.error(f"Failed to add symbol-to-pattern mapping for {symbol}: {e}")
+            raise
+
+    def get_patterns_for_symbol(self, symbol: str) -> set[str]:
+        """
+        Get all pattern names that contain a specific symbol.
+
+        Args:
+            symbol: Symbol name
+
+        Returns:
+            Set of pattern names (hashes) that contain this symbol
+
+        Raises:
+            Exception: If retrieval fails
+        """
+        try:
+            key = f"{self.kb_id}:symbol_to_patterns:{symbol}"
+            pattern_names = self.client.smembers(key)
+            # Redis returns bytes, decode to strings
+            return {name.decode('utf-8') if isinstance(name, bytes) else name for name in pattern_names}
+
+        except Exception as e:
+            logger.error(f"Failed to get patterns for symbol {symbol}: {e}")
+            return set()
+
+    def remove_symbol_to_pattern_mapping(self, symbol: str, pattern_name: str) -> int:
+        """
+        Remove a symbol-to-pattern mapping.
+
+        Used when a pattern is deleted.
+
+        Args:
+            symbol: Symbol name
+            pattern_name: Pattern name (hash)
+
+        Returns:
+            Number of elements removed (1 if existed, 0 if didn't exist)
+
+        Raises:
+            Exception: If removal fails
+        """
+        try:
+            key = f"{self.kb_id}:symbol_to_patterns:{symbol}"
+            result = self.client.srem(key, pattern_name)
+            logger.debug(f"Removed pattern {pattern_name} from symbol index for '{symbol}'")
+            return result
+
+        except Exception as e:
+            logger.error(f"Failed to remove symbol-to-pattern mapping for {symbol}: {e}")
+            raise
+
+    def get_patterns_starting_with_symbol(self, symbol: str, max_patterns: int = 1000) -> set[str]:
+        """
+        Get pattern names that START with a specific symbol (first event, first symbol).
+
+        This is optimized for single-symbol predictions where we only want patterns
+        that could be matched by the symbol at the beginning.
+
+        Args:
+            symbol: Symbol name
+            max_patterns: Maximum number of patterns to return (default: 1000)
+
+        Returns:
+            Set of pattern names (hashes) that start with this symbol
+
+        Note:
+            For now, returns all patterns containing the symbol. Filtering by first symbol
+            requires loading pattern_data from ClickHouse. This is still faster than
+            the full filter pipeline for single-symbol queries.
+        """
+        # For initial implementation, return all patterns containing symbol
+        # The pattern_processor will filter to first-symbol matches after loading from ClickHouse
+        return self.get_patterns_for_symbol(symbol)

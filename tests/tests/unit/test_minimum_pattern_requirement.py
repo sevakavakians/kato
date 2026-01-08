@@ -1,11 +1,8 @@
 """
-Comprehensive tests for KATO's 2+ string requirement for predictions.
+Comprehensive tests for KATO's 1+ string requirement for predictions.
 
-KATO requires at least 2 strings total in STM to generate predictions.
-This can be achieved through:
-- Single event with 2+ strings: [['a', 'b']]
-- Multiple events with 1+ strings each: [['a'], ['b']]
-- Any combination totaling 2+ strings
+KATO requires at least 1 string in STM to generate predictions.
+Single-symbol predictions use an optimized fast path with Redis index.
 
 This test file verifies this requirement is properly enforced.
 """
@@ -18,11 +15,11 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from fixtures.kato_fixtures import kato_fixture as kato_fixture
 
 
-def test_single_string_no_predictions(kato_fixture):
-    """Test that a single string observation generates NO predictions."""
+def test_single_string_generates_predictions(kato_fixture):
+    """Test that a single string observation generates predictions using fast path."""
     kato_fixture.clear_all_memory()
 
-    # First learn a sequence for comparison
+    # First learn a sequence starting with 'alpha'
     sequence = ['alpha', 'beta', 'gamma']
     for item in sequence:
         kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
@@ -32,9 +29,9 @@ def test_single_string_no_predictions(kato_fixture):
     kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': ['alpha'], 'vectors': [], 'emotives': {}})
 
-    # Should have NO predictions with only 1 string
+    # Should have predictions with 1 string (using fast path)
     predictions = kato_fixture.get_predictions()
-    assert predictions == [], f"Expected no predictions with 1 string, got {len(predictions)} predictions"
+    assert len(predictions) > 0, f"Expected predictions with 1 string, got {len(predictions)} predictions"
 
     # Verify STM has the single string
     stm = kato_fixture.get_short_term_memory()
@@ -70,7 +67,7 @@ def test_exactly_two_strings_generates_predictions(kato_fixture):
 
 
 def test_empty_events_dont_count(kato_fixture):
-    """Test that empty events don't count toward the 2+ requirement."""
+    """Test that empty events don't count toward the 1+ requirement."""
     kato_fixture.clear_all_memory()
 
     # Learn a sequence
@@ -85,14 +82,14 @@ def test_empty_events_dont_count(kato_fixture):
     kato_fixture.observe({'strings': [], 'vectors': [], 'emotives': {}})  # Empty - ignored
     kato_fixture.observe({'strings': [], 'vectors': [], 'emotives': {}})  # Empty - ignored
 
-    # Should still have NO predictions (only 1 actual string)
+    # Should HAVE predictions (1 actual string is sufficient)
     predictions = kato_fixture.get_predictions()
-    assert predictions == [], "Empty events shouldn't count toward 2+ requirement"
+    assert len(predictions) > 0, "Empty events shouldn't prevent predictions with 1 non-empty string"
 
     # Now add a second real string
     kato_fixture.observe({'strings': ['y'], 'vectors': [], 'emotives': {}})
 
-    # NOW should have predictions
+    # Should still have predictions
     predictions = kato_fixture.get_predictions()
     assert len(predictions) > 0, "Should have predictions after 2nd non-empty string"
 
@@ -154,36 +151,38 @@ def test_vector_only_observations(kato_fixture):
 
 
 def test_learning_with_insufficient_strings(kato_fixture):
-    """Test that learning with < 2 strings doesn't create a model."""
+    """Test that learning with < 2 events still requires multiple events."""
     kato_fixture.clear_all_memory()
 
-    # Try to learn with only 1 string
+    # Try to learn with only 1 event
     kato_fixture.observe({'strings': ['lonely'], 'vectors': [], 'emotives': {}})
     pattern_name = kato_fixture.learn()
 
-    # Should not create a pattern with only 1 string
-    # Pattern creation requires at least 2 events/strings
-    assert pattern_name == "" or pattern_name is None, f"Should not create model with 1 string, got {pattern_name}"
+    # Should not create a pattern with only 1 event
+    # Pattern creation still requires at least 2 events (temporal sequence)
+    assert pattern_name == "" or pattern_name is None, f"Should not create pattern with 1 event, got {pattern_name}"
 
 
-def test_auto_learn_with_insufficient_strings(kato_fixture):
-    """Test auto-learn behavior when max_pattern_length reached with < 2 strings."""
+def test_auto_learn_with_single_string(kato_fixture):
+    """Test auto-learn behavior - single strings can now generate predictions."""
     kato_fixture.clear_all_memory()
 
-    # Set a low max_pattern_length for testing
-    # Note: This assumes the fixture allows setting max_pattern_length
-    # If not, this test can be skipped or modified
+    # Learn a sequence first
+    kato_fixture.observe({'strings': ['auto'], 'vectors': [], 'emotives': {}})
+    kato_fixture.observe({'strings': ['learn'], 'vectors': [], 'emotives': {}})
+    kato_fixture.learn()
 
-    # Observe single string (should not trigger predictions even after auto-learn)
+    # Observe single string - should now generate predictions
+    kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': ['auto'], 'vectors': [], 'emotives': {}})
 
-    # Even if auto-learn triggers, predictions should not be generated
+    # Single string should generate predictions (using fast path)
     predictions = kato_fixture.get_predictions()
-    assert predictions == [], "No predictions with insufficient strings even after auto-learn"
+    assert len(predictions) > 0, "Single string should generate predictions"
 
 
-def test_transition_from_one_to_two_strings(kato_fixture):
-    """Test the transition point from 1 string (no predictions) to 2 strings (predictions)."""
+def test_single_string_predictions_work(kato_fixture):
+    """Test that single-symbol predictions work correctly."""
     kato_fixture.clear_all_memory()
 
     # Learn a sequence
@@ -194,15 +193,15 @@ def test_transition_from_one_to_two_strings(kato_fixture):
     # Start fresh
     kato_fixture.clear_short_term_memory()
 
-    # First string - no predictions
+    # First string - should now have predictions (fast path)
     kato_fixture.observe({'strings': ['a'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
-    assert predictions == [], "No predictions with 1 string"
+    assert len(predictions) > 0, "Should have predictions with 1 string (fast path)"
 
-    # Second string - now predictions should appear
+    # Second string - predictions should continue
     kato_fixture.observe({'strings': ['b'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
-    assert len(predictions) > 0, "Should have predictions immediately after 2nd string"
+    assert len(predictions) > 0, "Should continue having predictions with 2+ strings"
 
     # Third string - predictions should continue
     kato_fixture.observe({'strings': ['c'], 'vectors': [], 'emotives': {}})
@@ -211,7 +210,7 @@ def test_transition_from_one_to_two_strings(kato_fixture):
 
 
 def test_mixed_event_sizes(kato_fixture):
-    """Test 2+ requirement with events of different sizes."""
+    """Test 1+ requirement with events of different sizes."""
     kato_fixture.clear_all_memory()
 
     # Learn a complex sequence
@@ -220,10 +219,10 @@ def test_mixed_event_sizes(kato_fixture):
     kato_fixture.observe({'strings': ['z'], 'vectors': [], 'emotives': {}})       # 1 string
     kato_fixture.learn()
 
-    # Test various combinations reaching 2+ threshold
+    # Test various combinations - all should now generate predictions with 1+ strings
     test_cases = [
         # (observations, should_have_predictions, description)
-        ([['w']], False, "1 string - no predictions"),
+        ([['w']], True, "1 string - predictions (fast path)"),
         ([['w'], ['x']], True, "2 strings across 2 events - predictions"),
         ([['w', 'x']], True, "2 strings in 1 event - predictions"),
         ([['w', 'x', 'y']], True, "3 strings in 1 event - predictions"),
@@ -246,7 +245,7 @@ def test_mixed_event_sizes(kato_fixture):
 
 
 def test_emotives_dont_affect_requirement(kato_fixture):
-    """Test that emotives don't count toward the 2+ string requirement."""
+    """Test that single string with emotives generates predictions."""
     kato_fixture.clear_all_memory()
 
     # Learn sequence with emotives
@@ -268,20 +267,20 @@ def test_emotives_dont_affect_requirement(kato_fixture):
         'emotives': {'joy': 0.8, 'excitement': 0.6}  # Multiple emotives
     })
 
-    # Should still have NO predictions (emotives don't count)
+    # Should have predictions (1 string is sufficient)
     predictions = kato_fixture.get_predictions()
-    assert predictions == [], "Emotives shouldn't count toward 2+ string requirement"
+    assert len(predictions) > 0, "Should have predictions with 1 string + emotives"
 
     # Add second string
     kato_fixture.observe({'strings': ['day'], 'vectors': [], 'emotives': {'joy': 0.9}})
 
-    # NOW should have predictions
+    # Should still have predictions
     predictions = kato_fixture.get_predictions()
     assert len(predictions) > 0, "Should have predictions with 2 strings regardless of emotives"
 
 
-def test_clear_stm_resets_requirement(kato_fixture):
-    """Test that clearing STM resets the 2+ string requirement."""
+def test_clear_stm_resets_state(kato_fixture):
+    """Test that clearing STM resets state correctly."""
     kato_fixture.clear_all_memory()
 
     # Learn a sequence
@@ -300,9 +299,9 @@ def test_clear_stm_resets_requirement(kato_fixture):
     # Clear STM
     kato_fixture.clear_short_term_memory()
 
-    # Now observe single string again
-    kato_fixture.observe({'strings': ['blue'], 'vectors': [], 'emotives': {}})
+    # Now observe single string again (use 'red' which starts the pattern)
+    kato_fixture.observe({'strings': ['red'], 'vectors': [], 'emotives': {}})
 
-    # Should have NO predictions after clear
+    # Should still have predictions (1 string is sufficient now)
     predictions = kato_fixture.get_predictions()
-    assert predictions == [], "Should reset to no predictions after clearing STM"
+    assert len(predictions) > 0, "Should have predictions with 1 string after clearing STM"

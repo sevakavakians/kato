@@ -23,6 +23,59 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+# Get container image with version
+get_container_image() {
+    local container_name=$1
+    if docker inspect "$container_name" > /dev/null 2>&1; then
+        local image_tag=$(docker inspect --format='{{.Config.Image}}' "$container_name" 2>/dev/null)
+        local version=""
+
+        # Try to get version from image labels first
+        version=$(docker inspect --format='{{index .Config.Labels "org.opencontainers.image.version"}}' "$container_name" 2>/dev/null)
+
+        # If no label or dev version, try container-specific version commands
+        if [[ -z "$version" || "$version" == "<no value>" || "$version" == "dev" ]]; then
+            case "$container_name" in
+                kato-clickhouse)
+                    version=$(docker exec "$container_name" clickhouse-client --version 2>/dev/null | sed -n 's/.*version \([0-9.]*\).*/\1/p' | head -1)
+                    ;;
+                kato-redis)
+                    version=$(docker exec "$container_name" redis-server --version 2>/dev/null | sed -n 's/.*v=\([0-9.]*\).*/\1/p' | head -1)
+                    ;;
+                kato-qdrant)
+                    version=$(curl -s http://localhost:6333/ 2>/dev/null | sed -n 's/.*"version":"\([^"]*\)".*/\1/p' | head -1)
+                    ;;
+                kato)
+                    # Try to read from kato package __version__
+                    version=$(docker exec "$container_name" python -c "from kato import __version__; print(__version__)" 2>/dev/null)
+                    if [[ -z "$version" ]]; then
+                        # Try to extract from image tag if it's a version tag
+                        version=$(echo "$image_tag" | sed -n 's/.*:\([0-9][0-9.]*\).*/\1/p')
+                    fi
+                    ;;
+                kato-dashboard)
+                    # Try to extract from image tag if it's a version tag
+                    version=$(echo "$image_tag" | sed -n 's/.*:\([0-9][0-9.]*\).*/\1/p')
+                    if [[ -z "$version" ]]; then
+                        version=$(docker inspect --format='{{index .Config.Labels "version"}}' "$container_name" 2>/dev/null)
+                    fi
+                    ;;
+            esac
+        fi
+
+        if [[ -n "$version" && "$version" != "<no value>" && "$version" != "dev" ]]; then
+            # Remove leading 'v' if present to avoid double 'v'
+            version="${version#v}"
+            echo "${image_tag} → v${version}"
+        else
+            local image_id=$(docker inspect --format='{{.Image}}' "$container_name" 2>/dev/null | cut -d: -f2 | cut -c1-12)
+            echo "${image_tag} [${image_id}]"
+        fi
+    else
+        echo "not running"
+    fi
+}
+
 # Get the directory where this script is located
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
@@ -122,6 +175,15 @@ case "$COMMAND" in
     status)
         print_info "Checking service status..."
         docker compose -f "$SCRIPT_DIR/docker-compose.yml" ps
+
+        # Display container images with versions
+        echo ""
+        print_info "Container Images:"
+        printf "  %-20s → %s\n" "kato" "$(get_container_image kato)"
+        printf "  %-20s → %s\n" "kato-clickhouse" "$(get_container_image kato-clickhouse)"
+        printf "  %-20s → %s\n" "kato-redis" "$(get_container_image kato-redis)"
+        printf "  %-20s → %s\n" "kato-qdrant" "$(get_container_image kato-qdrant)"
+        printf "  %-20s → %s\n" "kato-dashboard" "$(get_container_image kato-dashboard)"
 
         # Check KATO health
         echo ""

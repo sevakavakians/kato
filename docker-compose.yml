@@ -42,6 +42,7 @@ services:
       - clickhouse-logs:/var/log/clickhouse-server
       - ./config/clickhouse/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
       - ./config/clickhouse/users.xml:/etc/clickhouse-server/users.xml:ro
+      - ./config/clickhouse/logging.xml:/etc/clickhouse-server/config.d/logging.xml:ro
     networks:
       - kato-network
     restart: unless-stopped

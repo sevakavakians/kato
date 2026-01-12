@@ -1,0 +1,67 @@
+<?xml version="1.0"?>
+<clickhouse>
+    <!-- Configure system logs with TTL for automatic cleanup to prevent bloat -->
+
+    <!-- Query log: keep for 7 days -->
+    <query_log>
+        <database>system</database>
+        <table>query_log</table>
+        <partition_by>toYYYYMM(event_date)</partition_by>
+        <ttl>event_date + INTERVAL 7 DAY DELETE</ttl>
+        <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    </query_log>
+
+    <!-- Trace log: keep for 1 day (most expensive) -->
+    <trace_log>
+        <database>system</database>
+        <table>trace_log</table>
+        <partition_by>toYYYYMM(event_date)</partition_by>
+        <ttl>event_date + INTERVAL 1 DAY DELETE</ttl>
+        <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    </trace_log>
+
+    <!-- Text log: keep for 3 days -->
+    <text_log>
+        <database>system</database>
+        <table>text_log</table>
+        <partition_by>toYYYYMM(event_date)</partition_by>
+        <ttl>event_date + INTERVAL 3 DAY DELETE</ttl>
+        <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    </text_log>
+
+    <!-- Metric log: keep for 7 days -->
+    <metric_log>
+        <database>system</database>
+        <table>metric_log</table>
+        <partition_by>toYYYYMM(event_date)</partition_by>
+        <ttl>event_date + INTERVAL 7 DAY DELETE</ttl>
+        <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    </metric_log>
+
+    <!-- Asynchronous metric log: keep for 7 days -->
+    <asynchronous_metric_log>
+        <database>system</database>
+        <table>asynchronous_metric_log</table>
+        <partition_by>toYYYYMM(event_date)</partition_by>
+        <ttl>event_date + INTERVAL 7 DAY DELETE</ttl>
+        <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    </asynchronous_metric_log>
+
+    <!-- Part log: keep for 3 days -->
+    <part_log>
+        <database>system</database>
+        <table>part_log</table>
+        <partition_by>toYYYYMM(event_date)</partition_by>
+        <ttl>event_date + INTERVAL 3 DAY DELETE</ttl>
+        <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    </part_log>
+
+    <!-- Processors profile log: keep for 3 days -->
+    <processors_profile_log>
+        <database>system</database>
+        <table>processors_profile_log</table>
+        <partition_by>toYYYYMM(event_date)</partition_by>
+        <ttl>event_date + INTERVAL 3 DAY DELETE</ttl>
+        <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    </processors_profile_log>
+</clickhouse>

@@ -50,7 +50,7 @@ Both are represented by the same pattern object which consists of sequences of e
 
 When the sequence matters, store symbols across events keeping their order. When the sequence doesn’t matter, store symbols within the same event. This allows the same representation to be used universally, i.e. in all use-cases.
 
-Every learned structure in KATO is identified by a unique hash: `PTRN|<sha1_hash>`
+Every learned structure in KATO is identified by a unique hash: `PTRN|&lt;sha1_hash&gt;`
 
 ## Architecture Comparison: KATO vs Transformers
 
@@ -172,7 +172,7 @@ KATO's pattern-based architecture shares fundamental principles with German soci
 | Zettelkasten Principle | KATO Implementation | Benefit |
 |------------------------|---------------------|---------|
 | **Atomic Notes** | Each pattern is a discrete fact/observation | Single, testable unit of knowledge |
-| **Permanent Referencing** | Unique pattern hash (`PTRN|<sha1>`) | Immutable, globally unique identifiers |
+| **Permanent Referencing** | Unique pattern hash (`PTRN&#124;&lt;sha1&gt;`) | Immutable, globally unique identifiers |
 | **Hypertextual Links** | Metadata cross-referencing + hierarchical pattern learning | Web of interconnected knowledge |
 | **Communication Partner** | Query/prediction system | "Converse" with your knowledge base |
 
@@ -672,7 +672,7 @@ curl -X GET "http://localhost:8000/predictions?unique_id=obs-123"
 
 KATO processes observations as **events** containing strings, vectors, and emotives. Each event is processed through:
 - **Alphanumeric sorting** within events
-- **Deterministic hashing** for patterns (PTRN|<sha1_hash>)
+- **Deterministic hashing** for patterns (`PTRN|&lt;sha1_hash&gt;`)
 - **Temporal segmentation** in predictions
 - **Empty event filtering**
 - **Minimum requirement**: 2+ strings in STM for predictions (vectors contribute strings)

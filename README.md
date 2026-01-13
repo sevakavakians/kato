@@ -259,19 +259,19 @@ WHERE kb_id = 'medical_devices' AND name = 'pattern_abc123';
 
 ### Key Features
 
-✨ **Deterministic Learning** - Same inputs always yield same outputs
-🔍 **Full Transparency** - All internal states and decisions are explainable
-🎯 **Temporal Predictions** - Sophisticated past/present/future segmentation
-🧠 **Multi-Modal Sensor Fusion** - Integrate text, vectors, vision systems, and multiple sensor streams
-🎖️ **Award-Winning Technology** - Evolved from GAIuS (Lockheed Martin Sikorsky Challenge Winner 2018)
-📋 **ExCITE AI Compliant** - Explainable, Correctable, Incremental, Traceable, Efficient
-⚡ **High Performance** - 3.57x throughput, 72% latency reduction, comprehensive optimizations
-🔄 **Stateful Processing** - Maintains context across observations
-🎪 **Vector Database** - Modern vector search with Qdrant (10-100x faster)
-👥 **Multi-User Sessions** - Complete STM isolation per user session
-💾 **Write Guarantees** - ClickHouse and Redis ensure data durability
-🔐 **Session Management** - Redis-backed sessions with TTL and isolation
-📊 **Session Isolation** - Each session has completely isolated state
+- ✨ **Deterministic Learning** - Same inputs always yield same outputs
+- 🔍 **Full Transparency** - All internal states and decisions are explainable
+- 🎯 **Temporal Predictions** - Sophisticated past/present/future segmentation
+- 🧠 **Multi-Modal Sensor Fusion** - Integrate text, vectors, vision systems, and multiple sensor streams
+- 🎖️ **Award-Winning Technology** - Evolved from GAIuS (Lockheed Martin Sikorsky Challenge Winner 2018)
+- 📋 **ExCITE AI Compliant** - Explainable, Correctable, Incremental, Traceable, Efficient
+- ⚡ **High Performance** - 3.57x throughput, 72% latency reduction, comprehensive optimizations
+- 🔄 **Stateful Processing** - Maintains context across observations
+- 🎪 **Vector Database** - Modern vector search with Qdrant (10-100x faster)
+- 👥 **Multi-User Sessions** - Complete STM isolation per user session
+- 💾 **Write Guarantees** - ClickHouse and Redis ensure data durability
+- 🔐 **Session Management** - Redis-backed sessions with TTL and isolation
+- 📊 **Session Isolation** - Each session has completely isolated state
 
 ### Comparative Advantages
 

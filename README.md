@@ -5,6 +5,7 @@
 > *ExCITE-capable prediction engine for safety-critical and regulated AI systems — deterministic, explainable, and real-time correctable. Evolution of award-winning GAIuS sensor-fusion technology.*
 
 🆕 **Latest Features**: Multi-user session isolation, guaranteed writes, Redis sessions, complete backwards compatibility
+
 🎖️ **Heritage**: Evolved from GAIuS (Lockheed Martin Sikorsky Award Winner 2018) | Adheres to [ExCITE AI](https://medium.com/@sevakavakians/what-is-excite-ai-712afd372af4) principles
 
 ![KATO Crystal](assets/kato-graphic.png "KATO crystal")
@@ -23,21 +24,21 @@ While transformer-based models (GPT, Claude, LLaMA) excel at language understand
 
 Modern AI is built on transformer architectures that suffer from critical flaws:
 
-❌ **Non-Deterministic** - Same input produces different outputs (sampling, temperature)
-❌ **Unexplainable** - Billions of weights with no interpretable meaning
-❌ **Static Knowledge** - Cannot learn new information without expensive retraining
-❌ **GPU-Dependent** - Requires $10k-$30k hardware for inference
-❌ **Hallucinations** - Generates plausible but incorrect information
-❌ **Non-Correctable** - Fixing errors requires full model retraining
+- ❌ **Non-Deterministic** - Same input produces different outputs (sampling, temperature)
+- ❌ **Unexplainable** - Billions of weights with no interpretable meaning
+- ❌ **Static Knowledge** - Cannot learn new information without expensive retraining
+- ❌ **GPU-Dependent** - Requires $10k-$30k hardware for inference
+- ❌ **Hallucinations** - Generates plausible but incorrect information
+- ❌ **Non-Correctable** - Fixing errors requires full model retraining
 
 ### KATO's Alternative Approach
 
-✅ **100% Deterministic** - Same inputs always yield identical outputs
-✅ **Fully Transparent** - Every prediction traces to source patterns
-✅ **Real-Time Learning** - Learns from single observations instantly
-✅ **CPU-Optimized** - Runs on $50/month VMs, no GPUs required
-✅ **Fact-Based** - Only predicts from observed patterns, no hallucinations
-✅ **Database-Editable** - Fix incorrect predictions with SQL UPDATE
+- ✅ **100% Deterministic** - Same inputs always yield identical outputs
+- ✅ **Fully Transparent** - Every prediction traces to source patterns
+- ✅ **Real-Time Learning** - Learns from single observations instantly
+- ✅ **CPU-Optimized** - Runs on $50/month VMs, no GPUs required
+- ✅ **Fact-Based** - Only predicts from observed patterns, no hallucinations
+- ✅ **Database-Editable** - Fix incorrect predictions with SQL UPDATE
 
 ### Pattern-Based Learning
 
@@ -86,11 +87,11 @@ Unlike transformer-based language models that can generate plausible but false c
 
 **Key Advantages Over Transformer Generation**:
 
-✅ **Zero Hallucinations** - Cannot generate facts not present in training corpus
-✅ **Complete Transparency** - Every generated token traceable to source pattern with frequency count
-✅ **Deterministic** - Same seed + context → same output (fully reproducible)
-✅ **Multi-Scale Control** - Generate at sentence, paragraph, chapter, or document level
-✅ **Frequency-Based Sampling** - Explicit probability interpretation (pattern seen N times)
+- ✅ **Zero Hallucinations** - Cannot generate facts not present in training corpus
+- ✅ **Complete Transparency** - Every generated token traceable to source pattern with frequency count
+- ✅ **Deterministic** - Same seed + context → same output (fully reproducible)
+- ✅ **Multi-Scale Control** - Generate at sentence, paragraph, chapter, or document level
+- ✅ **Frequency-Based Sampling** - Explicit probability interpretation (pattern seen N times)
 
 **Trade-offs**:
 - Less creative than transformers (recombines learned patterns only)
@@ -112,22 +113,22 @@ Unlike transformer-based language models that can generate plausible but false c
 
 ### Choose KATO When:
 
-✅ **Explainability is mandatory** (regulatory, safety-critical, compliance)
-✅ **Deterministic behavior required** (testing, certification, reproducibility)
-✅ **Real-time learning needed** (adapt from observations without retraining)
-✅ **Cost efficiency matters** (no GPU budget, edge deployment)
-✅ **Knowledge correction valuable** (fix errors post-deployment via database edits)
-✅ **Temporal patterns primary** (sequences, workflows, time-series)
-✅ **Multi-tenancy required** (isolated knowledge bases per user/organization)
-✅ **Fact-based generation** (medical, legal, financial documentation)
+- ✅ **Explainability is mandatory** (regulatory, safety-critical, compliance)
+- ✅ **Deterministic behavior required** (testing, certification, reproducibility)
+- ✅ **Real-time learning needed** (adapt from observations without retraining)
+- ✅ **Cost efficiency matters** (no GPU budget, edge deployment)
+- ✅ **Knowledge correction valuable** (fix errors post-deployment via database edits)
+- ✅ **Temporal patterns primary** (sequences, workflows, time-series)
+- ✅ **Multi-tenancy required** (isolated knowledge bases per user/organization)
+- ✅ **Fact-based generation** (medical, legal, financial documentation)
 
 ### Choose Transformers When:
 
-✅ **Open-ended generation primary** (creative writing, code generation, brainstorming)
-✅ **Zero-shot learning needed** (handle completely novel domains)
-✅ **Deep semantic understanding** (natural language nuance, context, ambiguity)
-✅ **Transfer learning valuable** (leverage massive pre-training)
-✅ **Fluency critical** (human-like text generation)
+- ✅ **Open-ended generation primary** (creative writing, code generation, brainstorming)
+- ✅ **Zero-shot learning needed** (handle completely novel domains)
+- ✅ **Deep semantic understanding** (natural language nuance, context, ambiguity)
+- ✅ **Transfer learning valuable** (leverage massive pre-training)
+- ✅ **Fluency critical** (human-like text generation)
 
 ### Choose Hybrid Architecture (KATO + Transformer) When:
 
@@ -333,12 +334,12 @@ WHERE kb_id = 'production' AND name = 'pattern_hash';
 
 #### Key Benefits of Hybrid Architecture
 
-✅ **Cost Optimization**: Use LLM only for language understanding, KATO for memory/prediction (10-100x cost reduction)
-✅ **Transparency**: Every decision traceable to source patterns (regulatory compliance)
-✅ **Adaptability**: Learn from production experience in real-time
-✅ **Guardrails**: Pattern-based constraints prevent harmful outputs
-✅ **Remediation**: Fix errors via database edits, no retraining cycles
-✅ **Best UX**: Natural language interface (LLM) + reliable memory (KATO)
+- ✅ **Cost Optimization**: Use LLM only for language understanding, KATO for memory/prediction (10-100x cost reduction)
+- ✅ **Transparency**: Every decision traceable to source patterns (regulatory compliance)
+- ✅ **Adaptability**: Learn from production experience in real-time
+- ✅ **Guardrails**: Pattern-based constraints prevent harmful outputs
+- ✅ **Remediation**: Fix errors via database edits, no retraining cycles
+- ✅ **Best UX**: Natural language interface (LLM) + reliable memory (KATO)
 
 ## Performance Optimizations
 

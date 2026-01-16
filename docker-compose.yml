@@ -46,6 +46,10 @@ services:
     networks:
       - kato-network
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 8G  # Increased for large training sessions (pattern data + system logs)
     environment:
       - CLICKHOUSE_DB=kato
       - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1

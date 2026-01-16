@@ -29,6 +29,9 @@
             <max_memory_usage>10000000000</max_memory_usage>
             <use_uncompressed_cache>0</use_uncompressed_cache>
             <load_balancing>random</load_balancing>
+            <!-- Only log queries that take longer than 1000ms (1 second) -->
+            <!-- This prevents fast INSERT/SELECT queries during training from cluttering logs -->
+            <log_queries_min_query_duration_ms>1000</log_queries_min_query_duration_ms>
         </default>
     </profiles>
 

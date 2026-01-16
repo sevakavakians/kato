@@ -11,9 +11,14 @@ services:
       - clickhouse-logs:/var/log/clickhouse-server
       - ./config/clickhouse/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
       - ./config/clickhouse/users.xml:/etc/clickhouse-server/users.xml:ro
+      - ./config/clickhouse/logging.xml:/etc/clickhouse-server/config.d/logging.xml:ro
     networks:
       - kato-network
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 8G  # Increased for large training sessions (pattern data + system logs)
     environment:
       - CLICKHOUSE_DB=kato
       - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
@@ -44,14 +49,21 @@ services:
   redis:
     image: redis:7-alpine
     container_name: kato-redis
-    command: redis-server --save 60 1000 --appendonly yes
+    # Use mounted config file for better management
+    # Includes: 8GB memory limit, LRU eviction, optimized persistence
+    command: redis-server /etc/redis/redis.conf
     ports:
       - "6379:6379"
     volumes:
       - redis-data:/data
+      - ../config/redis.conf:/etc/redis/redis.conf:ro
     networks:
       - kato-network
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 8G  # Match ClickHouse limit for fair resource allocation
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s

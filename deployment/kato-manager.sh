@@ -271,6 +271,429 @@ case "$COMMAND" in
         fi
         ;;
 
+    verify)
+        print_info "Verifying ClickHouse memory configuration for training workloads..."
+        echo ""
+
+        ISSUES_FOUND=0
+
+        # Check if ClickHouse is running
+        if ! docker ps --format '{{.Names}}' | grep -q "^kato-clickhouse$"; then
+            print_warn "ClickHouse container is not running"
+            print_info "Start services with: ./kato-manager.sh start"
+            exit 1
+        fi
+
+        # Check Docker memory limit
+        MEMORY_LIMIT=$(docker inspect kato-clickhouse --format='{{.HostConfig.Memory}}')
+        MEMORY_GB=$((MEMORY_LIMIT / 1024 / 1024 / 1024))
+
+        echo -e "${GREEN}✓${NC} Docker Memory Configuration"
+        if [ "$MEMORY_LIMIT" -ge 8589934592 ]; then
+            echo "  Memory Limit: ${MEMORY_GB}GB (recommended for training)"
+        elif [ "$MEMORY_LIMIT" -eq 0 ]; then
+            echo -e "  ${YELLOW}⚠${NC} Memory Limit: Unlimited (no docker limit set)"
+            print_warn "Recommend setting 8GB limit in docker-compose.yml for stability"
+            ISSUES_FOUND=$((ISSUES_FOUND + 1))
+        else
+            echo -e "  ${RED}✗${NC} Memory Limit: ${MEMORY_GB}GB (too low for large training)"
+            print_error "Recommend increasing to 8GB in docker-compose.yml"
+            ISSUES_FOUND=$((ISSUES_FOUND + 1))
+        fi
+
+        # Check ClickHouse effective memory
+        CH_MEMORY=$(docker exec kato-clickhouse clickhouse-client --query "SELECT value FROM system.server_settings WHERE name = 'max_server_memory_usage'" 2>/dev/null)
+        CH_MEMORY_GB=$((CH_MEMORY / 1024 / 1024 / 1024))
+        echo "  ClickHouse Limit: ${CH_MEMORY_GB}GB (90% of container)"
+        echo ""
+
+        # Check if expensive logs are disabled
+        echo -e "${GREEN}✓${NC} System Log Configuration"
+
+        TRACE_LOG_ENABLED=$(docker exec kato-clickhouse clickhouse-client --query "SELECT count(*) FROM system.tables WHERE database = 'system' AND name = 'trace_log'" 2>/dev/null)
+        TEXT_LOG_COUNT=$(docker exec kato-clickhouse clickhouse-client --query "SELECT count(*) FROM system.text_log WHERE event_time > now() - INTERVAL 1 HOUR" 2>/dev/null || echo "0")
+
+        if [ "$TRACE_LOG_ENABLED" -gt 0 ] && [ "$TEXT_LOG_COUNT" -gt 10000 ]; then
+            echo -e "  ${RED}✗${NC} Expensive logs are ENABLED (text_log: ${TEXT_LOG_COUNT} msgs/hour)"
+            print_error "trace_log and text_log should be disabled in config/clickhouse/logging.xml"
+            ISSUES_FOUND=$((ISSUES_FOUND + 1))
+        else
+            echo "  trace_log: Disabled or minimal activity ✓"
+            echo "  text_log: Disabled or minimal activity ✓"
+        fi
+
+        # Check current system log size
+        SYSTEM_LOG_SIZE=$(docker exec kato-clickhouse clickhouse-client --query "SELECT formatReadableSize(sum(bytes_on_disk)) FROM system.parts WHERE database = 'system' AND active = 1" 2>/dev/null)
+        echo "  Current system logs: $SYSTEM_LOG_SIZE"
+        echo ""
+
+        # Check query duration filter
+        echo -e "${GREEN}✓${NC} Query Logging Filter"
+        QUERY_FILTER=$(docker exec kato-clickhouse clickhouse-client --query "SELECT value FROM system.settings WHERE name = 'log_queries_min_query_duration_ms'" 2>/dev/null)
+        if [ "$QUERY_FILTER" -ge 1000 ]; then
+            echo "  Only logs queries > ${QUERY_FILTER}ms ✓"
+        else
+            echo -e "  ${YELLOW}⚠${NC} Logs all queries (may accumulate during training)"
+            print_warn "Consider setting log_queries_min_query_duration_ms=1000 in config/clickhouse/users.xml"
+        fi
+        echo ""
+
+        # Check pattern data size
+        PATTERN_SIZE=$(docker exec kato-clickhouse clickhouse-client --query "SELECT formatReadableSize(sum(bytes_on_disk)) FROM system.parts WHERE database = 'kato' AND table = 'patterns_data' AND active = 1" 2>/dev/null)
+        PATTERN_COUNT=$(docker exec kato-clickhouse clickhouse-client --query "SELECT count(*) FROM kato.patterns_data" 2>/dev/null)
+        echo -e "${GREEN}✓${NC} Pattern Data"
+        echo "  Total patterns: ${PATTERN_COUNT}"
+        echo "  Storage size: ${PATTERN_SIZE}"
+        echo ""
+
+        # Check Redis configuration
+        echo -e "${GREEN}✓${NC} Redis Configuration"
+
+        # Check if Redis is running
+        if ! docker ps --format '{{.Names}}' | grep -q "^kato-redis$"; then
+            echo -e "  ${RED}✗${NC} Redis container is not running"
+            ISSUES_FOUND=$((ISSUES_FOUND + 1))
+        else
+            # Check Docker memory limit for Redis
+            REDIS_MEMORY_LIMIT=$(docker inspect kato-redis --format='{{.HostConfig.Memory}}')
+            REDIS_MEMORY_GB=$((REDIS_MEMORY_LIMIT / 1024 / 1024 / 1024))
+
+            if [ "$REDIS_MEMORY_LIMIT" -ge 8589934592 ]; then
+                echo "  Docker Memory Limit: ${REDIS_MEMORY_GB}GB ✓"
+            elif [ "$REDIS_MEMORY_LIMIT" -eq 0 ]; then
+                echo -e "  ${YELLOW}⚠${NC} Docker Memory Limit: Unlimited (no docker limit set)"
+                print_warn "Recommend setting 8GB limit in docker-compose.yml"
+                ISSUES_FOUND=$((ISSUES_FOUND + 1))
+            else
+                echo -e "  ${RED}✗${NC} Docker Memory Limit: ${REDIS_MEMORY_GB}GB (recommend 8GB)"
+                ISSUES_FOUND=$((ISSUES_FOUND + 1))
+            fi
+
+            # Check Redis maxmemory configuration
+            REDIS_MAXMEMORY=$(docker exec kato-redis redis-cli CONFIG GET maxmemory 2>/dev/null | tail -1)
+            if [ -n "$REDIS_MAXMEMORY" ] && [ "$REDIS_MAXMEMORY" != "0" ]; then
+                REDIS_MAXMEMORY_GB=$((REDIS_MAXMEMORY / 1024 / 1024 / 1024))
+                echo "  Redis maxmemory: ${REDIS_MAXMEMORY_GB}GB ✓"
+            else
+                echo -e "  ${YELLOW}⚠${NC} Redis maxmemory: Not set (will use all available memory)"
+                print_warn "Recommend setting maxmemory in config/redis.conf"
+                ISSUES_FOUND=$((ISSUES_FOUND + 1))
+            fi
+
+            # Check eviction policy
+            EVICTION_POLICY=$(docker exec kato-redis redis-cli CONFIG GET maxmemory-policy 2>/dev/null | tail -1)
+            if [ "$EVICTION_POLICY" = "allkeys-lru" ] || [ "$EVICTION_POLICY" = "volatile-lru" ]; then
+                echo "  Eviction policy: $EVICTION_POLICY ✓"
+            elif [ "$EVICTION_POLICY" = "noeviction" ]; then
+                echo -e "  ${RED}✗${NC} Eviction policy: noeviction (will crash when memory full)"
+                print_error "Recommend setting maxmemory-policy to allkeys-lru"
+                ISSUES_FOUND=$((ISSUES_FOUND + 1))
+            else
+                echo "  Eviction policy: $EVICTION_POLICY"
+            fi
+
+            # Check persistence configuration
+            AOF_ENABLED=$(docker exec kato-redis redis-cli CONFIG GET appendonly 2>/dev/null | tail -1)
+            if [ "$AOF_ENABLED" = "yes" ]; then
+                echo "  AOF persistence: Enabled ✓"
+            else
+                echo -e "  ${YELLOW}⚠${NC} AOF persistence: Disabled (risk of data loss)"
+            fi
+        fi
+        echo ""
+
+        # Summary
+        if [ $ISSUES_FOUND -eq 0 ]; then
+            echo -e "${GREEN}========================================${NC}"
+            echo -e "${GREEN}✓ Configuration optimized for training${NC}"
+            echo -e "${GREEN}========================================${NC}"
+        else
+            echo -e "${YELLOW}========================================${NC}"
+            echo -e "${YELLOW}⚠ ${ISSUES_FOUND} configuration issue(s) found${NC}"
+            echo -e "${YELLOW}========================================${NC}"
+            echo ""
+            echo "To fix issues:"
+            echo "  1. Update docker-compose.yml (set memory: 8G for both services)"
+            echo "  2. Mount config/redis.conf in docker-compose.yml"
+            echo "  3. Update config/clickhouse/logging.xml (disable text_log, trace_log)"
+            echo "  4. Update config/clickhouse/users.xml (set log_queries_min_query_duration_ms)"
+            echo "  5. Restart: ./kato-manager.sh restart"
+            echo ""
+            echo "See: docs/operations/redis-data-protection.md"
+        fi
+        ;;
+
+    memory)
+        # Check if ClickHouse is running
+        if ! docker ps --format '{{.Names}}' | grep -q "^kato-clickhouse$"; then
+            print_error "ClickHouse container is not running"
+            print_info "Start services with: ./kato-manager.sh start"
+            exit 1
+        fi
+
+        print_info "ClickHouse Memory Usage Report"
+        echo ""
+
+        # Get Docker memory limit
+        MEMORY_LIMIT=$(docker inspect kato-clickhouse --format='{{.HostConfig.Memory}}')
+        MEMORY_LIMIT_GB=$((MEMORY_LIMIT / 1024 / 1024 / 1024))
+
+        # Get current RAM usage from docker stats (one-shot)
+        MEMORY_STATS=$(docker stats kato-clickhouse --no-stream --format "{{.MemUsage}}")
+        CURRENT_RAM=$(echo "$MEMORY_STATS" | awk '{print $1}')
+        MAX_RAM=$(echo "$MEMORY_STATS" | awk '{print $3}')
+
+        # Get ClickHouse server memory setting
+        CH_MAX_MEMORY=$(docker exec kato-clickhouse clickhouse-client --query "SELECT value FROM system.server_settings WHERE name = 'max_server_memory_usage'" 2>/dev/null)
+        CH_MAX_MEMORY_GB=$((CH_MAX_MEMORY / 1024 / 1024 / 1024))
+
+        # Get current memory usage from ClickHouse metrics
+        CH_MEMORY_USAGE=$(docker exec kato-clickhouse clickhouse-client --query "SELECT formatReadableSize(value) FROM system.asynchronous_metrics WHERE metric = 'MemoryTracking'" 2>/dev/null)
+        if [ -z "$CH_MEMORY_USAGE" ]; then
+            CH_MEMORY_USAGE=$(docker exec kato-clickhouse clickhouse-client --query "SELECT formatReadableSize(value) FROM system.metrics WHERE metric = 'MemoryTracking'" 2>/dev/null || echo "N/A")
+        fi
+
+        # RAM Usage (Operations)
+        echo -e "${GREEN}RAM Usage (Operations):${NC}"
+        echo "  Current: $CURRENT_RAM / $MAX_RAM"
+        echo "  Container Limit: ${MEMORY_LIMIT_GB}GB"
+        echo "  ClickHouse Limit: ${CH_MAX_MEMORY_GB}GB (90% of container)"
+        echo "  ClickHouse Tracked: $CH_MEMORY_USAGE"
+        echo ""
+
+        # Calculate memory headroom (more robust parsing)
+        # Extract numeric values from formats like "1.387GiB" or "280MiB"
+        CURRENT_RAM_VALUE=$(echo "$CURRENT_RAM" | grep -oE '[0-9]+\.[0-9]+|[0-9]+' | head -1)
+        CURRENT_RAM_UNIT=$(echo "$CURRENT_RAM" | grep -oE 'GiB|MiB|KiB' | head -1)
+        MAX_RAM_VALUE=$(echo "$MAX_RAM" | grep -oE '[0-9]+\.[0-9]+|[0-9]+' | head -1)
+        MAX_RAM_UNIT=$(echo "$MAX_RAM" | grep -oE 'GiB|MiB|KiB' | head -1)
+
+        # Convert to MB for comparison
+        case "$CURRENT_RAM_UNIT" in
+            GiB) CURRENT_RAM_MB=$(echo "$CURRENT_RAM_VALUE * 1024" | bc 2>/dev/null || echo "0") ;;
+            MiB) CURRENT_RAM_MB=$(echo "$CURRENT_RAM_VALUE" | bc 2>/dev/null || echo "0") ;;
+            KiB) CURRENT_RAM_MB=$(echo "$CURRENT_RAM_VALUE / 1024" | bc 2>/dev/null || echo "0") ;;
+            *) CURRENT_RAM_MB="0" ;;
+        esac
+
+        case "$MAX_RAM_UNIT" in
+            GiB) MAX_RAM_MB=$(echo "$MAX_RAM_VALUE * 1024" | bc 2>/dev/null || echo "$((MEMORY_LIMIT_GB * 1024))") ;;
+            MiB) MAX_RAM_MB=$(echo "$MAX_RAM_VALUE" | bc 2>/dev/null || echo "$((MEMORY_LIMIT_GB * 1024))") ;;
+            KiB) MAX_RAM_MB=$(echo "$MAX_RAM_VALUE / 1024" | bc 2>/dev/null || echo "$((MEMORY_LIMIT_GB * 1024))") ;;
+            *) MAX_RAM_MB="$((MEMORY_LIMIT_GB * 1024))" ;;
+        esac
+
+        # Ensure we have valid numbers
+        CURRENT_RAM_MB=${CURRENT_RAM_MB%.*}  # Remove decimal
+        MAX_RAM_MB=${MAX_RAM_MB%.*}
+
+        if [ -z "$CURRENT_RAM_MB" ] || [ "$CURRENT_RAM_MB" = "0" ]; then
+            CURRENT_RAM_MB="0"
+        fi
+        if [ -z "$MAX_RAM_MB" ] || [ "$MAX_RAM_MB" = "0" ]; then
+            MAX_RAM_MB="$((MEMORY_LIMIT_GB * 1024))"
+        fi
+
+        HEADROOM_MB=$((MAX_RAM_MB - CURRENT_RAM_MB))
+        if [ "$MAX_RAM_MB" -gt 0 ]; then
+            HEADROOM_PCT=$((100 * HEADROOM_MB / MAX_RAM_MB))
+        else
+            HEADROOM_PCT=0
+        fi
+
+        if [ "$HEADROOM_PCT" -gt 50 ]; then
+            echo -e "  Headroom: ${GREEN}${HEADROOM_PCT}% available${NC} (healthy)"
+        elif [ "$HEADROOM_PCT" -gt 20 ]; then
+            echo -e "  Headroom: ${YELLOW}${HEADROOM_PCT}% available${NC} (monitor closely)"
+        else
+            echo -e "  Headroom: ${RED}${HEADROOM_PCT}% available${NC} (approaching limit!)"
+        fi
+        echo ""
+
+        # Disk Usage (Storage)
+        echo -e "${GREEN}Disk Usage (Storage):${NC}"
+
+        # Pattern data
+        PATTERN_SIZE=$(docker exec kato-clickhouse clickhouse-client --query "SELECT formatReadableSize(sum(bytes_on_disk)) FROM system.parts WHERE database = 'kato' AND table = 'patterns_data' AND active = 1" 2>/dev/null || echo "0 B")
+        PATTERN_COUNT=$(docker exec kato-clickhouse clickhouse-client --query "SELECT formatReadableQuantity(count(*)) FROM kato.patterns_data" 2>/dev/null || echo "0")
+        echo "  Pattern Data: $PATTERN_SIZE ($PATTERN_COUNT patterns)"
+
+        # System logs
+        SYSTEM_LOG_SIZE=$(docker exec kato-clickhouse clickhouse-client --query "SELECT formatReadableSize(sum(bytes_on_disk)) FROM system.parts WHERE database = 'system' AND active = 1" 2>/dev/null || echo "0 B")
+        echo "  System Logs: $SYSTEM_LOG_SIZE"
+
+        # Total ClickHouse data
+        TOTAL_CH_SIZE=$(docker exec kato-clickhouse clickhouse-client --query "SELECT formatReadableSize(sum(bytes_on_disk)) FROM system.parts WHERE active = 1" 2>/dev/null || echo "0 B")
+        echo "  Total ClickHouse: $TOTAL_CH_SIZE"
+
+        # Available disk space
+        DISK_AVAILABLE=$(docker exec kato-clickhouse clickhouse-client --query "SELECT formatReadableSize(free_space) FROM system.disks WHERE name = 'default'" 2>/dev/null || echo "N/A")
+        echo "  Available Disk: $DISK_AVAILABLE"
+        echo ""
+
+        # Memory breakdown by table (top 5)
+        echo -e "${GREEN}Top 5 Tables by Disk Usage:${NC}"
+        docker exec kato-clickhouse clickhouse-client --query "
+        SELECT
+            database,
+            table,
+            formatReadableSize(sum(bytes_on_disk)) AS size
+        FROM system.parts
+        WHERE active = 1
+        GROUP BY database, table
+        ORDER BY sum(bytes_on_disk) DESC
+        LIMIT 5
+        FORMAT PrettyCompact
+        " 2>/dev/null
+        echo ""
+
+        # Training recommendations
+        echo -e "${GREEN}Training Session Guidance:${NC}"
+        if [ "$HEADROOM_PCT" -gt 50 ]; then
+            echo "  ✓ Memory headroom is healthy - safe to continue training"
+        elif [ "$HEADROOM_PCT" -gt 20 ]; then
+            echo "  ⚠ Memory headroom is moderate - monitor during training"
+            echo "    Consider clearing system logs if usage increases"
+        else
+            echo "  ✗ Memory headroom is low - training may fail"
+            echo "    Action: Clear system logs with:"
+            echo "      ./kato-manager.sh clean-logs"
+        fi
+        echo ""
+
+        # Redis Memory Usage
+        echo -e "${GREEN}Redis Memory Usage:${NC}"
+
+        if docker ps --format '{{.Names}}' | grep -q "^kato-redis$"; then
+            # Get Redis memory stats
+            REDIS_USED_MEMORY=$(docker exec kato-redis redis-cli INFO memory 2>/dev/null | grep "used_memory_human:" | cut -d: -f2 | tr -d '\r')
+            REDIS_MAXMEMORY=$(docker exec kato-redis redis-cli INFO memory 2>/dev/null | grep "maxmemory_human:" | cut -d: -f2 | tr -d '\r')
+            REDIS_MEM_FRAG=$(docker exec kato-redis redis-cli INFO memory 2>/dev/null | grep "mem_fragmentation_ratio:" | cut -d: -f2 | tr -d '\r')
+
+            # Get eviction stats
+            EVICTED_KEYS=$(docker exec kato-redis redis-cli INFO stats 2>/dev/null | grep "evicted_keys:" | cut -d: -f2 | tr -d '\r')
+            KEYSPACE_HITS=$(docker exec kato-redis redis-cli INFO stats 2>/dev/null | grep "keyspace_hits:" | cut -d: -f2 | tr -d '\r')
+            KEYSPACE_MISSES=$(docker exec kato-redis redis-cli INFO stats 2>/dev/null | grep "keyspace_misses:" | cut -d: -f2 | tr -d '\r')
+
+            # Get key counts
+            REDIS_KEYS=$(docker exec kato-redis redis-cli DBSIZE 2>/dev/null | grep -oE '[0-9]+')
+
+            echo "  Used Memory: $REDIS_USED_MEMORY"
+            echo "  Max Memory: $REDIS_MAXMEMORY"
+            echo "  Memory Fragmentation: $REDIS_MEM_FRAG"
+            echo "  Total Keys: $REDIS_KEYS"
+            echo "  Evicted Keys: $EVICTED_KEYS"
+
+            # Calculate hit rate
+            if [ -n "$KEYSPACE_HITS" ] && [ -n "$KEYSPACE_MISSES" ]; then
+                TOTAL_REQUESTS=$((KEYSPACE_HITS + KEYSPACE_MISSES))
+                if [ "$TOTAL_REQUESTS" -gt 0 ]; then
+                    HIT_RATE=$((100 * KEYSPACE_HITS / TOTAL_REQUESTS))
+                    echo "  Cache Hit Rate: ${HIT_RATE}%"
+                fi
+            fi
+
+            # Warning if evictions are happening
+            if [ -n "$EVICTED_KEYS" ] && [ "$EVICTED_KEYS" -gt 0 ]; then
+                echo -e "  ${YELLOW}⚠ Warning:${NC} $EVICTED_KEYS keys have been evicted (memory limit reached)"
+                echo "    Consider: Increasing Redis memory limit or optimizing data structure"
+            fi
+        else
+            echo "  Redis container is not running"
+        fi
+        echo ""
+
+        print_info "Run './kato-manager.sh monitor' for continuous updates"
+        ;;
+
+    monitor)
+        print_info "Starting continuous memory monitoring (Ctrl+C to stop)..."
+        print_info "Updates every 5 seconds"
+        echo ""
+
+        # Check if ClickHouse is running
+        if ! docker ps --format '{{.Names}}' | grep -q "^kato-clickhouse$"; then
+            print_error "ClickHouse container is not running"
+            exit 1
+        fi
+
+        while true; do
+            clear
+            echo "========================================="
+            echo "KATO Memory Monitor - $(date '+%Y-%m-%d %H:%M:%S')"
+            echo "========================================="
+            echo ""
+
+            # Get memory stats
+            MEMORY_STATS=$(docker stats kato-clickhouse --no-stream --format "{{.MemUsage}}")
+            CURRENT_RAM=$(echo "$MEMORY_STATS" | awk '{print $1}')
+            MAX_RAM=$(echo "$MEMORY_STATS" | awk '{print $3}')
+
+            # Get ClickHouse memory usage
+            CH_MEMORY=$(docker exec kato-clickhouse clickhouse-client --query "SELECT formatReadableSize(value) FROM system.metrics WHERE metric = 'MemoryTracking'" 2>/dev/null || echo "N/A")
+
+            echo -e "${GREEN}RAM Usage:${NC} $CURRENT_RAM / $MAX_RAM"
+            echo -e "${GREEN}ClickHouse Tracked:${NC} $CH_MEMORY"
+            echo ""
+
+            # Pattern data
+            PATTERN_SIZE=$(docker exec kato-clickhouse clickhouse-client --query "SELECT formatReadableSize(sum(bytes_on_disk)) FROM system.parts WHERE database = 'kato' AND table = 'patterns_data' AND active = 1" 2>/dev/null || echo "0 B")
+            PATTERN_COUNT=$(docker exec kato-clickhouse clickhouse-client --query "SELECT formatReadableQuantity(count(*)) FROM kato.patterns_data" 2>/dev/null || echo "0")
+            echo -e "${GREEN}Pattern Data:${NC} $PATTERN_SIZE ($PATTERN_COUNT patterns)"
+
+            # System logs
+            SYSTEM_LOG_SIZE=$(docker exec kato-clickhouse clickhouse-client --query "SELECT formatReadableSize(sum(bytes_on_disk)) FROM system.parts WHERE database = 'system' AND active = 1" 2>/dev/null || echo "0 B")
+            echo -e "${GREEN}System Logs:${NC} $SYSTEM_LOG_SIZE"
+            echo ""
+
+            # Active queries
+            ACTIVE_QUERIES=$(docker exec kato-clickhouse clickhouse-client --query "SELECT count(*) FROM system.processes" 2>/dev/null || echo "0")
+            echo -e "${GREEN}Active Queries:${NC} $ACTIVE_QUERIES"
+            echo ""
+
+            # Redis stats
+            if docker ps --format '{{.Names}}' | grep -q "^kato-redis$"; then
+                REDIS_USED=$(docker exec kato-redis redis-cli INFO memory 2>/dev/null | grep "used_memory_human:" | cut -d: -f2 | tr -d '\r')
+                REDIS_MAX=$(docker exec kato-redis redis-cli INFO memory 2>/dev/null | grep "maxmemory_human:" | cut -d: -f2 | tr -d '\r')
+                REDIS_KEYS=$(docker exec kato-redis redis-cli DBSIZE 2>/dev/null | grep -oE '[0-9]+')
+                EVICTED=$(docker exec kato-redis redis-cli INFO stats 2>/dev/null | grep "evicted_keys:" | cut -d: -f2 | tr -d '\r')
+
+                echo -e "${GREEN}Redis:${NC} $REDIS_USED / $REDIS_MAX ($REDIS_KEYS keys, $EVICTED evicted)"
+                echo ""
+            fi
+
+            echo "Press Ctrl+C to stop monitoring"
+            sleep 5
+        done
+        ;;
+
+    clean-logs)
+        print_warn "⚠️  This will TRUNCATE ClickHouse system logs (query_log, metric_log, etc.)"
+        print_warn "Pattern data will NOT be affected."
+        echo -e "${YELLOW}Continue? (yes/N)${NC}"
+        read -r response
+        if [[ "$response" == "yes" ]]; then
+            print_info "Truncating ClickHouse system logs..."
+
+            # Truncate system logs
+            docker exec kato-clickhouse clickhouse-client --query "TRUNCATE TABLE IF EXISTS system.query_log" 2>/dev/null
+            docker exec kato-clickhouse clickhouse-client --query "TRUNCATE TABLE IF EXISTS system.text_log" 2>/dev/null
+            docker exec kato-clickhouse clickhouse-client --query "TRUNCATE TABLE IF EXISTS system.trace_log" 2>/dev/null
+            docker exec kato-clickhouse clickhouse-client --query "TRUNCATE TABLE IF EXISTS system.metric_log" 2>/dev/null
+            docker exec kato-clickhouse clickhouse-client --query "TRUNCATE TABLE IF EXISTS system.asynchronous_metric_log" 2>/dev/null
+            docker exec kato-clickhouse clickhouse-client --query "TRUNCATE TABLE IF EXISTS system.part_log" 2>/dev/null
+            docker exec kato-clickhouse clickhouse-client --query "TRUNCATE TABLE IF EXISTS system.processors_profile_log" 2>/dev/null
+
+            print_info "✓ System logs truncated"
+
+            # Show new size
+            SYSTEM_LOG_SIZE=$(docker exec kato-clickhouse clickhouse-client --query "SELECT formatReadableSize(sum(bytes_on_disk)) FROM system.parts WHERE database = 'system' AND active = 1" 2>/dev/null)
+            print_info "Current system log size: $SYSTEM_LOG_SIZE"
+        else
+            print_info "Operation cancelled"
+        fi
+        ;;
+
     help|*)
         echo "KATO Deployment Manager"
         echo ""
@@ -285,6 +708,10 @@ case "$COMMAND" in
         echo "  logs [SERVICE] [N] - Show last N lines of logs (default: kato, 50 lines)"
         echo "  follow [SERVICE]   - Follow logs in real-time (default: kato)"
         echo "  status             - Check all service status"
+        echo "  verify             - Verify ClickHouse memory configuration for training"
+        echo "  memory             - Show detailed memory usage report (RAM + disk)"
+        echo "  monitor            - Continuous memory monitoring (updates every 5s)"
+        echo "  clean-logs         - Truncate ClickHouse system logs (keeps pattern data)"
         echo "  clean-data         - Delete all data in ClickHouse, Qdrant, and Redis"
         echo "  clean              - Remove all containers and volumes"
         echo "  help               - Show this help message"
@@ -296,11 +723,20 @@ case "$COMMAND" in
         echo "  ./kato-manager.sh start dashboard    # Start dashboard only"
         echo "  ./kato-manager.sh update             # Update KATO to latest version"
         echo "  ./kato-manager.sh status             # Check all services"
+        echo "  ./kato-manager.sh verify             # Verify ClickHouse memory config (before training)"
+        echo "  ./kato-manager.sh memory             # Check current memory usage (one-time)"
+        echo "  ./kato-manager.sh monitor            # Watch memory usage in real-time"
+        echo "  ./kato-manager.sh clean-logs         # Clear system logs if memory is low"
         echo "  ./kato-manager.sh logs kato 100      # Show last 100 lines from KATO"
         echo "  ./kato-manager.sh follow dashboard   # Follow dashboard logs in real-time"
         echo "  ./kato-manager.sh restart kato       # Restart only KATO"
         echo "  ./kato-manager.sh stop dashboard     # Stop dashboard (keeps KATO running)"
         echo "  ./kato-manager.sh clean-data         # Clear all database data"
+        echo ""
+        echo "Memory Management Workflow:"
+        echo "  1. Before training: ./kato-manager.sh verify"
+        echo "  2. During training: ./kato-manager.sh monitor (in separate terminal)"
+        echo "  3. If low memory:   ./kato-manager.sh clean-logs"
         echo ""
         echo "Documentation:"
         echo "  KATO API:  http://localhost:8000/docs (when running)"

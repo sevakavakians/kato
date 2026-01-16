@@ -236,6 +236,16 @@ case "$COMMAND" in
             docker exec kato-clickhouse clickhouse-client --query "DROP DATABASE IF EXISTS kato" || print_error "Failed to drop ClickHouse database"
             docker exec kato-clickhouse clickhouse-client --query "CREATE DATABASE kato" || print_error "Failed to recreate ClickHouse database"
 
+            # Recreate schema from init.sql
+            print_info "Recreating ClickHouse schema..."
+            if [ -f "$SCRIPT_DIR/config/clickhouse/init.sql" ]; then
+                docker exec -i kato-clickhouse clickhouse-client --multiquery < "$SCRIPT_DIR/config/clickhouse/init.sql" || print_error "Failed to recreate schema"
+                print_info "✓ Schema recreated successfully"
+            else
+                print_error "Could not find init.sql at $SCRIPT_DIR/config/clickhouse/init.sql"
+                print_warn "You will need to manually recreate the schema before using KATO"
+            fi
+
             # Clear Qdrant - delete all collections
             print_info "Clearing Qdrant collections..."
             COLLECTIONS=$(curl -s -m 10 http://localhost:6333/collections 2>/dev/null | grep -o '"name":"[^"]*"' | cut -d'"' -f4)

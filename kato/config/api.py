@@ -295,7 +295,7 @@ class APIServiceConfig(BaseSettings):
             'reload': self.reload,
             'access_log': self.access_log,
             'use_colors': True,
-            'limit_max_requests': 10000,
+            'limit_max_requests': 100000,  # Increased from 10k to 100k for training workloads
             'timeout_keep_alive': self.keep_alive,
         }
 

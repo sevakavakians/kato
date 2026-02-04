@@ -557,24 +557,22 @@ case "$COMMAND" in
         " 2>/dev/null
         echo ""
 
-        # Training recommendations
-        echo -e "${GREEN}Training Session Guidance:${NC}"
-        if [ "$HEADROOM_PCT" -gt 50 ]; then
-            echo "  ✓ Memory headroom is healthy - safe to continue training"
-        elif [ "$HEADROOM_PCT" -gt 20 ]; then
-            echo "  ⚠ Memory headroom is moderate - monitor during training"
-            echo "    Consider clearing system logs if usage increases"
-        else
-            echo "  ✗ Memory headroom is low - training may fail"
-            echo "    Action: Clear system logs with:"
-            echo "      ./kato-manager.sh clean-logs"
-        fi
-        echo ""
-
         # Redis Memory Usage
         echo -e "${GREEN}Redis Memory Usage:${NC}"
 
         if docker ps --format '{{.Names}}' | grep -q "^kato-redis$"; then
+            # Get Docker memory limit for Redis
+            REDIS_DOCKER_LIMIT=$(docker inspect kato-redis --format='{{.HostConfig.Memory}}' 2>/dev/null)
+            REDIS_DOCKER_LIMIT_GB=$((REDIS_DOCKER_LIMIT / 1024 / 1024 / 1024))
+
+            if [ "$REDIS_DOCKER_LIMIT" -eq 0 ]; then
+                echo "  Docker Memory Limit: Unlimited"
+                REDIS_DOCKER_LIMIT_MB=999999  # No limit
+            else
+                echo "  Docker Memory Limit: ${REDIS_DOCKER_LIMIT_GB}GB"
+                REDIS_DOCKER_LIMIT_MB=$((REDIS_DOCKER_LIMIT / 1024 / 1024))
+            fi
+
             # Get Redis memory stats
             REDIS_USED_MEMORY=$(docker exec kato-redis redis-cli INFO memory 2>/dev/null | grep "used_memory_human:" | cut -d: -f2 | tr -d '\r')
             REDIS_MAXMEMORY=$(docker exec kato-redis redis-cli INFO memory 2>/dev/null | grep "maxmemory_human:" | cut -d: -f2 | tr -d '\r')
@@ -603,6 +601,95 @@ case "$COMMAND" in
                 fi
             fi
 
+            # Parse used memory into MB for BGSAVE calculations
+            REDIS_USED_MB=$(echo "$REDIS_USED_MEMORY" | grep -oE '[0-9.]+' | head -1)
+            REDIS_USED_UNIT=$(echo "$REDIS_USED_MEMORY" | grep -oE '[MGK]B?' | head -1)
+
+            case "$REDIS_USED_UNIT" in
+                G|GB) REDIS_USED_MB=$(echo "$REDIS_USED_MB * 1024" | bc -l 2>/dev/null || echo "0") ;;
+                M|MB) REDIS_USED_MB=$(echo "$REDIS_USED_MB" | bc -l 2>/dev/null || echo "0") ;;
+                K|KB) REDIS_USED_MB=$(echo "$REDIS_USED_MB / 1024" | bc -l 2>/dev/null || echo "0") ;;
+                *) REDIS_USED_MB="0" ;;
+            esac
+
+            # Remove decimal for integer comparison
+            REDIS_USED_MB=${REDIS_USED_MB%.*}
+
+            # Calculate BGSAVE fork requirements (2x current usage for worst case COW)
+            BGSAVE_REQUIRED_MB=$((REDIS_USED_MB * 2))
+            BGSAVE_REQUIRED_GB=$(echo "scale=1; $BGSAVE_REQUIRED_MB / 1024" | bc)
+
+            echo "  BGSAVE Fork Requirement: ~${BGSAVE_REQUIRED_GB}GB (2x current usage)"
+
+            # Calculate total memory needed during BGSAVE
+            TOTAL_NEEDED_MB=$((REDIS_USED_MB + BGSAVE_REQUIRED_MB))
+            TOTAL_NEEDED_GB=$(echo "scale=1; $TOTAL_NEEDED_MB / 1024" | bc)
+
+            echo "  Total During BGSAVE: ~${TOTAL_NEEDED_GB}GB (parent + fork)"
+
+            # Check for recent SIGKILL events (OOM killer)
+            OOM_EVENTS=$(docker logs kato-redis --tail 1000 2>&1 | grep -c "terminated by signal 9")
+
+            if [ "$OOM_EVENTS" -gt 0 ]; then
+                echo -e "  ${RED}✗ OOM Events:${NC} $OOM_EVENTS SIGKILL events detected in logs!"
+                echo "    Redis is being killed by Docker OOM killer during BGSAVE"
+                REDIS_OOM_DETECTED=1
+            else
+                echo -e "  ${GREEN}✓ OOM Events:${NC} No SIGKILL events detected"
+                REDIS_OOM_DETECTED=0
+            fi
+
+            # Check if Redis is currently loading
+            REDIS_LOADING=$(docker exec kato-redis redis-cli INFO persistence 2>/dev/null | grep "^loading:" | cut -d: -f2 | tr -d '\r')
+            if [ "$REDIS_LOADING" = "1" ]; then
+                echo -e "  ${YELLOW}⚠ Status:${NC} Currently loading dataset from disk"
+                echo "    This indicates a recent restart (possibly from OOM)"
+            fi
+
+            # Check if BGSAVE will fit in Docker limit
+            REDIS_SAFE_FOR_BGSAVE=1
+
+            if [ "$REDIS_DOCKER_LIMIT" -ne 0 ]; then
+                if [ "$TOTAL_NEEDED_MB" -gt "$REDIS_DOCKER_LIMIT_MB" ]; then
+                    echo ""
+                    echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+                    echo -e "${RED}⚠ CRITICAL: Redis OOM Risk Detected!${NC}"
+                    echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+                    echo -e "  Current Usage:        ${REDIS_USED_MB}MB"
+                    echo -e "  BGSAVE Requirement:   ${BGSAVE_REQUIRED_MB}MB"
+                    echo -e "  Total Needed:         ${TOTAL_NEEDED_MB}MB"
+                    echo -e "  Docker Limit:         ${REDIS_DOCKER_LIMIT_MB}MB"
+                    echo -e "  ${RED}Shortfall:            $((TOTAL_NEEDED_MB - REDIS_DOCKER_LIMIT_MB))MB${NC}"
+                    echo ""
+                    echo -e "  ${RED}Risk:${NC} BGSAVE will likely trigger OOM killer (SIGKILL)"
+                    echo -e "  ${RED}Impact:${NC} Redis will crash and restart, disrupting training"
+                    echo ""
+                    echo -e "  ${YELLOW}Solution:${NC} Increase Redis Docker memory limit:"
+                    echo "    Edit docker-compose.yml:"
+                    echo "      redis:"
+                    echo "        deploy:"
+                    echo "          resources:"
+                    echo "            limits:"
+                    echo "              memory: 16G    # Increase from ${REDIS_DOCKER_LIMIT_GB}GB"
+                    echo ""
+                    echo "    Then: docker compose down && docker compose up -d"
+                    echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+                    REDIS_SAFE_FOR_BGSAVE=0
+                else
+                    # Calculate headroom
+                    REDIS_HEADROOM_MB=$((REDIS_DOCKER_LIMIT_MB - TOTAL_NEEDED_MB))
+                    REDIS_HEADROOM_GB=$(echo "scale=1; $REDIS_HEADROOM_MB / 1024" | bc)
+
+                    if [ "$REDIS_HEADROOM_MB" -lt 2048 ]; then
+                        echo -e "  ${YELLOW}⚠ Warning:${NC} Low headroom for BGSAVE (${REDIS_HEADROOM_GB}GB remaining)"
+                        echo "    Consider increasing Docker memory limit to 16GB for safety"
+                        REDIS_SAFE_FOR_BGSAVE=0
+                    else
+                        echo -e "  ${GREEN}✓ BGSAVE Safety:${NC} Sufficient headroom (${REDIS_HEADROOM_GB}GB remaining)"
+                    fi
+                fi
+            fi
+
             # Warning if evictions are happening
             if [ -n "$EVICTED_KEYS" ] && [ "$EVICTED_KEYS" -gt 0 ]; then
                 echo -e "  ${YELLOW}⚠ Warning:${NC} $EVICTED_KEYS keys have been evicted (memory limit reached)"
@@ -610,6 +697,52 @@ case "$COMMAND" in
             fi
         else
             echo "  Redis container is not running"
+            REDIS_SAFE_FOR_BGSAVE=0
+            REDIS_OOM_DETECTED=0
+        fi
+        echo ""
+
+        # Training Session Guidance (ENHANCED - includes Redis!)
+        echo -e "${GREEN}Training Session Guidance:${NC}"
+
+        # Initialize safety flag
+        ALL_SAFE=1
+
+        # Check ClickHouse headroom
+        if [ "$HEADROOM_PCT" -gt 50 ]; then
+            echo "  ✓ ClickHouse memory headroom is healthy (${HEADROOM_PCT}% available)"
+        elif [ "$HEADROOM_PCT" -gt 20 ]; then
+            echo "  ⚠ ClickHouse memory headroom is moderate (${HEADROOM_PCT}% available)"
+            echo "    Monitor during training, consider clearing system logs if usage increases"
+            ALL_SAFE=0
+        else
+            echo "  ✗ ClickHouse memory headroom is low (${HEADROOM_PCT}% available)"
+            echo "    Action: Clear system logs with: ./kato-manager.sh clean-logs"
+            ALL_SAFE=0
+        fi
+
+        # Check Redis safety
+        if [ "$REDIS_SAFE_FOR_BGSAVE" -eq 0 ]; then
+            echo "  ✗ Redis memory is UNSAFE for BGSAVE - training will likely fail"
+            echo "    Action: Increase Docker memory limit to 16GB (see above)"
+            ALL_SAFE=0
+        elif [ "$REDIS_OOM_DETECTED" -eq 1 ]; then
+            echo "  ⚠ Redis has experienced recent OOM events"
+            echo "    Action: Monitor closely, consider increasing memory limit"
+            ALL_SAFE=0
+        else
+            echo "  ✓ Redis memory is safe for BGSAVE operations"
+        fi
+
+        echo ""
+        if [ "$ALL_SAFE" -eq 1 ]; then
+            echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            echo -e "${GREEN}✓ All systems ready for training${NC}"
+            echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        else
+            echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            echo -e "${YELLOW}⚠ Address warnings above before training${NC}"
+            echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
         fi
         echo ""
 

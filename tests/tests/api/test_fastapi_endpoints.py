@@ -203,7 +203,48 @@ def test_predictions_endpoints(kato_fixture):
 
     # Get predictions using fixture method (which uses sessions)
     predictions = kato_fixture.get_predictions()
-    assert len(predictions) > 0
+    assert len(predictions) > 0, "Should have at least one prediction"
+
+    # Validate structure of at least one prediction
+    found_match = False
+    for pred in predictions:
+        if 'pred1' in pred.get('matches', []) and 'pred2' in pred.get('matches', []):
+            # Verify all required prediction fields exist and have correct structure
+            assert 'past' in pred, "Prediction should have past field"
+            assert 'present' in pred, "Prediction should have present field"
+            assert 'future' in pred, "Prediction should have future field"
+            assert 'missing' in pred, "Prediction should have missing field"
+            assert 'extras' in pred, "Prediction should have extras field"
+
+            past = pred['past']
+            present = pred['present']
+            future = pred['future']
+            missing = pred['missing']
+            extras = pred['extras']
+
+            # Verify these are lists
+            assert isinstance(past, list), f"Past should be a list, got {type(past)}"
+            assert isinstance(present, list), f"Present should be a list, got {type(present)}"
+            assert isinstance(future, list), f"Future should be a list, got {type(future)}"
+            assert isinstance(missing, list), f"Missing should be a list, got {type(missing)}"
+            assert isinstance(extras, list), f"Extras should be a list, got {type(extras)}"
+
+            # Verify exact content for this test case
+            # Note: present contains the COMPLETE event from the pattern (not STM structure)
+            # The learned pattern has event [['pred1', 'pred2'], ['pred3']]
+            # We observed [['pred1'], ['pred2']] which matches the first pattern event
+            # So present shows the complete pattern event: [['pred1', 'pred2']]
+            assert past == [], f"Past should be empty (observing from start), got {past}"
+            assert present == [['pred1', 'pred2']], f"Present should be [['pred1', 'pred2']] (complete pattern event), got {present}"
+            assert future == [['pred3']], f"Future should be [['pred3']], got {future}"
+            # Verify alignment with STM (2 events observed)
+            assert len(missing) == len(present), f"Missing should align with present, got {missing}"
+            assert len(extras) == 2, f"Extras should align with STM (2 events), got {len(extras)} items in {extras}"
+
+            found_match = True
+            break
+
+    assert found_match, "Should have found a prediction matching 'pred1' and 'pred2'"
 
     # Also test the raw endpoint with session ID
     if kato_fixture.session_id:

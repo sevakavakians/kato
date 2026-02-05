@@ -68,13 +68,22 @@ def test_prediction_matches(kato_fixture):
     for pred in predictions:
         if 'x' in pred.get('matches', []) and 'y' in pred.get('matches', []):
             # Since we observed 'x' and 'y', they should be in present
+            past = pred.get('past', [])
             present = pred.get('present', [])
             future = pred.get('future', [])
+            missing = pred.get('missing', [])
+            extras = pred.get('extras', [])
 
+            # No past - we're observing from the beginning
+            assert past == [], f"Past should be empty, got {past}"
             # Both 'x' and 'y' should be in present
             assert present == [['x'], ['y']], f"Present should be [['x'], ['y']], got {present}"
             # Only 'z' should be in future
             assert future == [['z']], f"Future should be [['z']], got {future}"
+            # Perfect match - no missing symbols
+            assert missing == [[], []], f"Missing should be [[], []], got {missing}"
+            # Perfect match - no extras
+            assert extras == [[], []], f"Extras should be [[], []], got {extras}"
             break
 
 
@@ -94,10 +103,33 @@ def test_prediction_present_past_future(kato_fixture):
 
     predictions = kato_fixture.get_predictions()
 
+    # Should have at least one prediction
+    assert len(predictions) > 0, "Should have predictions after observing middle of sequence"
+
+    # Find the prediction for our learned sequence
+    found_match = False
     for pred in predictions:
-        assert 'past' in pred
-        assert 'present' in pred
-        assert 'future' in pred
+        if '2' in pred.get('matches', []) and '3' in pred.get('matches', []):
+            past = pred.get('past', [])
+            present = pred.get('present', [])
+            future = pred.get('future', [])
+            missing = pred.get('missing', [])
+            extras = pred.get('extras', [])
+
+            # Should have '1' in past (before match)
+            assert past == [['1']], f"Past should be [['1']], got {past}"
+            # Should have '2' and '3' in present (matching portion)
+            assert present == [['2'], ['3']], f"Present should be [['2'], ['3']], got {present}"
+            # Should have '4' and '5' in future (after match)
+            assert future == [['4'], ['5']], f"Future should be [['4'], ['5']], got {future}"
+            # Perfect match - no missing
+            assert missing == [[], []], f"Missing should be [[], []], got {missing}"
+            # Perfect match - no extras
+            assert extras == [[], []], f"Extras should be [[], []], got {extras}"
+            found_match = True
+            break
+
+    assert found_match, "Should have found a prediction matching '2' and '3'"
 
 
 def test_prediction_similarity_perfect_match(kato_fixture):
@@ -196,11 +228,28 @@ def test_prediction_entropy(kato_fixture):
     kato_fixture.observe({'strings': ['a'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
 
-    # All predictions should have entropy values
+    # Should have at least one prediction
+    assert len(predictions) > 0, "Should have predictions after observations"
+
+    # All predictions should have entropy values and valid structure
     for pred in predictions:
         assert 'entropy' in pred
         assert isinstance(pred['entropy'], (int, float))
         assert pred['entropy'] >= 0
+
+        # Also verify all predictions have proper temporal structure
+        assert 'past' in pred, "Prediction should have past field"
+        assert 'present' in pred, "Prediction should have present field"
+        assert 'future' in pred, "Prediction should have future field"
+        assert 'missing' in pred, "Prediction should have missing field"
+        assert 'extras' in pred, "Prediction should have extras field"
+
+        # Verify these are lists
+        assert isinstance(pred['past'], list), "Past should be a list"
+        assert isinstance(pred['present'], list), "Present should be a list"
+        assert isinstance(pred['future'], list), "Future should be a list"
+        assert isinstance(pred['missing'], list), "Missing should be a list"
+        assert isinstance(pred['extras'], list), "Extras should be a list"
 
 
 def test_prediction_normalized_entropy(kato_fixture):
@@ -316,6 +365,34 @@ def test_multiple_pattern_predictions(kato_fixture):
     pattern_names = [pred.get('name', '') for pred in predictions]
     unique_names = set(pattern_names)
     assert len(unique_names) >= 3, "Should have different pattern names"
+
+    # Validate structure of at least one prediction
+    best_match = None
+    for pred in predictions:
+        if 'a' in pred.get('matches', []) and 'b' in pred.get('matches', []):
+            best_match = pred
+            break
+
+    assert best_match is not None, "Should have at least one prediction matching 'a' and 'b'"
+
+    # Verify this prediction has all required fields
+    past = best_match.get('past', [])
+    present = best_match.get('present', [])
+    future = best_match.get('future', [])
+    missing = best_match.get('missing', [])
+    extras = best_match.get('extras', [])
+
+    # Should have no past (observing from start)
+    assert past == [], f"Past should be empty, got {past}"
+    # Should have 'a' and 'b' in present
+    assert present == [['a'], ['b']], f"Present should be [['a'], ['b']], got {present}"
+    # Should have one item in future (either 'c', 'x', or 'p' depending on which pattern)
+    assert len(future) == 1, f"Future should have 1 event, got {len(future)}"
+    assert len(future[0]) == 1, f"Future event should have 1 symbol, got {len(future[0])}"
+    # Perfect match - no missing
+    assert missing == [[], []], f"Missing should be [[], []], got {missing}"
+    # Perfect match - no extras
+    assert extras == [[], []], f"Extras should be [[], []], got {extras}"
 
 
 def test_prediction_confidence_scores(kato_fixture):

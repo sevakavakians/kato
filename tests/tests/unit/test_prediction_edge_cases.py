@@ -59,19 +59,29 @@ def test_prediction_no_past(kato_fixture):
     predictions = kato_fixture.get_predictions()
 
     # Find matching prediction
+    found_match = False
     for pred in predictions:
         if 'start' in pred.get('matches', []) and 'middle' in pred.get('matches', []):
             past = pred.get('past', [])
             present = pred.get('present', [])
             future = pred.get('future', [])
+            missing = pred.get('missing', [])
+            extras = pred.get('extras', [])
 
             # No past when observing from beginning
-            assert past == [] or past == [[]], f"Should have no past, got {past}"
+            assert past == [], f"Past should be empty, got {past}"
             # Since we observed 'start' and 'middle', both should be in present
             assert present == [['start'], ['middle']], f"Present should be [['start'], ['middle']], got {present}"
             # Future should have remaining event
             assert future == [['end']], f"Future should be [['end']], got {future}"
+            # Perfect match - no missing
+            assert missing == [[], []], f"Missing should be [[], []], got {missing}"
+            # Perfect match - no extras
+            assert extras == [[], []], f"Extras should be [[], []], got {extras}"
+            found_match = True
             break
+
+    assert found_match, "Should have found prediction matching 'start' and 'middle'"
 
 
 def test_prediction_no_future(kato_fixture):
@@ -121,10 +131,23 @@ def test_all_extras_no_matches(kato_fixture):
         for pred in predictions:
             if pred.get('frequency', 0) > 0:
                 # If there's a prediction, extras should contain the unknown symbols
-                pred.get('extras', [])
+                extras = pred.get('extras', [])
                 matches = pred.get('matches', [])
                 # Low or no matches expected
                 assert len(matches) == 0 or pred.get('similarity', 0) < 0.5
+
+                # Verify extras is properly structured
+                assert isinstance(extras, list), f"Extras should be a list, got {type(extras)}"
+                # Flatten extras to check content
+                flat_extras = []
+                if extras and isinstance(extras[0], list):
+                    for event_extras in extras:
+                        flat_extras.extend(event_extras)
+                else:
+                    flat_extras = extras
+                # When there are no matches, observed symbols should appear in extras
+                assert 'unknown1' in flat_extras or 'unknown2' in flat_extras, \
+                    f"Extras should contain unmatched symbols, got {extras}"
 
 
 def test_partial_overlap_multiple_sequences(kato_fixture):
@@ -215,12 +238,30 @@ def test_repeated_symbols_in_event(kato_fixture):
     predictions = kato_fixture.get_predictions()
 
     # Check how repeated symbols are handled
+    found_match = False
     for pred in predictions:
         if pred.get('frequency', 0) > 0:
             missing = pred.get('missing', [])
-            # Depending on KATO's handling, might be missing 'c' or duplicates
-            assert len(missing) >= 0  # Just verify prediction exists
+            present = pred.get('present', [])
+
+            # Verify missing is properly structured
+            assert isinstance(missing, list), f"Missing should be a list, got {type(missing)}"
+            # Should have at least one event in present
+            assert len(present) > 0, f"Present should have at least one event, got {present}"
+            # Missing should match present length (event alignment)
+            assert len(missing) == len(present), \
+                f"Missing length ({len(missing)}) should match present length ({len(present)})"
+            # Flatten missing to check for 'c' which wasn't observed
+            flat_missing = []
+            if missing and isinstance(missing[0], list):
+                for event_missing in missing:
+                    flat_missing.extend(event_missing)
+            # Should be missing 'c' from the learned pattern
+            assert 'c' in flat_missing, f"Should be missing 'c', got {missing}"
+            found_match = True
             break
+
+    assert found_match, "Should have found a prediction with frequency > 0"
 
 
 def test_case_sensitive_matching(kato_fixture):
@@ -306,13 +347,26 @@ def test_single_symbol_sequences(kato_fixture):
     predictions = kato_fixture.get_predictions()
 
     # Find matching prediction
+    found_match = False
     for pred in predictions:
         if 'x' in pred.get('matches', []) and 'y' in pred.get('matches', []):
-            pred.get('past', [])
+            past = pred.get('past', [])
             present = pred.get('present', [])
             future = pred.get('future', [])
+            missing = pred.get('missing', [])
+            extras = pred.get('extras', [])
 
+            # No past - observing from beginning
+            assert past == [], f"Past should be empty, got {past}"
             # Since we observed 'x' and 'y', they should be in present
             assert present == [['x'], ['y']], f"Present should be [['x'], ['y']], got {present}"
+            # Should have 'z' in future
             assert future == [['z']], f"Future should be [['z']], got {future}"
+            # Perfect match - no missing
+            assert missing == [[], []], f"Missing should be [[], []], got {missing}"
+            # Perfect match - no extras
+            assert extras == [[], []], f"Extras should be [[], []], got {extras}"
+            found_match = True
             break
+
+    assert found_match, "Should have found prediction matching 'x' and 'y'"

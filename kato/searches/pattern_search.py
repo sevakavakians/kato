@@ -255,12 +255,14 @@ class InformationExtractor:
             # We have at least 2 actual matching blocks
             (i0, j0, n0) = tuple(matching_blocks[0])
             (i1, j1, n1) = tuple(matching_blocks[-2])  # Last actual match (before terminator)
+
             past = pattern[:i0]
             present = pattern[i0:i1+n1] if i1+n1 > i0 else pattern[i0:]
         elif num_actual_blocks == 1:
             # Only one matching block
             (i0, j0, n0) = tuple(matching_blocks[0])
             (i1, _, _) = (i0, j0, n0)  # Use same values for consistency
+
             past = pattern[:i0]
             present = pattern[i0:i0+n0]  # Just the matching portion
         else:

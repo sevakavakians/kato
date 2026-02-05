@@ -31,17 +31,32 @@ def test_simple_sequence_learning(kato_fixture):
     predictions = kato_fixture.get_predictions()
 
     # Should predict the rest of the sequence
-    assert len(predictions) > 0
+    assert len(predictions) > 0, "Should have predictions after observing 'hello' and 'world'"
+
+    found_match = False
     for pred in predictions:
         if 'hello' in pred.get('matches', []) and 'world' in pred.get('matches', []):
-            # Since we observed 'hello' and 'world', they should be in present
+            # Get all five prediction fields
+            past = pred.get('past', [])
             present = pred.get('present', [])
             future = pred.get('future', [])
+            missing = pred.get('missing', [])
+            extras = pred.get('extras', [])
+
+            # No past - observing from beginning
+            assert past == [], f"Past should be empty, got {past}"
             # Check that both observed strings are in present
             assert present == [['hello'], ['world']], f"Present should be [['hello'], ['world']], got {present}"
             # Only 'test' should be in future
             assert future == [['test']], f"Future should be [['test']], got {future}"
+            # Perfect match - no missing
+            assert missing == [[], []], f"Missing should be [[], []], got {missing}"
+            # Perfect match - no extras
+            assert extras == [[], []], f"Extras should be [[], []], got {extras}"
+            found_match = True
             break
+
+    assert found_match, "Should have found prediction matching 'hello' and 'world'"
 
 
 def test_multiple_sequence_learning(kato_fixture):
@@ -120,25 +135,44 @@ def test_sequence_completion(kato_fixture):
         predictions = kato_fixture.get_predictions()
 
         # Check predictions
+        found_match = False
         for pred in predictions:
             if pred.get('frequency', 0) > 0:
+                past = pred.get('past', [])
                 present = pred.get('present', [])
                 future = pred.get('future', [])
+                missing = pred.get('missing', [])
+                extras = pred.get('extras', [])
 
-                # Flatten fields for checking
-                present_items = [item for sublist in present for item in sublist if isinstance(sublist, list)]
+                # Convert actually_observed to expected present format (event-structured)
+                expected_present = [[item] for item in actually_observed]
+
+                # Present should exactly match what we observed
+                assert present == expected_present, \
+                    f"Present should be exactly {expected_present}, got {present}"
+
+                # Verify past is empty (observing from beginning)
+                assert past == [], f"Past should be empty, got {past}"
+
+                # Verify extras and missing structure
+                assert len(missing) == len(present), \
+                    f"Missing should align with present, got missing={missing}, present={present}"
+                assert len(extras) == len(present), \
+                    f"Extras should align with present (STM length), got extras={extras}, present={present}"
+
+                # Flatten future to check content
                 future_items = [item for sublist in future for item in sublist if isinstance(sublist, list)]
-
-                # All actually observed items should be in present
-                for obs_item in actually_observed:
-                    assert obs_item in present_items, f"{obs_item} should be in present"
 
                 # Unobserved expected items should be in future
                 unobserved_expected = [e for e in expected if e not in actually_observed]
                 if unobserved_expected:
                     assert any(exp in future_items for exp in unobserved_expected), \
-                        f"Some of {unobserved_expected} should be in future"
+                        f"Some of {unobserved_expected} should be in future, got {future}"
+
+                found_match = True
                 break
+
+        assert found_match, f"Should have found matching prediction for observed={actually_observed}"
 
 
 def test_cyclic_sequence_learning(kato_fixture):

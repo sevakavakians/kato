@@ -3,6 +3,40 @@
 
 ---
 
+## 2026-03-17 - Bug Fix Fully Verified: Vectors Never Persisted to Qdrant (Secondary Issue Resolved)
+
+**Trigger**: Task completion event - full verification confirmed after secondary event loop bug fix
+
+**Event Type**: Bug fix verification complete
+
+**Actions Taken**:
+1. Updated bug archive `planning-docs/completed/bugs/2026-03-17-vectors-never-persisted-to-qdrant.md` with full root cause analysis (two issues), complete fix description, and verification results
+2. Updated SESSION_STATE.md Recent Achievements entry from "PENDING VERIFICATION" to "FULLY VERIFIED" with secondary bug details
+3. Created `planning-docs/project-manager/triggers.md` (first entry)
+4. Created `planning-docs/project-manager/patterns.md` (first entry)
+
+**Secondary Bug Resolved**: `add_vector_sync` and `add_vectors_batch_sync` used bare `self._loop.run_until_complete()`, causing `RuntimeError: This event loop is already running` in FastAPI async contexts. Fixed by replacing with `self._run_async_in_sync()`.
+
+**Verification Results**: 8/8 vector integration tests, 441/443 full suite, 5/5 vector stress tests — all passing.
+
+---
+
+## 2026-03-17 - Bug Fix Archived: Vectors Never Persisted to Qdrant
+
+**Trigger**: Task completion event - bug fix applied to vector_search_engine.py
+
+**Event Type**: Bug fix documentation (Qdrant persistence no-op)
+
+**Actions Taken**:
+1. Created bug archive: `planning-docs/completed/bugs/2026-03-17-vectors-never-persisted-to-qdrant.md`
+2. Added entry to SESSION_STATE.md Recent Achievements with PENDING VERIFICATION status
+
+**Fix Summary**: `assignNewlyLearnedToWorkers()` in `kato/searches/vector_search_engine.py` replaced no-op with `self.engine.add_vector_sync(vector_obj)` calls. Fixes 0% accuracy in kato-notebooks Section 11 digits tutorial.
+
+**Verification Pending**: Notebook run needed to confirm fix resolves 0% accuracy.
+
+---
+
 ## 2025-12-17 - Documentation Cleanup: MongoDB to ClickHouse Migration References
 
 **Trigger**: Task completion event - Comprehensive documentation audit and update

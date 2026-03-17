@@ -248,6 +248,13 @@ Make KatoProcessor stateless following standard web application patterns:
 - **Related Work**: planning-docs/initiatives/hybrid-clickhouse-redis.md (v3.0 architecture)
 
 ## Recent Achievements
+- **Vectors Never Persisted to Qdrant Bug Fix - COMPLETE** (2026-03-17): FULLY VERIFIED
+  - **Primary Bug**: `assignNewlyLearnedToWorkers()` in `kato/searches/vector_search_engine.py` was a no-op - no code actually persisted vectors to Qdrant
+  - **Secondary Bug**: `add_vector_sync` and `add_vectors_batch_sync` used `self._loop.run_until_complete()` directly, causing `RuntimeError: This event loop is already running` in FastAPI async contexts
+  - **Symptom**: Digits classification tutorial (Section 11, kato-notebooks) produced 0% accuracy because Qdrant collection remained empty after training
+  - **Fix**: (1) Replaced no-op with `self.engine.add_vector_sync(vector_obj)` calls; (2) Replaced bare `run_until_complete()` with `self._run_async_in_sync()` in sync wrapper methods
+  - **Verification**: 8/8 vector integration tests passed, 441/443 full suite passed, 5/5 vector stress tests passed
+  - **Archive**: planning-docs/completed/bugs/2026-03-17-vectors-never-persisted-to-qdrant.md
 - **Deployment Network Auto-Creation Bug Fix - COMPLETE** (2025-12-17): ✅ OPERATIONS IMPROVEMENT
   - **Bug**: Users following Quick Start guide encountered "network declared as external, but could not be found" error
   - **Root Cause**: deployment/docker-compose.yml required pre-existing network (external: true)

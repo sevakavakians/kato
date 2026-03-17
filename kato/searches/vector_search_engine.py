@@ -314,7 +314,7 @@ class VectorSearchEngine:
         metadata: Optional[dict[str, Any]] = None
     ) -> bool:
         """Synchronous wrapper for add_vector"""
-        return self._loop.run_until_complete(
+        return self._run_async_in_sync(
             self.add_vector(vector, vector_id, metadata)
         )
 
@@ -404,7 +404,7 @@ class VectorSearchEngine:
         metadata: Optional[list[dict[str, Any]]] = None
     ) -> tuple[int, list[str]]:
         """Synchronous wrapper for add_vectors_batch"""
-        return self._loop.run_until_complete(
+        return self._run_async_in_sync(
             self.add_vectors_batch(vectors, vector_ids, metadata)
         )
 
@@ -815,14 +815,13 @@ class VectorIndexer:
         self.datasubset = []
 
     def assignNewlyLearnedToWorkers(self, new_vectors):
-        """
-        Compatibility method - in the modern architecture, vectors are automatically
-        indexed when stored in the vector database, so this is a no-op.
-        """
-        # In the new architecture, vectors are automatically indexed when stored
-        # No need to manually assign to workers
-        logger.debug(f"Received {len(new_vectors)} new vectors (auto-indexed)")
-        pass
+        """Add newly learned vectors to the Qdrant search index."""
+        if not new_vectors:
+            return
+        self.initialize()
+        for vector_obj in new_vectors:
+            self.engine.add_vector_sync(vector_obj)
+        logger.debug(f"Indexed {len(new_vectors)} new vectors to Qdrant")
 
     def findNearestPoints(self, query_vector: VectorObject) -> list[str]:
         """Find the 3 nearest vectors to the query"""

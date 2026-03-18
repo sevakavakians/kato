@@ -23,6 +23,13 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+# Load credentials from .env if it exists
+if [ -f ".env" ]; then
+    set -a
+    source ".env"
+    set +a
+fi
+
 # Available services
 ALL_SERVICES="redis qdrant clickhouse kato"
 
@@ -126,14 +133,14 @@ case "$COMMAND" in
         fi
 
         # Check Qdrant
-        if curl -s http://localhost:6333/health > /dev/null 2>&1; then
+        if curl -s ${QDRANT_API_KEY:+-H "api-key: $QDRANT_API_KEY"} http://localhost:6333/health > /dev/null 2>&1; then
             print_info "✓ Qdrant is healthy"
         else
             print_warn "✗ Qdrant is not responding"
         fi
 
         # Check Redis
-        if docker exec kato-redis redis-cli ping > /dev/null 2>&1; then
+        if docker exec kato-redis redis-cli ${REDIS_PASSWORD:+-a "$REDIS_PASSWORD" --no-auth-warning} ping > /dev/null 2>&1; then
             print_info "✓ Redis is healthy"
         else
             print_warn "✗ Redis is not responding"
@@ -158,11 +165,11 @@ case "$COMMAND" in
 
             # Clear Qdrant - delete all collections
             print_info "Clearing Qdrant collections..."
-            COLLECTIONS=$(curl -s -m 10 http://localhost:6333/collections 2>/dev/null | grep -o '"name":"[^"]*"' | cut -d'"' -f4)
+            COLLECTIONS=$(curl -s -m 10 ${QDRANT_API_KEY:+-H "api-key: $QDRANT_API_KEY"} http://localhost:6333/collections 2>/dev/null | grep -o '"name":"[^"]*"' | cut -d'"' -f4)
             if [ -n "$COLLECTIONS" ]; then
                 for collection in $COLLECTIONS; do
                     print_info "Deleting collection: $collection"
-                    curl -X DELETE "http://localhost:6333/collections/$collection" 2>/dev/null
+                    curl -X DELETE ${QDRANT_API_KEY:+-H "api-key: $QDRANT_API_KEY"} "http://localhost:6333/collections/$collection" 2>/dev/null
                 done
             else
                 print_info "No Qdrant collections to delete"
@@ -170,13 +177,13 @@ case "$COMMAND" in
 
             # Clear Redis - flush all data
             print_info "Clearing Redis data..."
-            docker exec kato-redis redis-cli FLUSHALL || print_error "Failed to clear Redis"
+            docker exec kato-redis redis-cli ${REDIS_PASSWORD:+-a "$REDIS_PASSWORD" --no-auth-warning} FLUSHALL || print_error "Failed to clear Redis"
 
             # Clear ClickHouse - drop patterns_data table
             print_info "Clearing ClickHouse data..."
-            docker exec kato-clickhouse clickhouse-client --query "DROP TABLE IF EXISTS default.patterns_data" 2>/dev/null || print_warn "ClickHouse not available or already empty"
+            docker exec kato-clickhouse clickhouse-client --user "${CLICKHOUSE_USER:-default}" --password "${CLICKHOUSE_PASSWORD:-}" --query "DROP TABLE IF EXISTS default.patterns_data" 2>/dev/null || print_warn "ClickHouse not available or already empty"
             # Recreate table from init script
-            docker exec kato-clickhouse clickhouse-client --queries-file /docker-entrypoint-initdb.d/init.sql 2>/dev/null || print_warn "Could not recreate ClickHouse table"
+            docker exec kato-clickhouse clickhouse-client --user "${CLICKHOUSE_USER:-default}" --password "${CLICKHOUSE_PASSWORD:-}" --queries-file /docker-entrypoint-initdb.d/init.sql 2>/dev/null || print_warn "Could not recreate ClickHouse table"
 
             print_info "✓ All database data has been cleared!"
             print_warn "Services are still running. Use './start.sh restart' if needed."

@@ -37,13 +37,13 @@ get_container_image() {
         if [[ -z "$version" || "$version" == "<no value>" || "$version" == "dev" ]]; then
             case "$container_name" in
                 kato-clickhouse)
-                    version=$(docker exec "$container_name" clickhouse-client --version 2>/dev/null | sed -n 's/.*version \([0-9.]*\).*/\1/p' | head -1)
+                    version=$(docker exec "$container_name" clickhouse-client --user "${CLICKHOUSE_USER:-default}" --password "${CLICKHOUSE_PASSWORD:-}" --version 2>/dev/null | sed -n 's/.*version \([0-9.]*\).*/\1/p' | head -1)
                     ;;
                 kato-redis)
                     version=$(docker exec "$container_name" redis-server --version 2>/dev/null | sed -n 's/.*v=\([0-9.]*\).*/\1/p' | head -1)
                     ;;
                 kato-qdrant)
-                    version=$(curl -s http://localhost:6333/ 2>/dev/null | sed -n 's/.*"version":"\([^"]*\)".*/\1/p' | head -1)
+                    version=$(curl -s ${QDRANT_API_KEY:+-H "api-key: $QDRANT_API_KEY"} http://localhost:6333/ 2>/dev/null | sed -n 's/.*"version":"\([^"]*\)".*/\1/p' | head -1)
                     ;;
                 kato)
                     # Try to read from kato package __version__
@@ -78,6 +78,13 @@ get_container_image() {
 
 # Get the directory where this script is located
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+# Load credentials from .env if it exists
+if [ -f "$SCRIPT_DIR/.env" ]; then
+    set -a
+    source "$SCRIPT_DIR/.env"
+    set +a
+fi
 
 # Available services
 ALL_SERVICES="clickhouse redis qdrant kato dashboard"
@@ -114,7 +121,7 @@ case "$COMMAND" in
             fi
         else
             print_info "Starting $SERVICE..."
-            docker compose -f "$SCRIPT_DIR/docker-compose.yml" up -d "$SERVICE"
+            docker compose -f "$SCRIPT_DIR/docker-compose.yml" up -d --no-deps "$SERVICE"
             print_info "$SERVICE started"
         fi
         ;;
@@ -202,14 +209,14 @@ case "$COMMAND" in
         fi
 
         # Check Qdrant
-        if curl -s http://localhost:6333/health > /dev/null 2>&1; then
+        if curl -s ${QDRANT_API_KEY:+-H "api-key: $QDRANT_API_KEY"} http://localhost:6333/health > /dev/null 2>&1; then
             print_info "✓ Qdrant is healthy"
         else
             print_warn "✗ Qdrant is not responding"
         fi
 
         # Check Redis
-        if docker exec kato-redis redis-cli ping > /dev/null 2>&1; then
+        if docker exec kato-redis redis-cli ${REDIS_PASSWORD:+-a "$REDIS_PASSWORD" --no-auth-warning} ping > /dev/null 2>&1; then
             print_info "✓ Redis is healthy"
         else
             print_warn "✗ Redis is not responding"
@@ -233,13 +240,13 @@ case "$COMMAND" in
 
             # Clear ClickHouse - drop all tables in kato database
             print_info "Clearing ClickHouse database..."
-            docker exec kato-clickhouse clickhouse-client --query "DROP DATABASE IF EXISTS kato" || print_error "Failed to drop ClickHouse database"
-            docker exec kato-clickhouse clickhouse-client --query "CREATE DATABASE kato" || print_error "Failed to recreate ClickHouse database"
+            docker exec kato-clickhouse clickhouse-client --user "${CLICKHOUSE_USER:-default}" --password "${CLICKHOUSE_PASSWORD:-}" --query "DROP DATABASE IF EXISTS kato" || print_error "Failed to drop ClickHouse database"
+            docker exec kato-clickhouse clickhouse-client --user "${CLICKHOUSE_USER:-default}" --password "${CLICKHOUSE_PASSWORD:-}" --query "CREATE DATABASE kato" || print_error "Failed to recreate ClickHouse database"
 
             # Recreate schema from init.sql
             print_info "Recreating ClickHouse schema..."
             if [ -f "$SCRIPT_DIR/config/clickhouse/init.sql" ]; then
-                docker exec -i kato-clickhouse clickhouse-client --multiquery < "$SCRIPT_DIR/config/clickhouse/init.sql" || print_error "Failed to recreate schema"
+                docker exec -i kato-clickhouse clickhouse-client --user "${CLICKHOUSE_USER:-default}" --password "${CLICKHOUSE_PASSWORD:-}" --multiquery < "$SCRIPT_DIR/config/clickhouse/init.sql" || print_error "Failed to recreate schema"
                 print_info "✓ Schema recreated successfully"
             else
                 print_error "Could not find init.sql at $SCRIPT_DIR/config/clickhouse/init.sql"
@@ -248,11 +255,11 @@ case "$COMMAND" in
 
             # Clear Qdrant - delete all collections
             print_info "Clearing Qdrant collections..."
-            COLLECTIONS=$(curl -s -m 10 http://localhost:6333/collections 2>/dev/null | grep -o '"name":"[^"]*"' | cut -d'"' -f4)
+            COLLECTIONS=$(curl -s -m 10 ${QDRANT_API_KEY:+-H "api-key: $QDRANT_API_KEY"} http://localhost:6333/collections 2>/dev/null | grep -o '"name":"[^"]*"' | cut -d'"' -f4)
             if [ -n "$COLLECTIONS" ]; then
                 for collection in $COLLECTIONS; do
                     print_info "Deleting collection: $collection"
-                    curl -X DELETE "http://localhost:6333/collections/$collection" 2>/dev/null
+                    curl -X DELETE ${QDRANT_API_KEY:+-H "api-key: $QDRANT_API_KEY"} "http://localhost:6333/collections/$collection" 2>/dev/null
                 done
             else
                 print_info "No Qdrant collections to delete"
@@ -260,7 +267,7 @@ case "$COMMAND" in
 
             # Clear Redis - flush all data
             print_info "Clearing Redis data..."
-            docker exec kato-redis redis-cli FLUSHALL || print_error "Failed to clear Redis"
+            docker exec kato-redis redis-cli ${REDIS_PASSWORD:+-a "$REDIS_PASSWORD" --no-auth-warning} FLUSHALL || print_error "Failed to clear Redis"
 
             print_info "✓ All database data has been cleared!"
             print_warn "Services are still running. Use './kato-manager.sh restart' if needed."
@@ -312,7 +319,7 @@ case "$COMMAND" in
         fi
 
         # Check ClickHouse effective memory
-        CH_MEMORY=$(docker exec kato-clickhouse clickhouse-client --query "SELECT value FROM system.server_settings WHERE name = 'max_server_memory_usage'" 2>/dev/null)
+        CH_MEMORY=$(docker exec kato-clickhouse clickhouse-client --user "${CLICKHOUSE_USER:-default}" --password "${CLICKHOUSE_PASSWORD:-}" --query "SELECT value FROM system.server_settings WHERE name = 'max_server_memory_usage'" 2>/dev/null)
         CH_MEMORY_GB=$((CH_MEMORY / 1024 / 1024 / 1024))
         echo "  ClickHouse Limit: ${CH_MEMORY_GB}GB (90% of container)"
         echo ""
@@ -320,8 +327,8 @@ case "$COMMAND" in
         # Check if expensive logs are disabled
         echo -e "${GREEN}✓${NC} System Log Configuration"
 
-        TRACE_LOG_ENABLED=$(docker exec kato-clickhouse clickhouse-client --query "SELECT count(*) FROM system.tables WHERE database = 'system' AND name = 'trace_log'" 2>/dev/null)
-        TEXT_LOG_COUNT=$(docker exec kato-clickhouse clickhouse-client --query "SELECT count(*) FROM system.text_log WHERE event_time > now() - INTERVAL 1 HOUR" 2>/dev/null || echo "0")
+        TRACE_LOG_ENABLED=$(docker exec kato-clickhouse clickhouse-client --user "${CLICKHOUSE_USER:-default}" --password "${CLICKHOUSE_PASSWORD:-}" --query "SELECT count(*) FROM system.tables WHERE database = 'system' AND name = 'trace_log'" 2>/dev/null)
+        TEXT_LOG_COUNT=$(docker exec kato-clickhouse clickhouse-client --user "${CLICKHOUSE_USER:-default}" --password "${CLICKHOUSE_PASSWORD:-}" --query "SELECT count(*) FROM system.text_log WHERE event_time > now() - INTERVAL 1 HOUR" 2>/dev/null || echo "0")
 
         if [ "$TRACE_LOG_ENABLED" -gt 0 ] && [ "$TEXT_LOG_COUNT" -gt 10000 ]; then
             echo -e "  ${RED}✗${NC} Expensive logs are ENABLED (text_log: ${TEXT_LOG_COUNT} msgs/hour)"
@@ -333,13 +340,13 @@ case "$COMMAND" in
         fi
 
         # Check current system log size
-        SYSTEM_LOG_SIZE=$(docker exec kato-clickhouse clickhouse-client --query "SELECT formatReadableSize(sum(bytes_on_disk)) FROM system.parts WHERE database = 'system' AND active = 1" 2>/dev/null)
+        SYSTEM_LOG_SIZE=$(docker exec kato-clickhouse clickhouse-client --user "${CLICKHOUSE_USER:-default}" --password "${CLICKHOUSE_PASSWORD:-}" --query "SELECT formatReadableSize(sum(bytes_on_disk)) FROM system.parts WHERE database = 'system' AND active = 1" 2>/dev/null)
         echo "  Current system logs: $SYSTEM_LOG_SIZE"
         echo ""
 
         # Check query duration filter
         echo -e "${GREEN}✓${NC} Query Logging Filter"
-        QUERY_FILTER=$(docker exec kato-clickhouse clickhouse-client --query "SELECT value FROM system.settings WHERE name = 'log_queries_min_query_duration_ms'" 2>/dev/null)
+        QUERY_FILTER=$(docker exec kato-clickhouse clickhouse-client --user "${CLICKHOUSE_USER:-default}" --password "${CLICKHOUSE_PASSWORD:-}" --query "SELECT value FROM system.settings WHERE name = 'log_queries_min_query_duration_ms'" 2>/dev/null)
         if [ "$QUERY_FILTER" -ge 1000 ]; then
             echo "  Only logs queries > ${QUERY_FILTER}ms ✓"
         else
@@ -349,8 +356,8 @@ case "$COMMAND" in
         echo ""
 
         # Check pattern data size
-        PATTERN_SIZE=$(docker exec kato-clickhouse clickhouse-client --query "SELECT formatReadableSize(sum(bytes_on_disk)) FROM system.parts WHERE database = 'kato' AND table = 'patterns_data' AND active = 1" 2>/dev/null)
-        PATTERN_COUNT=$(docker exec kato-clickhouse clickhouse-client --query "SELECT count(*) FROM kato.patterns_data" 2>/dev/null)
+        PATTERN_SIZE=$(docker exec kato-clickhouse clickhouse-client --user "${CLICKHOUSE_USER:-default}" --password "${CLICKHOUSE_PASSWORD:-}" --query "SELECT formatReadableSize(sum(bytes_on_disk)) FROM system.parts WHERE database = 'kato' AND table = 'patterns_data' AND active = 1" 2>/dev/null)
+        PATTERN_COUNT=$(docker exec kato-clickhouse clickhouse-client --user "${CLICKHOUSE_USER:-default}" --password "${CLICKHOUSE_PASSWORD:-}" --query "SELECT count(*) FROM kato.patterns_data" 2>/dev/null)
         echo -e "${GREEN}✓${NC} Pattern Data"
         echo "  Total patterns: ${PATTERN_COUNT}"
         echo "  Storage size: ${PATTERN_SIZE}"
@@ -380,7 +387,7 @@ case "$COMMAND" in
             fi
 
             # Check Redis maxmemory configuration
-            REDIS_MAXMEMORY=$(docker exec kato-redis redis-cli CONFIG GET maxmemory 2>/dev/null | tail -1)
+            REDIS_MAXMEMORY=$(docker exec kato-redis redis-cli ${REDIS_PASSWORD:+-a "$REDIS_PASSWORD" --no-auth-warning} CONFIG GET maxmemory 2>/dev/null | tail -1)
             if [ -n "$REDIS_MAXMEMORY" ] && [ "$REDIS_MAXMEMORY" != "0" ]; then
                 REDIS_MAXMEMORY_GB=$((REDIS_MAXMEMORY / 1024 / 1024 / 1024))
                 echo "  Redis maxmemory: ${REDIS_MAXMEMORY_GB}GB ✓"
@@ -391,7 +398,7 @@ case "$COMMAND" in
             fi
 
             # Check eviction policy
-            EVICTION_POLICY=$(docker exec kato-redis redis-cli CONFIG GET maxmemory-policy 2>/dev/null | tail -1)
+            EVICTION_POLICY=$(docker exec kato-redis redis-cli ${REDIS_PASSWORD:+-a "$REDIS_PASSWORD" --no-auth-warning} CONFIG GET maxmemory-policy 2>/dev/null | tail -1)
             if [ "$EVICTION_POLICY" = "allkeys-lru" ] || [ "$EVICTION_POLICY" = "volatile-lru" ]; then
                 echo "  Eviction policy: $EVICTION_POLICY ✓"
             elif [ "$EVICTION_POLICY" = "noeviction" ]; then
@@ -403,7 +410,7 @@ case "$COMMAND" in
             fi
 
             # Check persistence configuration
-            AOF_ENABLED=$(docker exec kato-redis redis-cli CONFIG GET appendonly 2>/dev/null | tail -1)
+            AOF_ENABLED=$(docker exec kato-redis redis-cli ${REDIS_PASSWORD:+-a "$REDIS_PASSWORD" --no-auth-warning} CONFIG GET appendonly 2>/dev/null | tail -1)
             if [ "$AOF_ENABLED" = "yes" ]; then
                 echo "  AOF persistence: Enabled ✓"
             else
@@ -454,13 +461,13 @@ case "$COMMAND" in
         MAX_RAM=$(echo "$MEMORY_STATS" | awk '{print $3}')
 
         # Get ClickHouse server memory setting
-        CH_MAX_MEMORY=$(docker exec kato-clickhouse clickhouse-client --query "SELECT value FROM system.server_settings WHERE name = 'max_server_memory_usage'" 2>/dev/null)
+        CH_MAX_MEMORY=$(docker exec kato-clickhouse clickhouse-client --user "${CLICKHOUSE_USER:-default}" --password "${CLICKHOUSE_PASSWORD:-}" --query "SELECT value FROM system.server_settings WHERE name = 'max_server_memory_usage'" 2>/dev/null)
         CH_MAX_MEMORY_GB=$((CH_MAX_MEMORY / 1024 / 1024 / 1024))
 
         # Get current memory usage from ClickHouse metrics
-        CH_MEMORY_USAGE=$(docker exec kato-clickhouse clickhouse-client --query "SELECT formatReadableSize(value) FROM system.asynchronous_metrics WHERE metric = 'MemoryTracking'" 2>/dev/null)
+        CH_MEMORY_USAGE=$(docker exec kato-clickhouse clickhouse-client --user "${CLICKHOUSE_USER:-default}" --password "${CLICKHOUSE_PASSWORD:-}" --query "SELECT formatReadableSize(value) FROM system.asynchronous_metrics WHERE metric = 'MemoryTracking'" 2>/dev/null)
         if [ -z "$CH_MEMORY_USAGE" ]; then
-            CH_MEMORY_USAGE=$(docker exec kato-clickhouse clickhouse-client --query "SELECT formatReadableSize(value) FROM system.metrics WHERE metric = 'MemoryTracking'" 2>/dev/null || echo "N/A")
+            CH_MEMORY_USAGE=$(docker exec kato-clickhouse clickhouse-client --user "${CLICKHOUSE_USER:-default}" --password "${CLICKHOUSE_PASSWORD:-}" --query "SELECT formatReadableSize(value) FROM system.metrics WHERE metric = 'MemoryTracking'" 2>/dev/null || echo "N/A")
         fi
 
         # RAM Usage (Operations)
@@ -524,26 +531,26 @@ case "$COMMAND" in
         echo -e "${GREEN}Disk Usage (Storage):${NC}"
 
         # Pattern data
-        PATTERN_SIZE=$(docker exec kato-clickhouse clickhouse-client --query "SELECT formatReadableSize(sum(bytes_on_disk)) FROM system.parts WHERE database = 'kato' AND table = 'patterns_data' AND active = 1" 2>/dev/null || echo "0 B")
-        PATTERN_COUNT=$(docker exec kato-clickhouse clickhouse-client --query "SELECT formatReadableQuantity(count(*)) FROM kato.patterns_data" 2>/dev/null || echo "0")
+        PATTERN_SIZE=$(docker exec kato-clickhouse clickhouse-client --user "${CLICKHOUSE_USER:-default}" --password "${CLICKHOUSE_PASSWORD:-}" --query "SELECT formatReadableSize(sum(bytes_on_disk)) FROM system.parts WHERE database = 'kato' AND table = 'patterns_data' AND active = 1" 2>/dev/null || echo "0 B")
+        PATTERN_COUNT=$(docker exec kato-clickhouse clickhouse-client --user "${CLICKHOUSE_USER:-default}" --password "${CLICKHOUSE_PASSWORD:-}" --query "SELECT formatReadableQuantity(count(*)) FROM kato.patterns_data" 2>/dev/null || echo "0")
         echo "  Pattern Data: $PATTERN_SIZE ($PATTERN_COUNT patterns)"
 
         # System logs
-        SYSTEM_LOG_SIZE=$(docker exec kato-clickhouse clickhouse-client --query "SELECT formatReadableSize(sum(bytes_on_disk)) FROM system.parts WHERE database = 'system' AND active = 1" 2>/dev/null || echo "0 B")
+        SYSTEM_LOG_SIZE=$(docker exec kato-clickhouse clickhouse-client --user "${CLICKHOUSE_USER:-default}" --password "${CLICKHOUSE_PASSWORD:-}" --query "SELECT formatReadableSize(sum(bytes_on_disk)) FROM system.parts WHERE database = 'system' AND active = 1" 2>/dev/null || echo "0 B")
         echo "  System Logs: $SYSTEM_LOG_SIZE"
 
         # Total ClickHouse data
-        TOTAL_CH_SIZE=$(docker exec kato-clickhouse clickhouse-client --query "SELECT formatReadableSize(sum(bytes_on_disk)) FROM system.parts WHERE active = 1" 2>/dev/null || echo "0 B")
+        TOTAL_CH_SIZE=$(docker exec kato-clickhouse clickhouse-client --user "${CLICKHOUSE_USER:-default}" --password "${CLICKHOUSE_PASSWORD:-}" --query "SELECT formatReadableSize(sum(bytes_on_disk)) FROM system.parts WHERE active = 1" 2>/dev/null || echo "0 B")
         echo "  Total ClickHouse: $TOTAL_CH_SIZE"
 
         # Available disk space
-        DISK_AVAILABLE=$(docker exec kato-clickhouse clickhouse-client --query "SELECT formatReadableSize(free_space) FROM system.disks WHERE name = 'default'" 2>/dev/null || echo "N/A")
+        DISK_AVAILABLE=$(docker exec kato-clickhouse clickhouse-client --user "${CLICKHOUSE_USER:-default}" --password "${CLICKHOUSE_PASSWORD:-}" --query "SELECT formatReadableSize(free_space) FROM system.disks WHERE name = 'default'" 2>/dev/null || echo "N/A")
         echo "  Available Disk: $DISK_AVAILABLE"
         echo ""
 
         # Memory breakdown by table (top 5)
         echo -e "${GREEN}Top 5 Tables by Disk Usage:${NC}"
-        docker exec kato-clickhouse clickhouse-client --query "
+        docker exec kato-clickhouse clickhouse-client --user "${CLICKHOUSE_USER:-default}" --password "${CLICKHOUSE_PASSWORD:-}" --query "
         SELECT
             database,
             table,
@@ -574,17 +581,17 @@ case "$COMMAND" in
             fi
 
             # Get Redis memory stats
-            REDIS_USED_MEMORY=$(docker exec kato-redis redis-cli INFO memory 2>/dev/null | grep "used_memory_human:" | cut -d: -f2 | tr -d '\r')
-            REDIS_MAXMEMORY=$(docker exec kato-redis redis-cli INFO memory 2>/dev/null | grep "maxmemory_human:" | cut -d: -f2 | tr -d '\r')
-            REDIS_MEM_FRAG=$(docker exec kato-redis redis-cli INFO memory 2>/dev/null | grep "mem_fragmentation_ratio:" | cut -d: -f2 | tr -d '\r')
+            REDIS_USED_MEMORY=$(docker exec kato-redis redis-cli ${REDIS_PASSWORD:+-a "$REDIS_PASSWORD" --no-auth-warning} INFO memory 2>/dev/null | grep "used_memory_human:" | cut -d: -f2 | tr -d '\r')
+            REDIS_MAXMEMORY=$(docker exec kato-redis redis-cli ${REDIS_PASSWORD:+-a "$REDIS_PASSWORD" --no-auth-warning} INFO memory 2>/dev/null | grep "maxmemory_human:" | cut -d: -f2 | tr -d '\r')
+            REDIS_MEM_FRAG=$(docker exec kato-redis redis-cli ${REDIS_PASSWORD:+-a "$REDIS_PASSWORD" --no-auth-warning} INFO memory 2>/dev/null | grep "mem_fragmentation_ratio:" | cut -d: -f2 | tr -d '\r')
 
             # Get eviction stats
-            EVICTED_KEYS=$(docker exec kato-redis redis-cli INFO stats 2>/dev/null | grep "evicted_keys:" | cut -d: -f2 | tr -d '\r')
-            KEYSPACE_HITS=$(docker exec kato-redis redis-cli INFO stats 2>/dev/null | grep "keyspace_hits:" | cut -d: -f2 | tr -d '\r')
-            KEYSPACE_MISSES=$(docker exec kato-redis redis-cli INFO stats 2>/dev/null | grep "keyspace_misses:" | cut -d: -f2 | tr -d '\r')
+            EVICTED_KEYS=$(docker exec kato-redis redis-cli ${REDIS_PASSWORD:+-a "$REDIS_PASSWORD" --no-auth-warning} INFO stats 2>/dev/null | grep "evicted_keys:" | cut -d: -f2 | tr -d '\r')
+            KEYSPACE_HITS=$(docker exec kato-redis redis-cli ${REDIS_PASSWORD:+-a "$REDIS_PASSWORD" --no-auth-warning} INFO stats 2>/dev/null | grep "keyspace_hits:" | cut -d: -f2 | tr -d '\r')
+            KEYSPACE_MISSES=$(docker exec kato-redis redis-cli ${REDIS_PASSWORD:+-a "$REDIS_PASSWORD" --no-auth-warning} INFO stats 2>/dev/null | grep "keyspace_misses:" | cut -d: -f2 | tr -d '\r')
 
             # Get key counts
-            REDIS_KEYS=$(docker exec kato-redis redis-cli DBSIZE 2>/dev/null | grep -oE '[0-9]+')
+            REDIS_KEYS=$(docker exec kato-redis redis-cli ${REDIS_PASSWORD:+-a "$REDIS_PASSWORD" --no-auth-warning} DBSIZE 2>/dev/null | grep -oE '[0-9]+')
 
             echo "  Used Memory: $REDIS_USED_MEMORY"
             echo "  Max Memory: $REDIS_MAXMEMORY"
@@ -640,7 +647,7 @@ case "$COMMAND" in
             fi
 
             # Check if Redis is currently loading
-            REDIS_LOADING=$(docker exec kato-redis redis-cli INFO persistence 2>/dev/null | grep "^loading:" | cut -d: -f2 | tr -d '\r')
+            REDIS_LOADING=$(docker exec kato-redis redis-cli ${REDIS_PASSWORD:+-a "$REDIS_PASSWORD" --no-auth-warning} INFO persistence 2>/dev/null | grep "^loading:" | cut -d: -f2 | tr -d '\r')
             if [ "$REDIS_LOADING" = "1" ]; then
                 echo -e "  ${YELLOW}⚠ Status:${NC} Currently loading dataset from disk"
                 echo "    This indicates a recent restart (possibly from OOM)"
@@ -773,33 +780,33 @@ case "$COMMAND" in
             MAX_RAM=$(echo "$MEMORY_STATS" | awk '{print $3}')
 
             # Get ClickHouse memory usage
-            CH_MEMORY=$(docker exec kato-clickhouse clickhouse-client --query "SELECT formatReadableSize(value) FROM system.metrics WHERE metric = 'MemoryTracking'" 2>/dev/null || echo "N/A")
+            CH_MEMORY=$(docker exec kato-clickhouse clickhouse-client --user "${CLICKHOUSE_USER:-default}" --password "${CLICKHOUSE_PASSWORD:-}" --query "SELECT formatReadableSize(value) FROM system.metrics WHERE metric = 'MemoryTracking'" 2>/dev/null || echo "N/A")
 
             echo -e "${GREEN}RAM Usage:${NC} $CURRENT_RAM / $MAX_RAM"
             echo -e "${GREEN}ClickHouse Tracked:${NC} $CH_MEMORY"
             echo ""
 
             # Pattern data
-            PATTERN_SIZE=$(docker exec kato-clickhouse clickhouse-client --query "SELECT formatReadableSize(sum(bytes_on_disk)) FROM system.parts WHERE database = 'kato' AND table = 'patterns_data' AND active = 1" 2>/dev/null || echo "0 B")
-            PATTERN_COUNT=$(docker exec kato-clickhouse clickhouse-client --query "SELECT formatReadableQuantity(count(*)) FROM kato.patterns_data" 2>/dev/null || echo "0")
+            PATTERN_SIZE=$(docker exec kato-clickhouse clickhouse-client --user "${CLICKHOUSE_USER:-default}" --password "${CLICKHOUSE_PASSWORD:-}" --query "SELECT formatReadableSize(sum(bytes_on_disk)) FROM system.parts WHERE database = 'kato' AND table = 'patterns_data' AND active = 1" 2>/dev/null || echo "0 B")
+            PATTERN_COUNT=$(docker exec kato-clickhouse clickhouse-client --user "${CLICKHOUSE_USER:-default}" --password "${CLICKHOUSE_PASSWORD:-}" --query "SELECT formatReadableQuantity(count(*)) FROM kato.patterns_data" 2>/dev/null || echo "0")
             echo -e "${GREEN}Pattern Data:${NC} $PATTERN_SIZE ($PATTERN_COUNT patterns)"
 
             # System logs
-            SYSTEM_LOG_SIZE=$(docker exec kato-clickhouse clickhouse-client --query "SELECT formatReadableSize(sum(bytes_on_disk)) FROM system.parts WHERE database = 'system' AND active = 1" 2>/dev/null || echo "0 B")
+            SYSTEM_LOG_SIZE=$(docker exec kato-clickhouse clickhouse-client --user "${CLICKHOUSE_USER:-default}" --password "${CLICKHOUSE_PASSWORD:-}" --query "SELECT formatReadableSize(sum(bytes_on_disk)) FROM system.parts WHERE database = 'system' AND active = 1" 2>/dev/null || echo "0 B")
             echo -e "${GREEN}System Logs:${NC} $SYSTEM_LOG_SIZE"
             echo ""
 
             # Active queries
-            ACTIVE_QUERIES=$(docker exec kato-clickhouse clickhouse-client --query "SELECT count(*) FROM system.processes" 2>/dev/null || echo "0")
+            ACTIVE_QUERIES=$(docker exec kato-clickhouse clickhouse-client --user "${CLICKHOUSE_USER:-default}" --password "${CLICKHOUSE_PASSWORD:-}" --query "SELECT count(*) FROM system.processes" 2>/dev/null || echo "0")
             echo -e "${GREEN}Active Queries:${NC} $ACTIVE_QUERIES"
             echo ""
 
             # Redis stats
             if docker ps --format '{{.Names}}' | grep -q "^kato-redis$"; then
-                REDIS_USED=$(docker exec kato-redis redis-cli INFO memory 2>/dev/null | grep "used_memory_human:" | cut -d: -f2 | tr -d '\r')
-                REDIS_MAX=$(docker exec kato-redis redis-cli INFO memory 2>/dev/null | grep "maxmemory_human:" | cut -d: -f2 | tr -d '\r')
-                REDIS_KEYS=$(docker exec kato-redis redis-cli DBSIZE 2>/dev/null | grep -oE '[0-9]+')
-                EVICTED=$(docker exec kato-redis redis-cli INFO stats 2>/dev/null | grep "evicted_keys:" | cut -d: -f2 | tr -d '\r')
+                REDIS_USED=$(docker exec kato-redis redis-cli ${REDIS_PASSWORD:+-a "$REDIS_PASSWORD" --no-auth-warning} INFO memory 2>/dev/null | grep "used_memory_human:" | cut -d: -f2 | tr -d '\r')
+                REDIS_MAX=$(docker exec kato-redis redis-cli ${REDIS_PASSWORD:+-a "$REDIS_PASSWORD" --no-auth-warning} INFO memory 2>/dev/null | grep "maxmemory_human:" | cut -d: -f2 | tr -d '\r')
+                REDIS_KEYS=$(docker exec kato-redis redis-cli ${REDIS_PASSWORD:+-a "$REDIS_PASSWORD" --no-auth-warning} DBSIZE 2>/dev/null | grep -oE '[0-9]+')
+                EVICTED=$(docker exec kato-redis redis-cli ${REDIS_PASSWORD:+-a "$REDIS_PASSWORD" --no-auth-warning} INFO stats 2>/dev/null | grep "evicted_keys:" | cut -d: -f2 | tr -d '\r')
 
                 echo -e "${GREEN}Redis:${NC} $REDIS_USED / $REDIS_MAX ($REDIS_KEYS keys, $EVICTED evicted)"
                 echo ""
@@ -819,22 +826,62 @@ case "$COMMAND" in
             print_info "Truncating ClickHouse system logs..."
 
             # Truncate system logs
-            docker exec kato-clickhouse clickhouse-client --query "TRUNCATE TABLE IF EXISTS system.query_log" 2>/dev/null
-            docker exec kato-clickhouse clickhouse-client --query "TRUNCATE TABLE IF EXISTS system.text_log" 2>/dev/null
-            docker exec kato-clickhouse clickhouse-client --query "TRUNCATE TABLE IF EXISTS system.trace_log" 2>/dev/null
-            docker exec kato-clickhouse clickhouse-client --query "TRUNCATE TABLE IF EXISTS system.metric_log" 2>/dev/null
-            docker exec kato-clickhouse clickhouse-client --query "TRUNCATE TABLE IF EXISTS system.asynchronous_metric_log" 2>/dev/null
-            docker exec kato-clickhouse clickhouse-client --query "TRUNCATE TABLE IF EXISTS system.part_log" 2>/dev/null
-            docker exec kato-clickhouse clickhouse-client --query "TRUNCATE TABLE IF EXISTS system.processors_profile_log" 2>/dev/null
+            docker exec kato-clickhouse clickhouse-client --user "${CLICKHOUSE_USER:-default}" --password "${CLICKHOUSE_PASSWORD:-}" --query "TRUNCATE TABLE IF EXISTS system.query_log" 2>/dev/null
+            docker exec kato-clickhouse clickhouse-client --user "${CLICKHOUSE_USER:-default}" --password "${CLICKHOUSE_PASSWORD:-}" --query "TRUNCATE TABLE IF EXISTS system.text_log" 2>/dev/null
+            docker exec kato-clickhouse clickhouse-client --user "${CLICKHOUSE_USER:-default}" --password "${CLICKHOUSE_PASSWORD:-}" --query "TRUNCATE TABLE IF EXISTS system.trace_log" 2>/dev/null
+            docker exec kato-clickhouse clickhouse-client --user "${CLICKHOUSE_USER:-default}" --password "${CLICKHOUSE_PASSWORD:-}" --query "TRUNCATE TABLE IF EXISTS system.metric_log" 2>/dev/null
+            docker exec kato-clickhouse clickhouse-client --user "${CLICKHOUSE_USER:-default}" --password "${CLICKHOUSE_PASSWORD:-}" --query "TRUNCATE TABLE IF EXISTS system.asynchronous_metric_log" 2>/dev/null
+            docker exec kato-clickhouse clickhouse-client --user "${CLICKHOUSE_USER:-default}" --password "${CLICKHOUSE_PASSWORD:-}" --query "TRUNCATE TABLE IF EXISTS system.part_log" 2>/dev/null
+            docker exec kato-clickhouse clickhouse-client --user "${CLICKHOUSE_USER:-default}" --password "${CLICKHOUSE_PASSWORD:-}" --query "TRUNCATE TABLE IF EXISTS system.processors_profile_log" 2>/dev/null
 
             print_info "✓ System logs truncated"
 
             # Show new size
-            SYSTEM_LOG_SIZE=$(docker exec kato-clickhouse clickhouse-client --query "SELECT formatReadableSize(sum(bytes_on_disk)) FROM system.parts WHERE database = 'system' AND active = 1" 2>/dev/null)
+            SYSTEM_LOG_SIZE=$(docker exec kato-clickhouse clickhouse-client --user "${CLICKHOUSE_USER:-default}" --password "${CLICKHOUSE_PASSWORD:-}" --query "SELECT formatReadableSize(sum(bytes_on_disk)) FROM system.parts WHERE database = 'system' AND active = 1" 2>/dev/null)
             print_info "Current system log size: $SYSTEM_LOG_SIZE"
         else
             print_info "Operation cancelled"
         fi
+        ;;
+
+    setup-auth)
+        ENV_FILE="$SCRIPT_DIR/.env"
+
+        if [ -f "$ENV_FILE" ]; then
+            print_warn "Existing .env file found at $ENV_FILE"
+            echo -e "${YELLOW}Overwrite database credentials? (y/N)${NC}"
+            read -r response
+            if [[ "$response" != "y" && "$response" != "Y" ]]; then
+                print_info "Setup cancelled"
+                exit 0
+            fi
+        fi
+
+        # Generate random passwords (32 chars, alphanumeric)
+        CH_PASS=$(openssl rand -base64 32 | tr -dc 'a-zA-Z0-9' | head -c 32)
+        REDIS_PASS=$(openssl rand -base64 32 | tr -dc 'a-zA-Z0-9' | head -c 32)
+        QDRANT_KEY=$(openssl rand -base64 32 | tr -dc 'a-zA-Z0-9' | head -c 32)
+
+        cat > "$ENV_FILE" <<ENVEOF
+# KATO Database Authentication
+# Generated by kato-manager.sh setup-auth on $(date)
+# WARNING: Keep this file secure and never commit to version control!
+
+CLICKHOUSE_USER=default
+CLICKHOUSE_PASSWORD=$CH_PASS
+REDIS_PASSWORD=$REDIS_PASS
+QDRANT_API_KEY=$QDRANT_KEY
+ENVEOF
+
+        chmod 600 "$ENV_FILE"
+
+        print_info "Database credentials generated and saved to $ENV_FILE"
+        print_warn "Keep this file secure - it contains your database passwords!"
+        print_info ""
+        print_info "Next steps:"
+        print_info "  1. Stop services:   ./kato-manager.sh stop"
+        print_info "  2. Clean volumes:   ./kato-manager.sh clean  (required for first-time auth setup)"
+        print_info "  3. Start services:  ./kato-manager.sh start"
         ;;
 
     help|*)
@@ -856,6 +903,7 @@ case "$COMMAND" in
         echo "  monitor            - Continuous memory monitoring (updates every 5s)"
         echo "  clean-logs         - Truncate ClickHouse system logs (keeps pattern data)"
         echo "  clean-data         - Delete all data in ClickHouse, Qdrant, and Redis"
+        echo "  setup-auth         - Generate database credentials (.env file)"
         echo "  clean              - Remove all containers and volumes"
         echo "  help               - Show this help message"
         echo ""

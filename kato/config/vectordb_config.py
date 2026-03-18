@@ -105,6 +105,7 @@ class QdrantConfig:
     vector_size: int = 512
     distance: SimilarityMetric = "euclidean"
     on_disk_payload: bool = True
+    api_key: Optional[str] = None
     optimizers: dict[str, Any] = field(default_factory=lambda: {
         "deleted_threshold": 0.2,
         "vacuum_min_vector_number": 1000,
@@ -199,6 +200,8 @@ class VectorDBConfig:
                 config.qdrant.port = int(port)
             if collection := os.getenv('QDRANT_COLLECTION'):
                 config.qdrant.collection_name = collection
+            if api_key := os.getenv('QDRANT_API_KEY'):
+                config.qdrant.api_key = api_key
 
         # GPU configuration
         if gpu_enabled := os.getenv('KATO_GPU_ENABLED'):

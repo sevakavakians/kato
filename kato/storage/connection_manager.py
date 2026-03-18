@@ -244,7 +244,11 @@ class OptimizedConnectionManager:
                 'timeout': 10,
             }
 
-            # Create Qdrant client (no API key configured for local instance)
+            # Add API key if configured
+            qdrant_api_key = getattr(self.settings.database, 'QDRANT_API_KEY', None)
+            if qdrant_api_key:
+                client_config['api_key'] = qdrant_api_key
+
             self._qdrant_client = QdrantClient(**client_config)
 
             # Test the connection
@@ -303,13 +307,17 @@ class OptimizedConnectionManager:
             clickhouse_port = getattr(self.settings.database, 'clickhouse_port', 8123)  # HTTP port, not native port
             clickhouse_db = getattr(self.settings.database, 'clickhouse_db', 'default')
 
+            # Get auth credentials from config
+            clickhouse_user = getattr(self.settings.database, 'CLICKHOUSE_USER', 'default')
+            clickhouse_password = getattr(self.settings.database, 'CLICKHOUSE_PASSWORD', '') or ''
+
             # Create ClickHouse client with connection pooling
             self._clickhouse_client = clickhouse_connect.get_client(
                 host=clickhouse_host,
                 port=clickhouse_port,
                 database=clickhouse_db,
-                username='default',
-                password='',
+                username=clickhouse_user,
+                password=clickhouse_password,
                 connect_timeout=10,
                 send_receive_timeout=30,
                 compress=True,  # Enable compression for better network performance

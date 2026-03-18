@@ -7,6 +7,7 @@ modern vector databases and optimization techniques.
 
 import asyncio
 import logging
+import uuid
 from typing import Any, Optional, Union
 
 try:
@@ -32,6 +33,27 @@ from ..representations.vector_object import VectorObject
 from ..storage import VectorBatch, VectorSearchResult, get_vector_store
 
 logger = logging.getLogger('kato.searches.vector_engine')
+
+# Key used to store original VCTR|hash name in Qdrant payload
+VCTR_PAYLOAD_KEY = 'vctr_name'
+
+
+def _vctr_name_to_qdrant_id(vctr_name: str) -> str:
+    """Convert VCTR|hash name to a deterministic UUID for Qdrant storage.
+
+    Qdrant requires point IDs to be UUIDs or integers. VCTR|hash names
+    contain a pipe character and are not valid UUIDs, so we use uuid5
+    to create a deterministic UUID from the name.
+    """
+    return str(uuid.uuid5(uuid.NAMESPACE_DNS, vctr_name))
+
+
+def _restore_vctr_names(results: list) -> list:
+    """Restore original VCTR|hash names from Qdrant payload on search results."""
+    for r in results:
+        if r.payload and VCTR_PAYLOAD_KEY in r.payload:
+            r.id = r.payload[VCTR_PAYLOAD_KEY]
+    return results
 
 
 @dataclass
@@ -280,8 +302,14 @@ class VectorSearchEngine:
                 vector_hash = hashlib.sha1(str(vector_array).encode(), usedforsecurity=False).hexdigest()
                 vector_id = f"VCTR|{vector_hash}"
 
+        # Convert VCTR|hash to deterministic UUID for Qdrant and store original in payload
+        original_name = vector_id
+        vector_id = _vctr_name_to_qdrant_id(original_name)
+        metadata = dict(metadata) if metadata else {}
+        metadata[VCTR_PAYLOAD_KEY] = original_name
+
         # Validate and lock dimension (raises VectorDimensionError if mismatch)
-        dimension = self._validate_vector_dimension(vector, vector_id)
+        dimension = self._validate_vector_dimension(vector, original_name)
 
         # Ensure collection exists with this dimension
         if not await self._ensure_collection_with_dimension(dimension):
@@ -349,11 +377,20 @@ class VectorSearchEngine:
                     vector_hash = hashlib.sha1(str(v).encode(), usedforsecurity=False).hexdigest()
                     vector_ids.append(f"VCTR|{vector_hash}")
 
+        # Convert VCTR|hash names to deterministic UUIDs, store originals in payload
+        original_names = list(vector_ids)
+        vector_ids = [_vctr_name_to_qdrant_id(name) for name in original_names]
+        if metadata is None:
+            metadata = [{VCTR_PAYLOAD_KEY: name} for name in original_names]
+        else:
+            metadata = [dict(m, **{VCTR_PAYLOAD_KEY: name}) if m else {VCTR_PAYLOAD_KEY: name}
+                        for m, name in zip(metadata, original_names)]
+
         # Validate dimensions for all vectors and convert to arrays
         vector_arrays = []
         dimension = None
         for i, v in enumerate(vectors):
-            vid = vector_ids[i] if i < len(vector_ids) else None
+            vid = original_names[i] if i < len(original_names) else None
             # Validate dimension (this will lock on first vector)
             dim = self._validate_vector_dimension(v, vid)
             if dimension is None:
@@ -368,7 +405,7 @@ class VectorSearchEngine:
         # Ensure collection exists with this dimension
         if dimension and not await self._ensure_collection_with_dimension(dimension):
             logger.error(f"Failed to ensure collection for dimension {dimension}")
-            return 0, vector_ids
+            return 0, original_names
 
         # Create batch
         try:
@@ -473,6 +510,9 @@ class VectorSearchEngine:
                     include_vectors=include_vectors
                 )
 
+            # Restore original VCTR|hash names from payload
+            _restore_vctr_names(results)
+
             # Update metrics
             search_time = (time.time() - start_time) * 1000  # Convert to ms
             self.total_searches += 1
@@ -564,6 +604,10 @@ class VectorSearchEngine:
                 include_vectors=include_vectors
             )
 
+            # Restore original VCTR|hash names from payload
+            for result_list in results:
+                _restore_vctr_names(result_list)
+
             return results
 
         except Exception as e:
@@ -602,9 +646,10 @@ class VectorSearchEngine:
         # Search for k+1 if excluding self
         search_k = k + 1 if exclude_self else k
 
+        # search() already restores VCTR names via _restore_vctr_names
         results = await self.search(vector, search_k, include_vectors=False)
 
-        # Convert to simple format
+        # Convert to simple format (IDs are already restored VCTR|hash names)
         neighbors = [(r.id, r.score) for r in results]
 
         # Exclude self if needed
@@ -631,9 +676,14 @@ class VectorSearchEngine:
         metadata: Optional[dict[str, Any]] = None
     ) -> bool:
         """Update a vector and/or its metadata"""
+        qdrant_id = _vctr_name_to_qdrant_id(vector_id)
+        # Preserve original name in payload
+        if metadata is None:
+            metadata = {}
+        metadata[VCTR_PAYLOAD_KEY] = vector_id
         success = await self.store.update_vector(
             self.collection_name,
-            vector_id,
+            qdrant_id,
             vector,
             metadata
         )
@@ -646,9 +696,10 @@ class VectorSearchEngine:
 
     async def delete_vector(self, vector_id: str) -> bool:
         """Delete a vector from the index"""
+        qdrant_id = _vctr_name_to_qdrant_id(vector_id)
         success = await self.store.delete_vector(
             self.collection_name,
-            vector_id
+            qdrant_id
         )
 
         # Invalidate cache
@@ -819,9 +870,19 @@ class VectorIndexer:
         if not new_vectors:
             return
         self.initialize()
+        failed = 0
         for vector_obj in new_vectors:
-            self.engine.add_vector_sync(vector_obj)
-        logger.debug(f"Indexed {len(new_vectors)} new vectors to Qdrant")
+            try:
+                if not self.engine.add_vector_sync(vector_obj):
+                    failed += 1
+                    logger.warning(f"Failed to index vector {vector_obj.name}")
+            except Exception as e:
+                failed += 1
+                logger.warning(f"Failed to index vector {vector_obj.name}: {type(e).__name__}: {e}")
+        if failed:
+            logger.error(f"Failed to index {failed}/{len(new_vectors)} vectors to Qdrant")
+        else:
+            logger.info(f"Indexed {len(new_vectors)} vectors to Qdrant")
 
     def findNearestPoints(self, query_vector: VectorObject) -> list[str]:
         """Find the 3 nearest vectors to the query"""

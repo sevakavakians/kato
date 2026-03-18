@@ -3,7 +3,7 @@
     <users>
         <!-- Default user for KATO -->
         <default>
-            <password></password>
+            <password from_env="CLICKHOUSE_PASSWORD"></password>
             <networks>
                 <ip>::/0</ip>
             </networks>
@@ -14,7 +14,7 @@
 
         <!-- KATO application user -->
         <kato>
-            <password></password>
+            <password from_env="CLICKHOUSE_PASSWORD"></password>
             <networks>
                 <ip>::/0</ip>
             </networks>

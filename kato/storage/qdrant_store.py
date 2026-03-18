@@ -96,11 +96,14 @@ class QdrantStore(VectorStore):
         Creates the client on first use to avoid unnecessary connections.
         """
         if self.client is None:
-            self.client = QdrantClient(
-                host=self.qdrant_config.host,
-                port=self.qdrant_config.port,
-                timeout=self._client_timeout
-            )
+            client_kwargs = {
+                'host': self.qdrant_config.host,
+                'port': self.qdrant_config.port,
+                'timeout': self._client_timeout
+            }
+            if self.qdrant_config.api_key:
+                client_kwargs['api_key'] = self.qdrant_config.api_key
+            self.client = QdrantClient(**client_kwargs)
             logger.info(f"Qdrant client created and connected to: {self.qdrant_config.get_url()}")
 
     async def connect(self) -> bool:
@@ -269,7 +272,7 @@ class QdrantStore(VectorStore):
             return result.status == UpdateStatus.COMPLETED
 
         except Exception as e:
-            logger.error(f"Failed to add vector {vector_id}: {e}")
+            logger.error(f"Failed to add vector {vector_id} to {collection_name}: {type(e).__name__}: {e}")
             return False
 
     async def add_vectors(

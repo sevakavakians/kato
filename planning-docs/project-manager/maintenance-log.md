@@ -3,6 +3,50 @@
 
 ---
 
+## 2026-03-17 - Feature Archived: Optional Database Authentication
+
+**Trigger**: Task completion event — optional auth added for ClickHouse, Redis, and Qdrant
+
+**Event Type**: Feature completion (security enhancement)
+
+**Actions Taken**:
+1. Created feature archive: `planning-docs/completed/features/2026-03-17-optional-database-authentication.md`
+2. Added DECISION-009 to `planning-docs/DECISIONS.md` with full rationale, alternatives considered, and affected files
+3. Added entry to `SESSION_STATE.md` Recent Achievements (top of list) with full details
+4. Updated `DECISIONS.md` Last Updated timestamp to 2026-03-17
+5. Updated `planning-docs/project-manager/triggers.md` with activation event
+
+**Feature Summary**:
+- Opt-in auth via env vars: `CLICKHOUSE_USER`, `CLICKHOUSE_PASSWORD`, `QDRANT_API_KEY`
+- ClickHouse `users.xml` uses `from_env` for password injection
+- `kato-manager.sh` gains new `setup-auth` command
+- Both Docker Compose files updated; `start.sh` and `kato-manager.sh` source `.env`
+- Zero breaking changes for existing deployments
+
+**Files Changed**: 11 files across config, storage, Docker Compose, scripts, and env examples
+
+---
+
+## 2026-03-17 - Bug Fix Archived: Qdrant ID Format, Error Handling, and Test Coverage
+
+**Trigger**: Task completion event — Qdrant vector storage bug fix with new integration test coverage
+
+**Event Type**: Bug fix documentation (ID format correction, error visibility, test coverage gap)
+
+**Actions Taken**:
+1. Created bug archive: `planning-docs/completed/bugs/2026-03-17-qdrant-id-format-error-handling-tests.md`
+2. Added entry to SESSION_STATE.md Recent Achievements (top of list) with full details
+3. Updated triggers.md with activation event
+
+**Fix Summary**:
+- `kato/searches/vector_search_engine.py`: Deterministic `uuid.uuid5()` conversion for all Qdrant IDs; return-value checks + failure logging in `assignNewlyLearnedToWorkers()`
+- `kato/storage/qdrant_store.py`: Exception log messages now include exception type
+- `tests/tests/integration/test_vector_qdrant_storage.py`: NEW — 4 integration tests verifying actual Qdrant storage
+
+**Verification**: 4/4 new tests + 8/8 existing vector tests + full suite passing
+
+---
+
 ## 2026-03-17 - Bug Fix Fully Verified: Vectors Never Persisted to Qdrant (Secondary Issue Resolved)
 
 **Trigger**: Task completion event - full verification confirmed after secondary event loop bug fix

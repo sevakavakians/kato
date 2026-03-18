@@ -1,6 +1,41 @@
 # DECISIONS.md - Architectural & Design Decision Log
 *Append-Only Log - Started: 2025-08-29*
-*Last Updated: 2025-11-25*
+*Last Updated: 2026-03-17*
+
+---
+
+## 2026-03-17 - DECISION-009: Optional Database Authentication Pattern
+**Decision**: Add opt-in authentication for all three KATO databases via environment variables
+**Status**: COMPLETE — deployed in production and development configs
+**Confidence**: High
+**Impact**: Security posture improvement; zero breaking changes
+
+### Context
+KATO's three storage backends (ClickHouse, Redis, Qdrant) previously ran without authentication, which is acceptable for development but insufficient for production deployments. The requirement was to add authentication support without forcing configuration changes on existing deployments.
+
+### Decision
+Implement optional authentication using environment variables sourced from `.env` files:
+- Absent credentials = no auth (backward compatible)
+- Present credentials = auth enforced at the driver level
+- Single source of truth: `.env` is read by both Docker Compose and shell scripts
+
+### Implementation Details
+- **ClickHouse**: `CLICKHOUSE_USER` / `CLICKHOUSE_PASSWORD` added to `settings.py`; `users.xml` uses ClickHouse `from_env` pattern for secure password injection; `connection_manager.py` passes credentials to the client
+- **Qdrant**: `QDRANT_API_KEY` added to `settings.py`, propagated through `vectordb_config.py` → `connection_manager.py` → `QdrantClient(api_key=...)`
+- **Redis**: Pre-existing auth support in place (no change required)
+- **Scripts**: `kato-manager.sh` and `start.sh` source `.env` at startup and pass auth flags to all database CLI calls; `setup-auth` command added to `kato-manager.sh` for guided credential setup
+- **Docker Compose**: Auth env vars added to both `docker-compose.yml` and `deployment/docker-compose.yml` with empty-string defaults
+
+### Alternatives Considered
+1. **Mandatory auth**: Rejected — breaks existing deployments without migration step
+2. **Separate auth-enabled Docker Compose profiles**: Rejected — adds complexity without benefit over the env-var approach
+3. **Vault / secrets manager**: Deferred — appropriate for enterprise deployments but out of scope for this change
+
+### Affected Files
+`kato/config/settings.py`, `kato/config/vectordb_config.py`, `kato/storage/connection_manager.py`, `kato/storage/qdrant_store.py`, `config/clickhouse/users.xml`, `docker-compose.yml`, `deployment/docker-compose.yml`, `deployment/kato-manager.sh`, `start.sh`, `deployment/.env.example`, `.env.example`
+
+### Archive
+`planning-docs/completed/features/2026-03-17-optional-database-authentication.md`
 
 ---
 

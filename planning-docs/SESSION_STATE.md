@@ -248,6 +248,21 @@ Make KatoProcessor stateless following standard web application patterns:
 - **Related Work**: planning-docs/initiatives/hybrid-clickhouse-redis.md (v3.0 architecture)
 
 ## Recent Achievements
+- **Optional Database Authentication - COMPLETE** (2026-03-17): FULLY DEPLOYED
+  - **Scope**: All three databases (ClickHouse, Redis, Qdrant) now support optional auth via `.env`
+  - **ClickHouse**: `CLICKHOUSE_USER` / `CLICKHOUSE_PASSWORD` fields in `settings.py`; `users.xml` uses `from_env` pattern
+  - **Qdrant**: `QDRANT_API_KEY` field in `settings.py`; wired through `vectordb_config.py` and `connection_manager.py` to `QdrantClient`
+  - **Scripts**: `kato-manager.sh` and `start.sh` now source `.env` and pass credentials to all CLI calls; new `setup-auth` command added to `kato-manager.sh`
+  - **Backward Compatibility**: Zero changes required for existing deployments — absent credentials = no auth
+  - **Files Modified**: 11 files across config, storage, Docker Compose, scripts, and env examples
+  - **Archive**: planning-docs/completed/features/2026-03-17-optional-database-authentication.md
+- **Qdrant Vector Storage: ID Format, Error Handling, and Test Coverage - COMPLETE** (2026-03-17): FULLY VERIFIED
+  - **Bug 1**: `VCTR|sha1hash` names were passed directly to Qdrant, which rejects non-UUID IDs — fixed with deterministic `uuid.uuid5()` conversion at all Qdrant interaction points (add/search/update/delete)
+  - **Bug 2**: `assignNewlyLearnedToWorkers()` did not check return values, silently swallowing storage failures — now checks returns and logs failures with context
+  - **Bug 3**: `qdrant_store.py` exception messages omitted the exception type — now included for faster diagnosis
+  - **New Tests**: Added `tests/tests/integration/test_vector_qdrant_storage.py` with 4 tests verifying actual Qdrant storage (not just symbolic matching): `test_vector_id_deterministic`, `test_vectors_stored_in_qdrant`, `test_search_returns_vctr_names`, `test_similarity_prediction_accuracy`
+  - **Verification**: 4/4 new tests + 8/8 existing vector tests + full suite passing
+  - **Archive**: planning-docs/completed/bugs/2026-03-17-qdrant-id-format-error-handling-tests.md
 - **Vectors Never Persisted to Qdrant Bug Fix - COMPLETE** (2026-03-17): FULLY VERIFIED
   - **Primary Bug**: `assignNewlyLearnedToWorkers()` in `kato/searches/vector_search_engine.py` was a no-op - no code actually persisted vectors to Qdrant
   - **Secondary Bug**: `add_vector_sync` and `add_vectors_batch_sync` used `self._loop.run_until_complete()` directly, causing `RuntimeError: This event loop is already running` in FastAPI async contexts

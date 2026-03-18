@@ -3,6 +3,8 @@ services:
   qdrant:
     image: qdrant/qdrant:latest
     container_name: kato-qdrant
+    environment:
+      - QDRANT__SERVICE__API_KEY=${QDRANT_API_KEY:-}
     ports:
       - "6333:6333"
     volumes:
@@ -15,7 +17,9 @@ services:
   redis:
     image: redis:7-alpine
     container_name: kato-redis
-    command: redis-server /usr/local/etc/redis/redis.conf
+    command: >-
+      sh -c 'redis-server /usr/local/etc/redis/redis.conf
+      ${REDIS_PASSWORD:+--requirepass "$REDIS_PASSWORD"}'
     ports:
       - "6379:6379"
     volumes:
@@ -25,7 +29,7 @@ services:
       - kato-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli ${REDIS_PASSWORD:+-a \"$REDIS_PASSWORD\" --no-auth-warning} ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -53,8 +57,9 @@ services:
     environment:
       - CLICKHOUSE_DB=kato
       - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:-}
     healthcheck:
-      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      test: ["CMD-SHELL", "clickhouse-client --password \"${CLICKHOUSE_PASSWORD:-}\" --query 'SELECT 1'"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -75,11 +80,14 @@ services:
       - SERVICE_NAME=kato
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
-      - REDIS_URL=redis://redis:6379
+      - QDRANT_API_KEY=${QDRANT_API_KEY:-}
+      - REDIS_URL=redis://${REDIS_PASSWORD:+:${REDIS_PASSWORD}@}redis:6379
       - REDIS_ENABLED=true
       - CLICKHOUSE_HOST=clickhouse
       - CLICKHOUSE_PORT=8123
       - CLICKHOUSE_DB=kato
+      - CLICKHOUSE_USER=${CLICKHOUSE_USER:-default}
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:-}
       - LOG_LEVEL=INFO
       - SESSION_TTL=3600
       - SESSION_AUTO_EXTEND=true

@@ -22,8 +22,9 @@ services:
     environment:
       - CLICKHOUSE_DB=kato
       - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:-}
     healthcheck:
-      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      test: ["CMD-SHELL", "clickhouse-client --password \"${CLICKHOUSE_PASSWORD:-}\" --query 'SELECT 1'"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -37,6 +38,8 @@ services:
   qdrant:
     image: qdrant/qdrant:latest
     container_name: kato-qdrant
+    environment:
+      - QDRANT__SERVICE__API_KEY=${QDRANT_API_KEY:-}
     ports:
       - "6333:6333"
     volumes:
@@ -51,7 +54,9 @@ services:
     container_name: kato-redis
     # Use mounted config file for better management
     # Includes: 8GB memory limit, LRU eviction, optimized persistence
-    command: redis-server /etc/redis/redis.conf
+    command: >-
+      sh -c 'redis-server /etc/redis/redis.conf
+      ${REDIS_PASSWORD:+--requirepass "$REDIS_PASSWORD"}'
     ports:
       - "6379:6379"
     volumes:
@@ -65,7 +70,7 @@ services:
         limits:
           memory: 8G  # Match ClickHouse limit for fair resource allocation
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli ${REDIS_PASSWORD:+-a \"$REDIS_PASSWORD\" --no-auth-warning} ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -87,8 +92,11 @@ services:
       - CLICKHOUSE_DB=kato
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
-      - REDIS_URL=redis://redis:6379
+      - QDRANT_API_KEY=${QDRANT_API_KEY:-}
+      - REDIS_URL=redis://${REDIS_PASSWORD:+:${REDIS_PASSWORD}@}redis:6379
       - REDIS_ENABLED=true
+      - CLICKHOUSE_USER=${CLICKHOUSE_USER:-default}
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:-}
       - LOG_LEVEL=INFO
       - SESSION_TTL=3600
       - SESSION_AUTO_EXTEND=true
@@ -134,12 +142,13 @@ services:
       - CLICKHOUSE_HOST=clickhouse
       - CLICKHOUSE_HTTP_PORT=8123
       - CLICKHOUSE_DB=kato
-      - CLICKHOUSE_USER=default
-      - CLICKHOUSE_PASSWORD=
+      - CLICKHOUSE_USER=${CLICKHOUSE_USER:-default}
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:-}
       # Qdrant connection
       - QDRANT_URL=http://qdrant:6333
+      - QDRANT_API_KEY=${QDRANT_API_KEY:-}
       # Redis connection
-      - REDIS_URL=redis://redis:6379
+      - REDIS_URL=redis://${REDIS_PASSWORD:+:${REDIS_PASSWORD}@}redis:6379
       # Hybrid architecture mode
       - USE_HYBRID_PATTERNS=true
       - DATABASE_READ_ONLY=false

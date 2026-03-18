@@ -154,6 +154,20 @@ class DatabaseConfig(BaseSettings):
         'kato',
         description="ClickHouse database name"
     )
+    CLICKHOUSE_USER: str = Field(
+        'default',
+        description="ClickHouse username"
+    )
+    CLICKHOUSE_PASSWORD: Optional[str] = Field(
+        None,
+        description="ClickHouse password"
+    )
+
+    # Qdrant authentication
+    QDRANT_API_KEY: Optional[str] = Field(
+        None,
+        description="Qdrant API key for authentication"
+    )
 
     @property
     def clickhouse_host(self) -> str:

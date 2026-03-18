@@ -30,12 +30,24 @@ if [ -f ".env" ]; then
     set +a
 fi
 
+# Script directory
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
 # Available services
 ALL_SERVICES="redis qdrant clickhouse kato"
 
 # Command to execute
 COMMAND=${1:-help}
 SERVICE=${2:-all}
+
+# Build docker compose command with optional auth override
+compose_cmd() {
+    local cmd="docker compose"
+    if [ -f "$SCRIPT_DIR/docker-compose.auth.yml" ]; then
+        cmd="$cmd -f $SCRIPT_DIR/docker-compose.yml -f $SCRIPT_DIR/docker-compose.auth.yml"
+    fi
+    echo "$cmd"
+}
 
 # Validate service name
 validate_service() {
@@ -51,7 +63,7 @@ case "$COMMAND" in
         validate_service "$SERVICE"
         if [[ "$SERVICE" == "all" ]]; then
             print_info "Starting all KATO services..."
-            docker compose up -d
+            $(compose_cmd) up -d
             print_info "Waiting for services to be ready..."
             sleep 5
 
@@ -65,7 +77,7 @@ case "$COMMAND" in
             fi
         else
             print_info "Starting $SERVICE..."
-            docker compose up -d "$SERVICE"
+            $(compose_cmd) up -d "$SERVICE"
             print_info "$SERVICE started"
         fi
         ;;
@@ -74,11 +86,11 @@ case "$COMMAND" in
         validate_service "$SERVICE"
         if [[ "$SERVICE" == "all" ]]; then
             print_info "Stopping all KATO services..."
-            docker compose down
+            $(compose_cmd) down
             print_info "All services stopped"
         else
             print_info "Stopping $SERVICE..."
-            docker compose stop "$SERVICE"
+            $(compose_cmd) stop "$SERVICE"
             print_info "$SERVICE stopped"
         fi
         ;;
@@ -87,11 +99,11 @@ case "$COMMAND" in
         validate_service "$SERVICE"
         if [[ "$SERVICE" == "all" ]]; then
             print_info "Restarting all KATO services..."
-            docker compose restart
+            $(compose_cmd) restart
             print_info "All services restarted"
         else
             print_info "Restarting $SERVICE..."
-            docker compose restart "$SERVICE"
+            $(compose_cmd) restart "$SERVICE"
             print_info "$SERVICE restarted"
         fi
         ;;
@@ -99,10 +111,10 @@ case "$COMMAND" in
     build)
         if [[ "$SERVICE" == "all" ]]; then
             print_info "Building all Docker images..."
-            docker compose build
+            $(compose_cmd) build
         else
             print_info "Building $SERVICE image..."
-            docker compose build "$SERVICE"
+            $(compose_cmd) build "$SERVICE"
         fi
         print_info "Build complete"
         ;;
@@ -111,18 +123,18 @@ case "$COMMAND" in
         SERVICE=${2:-kato}
         LINES=${3:-50}
         print_info "Showing last $LINES lines of logs for $SERVICE..."
-        docker compose logs --tail="$LINES" "$SERVICE"
+        $(compose_cmd) logs --tail="$LINES" "$SERVICE"
         ;;
 
     follow)
         SERVICE=${2:-kato}
         print_info "Following logs for $SERVICE (Ctrl+C to stop)..."
-        docker compose logs -f "$SERVICE"
+        $(compose_cmd) logs -f "$SERVICE"
         ;;
 
     status)
         print_info "Checking service status..."
-        docker compose ps
+        $(compose_cmd) ps
 
         # Check KATO health
         echo ""
@@ -197,7 +209,7 @@ case "$COMMAND" in
         read -r response
         if [[ "$response" == "y" || "$response" == "Y" ]]; then
             print_info "Cleaning up KATO services..."
-            docker compose down -v
+            $(compose_cmd) down -v
             print_info "Cleanup complete"
         else
             print_info "Cleanup cancelled"
@@ -230,13 +242,13 @@ case "$COMMAND" in
         read -r response
         if [[ "$response" == "DELETE EVERYTHING" ]]; then
             print_info "Stopping all services..."
-            docker compose down
+            $(compose_cmd) down
 
             print_info "Removing all volumes..."
             docker volume rm kato_qdrant-data kato_redis-data kato_clickhouse-data kato_clickhouse-logs 2>/dev/null || print_warn "Some volumes may not exist"
 
             print_info "Starting fresh services..."
-            docker compose up -d
+            $(compose_cmd) up -d
 
             print_info "Waiting for services to be ready..."
             sleep 5

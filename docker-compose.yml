@@ -3,8 +3,9 @@ services:
   qdrant:
     image: qdrant/qdrant:latest
     container_name: kato-qdrant
-    environment:
-      - QDRANT__SERVICE__API_KEY=${QDRANT_API_KEY:-}
+    # NOTE: QDRANT__SERVICE__API_KEY is intentionally NOT set here.
+    # An empty value causes Qdrant to reject ALL requests (401).
+    # To enable Qdrant auth, use docker-compose.auth.yml override.
     ports:
       - "6333:6333"
     volumes:

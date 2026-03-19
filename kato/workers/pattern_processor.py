@@ -10,9 +10,6 @@ from os import environ
 from typing import Any, Optional
 
 import numpy as np
-import pymongo
-from pymongo import ReturnDocument
-
 from kato.informatics.knowledge_base import SuperKnowledgeBase
 from kato.informatics.metrics import (
     accumulate_metadata,
@@ -47,7 +44,7 @@ class PatternProcessor:
         persistence: Number of events to retain in memory.
         recall_threshold: Minimum similarity threshold for pattern matching.
         STM: Short-term memory deque containing observed events.
-        predictions_kb: MongoDB collection for storing predictions.
+        predictions_kb: Redis-backed interface for storing predictions.
     """
     def __init__(self, settings=None, **kwargs: Any) -> None:
         logger.debug("Starting PatternProcessor...")
@@ -94,7 +91,7 @@ class PatternProcessor:
         self.superkb = SuperKnowledgeBase(self.kb_id, self.persistence, settings=self.settings)
 
         # Check architecture mode from environment
-        arch_mode = environ.get('KATO_ARCHITECTURE_MODE', 'mongodb').lower()
+        arch_mode = environ.get('KATO_ARCHITECTURE_MODE', 'hybrid').lower()
 
         # Initialize PatternSearcher with appropriate configuration
         searcher_kwargs = {
@@ -104,156 +101,100 @@ class PatternProcessor:
             'use_token_matching': self.use_token_matching
         }
 
-        # Configure hybrid architecture if enabled
-        if arch_mode == 'hybrid':
-            # Check if strict mode is enabled (fails instead of falling back)
-            strict_mode = environ.get('KATO_STRICT_MODE', 'false').lower() == 'true'
+        # Initialize hybrid architecture (ClickHouse + Redis)
+        logger.info("=" * 60)
+        logger.info("HYBRID ARCHITECTURE MODE ENABLED")
+        logger.info("=" * 60)
+        logger.info("Initializing ClickHouse/Redis connections...")
 
-            try:
-                logger.info("=" * 60)
-                logger.info("HYBRID ARCHITECTURE MODE ENABLED")
-                logger.info("=" * 60)
-                logger.info("Initializing ClickHouse/Redis connections...")
+        # Get connection manager
+        conn_manager = OptimizedConnectionManager()
 
-                # Get connection manager
-                conn_manager = OptimizedConnectionManager()
+        # Test ClickHouse connection (required)
+        clickhouse_client = conn_manager.clickhouse
+        if clickhouse_client is None:
+            raise RuntimeError(
+                "ClickHouse client is None! "
+                "Possible causes:\n"
+                "  1. ClickHouse service not running (check: docker ps | grep clickhouse)\n"
+                "  2. Connection failed (check: curl http://localhost:8123/ping)\n"
+                "  3. Environment variables incorrect (CLICKHOUSE_HOST, CLICKHOUSE_PORT)\n"
+                "  4. clickhouse-connect library not installed\n"
+                "Run: docker compose logs clickhouse"
+            )
 
-                # Test ClickHouse connection
-                clickhouse_client = conn_manager.clickhouse
-                if clickhouse_client is None:
-                    error_msg = (
-                        "ClickHouse client is None! "
-                        "Possible causes:\n"
-                        "  1. ClickHouse service not running (check: docker ps | grep clickhouse)\n"
-                        "  2. Connection failed (check: curl http://localhost:8123/ping)\n"
-                        "  3. Environment variables incorrect (CLICKHOUSE_HOST, CLICKHOUSE_PORT)\n"
-                        "  4. clickhouse-connect library not installed\n"
-                        "Run: docker compose logs clickhouse"
-                    )
-                    logger.error(error_msg)
-                    if strict_mode:
-                        raise RuntimeError("ClickHouse required in strict mode but not available")
-                    logger.warning("⚠️  Falling back to MongoDB mode")
-                    arch_mode = 'mongodb'
-                else:
-                    # Test ClickHouse query
-                    try:
-                        result = clickhouse_client.query("SELECT 1")
-                        logger.info("✓ ClickHouse connection verified")
-                    except Exception as ch_error:
-                        error_msg = (
-                            f"ClickHouse connection test failed: {ch_error}\n"
-                            f"  Host: {environ.get('CLICKHOUSE_HOST', 'localhost')}\n"
-                            f"  Port: {environ.get('CLICKHOUSE_PORT', '9000')}\n"
-                            f"Run: docker exec kato-clickhouse clickhouse-client --query 'SELECT 1'"
-                        )
-                        logger.error(error_msg)
-                        if strict_mode:
-                            raise RuntimeError(f"ClickHouse query failed: {ch_error}")
-                        logger.warning("⚠️  Falling back to MongoDB mode")
-                        arch_mode = 'mongodb'
-                        clickhouse_client = None
+        # Verify ClickHouse query
+        try:
+            clickhouse_client.query("SELECT 1")
+            logger.info("✓ ClickHouse connection verified")
+        except Exception as ch_error:
+            raise RuntimeError(
+                f"ClickHouse connection test failed: {ch_error}\n"
+                f"  Host: {environ.get('CLICKHOUSE_HOST', 'localhost')}\n"
+                f"  Port: {environ.get('CLICKHOUSE_PORT', '9000')}\n"
+                f"Run: docker exec kato-clickhouse clickhouse-client --query 'SELECT 1'"
+            ) from ch_error
 
-                # Test Redis connection
-                redis_client = conn_manager.redis
-                if redis_client is None:
-                    error_msg = (
-                        "Redis client is None! "
-                        "Possible causes:\n"
-                        "  1. Redis service not running (check: docker ps | grep redis)\n"
-                        "  2. Connection failed (check: docker exec kato-redis redis-cli ping)\n"
-                        "  3. Environment variables incorrect (REDIS_URL)\n"
-                        "  4. redis library not installed\n"
-                        "Run: docker compose logs redis"
-                    )
-                    logger.error(error_msg)
-                    if strict_mode:
-                        raise RuntimeError("Redis required in strict mode but not available")
-                    logger.warning("⚠️  Falling back to MongoDB mode")
-                    arch_mode = 'mongodb'
-                else:
-                    # Test Redis ping
-                    try:
-                        redis_client.ping()
-                        logger.info("✓ Redis connection verified")
-                    except Exception as redis_error:
-                        error_msg = (
-                            f"Redis connection test failed: {redis_error}\n"
-                            f"  URL: {environ.get('REDIS_URL', 'redis://localhost:6379')}\n"
-                            f"Run: docker exec kato-redis redis-cli ping"
-                        )
-                        logger.error(error_msg)
-                        if strict_mode:
-                            raise RuntimeError(f"Redis ping failed: {redis_error}")
-                        logger.warning("⚠️  Falling back to MongoDB mode")
-                        arch_mode = 'mongodb'
-                        redis_client = None
+        # Test Redis connection (required)
+        redis_client = conn_manager.redis
+        if redis_client is None:
+            raise RuntimeError(
+                "Redis client is None! "
+                "Possible causes:\n"
+                "  1. Redis service not running (check: docker ps | grep redis)\n"
+                "  2. Connection failed (check: docker exec kato-redis redis-cli ping)\n"
+                "  3. Environment variables incorrect (REDIS_URL)\n"
+                "  4. redis library not installed\n"
+                "Run: docker compose logs redis"
+            )
 
-                # Configure hybrid mode if both clients available
-                if clickhouse_client and redis_client and arch_mode == 'hybrid':
-                    # Check pattern data status
-                    try:
-                        pattern_count = clickhouse_client.query("SELECT COUNT(*) FROM kato.patterns_data").result_rows[0][0]
-                        logger.info(f"ClickHouse patterns_data table: {pattern_count:,} rows")
+        # Verify Redis ping
+        try:
+            redis_client.ping()
+            logger.info("✓ Redis connection verified")
+        except Exception as redis_error:
+            raise RuntimeError(
+                f"Redis connection test failed: {redis_error}\n"
+                f"  URL: {environ.get('REDIS_URL', 'redis://localhost:6379')}\n"
+                f"Run: docker exec kato-redis redis-cli ping"
+            ) from redis_error
 
-                        if pattern_count == 0:
-                            logger.info(
-                                "ℹ️  patterns_data table is empty (fresh deployment or migration pending).\n"
-                                "  Patterns will accumulate as you train the system.\n"
-                                "  If upgrading from v2.x with MongoDB data, run: python scripts/migrate_mongodb_to_clickhouse.py"
-                            )
-                    except Exception as check_error:
-                        logger.error(f"Failed to check patterns_data: {check_error}")
-                        if strict_mode:
-                            raise
+        # Check pattern data status
+        try:
+            pattern_count = clickhouse_client.query("SELECT COUNT(*) FROM kato.patterns_data").result_rows[0][0]
+            logger.info(f"ClickHouse patterns_data table: {pattern_count:,} rows")
 
-                    # Create default session config for filter pipeline
-                    session_config = SessionConfiguration(
-                        filter_pipeline=[],
-                        minhash_threshold=0.7,
-                        length_min_ratio=0.5,
-                        length_max_ratio=2.0,
-                        jaccard_threshold=0.3,
-                        jaccard_min_overlap=2,
-                        recall_threshold=self.recall_threshold,
-                        use_token_matching=self.use_token_matching,
-                        enable_filter_metrics=True
-                    )
+            if pattern_count == 0:
+                logger.info(
+                    "ℹ️  patterns_data table is empty (fresh deployment).\n"
+                    "  Patterns will accumulate as you train the system."
+                )
+        except Exception as check_error:
+            logger.error(f"Failed to check patterns_data: {check_error}")
 
-                    # Add hybrid params to searcher
-                    searcher_kwargs.update({
-                        'session_config': session_config,
-                        'clickhouse_client': clickhouse_client,
-                        'redis_client': redis_client
-                    })
+        # Create default session config for filter pipeline
+        session_config = SessionConfiguration(
+            filter_pipeline=[],
+            minhash_threshold=0.7,
+            length_min_ratio=0.5,
+            length_max_ratio=2.0,
+            jaccard_threshold=0.3,
+            jaccard_min_overlap=2,
+            recall_threshold=self.recall_threshold,
+            use_token_matching=self.use_token_matching,
+            enable_filter_metrics=True
+        )
 
-                    logger.info("=" * 60)
-                    logger.info("✓ HYBRID ARCHITECTURE CONFIGURED SUCCESSFULLY")
-                    logger.info("=" * 60)
-                    logger.info("Filter pipeline: [] (no filtering - returns all patterns)")
-                    logger.info("Performance: Unfiltered pattern retrieval")
-                    logger.info("=" * 60)
+        # Add hybrid params to searcher
+        searcher_kwargs.update({
+            'session_config': session_config,
+            'clickhouse_client': clickhouse_client,
+            'redis_client': redis_client
+        })
 
-            except Exception as e:
-                import traceback
-                error_details = traceback.format_exc()
-                logger.error("=" * 60)
-                logger.error("HYBRID ARCHITECTURE INITIALIZATION FAILED")
-                logger.error("=" * 60)
-                logger.error(f"Error: {e}")
-                logger.error(f"Full traceback:\n{error_details}")
-                logger.error("=" * 60)
-
-                if strict_mode:
-                    logger.error("STRICT MODE: Failing hard instead of falling back")
-                    raise RuntimeError(f"Hybrid mode required but initialization failed: {e}")
-
-                logger.warning("⚠️  FALLING BACK TO MONGODB MODE")
-                logger.warning("Set KATO_STRICT_MODE=true to fail instead of fallback")
-                arch_mode = 'mongodb'
-
-        if arch_mode == 'mongodb':
-            logger.info("MongoDB architecture mode active")
+        logger.info("=" * 60)
+        logger.info("✓ HYBRID ARCHITECTURE CONFIGURED SUCCESSFULLY")
+        logger.info("=" * 60)
 
         self.patterns_searcher = PatternSearcher(**searcher_kwargs)
 
@@ -305,10 +246,10 @@ class PatternProcessor:
         self.last_learned_pattern_name: Optional[str] = None
         self.patterns_searcher.clearPatternsFromRAM()
 
-        # CRITICAL: Delete all patterns from MongoDB for this processor
+        # Delete all patterns from ClickHouse for this processor
         # This ensures test isolation and prevents pattern contamination
-        deleted = self.superkb.patterns_kb.delete_many({})
-        logger.info(f"Deleted {deleted.deleted_count} patterns from MongoDB for processor {self.kb_id}")
+        self.superkb.patterns_kb.delete_many({})
+        logger.info(f"Deleted all patterns for processor {self.kb_id}")
 
         # Also clear symbols and predictions
         self.superkb.symbols_kb.delete_many({})
@@ -355,7 +296,7 @@ class PatternProcessor:
         """
         Convert current short-term memory into a persistent pattern.
 
-        Creates a hash-named pattern from the data in STM, stores it in MongoDB,
+        Creates a hash-named pattern from the data in STM, stores it in ClickHouse/Redis,
         and distributes it to search workers for future pattern matching.
 
         Returns:
@@ -378,7 +319,7 @@ class PatternProcessor:
                 self.patterns_searcher.assignNewlyLearnedToWorkers(
                     0,  # Index parameter ignored in optimized implementation
                     pattern.name,
-                    list(chain(*pattern.pattern_data))
+                    pattern.flat_data
                 )
 
                 # Invalidate metrics cache since patterns have changed
@@ -399,9 +340,19 @@ class PatternProcessor:
     def delete_pattern(self, name: str) -> str:
         if not self.patterns_searcher.delete_pattern(name):
             raise Exception(f'Unable to find and delete pattern {name} in RAM')
-        result = self.patterns_kb.delete_one({"name": name})
-        if result.deleted_count != 1:
-            logger.warning(f'Expected to delete 1 record for pattern {name} but deleted {result.deleted_count}')
+        # Delete from ClickHouse
+        try:
+            self.superkb.clickhouse_writer.client.command(
+                f"ALTER TABLE kato.patterns_data DELETE WHERE kb_id = '{self.kb_id}' AND name = '{name}'"
+            )
+        except Exception as e:
+            logger.warning(f"Failed to delete pattern {name} from ClickHouse: {e}")
+        # Delete metadata from Redis
+        try:
+            for key_type in ['frequency', 'emotives', 'metadata']:
+                self.superkb.redis_writer.client.delete(f"{self.kb_id}:{key_type}:{name}")
+        except Exception as e:
+            logger.warning(f"Failed to delete pattern {name} metadata from Redis: {e}")
         return 'deleted'
 
     def update_pattern(self, name: str, frequency: int, emotives: dict[str, list[float]]) -> Optional[dict[str, Any]]:
@@ -421,12 +372,9 @@ class PatternProcessor:
         for emotive, values_list in emotives.items():
             if len(values_list) > self.persistence:
                 raise Exception(f'{emotive} array length ({len(values_list)}) exceeds system persistence ({self.persistence})')
-        return self.patterns_kb.find_one_and_update(
-            {'name': name},
-            {'$set': {'frequency': frequency, 'emotives': emotives}},
-            {'_id': False},
-            return_document=ReturnDocument.AFTER
-        )
+        # Update metadata in Redis
+        self.superkb.redis_writer.write_metadata(name, frequency=frequency, emotives=emotives)
+        return {'name': name, 'frequency': frequency, 'emotives': emotives}
 
     async def processEvents(self, current_unique_id: str) -> list[dict[str, Any]]:
         """
@@ -434,7 +382,7 @@ class PatternProcessor:
 
         Flattens the STM (list of events) into a single state vector,
         then searches for similar patterns in the pattern database.
-        Predictions are cached in MongoDB for retrieval.
+        Predictions are cached in Redis for retrieval.
 
         Args:
             current_unique_id: Unique identifier for this observation.
@@ -443,7 +391,7 @@ class PatternProcessor:
             List of prediction dictionaries with pattern matches and metrics.
 
         Note:
-            KATO requires at least 2 strings in STM to generate predictions.
+            KATO requires at least 1 string in STM to generate predictions.
         """
         # Flatten short-term memory: [["a","b"],["c"]] -> ["a","b","c"]
         state = list(chain(*self.STM))
@@ -628,9 +576,11 @@ class PatternProcessor:
 
             # For single-symbol predictions, use a very low threshold (0.0)
             # since we're already filtering to patterns that START with this symbol.
-            # The similarity will be low (e.g., 1/10 = 0.1 for a 10-symbol pattern),
-            # so we don't want to filter aggressively here.
             single_symbol_threshold = 0.0
+
+            # Pre-load all pattern metadata in a single batch call
+            candidate_names = [p['name'] for p in candidate_patterns]
+            metadata_batch = self.superkb.redis_writer.get_metadata_batch(candidate_names)
 
             for pattern_dict in candidate_patterns:
                 pattern_data_flat = list(chain(*pattern_dict['pattern_data']))
@@ -650,8 +600,8 @@ class PatternProcessor:
                 (pattern, matching_intersection, past, present, missing, extras,
                  similarity, number_of_blocks, anomalies) = prediction_info
 
-                # Get frequency and emotives from Redis
-                metadata = self.superkb.redis_writer.get_metadata(pattern_dict['name'])
+                # Get frequency and emotives from pre-loaded batch
+                metadata = metadata_batch.get(pattern_dict['name'], {'name': pattern_dict['name'], 'frequency': 1})
                 frequency = metadata.get('frequency', 1)
                 emotives = metadata.get('emotives', [])
 

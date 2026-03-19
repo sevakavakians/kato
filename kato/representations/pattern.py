@@ -1,4 +1,6 @@
+import functools
 from hashlib import sha1
+from itertools import chain
 
 
 class Pattern:
@@ -16,6 +18,11 @@ class Pattern:
         self.length = sum(len(x) for x in self.pattern_data)
         self.name = sha1(('{}'.format(self.pattern_data)).encode('utf-8'), usedforsecurity=False).hexdigest()
         return
+
+    @functools.cached_property
+    def flat_data(self) -> list[str]:
+        """Flattened pattern_data as a single list of symbols. Cached on first access."""
+        return list(chain(*self.pattern_data))
 
     def __repr__(self):
         return """<PTRN|{}>""".format(self.name)

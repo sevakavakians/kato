@@ -61,6 +61,7 @@ Both are represented by the same pattern object which consists of sequences of e
 When the sequence matters, store symbols across events keeping their order. When the sequence doesn’t matter, store symbols within the same event. This allows the same representation to be used universally, i.e. in all use-cases.
 
 Every learned structure in KATO is identified by a unique hash: `PTRN|<sha1_hash>`
+(Note: In databases, patterns are stored as plain SHA1 hashes without the `PTRN|` prefix)
 
 ## Architecture Comparison: KATO vs Transformers
 
@@ -558,19 +559,19 @@ KATO provides official pre-built container images hosted on GitHub Container Reg
 
 | Tag | Description | Use Case |
 |-----|-------------|----------|
-| `2.0.0` | Specific version (immutable) | Production - pin to exact version |
-| `2.0` | Latest patch for 2.0.x | Auto-receive security/bug fixes |
-| `2` | Latest minor for 2.x | Track major version |
+| `3.4.0` | Specific version (immutable) | Production - pin to exact version |
+| `3.4` | Latest patch for 3.4.x | Auto-receive security/bug fixes |
+| `3` | Latest minor for 3.x | Track major version |
 | `latest` | Latest stable release | Development and testing |
 
 #### Pull Pre-Built Image
 
 ```bash
 # Recommended for production - pin to specific version
-docker pull ghcr.io/sevakavakians/kato:2.0.0
+docker pull ghcr.io/sevakavakians/kato:3.4.0
 
 # Auto-receive patch updates (security fixes, bug fixes)
-docker pull ghcr.io/sevakavakians/kato:2.0
+docker pull ghcr.io/sevakavakians/kato:3.4
 
 # Always use latest stable (for development)
 docker pull ghcr.io/sevakavakians/kato:latest
@@ -583,7 +584,7 @@ Modify your `docker compose.yml` to use pre-built images:
 ```yaml
 services:
   kato:
-    image: ghcr.io/sevakavakians/kato:2.0.0  # Use pre-built image
+    image: ghcr.io/sevakavakians/kato:3.4.0  # Use pre-built image
     # Remove 'build' section
     container_name: kato
     environment:
@@ -591,7 +592,7 @@ services:
       # ... rest of environment variables
 ```
 
-See the [Standalone Deployment Guide](deployment/README.md) for complete instructions on using pre-built images.
+See the [Deployment Guide](docs/operations/docker-deployment.md) for complete instructions on using pre-built images.
 
 ### Option 2: Build from Source
 
@@ -602,7 +603,7 @@ If you need to modify the code or contribute to development, build from source.
 ### 1. Clone Repository
 ```bash
 # Clone repository
-git clone https://github.com/your-org/kato.git
+git clone https://github.com/sevakavakians/kato.git
 cd kato
 ```
 
@@ -624,7 +625,7 @@ cd kato
 curl http://localhost:8000/health
 
 # Response:
-# {"status": "healthy", "session_id": "default", "uptime": 123.45}
+# {"status": "healthy", "service_name": "kato", "uptime_seconds": 123.45, ...}
 
 # Quick test of basic functionality
 ./run_tests.sh --no-start --no-stop tests/tests/api/test_fastapi_endpoints.py::test_health_endpoint -v
@@ -656,28 +657,6 @@ curl http://localhost:8000/sessions/$SESSION/stm
 - Sessions (STM, emotives) are temporary and expire, but learned patterns in ClickHouse persist forever
 - See [Database Persistence Guide](docs/users/database-persistence.md) for complete details
 
-#### Option B: Default Session API (backwards compatible)
-```bash
-# Send observation (backward compatible)
-curl -X POST http://localhost:8000/observe \
-  -H "Content-Type: application/json" \
-  -d '{
-    "strings": ["hello", "world"],
-    "vectors": [],
-    "emotives": {"joy": 0.8},
-    "unique_id": "obs-123"  # Optional unique identifier
-  }'
-
-# Learn pattern from current STM
-curl -X POST http://localhost:8000/learn
-# Returns: {"pattern_name": "PTRN|<hash>", "session_id": "...", "message": "..."}
-
-# Get predictions
-curl -X GET http://localhost:8000/predictions
-# Or with specific observation ID:
-curl -X GET "http://localhost:8000/predictions?unique_id=obs-123"
-```
-
 ## Core Concepts
 
 KATO processes observations as **events** containing strings, vectors, and emotives. Each event is processed through:
@@ -685,7 +664,7 @@ KATO processes observations as **events** containing strings, vectors, and emoti
 - **Deterministic hashing** for patterns (`PTRN|<sha1_hash>`)
 - **Temporal segmentation** in predictions
 - **Empty event filtering**
-- **Minimum requirement**: 2+ strings in STM for predictions (vectors contribute strings)
+- **Minimum requirement**: 1+ strings in STM for predictions (single-symbol fast path available; vectors contribute strings)
 
 Learn more in [Core Concepts](docs/developers/concepts.md) or [User Guide](docs/users/concepts.md).
 
@@ -759,7 +738,7 @@ pip install -r tests/requirements.txt
 - **Fast Iteration**: Direct Python execution allows debugging with print/breakpoints
 - **Parallel Safe**: Tests can run in parallel thanks to processor_id isolation
 
-**Current Status**: 185 total tests (184 passing, 1 intentionally skipped) across unit, integration, API, and performance suites
+**Current Status**: 445+ tests (2 intentionally skipped) across unit, integration, API, and performance suites
 
 See [Testing Guide](docs/developers/testing.md) for complete details.
 
@@ -781,22 +760,20 @@ See [Testing Guide](docs/developers/testing.md) for complete details.
 - [Developer Concepts](docs/developers/concepts.md) - Learn KATO's internal behavior
 
 ### 🚀 Deployment
-- [Docker Guide](docs/deployment/DOCKER.md) - Container deployment
-- [Configuration](docs/deployment/CONFIGURATION.md) - All parameters explained
-- [Architecture](docs/deployment/ARCHITECTURE.md) - System design
+- [Docker Guide](docs/operations/docker-deployment.md) - Container deployment
+- [Configuration](docs/operations/configuration.md) - All parameters explained
+- [Architecture](docs/developers/architecture.md) - System design
 - [Production Scale Migration Plan (PSMP)](docs/deployment/PRODUCTION_SCALE_MIGRATION_PLAN.md) - Future scaling strategy for production workloads
 
 ### 🔧 Development
 - [API Reference](docs/users/api-reference.md) - Complete endpoint documentation
 - [Testing Guide](docs/developers/testing.md) - Write and run tests
-- [Contributing](docs/development/CONTRIBUTING.md) - Development guidelines
+- [Contributing](docs/developers/contributing.md) - Development guidelines
 
 ### 📊 Technical
-- [Performance Guide](docs/technical/PERFORMANCE.md) - Optimization strategies
-- [Troubleshooting](docs/technical/TROUBLESHOOTING.md) - Common issues
+- [Performance Guide](docs/developers/performance-profiling.md) - Optimization strategies
+- [Troubleshooting](docs/maintenance/known-issues.md) - Common issues
 - [Prediction Object Reference](docs/technical/PREDICTION_OBJECT_REFERENCE.md) - Complete field documentation
-- [Vector Architecture](docs/VECTOR_ARCHITECTURE_IMPLEMENTATION.md) - Modern vector database system
-- [Breaking Changes](docs/BREAKING_CHANGES_VECTOR_ARCHITECTURE.md) - Vector migration guide
 - [Known Issues](docs/maintenance/known-issues.md) - Current bugs and workarounds
 
 ### 📁 Documentation Structure
@@ -964,8 +941,8 @@ curl http://localhost:8000/sessions/{session_id}/predictions
 ## Performance
 
 ### Current Performance Metrics
-- **Latency**: 1-5ms per observation
-- **Throughput**: 5,000+ requests/second per instance
+- **Latency**: 1-5ms per observation (single-instance, pre-warmed cache)
+- **Throughput**: 200+ observations/second per instance (benchmarked)
 - **Memory**: 200MB-500MB per processor
 - **Startup Time**: 2-3 seconds
 - **Vector Search**: 10-100x faster with Qdrant
@@ -975,7 +952,7 @@ curl http://localhost:8000/sessions/{session_id}/predictions
 - **Horizontal**: Run multiple KATO instances on different ports
 - **Load Balancing**: Use nginx or similar for distributing requests
 
-See [Performance Guide](docs/technical/PERFORMANCE.md) for optimization.
+See [Performance Guide](docs/developers/performance-profiling.md) for optimization.
 
 ## Troubleshooting
 
@@ -1036,11 +1013,11 @@ docker logs kato-clickhouse-init
 
 The main ClickHouse container (`kato-clickhouse`) will continue running normally. Only the init container stops after completing its setup task.
 
-See [Troubleshooting Guide](docs/technical/TROUBLESHOOTING.md) for more solutions.
+See [Known Issues](docs/maintenance/known-issues.md) for more solutions.
 
 ## Contributing
 
-We welcome contributions! Please see our [Contributing Guide](docs/development/CONTRIBUTING.md) for:
+We welcome contributions! Please see our [Contributing Guide](docs/developers/contributing.md) for:
 - Development setup
 - Code guidelines
 - Testing requirements
@@ -1069,20 +1046,23 @@ Like GAIuS before it, KATO adheres to [ExCITE AI](https://medium.com/@sevakavaki
 
 ## Recent Updates
 
-### Major Architecture Migration (2025-09)
-- **NEW: FastAPI Architecture** - Replaced REST/ZMQ with direct FastAPI embedding
-- **Fixed STM State Persistence** - Resolved state management problems
-- **Simplified Testing** - Local Python tests with automatic isolation
-- **Better Performance** - Reduced latency by removing inter-process communication
+### v3.4.0 (2026-03)
+- **Database Authentication**: Optional authentication support for ClickHouse, Redis, and Qdrant
+- **Qdrant Fix**: Prevent empty API key from blocking vector operations
 
-### Bug Fixes (2025-09-01)
-- **Fixed Division by Zero Errors**: Resolved edge cases in metric calculations when:
-  - Pattern fragmentation equals -1
-  - Total ensemble pattern frequencies equal 0 (when no patterns match)
-  - State is empty in normalized entropy calculations
-  - Redis metadata keys are missing
-- **Improved Error Handling**: Errors now provide detailed context instead of being masked with defaults
-- **Enhanced Recall Threshold**: Better handling of threshold=0.0 for comprehensive pattern matching
+### v3.3.0 (2026-02)
+- **Redis OOM Protection**: Comprehensive memory monitoring and Redis protection
+- **Manager Enhancements**: Memory monitoring, clean-data schema recreation
+- **Request Limit**: Increased uvicorn request limit from 10k to 100k for training workloads
+
+### v3.2.0 (2026-01)
+- **Single-Symbol Predictions**: 1+ STM prediction support with fast path optimization
+- **ClickHouse Memory Fix**: Prevent system log bloat causing memory exhaustion
+- **Semantic Version Display**: Version display in kato-manager.sh
+
+### v3.1.0 (2025-12)
+- **Fuzzy Token Matching**: Token-level similarity matching with configurable threshold
+- **RapidFuzz Integration**: 5-10x faster similarity calculation
 
 ## Support
 

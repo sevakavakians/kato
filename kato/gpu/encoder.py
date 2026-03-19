@@ -2,11 +2,11 @@
 Symbol Vocabulary Encoder for GPU Pattern Matching.
 
 Converts string symbols to integer IDs for efficient GPU processing.
-Maintains bidirectional mapping with MongoDB persistence.
+Maintains bidirectional mapping with persistence via a collection interface.
 
 Usage:
     >>> from kato.gpu.encoder import SymbolVocabularyEncoder
-    >>> encoder = SymbolVocabularyEncoder(mongodb.metadata)
+    >>> encoder = SymbolVocabularyEncoder(metadata_collection)
     >>>
     >>> # Encode symbols
     >>> encoded = encoder.encode_sequence(['hello', 'world'])
@@ -18,8 +18,7 @@ Usage:
 
 Design:
     - Bidirectional mapping: string ↔ integer ID
-    - MongoDB persistence for vocabulary
-    - Thread-safe operations (MongoDB atomic updates)
+    - Persistence via collection interface (find_one/update_one)
     - Padding value: -1 (filtered in decoding)
     - Deterministic ordering: alphabetical symbol sorting
 """
@@ -28,7 +27,7 @@ import logging
 from typing import Dict, List, Optional
 
 import numpy as np
-from pymongo.collection import Collection
+from typing import Any as Collection  # Was pymongo.Collection; now duck-typed interface
 
 logger = logging.getLogger('kato.gpu.encoder')
 

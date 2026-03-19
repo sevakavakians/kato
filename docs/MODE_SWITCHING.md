@@ -1,4 +1,4 @@
-# Architecture Mode Switching
+# Architecture Configuration
 
 ## Overview
 
@@ -23,52 +23,11 @@ Services:
 Performance: 100-300x improvement over previous architectures
 ```
 
-### Switch to Hybrid Mode
-```bash
-./start.sh mode hybrid
-```
-
-Output:
-```
-[INFO] Switching to hybrid mode...
-[INFO] ✓ Mode set to: hybrid
-[INFO] Restarting KATO service to apply changes...
-[INFO] Waiting for service to be ready...
-[INFO] ✓ KATO service restarted successfully
-
-⚠️  Hybrid mode requires:
-  1. ClickHouse and Redis services running
-  2. Data migrated to ClickHouse/Redis
-  3. SessionConfig with filter_pipeline configured
-
-Run migrations if not done:
-  python scripts/migrate_mongodb_to_clickhouse.py
-  python scripts/migrate_mongodb_to_redis.py
-
-See docs/HYBRID_ARCHITECTURE.md for setup guide
-```
-
-### Switch to MongoDB Mode
-```bash
-./start.sh mode mongodb
-```
-
-Output:
-```
-[INFO] Switching to mongodb mode...
-[INFO] ✓ Mode set to: mongodb
-[INFO] Restarting KATO service to apply changes...
-[INFO] Waiting for service to be ready...
-[INFO] ✓ KATO service restarted successfully
-
-[INFO] MongoDB mode active - no additional setup required
-```
-
 ## How It Works
 
 ### 1. Environment Variable
 
-The command updates a `.env` file with:
+The `.env` file contains:
 ```env
 KATO_ARCHITECTURE_MODE=hybrid
 ```
@@ -77,20 +36,8 @@ Docker-compose automatically reads this file and passes the variable to the KATO
 
 ### 2. Automatic Configuration
 
-When KATO starts, it reads `KATO_ARCHITECTURE_MODE` and automatically configures:
+When KATO starts, it reads `KATO_ARCHITECTURE_MODE` and automatically configures the hybrid architecture:
 
-**MongoDB Mode** (`mongodb` or unset):
-```python
-PatternSearcher(
-    kb_id='kb',
-    max_predictions=100,
-    recall_threshold=0.1,
-    use_token_matching=True
-)
-# Uses MongoDB for all operations
-```
-
-**Hybrid Mode** (`hybrid`):
 ```python
 PatternSearcher(
     kb_id='kb',
@@ -108,15 +55,12 @@ PatternSearcher(
     clickhouse_client=clickhouse,
     redis_client=redis
 )
-# Uses ClickHouse/Redis for filtering, MongoDB for fallback
+# Uses ClickHouse for pattern storage, Redis for session/metadata
 ```
 
-### 3. Graceful Fallback
+### 3. Required Services
 
-If hybrid mode is enabled but ClickHouse/Redis are not available:
-- System logs warning
-- Automatically falls back to MongoDB mode
-- No errors or service disruption
+KATO requires ClickHouse and Redis to be available. If either service is unavailable, KATO will fail to start with a clear error message.
 
 ## Complete Workflow for Testing
 
@@ -127,58 +71,13 @@ If hybrid mode is enabled but ClickHouse/Redis are not available:
 
 # 2. Wait for services to be healthy
 ./start.sh status
-
-# 3. Verify MongoDB mode (default)
-./start.sh mode
-```
-
-### Migrate to Hybrid (One Time)
-```bash
-# 1. Switch to hybrid mode
-./start.sh mode hybrid
-
-# 2. Run migrations
-python scripts/migrate_mongodb_to_clickhouse.py \
-    --mongo-url mongodb://localhost:27017 \
-    --clickhouse-host localhost \
-    --clickhouse-port 8123
-
-python scripts/migrate_mongodb_to_redis.py \
-    --mongo-url mongodb://localhost:27017 \
-    --redis-host localhost \
-    --redis-port 6379
-
-# 3. Verify hybrid mode is active
-./start.sh logs kato | grep -i "hybrid"
-# Should see: "Hybrid architecture mode enabled"
-# Should see: "✓ Hybrid architecture configured successfully"
 ```
 
 ### Performance Testing
 ```bash
-# Test MongoDB mode
-./start.sh mode mongodb
-# Run benchmarks...
-
-# Test hybrid mode
+# Run benchmarks with hybrid architecture
 ./start.sh mode hybrid
 # Run benchmarks...
-
-# Compare results
-```
-
-### Switching During Development
-```bash
-# Working on MongoDB code
-./start.sh mode mongodb
-# ... test changes ...
-
-# Working on hybrid code
-./start.sh mode hybrid
-# ... test changes ...
-
-# Check current mode anytime
-./start.sh mode
 ```
 
 ## Default Configuration (Hybrid Mode)
@@ -247,7 +146,7 @@ cat .env
 ./start.sh logs kato | grep -i "architecture mode"
 ```
 
-### Hybrid Mode Falls Back to MongoDB
+### ClickHouse or Redis Unavailable
 ```bash
 # Check ClickHouse availability
 curl http://localhost:8123/ping
@@ -261,6 +160,8 @@ docker exec kato-redis redis-cli ping
 ./start.sh logs kato | grep -i "hybrid"
 ```
 
+KATO fails hard if ClickHouse or Redis is unavailable. Both services are required.
+
 ### Data Not Migrated
 ```bash
 # Check ClickHouse has data
@@ -273,35 +174,6 @@ docker exec kato-redis redis-cli DBSIZE
 python scripts/migrate_mongodb_to_clickhouse.py
 python scripts/migrate_mongodb_to_redis.py
 ```
-
-## Strict Mode (Development)
-
-For development and troubleshooting, enable strict mode to **fail hard** instead of gracefully falling back:
-
-```bash
-# Add to .env file
-echo "KATO_STRICT_MODE=true" >> .env
-
-# Restart service
-./start.sh restart kato
-
-# Or set inline for one-time testing
-KATO_STRICT_MODE=true docker compose up -d kato
-```
-
-**Strict Mode Behavior:**
-- ❌ Hybrid mode initialization errors → **Service fails to start**
-- ❌ ClickHouse unavailable → **RuntimeError raised**
-- ❌ Redis unavailable → **RuntimeError raised**
-- ❌ Empty patterns_data table → **RuntimeError raised**
-- ✅ Forces you to fix issues immediately
-- ✅ No silent fallbacks hiding problems
-
-**When to Use:**
-- ✅ Development and testing
-- ✅ Troubleshooting hybrid mode issues
-- ✅ CI/CD validation
-- ❌ Production (use default graceful fallback)
 
 ## Detailed Error Messages
 
@@ -435,19 +307,7 @@ Performance: 100-300x improvement expected
 ============================================================
 ```
 
-### Failed Hybrid Initialization (Graceful Fallback)
-```bash
-./start.sh logs kato | grep -A 5 "FALLING BACK"
-```
-
-**Expected Output:**
-```
-⚠️  FALLING BACK TO MONGODB MODE
-Set KATO_STRICT_MODE=true to fail instead of fallback
-MongoDB architecture mode active
-```
-
-### Failed Hybrid Initialization (Strict Mode)
+### Failed Hybrid Initialization
 ```bash
 ./start.sh logs kato | tail -50
 ```
@@ -457,11 +317,10 @@ MongoDB architecture mode active
 ============================================================
 HYBRID ARCHITECTURE INITIALIZATION FAILED
 ============================================================
-Error: ClickHouse required in strict mode but not available
+Error: ClickHouse/Redis required but not available
 Full traceback:
   [stack trace...]
 ============================================================
-STRICT MODE: Failing hard instead of falling back
 RuntimeError: Hybrid mode required but initialization failed
 ```
 
@@ -469,32 +328,9 @@ RuntimeError: Hybrid mode required but initialization failed
 
 | Variable | Values | Default | Description |
 |----------|--------|---------|-------------|
-| `KATO_ARCHITECTURE_MODE` | `mongodb`, `hybrid` | `mongodb` | Architecture mode selection |
-| `KATO_STRICT_MODE` | `true`, `false` | `false` | Fail hard on hybrid errors (development) |
-
-## Benefits of Mode Switching
-
-### For Development
-- Test both implementations easily
-- Compare performance side-by-side
-- Debug mode-specific issues
-- No code changes required
-
-### For Production
-- Start with stable MongoDB mode
-- Migrate to hybrid incrementally
-- Roll back instantly if issues
-- Run A/B tests
-
-### For Benchmarking
-- Fair performance comparisons
-- Isolate infrastructure changes
-- Validate optimization claims
-- Generate comparison reports
+| `KATO_ARCHITECTURE_MODE` | `hybrid` | `hybrid` | Architecture mode (hybrid is the only supported mode) |
 
 ## See Also
 
 - **HYBRID_ARCHITECTURE.md** - Complete hybrid mode documentation
 - **start.sh** - Service management script
-- **scripts/migrate_mongodb_to_clickhouse.py** - ClickHouse migration
-- **scripts/migrate_mongodb_to_redis.py** - Redis migration

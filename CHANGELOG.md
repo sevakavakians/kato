@@ -7,6 +7,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+- **MongoDB Dead Code**: Removed `connection_pool.py`, `MongoDBConfig`, `DatabaseManager`, and pymongo imports
+- **MongoDB Fallback Logic**: Hybrid architecture (ClickHouse + Redis) is now the only mode; no MongoDB fallback
+
+### Changed
+- Default `KATO_ARCHITECTURE_MODE` changed from `mongodb` to `hybrid`
+- `update_pattern()` and `delete_pattern()` now use ClickHouse/Redis instead of MongoDB APIs
+
+### Documentation
+- Fixed README.md: updated container tags (v2.0.0 → v3.4.0), test counts (185 → 445+), broken doc links
+- Fixed ARCHITECTURE_DIAGRAM.md: single instance on port 8000, correct ClickHouse columns, added FilterPipelineExecutor
+- Updated MODE_SWITCHING.md: removed MongoDB mode, hybrid is the only architecture
+- Updated known-issues.md: refreshed test counts and removed stale September 2025 issues
+
+## [3.4.0] - 2026-03-15
+
+### Added
+- **Database Authentication**: Optional authentication support for ClickHouse, Redis, and Qdrant
+
+### Fixed
+- Prevent empty Qdrant API key from blocking all vector operations
+
+## [3.3.1] - 2026-03-10
+
+### Fixed
+- Minor stability improvements
+
+## [3.3.0] - 2026-02-20
+
+### Added
+- **Redis OOM Protection**: Comprehensive memory monitoring and Redis protection
+- **Manager Enhancements**: Memory monitoring command for kato-manager.sh
+- **Request Limit**: Increased uvicorn request limit from 10k to 100k for training workloads
+
+### Fixed
+- Use `_run_async_in_sync` for vector sync wrappers to prevent event loop crash
+- Recreate ClickHouse schema after clean-data command
+
+## [3.2.1] - 2026-01-28
+
+### Fixed
+- Prevent ClickHouse system log bloat causing memory exhaustion
+
+### Added
+- Semantic version display in kato-manager.sh status command
+
+## [3.2.0] - 2026-01-15
+
+### Added
+- **Single-Symbol Predictions**: 1+ STM prediction support with fast path optimization (previously required 2+ symbols)
+
+### Fixed
+- Remove DEBUG prefixes from production INFO-level logs
+
+## [3.1.2] - 2025-12-20
+
+### Fixed
+- Remove DEBUG prefixes from production INFO-level logs
+
+## [3.1.1] - 2025-12-16
+
+### Fixed
+- Resolve critical deployment configuration bugs for fresh installations
+- Auto-create Docker network in deployment package
+
 ## [3.1.0] - 2025-12-12
 
 ### Added
@@ -107,6 +172,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version History
 
+- **3.4.0** (2026-03-15): Database authentication support
+- **3.3.0** (2026-02-20): Redis OOM protection, memory monitoring
+- **3.2.0** (2026-01-15): Single-symbol predictions, ClickHouse memory fix
+- **3.1.0** (2025-12-12): Fuzzy token matching with RapidFuzz
+- **3.0.2** (2025-11-13): Container image versioning
 - **2.0.0** (2025-10-31): Major architecture modernization, GPU support, performance optimizations
 - **1.0.0** (2024-09-15): Initial public release
 

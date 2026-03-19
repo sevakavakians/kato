@@ -1,13 +1,10 @@
 # Known Issues and Bugs
 
-Last Updated: 2025-09-06
+Last Updated: 2026-03-19
 
 ## Test Suite Status ✅
-**Current Status**: 198 tests passing, 1 skipped (~99.5% pass rate)
-- All unit tests passing (142 passed, 1 skipped)
-- All integration tests passing (19 passed)
-- All API tests passing (32 passed)
-- All performance tests passing (5 passed)
+**Current Status**: 445+ tests passing, 2 skipped
+- All test suites passing
 
 ## Critical Issues 🔴
 *None at this time - all major functionality working correctly*
@@ -17,35 +14,7 @@ Last Updated: 2025-09-06
 
 ## Medium Priority Issues 🟡
 
-### 1. Analytics Service Not Starting
-**Status**: Active  
-**Severity**: Medium  
-**Location**: Docker Compose configuration
-
-**Description**:
-- Third KATO instance (analytics on port 8003) not starting
-- Primary (8001) and Testing (8002) instances work correctly
-- Does not affect core functionality
-
-**Configuration Details**:
-- Analytics instance has different settings:
-  - MAX_PATTERN_LENGTH=50 (auto-learns after 50 observations)
-  - PERSISTENCE=10 (longer memory retention)
-  - RECALL_THRESHOLD=0.3 (higher matching threshold)
-- Intended for specialized analytics workloads
-
-**Impact**:
-- Analytics instance unavailable for multi-instance testing
-- Can use Primary and Testing instances for all functionality
-
-**Next Steps**:
-- Investigate docker compose.yml configuration for analytics service
-- Check port conflicts or resource constraints
-- Verify if analytics-specific settings are causing startup issues
-
----
-
-### 2. One Test Consistently Skipped
+### 1. One Test Consistently Skipped
 **Status**: Active  
 **Severity**: Low  
 **Location**: `tests/tests/unit/test_determinism_preservation.py`
@@ -59,7 +28,7 @@ Last Updated: 2025-09-06
 
 ## Low Priority Issues 🟢
 
-### 3. Docker Compose Version Warning
+### 2. Docker Compose Version Warning
 **Status**: Active  
 **Severity**: Minimal  
 **Location**: `docker compose.yml` files
@@ -75,29 +44,21 @@ the attribute `version` is obsolete, it will be ignored
 
 ---
 
-### 4. Redis Cache Service (Optional)
-**Status**: Not Configured  
-**Severity**: Low  
+### 3. Redis is Required (v3.0+)
+**Status**: By Design
+**Severity**: Informational
 **Location**: Configuration
 
 **Description**:
-- Redis caching is available but not enabled by default
-- System works perfectly without Redis
-- Can be enabled via REDIS_ENABLED environment variable
-
-**To Enable**:
-```yaml
-environment:
-  - REDIS_ENABLED=true
-  - REDIS_HOST=redis
-  - REDIS_PORT=6379
-```
+- Redis is a **required** service in KATO v3.0+ (ClickHouse + Redis hybrid architecture)
+- Redis handles session management, pattern metadata, and caching
+- KATO will fail to start if Redis is unavailable
 
 ---
 
 ## Performance Considerations 📊
 
-### 5. Vector Search Accuracy Trade-offs
+### 4. Vector Search Accuracy Trade-offs
 **Status**: By Design  
 **Severity**: Informational  
 
@@ -114,7 +75,7 @@ environment:
 
 ## Configuration Notes 📝
 
-### 6. Environment Variable Loading
+### 5. Environment Variable Loading
 **Status**: Resolved  
 **Implementation**: Application Startup Pattern
 
@@ -130,7 +91,7 @@ See [Configuration Management](CONFIGURATION_MANAGEMENT.md) for details.
 
 ## Feature Enhancements (Future) 💡
 
-### 7. GPU Acceleration
+### 6. GPU Acceleration
 **Status**: Prepared but Not Active  
 **Priority**: Low  
 
@@ -145,7 +106,7 @@ See [Configuration Management](CONFIGURATION_MANAGEMENT.md) for details.
 
 ---
 
-### 8. Additional Vector Database Backends
+### 7. Additional Vector Database Backends
 **Status**: Architecture Ready
 **Priority**: Low
 
@@ -178,7 +139,7 @@ Factory pattern can be implemented if needed
 ### Test Suite Failures
 **Status**: RESOLVED
 - Previously: 102 failures (~46% pass rate)
-- Currently: 0 failures (~99.5% pass rate)
+- Currently: 0 failures (445+ tests passing)
 - All pattern handling tests passing
 - All memory management tests passing
 - All API tests passing
@@ -205,7 +166,7 @@ Factory pattern can be implemented if needed
 - Tests run in local Python environment
 - Each test gets unique session_id for isolation
 - Services must be running before tests
-- ~82 seconds for full test suite
+- ~590 seconds (10 min) for full test suite
 
 ---
 
@@ -233,10 +194,13 @@ Factory pattern can be implemented if needed
 - ✅ Phase 1: Structured Logging and Error Handling
 - ✅ Phase 2: Type Hints and Documentation
 - ✅ Phase 3: Configuration Management System
+- ✅ ClickHouse + Redis Hybrid Architecture (v3.0)
+- ✅ Stateless Processor Architecture (v3.0)
+- ✅ Database Authentication Support (v3.4)
 
 ### System Health
-- **Test Coverage**: ~99.5% (198/199 tests passing)
+- **Test Coverage**: 445+ tests passing
 - **API Stability**: All endpoints functional
-- **Performance**: 10-100x improvement with Qdrant
+- **Performance**: 100-300x improvement with ClickHouse/Redis hybrid + Qdrant
 - **Configuration**: Fully managed with Pydantic
 - **Documentation**: Comprehensive and up-to-date

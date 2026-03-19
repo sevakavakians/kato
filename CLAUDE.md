@@ -38,12 +38,12 @@ KATO (Knowledge Abstraction for Traceable Outcomes) is a deterministic memory an
 See [docs/HYBRID_ARCHITECTURE.md](docs/HYBRID_ARCHITECTURE.md) for complete details.
 
 ### Stateless Processor Architecture (v3.0+)
-**IMPORTANT**: KATO processors use a **stateless, functional programming pattern**:
-- **No Instance Mutations**: Processor methods never mutate instance variables
+**IMPORTANT**: KATO processors use a **externally stateless architecture** with an internal bridge pattern:
+- **Externally Stateless**: API contract is stateless — session state passed in/out per request
+- **Bridge Pattern Internally**: Session state (STM, emotives, metadata) is temporarily loaded into processor instance variables for the duration of a request, then extracted back to session state. This is marked with `BRIDGE:` comments and `TODO (Phase 1.6/1.7)` for future refactoring.
 - **Config-as-Parameter**: Configuration passed as parameters, not stored in processor state
-- **State Passed Explicitly**: Session state passed as input, new state returned as output
-- **True Concurrency**: No locks required, unlimited concurrent sessions per node_id
-- **Horizontal Scalability**: Processors are fully stateless and can be scaled horizontally
+- **True Concurrency**: No locks required, unlimited concurrent sessions per node_id (because each request loads/unloads its own state)
+- **Horizontal Scalability**: Processors can be scaled horizontally
 
 **Pattern**:
 ```python
@@ -188,8 +188,8 @@ POST /sessions/{session_id}/config
 ## Key Behavioral Properties (Quick Reference)
 
 ### Critical Rules
-1. **Minimum Sequence Length**: 2+ strings total in STM required for predictions
-2. **Alphanumeric Sorting**: Strings sorted within events (configurable)
+1. **Minimum Sequence Length**: 1+ strings in STM required for predictions (single-symbol uses fast path via `_predict_single_symbol_fast`)
+2. **Alphanumeric Sorting**: Strings sorted within events (auto-toggled based on `use_token_matching`; token-level=sort on, character-level=sort off)
 3. **Deterministic**: Same inputs → same outputs (always)
 4. **Session Isolation**: Each session has isolated STM, shared LTM per node_id
 5. **Config-as-Parameter**: Configuration passed as parameters (not mutated)

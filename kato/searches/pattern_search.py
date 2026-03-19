@@ -206,27 +206,50 @@ class InformationExtractor:
             # Build fuzzy matching map: state_token -> (pattern_token, similarity)
             fuzzy_matches = {}
 
-            for state_token in state:
-                best_match = None
-                best_similarity = 0.0
+            if RAPIDFUZZ_AVAILABLE and pattern:
+                # Use RapidFuzz batch API: O(n×m) in C instead of Python
+                for state_token in state:
+                    result = process.extractOne(
+                        state_token, pattern,
+                        scorer=fuzz.ratio,
+                        score_cutoff=fuzzy_token_threshold * 100
+                    )
+                    if result:
+                        best_match, score, _ = result
+                        best_similarity = score / 100.0
+                        fuzzy_matches[state_token] = (best_match, best_similarity)
+                        matching_intersection.append(state_token)
 
-                for pattern_token in pattern:
-                    token_similarity = self._fuzzy_match_tokens(state_token, pattern_token)
-                    if token_similarity >= fuzzy_token_threshold and token_similarity > best_similarity:
-                        best_match = pattern_token
-                        best_similarity = token_similarity
+                        # Track anomaly if not exact match
+                        if state_token != best_match:
+                            anomalies.append({
+                                'observed': state_token,
+                                'expected': best_match,
+                                'similarity': best_similarity
+                            })
+            else:
+                # Fallback to manual nested loop
+                for state_token in state:
+                    best_match = None
+                    best_similarity = 0.0
 
-                if best_match:
-                    fuzzy_matches[state_token] = (best_match, best_similarity)
-                    matching_intersection.append(state_token)
+                    for pattern_token in pattern:
+                        token_similarity = self._fuzzy_match_tokens(state_token, pattern_token)
+                        if token_similarity >= fuzzy_token_threshold and token_similarity > best_similarity:
+                            best_match = pattern_token
+                            best_similarity = token_similarity
 
-                    # Track anomaly if not exact match
-                    if state_token != best_match:
-                        anomalies.append({
-                            'observed': state_token,
-                            'expected': best_match,
-                            'similarity': best_similarity
-                        })
+                    if best_match:
+                        fuzzy_matches[state_token] = (best_match, best_similarity)
+                        matching_intersection.append(state_token)
+
+                        # Track anomaly if not exact match
+                        if state_token != best_match:
+                            anomalies.append({
+                                'observed': state_token,
+                                'expected': best_match,
+                                'similarity': best_similarity
+                            })
 
             # Build a simple matcher for temporal region extraction
             # Use pattern positions of matched tokens
@@ -1232,6 +1255,8 @@ class PatternSearcher:
         """
         Build predictions for a batch of results.
 
+        Uses batched Redis metadata loading to reduce round-trips.
+
         Args:
             batch: Batch of match results
             stm_events: Original event-structured STM for calculating event-aligned missing/extras
@@ -1241,6 +1266,9 @@ class PatternSearcher:
         """
         predictions = []
 
+        if not batch:
+            return predictions
+
         # Import RedisWriter for loading pattern metadata
         from kato.storage.redis_writer import RedisWriter
 
@@ -1249,35 +1277,39 @@ class PatternSearcher:
         if self.redis_client:
             redis_writer = RedisWriter(self.kb_id, self.redis_client)
 
+        if self.filter_executor is None:
+            raise RuntimeError("FilterPipelineExecutor not initialized - hybrid architecture required")
+
+        # Pre-load all pattern metadata in a single batch call
+        pattern_hashes = []
         for result in batch:
-            if len(result) >= 9:  # Ensure we have all required fields (including anomalies)
+            if len(result) >= 9:
+                pattern_hashes.append(result[0])  # pattern_hash is first element
+
+        metadata_batch = {}
+        if redis_writer and pattern_hashes:
+            metadata_batch = redis_writer.get_metadata_batch(pattern_hashes)
+
+        for result in batch:
+            if len(result) >= 9:
                 pattern_hash, pattern, matching_intersection, past, present, missing, extras, similarity, number_of_blocks, anomalies = result[:10]
-
-                # Fetch pattern data from ClickHouse + Redis (hybrid architecture REQUIRED)
-                pattern_data = None
-
-                if self.filter_executor is None:
-                    raise RuntimeError("FilterPipelineExecutor not initialized - hybrid architecture required")
 
                 # Hybrid architecture: pattern data already in filter_executor cache from pipeline
                 pattern_dict = self.filter_executor.patterns_cache.get(pattern_hash, {})
                 if pattern_dict:
-                    # Load metadata (frequency, emotives, metadata) from Redis
-                    metadata = {}
-                    if redis_writer:
-                        metadata = redis_writer.get_metadata(pattern_hash)
+                    # Use pre-loaded metadata from batch call
+                    metadata = metadata_batch.get(pattern_hash, {'name': pattern_hash, 'frequency': 1})
 
                     # Reconstruct pattern_data dict for Prediction object
                     pattern_data = {
                         'name': pattern_hash,
                         'pattern_data': pattern_dict.get('pattern_data', []),
                         'length': pattern_dict.get('length', 0),
-                        'frequency': metadata.get('frequency', 1),  # Load from Redis
-                        'emotives': metadata.get('emotives', {}),   # Load emotives from Redis
-                        'metadata': metadata.get('metadata', {})    # Load metadata from Redis
+                        'frequency': metadata.get('frequency', 1),
+                        'emotives': metadata.get('emotives', {}),
+                        'metadata': metadata.get('metadata', {})
                     }
 
-                if pattern_data:
                     pred = Prediction(
                         pattern_data,
                         matching_intersection,

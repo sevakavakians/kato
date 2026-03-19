@@ -10,13 +10,13 @@ Key Features:
 - Cache global symbol probabilities with incremental updates
 - Atomic cache operations for thread safety
 - Configurable TTL and cache sizes
-- Fallback to MongoDB when cache misses
+- Fallback to backing store when cache misses
 - Cache invalidation strategies for data consistency
 
 Expected Performance Gains:
 - 80% reduction in pattern loading time
 - 3-5x throughput increase for pattern queries
-- Reduced MongoDB load for read operations
+- Reduced database load for read operations
 """
 
 import json
@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 import redis.asyncio as redis
-from pymongo.collection import Collection
+from typing import Any as Collection  # Was pymongo.Collection; now duck-typed interface from knowledge_base.py
 from redis.asyncio import Redis
 
 logger = logging.getLogger('kato.storage.pattern_cache')
@@ -59,8 +59,8 @@ class PatternCache:
     """
     Redis-based caching layer for KATO patterns and symbols.
 
-    Provides high-performance caching with automatic fallback to MongoDB
-    when cache misses occur. Implements intelligent cache warming and
+    Provides high-performance caching with automatic fallback to the backing
+    store when cache misses occur. Implements intelligent cache warming and
     invalidation strategies.
     """
 

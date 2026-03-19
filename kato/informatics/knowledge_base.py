@@ -374,14 +374,13 @@ class SuperKnowledgeBase:
                 # No filtering needed - store raw list as rolling window
 
             # Check if pattern already exists in Redis
-            logger.info(f"[HYBRID] Checking if pattern exists in Redis: {pattern_object.name}")
             existing_frequency = self.redis_writer.get_frequency(pattern_object.name)
-            logger.info(f"[HYBRID] Existing frequency: {existing_frequency}")
+            logger.debug(f"[HYBRID] Existing frequency for {pattern_object.name}: {existing_frequency}")
 
             if existing_frequency > 0:
                 # Pattern exists - increment frequency
                 self.redis_writer.increment_frequency(pattern_object.name)
-                logger.info(f"[HYBRID] Incremented frequency for pattern {pattern_object.name}")
+                logger.debug(f"[HYBRID] Incremented frequency for pattern {pattern_object.name}")
 
                 # Update/merge emotives and metadata if provided
                 if emotives or metadata:
@@ -429,83 +428,49 @@ class SuperKnowledgeBase:
                     )
                     logger.debug(f"Updated emotives (len={len(updated_emotives)}) and metadata for pattern {pattern_object.name}")
 
-                # Update symbol statistics (pattern seen again)
-                from itertools import chain
-                from collections import Counter
-
-                # Flatten pattern_data to get all symbols
+                # Update symbol statistics (pattern seen again) - batched pipeline
                 all_symbols = list(chain(*pattern_object.pattern_data))
-                symbol_count = len(all_symbols)
-
-                # Count occurrences of each symbol in this pattern
                 symbol_counts = Counter(all_symbols)
 
-                # Increment symbol frequency for each symbol by its count in pattern
-                for symbol, count in symbol_counts.items():
-                    self.redis_writer.increment_symbol_frequency(symbol, count)
-                    # Ensure symbol-to-pattern mapping exists (idempotent operation)
-                    self.redis_writer.add_symbol_to_pattern_mapping(symbol, pattern_object.name)
-                    logger.debug(f"[HYBRID] Incremented symbol frequency for {symbol} by {count}")
-
-                # Increment global symbol count (pattern seen again)
-                self.redis_writer.increment_global_symbol_count(symbol_count)
-                logger.debug(f"[HYBRID] Updated symbol stats: {len(symbol_counts)} unique symbols, {symbol_count} total")
+                self.redis_writer.batch_update_symbol_stats(
+                    symbol_counts=symbol_counts,
+                    pattern_name=pattern_object.name,
+                    is_new_pattern=False,
+                    total_symbol_count=len(all_symbols)
+                )
+                logger.debug(f"[HYBRID] Updated symbol stats: {len(symbol_counts)} unique symbols, {len(all_symbols)} total")
 
                 return False  # Not a new pattern
 
             else:
                 # New pattern - write to both ClickHouse and Redis
-                logger.info(f"[HYBRID] Writing NEW pattern to ClickHouse: {pattern_object.name}")
-                # Write pattern data to ClickHouse
                 self.clickhouse_writer.write_pattern(pattern_object)
-                logger.info(f"[HYBRID] ClickHouse write completed for {pattern_object.name}")
 
                 # Enforce persistence window for NEW patterns (same as re-learned patterns)
                 trimmed_emotives = emotives if emotives else []
-                logger.info(f"[HYBRID] NEW pattern emotives before trim: len={len(trimmed_emotives)}, persistence={self.persistence}")
                 if isinstance(trimmed_emotives, list) and len(trimmed_emotives) > self.persistence:
-                    trimmed_emotives = trimmed_emotives[-self.persistence:]  # Keep last N entries
-                    logger.info(f"[HYBRID] Trimmed emotives from {len(emotives)} to {self.persistence} entries for NEW pattern {pattern_object.name}")
-                else:
-                    logger.info(f"[HYBRID] No trim needed, len={len(trimmed_emotives)} <= persistence={self.persistence}")
+                    trimmed_emotives = trimmed_emotives[-self.persistence:]
+                    logger.debug(f"[HYBRID] Trimmed emotives from {len(emotives)} to {self.persistence} entries for NEW pattern {pattern_object.name}")
 
                 # Write metadata to Redis
-                logger.info(f"[HYBRID] Writing metadata to Redis: {pattern_object.name}")
                 self.redis_writer.write_metadata(
                     pattern_name=pattern_object.name,
                     frequency=1,
-                    emotives=trimmed_emotives,  # Store as list (rolling window enforced)
+                    emotives=trimmed_emotives,
                     metadata=metadata if metadata else {}
                 )
-                logger.info(f"[HYBRID] Redis write completed for {pattern_object.name}")
 
-                # Update symbol statistics for new pattern
-                from itertools import chain
-                from collections import Counter
-
-                # Flatten pattern_data to get all symbols
+                # Update symbol statistics for new pattern - batched pipeline
                 all_symbols = list(chain(*pattern_object.pattern_data))
-                symbol_count = len(all_symbols)
-
-                # Count occurrences of each symbol in this pattern
                 symbol_counts = Counter(all_symbols)
 
-                # For NEW pattern: update both frequency and pattern_member_frequency
-                for symbol, count in symbol_counts.items():
-                    # Increment symbol frequency by count (how many times it appears)
-                    self.redis_writer.increment_symbol_frequency(symbol, count)
-                    # Increment pattern_member_frequency by 1 (this pattern contains this symbol)
-                    self.redis_writer.increment_pattern_member_frequency(symbol, 1)
-                    # Add symbol-to-pattern mapping for fast single-symbol lookups
-                    self.redis_writer.add_symbol_to_pattern_mapping(symbol, pattern_object.name)
-                    logger.debug(f"[HYBRID] Tracked symbol {symbol}: freq+{count}, pmf+1, added to index")
-
-                # Update global totals for new pattern
-                self.redis_writer.increment_global_symbol_count(symbol_count)
-                self.redis_writer.increment_global_pattern_count(1)
-                # Increment unique pattern count (only for NEW patterns)
-                self.redis_writer.increment_unique_pattern_count(1)
-                logger.debug(f"[HYBRID] Updated global totals: {len(symbol_counts)} unique symbols, {symbol_count} total, +1 pattern, +1 unique")
+                self.redis_writer.batch_update_symbol_stats(
+                    symbol_counts=symbol_counts,
+                    pattern_name=pattern_object.name,
+                    is_new_pattern=True,
+                    total_symbol_count=len(all_symbols)
+                )
+                logger.debug(f"[HYBRID] Updated global totals: {len(symbol_counts)} unique symbols, {len(all_symbols)} total, +1 pattern, +1 unique")
 
                 logger.info(f"[HYBRID] Successfully learned new pattern {pattern_object.name} to ClickHouse + Redis")
                 return True  # New pattern

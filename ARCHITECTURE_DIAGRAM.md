@@ -16,14 +16,13 @@ graph TB
 
     %% Docker Infrastructure Layer
     subgraph "Docker Infrastructure"
-        subgraph "KATO Instances"
-            KATO1[KATO Primary<br/>Port: 8001<br/>processor_id: primary]
-            KATO2[KATO Testing<br/>Port: 8002<br/>processor_id: testing]
-            KATO3[KATO Analytics<br/>Port: 8003<br/>processor_id: analytics]
+        subgraph "KATO Service"
+            KATO1[KATO<br/>Port: 8000]
         end
 
         subgraph "Database Services"
             CLICKHOUSE[(ClickHouse<br/>Port: 8123/9000)]
+            REDIS[(Redis<br/>Port: 6379)]
             QDRANT[(Qdrant<br/>Port: 6333/6334)]
         end
 
@@ -37,6 +36,7 @@ graph TB
             FASTAPI[FastAPI Service<br/>+ CORS Middleware<br/>+ Request Logger]
             REST[REST Endpoints]
             WEBSOCKET[WebSocket Handler]
+            SESSION_MGR[RedisSessionManager<br/>Session Lifecycle]
         end
 
         %% Core Processing Layer
@@ -55,6 +55,7 @@ graph TB
         %% Search & Indexing Layer
         subgraph "Search & Indexing"
             PAT_SEARCH[PatternSearcher<br/>Pattern Matching]
+            FILTER[FilterPipelineExecutor<br/>Bloom→Length→MinHash→Jaccard→RapidFuzz]
             VEC_INDEX[VectorIndexer<br/>Vector Search]
             VEC_ENGINE[VectorSearchEngine<br/>Modern Search]
         end
@@ -97,8 +98,9 @@ graph TB
 
     FASTAPI --> REST
     FASTAPI --> WEBSOCKET
-    REST -->|async| KATO_PROC
-    WEBSOCKET -->|async| KATO_PROC
+    REST -->|async| SESSION_MGR
+    WEBSOCKET -->|async| SESSION_MGR
+    SESSION_MGR -->|session state| KATO_PROC
 
     KATO_PROC --> MEM_MGR
     KATO_PROC --> PAT_PROC
@@ -112,6 +114,7 @@ graph TB
     PAT_OPS --> VEC_PROC
 
     PAT_PROC --> PAT_SEARCH
+    PAT_SEARCH --> FILTER
     VEC_PROC --> VEC_INDEX
     VEC_INDEX --> VEC_ENGINE
 
@@ -138,8 +141,6 @@ graph TB
 
     %% Network Connections
     KATO1 ---|Docker Network| NETWORK
-    KATO2 ---|Docker Network| NETWORK
-    KATO3 ---|Docker Network| NETWORK
     CLICKHOUSE ---|Docker Network| NETWORK
     QDRANT ---|Docker Network| NETWORK
     REDIS ---|Docker Network| NETWORK
@@ -267,7 +268,7 @@ Database abstraction and management:
 - **Purpose**: Pattern data storage with high-performance filtering
 - **Table Structure**:
   - `patterns` - Learned patterns partitioned by kb_id
-  - Columns: name, kb_id, length, events, emotive_profile, metadata, observation_count
+  - Columns: kb_id, name, pattern_data, length, token_set, token_count, minhash_sig, lsh_bands, first_token, last_token, created_at, updated_at
 - **Indexing**: Primary key on (kb_id, name) with Bloom filter
 - **Partitioning**: By kb_id for node isolation
 - **Performance**: Billion-scale with multi-stage filter pipeline
@@ -356,7 +357,7 @@ Comprehensive configuration management:
 ### Isolation Mechanisms
 1. **Processor ID Isolation**: Each instance has unique processor_id
 2. **Database Isolation**: Separate collections/databases per processor
-3. **Lock-based Synchronization**: Processing lock ensures sequential operations
+3. **Stateless Processing**: Concurrent session handling without locks (state passed explicitly per request)
 
 ## Deployment Architecture
 

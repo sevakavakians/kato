@@ -1,20 +1,20 @@
 """
-Optimized MongoDB Aggregation Pipelines for KATO Pattern Processing
+Optimized Aggregation Pipelines for KATO Pattern Processing
 
-These pipelines replace simple find() queries with server-side aggregations
-for better performance and reduced data transfer.
+These pipelines provide server-side aggregations for pattern queries,
+used through the duck-typed collection interfaces from knowledge_base.py.
 """
 
 import logging
 from typing import Any, Optional
 
-from pymongo.collection import Collection
+from typing import Any as Collection  # Was pymongo.Collection; now duck-typed interface from knowledge_base.py
 
 logger = logging.getLogger(__name__)
 
 
 class AggregationPipelines:
-    """Optimized MongoDB aggregation pipelines for KATO pattern processing."""
+    """Optimized aggregation pipelines for KATO pattern processing."""
 
     @staticmethod
     def get_patterns_with_flattened_data(collection: Collection,
@@ -235,7 +235,7 @@ class AggregationPipelines:
 
 
 class OptimizedQueryManager:
-    """Manager class for coordinating optimized MongoDB queries."""
+    """Manager class for coordinating optimized queries."""
 
     def __init__(self, superkb):
         self.superkb = superkb

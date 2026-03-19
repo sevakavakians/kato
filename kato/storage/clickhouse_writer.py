@@ -9,8 +9,11 @@ Handles writing pattern data to ClickHouse patterns_data table with:
 """
 
 import logging
+from datetime import datetime
 from itertools import chain
 from typing import Any
+
+from datasketch import MinHash
 
 logger = logging.getLogger('kato.storage.clickhouse_writer')
 
@@ -51,8 +54,6 @@ class ClickHouseWriter:
             Exception: If write fails
         """
         try:
-            from datasketch import MinHash
-
             # Compute MinHash signature for LSH (100 permutations)
             minhash = MinHash(num_perm=100)
             for token in chain(*pattern_object.pattern_data):
@@ -77,7 +78,6 @@ class ClickHouseWriter:
             last_token = pattern_object.pattern_data[-1][-1] if pattern_object.pattern_data and pattern_object.pattern_data[-1] else ''
 
             # Prepare row for insertion (column order matches schema)
-            from datetime import datetime
             now = datetime.now()
 
             row = {

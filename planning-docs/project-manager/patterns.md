@@ -3,6 +3,24 @@
 
 ---
 
+## Optimization Patterns
+
+### 2026-03-19 - Redis Round-Trip Batching on Hot Paths
+
+**Pattern**: Individual Redis calls inside loops on learn/predict hot paths accumulate latency that far exceeds the cost of the logical work. A 50-symbol pattern was issuing 150+ sequential Redis round-trips where 1 pipeline suffices.
+
+**Discovery Trigger**: Systematic audit of `learnPattern()` and prediction-build code paths.
+
+**Resolution Pattern**: Introduce batch methods (`get_metadata_batch()`, `batch_update_symbol_stats()`) that collect all keys/values up-front and issue a single `pipeline()` execute. Pre-load all metadata before entering scoring loops rather than loading on demand.
+
+**Lesson**: Any loop that calls Redis (or any networked store) per iteration should be treated as a candidate for pipeline batching. The boundary is: collect keys → single pipeline → distribute results.
+
+**Complementary Gains**: Pairing pipeline batching with `@functools.cached_property` on hot computed attributes and module-level imports eliminates secondary CPU costs that become visible once network latency is removed.
+
+**Recurrence Risk**: Low for existing paths (now batched). Medium for future features — any new loop touching Redis should default to pipeline pattern from the start.
+
+---
+
 ## Bug Patterns
 
 ### 2026-03-17 - Compound Bug: Silent Failure in Async Context

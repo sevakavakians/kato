@@ -171,6 +171,109 @@ class RedisWriter:
             logger.error(f"Failed to get metadata for {pattern_name}: {e}")
             return {'name': pattern_name, 'frequency': 0}
 
+    def get_metadata_batch(self, pattern_names: list[str]) -> dict[str, dict]:
+        """
+        Retrieve metadata for multiple patterns in a single Redis pipeline call.
+
+        Batches 3N GETs (frequency, emotives, metadata) into 1 pipeline call,
+        reducing Redis round-trips by ~3x per pattern.
+
+        Args:
+            pattern_names: List of pattern name hashes
+
+        Returns:
+            Dictionary mapping pattern_name -> metadata dict (same format as get_metadata)
+        """
+        if not pattern_names:
+            return {}
+
+        try:
+            pipe = self.client.pipeline(transaction=False)
+
+            # Queue all GETs: for each pattern, get frequency, emotives, metadata
+            for name in pattern_names:
+                pipe.get(f"{self.kb_id}:frequency:{name}")
+                pipe.get(f"{self.kb_id}:emotives:{name}")
+                pipe.get(f"{self.kb_id}:metadata:{name}")
+
+            # Execute all at once
+            raw_results = pipe.execute()
+
+            # Parse results (3 values per pattern)
+            results = {}
+            for i, name in enumerate(pattern_names):
+                freq_val = raw_results[i * 3]
+                emotives_val = raw_results[i * 3 + 1]
+                metadata_val = raw_results[i * 3 + 2]
+
+                entry = {'name': name, 'frequency': int(freq_val) if freq_val else 0}
+                if emotives_val is not None:
+                    entry['emotives'] = json.loads(emotives_val)
+                if metadata_val is not None:
+                    entry['metadata'] = json.loads(metadata_val)
+
+                results[name] = entry
+
+            logger.debug(f"Batch loaded metadata for {len(results)} patterns")
+            return results
+
+        except Exception as e:
+            logger.error(f"Failed to batch get metadata for {len(pattern_names)} patterns: {e}")
+            # Fallback to individual calls
+            results = {}
+            for name in pattern_names:
+                results[name] = self.get_metadata(name)
+            return results
+
+    def batch_update_symbol_stats(self, symbol_counts: dict[str, int],
+                                   pattern_name: str,
+                                   is_new_pattern: bool,
+                                   total_symbol_count: int) -> None:
+        """
+        Batch all per-symbol Redis updates into a single pipeline call.
+
+        Replaces per-symbol loops of increment_symbol_frequency,
+        increment_pattern_member_frequency, and add_symbol_to_pattern_mapping
+        plus global counter updates.
+
+        Args:
+            symbol_counts: Dict mapping symbol -> count in pattern
+            pattern_name: Pattern name hash
+            is_new_pattern: True if this is a new pattern (updates pmf and global unique count)
+            total_symbol_count: Total number of symbols (sum of counts)
+        """
+        try:
+            pipe = self.client.pipeline(transaction=False)
+
+            for symbol, count in symbol_counts.items():
+                # Increment symbol frequency by count
+                pipe.incrby(f"{self.kb_id}:symbol:freq:{symbol}", count)
+                # Add symbol-to-pattern mapping (idempotent SET add)
+                pipe.sadd(f"{self.kb_id}:symbol_to_patterns:{symbol}", pattern_name)
+
+                if is_new_pattern:
+                    # Increment pattern_member_frequency by 1 (new pattern contains this symbol)
+                    pipe.incrby(f"{self.kb_id}:symbol:pmf:{symbol}", 1)
+
+            # Global counters
+            pipe.incrby(f"{self.kb_id}:global:total_symbols_in_patterns_frequencies", total_symbol_count)
+
+            if is_new_pattern:
+                pipe.incrby(f"{self.kb_id}:global:total_pattern_frequencies", 1)
+                pipe.incrby(f"{self.kb_id}:global:total_unique_patterns", 1)
+            else:
+                # Re-learned pattern: only increment pattern frequency total
+                # (not unique count, since pattern already exists)
+                pass
+
+            pipe.execute()
+            logger.debug(f"Batch updated symbol stats: {len(symbol_counts)} symbols, "
+                        f"is_new={is_new_pattern}, total_symbols={total_symbol_count}")
+
+        except Exception as e:
+            logger.error(f"Failed to batch update symbol stats for pattern {pattern_name}: {e}")
+            raise
+
     def delete_all_metadata(self) -> int:
         """
         Delete all keys for this kb_id.
@@ -223,17 +326,14 @@ class RedisWriter:
             Dictionary with total_symbols_in_patterns_frequencies, total_pattern_frequencies, and total_unique_patterns
         """
         try:
-            # Get total_symbols_in_patterns_frequencies
+            # Batch all 3 GETs into a single mget call
             symbols_key = f"{self.kb_id}:global:total_symbols_in_patterns_frequencies"
-            symbols_total = self.client.get(symbols_key)
-
-            # Get total_pattern_frequencies
             patterns_key = f"{self.kb_id}:global:total_pattern_frequencies"
-            patterns_total = self.client.get(patterns_key)
-
-            # Get total_unique_patterns (NEW)
             unique_patterns_key = f"{self.kb_id}:global:total_unique_patterns"
-            unique_patterns_total = self.client.get(unique_patterns_key)
+
+            symbols_total, patterns_total, unique_patterns_total = self.client.mget(
+                symbols_key, patterns_key, unique_patterns_key
+            )
 
             return {
                 'total_symbols_in_patterns_frequencies': int(symbols_total) if symbols_total else 0,

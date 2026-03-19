@@ -6,40 +6,32 @@ Provides functions to completely clear all databases for a specific processor_id
 import os
 from typing import Optional
 
-import pymongo
 import redis
 from qdrant_client import QdrantClient
 
 
-def clear_mongodb_for_processor(processor_id: str, mongo_url: Optional[str] = None):
+def clear_clickhouse_for_processor(processor_id: str, clickhouse_host: str = "localhost", clickhouse_port: int = 8123):
     """
-    Clear all MongoDB collections for a specific processor.
+    Clear ClickHouse patterns for a specific processor.
 
     Args:
         processor_id: The processor ID whose data to clear
-        mongo_url: MongoDB connection URL (defaults to environment variable)
+        clickhouse_host: ClickHouse host
+        clickhouse_port: ClickHouse HTTP port
     """
-    if not mongo_url:
-        mongo_url = os.environ.get('MONGO_BASE_URL', 'mongodb://localhost:27017')
-
     try:
-        client = pymongo.MongoClient(mongo_url)
-
-        # The database name is the processor_id
-        db = client[processor_id]
-
-        # Drop all collections in the database
-        for collection_name in db.list_collection_names():
-            db[collection_name].drop()
-            print(f"  Dropped MongoDB collection: {processor_id}.{collection_name}")
-
-        # Optionally drop the entire database
-        client.drop_database(processor_id)
-        print(f"  Dropped MongoDB database: {processor_id}")
-
+        import clickhouse_connect
+        client = clickhouse_connect.get_client(host=clickhouse_host, port=clickhouse_port)
+        client.command(f"ALTER TABLE kato.patterns_data DROP PARTITION '{processor_id}'")
+        print(f"  Dropped ClickHouse partition for: {processor_id}")
         client.close()
     except Exception as e:
-        print(f"  Warning: Failed to clear MongoDB for {processor_id}: {e}")
+        if "doesn't exist" in str(e).lower() or "not found" in str(e).lower():
+            print(f"  ClickHouse partition {processor_id} doesn't exist (nothing to drop)")
+        elif "Connection refused" in str(e):
+            print(f"  Info: ClickHouse not available for {processor_id}")
+        else:
+            print(f"  Warning: Failed to clear ClickHouse for {processor_id}: {e}")
 
 
 def clear_qdrant_for_processor(processor_id: str, qdrant_host: str = "localhost", qdrant_port: int = 6333):
@@ -109,15 +101,15 @@ def clear_redis_for_processor(processor_id: str, redis_host: str = "localhost", 
 
 def clear_all_databases_for_processor(processor_id: str):
     """
-    Clear all databases (MongoDB, Qdrant, Redis) for a specific processor.
+    Clear all databases (ClickHouse, Qdrant, Redis) for a specific processor.
 
     Args:
         processor_id: The processor ID to clear
     """
     print(f"\nClearing all databases for processor: {processor_id}")
 
-    # Clear MongoDB
-    clear_mongodb_for_processor(processor_id)
+    # Clear ClickHouse
+    clear_clickhouse_for_processor(processor_id)
 
     # Clear Qdrant
     clear_qdrant_for_processor(processor_id)
@@ -140,20 +132,18 @@ def verify_isolation(processor_id: str) -> bool:
     """
     is_isolated = True
 
-    # Check MongoDB
+    # Check ClickHouse
     try:
-        mongo_url = os.environ.get('MONGO_BASE_URL', 'mongodb://localhost:27017')
-        client = pymongo.MongoClient(mongo_url)
-        db = client[processor_id]
-
-        collections = db.list_collection_names()
-        if collections:
-            print(f"  WARNING: MongoDB has {len(collections)} collections for {processor_id}")
+        import clickhouse_connect
+        client = clickhouse_connect.get_client(host="localhost", port=8123)
+        result = client.query(f"SELECT COUNT(*) FROM kato.patterns_data WHERE kb_id = '{processor_id}'")
+        count = result.result_rows[0][0]
+        if count > 0:
+            print(f"  WARNING: ClickHouse has {count} patterns for {processor_id}")
             is_isolated = False
-
         client.close()
     except Exception as e:
-        print(f"  Could not verify MongoDB isolation: {e}")
+        print(f"  Could not verify ClickHouse isolation: {e}")
 
     # Check Qdrant
     try:
@@ -193,20 +183,18 @@ def cleanup_orphaned_data():
     """
     print("\nCleaning up orphaned test data...")
 
-    # Clean MongoDB
+    # Clean ClickHouse
     try:
-        mongo_url = os.environ.get('MONGO_BASE_URL', 'mongodb://localhost:27017')
-        client = pymongo.MongoClient(mongo_url)
-
-        # Find all test databases (start with test_ or cluster_)
-        for db_name in client.list_database_names():
-            if db_name.startswith(('test_', 'cluster_')):
-                client.drop_database(db_name)
-                print(f"  Dropped orphaned MongoDB database: {db_name}")
-
+        import clickhouse_connect
+        client = clickhouse_connect.get_client(host="localhost", port=8123)
+        result = client.query("SELECT DISTINCT kb_id FROM kato.patterns_data WHERE kb_id LIKE 'test_%'")
+        for row in result.result_rows:
+            kb_id = row[0]
+            client.command(f"ALTER TABLE kato.patterns_data DROP PARTITION '{kb_id}'")
+            print(f"  Dropped orphaned ClickHouse partition: {kb_id}")
         client.close()
     except Exception as e:
-        print(f"  Could not clean MongoDB: {e}")
+        print(f"  Could not clean ClickHouse: {e}")
 
     # Clean Qdrant
     try:

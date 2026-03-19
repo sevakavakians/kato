@@ -2,13 +2,12 @@
 Pytest fixtures for GPU tests.
 
 Provides isolated test fixtures for:
-- MongoDB connection and cleanup
+- In-memory mock storage for vocabulary
 - SymbolVocabularyEncoder instances
 - Test data generation
 """
 
 import pytest
-from pymongo import MongoClient
 
 from kato.gpu.encoder import SymbolVocabularyEncoder
 
@@ -26,51 +25,48 @@ if not GPU_AVAILABLE:
     )
 
 
-@pytest.fixture
-def mongodb():
-    """
-    MongoDB test database with automatic cleanup.
+class InMemoryCollection:
+    """In-memory mock for a MongoDB-like collection interface used by SymbolVocabularyEncoder."""
 
-    Provides a fresh MongoDB database for each test with complete isolation.
-    Database is cleared before and after each test.
+    def __init__(self):
+        self._data = {}
+
+    def find_one(self, query):
+        key = tuple(sorted(query.items()))
+        return self._data.get(key)
+
+    def update_one(self, query, update, upsert=False):
+        key = tuple(sorted(query.items()))
+        if key in self._data:
+            self._data[key].update(update.get('$set', {}))
+        elif upsert:
+            self._data[key] = {**dict(key), **update.get('$set', {})}
+        return type('UpdateResult', (), {'matched_count': 1 if key in self._data else 0, 'modified_count': 1})()
+
+
+@pytest.fixture
+def mock_metadata():
+    """
+    In-memory mock metadata collection with automatic cleanup.
+
+    Provides a fresh in-memory collection for each test with complete isolation.
 
     Yields:
-        MongoDB database object
-
-    Example:
-        def test_something(mongodb):
-            collection = mongodb.test_collection
-            collection.insert_one({'test': 'data'})
+        InMemoryCollection object
     """
-    # Use unique database name per test to avoid conflicts
-    import time
-    import uuid
-    db_name = f"test_gpu_{int(time.time()*1000)}_{str(uuid.uuid4())[:8]}"
-
-    client = MongoClient("mongodb://localhost:27017")
-    db = client[db_name]
-
-    # Clear before test (shouldn't be necessary for unique DB, but safe)
-    db.metadata.delete_many({})
-
-    yield db
-
-    # Cleanup after test
-    db.metadata.delete_many({})
-    client.drop_database(db_name)
-    client.close()
+    return InMemoryCollection()
 
 
 @pytest.fixture
-def encoder(mongodb):
+def encoder(mock_metadata):
     """
     Fresh SymbolVocabularyEncoder instance for each test.
 
-    Provides an encoder connected to isolated MongoDB database.
+    Provides an encoder connected to in-memory storage.
     Vocabulary is empty at start of each test.
 
     Args:
-        mongodb: MongoDB fixture (auto-injected)
+        mock_metadata: In-memory collection fixture (auto-injected)
 
     Returns:
         SymbolVocabularyEncoder instance
@@ -80,7 +76,7 @@ def encoder(mongodb):
             symbol_id = encoder.encode_symbol('test')
             assert symbol_id == 0
     """
-    return SymbolVocabularyEncoder(mongodb.metadata)
+    return SymbolVocabularyEncoder(mock_metadata)
 
 
 @pytest.fixture

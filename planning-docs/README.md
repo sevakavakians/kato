@@ -89,11 +89,11 @@ docker compose up -d --build
 ## Current System State
 
 **Status**: Stable and production-ready (maintenance mode)
-**Architecture**: FastAPI with direct processor embedding
-**Test Coverage**: 276+ tests with high pass rate
-**Performance**: ~10ms average response time
+**Architecture**: FastAPI with direct processor embedding (ClickHouse + Redis hybrid)
+**Test Coverage**: 445+ tests passing (2 pre-existing failures, 2 skipped)
+**Performance**: ~10ms average response time; Redis round-trips on learn/predict paths heavily batched
 **Code Quality**: 96% technical debt reduction achieved (6,315 → 67 ruff issues)
-**Last Major Update**: Technical Debt Phase 5 cleanup completed (2025-10-06)  
+**Last Major Update**: Multi-phase performance optimization — Redis batching, RapidFuzz batch API, cached properties (2026-03-19)
 
 ## Directory Structure
 ```

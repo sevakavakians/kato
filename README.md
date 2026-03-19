@@ -10,15 +10,25 @@
 
 ![KATO Crystal](assets/kato-graphic.png "KATO crystal")
 
+## Why KATO?
+
+*Because in AI, memory without traceability or understanding is just confusion.*
+
+KATO is intended to be the *Linux of AI*, providing not just open source code and configuration, but an analytical **cognitive computing** model that doesn’t require huge, power-hungry data centers. As an analytical model, KATO doesn’t require tremendous amounts of data to generate quality outcomes. Therefore, KATO models and agents can run locally, preserving privacy. Its deterministic machine learning algorithm is editable in real-time, guaranteeing the elimination of hallucinations and errors with each corrected pattern.
+
+KATO is developed to work in highly regulated and/or mission-critical problem domains from which traditional GPT-based solutions are restricted. KATO’s algorithms *and* its knowledge bases (*i.e.* trained data) is completely transparent and auditable - table-stakes for AI regulation.
+
 ## What is KATO?
 
-KATO is a **deterministic AI architecture** that provides transparent, explainable machine learning through pattern-based learning—an alternative approach to transformer architectures for applications requiring real-time learning, complete traceability, and computational efficiency without neural networks.
+KATO is a neuro-symbolic, **deterministic AI/ML architecture** that provides transparent, explainable machine learning through pattern-based learning—an alternative approach to transformer architectures for applications requiring real-time learning, complete traceability, and computational efficiency without neural networks.
 
-As an evolution of GAIuS (winner of Lockheed Martin's Sikorsky 8th Entrepreneurial Challenge Award in 2018), KATO inherits proven sensor-fusion capabilities and adheres to **[ExCITE AI principles](https://medium.com/@sevakavakians/what-is-excite-ai-712afd372af4)** (Explainable, Correctable, Incremental, Traceable, Efficient). This makes KATO an **ExCITE-capable prediction engine** uniquely suited for safety-critical and highly regulated verticals where transparency, traceability, and real-time correction are mandatory.
+The “neuro” in KATO’s neuro-symbolic expresses its *connectionist* nature, wherein KATO agents can consist of a network of cognitive processor nodes. These cognitive processors are not simple neural network nodes, but complete, deterministic coherent processes that efficiently emulate cognitive functionality, rather than expensively simulate brain functions by replicating brain structures - as is the artificial neural network approach.
+
+As an evolution of GAIuS (winner of Lockheed Martin's Sikorsky 8th Entrepreneurial Challenge Award in 2018), KATO inherits proven sensor-fusion capabilities and adheres to **[ExCITE AI principles](https://medium.com/@sevakavakians/what-is-excite-ai-712afd372af4)** (Explainable, Computable, Interpretable, Traceable, Editable). This makes KATO an **ExCITE-capable prediction engine** uniquely suited for safety-critical and highly regulated verticals where transparency, traceability, and real-time correction are mandatory.
 
 While transformer-based models (GPT, Claude, LLaMA) excel at language understanding and creative generation, they come with fundamental limitations that make them unsuitable for many production AI systems. KATO fills these critical gaps by providing a **symbolic, pattern-based learning architecture** that learns incrementally, operates deterministically, and maintains complete traceability—all while running on commodity CPUs.
 
-**KATO doesn't replace transformers—it complements them.** Use transformers for language understanding and reasoning; use KATO for deterministic memory, pattern prediction, and fact-based generation. Together, they form a powerful hybrid architecture that combines the best of both approaches.
+With the tremendous advances already made with transformer based architectures, **KATO isn't intended to replace transformers—it complements them.** Use transformers for language understanding and reasoning; use KATO for deterministic memory, pattern prediction, and fact-based generation. Together, they form a powerful hybrid architecture that combines the best of both approaches.
 
 ### Modern AI's Critical Limitations
 
@@ -755,6 +765,10 @@ See [Testing Guide](docs/developers/testing.md) for complete details.
 
 ## Documentation
 
+
+### 📚 Tutorials
+- [Jupyter Notebook Tutorials](https://github.com/sevakavakians/kato-tutorials) - Various dataset examples and repeatable usage patterns.
+
 ### 📚 Getting Started
 - [Quick Start Guide](docs/users/quick-start.md) - Get running in 5 minutes
 - [API Reference](docs/users/api-reference.md) - Complete endpoint documentation
@@ -834,7 +848,7 @@ docs/
 
 ## Architecture Overview
 
-### FastAPI Architecture (Current)
+### FastAPI Architecture
 KATO uses a simplified FastAPI architecture with embedded processors:
 
 ```

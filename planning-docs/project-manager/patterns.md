@@ -3,6 +3,30 @@
 
 ---
 
+## Documentation Correctness Patterns
+
+### 2026-03-19 - Documentation Drift During Multi-Phase Refactors
+
+**Pattern**: After a large architectural change (e.g., MongoDB → ClickHouse + Redis), documentation across 20+ files is updated in batches. Version-tagged items (container image tags, test counts, port numbers, column names) and behavioral claims (stateless model, minimum input lengths, sort behavior) are the most common drift points because they are easy to miss in bulk find-replace passes.
+
+**Discovery Trigger**: Systematic audit pass cataloguing every claim in README.md, ARCHITECTURE_DIAGRAM.md, CHANGELOG.md, CLAUDE.md, and operational docs against the actual running codebase.
+
+**Assumption → Reality Mappings Found**:
+- Assumed: container tags were `v2` in README — Reality: deployed images are `v3.4`
+- Assumed: test count was `185` — Reality: test suite has grown to `445+`
+- Assumed: processor is "pure stateless" — Reality: uses bridge pattern (instance exists, state passed as parameter)
+- Assumed: minimum STM requirement is "2+ strings" — Reality: "1+ strings" triggers predictions
+- Assumed: sort is always on — Reality: alphanumeric sort is configurable and auto-toggles
+- Assumed: CHANGELOG covered all releases — Reality: gap existed from v3.0 to v3.4
+
+**Resolution Pattern**: A dedicated audit pass comparing docs-as-written against code-as-deployed catches all of these. Key audit targets: (1) version numbers in quickstart examples, (2) test counts in status sections, (3) architectural claims in CLAUDE.md / ARCHITECTURE_DIAGRAM.md, (4) CHANGELOG completeness.
+
+**Lesson**: Schedule a documentation audit pass after each minor or major version bump, not only after major architectural refactors. Version-tagged claims in docs rot faster than architectural descriptions.
+
+**Recurrence Risk**: Medium — version tags and counts will drift again with the next performance or feature release unless the release checklist explicitly includes a docs-audit step.
+
+---
+
 ## Optimization Patterns
 
 ### 2026-03-19 - Redis Round-Trip Batching on Hot Paths
@@ -18,6 +42,24 @@
 **Complementary Gains**: Pairing pipeline batching with `@functools.cached_property` on hot computed attributes and module-level imports eliminates secondary CPU costs that become visible once network latency is removed.
 
 **Recurrence Risk**: Low for existing paths (now batched). Medium for future features — any new loop touching Redis should default to pipeline pattern from the start.
+
+---
+
+### 2026-03-19 - Multi-Layer Optimization: Storage Buffer + Precomputed Scores + Cache + Optional Hash
+
+**Pattern**: A second optimization pass on the same codebase surfaces a different tier of wins. After the first pass eliminated per-iteration Redis calls, the remaining costs were: (1) write amplification to ClickHouse on every `write_pattern()`, (2) redundant similarity recomputation inside prediction loops, (3) repeated symbol table loads across predictions, and (4) hash function overhead inside MinHash.
+
+**Discovery Trigger**: Systematic audit of write path (`write_pattern()`), search loop (`extract_prediction_info()`), and cache infrastructure (`_symbol_cache`/`_cache_valid` already existed but was not wired up).
+
+**Optimization Patterns Applied**:
+1. **Write buffering**: Collect rows in memory, flush at threshold. ClickHouse benefits far more from batch inserts than per-row inserts. The explicit `flush()` call at `learnPattern()` ensures freshness without sacrificing batch efficiency.
+2. **Precomputed intermediate values**: Pass already-computed scores across function boundaries rather than recomputing. Adding a `precomputed_similarity` parameter is low-risk and zero-overhead for callers that do not need it (pass `None`).
+3. **Read-through cache with explicit invalidation**: When a resource changes infrequently (symbol table only changes on learn/delete), cache it and invalidate on the mutating operations. The cache infrastructure already existed — the missing piece was wiring invalidation to the mutating methods.
+4. **Optional fast hash path**: SHA1 is cryptographically strong but unnecessarily slow for MinHash (which only needs uniform distribution, not collision resistance). Providing xxhash as an opt-in preserves backward compatibility while giving advanced deployments a ~3-5x hash speedup.
+
+**Lesson**: After a batching pass, the next tier of gains usually comes from: (a) write buffering, (b) eliminating redundant recomputation of already-known values across call boundaries, (c) activating dormant cache infrastructure, and (d) replacing over-specified primitives (cryptographic hash where non-cryptographic suffices).
+
+**Recurrence Risk**: Low for these specific paths. For future features: (a) always pass precomputed values across inner-loop call boundaries instead of recomputing, (b) check for unused cache fields before adding new caching infrastructure, (c) use non-cryptographic hashes for any similarity/bucketing use case.
 
 ---
 

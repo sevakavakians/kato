@@ -11,6 +11,7 @@ import logging
 from datasketch import MinHash, MinHashLSH
 
 from kato.filters.base import PatternFilter
+from kato.storage.clickhouse_writer import _MINHASH_HASHFUNC
 
 logger = logging.getLogger(__name__)
 
@@ -69,9 +70,13 @@ class MinHashFilter(PatternFilter):
             self.bands = self.num_hashes // self.rows
 
         # Compute STM MinHash signature and LSH bands
-        self.stm_minhash = MinHash(num_perm=self.num_hashes)
-        for token in self.stm_tokens:
-            self.stm_minhash.update(token.encode('utf-8'))
+        if _MINHASH_HASHFUNC:
+            self.stm_minhash = MinHash(num_perm=self.num_hashes, hashfunc=_MINHASH_HASHFUNC)
+        else:
+            self.stm_minhash = MinHash(num_perm=self.num_hashes)
+        encoded_tokens = [token.encode('utf-8') for token in self.stm_tokens]
+        for encoded_token in encoded_tokens:
+            self.stm_minhash.update(encoded_token)
 
         # Compute LSH bands for database query
         self.stm_lsh_bands = self._compute_lsh_bands(self.stm_minhash)
@@ -169,7 +174,10 @@ class MinHashFilter(PatternFilter):
                 continue
 
             # Reconstruct MinHash object from signature
-            pattern_minhash = MinHash(num_perm=self.num_hashes)
+            if _MINHASH_HASHFUNC:
+                pattern_minhash = MinHash(num_perm=self.num_hashes, hashfunc=_MINHASH_HASHFUNC)
+            else:
+                pattern_minhash = MinHash(num_perm=self.num_hashes)
             pattern_minhash.hashvalues = minhash_sig
 
             # Estimate Jaccard similarity

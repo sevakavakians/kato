@@ -90,10 +90,10 @@ docker compose up -d --build
 
 **Status**: Stable and production-ready (maintenance mode)
 **Architecture**: FastAPI with direct processor embedding (ClickHouse + Redis hybrid)
-**Test Coverage**: 445+ tests passing (2 pre-existing failures, 2 skipped)
-**Performance**: ~10ms average response time; Redis round-trips on learn/predict paths heavily batched
+**Test Coverage**: 444+ tests passing (2 pre-existing flaky failures, 3 skipped)
+**Performance**: ~10ms average response time; Redis round-trips batched; ClickHouse writes buffered; symbol table cached; MinHash optional xxhash acceleration
 **Code Quality**: 96% technical debt reduction achieved (6,315 → 67 ruff issues)
-**Last Major Update**: Multi-phase performance optimization — Redis batching, RapidFuzz batch API, cached properties (2026-03-19)
+**Last Major Update**: Performance optimization phase — 5 optimizations (batch ClickHouse inserts, pipelined Redis symbol lookups, precomputed similarity, symbol table cache, xxhash MinHash) (2026-03-19)
 
 ## Directory Structure
 ```

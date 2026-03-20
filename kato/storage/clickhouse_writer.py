@@ -6,110 +6,192 @@ Handles writing pattern data to ClickHouse patterns_data table with:
 - MinHash signatures for LSH
 - LSH bands for fast similarity search
 - Token sets for filtering
+- Buffered batch inserts for high-throughput learning
 """
 
 import logging
 from datetime import datetime
 from itertools import chain
+from os import environ
 from typing import Any
 
 from datasketch import MinHash
 
+# Optional xxhash for faster MinHash computation (~3-5x speedup)
+try:
+    import xxhash
+    XXHASH_AVAILABLE = True
+except ImportError:
+    XXHASH_AVAILABLE = False
+
 logger = logging.getLogger('kato.storage.clickhouse_writer')
+
+# MinHash hash function selection
+# Set MINHASH_HASH_FUNC=xxhash to use xxhash (faster, requires reindexing existing patterns)
+_MINHASH_HASH_FUNC_SETTING = environ.get('MINHASH_HASH_FUNC', 'sha1').lower()
+
+def _get_minhash_hashfunc():
+    """Get the configured MinHash hash function."""
+    if _MINHASH_HASH_FUNC_SETTING == 'xxhash' and XXHASH_AVAILABLE:
+        def _xxhash_func(b):
+            return xxhash.xxh64(b).intdigest()
+        return _xxhash_func
+    return None  # Use datasketch default (SHA-1)
+
+_MINHASH_HASHFUNC = _get_minhash_hashfunc()
 
 
 class ClickHouseWriter:
-    """Writes pattern data to ClickHouse."""
+    """Writes pattern data to ClickHouse with buffered batch inserts."""
 
-    def __init__(self, kb_id: str, clickhouse_client):
+    # Default batch size for buffered writes
+    DEFAULT_BATCH_SIZE = 50
+
+    def __init__(self, kb_id: str, clickhouse_client, batch_size: int = None):
         """
         Initialize ClickHouse writer.
 
         Args:
             kb_id: Knowledge base identifier (used for partitioning)
             clickhouse_client: ClickHouse client from connection manager
+            batch_size: Number of patterns to buffer before auto-flush (default: 50)
         """
         self.kb_id = kb_id
         self.client = clickhouse_client
+        self.batch_size = batch_size or self.DEFAULT_BATCH_SIZE
+
+        # Write buffer for batch inserts
+        self._write_buffer: list[list] = []
+        self._column_names: list[str] | None = None
 
         if not self.client:
             raise RuntimeError("ClickHouse client is required but was None")
 
-        logger.debug(f"ClickHouseWriter initialized for kb_id: {kb_id}")
+        if _MINHASH_HASH_FUNC_SETTING == 'xxhash':
+            if XXHASH_AVAILABLE:
+                logger.info("MinHash using xxhash (faster). Existing patterns may need reindexing.")
+            else:
+                logger.warning("MINHASH_HASH_FUNC=xxhash but xxhash not installed. Using default SHA-1.")
 
-    def write_pattern(self, pattern_object) -> bool:
+        logger.debug(f"ClickHouseWriter initialized for kb_id: {kb_id}, batch_size: {self.batch_size}")
+
+    def _prepare_row(self, pattern_object) -> dict:
         """
-        Insert pattern into ClickHouse patterns_data table.
+        Prepare a row for ClickHouse insertion from a pattern object.
 
-        Computes MinHash signature and LSH bands for the pattern,
-        then inserts all data into ClickHouse with kb_id partitioning.
+        Computes MinHash signature, LSH bands, and token set.
 
         Args:
             pattern_object: Pattern object with name, pattern_data, length
 
         Returns:
-            True if write successful
+            Dictionary with all column values
+        """
+        # Pre-encode all tokens to bytes at once (avoids per-iteration overhead)
+        all_tokens = list(chain(*pattern_object.pattern_data))
+        encoded_tokens = [token.encode('utf8') for token in all_tokens]
+
+        # Compute MinHash signature for LSH (100 permutations)
+        if _MINHASH_HASHFUNC:
+            minhash = MinHash(num_perm=100, hashfunc=_MINHASH_HASHFUNC)
+        else:
+            minhash = MinHash(num_perm=100)
+        for encoded_token in encoded_tokens:
+            minhash.update(encoded_token)
+        minhash_sig = list(minhash.hashvalues)
+
+        # Compute LSH bands (20 bands, 5 rows each)
+        lsh_bands = []
+        for i in range(20):
+            band = minhash_sig[i*5:(i+1)*5]
+            band_hash = abs(hash(tuple(band)))
+            lsh_bands.append(band_hash)
+
+        # Create token_set for filtering (use pre-computed all_tokens)
+        token_set = list(set(all_tokens))
+
+        token_count = len(token_set)
+        first_token = pattern_object.pattern_data[0][0] if pattern_object.pattern_data and pattern_object.pattern_data[0] else ''
+        last_token = pattern_object.pattern_data[-1][-1] if pattern_object.pattern_data and pattern_object.pattern_data[-1] else ''
+
+        now = datetime.now()
+
+        return {
+            'kb_id': self.kb_id,
+            'name': pattern_object.name,
+            'pattern_data': pattern_object.pattern_data,
+            'length': pattern_object.length,
+            'token_set': token_set,
+            'token_count': token_count,
+            'minhash_sig': minhash_sig,
+            'lsh_bands': lsh_bands,
+            'first_token': first_token,
+            'last_token': last_token,
+            'created_at': now,
+            'updated_at': now
+        }
+
+    def write_pattern(self, pattern_object) -> bool:
+        """
+        Buffer pattern for batch insertion into ClickHouse.
+
+        Patterns are accumulated in an internal buffer and flushed to ClickHouse
+        when the buffer reaches batch_size. Call flush() to write remaining
+        buffered patterns.
+
+        Args:
+            pattern_object: Pattern object with name, pattern_data, length
+
+        Returns:
+            True if pattern was buffered (and possibly flushed) successfully
 
         Raises:
-            Exception: If write fails
+            Exception: If row preparation or flush fails
         """
         try:
-            # Compute MinHash signature for LSH (100 permutations)
-            minhash = MinHash(num_perm=100)
-            for token in chain(*pattern_object.pattern_data):
-                minhash.update(token.encode('utf8'))
-            minhash_sig = list(minhash.hashvalues)
+            row = self._prepare_row(pattern_object)
 
-            # Compute LSH bands (20 bands, 5 rows each)
-            # This allows fast approximate similarity search
-            lsh_bands = []
-            for i in range(20):
-                band = minhash_sig[i*5:(i+1)*5]
-                # Hash the band to create band signature (use abs for UInt64)
-                band_hash = abs(hash(tuple(band)))
-                lsh_bands.append(band_hash)
+            # Set column names on first write
+            if self._column_names is None:
+                self._column_names = list(row.keys())
 
-            # Flatten pattern_data to create token_set for filtering
-            token_set = list(set(chain(*pattern_object.pattern_data)))
+            self._write_buffer.append(list(row.values()))
 
-            # Calculate additional fields
-            token_count = len(token_set)
-            first_token = pattern_object.pattern_data[0][0] if pattern_object.pattern_data and pattern_object.pattern_data[0] else ''
-            last_token = pattern_object.pattern_data[-1][-1] if pattern_object.pattern_data and pattern_object.pattern_data[-1] else ''
+            # Auto-flush when buffer is full
+            if len(self._write_buffer) >= self.batch_size:
+                self.flush()
 
-            # Prepare row for insertion (column order matches schema)
-            now = datetime.now()
-
-            row = {
-                'kb_id': self.kb_id,
-                'name': pattern_object.name,
-                'pattern_data': pattern_object.pattern_data,
-                'length': pattern_object.length,
-                'token_set': token_set,
-                'token_count': token_count,
-                'minhash_sig': minhash_sig,
-                'lsh_bands': lsh_bands,
-                'first_token': first_token,
-                'last_token': last_token,
-                'created_at': now,
-                'updated_at': now
-            }
-
-            logger.debug(f"Inserting row with {len(row)} columns: {list(row.keys())}")
-
-            # Insert into ClickHouse with column names and values as list
-            # clickhouse_connect expects data as list of lists, not list of dicts
-            column_names = list(row.keys())
-            values = [list(row.values())]
-
-            self.client.insert('kato.patterns_data', values, column_names=column_names)
-
-            logger.debug(f"Wrote pattern {pattern_object.name} to ClickHouse (kb_id={self.kb_id})")
+            logger.debug(f"Buffered pattern {pattern_object.name} (buffer: {len(self._write_buffer)}/{self.batch_size})")
             return True
 
         except Exception as e:
             import traceback
-            logger.error(f"Failed to write pattern {pattern_object.name}: {type(e).__name__}: {e}")
+            logger.error(f"Failed to prepare pattern {pattern_object.name}: {type(e).__name__}: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            raise
+
+    def flush(self) -> int:
+        """
+        Flush buffered patterns to ClickHouse in a single batch insert.
+
+        Returns:
+            Number of patterns flushed
+
+        Raises:
+            Exception: If batch insert fails
+        """
+        if not self._write_buffer:
+            return 0
+
+        count = len(self._write_buffer)
+        try:
+            self.client.insert('kato.patterns_data', self._write_buffer, column_names=self._column_names)
+            logger.debug(f"Flushed {count} patterns to ClickHouse (kb_id={self.kb_id})")
+            self._write_buffer.clear()
+            return count
+        except Exception as e:
+            import traceback
+            logger.error(f"Failed to flush {count} patterns to ClickHouse: {type(e).__name__}: {e}")
             logger.error(f"Traceback: {traceback.format_exc()}")
             raise
 

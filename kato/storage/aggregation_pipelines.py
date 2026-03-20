@@ -273,14 +273,24 @@ class OptimizedQueryManager:
 
     def get_all_symbols_optimized(self, collection: Collection) -> dict[str, dict[str, Any]]:
         """
-        Get all symbols with optimized aggregation.
+        Get all symbols with caching.
+
+        Returns cached symbols if available. Cache is invalidated when
+        patterns are learned (via invalidate_caches()).
 
         Args:
-            collection: MongoDB collection to query
+            collection: Symbol collection to query (used on cache miss)
 
         Returns: Dict mapping symbol names to symbol documents
         """
-        return self.pipelines.get_all_symbols_optimized(collection)
+        if self._cache_valid and self._symbol_cache:
+            logger.debug(f"Returning cached symbol table ({len(self._symbol_cache)} symbols)")
+            return self._symbol_cache
+
+        self._symbol_cache = self.pipelines.get_all_symbols_optimized(collection)
+        self._cache_valid = True
+        logger.debug(f"Loaded and cached {len(self._symbol_cache)} symbols")
+        return self._symbol_cache
 
     def get_symbol_frequencies_batch(self, symbols: list[str]) -> dict[str, int]:
         """

@@ -1,5 +1,5 @@
 # SESSION_STATE.md - Current Development State
-*Last Updated: 2026-03-19 (Documentation Audit)*
+*Last Updated: 2026-03-19 (Performance Optimization Phase - 5 Optimizations)*
 
 ## Current Task
 **Phase 2: Stateless Processor Refactor - Test Updates - ACTIVE** 🎯
@@ -248,6 +248,23 @@ Make KatoProcessor stateless following standard web application patterns:
 - **Related Work**: planning-docs/initiatives/hybrid-clickhouse-redis.md (v3.0 architecture)
 
 ## Recent Achievements
+- **Performance Optimization Phase - 5 Optimizations - COMPLETE** (2026-03-19): FULLY VERIFIED
+  - **Scope**: Five targeted optimizations across storage, search, and filter pipeline layers
+  - **#2 Batch ClickHouse Inserts** (`clickhouse_writer.py`): Write buffer (default 50 rows); `write_pattern()` auto-flushes at threshold; `flush()` called from `learnPattern()` for immediate visibility; reduces ClickHouse round-trips from N to ceil(N/50)
+  - **#3 Pipelined Redis Symbol Lookups** (`redis_writer.py`): Rewrote `get_all_symbols_batch()` with two-phase SCAN + pipeline; eliminates N*2 Redis round-trips, replaced with 1 pipelined call
+  - **#4 Skip Double Similarity Computation** (`pattern_search.py`): `precomputed_similarity` parameter added to `extract_prediction_info()`; eliminates redundant O(n*m) LCS recomputation per candidate pattern; non-pipeline callers pass `None` for backward compatibility
+  - **#6 Cache Symbol Table Across Predictions** (`aggregation_pipelines.py`, `pattern_processor.py`): Wired up existing `_symbol_cache`/`_cache_valid` in `OptimizedQueryManager`; `invalidate_caches()` called on `learn()`, `clear_all_memory()`, `delete_pattern()`; symbol table now loaded once per cache lifetime
+  - **#7 Faster MinHash with xxhash** (`clickhouse_writer.py`, `minhash_filter.py`): xxhash added as optional dependency; opt-in via `MINHASH_HASH_FUNC=xxhash` env var (default: sha1 for backward compat); ~3-5x faster MinHash computation; tokens pre-encoded to bytes in batch
+  - **Test Results**: 444 passed, 3 skipped, 2 pre-existing flaky failures — zero regressions
+  - **Archive**: planning-docs/completed/optimizations/2026-03-19-performance-optimization-phase-5-optimizations.md
+- **Documentation Audit + MongoDB Removal Phase A-D - COMPLETE** (2026-03-19): FULLY VERIFIED
+  - **Scope**: Full audit of codebase and documentation; 21 discrepancies identified and resolved
+  - **Code (Phases A-D)**: Deleted 2 dead files (`connection_pool.py`, `diagnose_test_patterns.py`); cleaned 7 source/test files to remove all pymongo imports and MongoDB fallback logic
+  - **`kato/workers/pattern_processor.py`**: Default `KATO_ARCHITECTURE_MODE` changed from `'mongodb'` to `'hybrid'`; `update_pattern()` and `delete_pattern()` rewritten for ClickHouse + Redis; MongoDB fallback entirely removed (strict mode)
+  - **`kato/config/database.py`**: Removed `MongoDBConfig`, `DatabaseManager`, and `mongodb_nodes` field
+  - **Docs**: CHANGELOG.md gaps filled (v3.1.1–v3.4.0); README.md tags/counts/links fixed; ARCHITECTURE_DIAGRAM.md corrected (ports, columns, FilterPipelineExecutor added, stateless claim fixed); docs/MODE_SWITCHING.md MongoDB mode removed; docs/maintenance/known-issues.md updated to Mar 2026; CLAUDE.md corrected (bridge pattern, min sequence length, sort auto-toggle)
+  - **Verification**: Zero pymongo imports in `kato/` or `tests/`; all modified Python files pass syntax check
+  - **Archive**: planning-docs/completed/refactors/2026-03-19-documentation-audit-mongodb-removal-phase-a-d.md
 - **Performance Optimization: Redis Batching, Logging, RapidFuzz, Import Cleanup - COMPLETE** (2026-03-19): FULLY VERIFIED
   - **Scope**: Multi-phase optimization pass targeting Redis round-trips, log overhead, object recomputation, fuzzy-match complexity, and module-load cost
   - **Phase 1A** (`redis_writer.py`): Added `get_metadata_batch()` and `batch_update_symbol_stats()`; updated `get_global_metadata()` to use `mget()` — collapses 3N GETs into 1 pipeline

@@ -3,6 +3,58 @@
 
 ---
 
+## 2026-03-19 - Optimization Archived: Performance Optimization Phase - 5 Optimizations
+
+**Trigger**: Task completion event — five performance optimizations across storage, search, and filter pipeline
+
+**Event Type**: Optimization completion
+
+**Actions Taken**:
+1. Created optimization archive: `planning-docs/completed/optimizations/2026-03-19-performance-optimization-phase-5-optimizations.md`
+2. Added entry to `SESSION_STATE.md` Recent Achievements (top of list) with per-optimization details
+3. Updated `SESSION_STATE.md` Last Updated timestamp to 2026-03-19 (Performance Optimization Phase)
+4. Updated `planning-docs/README.md` Current System State — test count, performance description, Last Major Update
+5. Updated `planning-docs/project-manager/triggers.md` with activation event
+6. Added optimization patterns to `planning-docs/project-manager/patterns.md`
+
+**Optimization Summary**:
+- #2 Batch ClickHouse inserts: write buffer (50 rows default), auto-flush, `flush()` method, `_prepare_row()` helper
+- #3 Pipelined Redis symbol lookups: two-phase SCAN + pipeline; N*2 round-trips → 1 pipeline call
+- #4 Skip double similarity: `precomputed_similarity` param on `extract_prediction_info()`; eliminates O(n*m) LCS recomputation per candidate
+- #6 Symbol table cache: `_symbol_cache`/`_cache_valid` wired in `OptimizedQueryManager`; `invalidate_caches()` on mutating ops
+- #7 xxhash MinHash: optional via `MINHASH_HASH_FUNC=xxhash`; sha1 default preserved; tokens pre-encoded to bytes
+- Test Results: 444 passed, 3 skipped, 2 pre-existing flaky failures — zero regressions
+
+**Files Changed**: 8 files (clickhouse_writer.py, redis_writer.py, pattern_search.py, aggregation_pipelines.py, pattern_processor.py, minhash_filter.py, knowledge_base.py, requirements.txt)
+
+---
+
+## 2026-03-19 - Refactor Archived: Documentation Audit + MongoDB Removal Phase A-D
+
+**Trigger**: Task completion event — documentation audit and full MongoDB removal from codebase
+
+**Event Type**: Refactor completion (dead code removal + documentation correctness)
+
+**Actions Taken**:
+1. Created refactor archive: `planning-docs/completed/refactors/2026-03-19-documentation-audit-mongodb-removal-phase-a-d.md`
+2. Added entry to `SESSION_STATE.md` Recent Achievements (top of list) with full phase-by-phase details
+3. Updated `SESSION_STATE.md` Last Updated timestamp to 2026-03-19 (Documentation Audit)
+4. Updated `planning-docs/README.md` Current System State — Last Major Update description
+5. Updated `planning-docs/project-manager/triggers.md` with activation event
+6. Added documentation correctness pattern to `planning-docs/project-manager/patterns.md`
+
+**Refactor Summary**:
+- Deleted: `kato/resilience/connection_pool.py`, `scripts/diagnose_test_patterns.py`
+- Cleaned: `kato/config/database.py`, `kato/storage/aggregation_pipelines.py`, `kato/storage/pattern_cache.py`, `kato/gpu/encoder.py`
+- Rewritten: `kato/workers/pattern_processor.py` — default mode `'hybrid'`, no MongoDB fallback, `update_pattern()` / `delete_pattern()` use Redis+ClickHouse
+- Test fixtures: `tests/tests/fixtures/cleanup_utils.py`, `tests/tests/gpu/conftest.py` — MongoDB replaced with ClickHouse/in-memory
+- Docs: 6 files corrected (CHANGELOG.md, README.md, ARCHITECTURE_DIAGRAM.md, docs/MODE_SWITCHING.md, docs/maintenance/known-issues.md, CLAUDE.md)
+- Result: Zero pymongo imports; 445 passed, 2 pre-existing failures, 2 skipped
+
+**Files Changed**: 9 source/test files modified or deleted; 6 documentation files corrected
+
+---
+
 ## 2026-03-19 - Optimization Archived: Redis Batching, Logging, RapidFuzz, Import Cleanup
 
 **Trigger**: Task completion event — multi-phase performance optimization pass completed

@@ -502,7 +502,10 @@ class RedisWriter:
 
     def get_all_symbols_batch(self) -> dict[str, dict[str, Any]]:
         """
-        Get statistics for all symbols in this kb_id.
+        Get statistics for all symbols in this kb_id using pipelined Redis calls.
+
+        Collects all symbol keys via SCAN, then fetches all freq and pmf values
+        in a single pipeline call (2 GETs per symbol batched together).
 
         Returns:
             Dictionary mapping symbol names to their statistics
@@ -511,18 +514,35 @@ class RedisWriter:
             Exception: If retrieval fails
         """
         try:
-            # Scan for all symbol frequency keys
+            # Phase 1: Collect all symbol names via SCAN
             freq_pattern = f"{self.kb_id}:symbol:freq:*"
-            symbols = {}
+            prefix = f"{self.kb_id}:symbol:freq:"
+            symbol_names = []
 
             for freq_key in self.client.scan_iter(match=freq_pattern, count=1000):
-                # Extract symbol name from key: kb_id:symbol:freq:symbol_name
-                symbol_name = freq_key.split(f"{self.kb_id}:symbol:freq:", 1)[1]
+                # Handle bytes vs string keys
+                if isinstance(freq_key, bytes):
+                    freq_key = freq_key.decode('utf-8')
+                symbol_name = freq_key.split(prefix, 1)[1]
+                symbol_names.append(symbol_name)
 
-                # Get both frequency and pattern_member_frequency
-                pmf_key = f"{self.kb_id}:symbol:pmf:{symbol_name}"
-                freq = self.client.get(freq_key)
-                pmf = self.client.get(pmf_key)
+            if not symbol_names:
+                logger.debug(f"No symbols found for kb_id: {self.kb_id}")
+                return {}
+
+            # Phase 2: Pipeline all GETs (2 per symbol: freq + pmf)
+            pipe = self.client.pipeline(transaction=False)
+            for symbol_name in symbol_names:
+                pipe.get(f"{self.kb_id}:symbol:freq:{symbol_name}")
+                pipe.get(f"{self.kb_id}:symbol:pmf:{symbol_name}")
+
+            raw_results = pipe.execute()
+
+            # Phase 3: Parse results (2 values per symbol)
+            symbols = {}
+            for i, symbol_name in enumerate(symbol_names):
+                freq = raw_results[i * 2]
+                pmf = raw_results[i * 2 + 1]
 
                 symbols[symbol_name] = {
                     'name': symbol_name,
@@ -530,7 +550,7 @@ class RedisWriter:
                     'pattern_member_frequency': int(pmf) if pmf else 0
                 }
 
-            logger.debug(f"Retrieved {len(symbols)} symbols for kb_id: {self.kb_id}")
+            logger.debug(f"Retrieved {len(symbols)} symbols for kb_id: {self.kb_id} (pipelined)")
             return symbols
 
         except Exception as e:

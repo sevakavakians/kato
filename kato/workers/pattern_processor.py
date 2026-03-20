@@ -257,6 +257,8 @@ class PatternProcessor:
 
         self.superkb.patterns_observation_count = 0
         self.superkb.symbols_observation_count = 0
+        # Invalidate symbol cache since all data was cleared
+        self.query_manager.invalidate_caches()
         self.initiateDefaults()
         return
 
@@ -328,6 +330,9 @@ class PatternProcessor:
                         self.metrics_cache_manager.invalidate_pattern_metrics(pattern.name)
                     )
 
+            # Invalidate symbol cache since symbol stats changed
+            self.query_manager.invalidate_caches()
+
             self.last_learned_pattern_name = pattern.name
             del(pattern)
             self.emotives = []
@@ -353,6 +358,8 @@ class PatternProcessor:
                 self.superkb.redis_writer.client.delete(f"{self.kb_id}:{key_type}:{name}")
         except Exception as e:
             logger.warning(f"Failed to delete pattern {name} metadata from Redis: {e}")
+        # Invalidate symbol cache since pattern data changed
+        self.query_manager.invalidate_caches()
         return 'deleted'
 
     def update_pattern(self, name: str, frequency: int, emotives: dict[str, list[float]]) -> Optional[dict[str, Any]]:

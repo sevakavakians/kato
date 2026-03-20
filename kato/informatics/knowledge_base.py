@@ -445,6 +445,7 @@ class SuperKnowledgeBase:
             else:
                 # New pattern - write to both ClickHouse and Redis
                 self.clickhouse_writer.write_pattern(pattern_object)
+                self.clickhouse_writer.flush()  # Ensure immediate visibility for queries
 
                 # Enforce persistence window for NEW patterns (same as re-learned patterns)
                 trimmed_emotives = emotives if emotives else []

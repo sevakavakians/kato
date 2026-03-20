@@ -3,6 +3,63 @@
 
 ---
 
+## 2026-03-19 - Task Completion (Optimization: Performance Optimization Phase - 5 Optimizations)
+
+**Trigger Type**: Primary - Task Completion
+**Event**: Performance optimization pass completed — 5 optimizations across storage, search, and filter pipeline; 444 passed, 3 skipped, 2 pre-existing flaky failures; zero regressions
+**Source**: Developer report — batch ClickHouse inserts (#2), pipelined Redis symbol lookups (#3), precomputed similarity (#4), symbol table cache (#6), xxhash MinHash (#7)
+
+**Details**:
+- `kato/storage/clickhouse_writer.py`: Write buffer (batch size 50); `flush()` method; `_prepare_row()` helper; xxhash support via `MINHASH_HASH_FUNC` env var
+- `kato/storage/redis_writer.py`: `get_all_symbols_batch()` rewritten — SCAN phase + single pipeline phase
+- `kato/searches/pattern_search.py`: `precomputed_similarity` parameter on `extract_prediction_info()`; `_process_with_rapidfuzz()` and `_process_batch_rapidfuzz()` updated
+- `kato/storage/aggregation_pipelines.py`: `_symbol_cache`/`_cache_valid` wired into `OptimizedQueryManager.get_all_symbols_optimized()`
+- `kato/workers/pattern_processor.py`: `invalidate_caches()` calls added to `learn()`, `clear_all_memory()`, `delete_pattern()`
+- `kato/filters/minhash_filter.py`: xxhash support; tokens pre-encoded to bytes in batch
+- `kato/informatics/knowledge_base.py`: `flush()` called after `write_pattern()`
+- `requirements.txt`: xxhash added as optional dependency
+
+**Documents Updated**:
+- Created `planning-docs/completed/optimizations/2026-03-19-performance-optimization-phase-5-optimizations.md`
+- `planning-docs/SESSION_STATE.md` Recent Achievements (new entry at top), Last Updated timestamp
+- `planning-docs/README.md` Current System State (test count, performance description, last major update)
+- `planning-docs/project-manager/maintenance-log.md`
+- `planning-docs/project-manager/triggers.md`
+- `planning-docs/project-manager/patterns.md`
+
+**Agent Response Time**: Immediate
+**Action Result**: All docs updated; no human alerts required
+
+---
+
+## 2026-03-19 - Task Completion (Refactor: Documentation Audit + MongoDB Removal Phase A-D)
+
+**Trigger Type**: Primary - Task Completion + Knowledge Refinement
+**Event**: Documentation audit completed — 21 discrepancies fixed, zero pymongo imports remaining
+**Source**: Developer report — full audit pass covering source code, test fixtures, and 6 documentation files
+
+**Details**:
+- `kato/workers/pattern_processor.py`: `KATO_ARCHITECTURE_MODE` default → `'hybrid'`; MongoDB fallback path removed; `update_pattern()` / `delete_pattern()` use ClickHouse + Redis
+- `kato/config/database.py`: `MongoDBConfig`, `DatabaseManager`, `mongodb_nodes` removed
+- `kato/storage/aggregation_pipelines.py`, `kato/storage/pattern_cache.py`, `kato/gpu/encoder.py`: pymongo.Collection → duck-type alias
+- `tests/tests/fixtures/cleanup_utils.py`: MongoDB cleanup → ClickHouse cleanup
+- `tests/tests/gpu/conftest.py`: MongoDB fixtures → in-memory mock
+- Deleted: `kato/resilience/connection_pool.py`, `scripts/diagnose_test_patterns.py`
+- Docs corrected: CHANGELOG.md (v3.1.1–v3.4.0 entries added), README.md (tags/counts/links), ARCHITECTURE_DIAGRAM.md (ports, columns, FilterPipelineExecutor, stateless claim), docs/MODE_SWITCHING.md (MongoDB mode removed), docs/maintenance/known-issues.md (Mar 2026, updated counts), CLAUDE.md (bridge pattern, min sequence length, sort auto-toggle)
+
+**Documents Updated**:
+- Created `planning-docs/completed/refactors/2026-03-19-documentation-audit-mongodb-removal-phase-a-d.md`
+- `planning-docs/SESSION_STATE.md` Recent Achievements (new entry at top)
+- `planning-docs/README.md` Current System State
+- `planning-docs/project-manager/maintenance-log.md`
+- `planning-docs/project-manager/triggers.md`
+- `planning-docs/project-manager/patterns.md`
+
+**Agent Response Time**: Immediate
+**Action Result**: All docs updated; no human alerts required
+
+---
+
 ## 2026-03-19 - Task Completion (Optimization: Redis Batching, Logging, RapidFuzz, Import Cleanup)
 
 **Trigger Type**: Primary - Task Completion + Performance Optimization

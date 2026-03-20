@@ -144,7 +144,8 @@ class InformationExtractor:
                 return 0.0
 
     def extract_prediction_info(self, pattern: list[str], state: list[str],
-                               cutoff: float, fuzzy_token_threshold: float = 0.0) -> Optional[tuple[list[str], list[str], list[str], list[str], list[str], list[str], float, int, list[dict]]]:
+                               cutoff: float, fuzzy_token_threshold: float = 0.0,
+                               precomputed_similarity: float = None) -> Optional[tuple[list[str], list[str], list[str], list[str], list[str], list[str], float, int, list[dict]]]:
         """
         Extract prediction information using optimized algorithms.
 
@@ -153,6 +154,8 @@ class InformationExtractor:
             state: Current state sequence to match against.
             cutoff: Similarity threshold (0.0 to 1.0).
             fuzzy_token_threshold: Fuzzy token matching threshold (0.0-1.0, 0.0=disabled).
+            precomputed_similarity: If provided, skip similarity computation and use this value.
+                Useful when RapidFuzz has already computed the score in a batch operation.
 
         Returns:
             Tuple containing:
@@ -174,7 +177,9 @@ class InformationExtractor:
         if fuzzy_token_threshold is None:
             fuzzy_token_threshold = 0.0
 
-        if self.use_fast_matcher and RAPIDFUZZ_AVAILABLE:
+        if precomputed_similarity is not None:
+            similarity = precomputed_similarity
+        elif self.use_fast_matcher and RAPIDFUZZ_AVAILABLE:
             if self.use_token_matching:
                 # Token-level matching: EXACT difflib compatibility
                 # Uses LCSseq on lists directly
@@ -877,10 +882,11 @@ class PatternSearcher:
                     fuzzy_token_threshold = getattr(self.session_config, 'fuzzy_token_threshold', 0.0) if self.session_config else 0.0
 
                     # Extract detailed info for prediction
-                    # Defensive: ensure recall_threshold is never None
+                    # Pass pre-computed similarity to avoid redundant O(n*m) recomputation
                     recall_threshold_safe = self.recall_threshold if self.recall_threshold is not None else 0.1
                     info = self.extractor.extract_prediction_info(
-                        pattern_seq, state, recall_threshold_safe, fuzzy_token_threshold)
+                        pattern_seq, state, recall_threshold_safe, fuzzy_token_threshold,
+                        precomputed_similarity=similarity)
 
                     logger.debug(f"extract_prediction_info returned info={'NOT_NONE' if info else 'NONE'} for pattern_id={pattern_id[:20]}...")
 
@@ -1158,20 +1164,19 @@ class PatternSearcher:
                     fuzzy_token_threshold = getattr(self.session_config, 'fuzzy_token_threshold', 0.0) if self.session_config else 0.0
 
                     # Extract detailed info for prediction
-                    # Defensive: ensure recall_threshold is never None
+                    # Pass pre-computed similarity to avoid redundant O(n*m) recomputation
                     recall_threshold_safe = self.recall_threshold if self.recall_threshold is not None else 0.1
                     info = self.extractor.extract_prediction_info(
-                        pattern_seq, state, recall_threshold_safe, fuzzy_token_threshold)
+                        pattern_seq, state, recall_threshold_safe, fuzzy_token_threshold,
+                        precomputed_similarity=similarity)
 
                     logger.debug(f"extract_prediction_info returned info={'NOT_NONE' if info else 'NONE'} for pattern_id={pattern_id[:20]}...")
 
                     if info:
-                        # Use similarity from extract_prediction_info (info[6]) for consistency
-                        # This ensures both sync and async use the same similarity calculation
                         batch_results.append((
                             pattern_id, pattern_seq, info[1],  # matching_intersection
                             info[2], info[3], info[4], info[5],  # past, present, missing, extras
-                            info[6], info[7], info[8]  # similarity (from extract_prediction_info), number_of_blocks, anomalies
+                            info[6], info[7], info[8]  # similarity, number_of_blocks, anomalies
                         ))
 
         return batch_results

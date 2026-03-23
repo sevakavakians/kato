@@ -3,6 +3,31 @@
 
 ---
 
+## 2026-03-20 - Feature Archived: TLS/HTTPS Support for All Database Connections
+
+**Trigger**: Task completion event — security feature + Qdrant HTTPS bug fix
+
+**Event Type**: Feature completion (security enhancement + bug fix)
+
+**Actions Taken**:
+1. Created feature archive: `planning-docs/completed/features/2026-03-20-tls-https-database-connections.md`
+2. Added entry to `SESSION_STATE.md` Recent Achievements (top of list) with per-file change details
+3. Updated `SESSION_STATE.md` Last Updated timestamp to 2026-03-20
+4. Added DECISION-010 to `planning-docs/DECISIONS.md`
+5. Updated `DECISIONS.md` Last Updated timestamp to 2026-03-20
+6. Updated `planning-docs/project-manager/triggers.md` with activation event
+7. Added security pattern to `planning-docs/project-manager/patterns.md`
+
+**Feature Summary**:
+- Bug: qdrant-client auto-enables HTTPS when api_key is set; fixed by explicit `https=` kwarg from `QDRANT_HTTPS`
+- New TLS flags: `QDRANT_HTTPS`, `CLICKHOUSE_SECURE`, `REDIS_TLS` — all default false
+- Docker Compose and kato-manager.sh wired for TLS alongside auth
+- Zero breaking changes; all flags default off
+
+**Files Changed**: 10 files (vectordb_config.py, settings.py, qdrant_store.py, connection_manager.py, docker-compose.yml, deployment/docker-compose.yml, deployment/kato-manager.sh, .env.example, deployment/.env.example, docs/reference/configuration-vars.md)
+
+---
+
 ## 2026-03-19 - Optimization Archived: Performance Optimization Phase - 5 Optimizations
 
 **Trigger**: Task completion event — five performance optimizations across storage, search, and filter pipeline

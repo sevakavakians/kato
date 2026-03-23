@@ -170,9 +170,11 @@ class OptimizedConnectionManager:
 
             # Enhanced Redis connection pool
             # Use Redis URL if available, otherwise fall back to host/port
-            if self.settings.database.REDIS_URL:
+            # Use the redis_url property which handles REDIS_TLS upgrade
+            redis_url = self.settings.database.redis_url
+            if redis_url:
                 self._redis_client = redis.from_url(
-                    self.settings.database.REDIS_URL,
+                    redis_url,
                     max_connections=200,
                     retry_on_timeout=True,
                     socket_keepalive=True,
@@ -195,6 +197,8 @@ class OptimizedConnectionManager:
                     'decode_responses': True,
                     'encoding': 'utf-8'
                 }
+                if getattr(self.settings.database, 'REDIS_TLS', False):
+                    pool_config['ssl'] = True
                 connection_pool = redis.ConnectionPool(**pool_config)
                 self._redis_client = redis.Redis(connection_pool=connection_pool)
             else:
@@ -242,6 +246,7 @@ class OptimizedConnectionManager:
                 'grpc_port': self.settings.database.qdrant_grpc_port,
                 'prefer_grpc': True,
                 'timeout': 10,
+                'https': getattr(self.settings.database, 'QDRANT_HTTPS', False),
             }
 
             # Add API key if configured
@@ -311,6 +316,9 @@ class OptimizedConnectionManager:
             clickhouse_user = getattr(self.settings.database, 'CLICKHOUSE_USER', 'default')
             clickhouse_password = getattr(self.settings.database, 'CLICKHOUSE_PASSWORD', '') or ''
 
+            # TLS configuration
+            clickhouse_secure = getattr(self.settings.database, 'CLICKHOUSE_SECURE', False)
+
             # Create ClickHouse client with connection pooling
             self._clickhouse_client = clickhouse_connect.get_client(
                 host=clickhouse_host,
@@ -318,6 +326,7 @@ class OptimizedConnectionManager:
                 database=clickhouse_db,
                 username=clickhouse_user,
                 password=clickhouse_password,
+                secure=clickhouse_secure,
                 connect_timeout=10,
                 send_receive_timeout=30,
                 compress=True,  # Enable compression for better network performance

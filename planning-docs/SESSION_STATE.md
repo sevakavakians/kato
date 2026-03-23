@@ -1,5 +1,5 @@
 # SESSION_STATE.md - Current Development State
-*Last Updated: 2026-03-19 (Performance Optimization Phase - 5 Optimizations)*
+*Last Updated: 2026-03-20 (TLS/HTTPS Support for All Database Connections)*
 
 ## Current Task
 **Phase 2: Stateless Processor Refactor - Test Updates - ACTIVE** 🎯
@@ -248,6 +248,17 @@ Make KatoProcessor stateless following standard web application patterns:
 - **Related Work**: planning-docs/initiatives/hybrid-clickhouse-redis.md (v3.0 architecture)
 
 ## Recent Achievements
+- **TLS/HTTPS Support for All Database Connections - COMPLETE** (2026-03-20): SECURITY FEATURE + BUG FIX
+  - **Bug Fixed**: `qdrant-client` library auto-enables HTTPS when `api_key` is passed, causing SSL failures against plain HTTP Qdrant; fixed by passing `https` explicitly from `QDRANT_HTTPS` env var to `QdrantClient`
+  - **New Env Vars**: `QDRANT_HTTPS`, `CLICKHOUSE_SECURE`, `REDIS_TLS` — all default `false` (zero breaking changes)
+  - **`settings.py`**: TLS bool fields added; `qdrant_url` and `redis_url` properties respect TLS flags
+  - **`connection_manager.py`**: `CLICKHOUSE_SECURE` → `secure=True`; Redis host/port path → `ssl=True`; Redis URL path uses upgraded `redis_url`
+  - **`vectordb_config.py`**: `https` field added to `QdrantConfig`; `get_url()` uses correct scheme
+  - **Docker Compose**: TLS env vars wired in `docker-compose.yml` and `deployment/docker-compose.yml`
+  - **`kato-manager.sh`**: `setup-auth` now generates TLS vars alongside credential vars
+  - **Docs**: `.env.example`, `deployment/.env.example`, `docs/reference/configuration-vars.md` updated
+  - **Decision**: Documented as DECISION-010 in DECISIONS.md
+  - **Archive**: planning-docs/completed/features/2026-03-20-tls-https-database-connections.md
 - **Performance Optimization Phase - 5 Optimizations - COMPLETE** (2026-03-19): FULLY VERIFIED
   - **Scope**: Five targeted optimizations across storage, search, and filter pipeline layers
   - **#2 Batch ClickHouse Inserts** (`clickhouse_writer.py`): Write buffer (default 50 rows); `write_pattern()` auto-flushes at threshold; `flush()` called from `learnPattern()` for immediate visibility; reduces ClickHouse round-trips from N to ceil(N/50)

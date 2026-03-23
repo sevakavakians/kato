@@ -3,6 +3,33 @@
 
 ---
 
+## 2026-03-20 - Task Completion (Feature: TLS/HTTPS Support for All Database Connections)
+
+**Trigger Type**: Primary - Task Completion + Architectural Decision
+**Event**: Security feature implemented — TLS/HTTPS opt-in for ClickHouse, Redis, Qdrant; Qdrant HTTPS auto-enable bug fixed
+**Source**: Developer report — triggered by discovering qdrant-client silently enables HTTPS when api_key is passed
+
+**Details**:
+- `kato/config/vectordb_config.py`: `QdrantConfig.https` field added; `get_url()` scheme updated
+- `kato/config/settings.py`: `QDRANT_HTTPS`, `CLICKHOUSE_SECURE`, `REDIS_TLS` bool fields; `qdrant_url` and `redis_url` properties handle TLS
+- `kato/storage/qdrant_store.py`: Explicit `https=` kwarg to `QdrantClient`
+- `kato/storage/connection_manager.py`: TLS wired to all three clients
+- `docker-compose.yml` + `deployment/docker-compose.yml`: TLS env vars added
+- `deployment/kato-manager.sh`: `setup-auth` generates TLS vars
+- `.env.example`, `deployment/.env.example`, `docs/reference/configuration-vars.md`: Updated
+
+**Documents Updated**:
+- Created `planning-docs/completed/features/2026-03-20-tls-https-database-connections.md`
+- `planning-docs/SESSION_STATE.md` Recent Achievements (new entry at top), Last Updated timestamp
+- `planning-docs/DECISIONS.md` (DECISION-010 added), Last Updated timestamp
+- `planning-docs/project-manager/maintenance-log.md`
+- `planning-docs/project-manager/triggers.md`
+- `planning-docs/project-manager/patterns.md`
+
+**Agent Response Time**: Immediate
+
+---
+
 ## 2026-03-19 - Task Completion (Optimization: Performance Optimization Phase - 5 Optimizations)
 
 **Trigger Type**: Primary - Task Completion

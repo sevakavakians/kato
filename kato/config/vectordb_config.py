@@ -106,6 +106,7 @@ class QdrantConfig:
     distance: SimilarityMetric = "euclidean"
     on_disk_payload: bool = True
     api_key: Optional[str] = None
+    https: bool = False
     optimizers: dict[str, Any] = field(default_factory=lambda: {
         "deleted_threshold": 0.2,
         "vacuum_min_vector_number": 1000,
@@ -119,7 +120,8 @@ class QdrantConfig:
 
     def get_url(self) -> str:
         """Get Qdrant connection URL"""
-        return f"http://{self.host}:{self.port}"
+        scheme = "https" if self.https else "http"
+        return f"{scheme}://{self.host}:{self.port}"
 
     def get_grpc_url(self) -> str:
         """Get Qdrant gRPC connection URL"""
@@ -202,6 +204,8 @@ class VectorDBConfig:
                 config.qdrant.collection_name = collection
             if api_key := os.getenv('QDRANT_API_KEY'):
                 config.qdrant.api_key = api_key
+            if qdrant_https := os.getenv('QDRANT_HTTPS'):
+                config.qdrant.https = qdrant_https.lower() in ('true', '1', 'yes')
 
         # GPU configuration
         if gpu_enabled := os.getenv('KATO_GPU_ENABLED'):

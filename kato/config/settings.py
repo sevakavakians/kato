@@ -121,7 +121,8 @@ class DatabaseConfig(BaseSettings):
     @property
     def qdrant_url(self) -> str:
         """Get Qdrant connection URL."""
-        return f"http://{self.qdrant_host}:{self.qdrant_port}"
+        scheme = "https" if self.QDRANT_HTTPS else "http"
+        return f"{scheme}://{self.qdrant_host}:{self.qdrant_port}"
 
     @property
     def qdrant_grpc_url(self) -> str:
@@ -133,10 +134,15 @@ class DatabaseConfig(BaseSettings):
         """Get Redis connection URL if enabled."""
         # Prefer REDIS_URL env var if set
         if self.REDIS_URL:
-            return self.REDIS_URL
+            url = self.REDIS_URL
+            # Upgrade to TLS scheme if REDIS_TLS is enabled
+            if self.REDIS_TLS and url.startswith("redis://"):
+                url = "rediss://" + url[len("redis://"):]
+            return url
         # Fallback to constructing from host/port for backwards compatibility
         if self.redis_enabled and self.redis_host:
-            return f"redis://{self.redis_host}:{self.redis_port}/0"
+            scheme = "rediss" if self.REDIS_TLS else "redis"
+            return f"{scheme}://{self.redis_host}:{self.redis_port}/0"
         return None
 
     # ClickHouse settings (for hybrid architecture)
@@ -162,11 +168,25 @@ class DatabaseConfig(BaseSettings):
         None,
         description="ClickHouse password"
     )
+    CLICKHOUSE_SECURE: bool = Field(
+        False,
+        description="Use HTTPS for ClickHouse connection"
+    )
+
+    # Redis TLS
+    REDIS_TLS: bool = Field(
+        False,
+        description="Use TLS for Redis connection (upgrades redis:// to rediss:// scheme)"
+    )
 
     # Qdrant authentication
     QDRANT_API_KEY: Optional[str] = Field(
         None,
         description="Qdrant API key for authentication"
+    )
+    QDRANT_HTTPS: bool = Field(
+        False,
+        description="Use HTTPS for Qdrant connection (auto-set by qdrant-client when api_key is provided; explicitly set False for local Docker)"
     )
 
     @property

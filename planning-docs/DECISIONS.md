@@ -1,6 +1,46 @@
 # DECISIONS.md - Architectural & Design Decision Log
 *Append-Only Log - Started: 2025-08-29*
-*Last Updated: 2026-03-17*
+*Last Updated: 2026-03-20*
+
+---
+
+## 2026-03-20 - DECISION-010: TLS/HTTPS Opt-In for All Database Connections
+**Decision**: Add opt-in TLS/HTTPS support for ClickHouse, Redis, and Qdrant via environment variables; fix qdrant-client HTTPS auto-enable behavior
+**Status**: COMPLETE — deployed in production and development configs
+**Confidence**: High
+**Impact**: Security posture improvement; zero breaking changes; fixes SSL failure when QDRANT_API_KEY is set
+
+### Context
+Two related issues required this change:
+
+1. **Bug**: The `qdrant-client` Python library silently upgrades the connection to HTTPS when `api_key` is passed to `QdrantClient`, regardless of whether the Qdrant server is running with TLS. Any deployment using `QDRANT_API_KEY` (added in DECISION-009) against a plain HTTP Qdrant instance will hit SSL handshake failures.
+
+2. **Gap**: DECISION-009 added authentication for all three databases but did not add encrypted transport. Authentication without encryption exposes credentials in transit.
+
+### Decision
+1. Fix the Qdrant HTTPS auto-enable bug by passing `https` explicitly to `QdrantClient`, controlled by `QDRANT_HTTPS` env var.
+2. Add `QDRANT_HTTPS`, `CLICKHOUSE_SECURE`, and `REDIS_TLS` boolean flags (all default `False`) to `settings.py`.
+3. Wire each flag through to the corresponding driver client so operators can enable TLS per-database independently.
+4. Update `setup-auth` in `kato-manager.sh` to generate TLS vars alongside credential vars so auth-enabled deployments automatically get encrypted transport.
+
+### Implementation Details
+- **`QdrantConfig`**: Added `https: bool = False` field; `get_url()` uses correct scheme; `QdrantClient` receives explicit `https=` kwarg
+- **`settings.py`**: `QDRANT_HTTPS`, `CLICKHOUSE_SECURE`, `REDIS_TLS` boolean fields; `qdrant_url` and `redis_url` properties respect flags
+- **`connection_manager.py`**: `CLICKHOUSE_SECURE` → `secure=True` in `get_client()`; Redis host/port fallback → `ssl=True`; Redis URL path uses `redis_url` property
+- **Docker Compose**: TLS env vars added to `docker-compose.yml` and `deployment/docker-compose.yml` with empty/false defaults
+- **`kato-manager.sh`**: `setup-auth` generates `CLICKHOUSE_SECURE=true`, `REDIS_TLS=true`, `QDRANT_HTTPS=true`
+- **Docs**: `.env.example`, `deployment/.env.example`, `docs/reference/configuration-vars.md` updated
+
+### Alternatives Considered
+1. **Always-on TLS**: Rejected — breaks existing plain-HTTP development deployments; unnecessary overhead for localhost setups
+2. **Single TLS flag for all databases**: Rejected — operators may run only some databases with TLS (e.g., managed Redis with TLS, local ClickHouse without)
+3. **Fix only the Qdrant bug, skip ClickHouse/Redis TLS**: Rejected — inconsistent security posture; now that auth exists, transport encryption should be available for all three
+
+### Affected Files
+`kato/config/vectordb_config.py`, `kato/config/settings.py`, `kato/storage/qdrant_store.py`, `kato/storage/connection_manager.py`, `docker-compose.yml`, `deployment/docker-compose.yml`, `deployment/kato-manager.sh`, `.env.example`, `deployment/.env.example`, `docs/reference/configuration-vars.md`
+
+### Archive
+`planning-docs/completed/features/2026-03-20-tls-https-database-connections.md`
 
 ---
 

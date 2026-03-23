@@ -96,10 +96,13 @@ services:
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
       - QDRANT_API_KEY=${QDRANT_API_KEY:-}
+      - QDRANT_HTTPS=${QDRANT_HTTPS:-false}
       - REDIS_URL=redis://${REDIS_PASSWORD:+:${REDIS_PASSWORD}@}redis:6379
       - REDIS_ENABLED=true
+      - REDIS_TLS=${REDIS_TLS:-false}
       - CLICKHOUSE_USER=${CLICKHOUSE_USER:-default}
       - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:-}
+      - CLICKHOUSE_SECURE=${CLICKHOUSE_SECURE:-false}
       - LOG_LEVEL=INFO
       - SESSION_TTL=3600
       - SESSION_AUTO_EXTEND=true
@@ -147,11 +150,14 @@ services:
       - CLICKHOUSE_DB=kato
       - CLICKHOUSE_USER=${CLICKHOUSE_USER:-default}
       - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:-}
+      - CLICKHOUSE_SECURE=${CLICKHOUSE_SECURE:-false}
       # Qdrant connection
       - QDRANT_URL=http://qdrant:6333
       - QDRANT_API_KEY=${QDRANT_API_KEY:-}
+      - QDRANT_HTTPS=${QDRANT_HTTPS:-false}
       # Redis connection
       - REDIS_URL=redis://${REDIS_PASSWORD:+:${REDIS_PASSWORD}@}redis:6379
+      - REDIS_TLS=${REDIS_TLS:-false}
       # Hybrid architecture mode
       - USE_HYBRID_PATTERNS=true
       - DATABASE_READ_ONLY=false

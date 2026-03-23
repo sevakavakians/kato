@@ -3,6 +3,26 @@
 
 ---
 
+## Security Patterns
+
+### 2026-03-20 - Client Library Auth Flags Can Silently Change Transport Protocol
+
+**Pattern**: Adding authentication to a client library call can trigger implicit behavior changes beyond just authentication. The `qdrant-client` library treats the presence of an `api_key` argument as a signal to auto-upgrade the connection to HTTPS, regardless of whether the server is running with TLS.
+
+**Discovery Trigger**: SSL handshake failures appeared after DECISION-009 added `QDRANT_API_KEY` support. The connection worked without the key; setting the key caused SSL errors against a plain HTTP instance.
+
+**Assumption → Reality**:
+- Assumed: passing `api_key` to `QdrantClient` only affects the `Authorization` header
+- Reality: `qdrant-client` also silently sets `https=True` when `api_key` is non-empty
+
+**Resolution Pattern**: Always pass transport-layer parameters (e.g., `https`, `ssl`, `secure`) explicitly rather than relying on client library defaults. Any time a security credential is added to a driver call, audit the driver's documentation for implicit protocol-upgrade behavior.
+
+**Lesson**: Auth and transport encryption are separate concerns. When adding credentials to a database client, verify that the library does not conflate the two. The safest pattern is to always pass both `api_key` and `https` explicitly from separate, independently-controlled env vars.
+
+**Recurrence Risk**: Medium — other drivers (e.g., Elasticsearch, MongoDB Atlas) also have implicit TLS-on-auth behavior. Audit new driver integrations for this pattern.
+
+---
+
 ## Documentation Correctness Patterns
 
 ### 2026-03-19 - Documentation Drift During Multi-Phase Refactors

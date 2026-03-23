@@ -28,6 +28,7 @@ Complete reference for all KATO environment variables.
 | `CLICKHOUSE_DB` | string | `kato` | ClickHouse database name |
 | `CLICKHOUSE_USER` | string | `default` | ClickHouse username |
 | `CLICKHOUSE_PASSWORD` | string | `` | ClickHouse password (optional) |
+| `CLICKHOUSE_SECURE` | boolean | `false` | Use HTTPS for ClickHouse connection |
 
 ### Qdrant
 
@@ -37,6 +38,8 @@ Complete reference for all KATO environment variables.
 | `QDRANT_PORT` | integer | `6333` | Qdrant HTTP port (1-65535) |
 | `QDRANT_GRPC_PORT` | integer | `6334` | Qdrant gRPC port (1-65535) |
 | `QDRANT_COLLECTION_PREFIX` | string | `vectors` | Prefix for collection names |
+| `QDRANT_API_KEY` | string | None | Qdrant API key for authentication |
+| `QDRANT_HTTPS` | boolean | `false` | Use HTTPS for Qdrant connection |
 
 ### Redis
 
@@ -46,6 +49,7 @@ Complete reference for all KATO environment variables.
 | `REDIS_HOST` | string | None | Redis host (deprecated, use REDIS_URL) |
 | `REDIS_PORT` | integer | `6379` | Redis port (deprecated) |
 | `REDIS_ENABLED` | boolean | `false` | Enable Redis caching |
+| `REDIS_TLS` | boolean | `false` | Use TLS for Redis (upgrades redis:// to rediss://) |
 
 
 ## Learning Configuration

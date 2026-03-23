@@ -99,7 +99,8 @@ class QdrantStore(VectorStore):
             client_kwargs = {
                 'host': self.qdrant_config.host,
                 'port': self.qdrant_config.port,
-                'timeout': self._client_timeout
+                'timeout': self._client_timeout,
+                'https': self.qdrant_config.https,
             }
             if self.qdrant_config.api_key:
                 client_kwargs['api_key'] = self.qdrant_config.api_key

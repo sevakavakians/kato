@@ -3,6 +3,35 @@
 
 ---
 
+## Performance Profiling Patterns
+
+### 2026-03-24 - Monkey-Patching for Zero-Intrusion Production-Accurate Profiling
+
+**Pattern**: When building a profiling infrastructure for an existing codebase, monkey-patching
+live class methods is preferable to modifying source files. The instrumented code is byte-for-byte
+identical to production; there is no risk of accidentally altering the behavior being measured.
+
+**Implementation**: Wrap each target method with a closure that records `time.perf_counter()`
+before and after the real call, appends the delta to a `TimingCollector`, then returns the
+original result unchanged. A single `instrument_class(cls, collector)` utility can wrap all
+public methods of a class in one call.
+
+**When to Use**:
+- When profiling must not alter production code (zero-diff requirement)
+- When the profiling infrastructure must be disposable (no cleanup needed)
+- When you want to benchmark the exact code that runs in Docker, not a modified version
+
+**Limitation**: Monkey-patching does not capture C-extension internals (e.g., time inside
+ClickHouse's own serialization). Measure at the Python call boundary and treat the delta as
+the total round-trip including network + driver overhead.
+
+**Scaling Analysis Convention**: Report scaling coefficient as `time_at_100K / time_at_100`.
+Linear (100x) is expected; >100x flags super-linear algorithmic growth; <100x confirms
+caching/batching is working. This ratio makes bottleneck reports actionable regardless of
+absolute latency differences across machines.
+
+---
+
 ## Security Patterns
 
 ### 2026-03-20 - Client Library Auth Flags Can Silently Change Transport Protocol

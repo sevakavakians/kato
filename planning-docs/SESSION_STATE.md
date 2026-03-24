@@ -1,5 +1,5 @@
 # SESSION_STATE.md - Current Development State
-*Last Updated: 2026-03-20 (TLS/HTTPS Support for All Database Connections)*
+*Last Updated: 2026-03-24 (Performance Bottleneck Profiling Infrastructure - Implementation Complete)*
 
 ## Current Task
 **Phase 2: Stateless Processor Refactor - Test Updates - ACTIVE** 🎯
@@ -149,7 +149,32 @@
 - `kato/workers/pattern_operations.py` - Update to stateless
 
 ## Next Immediate Action
-**Phase 2 Task 2.4: Create Configuration Tests** 🎯
+**Bottleneck Profiling: Commit Branch and Execute Benchmarks** (Parallel Track)
+
+### Objective
+Commit the profiling infrastructure on `perf/bottleneck-profiling` and run the full benchmark
+suite to identify the top performance bottlenecks in the learning and prediction paths.
+
+### Approach
+1. Commit the 6 benchmarks files on branch `perf/bottleneck-profiling`
+2. Ensure services are running: `./start.sh`
+3. Run orchestrator: `python benchmarks/bottleneck_runner.py`
+4. Review JSON report in `benchmarks/results/`
+5. Identify top-3 bottlenecks by wall-clock contribution
+6. File targeted optimization tasks in SESSION_STATE or a new sprint backlog entry
+
+### Estimated Duration
+1-2 hours (commit + run + analyze)
+
+### Success Criteria
+- Benchmark suite executes without errors at all four scale tiers
+- JSON report produced with per-operation timing and bottleneck ranking
+- Top-3 bottlenecks identified with I/O vs CPU breakdown
+- Actionable optimization tasks filed based on findings
+
+---
+
+**Phase 2 Task 2.4: Create Configuration Tests** (Queued — resumes after profiling)
 
 ### Objective
 Create comprehensive tests for session configuration management to verify:
@@ -158,23 +183,8 @@ Create comprehensive tests for session configuration management to verify:
 - Config parameter validation
 - Config persistence across observations
 
-### Approach
-1. Review existing configuration test patterns
-2. Create new test file: tests/tests/unit/test_session_config.py
-3. Test default config values
-4. Test config update endpoint
-5. Test config parameter types and validation
-6. Test config persistence in session state
-
 ### Estimated Duration
 4-6 hours
-
-### Success Criteria
-- ✅ Default configuration values tested
-- ✅ Config update endpoint tested
-- ✅ Parameter validation tested
-- ✅ Config persistence verified
-- ✅ All new tests passing
 
 ## Blockers
 **ACTIVE BLOCKER** ⚠️
@@ -248,6 +258,17 @@ Make KatoProcessor stateless following standard web application patterns:
 - **Related Work**: planning-docs/initiatives/hybrid-clickhouse-redis.md (v3.0 architecture)
 
 ## Recent Achievements
+- **Performance Bottleneck Profiling Infrastructure - IMPLEMENTATION COMPLETE** (2026-03-24): READY FOR EXECUTION
+  - **Branch**: `perf/bottleneck-profiling` (uncommitted)
+  - **Approach**: Zero-invasive monkey-patching — no changes to `kato/` source code
+  - **`benchmarks/profiler.py`**: `TimingCollector`, `PerfTimer` (time.perf_counter), `instrument_class/instance` utilities
+  - **`benchmarks/data_generator.py`**: Zipf-distributed vocabulary; four scale tiers (100/1K/10K/100K); unique processor_id per tier for full DB isolation
+  - **`benchmarks/test_database_latency.py`**: Raw ClickHouse, Redis, and computation (MinHash/SHA1/LCS) baselines
+  - **`benchmarks/test_learning_path.py`**: Instrumented observe→learn path with per-operation breakdown
+  - **`benchmarks/test_prediction_path.py`**: Single-symbol fast path + multi-symbol filter pipeline stage timing
+  - **`benchmarks/bottleneck_runner.py`**: Orchestrator with JSON reporting, bottleneck ranking, and scaling analysis
+  - **Next Step**: Commit branch, run `python benchmarks/bottleneck_runner.py`, analyze top-3 bottlenecks
+  - **Archive**: planning-docs/completed/optimizations/2026-03-24-performance-bottleneck-profiling-infrastructure.md
 - **TLS/HTTPS Support for All Database Connections - COMPLETE** (2026-03-20): SECURITY FEATURE + BUG FIX
   - **Bug Fixed**: `qdrant-client` library auto-enables HTTPS when `api_key` is passed, causing SSL failures against plain HTTP Qdrant; fixed by passing `https` explicitly from `QDRANT_HTTPS` env var to `QdrantClient`
   - **New Env Vars**: `QDRANT_HTTPS`, `CLICKHOUSE_SECURE`, `REDIS_TLS` — all default `false` (zero breaking changes)

@@ -3,6 +3,30 @@
 
 ---
 
+## 2026-03-24 - New Work Item Archived: Performance Bottleneck Profiling Infrastructure
+
+**Trigger**: Task completion event — 6-file profiling infrastructure implementation complete on branch `perf/bottleneck-profiling`
+
+**Event Type**: Optimization work item completion (implementation phase)
+
+**Actions Taken**:
+1. Created completed archive: `planning-docs/completed/optimizations/2026-03-24-performance-bottleneck-profiling-infrastructure.md`
+2. Added entry to `SESSION_STATE.md` Recent Achievements (top of list) with per-file details
+3. Updated `SESSION_STATE.md` Last Updated timestamp to 2026-03-24
+4. Updated `SESSION_STATE.md` Next Immediate Action to reflect profiling execution as current focus, configuration tests queued
+5. Updated `planning-docs/project-manager/triggers.md` with activation event
+6. Updated `planning-docs/project-manager/patterns.md` with monkey-patching instrumentation pattern
+
+**Work Summary**:
+- 6 files created under `benchmarks/`: profiler.py, data_generator.py, test_database_latency.py,
+  test_learning_path.py, test_prediction_path.py, bottleneck_runner.py
+- Zero changes to `kato/` source code (monkey-patching instrumentation)
+- Four scale tiers (100/1K/10K/100K) with unique processor_id per tier
+- JSON report with bottleneck ranking and scaling analysis
+- Branch: `perf/bottleneck-profiling` — uncommitted, ready for execution
+
+---
+
 ## 2026-03-20 - Feature Archived: TLS/HTTPS Support for All Database Connections
 
 **Trigger**: Task completion event — security feature + Qdrant HTTPS bug fix

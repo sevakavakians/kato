@@ -3,6 +3,34 @@
 
 ---
 
+## 2026-03-25 - Architectural Decision + Implementation Progress (Database Bottleneck Fixes)
+
+**Trigger Type**: Primary — Architectural Decision + Task Progress
+**Event**: DECISION-011 made (in-place fixes selected over database migration); three fixes implemented on `perf/bottleneck-profiling`
+**Source**: Developer report — DuckDB/PostgreSQL/SQLite alternatives evaluated and rejected; three targeted fixes for premature flush, Redis SCAN, and first_token query
+
+**Decision Details**:
+- Alternatives evaluated: DuckDB (embedded columnar), PostgreSQL (transactional RDBMS), SQLite (embedded relational)
+- All rejected: 4-8 week migration scope vs 3-day targeted fix; bottlenecks are code patterns not database limitations
+- Selected: In-place ClickHouse + Redis fixes
+
+**Fix Summary**:
+- Fix 1: Deferred ClickHouse flush — `knowledge_base.py`, `clickhouse_writer.py`, `pattern_processor.py`
+- Fix 2: Redis HASH restructure — `redis_writer.py`
+- Fix 3: first_token column query — `pattern_processor.py`, `executor.py`
+
+**Documents Updated**:
+- `planning-docs/DECISIONS.md` (DECISION-011 prepended, Last Updated 2026-03-25)
+- `docs/architecture-decisions/ADR-002-database-bottleneck-fix-strategy.md` (created)
+- `planning-docs/SESSION_STATE.md` (Recent Achievements new entry, Next Immediate Action updated, timestamp)
+- `planning-docs/project-manager/maintenance-log.md`
+- `planning-docs/project-manager/triggers.md`
+- `planning-docs/project-manager/patterns.md`
+
+**Agent Response Time**: Immediate
+
+---
+
 ## 2026-03-24 - Task Completion (Optimization: Performance Bottleneck Profiling Infrastructure)
 
 **Trigger Type**: Primary - Task Completion

@@ -1,5 +1,5 @@
 # SESSION_STATE.md - Current Development State
-*Last Updated: 2026-03-24 (Performance Bottleneck Profiling Infrastructure - Implementation Complete)*
+*Last Updated: 2026-03-25 (Database Bottleneck Fixes - Three Fixes Implemented on perf/bottleneck-profiling)*
 
 ## Current Task
 **Phase 2: Stateless Processor Refactor - Test Updates - ACTIVE** 🎯
@@ -149,28 +149,28 @@
 - `kato/workers/pattern_operations.py` - Update to stateless
 
 ## Next Immediate Action
-**Bottleneck Profiling: Commit Branch and Execute Benchmarks** (Parallel Track)
+**Bottleneck Fixes: Verify, Test, and Merge Branch** (Active)
 
 ### Objective
-Commit the profiling infrastructure on `perf/bottleneck-profiling` and run the full benchmark
-suite to identify the top performance bottlenecks in the learning and prediction paths.
+Verify the three bottleneck fixes on `perf/bottleneck-profiling`, run the full test suite to confirm no regressions, run benchmarks to confirm expected speedups, then merge and release.
 
 ### Approach
-1. Commit the 6 benchmarks files on branch `perf/bottleneck-profiling`
-2. Ensure services are running: `./start.sh`
-3. Run orchestrator: `python benchmarks/bottleneck_runner.py`
-4. Review JSON report in `benchmarks/results/`
-5. Identify top-3 bottlenecks by wall-clock contribution
-6. File targeted optimization tasks in SESSION_STATE or a new sprint backlog entry
+1. Ensure services are running: `./start.sh`
+2. Run full test suite: `./run_tests.sh --no-start --no-stop`
+3. Run benchmark suite: `python benchmarks/bottleneck_runner.py`
+4. Confirm all three speedup targets are met (see DECISION-011 table)
+5. Merge branch to main
+6. Run container-manager.sh with `patch` bump (bug/perf fixes, no API changes)
 
 ### Estimated Duration
-1-2 hours (commit + run + analyze)
+2-3 hours (test + benchmark + merge + release)
 
 ### Success Criteria
-- Benchmark suite executes without errors at all four scale tiers
-- JSON report produced with per-operation timing and bottleneck ranking
-- Top-3 bottlenecks identified with I/O vs CPU breakdown
-- Actionable optimization tasks filed based on findings
+- All 444+ tests pass, zero regressions
+- Learning throughput reaches 100+/sec
+- `get_all_symbols_batch` completes in under 10ms at 10K symbols
+- Single-symbol prediction succeeds at 10K patterns in under 20ms
+- Clean merge to main with version bump
 
 ---
 
@@ -258,6 +258,15 @@ Make KatoProcessor stateless following standard web application patterns:
 - **Related Work**: planning-docs/initiatives/hybrid-clickhouse-redis.md (v3.0 architecture)
 
 ## Recent Achievements
+- **Database Bottleneck Fixes - THREE FIXES IMPLEMENTED** (2026-03-25): PENDING VERIFICATION
+  - **Branch**: `perf/bottleneck-profiling`
+  - **Decision**: DECISION-011 — fix in-place (no database migration); DuckDB/PostgreSQL/SQLite alternatives evaluated and rejected; 3-day fix vs 4-8 week migration
+  - **Fix 1 (Deferred ClickHouse Flush)**: Removed premature `flush()` from `learnPattern()` hot path; added flush-before-predict guards; files: `knowledge_base.py`, `clickhouse_writer.py`, `pattern_processor.py`
+  - **Fix 2 (Redis HASH Restructure)**: Replaced per-symbol individual keys with Redis HASH structures; eliminated O(N) SCAN; file: `redis_writer.py`
+  - **Fix 3 (first_token ClickHouse Query)**: Replaced IN-clause with direct `first_token` column query; added chunked IN-clause to filter executor; files: `pattern_processor.py`, `executor.py`
+  - **Expected Gains**: Learning 10/sec → 100+/sec; `get_all_symbols_batch` 2016ms → 5ms; single-symbol at 10K from failure → 5-10ms
+  - **ADR**: `docs/architecture-decisions/ADR-002-database-bottleneck-fix-strategy.md`
+  - **Next Step**: Run full test suite + benchmarks, merge to main, patch release
 - **Performance Bottleneck Profiling Infrastructure - IMPLEMENTATION COMPLETE** (2026-03-24): READY FOR EXECUTION
   - **Branch**: `perf/bottleneck-profiling` (uncommitted)
   - **Approach**: Zero-invasive monkey-patching — no changes to `kato/` source code

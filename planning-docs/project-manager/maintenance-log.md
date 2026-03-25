@@ -3,6 +3,27 @@
 
 ---
 
+## 2026-03-25 - Architectural Decision + Progress Documented: Database Bottleneck Fixes
+
+**Trigger**: Architectural decision event (DECISION-011) + task progress (three fixes implemented on `perf/bottleneck-profiling`)
+
+**Event Type**: Architectural decision + in-progress implementation update
+
+**Actions Taken**:
+1. Updated `planning-docs/DECISIONS.md` — added DECISION-011 (prepended as most recent entry; updated Last Updated to 2026-03-25); full alternatives table (DuckDB/PostgreSQL/SQLite evaluated and rejected), implementation details for all three fixes, expected performance targets table
+2. Created `docs/architecture-decisions/ADR-002-database-bottleneck-fix-strategy.md` — full ADR with problem statement, four options considered with pros/cons, selected option rationale, implementation details, performance targets table, consequences
+3. Updated `planning-docs/SESSION_STATE.md` — Last Updated timestamp; added new Recent Achievements entry at top of list with per-fix details; replaced "Commit Branch and Execute Benchmarks" Next Immediate Action with "Verify, Test, and Merge Branch" (fixes already implemented, next step is verification + merge)
+4. Updated `planning-docs/project-manager/triggers.md` with activation event
+5. Updated `planning-docs/project-manager/patterns.md` with new profiling-to-fix pattern
+
+**Summary**:
+- Three bottlenecks identified via profiling infrastructure and fixed in branch `perf/bottleneck-profiling`
+- DuckDB, PostgreSQL, SQLite alternatives evaluated and rejected (4-8 weeks vs 3 days; bottlenecks are code patterns not database limitations)
+- Expected gains: 10x+ learning throughput, 400x symbol lookup speedup, single-symbol prediction restored at 10K scale
+- Next step: full test suite + benchmark verification, then merge + patch release
+
+---
+
 ## 2026-03-24 - New Work Item Archived: Performance Bottleneck Profiling Infrastructure
 
 **Trigger**: Task completion event — 6-file profiling infrastructure implementation complete on branch `perf/bottleneck-profiling`

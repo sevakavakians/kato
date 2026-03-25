@@ -3,6 +3,34 @@
 
 ---
 
+## Performance Optimization Patterns
+
+### 2026-03-25 - Profiling-Driven Fix Scope Decision: Bottleneck Type Determines Remedy
+
+**Pattern**: When profiling surfaces performance bottlenecks, the first question is whether the bottleneck is a code pattern error, a data structure mismatch, or a fundamental database limitation. The answer determines whether targeted fixes or full migration is warranted.
+
+**Discovery Trigger**: After the 2026-03-24 benchmarking infrastructure identified three bottlenecks, the team evaluated DuckDB, PostgreSQL, and SQLite as ClickHouse replacements. Analysis revealed that none of the three bottlenecks were fundamental database limitations — all three were fixable code patterns.
+
+**Assumption → Reality**:
+- Assumed: poor performance might indicate the wrong database choice
+- Reality: the bottlenecks (premature flush, O(N) SCAN, unindexed query path) exist independent of which database is used; they are code errors and data structure mismatches, not database limitations
+
+**Bottleneck Classification Framework**:
+1. **Code error** (e.g., calling flush() in a loop when write buffering already exists): fix the code, 1 day
+2. **Data structure mismatch** (e.g., individual string keys where a HASH is correct): change the data structure, 1 day
+3. **Query pattern** (e.g., full table scan when an indexed column is available): fix the query, 1 day
+4. **Fundamental database limitation** (e.g., single-writer lock under concurrent writes): consider migration, 4-8 weeks
+
+**Resolution Pattern**: Before evaluating database migrations, classify each bottleneck into one of the four categories above. Categories 1-3 are always faster to fix in-place. Only Category 4 justifies migration scope.
+
+**Lesson**: Database migration is the most expensive remedy. It is rarely necessary unless the bottleneck is provably a fundamental limitation of the current database's architecture (e.g., write concurrency model, storage layout). Profiling data that shows slow queries is not by itself evidence for migration.
+
+**Recurrence Risk**: Low — this framework is now documented. Future performance work should start with bottleneck classification before entertaining migration options.
+
+**Time Savings**: 4-8 weeks (migration) → 3 days (targeted fixes) = ~30x faster time-to-resolution
+
+---
+
 ## Performance Profiling Patterns
 
 ### 2026-03-24 - Monkey-Patching for Zero-Intrusion Production-Accurate Profiling

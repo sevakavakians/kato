@@ -246,14 +246,14 @@ class RedisWriter:
             pipe = self.client.pipeline(transaction=False)
 
             for symbol, count in symbol_counts.items():
-                # Increment symbol frequency by count
-                pipe.incrby(f"{self.kb_id}:symbol:freq:{symbol}", count)
+                # Increment symbol frequency by count (HASH field per symbol)
+                pipe.hincrby(f"{self.kb_id}:symbols:freq", symbol, count)
                 # Add symbol-to-pattern mapping (idempotent SET add)
                 pipe.sadd(f"{self.kb_id}:symbol_to_patterns:{symbol}", pattern_name)
 
                 if is_new_pattern:
                     # Increment pattern_member_frequency by 1 (new pattern contains this symbol)
-                    pipe.incrby(f"{self.kb_id}:symbol:pmf:{symbol}", 1)
+                    pipe.hincrby(f"{self.kb_id}:symbols:pmf", symbol, 1)
 
             # Global counters
             pipe.incrby(f"{self.kb_id}:global:total_symbols_in_patterns_frequencies", total_symbol_count)
@@ -434,8 +434,7 @@ class RedisWriter:
             Exception: If increment fails
         """
         try:
-            freq_key = f"{self.kb_id}:symbol:freq:{symbol}"
-            new_freq = self.client.incrby(freq_key, count)
+            new_freq = self.client.hincrby(f"{self.kb_id}:symbols:freq", symbol, count)
             logger.debug(f"Incremented symbol frequency for {symbol} by {count} to {new_freq}")
             return new_freq
 
@@ -461,8 +460,7 @@ class RedisWriter:
             Exception: If increment fails
         """
         try:
-            pmf_key = f"{self.kb_id}:symbol:pmf:{symbol}"
-            new_pmf = self.client.incrby(pmf_key, count)
+            new_pmf = self.client.hincrby(f"{self.kb_id}:symbols:pmf", symbol, count)
             logger.debug(f"Incremented pattern_member_frequency for {symbol} by {count} to {new_pmf}")
             return new_pmf
 
@@ -484,11 +482,8 @@ class RedisWriter:
             Exception: If retrieval fails
         """
         try:
-            freq_key = f"{self.kb_id}:symbol:freq:{symbol}"
-            pmf_key = f"{self.kb_id}:symbol:pmf:{symbol}"
-
-            freq = self.client.get(freq_key)
-            pmf = self.client.get(pmf_key)
+            freq = self.client.hget(f"{self.kb_id}:symbols:freq", symbol)
+            pmf = self.client.hget(f"{self.kb_id}:symbols:pmf", symbol)
 
             return {
                 'name': symbol,
@@ -502,10 +497,11 @@ class RedisWriter:
 
     def get_all_symbols_batch(self) -> dict[str, dict[str, Any]]:
         """
-        Get statistics for all symbols in this kb_id using pipelined Redis calls.
+        Get statistics for all symbols in this kb_id using Redis HASH structures.
 
-        Collects all symbol keys via SCAN, then fetches all freq and pmf values
-        in a single pipeline call (2 GETs per symbol batched together).
+        Uses HGETALL on two HASH keys (symbols:freq and symbols:pmf) instead of
+        SCAN + pipelined GETs. This is O(1) for the hash lookup plus O(k) for
+        k symbols, vs O(N) SCAN over all Redis keys.
 
         Returns:
             Dictionary mapping symbol names to their statistics
@@ -514,43 +510,27 @@ class RedisWriter:
             Exception: If retrieval fails
         """
         try:
-            # Phase 1: Collect all symbol names via SCAN
-            freq_pattern = f"{self.kb_id}:symbol:freq:*"
-            prefix = f"{self.kb_id}:symbol:freq:"
-            symbol_names = []
+            # Two HGETALL calls instead of O(N) SCAN + O(N) pipelined GETs
+            freq_data = self.client.hgetall(f"{self.kb_id}:symbols:freq")
+            pmf_data = self.client.hgetall(f"{self.kb_id}:symbols:pmf")
 
-            for freq_key in self.client.scan_iter(match=freq_pattern, count=1000):
-                # Handle bytes vs string keys
-                if isinstance(freq_key, bytes):
-                    freq_key = freq_key.decode('utf-8')
-                symbol_name = freq_key.split(prefix, 1)[1]
-                symbol_names.append(symbol_name)
-
-            if not symbol_names:
+            if not freq_data:
                 logger.debug(f"No symbols found for kb_id: {self.kb_id}")
                 return {}
 
-            # Phase 2: Pipeline all GETs (2 per symbol: freq + pmf)
-            pipe = self.client.pipeline(transaction=False)
-            for symbol_name in symbol_names:
-                pipe.get(f"{self.kb_id}:symbol:freq:{symbol_name}")
-                pipe.get(f"{self.kb_id}:symbol:pmf:{symbol_name}")
-
-            raw_results = pipe.execute()
-
-            # Phase 3: Parse results (2 values per symbol)
             symbols = {}
-            for i, symbol_name in enumerate(symbol_names):
-                freq = raw_results[i * 2]
-                pmf = raw_results[i * 2 + 1]
+            for symbol_name, freq_val in freq_data.items():
+                # Handle bytes vs string keys
+                name = symbol_name.decode('utf-8') if isinstance(symbol_name, bytes) else symbol_name
+                pmf_val = pmf_data.get(symbol_name, 0)
 
-                symbols[symbol_name] = {
-                    'name': symbol_name,
-                    'frequency': int(freq) if freq else 0,
-                    'pattern_member_frequency': int(pmf) if pmf else 0
+                symbols[name] = {
+                    'name': name,
+                    'frequency': int(freq_val) if freq_val else 0,
+                    'pattern_member_frequency': int(pmf_val) if pmf_val else 0
                 }
 
-            logger.debug(f"Retrieved {len(symbols)} symbols for kb_id: {self.kb_id} (pipelined)")
+            logger.debug(f"Retrieved {len(symbols)} symbols for kb_id: {self.kb_id} (HASH)")
             return symbols
 
         except Exception as e:

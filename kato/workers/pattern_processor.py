@@ -518,18 +518,13 @@ class PatternProcessor:
         """
         logger.info(f"*** {self.name} [ PatternProcessor _predict_single_symbol_fast called with symbol='{symbol}' ]")
 
+        # Flush any pending ClickHouse writes so recently learned patterns are visible
+        self.superkb.clickhouse_writer.flush_if_pending()
+
         try:
-            # Step 1: Get all pattern names containing this symbol from Redis (O(1))
-            pattern_names = self.superkb.redis_writer.get_patterns_for_symbol(symbol)
-
-            if not pattern_names:
-                logger.debug(f"No patterns found containing symbol '{symbol}'")
-                return []
-
-            logger.debug(f"Found {len(pattern_names)} patterns containing symbol '{symbol}'")
-
-            # Step 2: Load pattern data from ClickHouse in batch
-            # Get ClickHouse client from connection manager
+            # Step 1: Query ClickHouse directly for patterns starting with this symbol
+            # Uses the first_token column (populated during _prepare_row) instead of
+            # building a large IN-clause from Redis, which overflows max_query_size at scale.
             from kato.storage.connection_manager import get_clickhouse_client
             clickhouse_client = get_clickhouse_client()
 
@@ -537,26 +532,24 @@ class PatternProcessor:
                 logger.warning("ClickHouse not available, falling back to regular prediction path")
                 return await self.predictPattern([symbol], stm_events=stm_events)
 
-            # Query patterns by names (using IN clause)
-            pattern_names_list = list(pattern_names)
-            placeholders = ', '.join([f"'{name}'" for name in pattern_names_list])
             query = f"""
                 SELECT name, pattern_data, length
                 FROM kato.patterns_data
-                WHERE kb_id = '{self.superkb.id}' AND name IN ({placeholders})
+                WHERE kb_id = '{self.superkb.id}' AND first_token = '{symbol}'
             """
 
             result = clickhouse_client.query(query)
 
             if not result.result_rows:
-                logger.debug(f"No pattern data found in ClickHouse for symbol '{symbol}'")
+                logger.debug(f"No patterns found starting with symbol '{symbol}'")
                 return []
 
-            # Step 3: Filter patterns that START with this symbol (first event, first symbol)
+            logger.debug(f"Found {len(result.result_rows)} patterns starting with symbol '{symbol}'")
+
+            # Step 2: Build candidate list (all rows already start with this symbol)
             candidate_patterns = []
             for row in result.result_rows:
                 pattern_name, pattern_data, length = row
-                # Check if pattern starts with this symbol
                 if pattern_data and pattern_data[0] and pattern_data[0][0] == symbol:
                     candidate_patterns.append({
                         'name': pattern_name,
@@ -738,6 +731,9 @@ class PatternProcessor:
             ValueError: If predictions are missing required fields.
         """
         logger.info(f"*** {self.name} [ PatternProcessor predictPattern (async) called with state={state} ]")
+
+        # Flush any pending ClickHouse writes so recently learned patterns are visible
+        self.superkb.clickhouse_writer.flush_if_pending()
 
         # FAST PATH: Single-symbol predictions using Redis index
         if len(state) == 1:

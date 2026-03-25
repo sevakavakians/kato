@@ -318,9 +318,16 @@ class FilterPipelineExecutor:
 
         # Refine query if we have existing candidates
         if existing_candidates is not None and len(existing_candidates) > 0:
-            # Add WHERE clause to filter by existing candidates
-            # Limit to first 10,000 to avoid query size issues
-            candidate_list = list(existing_candidates)[:10000]
+            candidate_list = list(existing_candidates)
+
+            # Chunk large candidate sets to avoid ClickHouse max_query_size overflow
+            # Each SHA1 hash is ~42 chars quoted; 500 * 42 = ~21KB per chunk (safe under 262KB limit)
+            CHUNK_SIZE = 500
+            if len(candidate_list) > CHUNK_SIZE:
+                return self._execute_chunked_query(
+                    query, kb_id_where, candidate_list, CHUNK_SIZE
+                )
+
             candidate_str = ", ".join(f"'{c}'" for c in candidate_list)
 
             # Inject WHERE clause into query (kb_id already added above)
@@ -379,6 +386,75 @@ class FilterPipelineExecutor:
             logger.error(f"Query was: {query}")
             # Return existing candidates on error to allow pipeline to continue
             return existing_candidates if existing_candidates else set()
+
+    def _execute_chunked_query(self, base_query: str, kb_id_where: str,
+                               candidate_list: List[str], chunk_size: int) -> Set[str]:
+        """Execute a query with large candidate sets by chunking the IN clause.
+
+        Avoids ClickHouse max_query_size overflow when candidate count exceeds
+        ~500 (each SHA1 hash is ~42 chars quoted).
+
+        Args:
+            base_query: The filter query with WHERE clause already containing kb_id
+            kb_id_where: The kb_id WHERE clause string
+            candidate_list: Full list of candidate pattern names
+            chunk_size: Maximum candidates per IN clause
+
+        Returns:
+            Set of candidate names passing the filter across all chunks
+        """
+        from itertools import chain as itertools_chain
+        all_candidates = set()
+
+        for i in range(0, len(candidate_list), chunk_size):
+            chunk = candidate_list[i:i + chunk_size]
+            candidate_str = ", ".join(f"'{c}'" for c in chunk)
+
+            chunk_query = base_query
+            if "WHERE" in chunk_query:
+                chunk_query = chunk_query.replace(
+                    "WHERE",
+                    f"WHERE name IN ({candidate_str}) AND", 1
+                )
+                chunk_query = chunk_query.replace(
+                    f"WHERE name IN ({candidate_str}) AND {kb_id_where}",
+                    f"WHERE {kb_id_where} AND name IN ({candidate_str})"
+                )
+            else:
+                chunk_query = chunk_query.replace(
+                    "FROM patterns_data",
+                    f"FROM patterns_data WHERE {kb_id_where} AND name IN ({candidate_str})"
+                )
+
+            try:
+                result = self.clickhouse.query(chunk_query)
+                column_names = result.column_names if hasattr(result, 'column_names') else []
+
+                for row in result.result_rows:
+                    name = row[0]
+                    all_candidates.add(name)
+
+                    if name not in self.patterns_cache:
+                        self.patterns_cache[name] = {}
+
+                    for j, col_name in enumerate(column_names):
+                        if j == 0:
+                            continue
+                        value = row[j] if j < len(row) else None
+                        if col_name == 'pattern_data' and value:
+                            from itertools import chain
+                            self.patterns_cache[name]['pattern_data'] = value
+                            self.patterns_cache[name]['pattern_data_flat'] = list(chain(*value))
+                        else:
+                            self.patterns_cache[name][col_name] = value
+
+            except Exception as e:
+                logger.error(f"Chunked query failed (chunk {i//chunk_size + 1}): {e}")
+
+        logger.debug(f"Chunked query: {len(candidate_list)} candidates in "
+                     f"{(len(candidate_list) + chunk_size - 1) // chunk_size} chunks, "
+                     f"{len(all_candidates)} results")
+        return all_candidates
 
     def get_metrics(self) -> Dict[str, Any]:
         """

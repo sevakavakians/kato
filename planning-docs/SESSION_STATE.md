@@ -1,5 +1,5 @@
 # SESSION_STATE.md - Current Development State
-*Last Updated: 2026-03-20 (TLS/HTTPS Support for All Database Connections)*
+*Last Updated: 2026-03-25 (Database Bottleneck Fixes - Three Fixes Implemented on perf/bottleneck-profiling)*
 
 ## Current Task
 **Phase 2: Stateless Processor Refactor - Test Updates - ACTIVE** 🎯
@@ -149,7 +149,32 @@
 - `kato/workers/pattern_operations.py` - Update to stateless
 
 ## Next Immediate Action
-**Phase 2 Task 2.4: Create Configuration Tests** 🎯
+**Bottleneck Fixes: Verify, Test, and Merge Branch** (Active)
+
+### Objective
+Verify the three bottleneck fixes on `perf/bottleneck-profiling`, run the full test suite to confirm no regressions, run benchmarks to confirm expected speedups, then merge and release.
+
+### Approach
+1. Ensure services are running: `./start.sh`
+2. Run full test suite: `./run_tests.sh --no-start --no-stop`
+3. Run benchmark suite: `python benchmarks/bottleneck_runner.py`
+4. Confirm all three speedup targets are met (see DECISION-011 table)
+5. Merge branch to main
+6. Run container-manager.sh with `patch` bump (bug/perf fixes, no API changes)
+
+### Estimated Duration
+2-3 hours (test + benchmark + merge + release)
+
+### Success Criteria
+- All 444+ tests pass, zero regressions
+- Learning throughput reaches 100+/sec
+- `get_all_symbols_batch` completes in under 10ms at 10K symbols
+- Single-symbol prediction succeeds at 10K patterns in under 20ms
+- Clean merge to main with version bump
+
+---
+
+**Phase 2 Task 2.4: Create Configuration Tests** (Queued — resumes after profiling)
 
 ### Objective
 Create comprehensive tests for session configuration management to verify:
@@ -158,23 +183,8 @@ Create comprehensive tests for session configuration management to verify:
 - Config parameter validation
 - Config persistence across observations
 
-### Approach
-1. Review existing configuration test patterns
-2. Create new test file: tests/tests/unit/test_session_config.py
-3. Test default config values
-4. Test config update endpoint
-5. Test config parameter types and validation
-6. Test config persistence in session state
-
 ### Estimated Duration
 4-6 hours
-
-### Success Criteria
-- ✅ Default configuration values tested
-- ✅ Config update endpoint tested
-- ✅ Parameter validation tested
-- ✅ Config persistence verified
-- ✅ All new tests passing
 
 ## Blockers
 **ACTIVE BLOCKER** ⚠️
@@ -248,6 +258,26 @@ Make KatoProcessor stateless following standard web application patterns:
 - **Related Work**: planning-docs/initiatives/hybrid-clickhouse-redis.md (v3.0 architecture)
 
 ## Recent Achievements
+- **Database Bottleneck Fixes - THREE FIXES IMPLEMENTED** (2026-03-25): PENDING VERIFICATION
+  - **Branch**: `perf/bottleneck-profiling`
+  - **Decision**: DECISION-011 — fix in-place (no database migration); DuckDB/PostgreSQL/SQLite alternatives evaluated and rejected; 3-day fix vs 4-8 week migration
+  - **Fix 1 (Deferred ClickHouse Flush)**: Removed premature `flush()` from `learnPattern()` hot path; added flush-before-predict guards; files: `knowledge_base.py`, `clickhouse_writer.py`, `pattern_processor.py`
+  - **Fix 2 (Redis HASH Restructure)**: Replaced per-symbol individual keys with Redis HASH structures; eliminated O(N) SCAN; file: `redis_writer.py`
+  - **Fix 3 (first_token ClickHouse Query)**: Replaced IN-clause with direct `first_token` column query; added chunked IN-clause to filter executor; files: `pattern_processor.py`, `executor.py`
+  - **Expected Gains**: Learning 10/sec → 100+/sec; `get_all_symbols_batch` 2016ms → 5ms; single-symbol at 10K from failure → 5-10ms
+  - **ADR**: `docs/architecture-decisions/ADR-002-database-bottleneck-fix-strategy.md`
+  - **Next Step**: Run full test suite + benchmarks, merge to main, patch release
+- **Performance Bottleneck Profiling Infrastructure - IMPLEMENTATION COMPLETE** (2026-03-24): READY FOR EXECUTION
+  - **Branch**: `perf/bottleneck-profiling` (uncommitted)
+  - **Approach**: Zero-invasive monkey-patching — no changes to `kato/` source code
+  - **`benchmarks/profiler.py`**: `TimingCollector`, `PerfTimer` (time.perf_counter), `instrument_class/instance` utilities
+  - **`benchmarks/data_generator.py`**: Zipf-distributed vocabulary; four scale tiers (100/1K/10K/100K); unique processor_id per tier for full DB isolation
+  - **`benchmarks/test_database_latency.py`**: Raw ClickHouse, Redis, and computation (MinHash/SHA1/LCS) baselines
+  - **`benchmarks/test_learning_path.py`**: Instrumented observe→learn path with per-operation breakdown
+  - **`benchmarks/test_prediction_path.py`**: Single-symbol fast path + multi-symbol filter pipeline stage timing
+  - **`benchmarks/bottleneck_runner.py`**: Orchestrator with JSON reporting, bottleneck ranking, and scaling analysis
+  - **Next Step**: Commit branch, run `python benchmarks/bottleneck_runner.py`, analyze top-3 bottlenecks
+  - **Archive**: planning-docs/completed/optimizations/2026-03-24-performance-bottleneck-profiling-infrastructure.md
 - **TLS/HTTPS Support for All Database Connections - COMPLETE** (2026-03-20): SECURITY FEATURE + BUG FIX
   - **Bug Fixed**: `qdrant-client` library auto-enables HTTPS when `api_key` is passed, causing SSL failures against plain HTTP Qdrant; fixed by passing `https` explicitly from `QDRANT_HTTPS` env var to `QdrantClient`
   - **New Env Vars**: `QDRANT_HTTPS`, `CLICKHOUSE_SECURE`, `REDIS_TLS` — all default `false` (zero breaking changes)

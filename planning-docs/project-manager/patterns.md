@@ -3,6 +3,63 @@
 
 ---
 
+## Performance Optimization Patterns
+
+### 2026-03-25 - Profiling-Driven Fix Scope Decision: Bottleneck Type Determines Remedy
+
+**Pattern**: When profiling surfaces performance bottlenecks, the first question is whether the bottleneck is a code pattern error, a data structure mismatch, or a fundamental database limitation. The answer determines whether targeted fixes or full migration is warranted.
+
+**Discovery Trigger**: After the 2026-03-24 benchmarking infrastructure identified three bottlenecks, the team evaluated DuckDB, PostgreSQL, and SQLite as ClickHouse replacements. Analysis revealed that none of the three bottlenecks were fundamental database limitations — all three were fixable code patterns.
+
+**Assumption → Reality**:
+- Assumed: poor performance might indicate the wrong database choice
+- Reality: the bottlenecks (premature flush, O(N) SCAN, unindexed query path) exist independent of which database is used; they are code errors and data structure mismatches, not database limitations
+
+**Bottleneck Classification Framework**:
+1. **Code error** (e.g., calling flush() in a loop when write buffering already exists): fix the code, 1 day
+2. **Data structure mismatch** (e.g., individual string keys where a HASH is correct): change the data structure, 1 day
+3. **Query pattern** (e.g., full table scan when an indexed column is available): fix the query, 1 day
+4. **Fundamental database limitation** (e.g., single-writer lock under concurrent writes): consider migration, 4-8 weeks
+
+**Resolution Pattern**: Before evaluating database migrations, classify each bottleneck into one of the four categories above. Categories 1-3 are always faster to fix in-place. Only Category 4 justifies migration scope.
+
+**Lesson**: Database migration is the most expensive remedy. It is rarely necessary unless the bottleneck is provably a fundamental limitation of the current database's architecture (e.g., write concurrency model, storage layout). Profiling data that shows slow queries is not by itself evidence for migration.
+
+**Recurrence Risk**: Low — this framework is now documented. Future performance work should start with bottleneck classification before entertaining migration options.
+
+**Time Savings**: 4-8 weeks (migration) → 3 days (targeted fixes) = ~30x faster time-to-resolution
+
+---
+
+## Performance Profiling Patterns
+
+### 2026-03-24 - Monkey-Patching for Zero-Intrusion Production-Accurate Profiling
+
+**Pattern**: When building a profiling infrastructure for an existing codebase, monkey-patching
+live class methods is preferable to modifying source files. The instrumented code is byte-for-byte
+identical to production; there is no risk of accidentally altering the behavior being measured.
+
+**Implementation**: Wrap each target method with a closure that records `time.perf_counter()`
+before and after the real call, appends the delta to a `TimingCollector`, then returns the
+original result unchanged. A single `instrument_class(cls, collector)` utility can wrap all
+public methods of a class in one call.
+
+**When to Use**:
+- When profiling must not alter production code (zero-diff requirement)
+- When the profiling infrastructure must be disposable (no cleanup needed)
+- When you want to benchmark the exact code that runs in Docker, not a modified version
+
+**Limitation**: Monkey-patching does not capture C-extension internals (e.g., time inside
+ClickHouse's own serialization). Measure at the Python call boundary and treat the delta as
+the total round-trip including network + driver overhead.
+
+**Scaling Analysis Convention**: Report scaling coefficient as `time_at_100K / time_at_100`.
+Linear (100x) is expected; >100x flags super-linear algorithmic growth; <100x confirms
+caching/batching is working. This ratio makes bottleneck reports actionable regardless of
+absolute latency differences across machines.
+
+---
+
 ## Security Patterns
 
 ### 2026-03-20 - Client Library Auth Flags Can Silently Change Transport Protocol

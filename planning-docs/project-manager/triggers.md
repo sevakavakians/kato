@@ -3,6 +3,59 @@
 
 ---
 
+## 2026-03-25 - Architectural Decision + Implementation Progress (Database Bottleneck Fixes)
+
+**Trigger Type**: Primary — Architectural Decision + Task Progress
+**Event**: DECISION-011 made (in-place fixes selected over database migration); three fixes implemented on `perf/bottleneck-profiling`
+**Source**: Developer report — DuckDB/PostgreSQL/SQLite alternatives evaluated and rejected; three targeted fixes for premature flush, Redis SCAN, and first_token query
+
+**Decision Details**:
+- Alternatives evaluated: DuckDB (embedded columnar), PostgreSQL (transactional RDBMS), SQLite (embedded relational)
+- All rejected: 4-8 week migration scope vs 3-day targeted fix; bottlenecks are code patterns not database limitations
+- Selected: In-place ClickHouse + Redis fixes
+
+**Fix Summary**:
+- Fix 1: Deferred ClickHouse flush — `knowledge_base.py`, `clickhouse_writer.py`, `pattern_processor.py`
+- Fix 2: Redis HASH restructure — `redis_writer.py`
+- Fix 3: first_token column query — `pattern_processor.py`, `executor.py`
+
+**Documents Updated**:
+- `planning-docs/DECISIONS.md` (DECISION-011 prepended, Last Updated 2026-03-25)
+- `docs/architecture-decisions/ADR-002-database-bottleneck-fix-strategy.md` (created)
+- `planning-docs/SESSION_STATE.md` (Recent Achievements new entry, Next Immediate Action updated, timestamp)
+- `planning-docs/project-manager/maintenance-log.md`
+- `planning-docs/project-manager/triggers.md`
+- `planning-docs/project-manager/patterns.md`
+
+**Agent Response Time**: Immediate
+
+---
+
+## 2026-03-24 - Task Completion (Optimization: Performance Bottleneck Profiling Infrastructure)
+
+**Trigger Type**: Primary - Task Completion
+**Event**: Profiling infrastructure implementation complete — 6 files on branch `perf/bottleneck-profiling`
+**Source**: Developer report — benchmarks/profiler.py, data_generator.py, test_database_latency.py, test_learning_path.py, test_prediction_path.py, bottleneck_runner.py
+
+**Details**:
+- `benchmarks/profiler.py`: `TimingCollector`, `PerfTimer`, `instrument_class/instance`
+- `benchmarks/data_generator.py`: Zipf vocabulary, 4 scale tiers, unique processor_id per tier
+- `benchmarks/test_database_latency.py`: Raw ClickHouse / Redis / compute baselines
+- `benchmarks/test_learning_path.py`: observe→learn path per-operation breakdown
+- `benchmarks/test_prediction_path.py`: fast path + filter pipeline stage timing
+- `benchmarks/bottleneck_runner.py`: JSON report, bottleneck ranking, scaling analysis
+
+**Documents Updated**:
+- Created `planning-docs/completed/optimizations/2026-03-24-performance-bottleneck-profiling-infrastructure.md`
+- `planning-docs/SESSION_STATE.md` Recent Achievements (new entry at top), Next Immediate Action updated, Last Updated timestamp
+- `planning-docs/project-manager/maintenance-log.md`
+- `planning-docs/project-manager/triggers.md`
+- `planning-docs/project-manager/patterns.md`
+
+**Agent Response Time**: Immediate
+
+---
+
 ## 2026-03-20 - Task Completion (Feature: TLS/HTTPS Support for All Database Connections)
 
 **Trigger Type**: Primary - Task Completion + Architectural Decision

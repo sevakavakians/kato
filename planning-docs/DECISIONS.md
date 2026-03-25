@@ -1,6 +1,79 @@
 # DECISIONS.md - Architectural & Design Decision Log
 *Append-Only Log - Started: 2025-08-29*
-*Last Updated: 2026-03-20*
+*Last Updated: 2026-03-25*
+
+---
+
+## 2026-03-25 - DECISION-011: Fix ClickHouse + Redis Bottlenecks In-Place (No Database Migration)
+**Decision**: Address the top three performance bottlenecks within the existing ClickHouse + Redis hybrid architecture via targeted code fixes rather than migrating to DuckDB, PostgreSQL, or SQLite.
+**Status**: IN PROGRESS — three fixes implemented on branch `perf/bottleneck-profiling`
+**Confidence**: High
+**Impact**: Learning throughput 10/sec → 100+/sec; get_all_symbols_batch 2016ms → 5ms; single-symbol at 10K scale from failure → 5-10ms
+
+### Context
+Benchmark profiling on the `perf/bottleneck-profiling` branch identified three critical performance bottlenecks in the learning and prediction paths:
+
+1. **Premature ClickHouse flush**: `learnPattern()` called `flush()` synchronously after every single pattern write, negating the write buffer (batch insert optimization from 2026-03-19). Each learn call triggered a full ClickHouse round-trip regardless of buffer fullness.
+2. **Redis O(N) SCAN for symbol lookup**: `get_all_symbols_batch()` used individual per-symbol Redis keys, requiring a full `SCAN` of the keyspace to enumerate them. At 10K symbols this degraded to ~2016ms per call.
+3. **ClickHouse IN-clause for first_token lookup**: Pattern prediction queries used a large `IN (token1, token2, ...)` clause across the full pattern table instead of querying the indexed `first_token` column directly.
+
+### Alternatives Evaluated
+
+#### DuckDB (Embedded Columnar)
+- **Pros**: Zero network overhead (in-process), columnar storage, excellent analytical query performance
+- **Cons**: Not designed for concurrent write workloads; requires full migration of storage layer; 4-8 weeks of work; no production validation in KATO's access pattern; loses Redis session/metadata co-location benefit
+- **Decision**: Rejected
+
+#### PostgreSQL (Transactional RDBMS)
+- **Pros**: Battle-tested, excellent tooling, strong ACID guarantees
+- **Cons**: Row-oriented (not optimized for pattern analytics); requires schema migration; 4-8 weeks of work; adds operational overhead; no columnar advantages for KATO's read-heavy pattern scan workload
+- **Decision**: Rejected
+
+#### SQLite (Embedded Relational)
+- **Pros**: Zero network overhead, simple deployment
+- **Cons**: Single-writer lock degrades under concurrent load; not designed for billion-scale pattern storage; feature regression vs ClickHouse (no MinHash/LSH pipeline); 4-8 weeks of migration work
+- **Decision**: Rejected
+
+#### In-Place ClickHouse + Redis Fixes (Selected)
+- **Pros**: ~3 days vs 4-8 weeks; no data migration; no operational risk; fixes are surgical and reversible; validates profiling-driven optimization methodology
+- **Cons**: Remains coupled to ClickHouse + Redis operational complexity
+- **Decision**: Accepted
+
+### Implementation Details
+
+**Fix 1: Deferred ClickHouse Flush**
+- Removed premature `flush()` call from `learnPattern()` hot path
+- Added flush-before-predict guards so predictions always see committed data
+- Files: `kato/storage/knowledge_base.py`, `kato/storage/clickhouse_writer.py`, `kato/workers/pattern_processor.py`
+- Expected gain: learning throughput 10/sec → 100+/sec
+
+**Fix 2: Redis HASH Restructure**
+- Replaced per-symbol individual Redis string keys with Redis HASH structures
+- Eliminated O(N) SCAN; replaced with single `HGETALL` on the symbol hash
+- Files: `kato/storage/redis_writer.py`
+- Expected gain: `get_all_symbols_batch` 2016ms → 5ms
+
+**Fix 3: first_token ClickHouse Query**
+- Replaced `IN (token1, token2, ...)` clause (full table scan) with direct `first_token` column query (index-aided)
+- Added chunked IN-clause to filter executor for large token sets
+- Files: `kato/workers/pattern_processor.py`, `kato/searches/executor.py`
+- Expected gain: single-symbol prediction at 10K patterns from failure → 5-10ms
+
+### Expected Performance Targets
+| Operation | Before | After |
+|-----------|--------|-------|
+| Learning throughput | ~10/sec | 100+/sec |
+| get_all_symbols_batch | ~2016ms | ~5ms |
+| Single-symbol predict (10K patterns) | failure | 5-10ms |
+
+### Affected Files
+`kato/storage/knowledge_base.py`, `kato/storage/clickhouse_writer.py`, `kato/workers/pattern_processor.py`, `kato/storage/redis_writer.py`, `kato/searches/executor.py`
+
+### Architecture Decision Record
+`docs/architecture-decisions/ADR-002-database-bottleneck-fix-strategy.md`
+
+### Branch
+`perf/bottleneck-profiling`
 
 ---
 

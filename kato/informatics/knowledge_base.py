@@ -443,9 +443,10 @@ class SuperKnowledgeBase:
                 return False  # Not a new pattern
 
             else:
-                # New pattern - write to both ClickHouse and Redis
+                # New pattern - write to ClickHouse (buffered) and Redis
                 self.clickhouse_writer.write_pattern(pattern_object)
-                self.clickhouse_writer.flush()  # Ensure immediate visibility for queries
+                # Buffer accumulates; auto-flushes at batch_size (default 50).
+                # Prediction paths call flush_if_pending() before querying.
 
                 # Enforce persistence window for NEW patterns (same as re-learned patterns)
                 trimmed_emotives = emotives if emotives else []
@@ -493,6 +494,9 @@ class SuperKnowledgeBase:
             Dictionary with pattern data, or None if not found
         """
         try:
+            # Flush pending writes so recently learned patterns are visible
+            self.clickhouse_writer.flush_if_pending()
+
             # Get pattern data from ClickHouse
             pattern_data = self.clickhouse_writer.get_pattern_data(pattern)
             if not pattern_data:

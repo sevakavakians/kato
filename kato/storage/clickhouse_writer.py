@@ -75,6 +75,21 @@ class ClickHouseWriter:
 
         logger.debug(f"ClickHouseWriter initialized for kb_id: {kb_id}, batch_size: {self.batch_size}")
 
+    @property
+    def has_pending(self) -> bool:
+        """Check if there are unflushed patterns in the write buffer."""
+        return len(self._write_buffer) > 0
+
+    def flush_if_pending(self) -> int:
+        """Flush the write buffer only if there are pending patterns.
+
+        Returns:
+            Number of patterns flushed (0 if buffer was empty)
+        """
+        if self._write_buffer:
+            return self.flush()
+        return 0
+
     def _prepare_row(self, pattern_object) -> dict:
         """
         Prepare a row for ClickHouse insertion from a pattern object.

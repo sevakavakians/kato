@@ -494,6 +494,9 @@ class SuperKnowledgeBase:
             Dictionary with pattern data, or None if not found
         """
         try:
+            # Flush pending writes so recently learned patterns are visible
+            self.clickhouse_writer.flush_if_pending()
+
             # Get pattern data from ClickHouse
             pattern_data = self.clickhouse_writer.get_pattern_data(pattern)
             if not pattern_data:

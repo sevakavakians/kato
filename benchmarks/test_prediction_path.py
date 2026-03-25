@@ -48,6 +48,9 @@ def _setup_processor(processor_id: str):
 
 def _load_patterns(pp, patterns):
     """Learn patterns into the processor's storage."""
+    # Ensure patterns_kb is accessible (learn() references self.patterns_kb)
+    if not hasattr(pp, 'patterns_kb') or pp.patterns_kb is None:
+        pp.patterns_kb = pp.superkb.patterns_kb
     for pattern in patterns:
         pp.setSTM(pattern.pattern_data)
         pp.emotives = []

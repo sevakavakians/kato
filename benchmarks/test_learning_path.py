@@ -99,6 +99,10 @@ def run_learning_benchmark(tier_size: int, collector: TimingCollector,
         'assignNewlyLearnedToWorkers': f'learn.searcher.assign',
     }, collector))
 
+    # Ensure patterns_kb is accessible (learn() references self.patterns_kb)
+    if not hasattr(pp, 'patterns_kb') or pp.patterns_kb is None:
+        pp.patterns_kb = pp.superkb.patterns_kb
+
     # Learn patterns
     print(f"  Learning {tier_size:,} patterns...")
     learn_start = time.perf_counter()

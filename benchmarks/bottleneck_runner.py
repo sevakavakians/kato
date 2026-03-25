@@ -138,22 +138,24 @@ def generate_report(collectors: dict[str, TimingCollector],
         report["results"][path_name] = stats
         all_stats.update(stats)
 
-    # Bottleneck ranking for learning path
-    if 'learn.total' in all_stats:
+    # Bottleneck ranking for learning path (only learn.* labels)
+    learn_stats = {k: v for k, v in all_stats.items() if k.startswith('learn.')}
+    if 'learn.total' in learn_stats:
         report["summary"]["learning_bottlenecks"] = compute_bottleneck_ranking(
-            all_stats, 'learn.total'
+            learn_stats, 'learn.total'
         )[:10]
 
-    # Bottleneck ranking for fast prediction path
-    if 'predict.fast.total' in all_stats:
+    # Bottleneck ranking for fast prediction path (only predict.* labels)
+    predict_stats = {k: v for k, v in all_stats.items() if k.startswith('predict.')}
+    if 'predict.fast.total' in predict_stats:
         report["summary"]["prediction_fast_bottlenecks"] = compute_bottleneck_ranking(
-            all_stats, 'predict.fast.total'
+            predict_stats, 'predict.fast.total'
         )[:10]
 
     # Bottleneck ranking for full prediction path
-    if 'predict.full.total' in all_stats:
+    if 'predict.full.total' in predict_stats:
         report["summary"]["prediction_full_bottlenecks"] = compute_bottleneck_ranking(
-            all_stats, 'predict.full.total'
+            predict_stats, 'predict.full.total'
         )[:10]
 
     # I/O vs computation breakdown

@@ -19,6 +19,8 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from typing import Optional
+
 from benchmarks.profiler import TimingCollector, perf_timer
 
 # Lazy imports for optional dependencies

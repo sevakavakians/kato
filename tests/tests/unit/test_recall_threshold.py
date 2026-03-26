@@ -304,10 +304,12 @@ def test_threshold_multimodal(kato_fixture):
     kato_fixture.learn()
 
     # Partial match — observe with missing strings from each event
+    # Similarity = 2*4/(4+6) = 0.8 (difflib ratio with 4 matched tokens)
     test_cases = [
         (0.2, True),
         (0.5, True),
-        (0.8, False),
+        (0.8, True),   # Boundary: similarity=0.8 passes threshold=0.8 (>= comparison)
+        (0.85, False), # Above similarity: should filter out
     ]
 
     for threshold, expect_predictions in test_cases:

@@ -26,6 +26,7 @@ except (ImportError, AttributeError):
             return sum(i**2 for i in x) ** 0.5
 import hashlib
 import time
+from collections import OrderedDict
 from dataclasses import dataclass
 
 from ..config.vectordb_config import VectorDBConfig, get_vector_db_config
@@ -108,8 +109,8 @@ class VectorSearchEngine:
         # Initialize vector store
         self.store = get_vector_store(config=self.config)
 
-        # Initialize cache if enabled
-        self._cache = {} if self.enable_cache else None
+        # Initialize cache if enabled (OrderedDict for LRU eviction)
+        self._cache: OrderedDict | None = OrderedDict() if self.enable_cache else None
         self.cache_size = cache_size
 
         # Performance tracking
@@ -326,8 +327,8 @@ class VectorSearchEngine:
             )
 
             # Invalidate cache for this vector
-            if self._cache and vector_id in self._cache:
-                del self._cache[vector_id]
+            if self._cache:
+                self._cache.pop(vector_id, None)
 
             return success
 
@@ -424,8 +425,7 @@ class VectorSearchEngine:
             # Invalidate cache for added vectors
             if self._cache:
                 for vid in vector_ids:
-                    if vid in self._cache:
-                        del self._cache[vid]
+                    self._cache.pop(vid, None)
 
             logger.info(f"Added {success_count}/{len(vectors)} vectors to index")
             return success_count, failed_ids
@@ -484,6 +484,7 @@ class VectorSearchEngine:
             if use_cache and self._cache:
                 cache_key = self._make_cache_key(query_id, k, filter)
                 if cache_key in self._cache:
+                    self._cache.move_to_end(cache_key)
                     cache_hit = True
                     self.cache_hits += 1
                     results = self._cache[cache_key]
@@ -689,8 +690,8 @@ class VectorSearchEngine:
         )
 
         # Invalidate cache
-        if self._cache and vector_id in self._cache:
-            del self._cache[vector_id]
+        if self._cache:
+            self._cache.pop(vector_id, None)
 
         return success
 
@@ -703,8 +704,8 @@ class VectorSearchEngine:
         )
 
         # Invalidate cache
-        if self._cache and vector_id in self._cache:
-            del self._cache[vector_id]
+        if self._cache:
+            self._cache.pop(vector_id, None)
 
         return success
 
@@ -790,17 +791,15 @@ class VectorSearchEngine:
         return f"{query_id}:{k}:{filter_str}"
 
     def _update_cache(self, key: str, results: list[VectorSearchResult]):
-        """Update the cache with new results"""
-        if not self._cache:
+        """Update the cache with new results, enforcing LRU eviction at cache_size."""
+        if self._cache is None:
             return
 
-        # Implement LRU by removing oldest if cache is full
-        if len(self._cache) >= self.cache_size:
-            # Remove first (oldest) item
-            oldest_key = next(iter(self._cache))
-            del self._cache[oldest_key]
-
         self._cache[key] = results
+        self._cache.move_to_end(key)
+        # Evict oldest entries until within limit
+        while len(self._cache) > self.cache_size:
+            self._cache.popitem(last=False)
 
 
 class VectorIndexer:

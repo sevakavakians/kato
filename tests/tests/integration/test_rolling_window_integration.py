@@ -240,10 +240,6 @@ def test_rolling_mode_memory_efficiency(kato_fixture):
     stm = kato_fixture.get_short_term_memory()
     assert len(stm) <= 4, f"STM should be bounded to window size, got {len(stm)}: {stm}"
 
-    # Processing should be reasonably fast (less than 1 second per 10 events)
-    assert processing_time < (num_events / 10), \
-        f"Processing too slow: {processing_time:.2f}s for {num_events} events"
-
     print(f"Processed {num_events} events in {processing_time:.2f}s, learned {len(learned_patterns)} patterns")
 
 

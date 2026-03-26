@@ -287,6 +287,13 @@ async def shutdown_event():
     """Cleanup on shutdown"""
     logger.info("Shutting down KATO FastAPI service...")
 
+    # Shutdown processor manager (flushes pending writes + closes processors)
+    if hasattr(app_state, 'processor_manager') and app_state.processor_manager:
+        try:
+            await app_state.processor_manager.shutdown()
+        except Exception as e:
+            logger.error(f"Error shutting down processor manager: {e}")
+
     # Stop metrics collection
     if hasattr(app_state, 'metrics_collector') and app_state.metrics_collector:
         try:
@@ -295,13 +302,22 @@ async def shutdown_event():
         except Exception as e:
             logger.error(f"Error stopping metrics collection: {e}")
 
-    # Close session manager if needed
+    # Close session manager
     if hasattr(app_state.session_manager, 'close'):
         try:
             await app_state.session_manager.close()
             logger.info("Session manager closed")
         except Exception as e:
             logger.error(f"Error closing session manager: {e}")
+
+    # Close all database connections LAST
+    from kato.storage.connection_manager import OptimizedConnectionManager
+    try:
+        conn_mgr = OptimizedConnectionManager.get_instance()
+        conn_mgr.close_all_connections()
+        logger.info("All database connections closed")
+    except Exception as e:
+        logger.error(f"Error closing connections: {e}")
 
     logger.info("KATO FastAPI service shutdown complete")
 

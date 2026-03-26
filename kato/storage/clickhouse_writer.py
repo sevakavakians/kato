@@ -59,6 +59,7 @@ class ClickHouseWriter:
         self.kb_id = kb_id
         self.client = clickhouse_client
         self.batch_size = batch_size or self.DEFAULT_BATCH_SIZE
+        self.max_buffer_size = self.batch_size * 10  # Cap buffer to prevent OOM on persistent flush failures
 
         # Write buffer for batch inserts
         self._write_buffer: list[list] = []
@@ -208,6 +209,11 @@ class ClickHouseWriter:
             import traceback
             logger.error(f"Failed to flush {count} patterns to ClickHouse: {type(e).__name__}: {e}")
             logger.error(f"Traceback: {traceback.format_exc()}")
+            # Prevent unbounded buffer growth on persistent failures
+            if len(self._write_buffer) > self.max_buffer_size:
+                dropped = len(self._write_buffer) - self.max_buffer_size
+                self._write_buffer = self._write_buffer[dropped:]
+                logger.error(f"Write buffer exceeded max size, dropped {dropped} oldest entries (kept {self.max_buffer_size})")
             raise
 
     def delete_all_patterns(self) -> bool:

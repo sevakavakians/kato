@@ -52,8 +52,8 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 # Run the FastAPI application with production settings
 # --workers 1: Single worker for testing (multi-worker has 50% failure rate)
 # --limit-concurrency 100: Max concurrent connections per worker
-# --limit-max-requests 10000: Restart workers after N requests (prevents memory leaks)
 # --timeout-keep-alive 5: Keep-alive timeout in seconds
+# --timeout-graceful-shutdown 30: Allow in-flight requests to finish on shutdown
 # --backlog 2048: Maximum queued connections (OS-level)
 # --access-log: Enable request logging
 CMD ["uvicorn", "kato.services.kato_fastapi:app", \
@@ -61,7 +61,7 @@ CMD ["uvicorn", "kato.services.kato_fastapi:app", \
      "--port", "8000", \
      "--workers", "1", \
      "--limit-concurrency", "100", \
-     "--limit-max-requests", "10000", \
      "--timeout-keep-alive", "5", \
+     "--timeout-graceful-shutdown", "30", \
      "--backlog", "2048", \
      "--access-log"]

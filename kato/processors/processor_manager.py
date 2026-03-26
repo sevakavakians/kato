@@ -317,12 +317,32 @@ class ProcessorManager:
 
         return stats
 
+    def flush_all_pending_writes(self) -> int:
+        """Flush all pending ClickHouse writes across all processors. Returns total rows flushed."""
+        total = 0
+        for processor_id, processor_info in self.processors.items():
+            try:
+                writer = processor_info['processor'].pattern_processor.superkb.clickhouse_writer
+                if writer.has_pending:
+                    total += writer.flush()
+            except Exception as e:
+                logger.error(f"Error flushing writes for processor {processor_id}: {e}")
+        return total
+
     async def shutdown(self):
         """Cleanup all processors on shutdown."""
         if self._cleanup_task:
             self._cleanup_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await self._cleanup_task
+
+        # Flush all pending ClickHouse writes BEFORE closing
+        try:
+            flushed = self.flush_all_pending_writes()
+            if flushed:
+                logger.info(f"Flushed {flushed} pending ClickHouse writes on shutdown")
+        except Exception as e:
+            logger.error(f"Error flushing pending writes on shutdown: {e}")
 
         # Close all processors
         for processor_id, processor_info in self.processors.items():

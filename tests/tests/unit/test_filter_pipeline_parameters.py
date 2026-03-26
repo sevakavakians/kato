@@ -51,21 +51,29 @@ def test_empty_pipeline_returns_all_matches(kato_fixture):
 
 def test_minhash_filter_reduces_candidates(kato_fixture):
     """Test that enabling minhash filter affects candidate selection."""
-    _learn_test_patterns(kato_fixture, count=10)
+    kato_fixture.clear_all_memory()
+
+    # Learn patterns with SHARED tokens so minhash can detect overlap
+    # Minhash works on token set overlap — patterns need shared symbols
+    for i in range(10):
+        for item in ['shared_a', 'shared_b', f'unique_{i}']:
+            kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
+        kato_fixture.learn()
 
     # Get baseline with no filters
     kato_fixture.update_config({'filter_pipeline': [], 'recall_threshold': 0.1})
-    baseline = _get_predictions_for(kato_fixture, ['filter_3_a', 'filter_3_b'])
+    baseline = _get_predictions_for(kato_fixture, ['shared_a', 'shared_b'])
 
     # Enable minhash filter
     kato_fixture.update_config({
         'filter_pipeline': ['minhash'],
         'recall_threshold': 0.1,
     })
-    filtered = _get_predictions_for(kato_fixture, ['filter_3_a', 'filter_3_b'])
+    filtered = _get_predictions_for(kato_fixture, ['shared_a', 'shared_b'])
 
-    # Both should find the target pattern
-    assert len(filtered) >= 1, "Minhash filter should still find the matching pattern"
+    # Both should find patterns (all 10 share 'shared_a', 'shared_b')
+    assert len(baseline) >= 1, "Baseline should find patterns"
+    assert len(filtered) >= 1, "Minhash filter should still find matching patterns"
     # Filtered should not return MORE than baseline
     assert len(filtered) <= len(baseline), \
         f"Minhash filter should not increase result count: {len(filtered)} > {len(baseline)}"
@@ -91,19 +99,24 @@ def test_jaccard_filter_reduces_candidates(kato_fixture):
 
 def test_combined_minhash_jaccard_pipeline(kato_fixture):
     """Test that minhash + jaccard pipeline together work correctly."""
-    _learn_test_patterns(kato_fixture, count=10)
+    kato_fixture.clear_all_memory()
+
+    # Learn patterns with shared tokens for minhash overlap detection
+    for i in range(5):
+        for item in ['combo_shared', f'combo_{i}_a', f'combo_{i}_b']:
+            kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
+        kato_fixture.learn()
 
     kato_fixture.update_config({
         'filter_pipeline': ['minhash', 'jaccard'],
         'recall_threshold': 0.1,
     })
-    predictions = _get_predictions_for(kato_fixture, ['filter_7_a', 'filter_7_b'])
+    predictions = _get_predictions_for(kato_fixture, ['combo_shared', 'combo_3_a'])
 
     assert len(predictions) >= 1, "Combined pipeline should find matching pattern"
 
-    # Verify the correct pattern is found
     matching = [p for p in predictions
-                if 'filter_7_a' in p.get('matches', []) and 'filter_7_b' in p.get('matches', [])]
+                if 'combo_shared' in p.get('matches', []) and 'combo_3_a' in p.get('matches', [])]
     assert len(matching) >= 1, "Should find the specific pattern"
 
 

@@ -85,10 +85,15 @@ def test_threshold_exact_match_passes_any_threshold(kato_fixture):
     assert len(perfect) >= 1, "Should have at least one prediction with similarity=1.0"
 
 
-def test_threshold_unrelated_observation_no_predictions(kato_fixture):
-    """Test that completely unrelated observations produce no predictions at any threshold."""
+def test_threshold_unrelated_observation_zero_similarity(kato_fixture):
+    """Test that completely unrelated observations produce zero-similarity predictions at threshold=0.0.
+
+    KATO has a special case: threshold=0.0 includes patterns with similarity=0.0
+    (all symbols missing, all observed symbols are extras). This is correct behavior —
+    threshold=0.0 means "return everything."
+    """
     kato_fixture.clear_all_memory()
-    kato_fixture.set_recall_threshold(0.0)  # Most permissive
+    kato_fixture.set_recall_threshold(0.0)  # Most permissive — includes zero-similarity
 
     for item in ['known', 'pattern', 'here']:
         kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
@@ -99,7 +104,23 @@ def test_threshold_unrelated_observation_no_predictions(kato_fixture):
     kato_fixture.observe({'strings': ['unknown2'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
 
-    assert len(predictions) == 0, "No matching symbols means no predictions even at threshold=0.0"
+    # With threshold=0.0, KATO returns patterns with similarity=0.0 (all missing, all extras)
+    if len(predictions) > 0:
+        for pred in predictions:
+            assert pred.get('similarity', 0) == 0.0, \
+                f"Unrelated observation should have similarity=0.0, got {pred.get('similarity')}"
+            assert pred.get('matches', ['non-empty']) == [], \
+                f"Unrelated observation should have no matches, got {pred.get('matches')}"
+
+    # With threshold > 0, unrelated observations should produce NO predictions
+    kato_fixture.set_recall_threshold(0.1)
+    kato_fixture.clear_short_term_memory()
+    kato_fixture.observe({'strings': ['unknown3'], 'vectors': [], 'emotives': {}})
+    kato_fixture.observe({'strings': ['unknown4'], 'vectors': [], 'emotives': {}})
+    predictions = kato_fixture.get_predictions()
+
+    assert len(predictions) == 0, \
+        "Unrelated observation with threshold > 0 should produce no predictions"
 
 
 # --- Missing and extra symbols ---

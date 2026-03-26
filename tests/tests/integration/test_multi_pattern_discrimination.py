@@ -18,6 +18,16 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from fixtures.kato_fixtures import kato_fixture as kato_fixture
 
 
+def _strip_prefix(name):
+    """Strip PTRN| prefix so learn() names can be compared with prediction names.
+
+    learn() returns 'PTRN|hash' but predictions contain just 'hash'.
+    """
+    if name and name.startswith('PTRN|'):
+        return name[5:]
+    return name
+
+
 def test_overlapping_prefix_discrimination(kato_fixture):
     """Test disambiguation when multiple patterns share a common prefix."""
     kato_fixture.clear_all_memory()
@@ -75,13 +85,16 @@ def test_subset_pattern_discrimination(kato_fixture):
     kato_fixture.observe({'strings': ['B'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
 
+    # Prediction names don't have PTRN| prefix
     names = {p.get('name') for p in predictions}
-    assert short_name in names, "Should find the short pattern"
-    assert long_name in names, "Should find the long pattern"
+    short_hash = _strip_prefix(short_name)
+    long_hash = _strip_prefix(long_name)
+    assert short_hash in names, f"Should find the short pattern, got names={names}"
+    assert long_hash in names, f"Should find the long pattern, got names={names}"
 
     # Short pattern should have higher similarity (2/2 = 1.0 vs 2/4 = 0.667)
-    short_pred = [p for p in predictions if p.get('name') == short_name][0]
-    long_pred = [p for p in predictions if p.get('name') == long_name][0]
+    short_pred = [p for p in predictions if p.get('name') == short_hash][0]
+    long_pred = [p for p in predictions if p.get('name') == long_hash][0]
     assert short_pred.get('similarity', 0) > long_pred.get('similarity', 0), \
         "Short pattern (exact match) should have higher similarity than long pattern (partial match)"
 
@@ -99,7 +112,7 @@ def test_reordered_symbols_different_patterns(kato_fixture):
         kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
     name_reverse = kato_fixture.learn()
 
-    assert name_forward != name_reverse, \
+    assert _strip_prefix(name_forward) != _strip_prefix(name_reverse), \
         "Same symbols in different order should produce different pattern hashes"
 
 
@@ -152,7 +165,7 @@ def test_identical_events_different_lengths(kato_fixture):
         kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
     name_long = kato_fixture.learn()
 
-    assert name_short != name_long, \
+    assert _strip_prefix(name_short) != _strip_prefix(name_long), \
         "Different-length patterns with same symbols should have different hashes"
 
     # Both should be findable
@@ -161,8 +174,8 @@ def test_identical_events_different_lengths(kato_fixture):
     predictions = kato_fixture.get_predictions()
 
     names = {p.get('name') for p in predictions}
-    assert name_short in names, "Should find the short pattern"
-    assert name_long in names, "Should find the long repeated pattern"
+    assert _strip_prefix(name_short) in names, f"Should find the short pattern, got names={names}"
+    assert _strip_prefix(name_long) in names, f"Should find the long repeated pattern, got names={names}"
 
 
 def test_disjoint_patterns_no_cross_match(kato_fixture):
@@ -204,7 +217,7 @@ def test_multi_symbol_event_discrimination(kato_fixture):
     kato_fixture.observe({'strings': sort_event_strings(['e', 'f']), 'vectors': [], 'emotives': {}})
     name2 = kato_fixture.learn()
 
-    assert name1 != name2, "Patterns with different second events should differ"
+    assert _strip_prefix(name1) != _strip_prefix(name2), "Patterns with different second events should differ"
 
     # Observe shared first event + unique second event from pattern 1
     kato_fixture.observe({'strings': sort_event_strings(['a', 'b']), 'vectors': [], 'emotives': {}})
@@ -212,10 +225,12 @@ def test_multi_symbol_event_discrimination(kato_fixture):
     predictions = kato_fixture.get_predictions()
 
     # Pattern 1 should have higher similarity (exact match) than pattern 2 (partial match)
-    pred1 = [p for p in predictions if p.get('name') == name1]
-    pred2 = [p for p in predictions if p.get('name') == name2]
+    hash1 = _strip_prefix(name1)
+    hash2 = _strip_prefix(name2)
+    pred1 = [p for p in predictions if p.get('name') == hash1]
+    pred2 = [p for p in predictions if p.get('name') == hash2]
 
-    assert len(pred1) >= 1, "Should find pattern 1"
+    assert len(pred1) >= 1, f"Should find pattern 1 ({hash1}), got names={[p.get('name') for p in predictions]}"
     if len(pred2) >= 1:
         assert pred1[0].get('similarity', 0) >= pred2[0].get('similarity', 0), \
             "Exact match should have >= similarity than partial match"

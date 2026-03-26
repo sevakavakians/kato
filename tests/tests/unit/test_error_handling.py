@@ -12,8 +12,8 @@ import requests
 
 def _get_test_base_url():
     """Get the base URL for testing - use single instance"""
-    # Use single KATO instance on port 8000
-    return "http://localhost:8000"
+    import os
+    return os.environ.get("KATO_BASE_URL", "http://localhost:8000")
 
 
 class TestSessionErrorHandling:
@@ -81,9 +81,9 @@ class TestSessionErrorHandling:
                     f"{base_url}/sessions/{session_id}/observe",
                     json=payload
                 )
-                # Should either return 400 (bad request) or 422 (validation error)
-                assert response.status_code in [400, 422, 500], \
-                    f"Invalid payload {payload} should return error status"
+                # Should return 400 (bad request) or 422 (validation error), NOT 500
+                assert response.status_code in [400, 422], \
+                    f"Invalid payload {payload} should return 400 or 422, got {response.status_code}"
 
         finally:
             requests.delete(f"{base_url}/sessions/{session_id}")
@@ -207,8 +207,8 @@ class TestConcurrencyAndRaceConditions:
                     f"{base_url}/sessions/{session_id}/observe",
                     json={"strings": [f"rapid_{i}"]}
                 )
-                # All should succeed or at least not crash
-                assert response.status_code in [200, 500], \
+                # All should succeed
+                assert response.status_code == 200, \
                     f"Rapid operation {i} failed with {response.status_code}"
 
             # Add a couple more observations to ensure STM has content
@@ -253,9 +253,9 @@ class TestResourceLimits:
                 json=large_observation
             )
 
-            # Should either succeed or return appropriate error
-            assert response.status_code in [200, 400, 413, 500], \
-                "Large observation should be handled appropriately"
+            # Should either succeed or return appropriate error (not a server crash)
+            assert response.status_code in [200, 400, 413], \
+                f"Large observation should return 200, 400, or 413, got {response.status_code}"
 
             if response.status_code == 200:
                 # Verify STM contains the observation

@@ -41,30 +41,8 @@ def test_emotives_multiple_keys_storage(kato_fixture):
     kato_fixture.observe({'strings': ['B'], 'vectors': [], 'emotives': {'joy': 0.5, 'confidence': 0.6, 'energy': 0.4}})
     pattern_name = kato_fixture.learn()
 
-    # Debug output
-    print(f"\n=== DEBUG test_emotives_multiple_keys_storage ===")
-    print(f"Pattern name: {pattern_name}")
-    print(f"Processor ID: {kato_fixture.processor_id}")
-    clean_name = pattern_name[5:] if pattern_name.startswith('PTRN|') else pattern_name
-    kb_id = f"{kato_fixture.processor_id}_kato"
-    print(f"KB ID: {kb_id}")
-    print(f"Clean pattern name: {clean_name}")
-    emotives_key = f"{kb_id}:emotives:{clean_name}"
-    print(f"Expected Redis key: {emotives_key}")
-
-    # Check Redis directly
-    import redis as redis_module
-    redis_client = redis_module.Redis(host='localhost', port=6379, decode_responses=True)
-    direct_value = redis_client.get(emotives_key)
-    print(f"Direct Redis GET: {direct_value}")
-
-    # All keys in Redis
-    all_keys = redis_client.keys(f"{kb_id}:*")
-    print(f"All keys for kb_id: {all_keys}")
-
     # Validate Redis storage
     redis_emotives = kato_fixture.get_redis_emotives(pattern_name)
-    print(f"get_redis_emotives returned: {redis_emotives}")
     assert redis_emotives is not None, "Emotives should be stored"
     assert len(redis_emotives) == 2, f"Should store 2 emotives, got {len(redis_emotives)}"
 

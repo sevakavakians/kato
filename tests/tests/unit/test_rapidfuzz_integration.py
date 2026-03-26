@@ -2,20 +2,17 @@
 Unit tests for RapidFuzz integration in pattern matching.
 
 Tests ensure that:
-1. RapidFuzz produces identical results to difflib (determinism)
-2. Threshold filtering works correctly with RapidFuzz
-3. Graceful fallback works when RapidFuzz is not available
-4. String caching optimization works correctly
-5. Edge cases are handled properly (empty state, special chars, large vocabularies)
+1. Threshold filtering works correctly with the active matcher
+2. Edge cases are handled properly (empty state, special chars, large vocabularies)
+3. Pattern cache clearing works correctly
 
-Note: Performance benchmarking is done in benchmarks/compare_matchers.py,
-not here, since unit tests run against a shared long-running service where
-configuration is set at startup.
+Note: Matcher comparison (RapidFuzz vs difflib) requires different server
+configurations and cannot be toggled via local environment variables since
+tests run against a Docker-hosted KATO service. Performance benchmarking
+is done in benchmarks/compare_matchers.py.
 """
 
-import os
 import pytest
-from unittest.mock import patch
 
 # Try to import RapidFuzz to check availability
 try:
@@ -25,12 +22,11 @@ except ImportError:
     RAPIDFUZZ_INSTALLED = False
 
 
-class TestRapidFuzzDeterminism:
-    """Test that RapidFuzz produces identical results to difflib."""
+class TestMatcherDeterminism:
+    """Test that the active matcher produces deterministic results."""
 
-    @pytest.mark.skipif(not RAPIDFUZZ_INSTALLED, reason="RapidFuzz not installed")
-    def test_rapidfuzz_vs_difflib_identical_predictions(self, kato_fixture):
-        """Test that RapidFuzz and difflib produce identical prediction results."""
+    def test_deterministic_predictions_across_queries(self, kato_fixture):
+        """Test that repeated queries produce identical prediction results."""
         kato = kato_fixture
 
         # Learn a simple pattern
@@ -38,86 +34,39 @@ class TestRapidFuzzDeterminism:
         kato.observe({'strings': ['C', 'D']})
         kato.learn()
 
-        # Clear STM and observe matching state
+        # Query twice and compare
         kato.clear_stm()
         kato.observe({'strings': ['A', 'B', 'C', 'D']})
+        predictions_1 = kato.get_predictions()
 
-        # Get predictions with RapidFuzz (default)
-        os.environ['KATO_USE_FAST_MATCHING'] = 'true'
-        rapidfuzz_predictions = kato.get_predictions()
-
-        # Clear and observe again
         kato.clear_stm()
         kato.observe({'strings': ['A', 'B', 'C', 'D']})
-
-        # Get predictions with difflib
-        os.environ['KATO_USE_FAST_MATCHING'] = 'false'
-        difflib_predictions = kato.get_predictions()
-
-        # Reset to default
-        os.environ['KATO_USE_FAST_MATCHING'] = 'true'
+        predictions_2 = kato.get_predictions()
 
         # Should have same number of predictions
-        assert len(rapidfuzz_predictions) == len(difflib_predictions)
+        assert len(predictions_1) == len(predictions_2), \
+            f"Repeated queries should produce same count: {len(predictions_1)} vs {len(predictions_2)}"
 
-        # Predictions should be identical (same pattern names)
-        if len(rapidfuzz_predictions) > 0:
-            rapidfuzz_names = {p['name'] for p in rapidfuzz_predictions}
-            difflib_names = {p['name'] for p in difflib_predictions}
-            assert rapidfuzz_names == difflib_names
+        # Predictions should be identical (same pattern names and scores)
+        if len(predictions_1) > 0:
+            names_1 = {p['name'] for p in predictions_1}
+            names_2 = {p['name'] for p in predictions_2}
+            assert names_1 == names_2, "Repeated queries should return same pattern names"
 
-    @pytest.mark.skipif(not RAPIDFUZZ_INSTALLED, reason="RapidFuzz not installed")
-    def test_rapidfuzz_vs_difflib_identical_similarity_scores(self, kato_fixture):
-        """Test that similarity scores match between RapidFuzz and difflib."""
-        kato = kato_fixture
-
-        # Learn multiple patterns
-        patterns = [
-            ['A', 'B', 'C'],
-            ['A', 'B', 'D'],
-            ['A', 'C', 'E'],
-        ]
-
-        for pattern_symbols in patterns:
-            kato.clear_stm()
-            kato.observe({'strings': pattern_symbols})
-            kato.learn()
-
-        # Query with partial match
-        kato.clear_stm()
-        kato.observe({'strings': ['A', 'B']})
-
-        # Get with RapidFuzz
-        os.environ['KATO_USE_FAST_MATCHING'] = 'true'
-        rapidfuzz_preds = kato.get_predictions()
-
-        # Get with difflib
-        kato.clear_stm()
-        kato.observe({'strings': ['A', 'B']})
-        os.environ['KATO_USE_FAST_MATCHING'] = 'false'
-        difflib_preds = kato.get_predictions()
-
-        # Reset
-        os.environ['KATO_USE_FAST_MATCHING'] = 'true'
-
-        # Compare similarity scores (should be close, allowing for floating point)
-        if len(rapidfuzz_preds) > 0 and len(difflib_preds) > 0:
-            # Sort by name for comparison
-            rf_sorted = sorted(rapidfuzz_preds, key=lambda x: x['name'])
-            df_sorted = sorted(difflib_preds, key=lambda x: x['name'])
-
-            for rf_pred, df_pred in zip(rf_sorted, df_sorted):
-                assert rf_pred['name'] == df_pred['name']
-                # Similarity scores should match closely
-                assert abs(rf_pred.get('similarity', 0) - df_pred.get('similarity', 0)) < 0.01
+            # Similarity scores should be identical
+            sorted_1 = sorted(predictions_1, key=lambda x: x['name'])
+            sorted_2 = sorted(predictions_2, key=lambda x: x['name'])
+            for p1, p2 in zip(sorted_1, sorted_2):
+                assert p1['name'] == p2['name']
+                assert abs(p1.get('similarity', 0) - p2.get('similarity', 0)) < 0.001, \
+                    f"Similarity scores should match: {p1.get('similarity')} vs {p2.get('similarity')}"
 
 
-class TestRapidFuzzThreshold:
-    """Test threshold filtering with RapidFuzz."""
+class TestMatcherThreshold:
+    """Test threshold filtering with the active matcher."""
 
-    @pytest.mark.skipif(not RAPIDFUZZ_INSTALLED, reason="RapidFuzz not installed")
-    def test_rapidfuzz_respects_recall_threshold(self, kato_fixture):
-        """Test that RapidFuzz filters results based on recall_threshold."""
+    def test_respects_recall_threshold(self, kato_fixture):
+        """Test that the matcher filters results based on recall_threshold."""
         kato = kato_fixture
 
         # Learn a pattern
@@ -148,9 +97,8 @@ class TestRapidFuzzThreshold:
         # Should get predictions with low threshold
         assert len(predictions) > 0
 
-    @pytest.mark.skipif(not RAPIDFUZZ_INSTALLED, reason="RapidFuzz not installed")
-    def test_rapidfuzz_score_cutoff_optimization(self, kato_fixture):
-        """Test that score_cutoff optimization works correctly."""
+    def test_score_cutoff_optimization(self, kato_fixture):
+        """Test that score_cutoff correctly filters low-similarity patterns."""
         kato = kato_fixture
 
         # Learn multiple patterns with varying similarity
@@ -173,17 +121,15 @@ class TestRapidFuzzThreshold:
         predictions = kato.get_predictions()
 
         # Should filter out low-similarity patterns
-        # score_cutoff should have rejected them early
         for pred in predictions:
             assert pred.get('similarity', 0) >= 0.5
 
 
-class TestRapidFuzzEdgeCases:
-    """Test edge cases with RapidFuzz."""
+class TestMatcherEdgeCases:
+    """Test edge cases with the active matcher."""
 
-    @pytest.mark.skipif(not RAPIDFUZZ_INSTALLED, reason="RapidFuzz not installed")
-    def test_rapidfuzz_empty_state(self, kato_fixture):
-        """Test RapidFuzz with empty state."""
+    def test_empty_state(self, kato_fixture):
+        """Test matcher with empty state."""
         kato = kato_fixture
 
         # Learn a pattern
@@ -199,9 +145,8 @@ class TestRapidFuzzEdgeCases:
         # Should handle gracefully (likely no predictions)
         assert isinstance(predictions, list)
 
-    @pytest.mark.skipif(not RAPIDFUZZ_INSTALLED, reason="RapidFuzz not installed")
-    def test_rapidfuzz_special_characters(self, kato_fixture):
-        """Test RapidFuzz with special characters in symbols."""
+    def test_special_characters(self, kato_fixture):
+        """Test matcher with special characters in symbols."""
         kato = kato_fixture
 
         # Learn pattern with special characters
@@ -218,9 +163,8 @@ class TestRapidFuzzEdgeCases:
         assert len(predictions) > 0
         assert predictions[0].get('similarity', 0) > 0.5
 
-    @pytest.mark.skipif(not RAPIDFUZZ_INSTALLED, reason="RapidFuzz not installed")
-    def test_rapidfuzz_large_vocabulary(self, kato_fixture):
-        """Test RapidFuzz with large symbol vocabulary."""
+    def test_large_vocabulary(self, kato_fixture):
+        """Test matcher with large symbol vocabulary."""
         kato = kato_fixture
 
         # Learn pattern with many symbols
@@ -239,86 +183,9 @@ class TestRapidFuzzEdgeCases:
         assert isinstance(predictions, list)
 
 
-class TestRapidFuzzFallback:
-    """Test graceful fallback when RapidFuzz is not available."""
-
-    def test_fallback_to_difflib_when_rapidfuzz_missing(self, kato_fixture):
-        """Test that system falls back to difflib if RapidFuzz not available."""
-        kato = kato_fixture
-
-        # Force difflib mode
-        os.environ['KATO_USE_FAST_MATCHING'] = 'false'
-
-        # Learn a pattern
-        kato.observe({'strings': ['A', 'B', 'C']})
-        kato.learn()
-
-        # Query
-        kato.clear_stm()
-        kato.observe({'strings': ['A', 'B']})
-
-        predictions = kato.get_predictions()
-
-        # Should still work with difflib
-        assert len(predictions) > 0
-
-        # Reset
-        os.environ['KATO_USE_FAST_MATCHING'] = 'true'
-
-    def test_environment_variable_controls_matcher(self, kato_fixture):
-        """Test that KATO_USE_FAST_MATCHING env var controls which matcher is used."""
-        kato = kato_fixture
-
-        # Learn a pattern
-        kato.observe({'strings': ['test1', 'test2']})
-        kato.learn()
-
-        # Test with fast matching enabled
-        os.environ['KATO_USE_FAST_MATCHING'] = 'true'
-        kato.clear_stm()
-        kato.observe({'strings': ['test1']})
-        fast_preds = kato.get_predictions()
-
-        # Test with fast matching disabled
-        os.environ['KATO_USE_FAST_MATCHING'] = 'false'
-        kato.clear_stm()
-        kato.observe({'strings': ['test1']})
-        slow_preds = kato.get_predictions()
-
-        # Reset
-        os.environ['KATO_USE_FAST_MATCHING'] = 'true'
-
-        # Should get same results either way
-        assert len(fast_preds) == len(slow_preds)
-
-
 class TestStringCaching:
-    """Test string caching optimization for RapidFuzz."""
+    """Test string caching optimization."""
 
-    @pytest.mark.skipif(not RAPIDFUZZ_INSTALLED, reason="RapidFuzz not installed")
-    def test_string_cache_populated(self, kato_fixture):
-        """Test that string cache is populated on first query."""
-        kato = kato_fixture
-
-        # Learn patterns
-        kato.observe({'strings': ['A', 'B']})
-        kato.learn()
-
-        # First query should populate cache
-        kato.clear_stm()
-        kato.observe({'strings': ['A']})
-        kato.get_predictions()
-
-        # Second query should use cache (faster)
-        kato.clear_stm()
-        kato.observe({'strings': ['A']})
-        kato.get_predictions()
-
-        # Cache should exist (we can't directly test PatternSearcher internals
-        # but we can verify it doesn't error)
-        assert True
-
-    @pytest.mark.skipif(not RAPIDFUZZ_INSTALLED, reason="RapidFuzz not installed")
     def test_string_cache_cleared_on_pattern_delete(self, kato_fixture):
         """Test that string cache is cleared when patterns are deleted."""
         kato = kato_fixture

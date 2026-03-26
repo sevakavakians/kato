@@ -91,6 +91,7 @@ def test_single_symbol_events_sequence(kato_fixture):
     predictions = kato_fixture.get_predictions()
 
     assert len(predictions) > 0
+    found_single_symbol_future = False
     for pred in predictions:
         if pred.get('frequency', 0) > 0:
             future = pred.get('future', [])
@@ -99,9 +100,10 @@ def test_single_symbol_events_sequence(kato_fixture):
             # Each future event should have one symbol
             for event in future:
                 if isinstance(event, list) and len(event) == 1:
-                    assert True
+                    found_single_symbol_future = True
                     break
             break
+    assert found_single_symbol_future, "Should find future events with single symbols"
 
 
 def test_duplicate_symbols_in_event(kato_fixture):

@@ -20,9 +20,10 @@ import websockets
 
 logger = logging.getLogger(__name__)
 
-# KATO service URL for testing
-KATO_BASE_URL = "http://localhost:8000"
-KATO_WS_URL = "ws://localhost:8000"
+# KATO service URL for testing - use environment variable or default
+import os
+KATO_BASE_URL = os.environ.get("KATO_BASE_URL", "http://localhost:8000")
+KATO_WS_URL = KATO_BASE_URL.replace("http://", "ws://").replace("https://", "wss://")
 
 
 @pytest.mark.asyncio

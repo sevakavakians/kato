@@ -111,15 +111,15 @@ class TestKatoExceptions:
     def test_database_connection_error(self):
         """Test DatabaseConnectionError"""
         exc = DatabaseConnectionError(
-            database_type="MongoDB",
-            connection_string="mongodb://localhost:27017"
+            database_type="ClickHouse",
+            connection_string="clickhouse://localhost:8123"
         )
 
-        assert exc.database_type == "MongoDB"
-        assert exc.connection_string == "mongodb://localhost:27017"
+        assert exc.database_type == "ClickHouse"
+        assert exc.connection_string == "clickhouse://localhost:8123"
         assert exc.error_code == "DATABASE_CONNECTION_ERROR"
         assert exc.recoverable is True
-        assert "mongodb" in exc.message.lower()
+        assert "clickhouse" in exc.message.lower()
 
     def test_resource_exhausted_error(self):
         """Test ResourceExhaustedError"""
@@ -306,7 +306,7 @@ class TestErrorIntegration:
             (SessionExpiredError("test"), 410),
             (ConcurrencyError("test", "op"), 409),
             (ValidationError("field", "value", "rule"), 422),
-            (DatabaseConnectionError("mongo"), 503),
+            (DatabaseConnectionError("clickhouse"), 503),
             (ResourceExhaustedError("cpu", 100, 100), 507)
         ]
 

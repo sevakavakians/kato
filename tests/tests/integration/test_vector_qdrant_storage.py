@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """
-Integration tests for Qdrant vector storage.
+Integration tests for vector storage and Qdrant.
 
 These tests verify that vectors are actually stored in Qdrant and that
-similarity search works end-to-end, including the VCTR|hash → UUID conversion
-and reverse mapping.
+similarity search works end-to-end, including the VCTR|hash → UUID conversion,
+reverse mapping, large vectors, and similarity-based predictions.
 """
 
 import os
+import random
 import sys
 import uuid
 
@@ -70,7 +71,7 @@ def test_vectors_stored_in_qdrant(kato_fixture):
 
     # Now check Qdrant directly for this processor's collection
     processor_id = kato_fixture.processor_id
-    qdrant_url = "http://localhost:6333"
+    qdrant_url = os.environ.get("QDRANT_URL", "http://localhost:6333")
 
     # Find the collection matching this processor_id (may have suffix like _kato)
     collections_resp = requests.get(f"{qdrant_url}/collections")
@@ -206,3 +207,21 @@ def test_similarity_prediction_accuracy(kato_fixture):
         f"Should predict 'meow' after observing cat-like vector. Got predictions: {predicted_symbols}"
     )
     print(f"Correctly predicted 'meow' from similar vector. All predictions: {predicted_symbols}")
+
+
+def test_large_vector_handling(kato_fixture):
+    """Test handling of larger dimensional vectors (128-dim)."""
+    kato_fixture.clear_all_memory()
+
+    large_dim = 128
+    large_vector = [random.random() for _ in range(large_dim)]
+
+    result = kato_fixture.observe({
+        'strings': ['large_vector_test'],
+        'vectors': [large_vector],
+        'emotives': {}
+    })
+    assert result['status'] in ['ok', 'okay', 'observed']
+
+    pattern_name = kato_fixture.learn()
+    assert pattern_name is not None, f"Should learn pattern with {large_dim}-dim vector"

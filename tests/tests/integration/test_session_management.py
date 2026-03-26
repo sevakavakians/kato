@@ -964,6 +964,111 @@ class TestSessionPerceptCognitionIsolation:
         await kato_client.delete_session(session_id)
 
 
+class TestSessionSameNodeIsolation:
+    """Regression tests for STM isolation when sessions share the same node_id.
+
+    Sessions with the same node_id share LTM (learned patterns) but must have
+    completely isolated STM. These tests verify no cross-contamination occurs.
+    """
+
+    @pytest.mark.asyncio
+    async def test_stm_isolation_same_node_id(self, kato_client):
+        """Test STM isolation with SAME node_id (regression for cross-contamination bug)."""
+        shared_node_id = f"test_node_{uuid.uuid4().hex[:8]}"
+
+        session1 = await kato_client.create_session(node_id=shared_node_id)
+        session2 = await kato_client.create_session(node_id=shared_node_id)
+
+        session1_id = session1['session_id']
+        session2_id = session2['session_id']
+
+        # Session 1: Build STM with A, B, C
+        await kato_client.observe_in_session(session1_id, {"strings": ["A"]})
+        await kato_client.observe_in_session(session1_id, {"strings": ["B"]})
+        await kato_client.observe_in_session(session1_id, {"strings": ["C"]})
+
+        # Session 2: Build STM with X, Y, Z
+        await kato_client.observe_in_session(session2_id, {"strings": ["X"]})
+        await kato_client.observe_in_session(session2_id, {"strings": ["Y"]})
+        await kato_client.observe_in_session(session2_id, {"strings": ["Z"]})
+
+        # Re-check Session 1's STM — should NOT be affected by Session 2
+        stm1 = await kato_client.get_session_stm(session1_id)
+        stm2 = await kato_client.get_session_stm(session2_id)
+
+        assert stm1['stm'] == [["A"], ["B"], ["C"]], \
+            f"Session 1 STM corrupted after Session 2 activity: {stm1['stm']}"
+        assert stm2['stm'] == [["X"], ["Y"], ["Z"]], \
+            f"Session 2 STM incorrect: {stm2['stm']}"
+
+        # No cross-contamination
+        assert "X" not in str(stm1['stm']), "Session 1 should not contain Session 2's data"
+        assert "A" not in str(stm2['stm']), "Session 2 should not contain Session 1's data"
+
+        await kato_client.delete_session(session1_id)
+        await kato_client.delete_session(session2_id)
+
+    @pytest.mark.asyncio
+    async def test_create_session_same_node_different_sessions(self, kato_client):
+        """Test that create_session with same node_id creates distinct sessions."""
+        node_id = f"test_node_{uuid.uuid4().hex[:8]}"
+
+        session1 = await kato_client.create_session(node_id=node_id)
+        session2 = await kato_client.create_session(node_id=node_id)
+
+        assert session1['session_id'] != session2['session_id'], \
+            "Same node_id should create different session IDs"
+
+        # Build different STMs
+        await kato_client.observe_in_session(session1['session_id'], {"strings": ["first"]})
+        await kato_client.observe_in_session(session2['session_id'], {"strings": ["alpha"]})
+
+        stm1 = await kato_client.get_session_stm(session1['session_id'])
+        stm2 = await kato_client.get_session_stm(session2['session_id'])
+
+        assert stm1['stm'] == [["first"]]
+        assert stm2['stm'] == [["alpha"]]
+
+        await kato_client.delete_session(session1['session_id'])
+        await kato_client.delete_session(session2['session_id'])
+
+    @pytest.mark.asyncio
+    async def test_stm_isolation_after_learn(self, kato_client):
+        """Test STM isolation when sessions share LTM via same node_id."""
+        shared_node_id = f"test_node_{uuid.uuid4().hex[:8]}"
+
+        # Session 1: Learn a pattern
+        session1 = await kato_client.create_session(node_id=shared_node_id)
+        session1_id = session1['session_id']
+
+        await kato_client.observe_in_session(session1_id, {"strings": ["hello"]})
+        await kato_client.observe_in_session(session1_id, {"strings": ["world"]})
+        await kato_client.learn_in_session(session1_id)
+
+        # Session 2: Should have empty STM despite shared LTM
+        session2 = await kato_client.create_session(node_id=shared_node_id)
+        session2_id = session2['session_id']
+
+        stm2_initial = await kato_client.get_session_stm(session2_id)
+        assert stm2_initial['stm'] == [], \
+            f"Session 2 should start with empty STM, got: {stm2_initial['stm']}"
+
+        # Session 2: Observe different data
+        await kato_client.observe_in_session(session2_id, {"strings": ["foo"]})
+        await kato_client.observe_in_session(session2_id, {"strings": ["bar"]})
+
+        # Session 1 STM should be empty (cleared by learn), NOT overwritten by Session 2
+        stm1 = await kato_client.get_session_stm(session1_id)
+        stm2 = await kato_client.get_session_stm(session2_id)
+
+        assert stm1['stm'] == [], \
+            f"Session 1 STM should be [] after learning, got {stm1['stm']}"
+        assert stm2['stm'] == [["foo"], ["bar"]], \
+            f"Session 2 STM incorrect: {stm2['stm']}"
+
+        await kato_client.delete_session(session1_id)
+        await kato_client.delete_session(session2_id)
+
+
 if __name__ == "__main__":
-    # Run tests with pytest
     pytest.main([__file__, "-v", "-s"])

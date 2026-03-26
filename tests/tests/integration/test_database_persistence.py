@@ -1,11 +1,11 @@
 """
 Comprehensive Database Persistence Tests for node_id
 
-This test suite validates the CRITICAL requirement that knowledge bases (MongoDB patterns
+This test suite validates the CRITICAL requirement that knowledge bases (ClickHouse patterns
 and Qdrant vectors) persist across sessions for the same node_id.
 
 Architecture:
-- Each node_id → processor_id → isolated MongoDB database ({node_id}_{base}.patterns_kb)
+- Each node_id → processor_id → isolated ClickHouse partition (kb_id) + Redis namespace
 - Sessions store only temporary state (STM, emotives accumulator) in Redis
 - Deleting sessions DOES NOT delete learned patterns
 - New session with same node_id should access all previously learned patterns

@@ -277,19 +277,11 @@ def test_case_sensitive_matching(kato_fixture):
     kato_fixture.observe({'strings': sort_event_strings(['hello', 'world']), 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
 
-    # Check if lowercase is treated as extras (case-sensitive) or matches (case-insensitive)
-    for pred in predictions:
-        matches = pred.get('matches', [])
-        extras = pred.get('extras', [])
-
-        # Document the actual behavior
-        if 'Hello' in matches or 'World' in matches:
-            # Case-insensitive matching
-            assert True, "KATO uses case-insensitive matching"
-        elif 'hello' in extras or 'world' in extras:
-            # Case-sensitive matching
-            assert True, "KATO uses case-sensitive matching"
-        break
+    # KATO uses case-sensitive matching: 'hello' != 'Hello'
+    # With case-sensitive matching, different-case observations should NOT match
+    # the learned pattern, resulting in zero predictions (symbols are unrecognized)
+    assert len(predictions) == 0, \
+        f"Case-sensitive matching should produce 0 predictions for case-variant observation, got {len(predictions)}"
 
 
 def test_observation_longer_than_learned(kato_fixture):

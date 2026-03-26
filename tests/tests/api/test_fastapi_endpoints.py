@@ -397,8 +397,5 @@ def test_websocket_endpoint(kato_fixture):
     try:
         ws = websocket.create_connection(ws_url)
         ws.close()
-        assert True  # Connection successful
-    except Exception:
-        # WebSocket might not be fully configured, but endpoint should exist
-        # This is okay for basic testing
-        pass
+    except Exception as e:
+        pytest.skip(f"WebSocket endpoint not available: {e}")

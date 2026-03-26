@@ -1,10 +1,12 @@
 """
-Test Redis-based session storage for KATO current.0
-Tests persistence, serialization, and Redis integration
+Test Redis-based session storage for KATO v3.0+
+Tests persistence, serialization, and real Redis integration.
+
+These tests connect to the running Redis instance (not mocked) to verify
+actual session persistence behavior.
 """
 
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -105,224 +107,126 @@ class TestRedisSessionStore:
         assert deserialized.metadata == session.metadata
         assert deserialized.created_at == session.created_at
 
-    async def test_store_session_mock(self):
-        """Test storing session with mocked Redis store methods"""
-        # Mock the connect and Redis operations at the store level
-        store = RedisSessionStore()
-
-        # Mock the internal methods
-        store._connected = True  # Skip connection
-        store.redis_client = AsyncMock()
-        store.redis_client.setex = AsyncMock(return_value=True)
-
-        # Create test session
-        now = datetime.now(timezone.utc)
-        session = SessionState(
-            session_id="test-session",
-            node_id="test-node",
-            created_at=now,
-            last_accessed=now,
-            expires_at=now + timedelta(hours=1)
-        )
-
-        # Store session
-        success = await store.store_session(session)
-
-        # Verify Redis operations
-        assert success
-        store.redis_client.setex.assert_called_once()
-
-        # Check setex parameters
-        call_args = store.redis_client.setex.call_args
-        key, ttl, data = call_args[0]
-
-        assert key == f"{store.key_prefix}test-session"
-        assert ttl > 0  # Should have positive TTL
-        assert isinstance(data, bytes)  # Should be serialized
-
-    async def test_get_session_mock(self):
-        """Test retrieving session with mocked Redis"""
-        # Create test session
-        now = datetime.now(timezone.utc)
-        session = SessionState(
-            session_id="test-session",
-            node_id="test-node",
-            created_at=now,
-            last_accessed=now,
-            expires_at=now + timedelta(hours=1)
-        )
-
-        store = RedisSessionStore()
-
-        # Mock the internal methods
-        store._connected = True  # Skip connection
-        store.redis_client = AsyncMock()
-
-        # Mock get returning serialized session
-        serialized = store._serialize_session(session)
-        store.redis_client.get = AsyncMock(return_value=serialized)
-
-        # Get session
-        retrieved = await store.get_session("test-session")
-
-        # Verify
-        assert retrieved is not None
-        assert retrieved.session_id == session.session_id
-        assert retrieved.node_id == session.node_id
-
-        store.redis_client.get.assert_called_with(f"{store.key_prefix}test-session")
-
 
 @pytest.mark.asyncio
-class TestRedisSessionManager:
-    """Test Redis session manager"""
+class TestRedisSessionManagerIntegration:
+    """Test Redis session manager against running Redis instance."""
 
-    async def test_redis_manager_creation(self):
-        """Test creating Redis session manager"""
+    async def test_session_create_and_retrieve(self):
+        """Test creating and retrieving a session from real Redis."""
         manager = RedisSessionManager(
-            default_ttl_seconds=1800,
+            default_ttl_seconds=60,
             redis_url="redis://localhost:6379"
         )
 
-        assert manager.default_ttl == 1800
-        assert not manager._connected
-        # RedisSessionManager has redis_client, not store
+        try:
+            await manager.initialize()
 
-    async def test_create_session_mock(self):
-        """Test session creation with mocked Redis store"""
-        manager = RedisSessionManager()
+            # Create session
+            session = await manager.create_session(
+                node_id="test-redis-integration",
+                metadata={"test": True}
+            )
 
-        # Mock the redis_client directly
-        manager.redis_client = AsyncMock()
-        manager._connected = True
-        manager.redis_client.setex = AsyncMock()
-        manager.redis_client.get = AsyncMock(return_value=None)
+            assert session.session_id.startswith("session-")
+            assert session.node_id == "test-redis-integration"
+            assert session.metadata == {"test": True}
+            assert session.stm == []
 
-        # Create session
-        session = await manager.create_session(
-            node_id="test-node",
-            metadata={"test": True}
+            # Retrieve session
+            retrieved = await manager.get_session(session.session_id)
+            assert retrieved is not None
+            assert retrieved.session_id == session.session_id
+            assert retrieved.node_id == session.node_id
+
+            # Cleanup
+            await manager.delete_session(session.session_id)
+        finally:
+            await manager.shutdown()
+
+    async def test_session_delete(self):
+        """Test deleting a session from real Redis."""
+        manager = RedisSessionManager(
+            default_ttl_seconds=60,
+            redis_url="redis://localhost:6379"
         )
 
-        # Verify session properties
-        assert session.session_id.startswith("session-")
-        assert session.node_id == "test-node"
-        assert session.metadata == {"test": True}
-        assert session.stm == []
+        try:
+            await manager.initialize()
 
-        # Verify Redis operations
-        assert manager.redis_client.setex.called
+            # Create and delete
+            session = await manager.create_session(node_id="test-delete")
+            result = await manager.delete_session(session.session_id)
+            assert result is True
 
-        # Verify lock creation
-        assert session.session_id in manager.session_locks
+            # Should not exist after delete
+            retrieved = await manager.get_session(session.session_id)
+            assert retrieved is None
+        finally:
+            await manager.shutdown()
 
-    async def test_get_session_mock(self):
-        """Test session retrieval with mocked Redis store"""
-        # Create test session
-        now = datetime.now(timezone.utc)
-        session = SessionState(
-            session_id="test-session",
-            node_id="test-node",
-            created_at=now,
-            last_accessed=now - timedelta(minutes=5),
-            expires_at=now + timedelta(hours=1)
+    async def test_session_extend(self):
+        """Test extending a session TTL in real Redis."""
+        manager = RedisSessionManager(
+            default_ttl_seconds=60,
+            redis_url="redis://localhost:6379"
         )
 
-        manager = RedisSessionManager()
+        try:
+            await manager.initialize()
 
-        # Mock the redis_client
-        manager.redis_client = AsyncMock()
-        manager._connected = True
+            # Create session with short TTL
+            session = await manager.create_session(node_id="test-extend")
 
-        # Serialize the session for mock return
-        import json
-        session_dict = {
-            'session_id': session.session_id,
-            'node_id': session.node_id,
-            'created_at': session.created_at.isoformat(),
-            'last_accessed': session.last_accessed.isoformat(),
-            'expires_at': session.expires_at.isoformat(),
-            'stm': session.stm,
-            'emotives_accumulator': session.emotives_accumulator,
-            'time': session.time,
-            'metadata': session.metadata,
-            'access_count': session.access_count,
-            'max_stm_size': session.max_stm_size,
-            'max_emotives_size': session.max_emotives_size,
-            'session_config': None
-        }
-        manager.redis_client.get = AsyncMock(return_value=json.dumps(session_dict))
-        manager.redis_client.ttl = AsyncMock(return_value=3600)
-        manager.redis_client.setex = AsyncMock()
+            # Extend TTL
+            result = await manager.extend_session(session.session_id, 7200)
+            assert result is True
 
-        # Get session
-        retrieved = await manager.get_session("test-session")
+            # Session should still be accessible
+            retrieved = await manager.get_session(session.session_id)
+            assert retrieved is not None
 
-        # Verify
-        assert retrieved is not None
-        assert retrieved.session_id == "test-session"
-        assert retrieved.node_id == "test-node"
+            # Cleanup
+            await manager.delete_session(session.session_id)
+        finally:
+            await manager.shutdown()
 
-        # Verify access time was updated (or at least not older)
-        # Note: The mock returns the same object which gets updated in place
-        assert retrieved.last_accessed >= session.last_accessed
+    async def test_session_update_persists(self):
+        """Test that session updates persist to Redis."""
+        manager = RedisSessionManager(
+            default_ttl_seconds=60,
+            redis_url="redis://localhost:6379"
+        )
 
-        # Verify Redis operations
-        manager.redis_client.get.assert_called()
-        # Note: setex is no longer called in get_session() - it only updates fields in memory
-        # The actual save happens in update_session() to avoid double-writes
+        try:
+            await manager.initialize()
 
-    async def test_session_operations_mock(self):
-        """Test various session operations with mocked store"""
-        manager = RedisSessionManager()
+            # Create session
+            session = await manager.create_session(node_id="test-update")
 
-        # Mock the redis_client
-        manager.redis_client = AsyncMock()
-        manager._connected = True
-        manager.redis_client.delete = AsyncMock(return_value=1)
-        manager.redis_client.scan = AsyncMock(return_value=(0, []))
+            # Modify STM
+            session.stm = [["hello", "world"], ["foo", "bar"]]
+            await manager.update_session(session)
 
-        # Test delete session
-        result = await manager.delete_session("test-session")
-        assert result is True
-        manager.redis_client.delete.assert_called()
+            # Retrieve and verify
+            retrieved = await manager.get_session(session.session_id)
+            assert retrieved is not None
+            assert retrieved.stm == [["hello", "world"], ["foo", "bar"]]
 
-        # Test extend session
-        manager.redis_client.exists = AsyncMock(return_value=True)
-        manager.redis_client.expire = AsyncMock(return_value=True)
-        manager.redis_client.get = AsyncMock(return_value=None)  # For get_session
-        result = await manager.extend_session("test-session", 7200)
-        assert result is True
+            # Cleanup
+            await manager.delete_session(session.session_id)
+        finally:
+            await manager.shutdown()
 
-    async def test_health_check_mock(self):
-        """Test health check with mocked store"""
-        manager = RedisSessionManager()
+    async def test_connection_failure_handling(self):
+        """Test that connection to invalid Redis fails gracefully."""
+        manager = RedisSessionManager(
+            default_ttl_seconds=60,
+            redis_url="redis://localhost:19999"  # Non-existent port
+        )
 
-        # Mock healthy Redis connection
-        manager.redis_client = AsyncMock()
-        manager._connected = True
-        manager.redis_client.ping = AsyncMock()
-        manager.redis_client.scan = AsyncMock(return_value=(0, [b'key1', b'key2', b'key3']))
-
-        # Manager doesn't have a health_check method, test connection instead
-        await manager.initialize()
-        assert manager._connected
-
-    async def test_health_check_unhealthy_mock(self):
-        """Test health check with unhealthy Redis"""
-        manager = RedisSessionManager()
-
-        # Mock unhealthy Redis connection
-        manager.redis_client = None
-        manager._connected = False
-
-        # Test that initialize can fail gracefully
-        with patch('redis.asyncio.from_url', side_effect=Exception("Connection failed")):
-            try:
-                await manager.initialize()
-                raise AssertionError("Should have raised exception")
-            except Exception as e:
-                assert "Connection failed" in str(e)
+        with pytest.raises(Exception):
+            await manager.initialize()
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 """
 End-to-end integration tests for ClickHouse/Redis hybrid architecture.
-Tests filter pipeline, mode switching, fallback behavior, and error handling.
+Tests filter pipeline, mode switching, and error handling.
 """
 
 import os
@@ -107,12 +107,14 @@ def test_hybrid_with_vectors(hybrid_kato_fixture):
     assert len(predictions) > 0, "Hybrid mode should handle vectors"
 
     # Verify prediction contains both user strings and vector names
+    found_multimodal = False
     for pred in predictions:
         matches = pred.get('matches', [])
         # Should include both 'visual' and 'audio' in matches
         if 'visual' in matches and 'audio' in matches:
-            assert True
+            found_multimodal = True
             break
+    assert found_multimodal, "Should find prediction with both 'visual' and 'audio' in matches"
 
 
 def test_hybrid_with_emotives(hybrid_kato_fixture):
@@ -182,27 +184,6 @@ def test_hybrid_large_scale_filtering(hybrid_kato_fixture):
     assert elapsed < 1.0, f"Hybrid mode should be fast, took {elapsed:.2f}s"
 
 
-def test_mongodb_fallback_behavior(kato_fixture):
-    """Test that MongoDB mode still works (fallback or explicit mode)."""
-    # This test should work in both mongodb and hybrid modes
-    kato_fixture.clear_all_memory()
-
-    # Learn a simple pattern
-    sequence = ['mongo', 'db', 'fallback']
-    for item in sequence:
-        kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
-
-    pattern_name = kato_fixture.learn()
-    assert pattern_name.startswith('PTRN|'), "MongoDB mode should still work"
-
-    # Get predictions
-    kato_fixture.observe({'strings': ['mongo'], 'vectors': [], 'emotives': {}})
-    kato_fixture.observe({'strings': ['db'], 'vectors': [], 'emotives': {}})
-    predictions = kato_fixture.get_predictions()
-
-    assert len(predictions) > 0, "MongoDB mode should generate predictions"
-
-
 def test_hybrid_pattern_frequency_tracking(hybrid_kato_fixture):
     """Test that pattern frequency is correctly tracked in hybrid mode."""
     hybrid_kato_fixture.clear_all_memory()
@@ -256,14 +237,20 @@ def test_hybrid_recall_threshold(hybrid_kato_fixture):
     # Set high recall threshold via session config
     hybrid_kato_fixture.set_recall_threshold(0.7)
 
-    # Query with exact match to first pattern
+    # Query with exact match to first pattern (all 3 events, similarity = 1.0)
     hybrid_kato_fixture.observe({'strings': ['exact'], 'vectors': [], 'emotives': {}})
     hybrid_kato_fixture.observe({'strings': ['match'], 'vectors': [], 'emotives': {}})
+    hybrid_kato_fixture.observe({'strings': ['pattern'], 'vectors': [], 'emotives': {}})
     predictions = hybrid_kato_fixture.get_predictions()
 
-    # Should find high-similarity pattern
-    exact_matches = [p for p in predictions if 'exact' in p.get('matches', []) and 'match' in p.get('matches', [])]
+    # Should find exact match pattern (similarity = 1.0 > 0.7 threshold)
+    exact_matches = [p for p in predictions if 'exact' in p.get('matches', []) and 'match' in p.get('matches', []) and 'pattern' in p.get('matches', [])]
     assert len(exact_matches) >= 1, "Should find exact match pattern"
+
+    # The medium-similarity pattern ['exact','different','words'] shares only 'exact'
+    # similarity = 2*1/(3+3) = 0.333 < 0.7, so it should also be filtered
+    medium_matches = [p for p in predictions if 'different' in p.get('matches', []) or 'words' in p.get('matches', [])]
+    assert len(medium_matches) == 0, "High recall threshold should filter out medium-similarity patterns"
 
     # Should NOT find low-similarity pattern with high threshold
     unrelated = [p for p in predictions if 'completely' in p.get('matches', []) or 'unrelated' in p.get('matches', [])]
@@ -342,9 +329,8 @@ def test_hybrid_empty_state_handling(hybrid_kato_fixture):
     assert len(predictions) > 0, "Should return predictions with 1 string (fast path optimization)"
 
 
-def test_hybrid_backward_compatibility(kato_fixture):
-    """Test that hybrid mode is backward compatible with MongoDB-only code."""
-    # This test works in both mongodb and hybrid modes
+def test_prediction_structure_completeness(kato_fixture):
+    """Test that predictions contain all required fields in the standard structure."""
     kato_fixture.clear_all_memory()
 
     # Use standard KATO workflow

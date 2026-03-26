@@ -90,10 +90,10 @@ docker compose up -d --build
 
 **Status**: Stable and production-ready (maintenance mode)
 **Architecture**: FastAPI with direct processor embedding (ClickHouse + Redis hybrid)
-**Test Coverage**: 444+ tests passing (2 pre-existing flaky failures, 3 skipped)
+**Test Coverage**: 444+ tests passing + 9 new regression tests (2 pre-existing flaky failures, 3 skipped); test suite audited and hardened (2026-03-25)
 **Performance**: ~10ms average response time; Redis round-trips batched; ClickHouse writes buffered; symbol table cached; MinHash optional xxhash acceleration
 **Code Quality**: 96% technical debt reduction achieved (6,315 → 67 ruff issues)
-**Last Major Update**: Performance optimization phase — 5 optimizations (batch ClickHouse inserts, pipelined Redis symbol lookups, precomputed similarity, symbol table cache, xxhash MinHash) (2026-03-19)
+**Last Major Update**: Test Suite Audit — 5-phase overhaul: eliminated misleading tests, fixed broken patterns, removed pymongo, added 9 regression tests, hardened URL infrastructure (2026-03-25)
 
 ## Directory Structure
 ```

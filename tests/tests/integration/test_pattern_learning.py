@@ -88,18 +88,19 @@ def test_multiple_sequence_learning(kato_fixture):
     kato_fixture.observe({'strings': ['end1'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
 
-    # Should now have completed the path1 sequence
+    # Should now have completed the path1 sequence (similarity = 1.0 for full match)
+    assert len(predictions) > 0, "Full sequence observation should produce predictions"
+    found_complete = False
     for pred in predictions:
-        if pred.get('similarity', 0) > 0.6:
-            present = pred.get('present', [])
-            # We observed all three: 'start', 'path1', 'end1'
-            # So present should be all three events: [['start'], ['path1'], ['end1']]
-            if len(present) == 3:
-                # Check that all observed symbols are in present
-                present_flat = [item for sublist in present for item in sublist if isinstance(sublist, list)]
-                assert 'start' in present_flat and 'path1' in present_flat and 'end1' in present_flat, \
-                    f"Present should contain all observed symbols, got {present}"
-                break
+        present = pred.get('present', [])
+        if len(present) == 3:
+            present_flat = [item for sublist in present for item in sublist if isinstance(sublist, list)]
+            assert 'start' in present_flat and 'path1' in present_flat and 'end1' in present_flat, \
+                f"Present should contain all observed symbols, got {present}"
+            found_complete = True
+            break
+    assert found_complete, \
+        f"Should find prediction with 3 present events, got predictions: {[(p.get('similarity'), len(p.get('present', []))) for p in predictions]}"
 
 
 def test_sequence_completion(kato_fixture):
@@ -191,14 +192,20 @@ def test_cyclic_sequence_learning(kato_fixture):
 
     predictions = kato_fixture.get_predictions()
 
-    # Should predict 'C' as next in future
-    for pred in predictions:
-        if pred.get('similarity', 0) > 0.5:
-            future = pred.get('future', [])
-            # Check if 'C' is in the next future event
-            if future and 'C' in future[0]:
-                assert True
-                break
+    # Cyclic patterns should produce predictions (similarity ≈ 0.444 > default threshold 0.1)
+    assert len(predictions) > 0, "Cyclic pattern should produce predictions"
+
+    # Find the prediction matching our pattern
+    pred = predictions[0]
+    assert 'A' in pred.get('matches', []) and 'B' in pred.get('matches', []), \
+        f"Prediction should match observed symbols, got matches={pred.get('matches', [])}"
+
+    # Alignment anchors at first occurrence (positions 0-1), so future starts at position 2
+    # future should be [['C'], ['A'], ['B'], ['C'], ['A']]
+    future = pred.get('future', [])
+    assert len(future) > 0, f"Cyclic pattern should have future events, got {future}"
+    assert 'C' in future[0], \
+        f"First future event after ['A'],['B'] should contain 'C', got {future[0]}"
 
 
 def test_sequence_with_repetition(kato_fixture):
@@ -298,6 +305,7 @@ def test_context_switching(kato_fixture):
         predictions = kato_fixture.get_predictions()
 
         # Should predict appropriate context continuation
+        found_context = False
         for pred in predictions:
             if pred.get('frequency', 0) > 0:
                 future = pred.get('future', [])
@@ -305,8 +313,10 @@ def test_context_switching(kato_fixture):
                 # Check if future events contain the expected context continuation
                 future_items = [item for event in future for item in event if isinstance(event, list)]
                 if any(item in future_items for item in context_seq[1:]):
-                    assert True
+                    found_context = True
                     break
+        # Note: context switching may not always produce perfect predictions,
+        # so we don't assert here - the test validates no crashes occur
 
 
 def test_max_pattern_length_auto_learn(kato_fixture):

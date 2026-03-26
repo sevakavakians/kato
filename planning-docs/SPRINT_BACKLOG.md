@@ -298,6 +298,24 @@ Phase 4 (Symbol Statistics & Fail-Fast Architecture) is 100% complete. The Click
 
 ## Recently Completed
 
+### Comprehensive Test Suite Audit ✅ COMPLETE
+**Priority**: High - Code Quality / Regression Coverage
+**Status**: FULLY COMPLETED (2026-03-25)
+**Total Effort**: Full audit + implementation
+
+**Summary**: 30 issues found across 5 categories (A: misleading tests, B: broken assertions, C: outdated refs, D: missing regression tests, E: infrastructure), all resolved.
+- Deleted 3 misleading tests (MongoDB fallback, cache assert True, swallowed WebSocket)
+- Replaced 5 Redis mock tests with real integration tests
+- Fixed 10+ bare `assert True` instances with meaningful assertions
+- Removed local env var manipulation from rapidfuzz tests
+- Added 9 new regression tests (deferred flush, symbol batch, fast path, filter pipeline)
+- Cleaned up all MongoDB references and removed pymongo from test requirements
+- 18 files modified (16 existing + 2 new)
+
+**Archive**: planning-docs/completed/refactors/2026-03-25-test-suite-audit.md
+
+---
+
 ### API Endpoint Deprecation - Session-Based Migration ✅ COMPLETE
 **Priority**: Medium
 **Status**: All Phases Complete (2025-10-06)

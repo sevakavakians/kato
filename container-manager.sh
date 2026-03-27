@@ -112,49 +112,32 @@ echo "────────────────────────�
 CURRENT_VERSION=$(grep '^version = ' pyproject.toml | cut -d'"' -f2)
 echo -e "Current version: ${YELLOW}${CURRENT_VERSION}${NC}"
 
-# Run bump-version.sh in automated mode
-export BUMP_TYPE
-export DESCRIPTION
-
-# Create a temporary script to handle bump-version.sh automation
-cat > /tmp/bump-version-auto.sh << 'EOFSCRIPT'
-#!/bin/bash
-set -e
-
-# Automated version bump
-BUMP_TYPE=${1:-patch}
-DESCRIPTION=${2:-"Version bump"}
-
-# Get current version
-CURRENT_VERSION=$(grep '^version = ' pyproject.toml | cut -d'"' -f2)
-
-# Parse semantic version
-IFS='.' read -r MAJOR MINOR PATCH <<< "${CURRENT_VERSION}"
+# Compute new version inline (no subprocess capture to avoid stdout pollution)
+IFS='.' read -r V_MAJOR V_MINOR V_PATCH <<< "${CURRENT_VERSION}"
 
 # Handle pre-release versions
-if [[ "$PATCH" == *"-"* ]]; then
-    PATCH=$(echo "$PATCH" | cut -d'-' -f1)
+if [[ "$V_PATCH" == *"-"* ]]; then
+    V_PATCH=$(echo "$V_PATCH" | cut -d'-' -f1)
 fi
 
-# Bump version based on type
 case $BUMP_TYPE in
     major)
-        MAJOR=$((MAJOR + 1))
-        MINOR=0
-        PATCH=0
+        V_MAJOR=$((V_MAJOR + 1))
+        V_MINOR=0
+        V_PATCH=0
         ;;
     minor)
-        MINOR=$((MINOR + 1))
-        PATCH=0
+        V_MINOR=$((V_MINOR + 1))
+        V_PATCH=0
         ;;
     patch)
-        PATCH=$((PATCH + 1))
+        V_PATCH=$((V_PATCH + 1))
         ;;
 esac
 
-NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+NEW_VERSION="${V_MAJOR}.${V_MINOR}.${V_PATCH}"
 
-# Update files
+# Update version in source files
 sed -i.bak "s/^version = \"${CURRENT_VERSION}\"/version = \"${NEW_VERSION}\"/" pyproject.toml
 rm -f pyproject.toml.bak
 
@@ -168,19 +151,10 @@ if [[ -f "kato/__init__.py" ]]; then
     rm -f kato/__init__.py.bak
 fi
 
-# Commit changes (suppress stdout so only the final echo is captured)
+# Commit and tag
 git add pyproject.toml setup.py kato/__init__.py
-git commit -m "chore: bump version to ${NEW_VERSION}" > /dev/null
-
-# Create tag
-git tag -a "v${NEW_VERSION}" -m "Release v${NEW_VERSION}: ${DESCRIPTION}" > /dev/null
-
-echo "${NEW_VERSION}"
-EOFSCRIPT
-
-chmod +x /tmp/bump-version-auto.sh
-NEW_VERSION=$(/tmp/bump-version-auto.sh "$BUMP_TYPE" "$DESCRIPTION")
-rm /tmp/bump-version-auto.sh
+git commit -m "chore: bump version to ${NEW_VERSION}"
+git tag -a "v${NEW_VERSION}" -m "Release v${NEW_VERSION}: ${DESCRIPTION}"
 
 echo -e "${GREEN}✓ Version bumped to: ${NEW_VERSION}${NC}"
 

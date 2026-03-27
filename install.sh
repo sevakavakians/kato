@@ -140,6 +140,10 @@ fi
 # Make scripts executable
 chmod +x "${INSTALL_DIR}/kato-manager.sh"
 
+# Ensure config files are readable by container processes (e.g. ClickHouse UID 101)
+chmod 644 "${INSTALL_DIR}/config/clickhouse/"* 2>/dev/null || true
+chmod 644 "${INSTALL_DIR}/config/redis.conf" 2>/dev/null || true
+
 echo ""
 echo -e "${GREEN}KATO ${DISPLAY_VERSION} installed to ${INSTALL_DIR}${NC}"
 echo ""

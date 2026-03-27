@@ -223,10 +223,12 @@ cp deployment/README.md "${TARBALL_DIR}/"
 cp deployment/DEPLOYMENT-GUIDE.md "${TARBALL_DIR}/"
 cp deployment/MEMORY-MONITORING.md "${TARBALL_DIR}/"
 cp deployment/config/clickhouse/* "${TARBALL_DIR}/config/clickhouse/"
+chmod 644 "${TARBALL_DIR}/config/clickhouse/"*
 
 # Include redis.conf and patch the path so the tarball is self-contained
 if [[ -f "config/redis.conf" ]]; then
     cp config/redis.conf "${TARBALL_DIR}/config/"
+    chmod 644 "${TARBALL_DIR}/config/redis.conf"
     sed -i.bak 's|\.\./config/redis\.conf|./config/redis.conf|g' "${TARBALL_DIR}/docker-compose.yml"
     rm -f "${TARBALL_DIR}/docker-compose.yml.bak"
 fi

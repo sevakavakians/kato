@@ -45,6 +45,17 @@ if [[ ! -f "build-and-push.sh" ]]; then
     exit 1
 fi
 
+# Check for GitHub CLI (needed for release creation)
+if ! command -v gh &> /dev/null; then
+    echo -e "${RED}Error: GitHub CLI (gh) not found. Install: https://cli.github.com/${NC}"
+    exit 1
+fi
+
+if ! gh auth status &> /dev/null; then
+    echo -e "${RED}Error: Not authenticated with GitHub CLI. Run: gh auth login${NC}"
+    exit 1
+fi
+
 # Check git status
 echo -e "${YELLOW}Checking git status...${NC}"
 if [[ -n $(git status --porcelain) ]]; then
@@ -222,9 +233,54 @@ echo "Building multi-tag images..."
 
 echo -e "${GREEN}✓ Container images built and pushed${NC}"
 
-# Step 5: Verify deployment
+# Step 5: Create deployment tarball and GitHub release
 echo ""
-echo -e "${BLUE}Step 5: Verification${NC}"
+echo -e "${BLUE}Step 5: Creating deployment bundle and GitHub release${NC}"
+echo "────────────────────────────────────────────────────────────"
+
+STAGING_DIR=$(mktemp -d)
+TARBALL_DIR="${STAGING_DIR}/kato-deployment"
+mkdir -p "${TARBALL_DIR}/config/clickhouse"
+
+# Copy deployment files
+cp deployment/docker-compose.yml "${TARBALL_DIR}/"
+cp deployment/kato-manager.sh "${TARBALL_DIR}/"
+cp deployment/README.md "${TARBALL_DIR}/"
+cp deployment/DEPLOYMENT-GUIDE.md "${TARBALL_DIR}/"
+cp deployment/MEMORY-MONITORING.md "${TARBALL_DIR}/"
+cp deployment/config/clickhouse/* "${TARBALL_DIR}/config/clickhouse/"
+
+# Include redis.conf and patch the path so the tarball is self-contained
+if [[ -f "config/redis.conf" ]]; then
+    cp config/redis.conf "${TARBALL_DIR}/config/"
+    sed -i.bak 's|\.\./config/redis\.conf|./config/redis.conf|g' "${TARBALL_DIR}/docker-compose.yml"
+    rm -f "${TARBALL_DIR}/docker-compose.yml.bak"
+fi
+
+# Include .env.example if it exists
+if [[ -f "deployment/.env.example" ]]; then
+    cp deployment/.env.example "${TARBALL_DIR}/"
+fi
+
+TARBALL_NAME="kato-deployment-v${NEW_VERSION}.tar.gz"
+tar -czf "${TARBALL_NAME}" -C "${STAGING_DIR}" kato-deployment
+rm -rf "${STAGING_DIR}"
+
+echo -e "${GREEN}✓ Deployment bundle created: ${TARBALL_NAME}${NC}"
+
+# Create GitHub release with the deployment tarball
+echo "Creating GitHub release..."
+gh release create "v${NEW_VERSION}" \
+    --title "KATO v${NEW_VERSION}" \
+    --notes "Release v${NEW_VERSION}: ${DESCRIPTION}" \
+    "${TARBALL_NAME}#Deployment Bundle"
+
+rm -f "${TARBALL_NAME}"
+echo -e "${GREEN}✓ GitHub release created with deployment bundle${NC}"
+
+# Step 6: Verify deployment
+echo ""
+echo -e "${BLUE}Step 6: Verification${NC}"
 echo "────────────────────────────────────────────────────────────"
 
 # Check if image exists in registry
@@ -252,13 +308,15 @@ echo "  • Description: ${DESCRIPTION}"
 echo "  • Git tag: v${NEW_VERSION}"
 echo "  • Container images: ghcr.io/sevakavakians/kato:${NEW_VERSION}"
 echo ""
+echo "  • Release: https://github.com/sevakavakians/kato/releases/tag/v${NEW_VERSION}"
+echo ""
 echo "Next steps:"
 echo "  1. Update CHANGELOG.md with detailed release notes (if not done)"
-echo "  2. Create GitHub release at: https://github.com/sevakavakians/kato/releases/new?tag=v${NEW_VERSION}"
-echo "  3. Update deployment documentation if needed"
-echo "  4. Notify users of the new release"
+echo "  2. Notify users of the new release"
 echo ""
-echo "Users can now pull the new version:"
+echo "Users can install with:"
+echo "  curl -fsSL https://raw.githubusercontent.com/sevakavakians/kato/main/install.sh | bash"
+echo ""
+echo "Or pull the container directly:"
 echo "  docker pull ghcr.io/sevakavakians/kato:${NEW_VERSION}"
-echo "  docker pull ghcr.io/sevakavakians/kato:latest"
 echo ""

@@ -20,15 +20,25 @@ KATO (Knowledge Abstraction for Traceable Outcomes) is a deterministic memory an
 ### Fastest Setup
 
 ```bash
-# Download deployment files
-curl -L https://github.com/sevakavakians/kato/archive/main.tar.gz | tar xz
-cd kato-main/deployment
+# One-line install (downloads latest release)
+curl -fsSL https://raw.githubusercontent.com/sevakavakians/kato/main/install.sh | bash
 
-# Start all services
+cd kato
 ./kato-manager.sh start
-
-# Verify
 ./kato-manager.sh status
+```
+
+Or install a specific version:
+```bash
+curl -fsSL https://raw.githubusercontent.com/sevakavakians/kato/main/install.sh | bash -s -- --version v3.7.0
+```
+
+Or with GitHub CLI:
+```bash
+gh release download --repo sevakavakians/kato --pattern 'kato-deployment-*.tar.gz'
+tar xzf kato-deployment-*.tar.gz
+cd kato-deployment
+./kato-manager.sh start
 ```
 
 **Access KATO:**
@@ -43,17 +53,58 @@ cd kato-main/deployment
 
 Choose the deployment method that best fits your needs:
 
-### Option 1: Copy Deployment Directory (Recommended for Production)
+### Option 1: Install Script / Release Download (Recommended)
 
-**Best for:** Remote servers, production deployments, minimal footprint
+**Best for:** Quick setup, production deployments, automated installs
 
-**What you need:** Just the 4 files in this `deployment/` directory
+**Steps:**
+
+```bash
+# One-line install (downloads latest release bundle)
+curl -fsSL https://raw.githubusercontent.com/sevakavakians/kato/main/install.sh | bash
+
+cd kato
+./kato-manager.sh start
+```
+
+**Options:**
+```bash
+# Install to a custom directory
+curl -fsSL https://raw.githubusercontent.com/sevakavakians/kato/main/install.sh | bash -s -- --dir /opt/kato
+
+# Install a specific version
+curl -fsSL https://raw.githubusercontent.com/sevakavakians/kato/main/install.sh | bash -s -- --version v3.7.0
+```
+
+**Or download manually with GitHub CLI:**
+```bash
+gh release download --repo sevakavakians/kato --pattern 'kato-deployment-*.tar.gz'
+tar xzf kato-deployment-*.tar.gz
+cd kato-deployment
+./kato-manager.sh start
+```
+
+**Advantages:**
+- Self-contained deployment bundle (no source code download)
+- Version-pinned releases with deployment configs included
+- Preserves existing `.env` on upgrade
+- Works on any system with `curl` and `tar`
+
+**Upgrading:**
+```bash
+# Re-run the installer to upgrade (your .env is preserved)
+curl -fsSL https://raw.githubusercontent.com/sevakavakians/kato/main/install.sh | bash -s -- --dir /opt/kato
+cd /opt/kato && ./kato-manager.sh restart
+```
+
+### Option 2: Copy Deployment Directory
+
+**Best for:** Remote servers where you already have the source repo locally
 
 **Steps:**
 
 1. **Copy deployment files to your remote machine:**
    ```bash
-   # From your local machine
    scp -r deployment/ user@remote-machine:/opt/kato/
 
    # Or use rsync
@@ -71,54 +122,20 @@ Choose the deployment method that best fits your needs:
    ./kato-manager.sh status
    ```
 
-**Advantages:**
-- ✅ Minimal footprint (only 4 small files needed)
-- ✅ No source code required
-- ✅ Easy to manage with included `kato-manager.sh` script
-- ✅ Simple updates: `./kato-manager.sh update`
-- ✅ Clean separation from development environment
+### Option 3: Download Full Repository
 
-**Files included:**
-- `docker-compose.yml` - Service orchestration
-- `kato-manager.sh` - Management script
-- `.env.example` - Configuration template
-- `README.md` - This documentation
-
-### Option 2: Download from GitHub
-
-**Best for:** Quick setup, trying KATO, automated deployments
+**Best for:** Development, contributing to KATO
 
 **Steps:**
 
 ```bash
-# Using curl
-curl -L https://github.com/sevakavakians/kato/archive/main.tar.gz | tar xz
-cd kato-main/deployment
-./kato-manager.sh start
-
-# Using wget
-wget -O- https://github.com/sevakavakians/kato/archive/main.tar.gz | tar xz
-cd kato-main/deployment
-./kato-manager.sh start
-
-# Download specific version
-curl -L https://github.com/sevakavakians/kato/archive/v1.2.3.tar.gz | tar xz
-cd kato-1.2.3/deployment
-./kato-manager.sh start
-
-# Clone entire repository
+# Clone repository
 git clone https://github.com/sevakavakians/kato.git
 cd kato/deployment
 ./kato-manager.sh start
 ```
 
-**Advantages:**
-- ✅ Always get latest version
-- ✅ Can specify exact version tags
-- ✅ No manual file transfers
-- ✅ Good for CI/CD pipelines
-
-### Option 3: Manual Docker Commands
+### Option 4: Manual Docker Commands
 
 **Best for:** Custom setups, testing, environments without docker compose
 
@@ -258,21 +275,20 @@ docker volume rm kato-clickhouse-data kato-qdrant-data kato-redis-data
 
 ### Comparison Table
 
-| Feature | Copy Directory | Download from GitHub | Manual Docker |
-|---------|---------------|---------------------|---------------|
-| **Files needed** | 4 files | Internet access | None |
-| **Setup complexity** | Low | Low | Medium |
-| **Management ease** | Excellent (`kato-manager.sh`) | Excellent (`kato-manager.sh`) | Manual |
-| **Customization** | Easy (edit files) | Easy (edit files) | Very Easy (modify commands) |
-| **Updates** | `./kato-manager.sh update` | `./kato-manager.sh update` | Manual pull & restart |
-| **Best for** | Production servers | Quick testing | Custom setups |
-| **Version control** | Manual | Easy (git tags) | Manual |
+| Feature | Install Script | Copy Directory | Full Repo | Manual Docker |
+|---------|---------------|---------------|-----------|---------------|
+| **Setup complexity** | One command | Low | Low | Medium |
+| **Version pinning** | Built-in | Manual | Git tags | Manual |
+| **Upgrade support** | Re-run installer | Manual copy | Git pull | Manual |
+| **Management** | `kato-manager.sh` | `kato-manager.sh` | `kato-manager.sh` | Manual |
+| **Best for** | Most users | Remote servers | Development | Custom setups |
 
 ### Recommendation
 
-- **Production deployments**: Use **Option 1** (Copy Directory) for minimal footprint and easy management
-- **Quick testing/evaluation**: Use **Option 2** (Download from GitHub) for fastest setup
-- **Custom configurations**: Use **Option 3** (Manual Docker) for full control without files
+- **Most users**: Use **Option 1** (Install Script) for the simplest setup and upgrades
+- **Remote servers**: Use **Option 2** (Copy Directory) if you already have the repo locally
+- **Development/Contributing**: Use **Option 3** (Full Repo) for source access
+- **Custom setups**: Use **Option 4** (Manual Docker) for full control
 
 ## Usage
 

@@ -81,6 +81,77 @@ def _lcs_ratio_scorer(s1: list, s2: list, **kwargs) -> float:
         return matcher.ratio() * 100.0
 
 
+# Threshold for switching from ThreadPoolExecutor to ProcessPoolExecutor
+# ProcessPool has higher startup/serialization cost but bypasses the GIL
+PROCESS_POOL_CANDIDATE_THRESHOLD = 500
+
+
+def _process_batch_worker(state, batch_patterns_data, recall_threshold, use_token_matching, fuzzy_token_threshold):
+    """
+    Module-level worker function for ProcessPoolExecutor (must be picklable).
+
+    Processes a batch of pattern data for similarity matching. Creates its own
+    InformationExtractor since it runs in a separate process.
+
+    Args:
+        state: Current state sequence (list of tokens)
+        batch_patterns_data: List of (pattern_id, pattern_sequence) tuples
+        recall_threshold: Minimum similarity threshold
+        use_token_matching: Whether to use token-level matching
+        fuzzy_token_threshold: Fuzzy matching threshold
+
+    Returns:
+        List of match result tuples
+    """
+    extractor = InformationExtractor(use_fast_matcher=True, use_token_matching=use_token_matching)
+    batch_results = []
+
+    if use_token_matching:
+        choices = {pid: seq for pid, seq in batch_patterns_data}
+        scorer = _lcs_ratio_scorer
+        query = state
+    else:
+        state_str = ' '.join(state)
+        choices = {pid: ' '.join(seq) for pid, seq in batch_patterns_data}
+        scorer = fuzz.ratio if RAPIDFUZZ_AVAILABLE else None
+        query = state_str
+
+    if choices and RAPIDFUZZ_AVAILABLE:
+        # Subtract epsilon: RapidFuzz score_cutoff uses strict > internally,
+        # but our threshold semantics are >=
+        score_cutoff = recall_threshold * 100 - 1e-6
+        matches = process.extract(query, choices, scorer=scorer, score_cutoff=score_cutoff, limit=None)
+
+        for _choice_str, score, pattern_id in matches:
+            similarity = score / 100.0
+            if similarity >= recall_threshold:
+                pattern_seq = dict(batch_patterns_data)[pattern_id]
+                recall_threshold_safe = recall_threshold if recall_threshold is not None else 0.1
+                info = extractor.extract_prediction_info(
+                    pattern_seq, state, recall_threshold_safe, fuzzy_token_threshold,
+                    precomputed_similarity=similarity)
+                if info:
+                    batch_results.append((
+                        pattern_id, pattern_seq, info[1], info[2], info[3], info[4], info[5],
+                        info[6], info[7], info[8]
+                    ))
+    elif choices:
+        # Fallback without RapidFuzz
+        recall_threshold_safe = recall_threshold if recall_threshold is not None else 0.1
+        for pattern_id, pattern_seq in batch_patterns_data:
+            info = extractor.extract_prediction_info(
+                pattern_seq, state, recall_threshold_safe, fuzzy_token_threshold)
+            if info and len(info) >= 9:
+                similarity = info[6] if len(info) > 6 else 0.0
+                if similarity >= recall_threshold_safe:
+                    batch_results.append((
+                        pattern_id, pattern_seq, info[1], info[2], info[3], info[4], info[5],
+                        similarity, info[7] if len(info) > 7 else 0, info[8] if len(info) > 8 else []
+                    ))
+
+    return batch_results
+
+
 class InformationExtractor:
     """
     Optimized information extraction using fast matching algorithms.
@@ -860,7 +931,10 @@ class PatternSearcher:
         if choices:
             # Use score_cutoff for early termination (5-10% faster)
             # Convert recall_threshold (0-1) to score (0-100)
-            score_cutoff = self.recall_threshold * 100
+            # Subtract epsilon: RapidFuzz score_cutoff uses strict > internally,
+            # but our threshold semantics are >= (line 1259). The epsilon ensures
+            # matches at the exact threshold boundary are returned by RapidFuzz.
+            score_cutoff = self.recall_threshold * 100 - 1e-6
 
             matches = process.extract(
                 query,
@@ -1039,27 +1113,57 @@ class PatternSearcher:
         # Split candidates into batches for parallel processing
         candidate_batches = [candidates[i:i + batch_size] for i in range(0, len(candidates), batch_size)]
 
-        # Process batches in parallel
-        all_results = []
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # Create futures for each batch
-            futures = []
-            for batch in candidate_batches:
-                if self.use_fast_matching and RAPIDFUZZ_AVAILABLE:
-                    future = executor.submit(self._process_batch_rapidfuzz, state, batch)
-                else:
-                    future = executor.submit(self._process_batch_original, state, batch)
-                futures.append(future)
+        # Choose executor: ProcessPool for large candidate sets (bypasses GIL),
+        # ThreadPool for smaller sets (lower overhead)
+        use_process_pool = len(candidates) > PROCESS_POOL_CANDIDATE_THRESHOLD
+        fuzzy_token_threshold = getattr(self.session_config, 'fuzzy_token_threshold', 0.0) if self.session_config else 0.0
 
-            # Gather results from all batches
-            for future in concurrent.futures.as_completed(futures):
-                try:
-                    batch_results = future.result()
-                    all_results.extend(batch_results)
-                except Exception as e:
-                    import traceback
-                    logger.error(f"Error processing batch: {e}")
-                    logger.error(f"Traceback: {traceback.format_exc()}")
+        all_results = []
+        if use_process_pool:
+            # ProcessPoolExecutor: true CPU parallelism for GIL-bound extract_prediction_info
+            # Use fewer workers than ThreadPool due to higher per-process overhead
+            process_workers = min(multiprocessing.cpu_count(), 4)
+            logger.debug(f"Using ProcessPoolExecutor with {process_workers} workers for {len(candidates)} candidates")
+
+            # Prepare batch data: extract pattern sequences from cache (must be picklable)
+            recall_threshold = self.recall_threshold if self.recall_threshold is not None else 0.1
+            with concurrent.futures.ProcessPoolExecutor(max_workers=process_workers) as executor:
+                futures = []
+                for batch in candidate_batches:
+                    batch_data = [(pid, self.patterns_cache[pid]) for pid in batch if pid in self.patterns_cache]
+                    if batch_data:
+                        future = executor.submit(
+                            _process_batch_worker, state, batch_data,
+                            recall_threshold, self.use_token_matching, fuzzy_token_threshold
+                        )
+                        futures.append(future)
+
+                for future in concurrent.futures.as_completed(futures):
+                    try:
+                        all_results.extend(future.result())
+                    except Exception as e:
+                        import traceback
+                        logger.error(f"Error in ProcessPool batch: {e}")
+                        logger.error(f"Traceback: {traceback.format_exc()}")
+        else:
+            # ThreadPoolExecutor: lower overhead, effective when RapidFuzz releases GIL
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = []
+                for batch in candidate_batches:
+                    if self.use_fast_matching and RAPIDFUZZ_AVAILABLE:
+                        future = executor.submit(self._process_batch_rapidfuzz, state, batch)
+                    else:
+                        future = executor.submit(self._process_batch_original, state, batch)
+                    futures.append(future)
+
+                for future in concurrent.futures.as_completed(futures):
+                    try:
+                        batch_results = future.result()
+                        all_results.extend(batch_results)
+                    except Exception as e:
+                        import traceback
+                        logger.error(f"Error processing batch: {e}")
+                        logger.error(f"Traceback: {traceback.format_exc()}")
 
         logger.debug(f"Found {len(all_results)} matches above threshold (async parallel)")
 
@@ -1141,7 +1245,10 @@ class PatternSearcher:
         if choices:
             # Use score_cutoff for early termination (consistent with sync version)
             # Convert recall_threshold (0-1) to score (0-100)
-            score_cutoff = self.recall_threshold * 100
+            # Subtract epsilon: RapidFuzz score_cutoff uses strict > internally,
+            # but our threshold semantics are >= (line 1259). The epsilon ensures
+            # matches at the exact threshold boundary are returned by RapidFuzz.
+            score_cutoff = self.recall_threshold * 100 - 1e-6
             logger.debug(f"About to call rapidfuzz with query={query}, "
                        f"recall_threshold={self.recall_threshold}, score_cutoff={score_cutoff}")
 

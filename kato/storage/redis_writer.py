@@ -712,3 +712,103 @@ class RedisWriter:
         # For initial implementation, return all patterns containing symbol
         # The pattern_processor will filter to first-symbol matches after loading from ClickHouse
         return self.get_patterns_for_symbol(symbol)
+
+    # ── Pre-computed metrics (finalize-training) ──────────────────────
+
+    def write_precomputed_metrics_batch(self, metrics: list[dict]) -> int:
+        """
+        Batch-write pre-computed pattern-intrinsic metrics.
+
+        Uses a single Redis pipeline for all writes.
+
+        Args:
+            metrics: List of dicts with keys: pattern_name, entropy,
+                     normalized_entropy, global_normalized_entropy, tf_vector
+
+        Returns:
+            Number of patterns written
+        """
+        if not metrics:
+            return 0
+
+        try:
+            pipe = self.client.pipeline(transaction=False)
+
+            for m in metrics:
+                name = m['pattern_name']
+                pipe.set(
+                    f"{self.kb_id}:entropy:{name}",
+                    str(m['entropy'])
+                )
+                pipe.set(
+                    f"{self.kb_id}:normalized_entropy:{name}",
+                    str(m['normalized_entropy'])
+                )
+                pipe.set(
+                    f"{self.kb_id}:global_normalized_entropy:{name}",
+                    str(m['global_normalized_entropy'])
+                )
+                pipe.set(
+                    f"{self.kb_id}:tf_vector:{name}",
+                    json.dumps(m['tf_vector'])
+                )
+
+            pipe.execute()
+            logger.debug(f"Batch wrote pre-computed metrics for {len(metrics)} patterns")
+            return len(metrics)
+
+        except Exception as e:
+            logger.error(f"Failed to batch write pre-computed metrics: {e}")
+            raise
+
+    def get_precomputed_metrics_batch(self, pattern_names: list[str]) -> dict[str, dict]:
+        """
+        Batch-read pre-computed pattern-intrinsic metrics.
+
+        Uses a single Redis pipeline (4N GETs for N patterns).
+
+        Args:
+            pattern_names: List of pattern name hashes
+
+        Returns:
+            Dictionary mapping pattern_name -> {entropy, normalized_entropy,
+            global_normalized_entropy, tf_vector}. Only includes patterns
+            that have pre-computed metrics (entropy key must exist).
+        """
+        if not pattern_names:
+            return {}
+
+        try:
+            pipe = self.client.pipeline(transaction=False)
+
+            for name in pattern_names:
+                pipe.get(f"{self.kb_id}:entropy:{name}")
+                pipe.get(f"{self.kb_id}:normalized_entropy:{name}")
+                pipe.get(f"{self.kb_id}:global_normalized_entropy:{name}")
+                pipe.get(f"{self.kb_id}:tf_vector:{name}")
+
+            raw_results = pipe.execute()
+
+            results = {}
+            for i, name in enumerate(pattern_names):
+                entropy_val = raw_results[i * 4]
+                norm_entropy_val = raw_results[i * 4 + 1]
+                global_norm_entropy_val = raw_results[i * 4 + 2]
+                tf_val = raw_results[i * 4 + 3]
+
+                if entropy_val is not None:
+                    entry = {
+                        'entropy': float(entropy_val),
+                        'normalized_entropy': float(norm_entropy_val) if norm_entropy_val is not None else 0.0,
+                        'global_normalized_entropy': float(global_norm_entropy_val) if global_norm_entropy_val is not None else 0.0,
+                    }
+                    if tf_val is not None:
+                        entry['tf_vector'] = json.loads(tf_val)
+                    results[name] = entry
+
+            logger.debug(f"Batch loaded pre-computed metrics for {len(results)}/{len(pattern_names)} patterns")
+            return results
+
+        except Exception as e:
+            logger.error(f"Failed to batch get pre-computed metrics: {e}")
+            return {}

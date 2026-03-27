@@ -72,9 +72,13 @@ def test_vectors_stored_in_qdrant(kato_fixture):
     # Now check Qdrant directly for this processor's collection
     processor_id = kato_fixture.processor_id
     qdrant_url = os.environ.get("QDRANT_URL", "http://localhost:6333")
+    qdrant_headers = {}
+    qdrant_api_key = os.environ.get("QDRANT_API_KEY", "")
+    if qdrant_api_key:
+        qdrant_headers["api-key"] = qdrant_api_key
 
     # Find the collection matching this processor_id (may have suffix like _kato)
-    collections_resp = requests.get(f"{qdrant_url}/collections")
+    collections_resp = requests.get(f"{qdrant_url}/collections", headers=qdrant_headers)
     assert collections_resp.status_code == 200, "Should be able to list Qdrant collections"
     all_collections = [c['name'] for c in collections_resp.json()['result']['collections']]
     matching = [c for c in all_collections if processor_id in c]
@@ -84,7 +88,7 @@ def test_vectors_stored_in_qdrant(kato_fixture):
     )
     collection_name = matching[0]
 
-    resp = requests.get(f"{qdrant_url}/collections/{collection_name}")
+    resp = requests.get(f"{qdrant_url}/collections/{collection_name}", headers=qdrant_headers)
     assert resp.status_code == 200, f"Collection {collection_name} should exist in Qdrant"
 
     info = resp.json()

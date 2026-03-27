@@ -11,7 +11,7 @@ from .observation import (
     ObservationSequenceResult,
     STMResponse,
 )
-from .prediction import LearnResult, PredictionsResponse
+from .prediction import FinalizeTrainingResult, LearnResult, PredictionsResponse
 from .session import CreateSessionRequest, SessionResponse
 
 __all__ = [
@@ -23,5 +23,6 @@ __all__ = [
     'ObservationSequenceRequest',
     'ObservationSequenceResult',
     'PredictionsResponse',
-    'LearnResult'
+    'LearnResult',
+    'FinalizeTrainingResult'
 ]

@@ -14,6 +14,7 @@ from fastapi import APIRouter, HTTPException, Request
 
 from kato.api.schemas import (
     CreateSessionRequest,
+    FinalizeTrainingResult,
     LearnResult,
     ObservationData,
     ObservationResult,
@@ -449,6 +450,39 @@ async def learn_in_session(session_id: str):
         pattern_name=pattern_name,
         session_id=session_id,
         message=f"Learned pattern {pattern_name} from {len(session.stm)} events"
+    )
+
+
+@router.post("/{session_id}/finalize-training", response_model=FinalizeTrainingResult)
+async def finalize_training(session_id: str):
+    """
+    Run post-training computations for all patterns in this session's node.
+
+    Computes and stores Shannon entropy and TF (term frequency) vectors for
+    every pattern in the node's knowledge base. These metrics are pattern-intrinsic
+    but depend on corpus-level statistics that are only stable after training.
+
+    Call this once after a training session is complete, before running predictions.
+    """
+    from kato.services.kato_fastapi import app_state
+
+    session = await app_state.session_manager.get_session(session_id)
+    if not session:
+        raise HTTPException(404, detail=f"Session {session_id} not found or expired")
+
+    processor = await app_state.processor_manager.get_processor(
+        session.node_id, session.session_config
+    )
+
+    result = await processor.finalize_training()
+
+    return FinalizeTrainingResult(
+        status=result['status'],
+        patterns_processed=result['patterns_processed'],
+        time_ms=result['time_ms'],
+        session_id=session_id,
+        node_id=session.node_id,
+        message=f"Computed Shannon entropy and TF vectors for {result['patterns_processed']} patterns in {result['time_ms']}ms"
     )
 
 

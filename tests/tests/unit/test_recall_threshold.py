@@ -304,12 +304,16 @@ def test_threshold_multimodal(kato_fixture):
     kato_fixture.learn()
 
     # Partial match — observe with missing strings from each event
-    # Similarity = 2*4/(4+6) = 0.8 (difflib ratio with 4 matched tokens)
+    # Pattern flat = [VCTR|xxx, modal1, multi1, VCTR|yyy, modal2, multi2] (6 symbols)
+    # State flat = [VCTR|xxx, VCTR|yyy, multi1, VCTR|xxx, VCTR|yyy, multi2] (6 symbols)
+    #   (each event gets both VCTR hashes from vector similarity search)
+    # LCS matches = 4 (VCTR|xxx, multi1, VCTR|yyy, multi2)
+    # difflib ratio = 2*4/(6+6) = 0.6667
     test_cases = [
         (0.2, True),
         (0.5, True),
-        (0.8, True),   # Boundary: similarity=0.8 passes threshold=0.8 (>= comparison)
-        (0.85, False), # Above similarity: should filter out
+        (0.65, True),  # similarity=0.6667 passes threshold=0.65
+        (0.7, False),  # similarity=0.6667 fails threshold=0.7
     ]
 
     for threshold, expect_predictions in test_cases:

@@ -16,6 +16,16 @@ class LearnResult(BaseModel):
     message: Optional[str] = Field(None, description="Human-readable message")
 
 
+class FinalizeTrainingResult(BaseModel):
+    """Result of finalize-training operation"""
+    status: str = Field(..., description="Status of the operation (completed)")
+    patterns_processed: int = Field(..., description="Number of patterns with pre-computed metrics")
+    time_ms: float = Field(..., description="Time taken in milliseconds")
+    session_id: Optional[str] = Field(None, description="Session ID")
+    node_id: Optional[str] = Field(None, description="Node ID that was finalized")
+    message: Optional[str] = Field(None, description="Human-readable message")
+
+
 class PredictionsResponse(BaseModel):
     """Predictions response"""
     predictions: list[dict] = Field(default_factory=list, description="List of predictions")

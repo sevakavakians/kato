@@ -41,9 +41,11 @@ COMMAND=${1:-help}
 SERVICE=${2:-all}
 
 # Build docker compose command with optional auth override
+# Only include auth overlay when credentials are actually configured,
+# because an empty QDRANT__SERVICE__API_KEY causes Qdrant to reject ALL requests (401).
 compose_cmd() {
     local cmd="docker compose"
-    if [ -f "$SCRIPT_DIR/docker-compose.auth.yml" ]; then
+    if [ -f "$SCRIPT_DIR/docker-compose.auth.yml" ] && [ -n "${QDRANT_API_KEY:-}" -o -n "${REDIS_PASSWORD:-}" -o -n "${CLICKHOUSE_PASSWORD:-}" ]; then
         cmd="$cmd -f $SCRIPT_DIR/docker-compose.yml -f $SCRIPT_DIR/docker-compose.auth.yml"
     fi
     echo "$cmd"

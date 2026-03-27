@@ -298,6 +298,23 @@ Phase 4 (Symbol Statistics & Fail-Fast Architecture) is 100% complete. The Click
 
 ## Recently Completed
 
+### Prediction Speed Optimizations (Phases A-E) ✅ COMPLETE
+**Priority**: High - Performance
+**Status**: FULLY COMPLETED (2026-03-26)
+**Files Modified**: `kato/workers/pattern_processor.py`, `kato/searches/pattern_search.py`
+
+**Summary**: Six optimization phases targeting the prediction pipeline — no regressions (430 passed, 2 pre-existing failures, 2 skipped).
+- **Phase A1**: Hoisted `normalized_entropy` / `global_normalized_entropy` before per-prediction loop — eliminates N-1 redundant calls
+- **Phase A2**: Processor-level `global_metadata` cache; removed dead MongoDB metadata fetch; `total_symbols` derived from cache; cache invalidated on `learn()` / `clear_all_memory()`
+- **Phase B**: Pre-potential top-K pruning after `causalBeliefAsync` (keeps `max_predictions * 3`); reduces expensive metrics loop by 2-3x for large candidate sets
+- **Phase C**: Vectorized cosine distance, Bayesian posteriors, and potential calculation via numpy batch matrix ops
+- **Phase D**: `ThreadPoolExecutor` in `_predict_single_symbol_fast` for `extract_prediction_info` (threshold: >100 candidates; RapidFuzz releases GIL)
+- **Phase E**: `ProcessPoolExecutor` in `causalBeliefAsync` for true CPU parallelism (threshold: >500 candidates; `_process_batch_worker` at module level for picklability)
+
+**Archive**: planning-docs/completed/optimizations/2026-03-26-prediction-speed-optimizations-phases-a-e.md
+
+---
+
 ### Comprehensive Test Suite Audit ✅ COMPLETE
 **Priority**: High - Code Quality / Regression Coverage
 **Status**: FULLY COMPLETED (2026-03-25)

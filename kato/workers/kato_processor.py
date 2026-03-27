@@ -205,6 +205,18 @@ class KatoProcessor:
 
         return pattern_name, new_stm
 
+    async def finalize_training(self) -> dict:
+        """
+        Post-training step: compute and store pattern-intrinsic metrics.
+
+        Delegates to pattern_processor.finalize_training() which computes
+        Shannon entropy and TF vectors for all patterns in this node's kb_id.
+
+        Returns:
+            Summary dict with patterns_processed, time_ms, and status.
+        """
+        return await self.pattern_processor.finalize_training()
+
     def delete_pattern(self, name):
         """Delete pattern - delegates to pattern operations"""
         return self.pattern_operations.delete_pattern(name)

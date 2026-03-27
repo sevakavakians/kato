@@ -168,12 +168,12 @@ if [[ -f "kato/__init__.py" ]]; then
     rm -f kato/__init__.py.bak
 fi
 
-# Commit changes
+# Commit changes (suppress stdout so only the final echo is captured)
 git add pyproject.toml setup.py kato/__init__.py
-git commit -m "chore: bump version to ${NEW_VERSION}"
+git commit -m "chore: bump version to ${NEW_VERSION}" > /dev/null
 
 # Create tag
-git tag -a "v${NEW_VERSION}" -m "Release v${NEW_VERSION}: ${DESCRIPTION}"
+git tag -a "v${NEW_VERSION}" -m "Release v${NEW_VERSION}: ${DESCRIPTION}" > /dev/null
 
 echo "${NEW_VERSION}"
 EOFSCRIPT

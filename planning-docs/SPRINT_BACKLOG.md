@@ -298,6 +298,22 @@ Phase 4 (Symbol Statistics & Fail-Fast Architecture) is 100% complete. The Click
 
 ## Recently Completed
 
+### Symbol Affinity ✅ COMPLETE
+**Priority**: Feature
+**Status**: FULLY COMPLETED (2026-03-27)
+**Files Modified**: `kato/storage/redis_writer.py`, `kato/informatics/knowledge_base.py`, `kato/api/endpoints/kato_ops.py`, `tests/tests/unit/test_symbol_affinity.py`, `tests/tests/integration/test_symbol_affinity_e2e.py`
+
+**Summary**: Per-symbol running cumulative sum of averaged emotive values, accumulated across every pattern that contains the symbol when learned with emotives. Monotonic (never decrements), unlike pattern emotives (rolling window).
+- Storage: Redis HASH at `{kb_id}:affinity:{symbol}` with atomic `HINCRBYFLOAT` — fully namespaced for node isolation
+- Write: `_update_symbol_affinity()` integrated into both branches of `learnPattern()`
+- Read: `get_symbol_affinity()` / `get_all_symbol_affinities()` in `redis_writer.py`
+- API: `GET /symbols/affinity` and `GET /symbols/{symbol}/affinity`
+- Tests: 10/10 passing (6 unit + 4 integration); 433/442 total; zero regressions
+
+**Archive**: planning-docs/completed/features/2026-03-27-symbol-affinity.md
+
+---
+
 ### Prediction Speed Optimizations (Phases A-E) ✅ COMPLETE
 **Priority**: High - Performance
 **Status**: FULLY COMPLETED (2026-03-26)

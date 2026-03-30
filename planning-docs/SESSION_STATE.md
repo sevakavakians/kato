@@ -1,5 +1,5 @@
 # SESSION_STATE.md - Current Development State
-*Last Updated: 2026-03-26 (Prediction Speed Optimizations Phases A-E - COMPLETE)*
+*Last Updated: 2026-03-27 (Symbol Affinity Feature - COMPLETE)*
 
 ## Current Task
 **Phase 2: Stateless Processor Refactor - Test Updates - ACTIVE** 🎯
@@ -258,6 +258,15 @@ Make KatoProcessor stateless following standard web application patterns:
 - **Related Work**: planning-docs/initiatives/hybrid-clickhouse-redis.md (v3.0 architecture)
 
 ## Recent Achievements
+- **Symbol Affinity Feature - COMPLETE** (2026-03-27): NEW API FEATURE
+  - **What**: Per-symbol running cumulative sum of averaged emotive values, accumulated across every pattern that contains the symbol when learned with emotives. Monotonic (never decrements), unlike pattern emotives (rolling window).
+  - **Storage**: Redis HASH at `{kb_id}:affinity:{symbol}` with atomic `HINCRBYFLOAT` updates — fully namespaced by `kb_id`
+  - **Write Path**: `_update_symbol_affinity()` helper integrated into both branches of `learnPattern()` in `knowledge_base.py`
+  - **Read Path**: `get_symbol_affinity()` and `get_all_symbol_affinities()` in `redis_writer.py`
+  - **API**: `GET /symbols/affinity` (all) and `GET /symbols/{symbol}/affinity` (single)
+  - **Tests**: 10/10 new tests passing (6 unit + 4 integration); 433/442 total; zero regressions
+  - **Files Modified**: `redis_writer.py`, `knowledge_base.py`, `kato_ops.py`, `test_symbol_affinity.py`, `test_symbol_affinity_e2e.py`
+  - **Archive**: planning-docs/completed/features/2026-03-27-symbol-affinity.md
 - **Prediction Speed Optimizations Phases A-E COMPLETED** (2026-03-26): Six optimization phases implemented in the KATO prediction pipeline — zero regressions (430 passed, 2 pre-existing failures, 2 skipped).
   - **Phase A1**: Hoisted state-level entropy metrics before per-prediction loop (eliminates N-1 redundant calls)
   - **Phase A2**: Processor-level cache for `global_metadata`; removed dead MongoDB metadata fetch; derived `total_symbols` from cache length; invalidation on `learn()` and `clear_all_memory()`

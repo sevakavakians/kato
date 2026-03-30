@@ -125,3 +125,66 @@ async def get_cognition_data(
         "node_id": processor.id,
         "warning": "This endpoint is deprecated. Use /sessions/{session_id}/cognition-data for session-aware data."
     }
+
+
+@router.get("/symbols/affinity")
+async def get_all_symbol_affinities(
+    request: Request,
+    node_id: Optional[str] = Query(None, description="Node identifier")
+):
+    """
+    Get cumulative emotive affinity for all symbols in this node's knowledge base.
+
+    Affinity is a running sum of averaged emotive values accumulated each time
+    a pattern containing the symbol is learned with emotives.
+
+    Args:
+        node_id: Node identifier (defaults to header-based node_id)
+
+    Returns:
+        Dictionary of symbol affinities and node_id
+    """
+    from kato.services.kato_fastapi import app_state, get_node_id_from_request
+
+    if node_id is None:
+        node_id = get_node_id_from_request(request)
+
+    processor = await app_state.processor_manager.get_processor(node_id)
+
+    try:
+        affinities = processor.pattern_processor.superkb.redis_writer.get_all_symbol_affinities()
+        return {"affinities": affinities, "node_id": processor.id}
+    except Exception as e:
+        logger.error(f"Error getting symbol affinities: {e}")
+        raise HTTPException(status_code=500, detail=f"Symbol affinity retrieval failed: {str(e)}")
+
+
+@router.get("/symbols/{symbol}/affinity")
+async def get_symbol_affinity(
+    request: Request,
+    symbol: str = Path(..., description="Symbol name"),
+    node_id: Optional[str] = Query(None, description="Node identifier")
+):
+    """
+    Get cumulative emotive affinity for a specific symbol.
+
+    Args:
+        symbol: Symbol name
+        node_id: Node identifier (defaults to header-based node_id)
+
+    Returns:
+        Symbol affinity data and node_id
+    """
+    from kato.services.kato_fastapi import app_state, get_node_id_from_request
+
+    if node_id is None:
+        node_id = get_node_id_from_request(request)
+
+    processor = await app_state.processor_manager.get_processor(node_id)
+
+    try:
+        affinity = processor.pattern_processor.superkb.redis_writer.get_symbol_affinity(symbol)
+        return {"symbol": symbol, "affinity": affinity, "node_id": processor.id}
+    except Exception as e:
+        logger.error(f"Error getting affinity for symbol {symbol}: {e}")
+        raise HTTPException(status_code=500, detail=f"Symbol affinity retrieval failed: {str(e)}")

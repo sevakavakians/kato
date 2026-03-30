@@ -3,6 +3,29 @@
 
 ---
 
+## 2026-03-27 - Task Completion (Symbol Affinity — FULLY COMPLETED)
+
+**Trigger Type**: Primary — Task Completion
+**Event**: Symbol Affinity feature implemented, 10/10 tests passing, zero regressions
+**Source**: Developer report — 433/442 total tests passing; 9 pre-existing failures unrelated
+
+**Feature Summary**:
+- Per-symbol running cumulative sum of averaged emotive values (monotonic, unlike rolling-window pattern emotives)
+- Redis HASH storage at `{kb_id}:affinity:{symbol}` — atomic HINCRBYFLOAT, fully kb_id namespaced
+- Write path: `_update_symbol_affinity()` in `knowledge_base.py` — integrated into both branches of `learnPattern()`
+- Read path: `get_symbol_affinity()` and `get_all_symbol_affinities()` in `redis_writer.py`
+- API: `GET /symbols/affinity` and `GET /symbols/{symbol}/affinity` in `kato_ops.py`
+- New tests: `test_symbol_affinity.py` (6 unit) + `test_symbol_affinity_e2e.py` (4 integration)
+
+**Files Updated by project-manager**:
+- `planning-docs/completed/features/2026-03-27-symbol-affinity.md` (created)
+- `planning-docs/SESSION_STATE.md` (Recent Achievements updated)
+- `planning-docs/SPRINT_BACKLOG.md` (Recently Completed section updated)
+- `planning-docs/project-manager/maintenance-log.md` (logged)
+- `planning-docs/project-manager/triggers.md` (this entry)
+
+---
+
 ## 2026-03-26 - Task Completion (Prediction Speed Optimizations — Phases A-E — FULLY COMPLETED)
 
 **Trigger Type**: Primary — Task Completion

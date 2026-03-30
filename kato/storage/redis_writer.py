@@ -713,6 +713,111 @@ class RedisWriter:
         # The pattern_processor will filter to first-symbol matches after loading from ClickHouse
         return self.get_patterns_for_symbol(symbol)
 
+    # ── Symbol affinity ────────────────────────────────────────────────
+
+    def batch_update_symbol_affinity(self, symbol_names: list[str],
+                                      averaged_emotives: dict[str, float]) -> None:
+        """
+        Accumulate averaged emotives into per-symbol affinity sums.
+
+        For each symbol, increments its affinity HASH fields by the corresponding
+        emotive values using HINCRBYFLOAT (atomic, lock-free).
+
+        Args:
+            symbol_names: List of unique symbol names to update
+            averaged_emotives: Dict mapping emotive name -> value to add
+        """
+        if not symbol_names or not averaged_emotives:
+            return
+
+        try:
+            pipe = self.client.pipeline(transaction=False)
+
+            for symbol in symbol_names:
+                affinity_key = f"{self.kb_id}:affinity:{symbol}"
+                for emotive_name, value in averaged_emotives.items():
+                    pipe.hincrbyfloat(affinity_key, emotive_name, value)
+
+            pipe.execute()
+            logger.debug(f"Batch updated affinity for {len(symbol_names)} symbols, "
+                        f"{len(averaged_emotives)} emotive keys")
+
+        except Exception as e:
+            logger.error(f"Failed to batch update symbol affinity: {e}")
+            raise
+
+    def get_symbol_affinity(self, symbol: str) -> dict[str, float]:
+        """
+        Get affinity (cumulative emotive sums) for a symbol.
+
+        Args:
+            symbol: Symbol name
+
+        Returns:
+            Dictionary mapping emotive name -> cumulative sum value.
+            Empty dict if no affinity data exists.
+        """
+        try:
+            affinity_key = f"{self.kb_id}:affinity:{symbol}"
+            raw = self.client.hgetall(affinity_key)
+
+            if not raw:
+                return {}
+
+            return {
+                (k.decode('utf-8') if isinstance(k, bytes) else k):
+                float(v)
+                for k, v in raw.items()
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to get affinity for symbol {symbol}: {e}")
+            return {}
+
+    def get_all_symbol_affinities(self) -> dict[str, dict[str, float]]:
+        """
+        Get affinity data for all symbols in this kb_id.
+
+        Uses scan_iter to find all affinity keys, then pipelines HGETALL
+        for each.
+
+        Returns:
+            Dictionary mapping symbol name -> {emotive_name: cumulative_sum}.
+        """
+        try:
+            pattern = f"{self.kb_id}:affinity:*"
+            keys = list(self.client.scan_iter(match=pattern, count=1000))
+
+            if not keys:
+                return {}
+
+            pipe = self.client.pipeline(transaction=False)
+            for key in keys:
+                pipe.hgetall(key)
+
+            results = pipe.execute()
+
+            prefix = f"{self.kb_id}:affinity:"
+            affinities = {}
+            for key, raw_hash in zip(keys, results):
+                key_str = key.decode('utf-8') if isinstance(key, bytes) else key
+                symbol = key_str[len(prefix):]
+                if raw_hash:
+                    affinities[symbol] = {
+                        (k.decode('utf-8') if isinstance(k, bytes) else k):
+                        float(v)
+                        for k, v in raw_hash.items()
+                    }
+                else:
+                    affinities[symbol] = {}
+
+            logger.debug(f"Retrieved affinity for {len(affinities)} symbols")
+            return affinities
+
+        except Exception as e:
+            logger.error(f"Failed to get all symbol affinities for {self.kb_id}: {e}")
+            return {}
+
     # ── Pre-computed metrics (finalize-training) ──────────────────────
 
     def write_precomputed_metrics_batch(self, metrics: list[dict]) -> int:

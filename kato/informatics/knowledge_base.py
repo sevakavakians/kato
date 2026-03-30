@@ -3,6 +3,7 @@ from collections import Counter
 from itertools import chain
 
 from kato.config.settings import get_settings
+from kato.informatics.metrics import average_emotives
 
 logger = logging.getLogger('kato.informatics.knowledge-base')
 # Configure logging lazily
@@ -343,6 +344,17 @@ class SuperKnowledgeBase:
 
     # learnVector method removed - vectors now handled by modern vector store
 
+    def _update_symbol_affinity(self, emotives, symbol_counts):
+        """Update per-symbol affinity by summing averaged emotives into each symbol's running total."""
+        if not emotives:
+            return
+        averaged = average_emotives(emotives if isinstance(emotives, list) else [emotives])
+        if averaged:
+            self.redis_writer.batch_update_symbol_affinity(
+                symbol_names=list(symbol_counts.keys()),
+                averaged_emotives=averaged
+            )
+
     def learnPattern(self, pattern_object, emotives=None, metadata=None):
         """
         Core machine learning function.
@@ -440,6 +452,9 @@ class SuperKnowledgeBase:
                 )
                 logger.debug(f"[HYBRID] Updated symbol stats: {len(symbol_counts)} unique symbols, {len(all_symbols)} total")
 
+                # Update per-symbol affinity with averaged emotives
+                self._update_symbol_affinity(emotives, symbol_counts)
+
                 return False  # Not a new pattern
 
             else:
@@ -473,6 +488,9 @@ class SuperKnowledgeBase:
                     total_symbol_count=len(all_symbols)
                 )
                 logger.debug(f"[HYBRID] Updated global totals: {len(symbol_counts)} unique symbols, {len(all_symbols)} total, +1 pattern, +1 unique")
+
+                # Update per-symbol affinity with averaged emotives
+                self._update_symbol_affinity(emotives, symbol_counts)
 
                 logger.info(f"[HYBRID] Successfully learned new pattern {pattern_object.name} to ClickHouse + Redis")
                 return True  # New pattern

@@ -13,6 +13,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Understanding architecture**: [docs/developers/architecture.md](docs/developers/architecture.md) + [ARCHITECTURE_DIAGRAM.md](ARCHITECTURE_DIAGRAM.md)
 - **Hybrid architecture (ClickHouse + Redis)**: [docs/HYBRID_ARCHITECTURE.md](docs/HYBRID_ARCHITECTURE.md)
 - **Node isolation (kb_id)**: [docs/KB_ID_ISOLATION.md](docs/KB_ID_ISOLATION.md)
+- **Database schema (ClickHouse/Redis/Qdrant fields)**: [docs/reference/database-schema.md](docs/reference/database-schema.md)
 - **Filter pipeline tuning (MinHash/LSH)**: [docs/reference/filter-pipeline-guide.md](docs/reference/filter-pipeline-guide.md)
 - **Deploying to production**: [docs/operations/docker-deployment.md](docs/operations/docker-deployment.md)
 - **Understanding algorithms**: [docs/research/README.md](docs/research/README.md)

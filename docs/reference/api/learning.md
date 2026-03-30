@@ -154,6 +154,63 @@ curl -X POST http://localhost:8000/sessions/$SESSION_ID/clear-all
 
 ---
 
+### Finalize Training
+
+Pre-compute pattern-intrinsic metrics (Shannon entropy, TF vectors) for all patterns in the session's node. These metrics depend on corpus-level statistics (total symbols, total unique patterns) that are only stable after training completes.
+
+```http
+POST /sessions/{session_id}/finalize-training
+```
+
+**Request**: No body required
+
+**Response** (`200 OK`):
+
+```json
+{
+  "status": "completed",
+  "patterns_processed": 42,
+  "time_ms": 15.3,
+  "session_id": "session-abc123...",
+  "node_id": "user_alice",
+  "message": "Computed Shannon entropy and TF vectors for 42 patterns in 15.3ms"
+}
+```
+
+**Errors**:
+
+- `404 Not Found`: Session not found or expired
+- `500 Internal Server Error`: ClickHouse unavailable
+
+**Example**:
+
+```bash
+# After all training is complete, finalize metrics
+curl -X POST http://localhost:8000/sessions/$SESSION_ID/finalize-training
+```
+
+**Response**:
+
+```json
+{
+  "status": "completed",
+  "patterns_processed": 12,
+  "time_ms": 8.74,
+  "session_id": "session-xyz...",
+  "node_id": "my_training_node",
+  "message": "Computed Shannon entropy and TF vectors for 12 patterns in 8.74ms"
+}
+```
+
+**When to Call**:
+- Once after a training session is complete, before running predictions
+- Idempotent — safe to call multiple times (re-computes and overwrites)
+- Operates on all patterns in the node's `kb_id`, not just the current session's patterns
+
+**Note**: If not called, predictions still work — entropy and TF metrics are computed at runtime as a fallback. However, pre-computing them avoids redundant per-prediction computation and improves prediction speed.
+
+---
+
 ## Learning Behavior
 
 ### STM to Pattern Conversion

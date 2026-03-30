@@ -608,6 +608,24 @@ class KATOClient:
         """
         return self._request('POST', f'/sessions/{self._session_id}/clear-stm')
 
+    def finalize_training(self) -> Dict[str, Any]:
+        """
+        Pre-compute pattern metrics after training completes.
+
+        Computes Shannon entropy and TF (term frequency) vectors for all
+        patterns in this node's knowledge base. Call once after training
+        is complete, before running predictions.
+
+        Returns:
+            Result with status, patterns_processed, time_ms, node_id, message
+
+        Example:
+            >>> result = client.finalize_training()
+            >>> print(result['patterns_processed'])
+            42
+        """
+        return self._request('POST', f'/sessions/{self._session_id}/finalize-training')
+
     def observe_sequence(
         self,
         observations: List[Dict[str, Any]],
@@ -938,6 +956,10 @@ if __name__ == "__main__":
         # Learn pattern
         learn_result = client.learn()
         print(f"Learned pattern: {learn_result['pattern_name']}")
+
+        # Finalize training (pre-computes entropy/TF metrics for faster predictions)
+        finalize_result = client.finalize_training()
+        print(f"Finalized: {finalize_result['patterns_processed']} patterns in {finalize_result['time_ms']}ms")
 
         # Clear and observe again
         client.clear_stm()

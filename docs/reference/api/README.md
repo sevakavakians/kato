@@ -57,6 +57,7 @@ Learn patterns from observations.
 - `POST /sessions/{session_id}/learn` - Learn pattern from STM
 - `POST /sessions/{session_id}/clear-stm` - Clear short-term memory
 - `POST /sessions/{session_id}/clear-all` - Clear all memory (STM + patterns)
+- `POST /sessions/{session_id}/finalize-training` - Pre-compute pattern metrics after training
 
 ### Configuration
 Update session-specific configuration.
@@ -203,7 +204,12 @@ Direct endpoints (`/observe`, `/learn`, `/predictions`) have been **permanently 
    POST /sessions/{session_id}/learn
    ```
 
-5. **Clean up** (optional):
+5. **Finalize training** (optional, improves prediction speed):
+   ```http
+   POST /sessions/{session_id}/finalize-training
+   ```
+
+6. **Clean up** (optional):
    ```http
    DELETE /sessions/{session_id}
    ```

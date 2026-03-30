@@ -18,6 +18,7 @@ Welcome to the KATO reference documentation! This section provides technical spe
 - **[Processing Configuration](processing-configuration.md)** - Processing parameters
 
 ### Data Specifications
+- **[Database Schema](database-schema.md)** - Complete field-level reference for ClickHouse, Redis, and Qdrant
 - **[Prediction Object](prediction-object.md)** - Prediction structure specification
 - **[Pattern Object](pattern-object.md)** - Pattern data structure
 - **[Observation Object](observation-object.md)** - Observation format

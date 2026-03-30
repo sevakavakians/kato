@@ -99,7 +99,17 @@ curl -X POST http://localhost:8000/sessions/$SESSION/observe \
 curl -X POST http://localhost:8000/sessions/$SESSION/learn
 ```
 
-### 5. Get Predictions
+### 5. Finalize Training (Optional)
+
+For best prediction performance, call `finalize-training` after all patterns have been learned. This pre-computes metrics used during prediction scoring.
+
+```bash
+curl -X POST http://localhost:8000/sessions/$SESSION/finalize-training
+```
+
+If skipped, predictions still work but compute these metrics on the fly. See the [Learning API Reference](../reference/api/learning.md#finalize-training) for details.
+
+### 6. Get Predictions
 
 ```bash
 # Clear short-term memory (patterns remain in long-term memory)
@@ -116,7 +126,7 @@ curl http://localhost:8000/sessions/$SESSION/predictions
 
 KATO will predict the rest of the pattern!
 
-### 6. Understanding Data Persistence
+### 7. Understanding Data Persistence
 
 **What just happened?**
 - Your **session** (STM, emotives) is temporary - expires after 1 hour by default

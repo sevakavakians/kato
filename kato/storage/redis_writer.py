@@ -818,6 +818,70 @@ class RedisWriter:
             logger.error(f"Failed to get all symbol affinities for {self.kb_id}: {e}")
             return {}
 
+    def get_symbol_affinity_batch(self, symbols: list[str]) -> dict[str, dict[str, float]]:
+        """
+        Batch fetch affinity data for multiple symbols using a single pipeline.
+
+        Args:
+            symbols: List of symbol names to look up
+
+        Returns:
+            Dictionary mapping symbol name -> {emotive_name: cumulative_sum}.
+            Symbols with no affinity data map to empty dict.
+        """
+        if not symbols:
+            return {}
+
+        try:
+            pipe = self.client.pipeline(transaction=False)
+            for symbol in symbols:
+                pipe.hgetall(f"{self.kb_id}:affinity:{symbol}")
+            results = pipe.execute()
+
+            affinities = {}
+            for symbol, raw in zip(symbols, results):
+                if raw:
+                    affinities[symbol] = {
+                        (k.decode('utf-8') if isinstance(k, bytes) else k): float(v)
+                        for k, v in raw.items()
+                    }
+                else:
+                    affinities[symbol] = {}
+            return affinities
+
+        except Exception as e:
+            logger.error(f"Failed to batch get symbol affinities: {e}")
+            return {}
+
+    def get_symbol_frequencies_batch(self, symbols: list[str]) -> dict[str, int]:
+        """
+        Batch fetch learn-frequencies for multiple symbols from the symbols:freq HASH.
+
+        Args:
+            symbols: List of symbol names to look up
+
+        Returns:
+            Dictionary mapping symbol name -> learn frequency (int).
+            Symbols with no frequency data map to 0.
+        """
+        if not symbols:
+            return {}
+
+        try:
+            pipe = self.client.pipeline(transaction=False)
+            for symbol in symbols:
+                pipe.hget(f"{self.kb_id}:symbols:freq", symbol)
+            results = pipe.execute()
+
+            return {
+                symbol: int(val) if val else 0
+                for symbol, val in zip(symbols, results)
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to batch get symbol frequencies: {e}")
+            return {}
+
     # ── Pre-computed metrics (finalize-training) ──────────────────────
 
     def write_precomputed_metrics_batch(self, metrics: list[dict]) -> int:

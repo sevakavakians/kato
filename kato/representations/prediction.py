@@ -3,7 +3,7 @@ from itertools import chain
 
 class Prediction(dict):
     "Pattern prediction."
-    def __init__(self, _pattern, matching_intersection, past, present, missing, extras, similarity, number_of_blocks, anomalies=None, stm_events=None):
+    def __init__(self, _pattern, matching_intersection, past, present, missing, extras, similarity, number_of_blocks, anomalies=None, stm_events=None, weighted_similarity=None):
         super().__init__(self)
         self['type'] = 'prototypical'
         self['name'] = _pattern['name']
@@ -104,6 +104,12 @@ class Prediction(dict):
 
         __present_length__ = sum([len(_event) for _event in self['present']])
         self['confidence'] = float(len(self['matches'])/__present_length__) if __present_length__ > 0 else 0.0
+
+        # Affinity-weighted metrics (None when disabled)
+        self['weighted_similarity'] = weighted_similarity
+        self['weighted_evidence'] = None
+        self['weighted_confidence'] = None
+        self['weighted_snr'] = None
 
         self.present = self['present']
         # self['past'] = ListValue().add_list().extend(self['past'])

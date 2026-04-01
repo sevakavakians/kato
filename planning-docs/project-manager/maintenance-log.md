@@ -3,6 +3,29 @@
 
 ---
 
+## 2026-03-31 - Task Completion: Affinity-Weighted Pattern Matching (FULLY COMPLETED)
+
+**Trigger**: Task completion event — Affinity-Weighted Pattern Matching implemented, 288/288 unit tests passing, zero regressions
+
+**Event Type**: Feature work item completion
+
+**Actions Taken**:
+1. Created `planning-docs/completed/features/2026-03-31-affinity-weighted-pattern-matching.md` — full archive entry: weight formula, integration points, new Prediction fields, batch read design, test results, key design properties
+2. Updated `planning-docs/SESSION_STATE.md` — Last Updated timestamp; added Affinity-Weighted Pattern Matching as leading Recent Achievement entry
+3. Updated `planning-docs/README.md` — Current System State test count and Last Major Update fields
+4. Updated `planning-docs/project-manager/triggers.md` with activation event
+5. Updated `planning-docs/project-manager/maintenance-log.md` (this entry)
+
+**Summary**:
+- Opt-in weighted prediction metrics using frequency-normalized symbol affinity magnitudes
+- New `SessionConfiguration` field `affinity_emotive` activates the feature
+- Four new optional `Prediction` fields: `weighted_similarity`, `weighted_evidence`, `weighted_confidence`, `weighted_snr`
+- Batch Redis reads added: `get_symbol_affinity_batch()` and `get_symbol_frequencies_batch()`
+- Both `predictPattern` and `_predict_single_symbol_fast` paths updated
+- 6 files modified, 1 new test file; 12 new unit tests; 288/288 total unit tests passing
+
+---
+
 ## 2026-03-27 - Task Completion: Symbol Affinity Feature (FULLY COMPLETED)
 
 **Trigger**: Task completion event — Symbol Affinity feature implemented and all tests passing

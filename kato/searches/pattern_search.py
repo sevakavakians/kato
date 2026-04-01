@@ -216,7 +216,8 @@ class InformationExtractor:
 
     def extract_prediction_info(self, pattern: list[str], state: list[str],
                                cutoff: float, fuzzy_token_threshold: float = 0.0,
-                               precomputed_similarity: float = None) -> Optional[tuple[list[str], list[str], list[str], list[str], list[str], list[str], float, int, list[dict]]]:
+                               precomputed_similarity: float = None,
+                               weights: dict[str, float] = None) -> Optional[tuple[list[str], list[str], list[str], list[str], list[str], list[str], float, int, list[dict], float]]:
         """
         Extract prediction information using optimized algorithms.
 
@@ -227,6 +228,9 @@ class InformationExtractor:
             fuzzy_token_threshold: Fuzzy token matching threshold (0.0-1.0, 0.0=disabled).
             precomputed_similarity: If provided, skip similarity computation and use this value.
                 Useful when RapidFuzz has already computed the score in a batch operation.
+            weights: Optional dict mapping symbol -> weight for affinity-weighted similarity.
+                When provided, weighted_similarity is computed using these weights.
+                When None, weighted_similarity is returned as None.
 
         Returns:
             Tuple containing:
@@ -236,9 +240,10 @@ class InformationExtractor:
                 - present: Pattern elements in matching region
                 - missing: Pattern elements not found in state
                 - extras: State elements not in pattern
-                - similarity: Calculated similarity ratio
+                - similarity: Calculated similarity ratio (unweighted)
                 - number_of_blocks: Number of matching blocks
                 - anomalies: List of fuzzy matches with similarity scores
+                - weighted_similarity: Affinity-weighted similarity (None if weights not provided)
             Returns None if similarity is below cutoff.
         """
         # Defensive: ensure parameters are never None
@@ -404,8 +409,18 @@ class InformationExtractor:
                     elif diff.startswith("+ "):
                         extras.append(diff[2:])
 
+        # Compute affinity-weighted similarity if weights provided
+        weighted_similarity = None
+        if weights:
+            w_matched = sum(weights.get(t, 0.0) for t in matching_intersection)
+            w_state = sum(weights.get(t, 0.0) for t in state)
+            w_pattern = sum(weights.get(t, 0.0) for t in pattern)
+            w_total = w_state + w_pattern
+            weighted_similarity = (2.0 * w_matched / w_total) if w_total > 0 else None
+
         return (pattern, matching_intersection, past, present,
-                missing, extras, similarity, number_of_blocks, anomalies)
+                missing, extras, similarity, number_of_blocks, anomalies,
+                weighted_similarity)
 
 
 class PatternSearcher:
@@ -515,6 +530,9 @@ class PatternSearcher:
         # String cache for RapidFuzz optimization
         # Cache joined pattern strings to avoid repeated string operations
         self._pattern_strings_cache = {}
+
+        # Affinity weights for weighted similarity (set per-prediction cycle)
+        self.affinity_weights: Optional[dict[str, float]] = None
 
         # Redis pattern cache
         self.redis_cache: Optional[PatternCache] = None
@@ -832,6 +850,8 @@ class PatternSearcher:
         for result in results:
             if len(result) >= 9:  # Ensure we have all required fields (including anomalies)
                 pattern_hash, pattern, matching_intersection, past, present, missing, extras, similarity, number_of_blocks, anomalies = result[:10]
+                # Extract weighted_similarity if present (11th element = index 10)
+                weighted_similarity = result[10] if len(result) > 10 else None
 
                 # Fetch pattern data from hybrid architecture cache
                 if self.filter_executor is None:
@@ -849,7 +869,8 @@ class PatternSearcher:
                         similarity,
                         number_of_blocks,
                         anomalies=anomalies,
-                        stm_events=stm_events
+                        stm_events=stm_events,
+                        weighted_similarity=weighted_similarity
                     )
                     active_list.append(pred)
 
@@ -960,7 +981,8 @@ class PatternSearcher:
                     recall_threshold_safe = self.recall_threshold if self.recall_threshold is not None else 0.1
                     info = self.extractor.extract_prediction_info(
                         pattern_seq, state, recall_threshold_safe, fuzzy_token_threshold,
-                        precomputed_similarity=similarity)
+                        precomputed_similarity=similarity,
+                        weights=self.affinity_weights)
 
                     logger.debug(f"extract_prediction_info returned info={'NOT_NONE' if info else 'NONE'} for pattern_id={pattern_id[:20]}...")
 
@@ -1038,10 +1060,20 @@ class PatternSearcher:
                             elif diff.startswith("+ "):
                                 extras.append(diff[2:])
 
+                        # Compute affinity-weighted similarity if weights available
+                        _weighted_sim = None
+                        if self.affinity_weights:
+                            _w_matched = sum(self.affinity_weights.get(t, 0.0) for t in matching_intersection)
+                            _w_state = sum(self.affinity_weights.get(t, 0.0) for t in state)
+                            _w_pattern = sum(self.affinity_weights.get(t, 0.0) for t in pattern_seq)
+                            _w_total = _w_state + _w_pattern
+                            _weighted_sim = (2.0 * _w_matched / _w_total) if _w_total > 0 else None
+
                         results.append((
                             pattern_id, pattern_seq, matching_intersection,
                             past, present, missing, extras,
-                            similarity, number_of_blocks, []  # anomalies (empty for non-fuzzy matching)
+                            similarity, number_of_blocks, [],  # anomalies (empty for non-fuzzy matching)
+                            _weighted_sim
                         ))
                     elif (self.recall_threshold if self.recall_threshold is not None else 0.1) == 0.0:
                         # Special case: threshold 0.0 should include even non-matching patterns
@@ -1054,7 +1086,8 @@ class PatternSearcher:
                         results.append((
                             pattern_id, pattern_seq, matching_intersection,
                             past, present, missing, extras,
-                            similarity, number_of_blocks, []  # anomalies (empty for non-fuzzy matching)
+                            similarity, number_of_blocks, [],  # anomalies (empty for non-fuzzy matching)
+                            None  # weighted_similarity (no matches to weight)
                         ))
 
     async def causalBeliefAsync(self, state: list[str],
@@ -1275,7 +1308,8 @@ class PatternSearcher:
                     recall_threshold_safe = self.recall_threshold if self.recall_threshold is not None else 0.1
                     info = self.extractor.extract_prediction_info(
                         pattern_seq, state, recall_threshold_safe, fuzzy_token_threshold,
-                        precomputed_similarity=similarity)
+                        precomputed_similarity=similarity,
+                        weights=self.affinity_weights)
 
                     logger.debug(f"extract_prediction_info returned info={'NOT_NONE' if info else 'NONE'} for pattern_id={pattern_id[:20]}...")
 
@@ -1283,7 +1317,8 @@ class PatternSearcher:
                         batch_results.append((
                             pattern_id, pattern_seq, info[1],  # matching_intersection
                             info[2], info[3], info[4], info[5],  # past, present, missing, extras
-                            info[6], info[7], info[8]  # similarity, number_of_blocks, anomalies
+                            info[6], info[7], info[8],  # similarity, number_of_blocks, anomalies
+                            info[9]  # weighted_similarity
                         ))
 
         return batch_results
@@ -1312,7 +1347,8 @@ class PatternSearcher:
                 # Defensive: ensure recall_threshold is never None
                 recall_threshold_safe = self.recall_threshold if self.recall_threshold is not None else 0.1
                 info = self.extractor.extract_prediction_info(
-                    pattern_seq, state, recall_threshold_safe, fuzzy_token_threshold)
+                    pattern_seq, state, recall_threshold_safe, fuzzy_token_threshold,
+                    weights=self.affinity_weights)
 
                 if info and len(info) >= 9:
                     similarity = info[6] if len(info) > 6 else 0.0
@@ -1320,7 +1356,8 @@ class PatternSearcher:
                         batch_results.append((
                             pattern_id, pattern_seq, info[1],  # matching_intersection
                             info[2], info[3], info[4], info[5],  # past, present, missing, extras
-                            similarity, info[7] if len(info) > 7 else 0, info[8] if len(info) > 8 else []  # similarity, number_of_blocks, anomalies
+                            similarity, info[7] if len(info) > 7 else 0, info[8] if len(info) > 8 else [],  # similarity, number_of_blocks, anomalies
+                            info[9] if len(info) > 9 else None  # weighted_similarity
                         ))
 
         return batch_results
@@ -1405,6 +1442,8 @@ class PatternSearcher:
         for result in batch:
             if len(result) >= 9:
                 pattern_hash, pattern, matching_intersection, past, present, missing, extras, similarity, number_of_blocks, anomalies = result[:10]
+                # Extract weighted_similarity if present (11th element = index 10)
+                weighted_similarity = result[10] if len(result) > 10 else None
 
                 # Hybrid architecture: pattern data already in filter_executor cache from pipeline
                 pattern_dict = self.filter_executor.patterns_cache.get(pattern_hash, {})
@@ -1431,7 +1470,8 @@ class PatternSearcher:
                         similarity,
                         number_of_blocks,
                         anomalies=anomalies,
-                        stm_events=stm_events
+                        stm_events=stm_events,
+                        weighted_similarity=weighted_similarity
                     )
                     predictions.append(pred)
 

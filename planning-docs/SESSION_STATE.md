@@ -1,5 +1,5 @@
 # SESSION_STATE.md - Current Development State
-*Last Updated: 2026-03-27 (Symbol Affinity Feature - COMPLETE)*
+*Last Updated: 2026-03-31 (Affinity-Weighted Pattern Matching - COMPLETE)*
 
 ## Current Task
 **Phase 2: Stateless Processor Refactor - Test Updates - ACTIVE** 🎯
@@ -258,6 +258,15 @@ Make KatoProcessor stateless following standard web application patterns:
 - **Related Work**: planning-docs/initiatives/hybrid-clickhouse-redis.md (v3.0 architecture)
 
 ## Recent Achievements
+- **Affinity-Weighted Pattern Matching - COMPLETE** (2026-03-31): NEW PREDICTION FEATURE
+  - **What**: Opt-in weighted prediction metrics that use per-symbol affinity scores (from Symbol Affinity, 2026-03-27) to amplify predictions whose matched symbols carry stronger emotive weight. Activates when `affinity_emotive` is set in session config.
+  - **Weight Formula**: `|affinity[s]| / (freq[s] + epsilon)` — frequency-normalized affinity magnitude
+  - **New Prediction Fields**: `weighted_similarity`, `weighted_evidence`, `weighted_confidence`, `weighted_snr` (all `Optional`; `None` when feature inactive)
+  - **Batch Reads**: `get_symbol_affinity_batch()` and `get_symbol_frequencies_batch()` added to `redis_writer.py` — single pipeline per call
+  - **Integration**: Both `predictPattern` and `_predict_single_symbol_fast` paths updated; weighted metrics feed into `potential` ensemble ranking when active
+  - **Tests**: 12 new unit tests; all 288 unit tests passing; zero regressions
+  - **Files Modified**: `redis_writer.py`, `pattern_search.py`, `pattern_processor.py`, `prediction.py`, `session_config.py`, `test_affinity_weighted_matching.py` (new)
+  - **Archive**: planning-docs/completed/features/2026-03-31-affinity-weighted-pattern-matching.md
 - **Symbol Affinity Feature - COMPLETE** (2026-03-27): NEW API FEATURE
   - **What**: Per-symbol running cumulative sum of averaged emotive values, accumulated across every pattern that contains the symbol when learned with emotives. Monotonic (never decrements), unlike pattern emotives (rolling window).
   - **Storage**: Redis HASH at `{kb_id}:affinity:{symbol}` with atomic `HINCRBYFLOAT` updates — fully namespaced by `kb_id`

@@ -624,6 +624,61 @@ class PatternProcessor:
         """
         return float(freq/total_pattern_frequencies) if total_pattern_frequencies > 0 else 0.0
 
+    def _compute_affinity_weights(self, state: list[str], candidate_patterns: list[dict] = None) -> Optional[dict[str, float]]:
+        """
+        Compute affinity-weighted token weights for pattern matching.
+
+        Uses frequency-normalized absolute affinity: w(t) = |aff(t, e)| / freq(t) + epsilon
+
+        Args:
+            state: Flattened STM state tokens
+            candidate_patterns: Optional list of candidate pattern dicts (for single-symbol path).
+                If None, weights are computed only for state tokens (pattern tokens
+                will get floor weight if not in the weight map).
+
+        Returns:
+            Dict mapping symbol -> weight, or None if affinity weighting is not active.
+        """
+        # Check if affinity_emotive is configured (session_config lives on the PatternSearcher)
+        affinity_emotive = None
+        if hasattr(self, 'patterns_searcher') and self.patterns_searcher:
+            sc = getattr(self.patterns_searcher, 'session_config', None)
+            if sc:
+                affinity_emotive = getattr(sc, 'affinity_emotive', None)
+
+        if not affinity_emotive:
+            return None
+
+        EPSILON = 0.01
+
+        # Collect all unique symbols that need weights
+        all_symbols = set(state)
+        if candidate_patterns:
+            for p in candidate_patterns:
+                for event in p.get('pattern_data', []):
+                    all_symbols.update(event)
+
+        all_symbols = list(all_symbols)
+        if not all_symbols:
+            return None
+
+        # Batch fetch affinities and frequencies from Redis
+        affinities = self.superkb.redis_writer.get_symbol_affinity_batch(all_symbols)
+        frequencies = self.superkb.redis_writer.get_symbol_frequencies_batch(all_symbols)
+
+        # Compute weights: w(t) = |aff(t, e)| / freq(t) + epsilon
+        weights = {}
+        for symbol in all_symbols:
+            aff_dict = affinities.get(symbol, {})
+            aff_value = abs(aff_dict.get(affinity_emotive, 0.0))
+            freq = frequencies.get(symbol, 0)
+            if freq > 0 and aff_value > 0:
+                weights[symbol] = aff_value / freq + EPSILON
+            else:
+                weights[symbol] = EPSILON
+
+        return weights
+
     async def _predict_single_symbol_fast(self, symbol: str, stm_events: Optional[list[list[str]]] = None) -> list[dict[str, Any]]:
         """
         Fast path for single-symbol predictions using Redis symbol-to-pattern index.
@@ -708,7 +763,10 @@ class PatternProcessor:
             candidate_names = [p['name'] for p in candidate_patterns]
             metadata_batch = self.superkb.redis_writer.get_metadata_batch(candidate_names)
 
-            def _process_single_symbol_batch(batch, _state, _extractor, _metadata_batch, _threshold):
+            # Compute affinity weights if affinity_emotive is configured
+            affinity_weights = self._compute_affinity_weights(state, candidate_patterns)
+
+            def _process_single_symbol_batch(batch, _state, _extractor, _metadata_batch, _threshold, _weights=None):
                 """Process a batch of candidates for single-symbol prediction (thread-safe)."""
                 batch_results = []
                 for pattern_dict in batch:
@@ -718,14 +776,15 @@ class PatternProcessor:
                         pattern_data_flat,
                         _state,
                         cutoff=_threshold,
-                        fuzzy_token_threshold=0.0
+                        fuzzy_token_threshold=0.0,
+                        weights=_weights
                     )
 
                     if not prediction_info:
                         continue
 
                     (pattern, matching_intersection, past, present, missing, extras,
-                     similarity, number_of_blocks, anomalies) = prediction_info
+                     similarity, number_of_blocks, anomalies, weighted_similarity) = prediction_info
 
                     metadata = _metadata_batch.get(pattern_dict['name'], {'name': pattern_dict['name'], 'frequency': 1})
                     frequency = metadata.get('frequency', 1)
@@ -747,6 +806,20 @@ class PatternProcessor:
                     snr = total_matches / (total_matches + total_extras) if (total_matches + total_extras) > 0 else 0.0
 
                     fragmentation = number_of_blocks - 1
+
+                    # Compute weighted metrics if weights available
+                    weighted_evidence = None
+                    weighted_confidence = None
+                    weighted_snr = None
+                    if _weights:
+                        w_matched = sum(_weights.get(t, 0.0) for t in matching_intersection)
+                        w_pattern = sum(_weights.get(t, 0.0) for t in pattern)
+                        w_present = sum(_weights.get(t, 0.0) for t in present_flat)
+                        w_extras = sum(_weights.get(t, 0.0) for t in extras)
+
+                        weighted_evidence = (w_matched / w_pattern) if w_pattern > 0 else 0.0
+                        weighted_confidence = (w_matched / w_present) if w_present > 0 else 0.0
+                        weighted_snr = (w_matched / (w_matched + w_extras)) if (w_matched + w_extras) > 0 else 0.0
 
                     try:
                         if isinstance(emotives, list) and emotives:
@@ -773,7 +846,11 @@ class PatternProcessor:
                         'confidence': confidence,
                         'snr': snr,
                         'fragmentation': fragmentation,
-                        'anomalies': anomalies
+                        'anomalies': anomalies,
+                        'weighted_similarity': weighted_similarity,
+                        'weighted_evidence': weighted_evidence,
+                        'weighted_confidence': weighted_confidence,
+                        'weighted_snr': weighted_snr
                     })
                 return batch_results
 
@@ -789,7 +866,7 @@ class PatternProcessor:
 
                 with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
                     futures = [
-                        executor.submit(_process_single_symbol_batch, batch, state, extractor, metadata_batch, single_symbol_threshold)
+                        executor.submit(_process_single_symbol_batch, batch, state, extractor, metadata_batch, single_symbol_threshold, affinity_weights)
                         for batch in batches
                     ]
                     for future in concurrent.futures.as_completed(futures):
@@ -799,7 +876,7 @@ class PatternProcessor:
                             logger.error(f"Error processing single-symbol batch: {e}")
             else:
                 predictions.extend(
-                    _process_single_symbol_batch(candidate_patterns, state, extractor, metadata_batch, single_symbol_threshold)
+                    _process_single_symbol_batch(candidate_patterns, state, extractor, metadata_batch, single_symbol_threshold, affinity_weights)
                 )
 
             if not predictions:
@@ -818,8 +895,13 @@ class PatternProcessor:
                 frag = prediction['fragmentation']
                 frag_contribution = 0.0 if frag == -1 else (1 / (frag + 1))
 
+                # Use weighted metrics for potential when available
+                ev = prediction.get('weighted_evidence') if prediction.get('weighted_evidence') is not None else prediction['evidence']
+                conf = prediction.get('weighted_confidence') if prediction.get('weighted_confidence') is not None else prediction['confidence']
+                s = prediction.get('weighted_snr') if prediction.get('weighted_snr') is not None else prediction['snr']
+
                 prediction['potential'] = (
-                    (prediction['evidence'] + prediction['confidence']) * prediction['snr']
+                    (ev + conf) * s
                     + frag_contribution
                 )
 
@@ -878,6 +960,9 @@ class PatternProcessor:
             return await self._predict_single_symbol_fast(state[0], stm_events=stm_events)
 
         try:
+            # Compute and set affinity weights on pattern searcher before matching
+            self.patterns_searcher.affinity_weights = self._compute_affinity_weights(state)
+
             # Use async parallel pattern matching
             causal_patterns = await self.patterns_searcher.causalBeliefAsync(
                 state, self.target_class_candidates, stm_events, max_workers, batch_size)
@@ -901,6 +986,34 @@ class PatternProcessor:
             if missing_fields:
                 pred_name = prediction.get('name', f'prediction_{idx}')
                 raise ValueError(f"Prediction '{pred_name}' missing required fields: {missing_fields}")
+
+        # Compute weighted metrics for predictions if affinity weighting is active
+        weights = self.patterns_searcher.affinity_weights
+        if weights:
+            for p in causal_patterns:
+                matches = p.get('matches', [])
+                present_events = p.get('present', [])
+                extras = p.get('extras', [])
+                pattern_data = p.get('pattern_data', [])
+
+                from itertools import chain as _chain
+                present_flat = list(_chain(*present_events)) if present_events and isinstance(present_events[0], list) else (present_events or [])
+                pattern_flat = list(_chain(*pattern_data)) if pattern_data and isinstance(pattern_data[0], list) else (pattern_data or [])
+
+                # Handle event-structured extras
+                if extras and isinstance(extras[0], list):
+                    extras_flat = list(_chain(*extras))
+                else:
+                    extras_flat = extras or []
+
+                w_matched = sum(weights.get(t, 0.0) for t in matches)
+                w_pattern = sum(weights.get(t, 0.0) for t in pattern_flat)
+                w_present = sum(weights.get(t, 0.0) for t in present_flat)
+                w_extras = sum(weights.get(t, 0.0) for t in extras_flat)
+
+                p['weighted_evidence'] = (w_matched / w_pattern) if w_pattern > 0 else 0.0
+                p['weighted_confidence'] = (w_matched / w_present) if w_present > 0 else 0.0
+                p['weighted_snr'] = (w_matched / (w_matched + w_extras)) if (w_matched + w_extras) > 0 else 0.0
 
         # Top-K pruning: reduce candidates before expensive metrics loop
         # Uses a cheap pre-potential from already-available fields (same formula as
@@ -1172,9 +1285,11 @@ class PatternProcessor:
 
             # Vectorized potential calculation
             # potential = (evidence + confidence) * snr + itfdf_similarity + (1/(fragmentation + 1))
-            evidence_arr = np.array([p['evidence'] for p in causal_patterns])
-            confidence_arr = np.array([p['confidence'] for p in causal_patterns])
-            snr_arr = np.array([p['snr'] for p in causal_patterns])
+            # Use weighted metrics when available
+            use_weighted = weights and any(p.get('weighted_evidence') is not None for p in causal_patterns)
+            evidence_arr = np.array([p.get('weighted_evidence', p['evidence']) if use_weighted else p['evidence'] for p in causal_patterns])
+            confidence_arr = np.array([p.get('weighted_confidence', p['confidence']) if use_weighted else p['confidence'] for p in causal_patterns])
+            snr_arr = np.array([p.get('weighted_snr', p['snr']) if use_weighted else p['snr'] for p in causal_patterns])
             itfdf_arr = np.array([p.get('itfdf_similarity', 0.0) for p in causal_patterns])
             frag_arr = np.array([p['fragmentation'] for p in causal_patterns])
             frag_contrib = np.where(frag_arr == -1, 0.0, 1.0 / (frag_arr + 1))

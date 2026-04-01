@@ -3,6 +3,27 @@
 
 ---
 
+## 2026-03-31 - Task Completion (Affinity-Weighted Pattern Matching — FULLY COMPLETED)
+
+**Trigger Type**: Primary — Task Completion
+**Event**: Affinity-Weighted Pattern Matching implemented, 12/12 new unit tests passing, 288/288 total unit tests passing, zero regressions
+**Source**: Developer report — opt-in weighted prediction metrics using per-symbol affinity scores
+
+**Feature Summary**:
+- `affinity_emotive` field added to `SessionConfiguration`; opt-in, zero behavioral change when unset
+- Weight formula: `|affinity[s]| / (freq[s] + epsilon)` — frequency-normalized affinity magnitude per symbol
+- New `Prediction` fields: `weighted_similarity`, `weighted_evidence`, `weighted_confidence`, `weighted_snr` (all Optional)
+- Batch Redis reads: `get_symbol_affinity_batch()` and `get_symbol_frequencies_batch()` in `redis_writer.py`
+- `_compute_affinity_weights()` added to `PatternProcessor`; wired into both `predictPattern` and `_predict_single_symbol_fast`
+- `extract_prediction_info` in `pattern_search.py` extended with optional `weights` dict
+- Weighted metrics feed into `potential` ensemble ranking when active
+
+**Documentation Actions**:
+- Created archive: `planning-docs/completed/features/2026-03-31-affinity-weighted-pattern-matching.md`
+- Updated: `SESSION_STATE.md`, `README.md`, `maintenance-log.md`, `triggers.md`
+
+---
+
 ## 2026-03-27 - Task Completion (Symbol Affinity — FULLY COMPLETED)
 
 **Trigger Type**: Primary — Task Completion

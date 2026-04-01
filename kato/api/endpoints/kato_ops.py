@@ -188,3 +188,32 @@ async def get_symbol_affinity(
     except Exception as e:
         logger.error(f"Error getting affinity for symbol {symbol}: {e}")
         raise HTTPException(status_code=500, detail=f"Symbol affinity retrieval failed: {str(e)}")
+
+
+@router.get("/symbols/stats")
+async def get_all_symbol_stats(
+    request: Request,
+    node_id: Optional[str] = Query(None, description="Node identifier")
+):
+    """
+    Get frequency and pattern member frequency (PMF) for all symbols in this node's knowledge base.
+
+    Args:
+        node_id: Node identifier (defaults to header-based node_id)
+
+    Returns:
+        Dictionary of symbol stats and node_id
+    """
+    from kato.services.kato_fastapi import app_state, get_node_id_from_request
+
+    if node_id is None:
+        node_id = get_node_id_from_request(request)
+
+    processor = await app_state.processor_manager.get_processor(node_id)
+
+    try:
+        symbols = processor.pattern_processor.superkb.redis_writer.get_all_symbols_batch()
+        return {"symbols": symbols, "node_id": processor.id}
+    except Exception as e:
+        logger.error(f"Error getting symbol stats: {e}")
+        raise HTTPException(status_code=500, detail=f"Symbol stats retrieval failed: {str(e)}")

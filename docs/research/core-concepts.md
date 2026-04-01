@@ -250,7 +250,7 @@ Every prediction in KATO can be traced back to:
 
 ```python
 prediction = {
-    "pattern_name": "PTN|a1b2c3d4e5f6",  # Source pattern ID
+    "name": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",  # Source pattern ID (plain SHA1 hash)
     "past": [["morning", "coffee"]],      # Events before match
     "present": [["commute", "train"]],    # Matched events
     "future": [["work", "arrive"]],       # Predicted events

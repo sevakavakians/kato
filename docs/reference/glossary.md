@@ -124,7 +124,7 @@ A measure of pattern cohesion, calculated as the number of matching blocks minus
 ### Potential
 Composite metric for ranking predictions, combining multiple factors:
 ```
-potential = (evidence + confidence) * snr + similarity + (1/(fragmentation + 1))
+potential = (evidence + confidence) * snr + itfdf_similarity + (1/(fragmentation + 1))
 ```
 
 ### ITFDF Similarity
@@ -237,7 +237,7 @@ Identifier prefix for vector-derived symbols. Format: `VCTR|<hash>`
 Empty events `[]` are NOT supported and should be filtered before observation.
 
 ### Minimum Pattern Length
-Patterns require at least 2 strings total across all events to be valid for prediction generation.
+Patterns require at least 1 string in STM to generate predictions. Single-symbol observations use an optimized fast path (`_predict_single_symbol_fast`).
 
 ### Division by Zero Protection
 Various metrics include protection against division by zero:

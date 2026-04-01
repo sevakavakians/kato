@@ -285,21 +285,17 @@ kato.learn()
 # joy: [[0.8], [null], [0.6]]
 ```
 
-### Prediction Statistics
+### Emotives in Predictions
 
-KATO computes statistics from rolling windows:
+Predictions include averaged emotive values from the pattern's rolling window:
 
 ```json
-"emotive_predictions": {
-  "energy": {
-    "mean": 0.43,
-    "std": 0.15,
-    "min": 0.2,
-    "max": 0.6,
-    "count": 5
-  }
+"emotives": {
+  "energy": 0.43
 }
 ```
+
+The value is the mean across the rolling window entries for that emotive.
 
 ## Metadata Handling
 

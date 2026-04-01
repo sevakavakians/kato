@@ -254,6 +254,61 @@ Fuzzy matches generate anomaly records in prediction objects:
 - Integrates with RapidFuzzFilter for efficient candidate filtering
 - Full backward compatibility (default threshold=0.0 maintains exact matching)
 
+### 2.4 Affinity-Weighted Matching
+
+**Location**: `kato/searches/pattern_search.py`, `kato/workers/pattern_processor.py`
+
+When `affinity_emotive` is set in session configuration, pattern matching incorporates per-symbol affinity weights derived from KATO's emotive system. This allows the similarity calculation to discount noise tokens and amplify signal tokens based on their emotive charge.
+
+#### Weight Function
+
+For a chosen emotive `e`, each token `t` receives weight:
+
+```
+w(t) = |aff(t, e)| / freq(t) + epsilon
+```
+
+- `aff(t, e)`: cumulative affinity from Redis (`{kb_id}:affinity:{t}`, field `e`)
+- `freq(t)`: learn frequency from Redis (`{kb_id}:symbols:freq`, field `t`)
+- `epsilon = 0.01`: floor weight preventing zero-weight tokens
+
+This is **frequency-normalized** — a symbol seen 10 times with average intensity 0.8 has the same weight as one seen 1000 times with intensity 0.8.
+
+#### Weighted Dice-Sorensen Coefficient
+
+The standard similarity formula `sim = 2|M| / (|A| + |B|)` generalizes to:
+
+```
+sim_w = 2 * sum(w(t) for t in M) / (sum(w(t) for t in A) + sum(w(t) for t in B))
+```
+
+Where `M` is the set of LCS-matched tokens, `A` is the state, and `B` is the pattern.
+
+**Properties**:
+- Range `[0, 1]`
+- Reduces to standard formula when all weights are equal
+- Reduces to standard formula when no affinity data exists (all weights = epsilon)
+- Signal-signal matches boost the score; noise-noise matches contribute minimally
+
+#### Integration with RapidFuzz
+
+Since RapidFuzz's C-optimized LCS cannot incorporate weights, a two-phase approach is used:
+
+1. **Phase 1** (batch, unweighted): Standard `process.extract()` for fast candidate elimination
+2. **Phase 2** (per-pattern, weighted): Weighted similarity computed from `get_matching_blocks()` results
+
+Performance impact is minimal — Phase 2 adds O(k) dict lookups per candidate.
+
+#### Example
+
+With emotive `"cost"` and affinities `A=10/12, B=8/10, NOISE_x=0/50`:
+
+| Metric | Unweighted | Weighted |
+|--------|-----------|----------|
+| Similarity | 0.308 | 0.782 |
+
+Noise tokens (weight 0.01) are effectively discounted while signal tokens (weight ~0.8) dominate.
+
 ### 3. Indexing Layer
 
 **Location**: `kato/searches/index_manager.py`
@@ -483,7 +538,7 @@ export RECALL_THRESHOLD=0.5  # Default is 0.1
 **Possible Causes**:
 1. Threshold too high - reduce `RECALL_THRESHOLD`
 2. Pattern not learned - check with `/patterns` endpoint
-3. Insufficient STM content - need at least 2 strings
+3. Insufficient STM content - need at least 1 string
 
 ### Issue: Slow Performance
 

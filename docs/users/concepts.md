@@ -142,15 +142,16 @@ kato.learn()
 
 KATO generates predictions when observations match learned patterns.
 
-**CRITICAL REQUIREMENT**: KATO requires at least 2 strings total in short-term memory (STM) to generate predictions. This ensures sufficient context for meaningful pattern matching.
+**CRITICAL REQUIREMENT**: KATO requires at least 1 string in short-term memory (STM) to generate predictions. Single-symbol observations use an optimized fast path (`_predict_single_symbol_fast`).
 
 Valid for predictions:
+- Single string: `[['hello']]` ✅ (uses single-symbol fast path)
 - Single event with 2+ strings: `[['hello', 'world']]` ✅
-- Multiple events totaling 2+ strings: `[['hello'], ['world']]` ✅
+- Multiple events: `[['hello'], ['world']]` ✅
 - Single string with vectors: `[['hello', 'VCTR|<hash>']]` ✅ (vectors generate string representations)
 
 Invalid (no predictions):
-- Single string only: `[['hello']]` ❌
+- Empty STM: `[]` ❌
 - Empty events: `[[], []]` ❌
 
 When predictions are generated:
@@ -191,8 +192,8 @@ Predictions are organized into temporal fields:
 {
     'past': [],
     'present': [['hello', 'world'], ['foo', 'bar']],
-    'missing': ['world', 'bar'],
-    'extras': [],
+    'missing': [['world'], ['bar']],
+    'extras': [[]],
     'future': []
 }
 ```
@@ -207,7 +208,7 @@ Predictions are organized into temporal fields:
     'past': [],
     'present': [['cat'], ['dog']],
     'missing': [],
-    'extras': ['bird', 'fish'],
+    'extras': [['bird'], ['fish']],
     'future': []
 }
 ```
@@ -241,6 +242,24 @@ observe({'strings': ['happy']})
 # Prediction includes averaged emotives from learned pattern
 ```
 
+#### Affinity-Weighted Pattern Matching
+- Symbol affinities (cumulative emotive values per symbol) can be used to weight pattern matching
+- Enable by setting `affinity_emotive` in session config to an emotive name (e.g., `"cost"`)
+- Tokens with high absolute affinity for the chosen emotive are treated as signal
+- Tokens with near-zero affinity are treated as noise and discounted in similarity
+- Predictions include both standard and weighted metrics (`weighted_similarity`, etc.)
+- The `potential` ranking uses weighted metrics, so signal-rich matches rank higher
+
+```python
+# Configure session to weight by "cost" emotive
+POST /sessions/{session_id}/config
+{"config": {"affinity_emotive": "cost"}}
+
+# Predictions now include weighted metrics
+# weighted_similarity: 0.782 vs similarity: 0.308
+# Noise tokens are discounted, signal tokens dominate
+```
+
 #### Vector Processing
 - Processed through configurable classifiers
 - May generate VCTR|<hash> symbols
@@ -267,12 +286,12 @@ observe({'strings': ['happy']})
 {
     "short_term_memory": [["current"], ["events"]],
     "predictions": [{
-        "name": "PTRN|abc123...",
+        "name": "abc123def456789012345678901234567890abcd",
         "past": [],
         "present": [["matching", "events"]],
         "future": [["expected", "next"]],
-        "missing": [],
-        "extras": [],
+        "missing": [[]],
+        "extras": [[]],
         "confidence": 0.85
     }],
     "emotives": {"joy": 0.7},

@@ -121,7 +121,7 @@ Processes an observation and adds it to the session's short-term memory.
 {
   "status": "okay",
   "session_id": "default",
-  "auto_learned_pattern": "PTRN|abc123...",  // If auto-learning triggered
+  "auto_learned_pattern": "abc123def456...",  // If auto-learning triggered
   "time": 43,
   "unique_id": "obs-123"
 }
@@ -162,9 +162,9 @@ Learns a pattern from the session's current short-term memory.
 **Response Model: `LearnResult`**
 ```json
 {
-  "pattern_name": "PTRN|7f3a2b1c...",
+  "pattern_name": "7f3a2b1c4d5e6f7890123456789abcdef0123456",
   "session_id": "default",
-  "message": "Learned pattern: PTRN|7f3a2b1c..."
+  "message": "Learned pattern 7f3a2b1c4d5e6f7890123456789abcdef0123456 from 2 events"
 }
 ```
 
@@ -174,8 +174,8 @@ Learns a pattern from the session's current short-term memory.
 - When patterns are re-learned, oldest emotive values drop off
 - Metadata accumulated in STM is merged with unique string lists (set-union)
 - Pattern metadata persists indefinitely and accumulates across re-learning
-- Returns empty pattern_name if STM has < 2 strings
-- Pattern name format: `PTRN|<sha1_hash>`
+- Returns no predictions if STM has < 1 string
+- Pattern name format: plain SHA1 hash (no `PTRN|` prefix)
 - Clears STM after learning
 
 ### Get Predictions (Session-Based)
@@ -192,26 +192,36 @@ Returns predictions based on the session's current STM or specific observation.
 {
   "predictions": [
     {
-      "name": "PTRN|abc123...",
+      "name": "abc123def456789012345678901234567890abcd",
+      "type": "prototypical",
       "frequency": 5,
       "matches": ["hello", "world"],
-      "missing": ["foo"],
-      "extras": ["bar"],
+      "missing": [["foo"]],
+      "extras": [["bar"]],
+      "anomalies": [],
       "past": [["previous"]],
-      "present": [["hello", "world"]],
+      "present": [["hello", "world", "foo"]],
       "future": [["next"]],
       "evidence": 0.8,
       "confidence": 0.7,
       "similarity": 0.85,
       "snr": 0.9,
-      "fragmentation": 1,
-      "emotives": {"joy": 0.5},      // Averaged emotives from learned pattern
-      "metadata": {"book": ["Alice", "Wonderland"]},  // Accumulated metadata from pattern
-      "predictive_information": 0.75,  // Information-theoretic predictive value
-      "potential": 0.6375,             // similarity * predictive_information
+      "fragmentation": 0,
+      "emotives": {"joy": 0.5},
+      "predictive_information": 0.75,
+      "potential": 2.45,
       "normalized_entropy": 0.3,
       "global_normalized_entropy": 0.4,
-      "confluence": 0.6
+      "confluence": 0.6,
+      "itfdf_similarity": 0.65,
+      "tfidf_score": 0.82,
+      "bayesian_posterior": 0.35,
+      "bayesian_prior": 0.20,
+      "bayesian_likelihood": 0.85,
+      "weighted_similarity": null,
+      "weighted_evidence": null,
+      "weighted_confidence": null,
+      "weighted_snr": null
     }
   ],
   "future_potentials": [             // Optional: aggregate future predictions
@@ -277,7 +287,7 @@ Retrieves a specific pattern by ID.
 ```json
 {
   "pattern": {
-    "name": "PTRN|abc123...",
+    "name": "abc123def456789012345678901234567890abcd",
     "pattern_data": [["a"], ["b", "c"]],
     "frequency": 3,
     "emotives": {"confidence": [0.8, 0.7, 0.9]},  // Rolling window arrays per emotive
@@ -533,26 +543,37 @@ Common HTTP status codes:
 - `unique_id`: Optional[str] - Tracking identifier
 
 ### Prediction Fields
-- `name`: Pattern identifier (PTRN|hash)
+- `name`: Pattern identifier (plain SHA1 hash)
+- `type`: Prediction type (always "prototypical")
 - `frequency`: Number of times pattern learned
-- `matches`: Symbols matching observation
-- `missing`: Symbols in pattern but not observed
-- `extras`: Observed symbols not in pattern
+- `matches`: Symbols matching observation (flat list)
+- `missing`: Symbols in pattern but not observed (event-aligned with present)
+- `extras`: Observed symbols not in pattern (event-aligned with STM)
+- `anomalies`: Fuzzy token matches with similarity scores (when fuzzy matching enabled)
 - `past`: Events before first match
-- `present`: Events containing matches
+- `present`: All events from first to last match (complete events)
 - `future`: Events after last match
-- `evidence`: Strength of pattern match (0-1)
-- `confidence`: Ratio of matches to present length (0-1)
+- `evidence`: Proportion of pattern observed: `len(matches) / pattern_length` (0-1)
+- `confidence`: Ratio of matches to present length: `len(matches) / total_present_length` (0-1)
 - `similarity`: Overall pattern similarity (0-1)
-- `snr`: Signal-to-noise ratio
-- `fragmentation`: Pattern cohesion measure
-- `emotives`: Emotional/utility values (averaged from pattern)
-- `metadata`: Contextual tags/attributes (unique string lists from pattern)
+- `snr`: Signal-to-noise ratio (-1 to 1)
+- `fragmentation`: Pattern cohesion measure (0-n)
+- `entropy`: Shannon entropy of present symbols
+- `normalized_entropy`: Local entropy based on symbol distribution
+- `global_normalized_entropy`: Entropy using global symbol probabilities
+- `confluence`: Pattern probability vs random chance (0-1)
+- `itfdf_similarity`: Inverse TF-DF similarity (0-1)
+- `tfidf_score`: TF-IDF pattern distinctiveness (0-~2.0)
 - `predictive_information`: Information-theoretic predictive value (0-1)
-- `potential`: Information-theoretic ranking metric (similarity × predictive_information)
-- `normalized_entropy`: Entropy-like complexity measure
-- `global_normalized_entropy`: Extended normalized entropy
-- `confluence`: Probability vs random chance
+- `potential`: Composite ranking metric: `(evidence + confidence) * snr + itfdf_similarity + (1/(fragmentation+1))` (unbounded)
+- `bayesian_posterior`: P(pattern|observation), sums to 1.0 across ensemble (0-1)
+- `bayesian_prior`: P(pattern) base rate frequency (0-1)
+- `bayesian_likelihood`: P(observation|pattern), equivalent to similarity (0-1)
+- `emotives`: Emotional/utility values (averaged from pattern)
+- `weighted_similarity`: Affinity-weighted similarity (null when disabled)
+- `weighted_evidence`: Affinity-weighted evidence (null when disabled)
+- `weighted_confidence`: Affinity-weighted confidence (null when disabled)
+- `weighted_snr`: Affinity-weighted SNR (null when disabled)
 
 ### Future Potentials Fields (Optional Response)
 - `future`: The predicted future event sequence
@@ -573,23 +594,25 @@ Common HTTP status codes:
 - **0.5**: Pattern provides moderate predictive information  
 - **1.0**: Pattern provides maximum predictive information (rare, indicates strong predictive relationship)
 
-#### 2. **New Potential Formula**
+#### 2. **Potential Formula**
 ```
-potential = similarity × predictive_information
+potential = (evidence + confidence) * snr + itfdf_similarity + (1/(fragmentation + 1))
 ```
-- **similarity**: How well the pattern matches your current observation (0.0-1.0)
-- **predictive_information**: How reliably this pattern predicts its future (0.0-1.0)
-- **potential**: Combined ranking metric (0.0-1.0)
+- **evidence + confidence**: Match completeness
+- **snr**: Signal quality (matches vs extras)
+- **itfdf_similarity**: Frequency-weighted similarity
+- **fragmentation term**: Pattern cohesion bonus
+- **potential**: Composite ranking metric (unbounded, typically 0.0-3.0)
 
 ### Practical Usage Examples
 
 #### Example 1: High PI Pattern
 ```json
 {
-  "name": "PTRN|abc123",
+  "name": "abc123def456789012345678901234567890abcd",
   "similarity": 0.9,
   "predictive_information": 0.8,
-  "potential": 0.72,
+  "potential": 2.72,
   "frequency": 15,
   "future": [["expected_next_event"]]
 }
@@ -599,10 +622,10 @@ potential = similarity × predictive_information
 #### Example 2: Low PI Pattern  
 ```json
 {
-  "name": "PTRN|def456",
+  "name": "def456789012345678901234567890abcdef012345",
   "similarity": 0.85,
   "predictive_information": 0.2,
-  "potential": 0.17,
+  "potential": 0.45,
   "frequency": 2,
   "future": [["uncertain_outcome"]]
 }
@@ -647,8 +670,8 @@ For theoretical details, see: `docs/PREDICTIVE_INFORMATION.md`
 
 ## Notes
 
-1. **Pattern Naming**: All patterns use format `PTRN|<sha1_hash>` where hash is SHA1 of pattern data
-2. **Minimum Prediction Requirement**: STM must contain at least 2 strings total to generate predictions
+1. **Pattern Naming**: Pattern names are plain SHA1 hashes of pattern data (the `PTRN|` prefix only appears in display/repr output)
+2. **Minimum Prediction Requirement**: STM must contain at least 1 string to generate predictions (single-symbol uses optimized fast path)
 3. **Sorting**: Symbols within events are sorted alphabetically when SORT=true (default)
 4. **Auto-Learning**: Triggers when STM reaches MAX_PATTERN_LENGTH (if > 0)
 5. **Recall Threshold**: Controls pattern matching sensitivity (0.0 = all patterns, 1.0 = exact matches only)

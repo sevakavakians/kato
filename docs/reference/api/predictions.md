@@ -9,8 +9,8 @@ Predictions represent KATO's forecasts based on pattern matching between current
 Each prediction contains:
 - **Temporal segmentation**: past/present/future
 - **Match analysis**: matches/missing/extras/anomalies
-- **Information metrics**: confidence, evidence, similarity, SNR, entropy, potential
-- **Pattern metadata**: frequency, emotives, metadata
+- **Information metrics**: confidence, evidence, similarity, SNR, entropy, potential, Bayesian posteriors
+- **Pattern metadata**: frequency, emotives
 
 ## Endpoints
 
@@ -28,12 +28,12 @@ GET /sessions/{session_id}/predictions
 {
   "predictions": [
     {
-      "name": "PTRN|abc123def456...",
+      "name": "abc123def456789012345678901234567890abcd",
       "type": "prototypical",
       "frequency": 42,
       "matches": ["hello", "world"],
-      "missing": ["goodbye"],
-      "extras": ["unexpected"],
+      "missing": [["goodbye"]],
+      "extras": [["unexpected"]],
       "anomalies": [],
       "past": [["start"]],
       "present": [["hello", "world", "goodbye"]],
@@ -53,7 +53,7 @@ GET /sessions/{session_id}/predictions
       "symbol": "end",
       "total_potential": 2.45,
       "prediction_count": 1,
-      "patterns": ["PTRN|abc123..."]
+      "patterns": ["abc123def456..."]
     }
   ],
   "session_id": "session-abc123...",
@@ -85,7 +85,7 @@ curl http://localhost:8000/sessions/session-abc123.../predictions
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `name` | string | Pattern ID (PTRN\|hash) |
+| `name` | string | Pattern ID (plain SHA1 hash) |
 | `type` | string | Prediction type (always "prototypical") |
 | `frequency` | integer | Number of times pattern was learned |
 
@@ -103,30 +103,32 @@ curl http://localhost:8000/sessions/session-abc123.../predictions
 Pattern: [["start"], ["hello", "world"], ["middle"], ["end"]]
 Observing: ["hello", "end"]
 
-past: [["start"]]                     # Before first match
-present: [["hello", "world"], ["end"]]  # ALL events with matches (complete)
-future: [["middle"]]                  # After last match (nothing after "end")
+past: [["start"]]                                        # Before first match
+present: [["hello", "world"], ["middle"], ["end"]]       # ALL events from first to last match (inclusive)
+future: []                                               # Nothing after last match
 ```
+
+**Important**: `present` includes ALL events from first match to last match, including intervening events that contain no matches (like `["middle"]` above).
 
 ### Match Analysis
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `matches` | array[string] | Symbols present in both observation and pattern |
-| `missing` | array[string] | Pattern symbols NOT observed (from present events) |
-| `extras` | array[string] | Observed symbols NOT in pattern |
+| `missing` | array[array[string]] | Pattern symbols NOT observed, event-aligned with `present` |
+| `extras` | array[array[string]] | Observed symbols NOT in pattern, event-aligned with STM |
 | `anomalies` | array[object] | Fuzzy token matches with similarity scores (when fuzzy matching enabled) |
 
 **Example**:
 
 ```python
 Pattern present: [["a", "b"], ["c", "d"]]
-Observing: ["a", "c", "x"]
+STM: [["a", "c", "x"]]
 
-matches: ["a", "c"]      # In both
-missing: ["b", "d"]      # In pattern, not observed
-extras: ["x"]            # Observed, not in pattern
-anomalies: []            # No fuzzy matches (exact matching only)
+matches: ["a", "c"]           # In both
+missing: [["b"], ["d"]]       # Per-present-event: symbols in pattern not observed
+extras: [["x"]]               # Per-STM-event: symbols in STM not in pattern
+anomalies: []                 # No fuzzy matches (exact matching only)
 ```
 
 **Anomalies Field**:
@@ -165,12 +167,24 @@ When fuzzy token matching is enabled (`fuzzy_token_threshold` > 0.0), the `anoma
 |-------|-------|-------------|
 | `confidence` | 0.0-1.0 | Ratio of matches to total present symbols |
 | `evidence` | 0.0-1.0 | Proportion of pattern observed |
-| `similarity` | 0.0-1.0 | Base similarity score |
+| `similarity` | 0.0-1.0 | Base similarity score (unweighted) |
 | `snr` | -1.0-1.0 | Signal-to-noise ratio (matches vs extras) |
 | `fragmentation` | 0.0-n | Degree of match discontinuity |
-| `entropy` | 0.0-n | Pattern complexity measure |
-| `global_normalized_entropy` | 0.0-1.0 | Normalized entropy score |
-| `potential` | 0.0-n | Prediction ranking score (default sort) |
+| `entropy` | 0.0-n | Shannon entropy of present symbols |
+| `normalized_entropy` | 0.0-n | Local entropy based on symbol distribution within present |
+| `global_normalized_entropy` | 0.0-n | Entropy using global symbol probability distributions |
+| `confluence` | 0.0-1.0 | Pattern probability vs random chance |
+| `itfdf_similarity` | 0.0-1.0 | Inverse TF-DF similarity (frequency-weighted) |
+| `tfidf_score` | 0.0-~2.0 | TF-IDF measure of pattern distinctiveness |
+| `predictive_information` | 0.0-1.0 | Information-theoretic predictive value |
+| `potential` | unbounded | Composite prediction ranking score (default sort) |
+| `bayesian_posterior` | 0.0-1.0 | P(pattern\|observation) - posteriors sum to 1.0 across ensemble |
+| `bayesian_prior` | 0.0-1.0 | P(pattern) - base rate frequency |
+| `bayesian_likelihood` | 0.0-1.0 | P(observation\|pattern) - equivalent to similarity |
+| `weighted_similarity` | 0.0-1.0 or null | Affinity-weighted similarity (null when `affinity_emotive` not set) |
+| `weighted_evidence` | 0.0-1.0 or null | Affinity-weighted evidence |
+| `weighted_confidence` | 0.0-1.0 or null | Affinity-weighted confidence |
+| `weighted_snr` | 0.0-1.0 or null | Affinity-weighted signal-to-noise ratio |
 
 **Formulas**:
 
@@ -178,6 +192,16 @@ When fuzzy token matching is enabled (`fuzzy_token_threshold` > 0.0), the `anoma
 confidence = len(matches) / total_present_length
 evidence = len(matches) / pattern_length
 snr = (2 * len(matches) - len(extras)) / (2 * len(matches) + len(extras))
+```
+
+**Weighted formulas** (when `affinity_emotive` is set):
+
+```python
+# w(t) = |affinity(t, emotive)| / frequency(t) + epsilon
+weighted_similarity = 2 * sum(w(t) for t in matches) / (sum(w(t) for t in state) + sum(w(t) for t in pattern))
+weighted_evidence   = sum(w(t) for t in matches) / sum(w(t) for t in pattern)
+weighted_confidence = sum(w(t) for t in matches) / sum(w(t) for t in present)
+weighted_snr        = sum(w(t) for t in matches) / (sum(w(t) for t in matches) + sum(w(t) for t in extras))
 ```
 
 **See**: [../../research/predictive-information.md](../../research/predictive-information.md)
@@ -196,16 +220,16 @@ Aggregated predictions for future symbols.
       "total_potential": 5.67,
       "prediction_count": 3,
       "patterns": [
-        "PTRN|abc123...",
-        "PTRN|def456...",
-        "PTRN|ghi789..."
+        "abc123def456...",
+        "def456789012...",
+        "ghi789012345..."
       ]
     },
     {
       "symbol": "logout",
       "total_potential": 2.45,
       "prediction_count": 1,
-      "patterns": ["PTRN|xyz999..."]
+      "patterns": ["xyz999012345..."]
     }
   ]
 }

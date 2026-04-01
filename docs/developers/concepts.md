@@ -18,22 +18,18 @@ This document provides a comprehensive reference for KATO's core concepts, behav
 
 ### Minimum Pattern Requirements
 
-**CRITICAL**: KATO requires at least 2 strings total in short-term memory (STM) to generate predictions. This is a fundamental architectural requirement.
+**CRITICAL**: KATO requires at least 1 string in short-term memory (STM) to generate predictions. Single-symbol observations use an optimized fast path (`_predict_single_symbol_fast`).
 
 #### Valid Patterns for Predictions:
+- **Single string**: `[['hello']]` ✅ (uses single-symbol fast path)
 - **Single event with 2+ strings**: `[['hello', 'world']]` ✅
-- **Multiple events totaling 2+ strings**: `[['hello'], ['world']]` ✅
+- **Multiple events**: `[['hello'], ['world']]` ✅
 - **Mixed event sizes**: `[['a', 'b'], ['c']]` ✅
+- **Single string with vectors**: `[['hello', 'VCTR|<hash>']]` ✅
 
 #### Invalid Patterns (No Predictions):
-- **Single string only**: `[['hello']]` ❌
-- **Single string with emotives**: `[['hello']] + emotives` ❌ (emotives don't contribute strings)
+- **Empty STM**: `[]` ❌
 - **Empty events**: `[[], [], []]` ❌
-
-#### Valid with Vectors:
-- **Single string with vectors**: `[['hello', 'VCTR|<hash>']]` ✅
-  - Vectors contribute their own string representation (e.g., 'VCTR|<hash>')
-  - Results in 2+ strings total, meeting the minimum requirement
   - The vector string is automatically added when vectors are processed
 
 This requirement ensures sufficient context for meaningful pattern matching and prediction generation.

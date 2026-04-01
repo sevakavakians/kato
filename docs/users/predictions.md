@@ -12,23 +12,23 @@ Complete guide to understanding and working with KATO predictions.
 {
   "predictions": [
     {
+      "name": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+      "type": "prototypical",
+      "frequency": 5,
       "past": [["event1"], ["event2"]],
       "present": [["current_event"]],
       "future": [["next_event"], ["final_event"]],
-      "missing": [["expected_but_not_seen"]],
-      "extras": [["seen_but_not_expected"]],
-      "pattern_name": "PTN|a1b2c3d4e5f6",
+      "matches": ["current_event"],
+      "missing": [[]],
+      "extras": [[]],
+      "anomalies": [],
       "similarity": 0.85,
-      "metrics": {
-        "potential": 0.72,
-        "evidence": 0.90,
-        "confidence": 0.88,
-        "snr": 1.45
-      },
-      "emotive_predictions": {
-        "joy": {"mean": 0.7, "std": 0.15, "min": 0.5, "max": 0.9},
-        "energy": {"mean": 0.6, "std": 0.20, "min": 0.3, "max": 0.8}
-      }
+      "confidence": 0.88,
+      "evidence": 0.90,
+      "snr": 0.75,
+      "potential": 2.45,
+      "fragmentation": 0.0,
+      "emotives": {"joy": 0.7, "energy": 0.6}
     }
   ],
   "count": 1
@@ -323,11 +323,13 @@ kato.update_config({
 
 ### potential
 
-**Information-theoretic value of the prediction.**
+**Composite ranking metric combining match quality, signal strength, frequency-weighted similarity, and pattern cohesion.**
 
 **Higher = More useful** for reducing uncertainty about future.
 
-**Calculation**: Based on entropy, evidence, and future information.
+**Formula**: `(evidence + confidence) * snr + itfdf_similarity + (1/(fragmentation + 1))`
+
+**Range**: Unbounded (typically 0.0 to ~3.0, can be negative with poor SNR).
 
 **Use Cases**:
 - **Ranking**: Default sort order
@@ -338,35 +340,37 @@ kato.update_config({
 predictions = kato.get_predictions()
 
 # Sorted by potential (highest first)
-# predictions[0]['metrics']['potential']: 0.95  ← Most informative
-# predictions[1]['metrics']['potential']: 0.72
-# predictions[2]['metrics']['potential']: 0.45
+# predictions[0]['potential']: 2.95  ← Most informative
+# predictions[1]['potential']: 1.72
+# predictions[2]['potential']: 0.45
 ```
 
 ### evidence
 
-**Amount of training data supporting the prediction.**
+**Proportion of the total pattern that has been observed.**
 
-**Higher = More observations** of this pattern.
+**Formula**: `len(matches) / pattern_length`
+
+**Range**: 0.0 to 1.0
 
 ```python
-# Pattern learned 100 times:
-# evidence: 0.99 (high confidence)
+# Pattern has 5 symbols, 4 matched:
+# evidence: 0.80 (most of pattern observed)
 
-# Pattern learned 2 times:
-# evidence: 0.20 (low confidence)
+# Pattern has 10 symbols, 2 matched:
+# evidence: 0.20 (small portion observed)
 ```
 
 **Use Cases**:
-- **Reliability**: Prefer well-established patterns
-- **Cold-start detection**: Identify undertrained patterns
-- **A/B testing**: Track pattern observation counts
+- **Match completeness**: How much of the pattern is confirmed
+- **Partial match detection**: Low evidence = only a fragment matched
+- **Filtering**: Require minimum evidence for actions
 
 ### confidence
 
-**Bayesian confidence in the prediction.**
+**Ratio of matched symbols to total symbols in the present events.**
 
-**Combined measure** of similarity, evidence, and pattern quality.
+**Formula**: `len(matches) / total_present_length`
 
 **Values**:
 - **0.9+**: Very confident
@@ -403,15 +407,9 @@ KATO aggregates emotives across all observations of a pattern.
 # Observation 4: joy=0.7
 # Observation 5: joy=0.5
 
-# Prediction:
-"emotive_predictions": {
-  "joy": {
-    "mean": 0.70,
-    "std": 0.14,
-    "min": 0.5,
-    "max": 0.9,
-    "count": 5
-  }
+# Prediction emotives (averaged from rolling window):
+"emotives": {
+  "joy": 0.70
 }
 ```
 
@@ -592,8 +590,8 @@ def get_top_prediction(predictions):
 
 top = get_top_prediction(predictions)
 if top:
-    print(f"Pattern: {top['pattern_name']}")
-    print(f"Confidence: {top['metrics']['confidence']}")
+    print(f"Pattern: {top['name']}")
+    print(f"Confidence: {top['confidence']}")
 ```
 
 ### Get Next Event
@@ -628,7 +626,7 @@ def get_confident_predictions(predictions, min_confidence=0.7):
     """Return only high-confidence predictions."""
     return [
         p for p in predictions['predictions']
-        if p['metrics']['confidence'] >= min_confidence
+        if p['confidence'] >= min_confidence
     ]
 
 confident = get_confident_predictions(predictions, 0.8)
@@ -656,7 +654,7 @@ print(f"Possible next steps: {all_next_steps}")
 ```python
 # Different actions based on confidence
 top = predictions['predictions'][0]
-confidence = top['metrics']['confidence']
+confidence = top['confidence']
 
 if confidence > 0.9:
     # Auto-execute
@@ -681,7 +679,7 @@ def get_weighted_predictions(predictions):
 
     for pred in predictions['predictions']:
         # Fetch pattern metadata from storage
-        pattern = fetch_pattern_metadata(pred['pattern_name'])
+        pattern = fetch_pattern_metadata(pred['name'])
         updated_at = pattern['updated_at'].timestamp()
 
         # Decay factor (newer = higher weight)
@@ -689,12 +687,12 @@ def get_weighted_predictions(predictions):
         decay = math.exp(-age_days / 30)  # 30-day half-life
 
         # Adjust confidence
-        pred['metrics']['confidence'] *= decay
+        pred['confidence'] *= decay
 
     # Re-sort by adjusted confidence
     return sorted(
         predictions['predictions'],
-        key=lambda p: p['metrics']['confidence'],
+        key=lambda p: p['confidence'],
         reverse=True
     )
 ```

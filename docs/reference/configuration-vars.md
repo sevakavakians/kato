@@ -74,6 +74,29 @@ Complete reference for all KATO environment variables.
 | `KATO_USE_TOKEN_MATCHING` | boolean | `true` | Token-level (true) vs character-level (false) |
 | `KATO_FUZZY_TOKEN_THRESHOLD` | float | `0.0` | Fuzzy token matching threshold (0.0-1.0, 0.0=disabled) |
 | `RANK_SORT_ALGO` | string | `potential` | Prediction ranking metric |
+| `AFFINITY_EMOTIVE` | string | `null` | Emotive name for affinity-weighted matching (null=disabled). When set, symbol affinities for this emotive are used to weight pattern matching similarity. See [Affinity-Weighted Matching](#affinity-weighted-matching). |
+
+## Affinity-Weighted Matching
+
+When `affinity_emotive` is set in the session configuration, KATO uses per-symbol affinity values to weight the pattern matching similarity calculation. Symbols with high absolute affinity for the chosen emotive are treated as signal; symbols with low or zero affinity are treated as noise and discounted.
+
+**Weight formula**: `w(t) = |aff(t, e)| / freq(t) + epsilon`
+
+Where `aff(t, e)` is the cumulative affinity of symbol `t` for emotive `e`, `freq(t)` is the symbol's learn frequency, and `epsilon = 0.01` is a floor weight. This yields the average emotive intensity per observation — scale-invariant across symbol frequencies.
+
+**Effect on predictions**: When active, the following weighted metrics are added to each prediction:
+- `weighted_similarity` — affinity-weighted Dice-Sorensen coefficient
+- `weighted_evidence`, `weighted_confidence`, `weighted_snr` — weighted versions of standard metrics
+
+The `potential` ranking formula uses the weighted metrics, so predictions with strong emotive signal are ranked higher.
+
+**Configuration via API**:
+```bash
+POST /sessions/{session_id}/config
+{"config": {"affinity_emotive": "cost"}}
+```
+
+Set to `null` to disable and revert to standard unweighted matching.
 
 ## Performance Configuration
 

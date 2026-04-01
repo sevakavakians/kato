@@ -220,7 +220,7 @@ curl http://localhost:8000/sessions/{session_id}/patterns
 1. **Train more**: More observations = better patterns
 2. **Adjust threshold**: Higher `recall_threshold` = stricter matching
 3. **Use token matching**: Enable `use_token_matching: true` (default)
-4. **Filter by confidence**: Use `predictions[i]['metrics']['confidence']`
+4. **Filter by confidence**: Use `predictions[i]['confidence']`
 5. **Provide more context**: Longer STM = better matching
 
 ### What's a good recall_threshold?

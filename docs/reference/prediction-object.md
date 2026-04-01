@@ -11,7 +11,8 @@ A Prediction Object is generated when KATO's pattern recognition engine identifi
 ### 1. **name** (string)
 **Description**: Unique identifier hash of the learned pattern that generated this prediction.  
 **Purpose**: Links the prediction back to a specific learned pattern in the knowledge base.  
-**Example**: `"PTRN|abc123def456"`
+**Example**: `"a5b9c3d7e8f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5"`  
+**Note**: Pattern names in predictions are plain SHA1 hashes. The `PTRN|` prefix only appears in `Pattern.__repr__()` for human-readable display.
 
 ### 2. **type** (string)
 **Description**: Classification of the prediction type.  
@@ -28,19 +29,19 @@ A Prediction Object is generated when KATO's pattern recognition engine identifi
 **Purpose**: Shows which elements of the prediction were correctly identified in the current context.  
 **Example**: `["hello", "world"]` when these symbols appear in both the pattern and current observation.
 
-### 5. **missing** (repeated string)
+### 5. **missing** (array[array[string]], event-aligned)
 **Description**: Symbols that appear in the `present` events but were NOT actually observed.  
 **Purpose**: Identifies incomplete or partial observations within the matched events.  
+**Structure**: List of lists, where each sub-list corresponds to a `present` event and contains the symbols from that event not found in the observation.  
 **Critical**: The present field contains complete events; missing lists the symbols from those events that weren't in the observation.  
-**Order**: Preserves the pattern order across events.  
-**Example 1**: If pattern has `[["a", "b"], ["c", "d"]]` and observing `["a", "c"]`, present would be `[["a", "b"], ["c", "d"]]` (complete events) and missing would be `["b", "d"]`.  
-**Example 2**: If pattern has `[["hello", "world"], ["foo", "bar"]]` and observing `["hello", "foo"]`, present would be `[["hello", "world"], ["foo", "bar"]]` and missing would be `["world", "bar"]`.
+**Example 1**: If pattern has `[["a", "b"], ["c", "d"]]` and observing `["a", "c"]`, present would be `[["a", "b"], ["c", "d"]]` (complete events) and missing would be `[["b"], ["d"]]`.  
+**Example 2**: If pattern has `[["hello", "world"], ["foo", "bar"]]` and observing `["hello", "foo"]`, present would be `[["hello", "world"], ["foo", "bar"]]` and missing would be `[["world"], ["bar"]]`.
 
-### 6. **extras** (repeated string)
+### 6. **extras** (array[array[string]], event-aligned)
 **Description**: Symbols observed in the current context that are not part of the expected pattern.  
 **Purpose**: Identifies unexpected elements that don't fit the predicted pattern.  
-**Order**: Preserves the pattern order in which extras were observed across events.  
-**Example**: If observing `[["a", "x"], ["b"], ["y"]]` against pattern `[["a"], ["b"]]`, extras would be `["x", "y"]` in that order.
+**Structure**: List of lists, where each sub-list corresponds to an STM event and contains observed symbols from that event not expected in the pattern's present events.  
+**Example**: If observing `[["a", "x"], ["b"], ["y"]]` against pattern `[["a"], ["b"]]`, extras would be `[["x"], [], ["y"]]`.
 
 ### 7. **past** (repeated ListValue)
 **Description**: Pattern of events from the learned pattern that occur BEFORE any observed matches.  

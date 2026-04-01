@@ -16,7 +16,7 @@
 
 KATO is intended to be the *Linux of AI*, providing not just open source code and configuration, but an analytical **cognitive computing** model that doesn’t require huge, power-hungry data centers. As an analytical model, KATO doesn’t require tremendous amounts of data to generate quality outcomes. Therefore, KATO models and agents can run locally, preserving privacy. Its deterministic machine learning algorithm is editable in real-time, guaranteeing the elimination of hallucinations and errors with each corrected pattern.
 
-KATO is developed to work in highly regulated and/or mission-critical problem domains from which traditional GPT-based solutions are restricted. KATO’s algorithms *and* its knowledge bases (*i.e.* trained data) is completely transparent and auditable - table-stakes for AI regulation.
+KATO is developed to work in highly regulated and/or mission-critical problem domains from which traditional GPT-based solutions are restricted. KATO’s algorithms *and* its knowledge bases (*i.e.* trained data) are completely transparent and auditable - table-stakes for AI regulation.
 
 ## What is KATO?
 

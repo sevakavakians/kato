@@ -180,7 +180,7 @@ curl -X POST http://localhost:8000/sessions/$SESSION_ID/learn | jq .
 **Response**:
 ```json
 {
-  "pattern_name": "PTN|a1b2c3d4e5f6",
+  "pattern_name": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
   "length": 4,
   "events": [
     ["alarm", "wake_up"],
@@ -257,16 +257,16 @@ curl http://localhost:8000/sessions/$SESSION_ID/predictions | jq .
       ],
       "missing": [[]],
       "extras": [[]],
-      "pattern_name": "PTN|a1b2c3d4e5f6",
+      "name": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+      "type": "prototypical",
       "similarity": 1.0,
-      "metrics": {
-        "potential": 0.85,
-        "evidence": 1.0,
-        "confidence": 0.95
-      },
-      "emotive_predictions": {
-        "energy": {"mean": 0.43, "std": 0.34},
-        "joy": {"mean": 0.8, "std": 0.0}
+      "potential": 2.85,
+      "evidence": 1.0,
+      "confidence": 0.95,
+      "snr": 1.0,
+      "emotives": {
+        "energy": 0.43,
+        "joy": 0.8
       }
     }
   ],
@@ -281,8 +281,8 @@ curl http://localhost:8000/sessions/$SESSION_ID/predictions | jq .
 - **missing**: Expected symbols not observed (empty - perfect match)
 - **extras**: Observed symbols not expected (empty - perfect match)
 - **similarity**: 1.0 = perfect match
-- **potential**: 0.85 = high predictive value
-- **emotive_predictions**: Expected emotional states
+- **potential**: 2.85 = high predictive value
+- **emotives**: Averaged emotional values from learned pattern
 
 ## Step 8: Test Partial Recall
 
@@ -320,13 +320,13 @@ curl http://localhost:8000/sessions/$SESSION_ID/predictions | jq .
       "future": [["drive_to_work", "leave_home"]],
       "missing": [[]],
       "extras": [[]],
-      "pattern_name": "PTN|a1b2c3d4e5f6",
+      "name": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+      "type": "prototypical",
       "similarity": 1.0,
-      "metrics": {
-        "potential": 0.25,
-        "evidence": 1.0,
-        "confidence": 0.95
-      }
+      "potential": 2.25,
+      "evidence": 1.0,
+      "confidence": 0.95,
+      "snr": 1.0
     }
   ]
 }
@@ -335,7 +335,7 @@ curl http://localhost:8000/sessions/$SESSION_ID/predictions | jq .
 **Key Observations**:
 - **past**: Shows 2 events that came before in the pattern
 - **future**: Shows 1 event remaining
-- **potential**: Lower (0.25) - less future information available
+- **potential**: Lower (2.25) - less future information available
 - KATO reconstructs full pattern context from any matching event
 
 ## Step 9: Test Fuzzy Matching
@@ -370,13 +370,13 @@ curl http://localhost:8000/sessions/$SESSION_ID/predictions | jq .
       "future": [["drive_to_work", "leave_home"]],
       "missing": [["breakfast"]],
       "extras": [[]],
-      "pattern_name": "PTN|a1b2c3d4e5f6",
+      "name": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+      "type": "prototypical",
       "similarity": 0.5,
-      "metrics": {
-        "potential": 0.25,
-        "evidence": 0.5,
-        "confidence": 0.71
-      }
+      "potential": 1.25,
+      "evidence": 0.5,
+      "confidence": 0.71,
+      "snr": 1.0
     }
   ]
 }

@@ -289,17 +289,17 @@ else:
 **Phase 3: GPU Acceleration**
 - 100-1000x additional speedup
 - Requires NVIDIA GPU + CUDA
-- See `docs/gpu/` for details
+- See `docs/developers/gpu/` for details
 
 ---
 
 ## See Also
 
-- `docs/cpu-optimization/RAPIDFUZZ.md` - RapidFuzz technical details
+- `docs/archive/optimizations/cpu/RAPIDFUZZ.md` - RapidFuzz technical details
 - `benchmarks/README.md` - Benchmarking guide
 - `benchmarks/compare_matchers.py` - Performance comparison tool
 - `CLAUDE.md` - Project documentation
-- `docs/gpu/` - GPU optimization (Phase 3)
+- `docs/developers/gpu/` - GPU optimization (Phase 3)
 
 ---
 

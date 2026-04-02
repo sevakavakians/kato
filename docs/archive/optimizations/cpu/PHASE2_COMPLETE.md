@@ -132,9 +132,9 @@ python benchmarks/compare_matchers.py
 **Status:** Complete
 
 **Created:**
-- `docs/cpu-optimization/README.md` - Overview and usage
-- `docs/cpu-optimization/RAPIDFUZZ.md` - Technical deep-dive
-- `docs/cpu-optimization/PHASE2_COMPLETE.md` - This file
+- `docs/archive/optimizations/cpu/README.md` - Overview and usage
+- `docs/archive/optimizations/cpu/RAPIDFUZZ.md` - Technical deep-dive
+- `docs/archive/optimizations/cpu/PHASE2_COMPLETE.md` - This file
 
 **Documentation Coverage:**
 - Configuration and environment variables
@@ -227,8 +227,8 @@ docker logs kato | grep "fast_matching=False"
 2. `benchmarks/compare_matchers.py` - Performance comparison (430 lines)
 
 **Documentation:**
-3. `docs/cpu-optimization/README.md` - Overview (320 lines)
-4. `docs/cpu-optimization/RAPIDFUZZ.md` - Technical details (390 lines)
+3. `docs/archive/optimizations/cpu/README.md` - Overview (320 lines)
+4. `docs/archive/optimizations/cpu/RAPIDFUZZ.md` - Technical details (390 lines)
 
 **Modified Files:** 2 total
 1. `kato/searches/pattern_search.py` - RapidFuzz integration
@@ -331,13 +331,13 @@ else:
 ## Documentation References
 
 **Phase 2 Documentation:**
-- `docs/cpu-optimization/README.md` - Overview and configuration
-- `docs/cpu-optimization/RAPIDFUZZ.md` - Technical deep-dive
+- `docs/archive/optimizations/cpu/README.md` - Overview and configuration
+- `docs/archive/optimizations/cpu/RAPIDFUZZ.md` - Technical deep-dive
 - `benchmarks/README.md` - Benchmarking guide
 
 **Related Documentation:**
-- `docs/gpu/IMPLEMENTATION_PLAN.md` - Full project plan (all phases)
-- `docs/gpu/PHASE1_COMPLETE.md` - Phase 1 completion report
+- `docs/developers/gpu/IMPLEMENTATION_PLAN.md` - Full project plan (all phases)
+- `docs/developers/gpu/PHASE1_COMPLETE.md` - Phase 1 completion report
 - `CLAUDE.md` - KATO project overview
 
 ---

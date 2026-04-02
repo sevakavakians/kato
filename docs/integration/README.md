@@ -17,7 +17,7 @@ Welcome to the KATO integration documentation! This section covers architecture 
 - **[Database Isolation](database-isolation.md)** - Preventing cross-contamination
 
 ### Use Case Patterns
-- **[Hybrid Agents](hybrid-agents.md)** - Combining KATO with LLMs
+- **[Hybrid Agents](hybrid-agents-analysis.md)** - Combining KATO with LLMs
 - **[Chatbot Integration](chatbot-integration.md)** - KATO in conversational AI
 - **[Recommendation Systems](recommendation-systems.md)** - Pattern-based recommendations
 

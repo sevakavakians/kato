@@ -1001,9 +1001,9 @@ pytest tests/tests/gpu/test_encoder.py -v
 ## 📞 Need Help?
 
 **Stuck? Check:**
-1. `docs/gpu/QUICK_START.md` - Common issues
-2. `docs/gpu/IMPLEMENTATION_PLAN.md` - Full context
+1. `docs/developers/gpu/QUICK_START.md` - Common issues
+2. `docs/developers/gpu/IMPLEMENTATION_PLAN.md` - Full context
 3. Test cases for examples
 4. KATO source code for patterns
 
-**Next:** `docs/gpu/PHASE2_GUIDE.md` (CPU optimization)
+**Next:** `docs/developers/gpu/PHASE2_GUIDE.md` (CPU optimization)

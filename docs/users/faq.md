@@ -404,7 +404,7 @@ Use containerized deployment instead.
 
 KATO uses a hybrid architecture for billion-scale patterns with optimized read and write paths.
 
-See [Hybrid Architecture](../HYBRID_ARCHITECTURE.md) for details.
+See [Hybrid Architecture](../developers/hybrid-architecture.md) for details.
 
 ### Can I use KATO for streaming data?
 

@@ -14,6 +14,8 @@ Welcome to the KATO developer documentation! This section provides everything yo
 
 ### Architecture & Design
 - **[Architecture Overview](architecture.md)** - System design and component interaction
+- **[Hybrid Architecture](hybrid-architecture.md)** - ClickHouse + Redis hybrid design
+- **[KB ID Isolation](kb-id-isolation.md)** - Node isolation via `kb_id` partitioning
 - **[Code Organization](code-organization.md)** - Where code lives and why
 - **[Data Flow](data-flow.md)** - How data moves through the system
 - **[Design Patterns](design-patterns.md)** - Patterns used in KATO
@@ -21,8 +23,12 @@ Welcome to the KATO developer documentation! This section provides everything yo
 ### Development Guides
 - **[Testing Guide](testing.md)** - Running and writing tests
 - **[Debugging Guide](debugging.md)** - Common debugging scenarios
+- **[Logging Guide](logging-guide.md)** - Logging usage and conventions
 - **[Performance Profiling](performance-profiling.md)** - Optimizing KATO
 - **[Database Management](database-management.md)** - Working with ClickHouse, Redis, and Qdrant
+
+### Projects
+- **[GPU Optimization](gpu/)** - GPU acceleration project (Phase 1-2 complete, Phase 3 awaiting hardware)
 
 ## 🎯 Quick Navigation by Task
 

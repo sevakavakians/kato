@@ -332,5 +332,5 @@ RuntimeError: Hybrid mode required but initialization failed
 
 ## See Also
 
-- **HYBRID_ARCHITECTURE.md** - Complete hybrid mode documentation
+- **[Hybrid Architecture](../developers/hybrid-architecture.md)** - Complete hybrid mode documentation
 - **start.sh** - Service management script

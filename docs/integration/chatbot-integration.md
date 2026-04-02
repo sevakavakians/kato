@@ -547,7 +547,7 @@ class TutorBot:
 
 ## Related Documentation
 
-- [Hybrid Agents Guide](hybrid-agents.md)
+- [Hybrid Agents Guide](hybrid-agents-analysis.md)
 - [Session Management](session-management.md)
 - [Architecture Patterns](architecture-patterns.md)
 - [Emotives Processing](/docs/research/emotives-processing.md)

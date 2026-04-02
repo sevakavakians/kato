@@ -132,7 +132,7 @@ docker-compose -f docker-compose.yml -f examples/multi-instance-config.yaml up
 
 **Documentation**:
 - [docs/integration/multi-instance.md](../docs/integration/multi-instance.md)
-- [docs/KB_ID_ISOLATION.md](../docs/KB_ID_ISOLATION.md)
+- [docs/developers/kb-id-isolation.md](../docs/developers/kb-id-isolation.md)
 
 ---
 

@@ -562,7 +562,7 @@ Testing with 10,000 learned patterns, observing 10-element pattern:
 
 ## Related Documentation
 
-- [Architecture](../deployment/ARCHITECTURE.md) - System design
-- [Configuration](../deployment/CONFIGURATION.md) - Performance parameters
+- [Architecture](../developers/architecture.md) - System design
+- [Configuration](../operations/configuration.md) - Performance parameters
 - [Troubleshooting](TROUBLESHOOTING.md) - Performance issues
 - [Architecture Complete](../ARCHITECTURE_COMPLETE.md) - System architecture

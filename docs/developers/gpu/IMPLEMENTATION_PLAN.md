@@ -195,11 +195,11 @@
 - [ ] Complete documentation set
 
 **Documentation Required:**
-- Architecture documentation (`docs/gpu/ARCHITECTURE.md`)
-- API documentation (`docs/gpu/API.md`)
-- Operational runbook (`docs/gpu/OPERATIONS.md`)
-- Developer guide (`docs/gpu/DEVELOPMENT.md`)
-- Migration guide (`docs/gpu/MIGRATION.md`)
+- Architecture documentation (`docs/developers/gpu/ARCHITECTURE.md`)
+- API documentation (`docs/developers/gpu/API.md`)
+- Operational runbook (`docs/developers/gpu/OPERATIONS.md`)
+- Developer guide (`docs/developers/gpu/DEVELOPMENT.md`)
+- Migration guide (`docs/developers/gpu/MIGRATION.md`)
 
 **Acceptance Criteria:**
 - ✅ All error scenarios handled gracefully
@@ -389,7 +389,7 @@ benchmarks/
 ├── gpu_benchmarks.py            # GPU performance
 └── comparison.py                # Side-by-side comparison
 
-docs/gpu/
+docs/developers/gpu/
 ├── ARCHITECTURE.md              # System design
 ├── API.md                       # Endpoint documentation
 ├── OPERATIONS.md                # Operational runbook
@@ -834,7 +834,7 @@ matcher.add_new_pattern("PTRN|new", encoded_sequence)
 
 ### **Escalation Path**
 
-1. Check documentation in `docs/gpu/`
+1. Check documentation in `docs/developers/gpu/`
 2. Review test cases for examples
 3. Check git history for context
 4. Consult architecture diagrams

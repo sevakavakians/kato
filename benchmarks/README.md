@@ -249,6 +249,6 @@ Patterns are realistic representations of KATO data.
 
 ## See Also
 
-- `docs/gpu/IMPLEMENTATION_PLAN.md` - GPU optimization roadmap
-- `docs/gpu/PHASE1_GUIDE.md` - Phase 1 details
+- `docs/developers/gpu/IMPLEMENTATION_PLAN.md` - GPU optimization roadmap
+- `docs/developers/gpu/PHASE1_GUIDE.md` - Phase 1 details
 - `CLAUDE.md` - KATO project documentation

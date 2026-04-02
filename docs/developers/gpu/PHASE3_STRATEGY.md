@@ -278,7 +278,7 @@
 
 5. **Begin Phase 3 Implementation** (ongoing)
    - Start with Task 3.1: GPU memory manager
-   - Follow `docs/gpu/IMPLEMENTATION_PLAN.md` Phase 3 section
+   - Follow `docs/developers/gpu/IMPLEMENTATION_PLAN.md` Phase 3 section
    - Commit regularly to GitHub
 
 **Total Setup Time:** ~3-4 hours to be fully operational

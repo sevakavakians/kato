@@ -763,7 +763,7 @@ See [Testing Guide](docs/developers/testing.md) for complete details.
 - [Docker Guide](docs/operations/docker-deployment.md) - Container deployment
 - [Configuration](docs/operations/configuration.md) - All parameters explained
 - [Architecture](docs/developers/architecture.md) - System design
-- [Production Scale Migration Plan (PSMP)](docs/deployment/PRODUCTION_SCALE_MIGRATION_PLAN.md) - Future scaling strategy for production workloads
+- [Production Scale Migration Plan (PSMP)](docs/operations/production-scale-migration.md) - Future scaling strategy for production workloads
 
 ### 🔧 Development
 - [API Reference](docs/users/api-reference.md) - Complete endpoint documentation
@@ -773,7 +773,7 @@ See [Testing Guide](docs/developers/testing.md) for complete details.
 ### 📊 Technical
 - [Performance Guide](docs/developers/performance-profiling.md) - Optimization strategies
 - [Troubleshooting](docs/maintenance/known-issues.md) - Common issues
-- [Prediction Object Reference](docs/technical/PREDICTION_OBJECT_REFERENCE.md) - Complete field documentation
+- [Prediction Object Reference](docs/reference/prediction-object.md) - Complete field documentation
 - [Known Issues](docs/maintenance/known-issues.md) - Current bugs and workarounds
 
 ### 📁 Documentation Structure
@@ -788,14 +788,16 @@ docs/
 │   ├── concepts.md          # User-facing concepts
 │   └── migration-guides/    # Version migration guides
 ├── developers/              # 💻 Core contributor documentation
+│   ├── architecture.md      # System design
+│   ├── hybrid-architecture.md # ClickHouse + Redis hybrid
+│   ├── kb-id-isolation.md   # Node isolation via kb_id
 │   ├── testing.md           # Complete testing guide
-│   ├── concepts.md          # Internal concepts
-│   └── configuration-management.md # Config system
+│   └── gpu/                 # GPU optimization project
 ├── operations/              # 🔧 DevOps and deployment
+│   ├── docker-deployment.md # Container deployment
 │   ├── configuration.md     # All parameters
-│   ├── container-deployment.md # Container management
-│   ├── multi-instance.md    # Multi-instance setup
-│   └── network-topology.md  # Network patterns
+│   ├── scaling.md           # Horizontal/vertical scaling
+│   └── troubleshooting.md   # Operational issues
 ├── research/                # 🔬 Algorithm and theory
 │   ├── pattern-matching.md  # Pattern algorithms
 │   ├── predictive-information.md # Prediction theory
@@ -807,20 +809,12 @@ docs/
 ├── maintenance/             # 🛠️ Project maintenance
 │   └── known-issues.md      # Current bugs/workarounds
 ├── reference/               # 📖 Quick reference
+│   ├── api/                 # API endpoint specs
 │   └── glossary.md          # Terms and definitions
 ├── archive/                 # 📦 Historical documentation
 │   ├── optimizations/       # Past optimization work
 │   └── investigations/      # Research archives
-├── deployment/              # Legacy deployment docs
-│   ├── ARCHITECTURE.md
-│   ├── CONFIGURATION.md
-│   └── DOCKER.md
-├── development/             # Legacy development docs
-│   └── CONTRIBUTING.md
-└── technical/               # Legacy technical docs
-    ├── PERFORMANCE.md
-    ├── TROUBLESHOOTING.md
-    └── PREDICTION_OBJECT_REFERENCE.md
+└── architecture-decisions/  # 📐 ADRs
 ```
 
 ## Architecture Overview

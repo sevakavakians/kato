@@ -148,7 +148,7 @@ Phase 1 implementation is complete. All foundational infrastructure for GPU acce
 
 **Infrastructure:**
 10. `scripts/setup_gpu_dev.sh` - Environment setup (180 lines)
-11. `docs/gpu/PHASE1_COMPLETE.md` - This file
+11. `docs/developers/gpu/PHASE1_COMPLETE.md` - This file
 
 **Modified Files:** 2 total
 1. `.gitignore` - Added GPU-related ignores
@@ -305,9 +305,9 @@ pytest tests/tests/gpu/ --cov=kato.gpu --cov-report=html
 ## Documentation References
 
 **Phase 1 Documentation:**
-- `docs/gpu/QUICK_START.md` - Overview and workflow
-- `docs/gpu/PHASE1_GUIDE.md` - Detailed implementation guide
-- `docs/gpu/REFERENCE.md` - Quick reference
+- `docs/developers/gpu/QUICK_START.md` - Overview and workflow
+- `docs/developers/gpu/PHASE1_GUIDE.md` - Detailed implementation guide
+- `docs/developers/gpu/REFERENCE.md` - Quick reference
 - `benchmarks/README.md` - Benchmark usage
 
 **KATO Documentation:**
@@ -334,7 +334,7 @@ All deliverables have been implemented:
 ---
 
 **Questions or Issues?**
-- Review `docs/gpu/QUICK_START.md` for troubleshooting
+- Review `docs/developers/gpu/QUICK_START.md` for troubleshooting
 - Check `benchmarks/README.md` for benchmark help
 - See test output for detailed error messages
 

@@ -486,7 +486,7 @@ def analyze_patterns(predictions):
 - **1000-10000 patterns**: Moderate performance
 - **> 10000 patterns**: Consider hybrid architecture
 
-**See**: [../../docs/HYBRID_ARCHITECTURE.md](../../HYBRID_ARCHITECTURE.md)
+**See**: [Hybrid Architecture](../../developers/hybrid-architecture.md)
 
 ### Filtering Pipeline
 

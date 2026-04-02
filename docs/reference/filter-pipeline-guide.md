@@ -934,7 +934,7 @@ Winner: Jaccard (better recall, acceptable latency)
 
 ## See Also
 
-- [Hybrid Architecture](../HYBRID_ARCHITECTURE.md) - ClickHouse + Redis architecture overview
+- [Hybrid Architecture](../developers/hybrid-architecture.md) - ClickHouse + Redis architecture overview
 - [Pattern Matching](../research/pattern-matching.md) - Core matching algorithms
 - [Configuration Reference](configuration-vars.md) - Complete config parameter list
 - [API Reference](api/) - REST API documentation

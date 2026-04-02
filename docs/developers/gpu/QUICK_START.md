@@ -17,7 +17,7 @@
 **Before starting work, read these in order:**
 
 1. **This file** (you're here!)
-2. `docs/gpu/IMPLEMENTATION_PLAN.md` (full plan, 30 min read)
+2. `docs/developers/gpu/IMPLEMENTATION_PLAN.md` (full plan, 30 min read)
 3. `CLAUDE.md` (project context, review pattern terminology)
 
 ---
@@ -116,7 +116,7 @@ benchmarks/                   # NEW - Performance testing
 ├── baseline.py              # Current performance
 └── gpu_benchmarks.py        # GPU performance
 
-docs/gpu/                     # THIS DIRECTORY
+docs/developers/gpu/                     # THIS DIRECTORY
 ├── IMPLEMENTATION_PLAN.md   # Full project plan
 ├── QUICK_START.md          # This file
 ├── PHASE1_GUIDE.md         # Phase 1 details
@@ -286,11 +286,11 @@ np.testing.assert_allclose(gpu_result, python_result, rtol=1e-6)
 2. Run single test: `pytest tests/tests/gpu/test_encoder.py::test_encode_symbol -vv`
 3. Profile code: `python -m cProfile -o profile.prof script.py`
 4. Check GPU: `nvidia-smi` (memory, utilization)
-5. Review architecture: `docs/gpu/ARCHITECTURE.md`
+5. Review architecture: `docs/developers/gpu/ARCHITECTURE.md`
 
 **Where to Look:**
-- Implementation details: `docs/gpu/IMPLEMENTATION_PLAN.md`
-- API changes: `docs/gpu/API.md` (to be created)
+- Implementation details: `docs/developers/gpu/IMPLEMENTATION_PLAN.md`
+- API changes: `docs/developers/gpu/API.md` (to be created)
 - Code examples: `tests/tests/gpu/` directory
 
 ---
@@ -363,4 +363,4 @@ Each phase builds on the previous one. Take it step by step.
 
 ---
 
-**Next:** Read `docs/gpu/PHASE1_GUIDE.md` for detailed Phase 1 instructions
+**Next:** Read `docs/developers/gpu/PHASE1_GUIDE.md` for detailed Phase 1 instructions

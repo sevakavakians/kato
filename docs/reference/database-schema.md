@@ -1,6 +1,6 @@
 # Database Schema Reference
 
-Complete field-level reference for all data stored across KATO's three databases. For architectural context, see [Hybrid Architecture](../HYBRID_ARCHITECTURE.md).
+Complete field-level reference for all data stored across KATO's three databases. For architectural context, see [Hybrid Architecture](../developers/hybrid-architecture.md).
 
 **Version**: KATO 3.8.0+
 
@@ -247,8 +247,8 @@ Observation -> KatoProcessor
 
 ## See also
 
-- [Hybrid Architecture](../HYBRID_ARCHITECTURE.md) - Design rationale, filter pipeline, migration
-- [KB ID Isolation](../KB_ID_ISOLATION.md) - Node isolation details
+- [Hybrid Architecture](../developers/hybrid-architecture.md) - Design rationale, filter pipeline, migration
+- [KB ID Isolation](../developers/kb-id-isolation.md) - Node isolation details
 - [Configuration Variables](configuration-vars.md) - Environment variables
 - [Filter Pipeline Guide](filter-pipeline-guide.md) - MinHash/LSH tuning
 - [ClickHouse init.sql](../../config/clickhouse/init.sql) - Raw DDL

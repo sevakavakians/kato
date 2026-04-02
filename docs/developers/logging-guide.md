@@ -577,9 +577,9 @@ If logging impacts performance:
 
 ## Additional Resources
 
-- **Technical Specification:** `docs/technical/LOGGING_SPECIFICATION.md`
-- **Configuration Reference:** `docs/CONFIGURATION.md`
-- **Troubleshooting Guide:** `docs/technical/TROUBLESHOOTING.md`
+- **Technical Specification:** [Logging Specification](../reference/logging-specification.md)
+- **Configuration Reference:** [Configuration](../operations/configuration.md)
+- **Troubleshooting Guide:** [Troubleshooting](../users/troubleshooting.md)
 - **Python Logging Docs:** https://docs.python.org/3/library/logging.html
 
 ---

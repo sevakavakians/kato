@@ -4,7 +4,7 @@ Comprehensive operations-focused guide to optimizing KATO performance for produc
 
 ## Overview
 
-This guide focuses on practical performance tuning for production KATO deployments. For technical performance details, see [docs/technical/PERFORMANCE.md](../technical/PERFORMANCE.md).
+This guide focuses on practical performance tuning for production KATO deployments. For technical performance details, see [Performance Guide](../reference/performance-guide.md).
 
 ## Performance Targets
 

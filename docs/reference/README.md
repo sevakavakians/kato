@@ -27,6 +27,12 @@ Welcome to the KATO reference documentation! This section provides technical spe
 - **[Error Codes](error-codes.md)** - HTTP status codes and meanings
 - **[Exception Types](exception-types.md)** - Python exception hierarchy
 
+### Specifications
+- **[Logging Specification](logging-specification.md)** - Logging system specification
+- **[Performance Guide](performance-guide.md)** - Performance specifications and tuning
+- **[Mode Switching](mode-switching.md)** - Filter pipeline mode switching
+- **[Filter Pipeline Guide](filter-pipeline-guide.md)** - MinHash/LSH tuning
+
 ### Terminology
 - **[Glossary](glossary.md)** - Complete terminology reference
 

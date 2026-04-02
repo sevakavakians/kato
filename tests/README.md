@@ -2,7 +2,7 @@
 
 This directory contains the complete test suite for KATO. For comprehensive testing documentation, please refer to the main testing documentation:
 
-**📖 [Complete Testing Documentation](../docs/development/TESTING.md)**
+**📖 [Complete Testing Documentation](../docs/developers/testing.md)**
 
 ## Test Infrastructure: Docker Container
 
@@ -186,4 +186,4 @@ For detailed information about:
 - Adding new test categories
 - CI/CD integration
 
-Please see **[docs/development/TESTING.md](../docs/development/TESTING.md)**
+Please see **[docs/developers/testing.md](../docs/developers/testing.md)**

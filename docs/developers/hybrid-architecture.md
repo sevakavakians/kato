@@ -192,9 +192,9 @@ python scripts/migrate_mongodb_to_redis.py \
 
 ### See Also
 
-- **Detailed kb_id documentation**: `docs/KB_ID_ISOLATION.md`
-- **Migration troubleshooting**: `docs/KB_ID_ISOLATION.md#troubleshooting`
-- **Partition management**: `docs/KB_ID_ISOLATION.md#verification`
+- **Detailed kb_id documentation**: [kb-id-isolation.md](kb-id-isolation.md)
+- **Migration troubleshooting**: [kb-id-isolation.md#troubleshooting](kb-id-isolation.md#troubleshooting)
+- **Partition management**: [kb-id-isolation.md#verification](kb-id-isolation.md#verification)
 
 ## Filter Pipeline
 

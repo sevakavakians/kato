@@ -82,7 +82,7 @@
 - `kato/gpu/kernels.py`
 - `kato/gpu/matcher.py`
 - `kato/gpu/sync_manager.py`
-- `docs/gpu/PHASE3_IMPLEMENTATION_STATUS.md` (this file)
+- `docs/developers/gpu/PHASE3_IMPLEMENTATION_STATUS.md` (this file)
 
 **Files Modified:**
 - `kato/gpu/__init__.py` (Phase 3 exports)
@@ -124,8 +124,8 @@ Create performance benchmarking suite:
 - Scaling tests (1K, 10K, 100K, 1M, 10M patterns)
 
 **4. Documentation Updates (2-4 hours)**
-- `docs/gpu/PHASE3_COMPLETE.md` - Completion report
-- `docs/gpu/README.md` - Update status
+- `docs/developers/gpu/PHASE3_COMPLETE.md` - Completion report
+- `docs/developers/gpu/README.md` - Update status
 - `CLAUDE.md` - Add GPU configuration section
 - Update user guides
 
@@ -401,11 +401,11 @@ Push Phase 3 completion to GitHub
 - `benchmarks/compare_all.py`
 
 **Documentation:**
-- Implementation Plan: `docs/gpu/IMPLEMENTATION_PLAN.md`
-- Phase 1 Complete: `docs/gpu/PHASE1_COMPLETE.md`
-- Phase 2 Complete: `docs/cpu-optimization/PHASE2_COMPLETE.md`
-- Phase 3 Status: `docs/gpu/PHASE3_IMPLEMENTATION_STATUS.md` (this file)
-- Phase 3 Strategy: `docs/gpu/PHASE3_STRATEGY.md`
+- Implementation Plan: `docs/developers/gpu/IMPLEMENTATION_PLAN.md`
+- Phase 1 Complete: `docs/developers/gpu/PHASE1_COMPLETE.md`
+- Phase 2 Complete: `docs/archive/optimizations/cpu/PHASE2_COMPLETE.md`
+- Phase 3 Status: `docs/developers/gpu/PHASE3_IMPLEMENTATION_STATUS.md` (this file)
+- Phase 3 Strategy: `docs/developers/gpu/PHASE3_STRATEGY.md`
 
 ---
 

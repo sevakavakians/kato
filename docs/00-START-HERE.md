@@ -71,8 +71,8 @@ Welcome to KATO documentation! This guide helps you find the right documentation
 - [Architecture Patterns](integration/architecture-patterns.md) - Integration approaches
 - [Session Management](integration/session-management.md) - Sessions deep dive
 - [Multi-Instance Setup](integration/multi-instance.md) - Running multiple KATO instances
-- [Network Topology](integration/network-topology.md) - Network design patterns
-- [Hybrid Agents](integration/hybrid-agents.md) - Combining KATO with LLMs
+- [Network Topology](operations/network-topology.md) - Network design patterns
+- [Hybrid Agents](integration/hybrid-agents-analysis.md) - Combining KATO with LLMs
 
 ---
 
@@ -134,5 +134,5 @@ docs/
 
 ---
 
-**Last Updated**: November 2025
+**Last Updated**: April 2026
 **KATO Version**: 3.0+

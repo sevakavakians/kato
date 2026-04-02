@@ -268,8 +268,8 @@ class KatoProcessor:
 - None
 
 **Related**:
-- [HYBRID_ARCHITECTURE.md](../HYBRID_ARCHITECTURE.md) - ClickHouse + Redis v3.0 architecture
-- [KB_ID_ISOLATION.md](../KB_ID_ISOLATION.md) - Node isolation via `kb_id`
+- [Hybrid Architecture](../developers/hybrid-architecture.md) - ClickHouse + Redis v3.0 architecture
+- [KB ID Isolation](../developers/kb-id-isolation.md) - Node isolation via `kb_id`
 
 ---
 

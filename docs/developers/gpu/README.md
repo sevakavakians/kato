@@ -112,7 +112,7 @@
 ## 📂 Document Organization
 
 ```
-docs/gpu/
+docs/developers/gpu/
 ├── README.md              # This file - documentation index
 ├── QUICK_START.md         # Start here - 5 min read
 ├── IMPLEMENTATION_PLAN.md # Full project plan - 30 min read
@@ -197,14 +197,14 @@ Integrate GPU acceleration while:
 - [x] Baseline benchmarks ready (benchmarks/baseline.py)
 - [x] Symbol encoder implemented (kato/gpu/encoder.py)
 - [x] Tests passing (38 tests in tests/tests/gpu/)
-- [x] Documentation complete (docs/gpu/)
+- [x] Documentation complete (docs/developers/gpu/)
 
 **Phase 2 Status (✅ COMPLETE - Oct 27, 2025):**
 - [x] RapidFuzz integration (5-10x speedup)
 - [x] String caching optimization
 - [x] Integration tests (50+ tests)
 - [x] Performance validated (8-10x improvement)
-- [x] Documentation complete (docs/cpu-optimization/)
+- [x] Documentation complete (docs/archive/optimizations/cpu/)
 - [x] **DEPLOYED and ACTIVE in production**
 
 **Phase 3 Status (🔄 READY - Awaiting Hardware):**
@@ -218,7 +218,7 @@ Integrate GPU acceleration while:
 → Need Linux system with NVIDIA GPU (RTX 3060/4060 or similar)
 
 **Want to Test Phase 2?**
-→ See `docs/cpu-optimization/README.md` for benchmarking
+→ See `docs/archive/optimizations/cpu/README.md` for benchmarking
 
 **Need Reference?**
 → Check `REFERENCE.md` for quick lookups

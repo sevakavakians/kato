@@ -11,8 +11,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Getting started with KATO**: [docs/users/quick-start.md](docs/users/quick-start.md)
 - **Code examples**: [examples/README.md](examples/README.md) - Python client, token matching, hierarchical training
 - **Understanding architecture**: [docs/developers/architecture.md](docs/developers/architecture.md) + [ARCHITECTURE_DIAGRAM.md](ARCHITECTURE_DIAGRAM.md)
-- **Hybrid architecture (ClickHouse + Redis)**: [docs/HYBRID_ARCHITECTURE.md](docs/HYBRID_ARCHITECTURE.md)
-- **Node isolation (kb_id)**: [docs/KB_ID_ISOLATION.md](docs/KB_ID_ISOLATION.md)
+- **Hybrid architecture (ClickHouse + Redis)**: [docs/developers/hybrid-architecture.md](docs/developers/hybrid-architecture.md)
+- **Node isolation (kb_id)**: [docs/developers/kb-id-isolation.md](docs/developers/kb-id-isolation.md)
 - **Database schema (ClickHouse/Redis/Qdrant fields)**: [docs/reference/database-schema.md](docs/reference/database-schema.md)
 - **Filter pipeline tuning (MinHash/LSH)**: [docs/reference/filter-pipeline-guide.md](docs/reference/filter-pipeline-guide.md)
 - **Deploying to production**: [docs/operations/docker-deployment.md](docs/operations/docker-deployment.md)
@@ -36,7 +36,7 @@ KATO (Knowledge Abstraction for Traceable Outcomes) is a deterministic memory an
 - **Qdrant**: Vector embeddings (unchanged)
 - **Node Isolation**: Via `kb_id` partitioning (ClickHouse) and key namespacing (Redis)
 
-See [docs/HYBRID_ARCHITECTURE.md](docs/HYBRID_ARCHITECTURE.md) for complete details.
+See [docs/developers/hybrid-architecture.md](docs/developers/hybrid-architecture.md) for complete details.
 
 ### Stateless Processor Architecture (v3.0+)
 **IMPORTANT**: KATO processors use a **externally stateless architecture** with an internal bridge pattern:
@@ -347,8 +347,8 @@ Claude Code automatically:
 **Developers**:
 - Contributing: [docs/developers/contributing.md](docs/developers/contributing.md)
 - Architecture: [docs/developers/architecture.md](docs/developers/architecture.md)
-- Hybrid Architecture: [docs/HYBRID_ARCHITECTURE.md](docs/HYBRID_ARCHITECTURE.md)
-- KB ID Isolation: [docs/KB_ID_ISOLATION.md](docs/KB_ID_ISOLATION.md)
+- Hybrid Architecture: [docs/developers/hybrid-architecture.md](docs/developers/hybrid-architecture.md)
+- KB ID Isolation: [docs/developers/kb-id-isolation.md](docs/developers/kb-id-isolation.md)
 - Testing: [docs/developers/testing.md](docs/developers/testing.md)
 - Architecture Decisions: [docs/architecture-decisions/](docs/architecture-decisions/)
 
@@ -365,7 +365,7 @@ Claude Code automatically:
 **Integration**:
 - Architecture Patterns: [docs/integration/architecture-patterns.md](docs/integration/architecture-patterns.md)
 - Multi-Instance: [docs/integration/multi-instance.md](docs/integration/multi-instance.md)
-- Hybrid Agents: [docs/integration/hybrid-agents.md](docs/integration/hybrid-agents.md)
+- Hybrid Agents: [docs/integration/hybrid-agents-analysis.md](docs/integration/hybrid-agents-analysis.md)
 
 **Maintenance**:
 - Release Process: [docs/maintenance/releasing.md](docs/maintenance/releasing.md)

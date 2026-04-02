@@ -3,6 +3,28 @@
 
 ---
 
+## 2026-04-02 - Task Completion: Swagger/OpenAPI Documentation Fix (FULLY COMPLETED)
+
+**Trigger**: Task completion event — Swagger/OpenAPI documentation issues fixed across all 36 API endpoints
+
+**Event Type**: Bug fix / documentation quality work item completion
+
+**Actions Taken**:
+1. Created `planning-docs/completed/features/2026-04-02-swagger-openapi-documentation-fix.md` — full archive entry: route ordering fix, version mismatch correction, deprecated endpoint marking, 5 new schema files, 28 new Pydantic response models, full endpoint coverage
+2. Updated `planning-docs/project-manager/maintenance-log.md` (this entry)
+3. Updated `planning-docs/project-manager/triggers.md` with activation event
+4. Updated `planning-docs/README.md` — Last Major Update field
+
+**Summary**:
+- Route ordering fixed: `GET /symbols/stats` moved above `GET /symbols/{symbol}/affinity` to prevent parameterized shadowing
+- Version mismatch corrected: both `kato_fastapi.py` and `health.py` now import `__version__` dynamically (was hardcoded `"1.0.0"`, now `"3.9.0"`)
+- `/percept-data` and `/cognition-data` marked `deprecated=True`
+- 5 new schema files created under `kato/api/schemas/`: `root.py`, `health.py`, `monitoring.py`, `kato_ops.py`, `session_extra.py`
+- 28 new Pydantic response models defined
+- `response_model=` wired to all 36 endpoints (up from 8); OpenAPI spec fully populated
+
+---
+
 ## 2026-03-31 - Task Completion: Affinity-Weighted Pattern Matching (FULLY COMPLETED)
 
 **Trigger**: Task completion event — Affinity-Weighted Pattern Matching implemented, 288/288 unit tests passing, zero regressions

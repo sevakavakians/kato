@@ -3,6 +3,25 @@
 
 ---
 
+## 2026-04-02 - Task Completion (Swagger/OpenAPI Documentation Fix — FULLY COMPLETED)
+
+**Trigger Type**: Primary — Task Completion
+**Event**: Swagger/OpenAPI documentation issues fixed; all 36 endpoints now have response_model=; version corrected; routing conflict resolved; deprecated endpoints marked
+**Source**: Developer report — 5 new schema files, 28 new Pydantic models, route reordering, dynamic version import
+
+**Fix Summary**:
+- Route ordering: `GET /symbols/stats` moved above `GET /symbols/{symbol}/affinity` (FastAPI static-before-parameterized rule)
+- Version: `kato_fastapi.py` and `health.py` import `__version__` from `kato` package (was hardcoded `"1.0.0"`)
+- Deprecated: `/percept-data` and `/cognition-data` have `deprecated=True` in route decorator
+- New schema files: `kato/api/schemas/root.py`, `health.py`, `monitoring.py`, `kato_ops.py`, `session_extra.py`
+- 28 new Pydantic response models; `response_model=` wired to all 36 endpoints (was 8)
+
+**Documentation Actions**:
+- Created archive: `planning-docs/completed/features/2026-04-02-swagger-openapi-documentation-fix.md`
+- Updated: `README.md`, `maintenance-log.md`, `triggers.md`
+
+---
+
 ## 2026-03-31 - Task Completion (Affinity-Weighted Pattern Matching — FULLY COMPLETED)
 
 **Trigger Type**: Primary — Task Completion

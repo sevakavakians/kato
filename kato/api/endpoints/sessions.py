@@ -24,12 +24,25 @@ from kato.api.schemas import (
     SessionResponse,
     STMResponse,
 )
+from kato.api.schemas.session_extra import (
+    AllClearedResponse,
+    CognitionDataResponse,
+    PerceptDataResponse,
+    SessionConfigResponse,
+    SessionConfigUpdateResponse,
+    SessionCountResponse,
+    SessionDeletedResponse,
+    SessionExistsResponse,
+    SessionExtendResponse,
+    STMClearedResponse,
+    TestResponse,
+)
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 logger = logging.getLogger('kato.api.sessions')
 
 
-@router.get("/test/{test_id}")
+@router.get("/test/{test_id}", response_model=TestResponse)
 async def test_endpoint(test_id: str):
     """Simple test endpoint to verify routing works"""
     logger.debug(f"Test endpoint called: {test_id}")
@@ -74,7 +87,7 @@ async def create_session(request: CreateSessionRequest):
     )
 
 
-@router.get("/count")
+@router.get("/count", response_model=SessionCountResponse)
 async def get_active_session_count():
     """Get the count of active sessions"""
     from kato.services.kato_fastapi import app_state
@@ -88,7 +101,7 @@ async def get_active_session_count():
         raise HTTPException(status_code=500, detail="Failed to get session count")
 
 
-@router.get("/{session_id}/exists")
+@router.get("/{session_id}/exists", response_model=SessionExistsResponse)
 async def check_session_exists(session_id: str):
     """
     Check if session exists without extending its TTL.
@@ -174,7 +187,7 @@ async def get_session_info(session_id: str):
     )
 
 
-@router.delete("/{session_id}")
+@router.delete("/{session_id}", response_model=SessionDeletedResponse)
 async def delete_session(session_id: str):
     """Delete a session and cleanup resources"""
     from kato.services.kato_fastapi import app_state
@@ -187,7 +200,7 @@ async def delete_session(session_id: str):
     return {"status": "deleted", "session_id": session_id}
 
 
-@router.get("/{session_id}/config")
+@router.get("/{session_id}/config", response_model=SessionConfigResponse)
 async def get_session_config(session_id: str):
     """
     Get effective configuration for a session.
@@ -218,7 +231,7 @@ async def get_session_config(session_id: str):
     }
 
 
-@router.post("/{session_id}/config")
+@router.post("/{session_id}/config", response_model=SessionConfigUpdateResponse)
 async def update_session_config(session_id: str, request_data: dict[str, Any]):
     """Update session configuration parameters"""
     from kato.services.kato_fastapi import app_state
@@ -284,7 +297,7 @@ async def update_session_config(session_id: str, request_data: dict[str, Any]):
     return {"status": "okay", "message": "Configuration updated", "session_id": session_id}
 
 
-@router.post("/{session_id}/extend")
+@router.post("/{session_id}/extend", response_model=SessionExtendResponse)
 async def extend_session(session_id: str, ttl_seconds: int = 3600):
     """Extend session expiration"""
     from kato.services.kato_fastapi import app_state
@@ -486,7 +499,7 @@ async def finalize_training(session_id: str):
     )
 
 
-@router.post("/{session_id}/clear-stm")
+@router.post("/{session_id}/clear-stm", response_model=STMClearedResponse)
 async def clear_session_stm(session_id: str):
     """Clear the STM for a specific session"""
     from kato.services.kato_fastapi import app_state
@@ -505,7 +518,7 @@ async def clear_session_stm(session_id: str):
     return {"status": "cleared", "session_id": session_id}
 
 
-@router.post("/{session_id}/clear-all")
+@router.post("/{session_id}/clear-all", response_model=AllClearedResponse)
 async def clear_session_all_memory(session_id: str):
     """Clear all memory (STM and learned patterns) for a specific session"""
     from kato.services.kato_fastapi import app_state
@@ -775,7 +788,7 @@ async def get_session_predictions(session_id: str):
     )
 
 
-@router.get("/{session_id}/percept-data")
+@router.get("/{session_id}/percept-data", response_model=PerceptDataResponse)
 async def get_session_percept_data(session_id: str):
     """
     Get percept data (input observation data) for a specific session.
@@ -803,7 +816,7 @@ async def get_session_percept_data(session_id: str):
     }
 
 
-@router.get("/{session_id}/cognition-data")
+@router.get("/{session_id}/cognition-data", response_model=CognitionDataResponse)
 async def get_session_cognition_data(session_id: str):
     """
     Get cognition data (processing outputs) for a specific session.

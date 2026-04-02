@@ -12,11 +12,20 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Path, Query, Request
 
+from kato.api.schemas.kato_ops import (
+    DeprecatedCognitionDataResponse,
+    DeprecatedPerceptDataResponse,
+    PatternResponse,
+    SymbolAffinitiesResponse,
+    SymbolAffinityResponse,
+    SymbolStatsResponse,
+)
+
 router = APIRouter(tags=["kato-ops"])
 logger = logging.getLogger('kato.api.kato_ops')
 
 
-@router.get("/pattern/{pattern_id}")
+@router.get("/pattern/{pattern_id}", response_model=PatternResponse)
 async def get_pattern(
     request: Request,
     pattern_id: str = Path(..., description="Pattern ID to retrieve"),
@@ -53,7 +62,7 @@ async def get_pattern(
         raise HTTPException(status_code=500, detail=f"Pattern retrieval failed: {str(e)}")
 
 
-@router.get("/percept-data")
+@router.get("/percept-data", deprecated=True, response_model=DeprecatedPerceptDataResponse)
 async def get_percept_data(
     request: Request,
     node_id: Optional[str] = Query(None, description="Node identifier")
@@ -85,7 +94,7 @@ async def get_percept_data(
     }
 
 
-@router.get("/cognition-data")
+@router.get("/cognition-data", deprecated=True, response_model=DeprecatedCognitionDataResponse)
 async def get_cognition_data(
     request: Request,
     node_id: Optional[str] = Query(None, description="Node identifier")
@@ -127,7 +136,7 @@ async def get_cognition_data(
     }
 
 
-@router.get("/symbols/affinity")
+@router.get("/symbols/affinity", response_model=SymbolAffinitiesResponse)
 async def get_all_symbol_affinities(
     request: Request,
     node_id: Optional[str] = Query(None, description="Node identifier")
@@ -159,7 +168,36 @@ async def get_all_symbol_affinities(
         raise HTTPException(status_code=500, detail=f"Symbol affinity retrieval failed: {str(e)}")
 
 
-@router.get("/symbols/{symbol}/affinity")
+@router.get("/symbols/stats", response_model=SymbolStatsResponse)
+async def get_all_symbol_stats(
+    request: Request,
+    node_id: Optional[str] = Query(None, description="Node identifier")
+):
+    """
+    Get frequency and pattern member frequency (PMF) for all symbols in this node's knowledge base.
+
+    Args:
+        node_id: Node identifier (defaults to header-based node_id)
+
+    Returns:
+        Dictionary of symbol stats and node_id
+    """
+    from kato.services.kato_fastapi import app_state, get_node_id_from_request
+
+    if node_id is None:
+        node_id = get_node_id_from_request(request)
+
+    processor = await app_state.processor_manager.get_processor(node_id)
+
+    try:
+        symbols = processor.pattern_processor.superkb.redis_writer.get_all_symbols_batch()
+        return {"symbols": symbols, "node_id": processor.id}
+    except Exception as e:
+        logger.error(f"Error getting symbol stats: {e}")
+        raise HTTPException(status_code=500, detail=f"Symbol stats retrieval failed: {str(e)}")
+
+
+@router.get("/symbols/{symbol}/affinity", response_model=SymbolAffinityResponse)
 async def get_symbol_affinity(
     request: Request,
     symbol: str = Path(..., description="Symbol name"),
@@ -188,32 +226,3 @@ async def get_symbol_affinity(
     except Exception as e:
         logger.error(f"Error getting affinity for symbol {symbol}: {e}")
         raise HTTPException(status_code=500, detail=f"Symbol affinity retrieval failed: {str(e)}")
-
-
-@router.get("/symbols/stats")
-async def get_all_symbol_stats(
-    request: Request,
-    node_id: Optional[str] = Query(None, description="Node identifier")
-):
-    """
-    Get frequency and pattern member frequency (PMF) for all symbols in this node's knowledge base.
-
-    Args:
-        node_id: Node identifier (defaults to header-based node_id)
-
-    Returns:
-        Dictionary of symbol stats and node_id
-    """
-    from kato.services.kato_fastapi import app_state, get_node_id_from_request
-
-    if node_id is None:
-        node_id = get_node_id_from_request(request)
-
-    processor = await app_state.processor_manager.get_processor(node_id)
-
-    try:
-        symbols = processor.pattern_processor.superkb.redis_writer.get_all_symbols_batch()
-        return {"symbols": symbols, "node_id": processor.id}
-    except Exception as e:
-        logger.error(f"Error getting symbol stats: {e}")
-        raise HTTPException(status_code=500, detail=f"Symbol stats retrieval failed: {str(e)}")

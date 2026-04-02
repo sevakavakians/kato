@@ -12,13 +12,23 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 
+from kato.api.schemas.monitoring import (
+    CacheInvalidateResponse,
+    CacheStatsResponse,
+    ConcurrencyResponse,
+    ConnectionPoolsResponse,
+    DistributedSTMStatsResponse,
+    MetricHistoryResponse,
+    MetricsResponse,
+    StatsResponse,
+)
 from kato.storage.pattern_cache import get_cache_manager
 
 router = APIRouter(tags=["monitoring"])
 logger = logging.getLogger('kato.api.monitoring')
 
 
-@router.get("/concurrency")
+@router.get("/concurrency", response_model=ConcurrencyResponse)
 async def get_concurrency_metrics():
     """
     Get real-time concurrency metrics.
@@ -108,7 +118,7 @@ def _get_concurrency_recommendations(current: int, peak: int, limit: int, worker
     return recommendations
 
 
-@router.get("/cache/stats")
+@router.get("/cache/stats", response_model=CacheStatsResponse)
 async def get_cache_stats():
     """Get Redis pattern cache performance statistics"""
     try:
@@ -137,7 +147,7 @@ async def get_cache_stats():
         }
 
 
-@router.post("/cache/invalidate")
+@router.post("/cache/invalidate", response_model=CacheInvalidateResponse)
 async def invalidate_cache(session_id: Optional[str] = None):
     """Invalidate pattern cache (optionally for specific session)"""
     try:
@@ -164,7 +174,7 @@ async def invalidate_cache(session_id: Optional[str] = None):
         raise HTTPException(status_code=500, detail=f"Cache invalidation failed: {str(e)}")
 
 
-@router.get("/distributed-stm/stats")
+@router.get("/distributed-stm/stats", response_model=DistributedSTMStatsResponse)
 async def get_distributed_stm_stats():
     """Get distributed STM performance statistics and health"""
     from kato.services.kato_fastapi import app_state
@@ -230,7 +240,7 @@ async def get_distributed_stm_stats():
         }
 
 
-@router.get("/metrics")
+@router.get("/metrics", response_model=MetricsResponse)
 async def get_comprehensive_metrics():
     """Get comprehensive v2 metrics including system resources and performance"""
     from kato.services.kato_fastapi import app_state
@@ -292,7 +302,7 @@ async def get_comprehensive_metrics():
         }
 
 
-@router.get("/stats")
+@router.get("/stats", response_model=StatsResponse)
 async def get_stats(minutes: int = 10):
     """Get time-series statistics for the last N minutes"""
     from kato.services.kato_fastapi import app_state
@@ -350,7 +360,7 @@ async def get_stats(minutes: int = 10):
         }
 
 
-@router.get("/metrics/{metric_name}")
+@router.get("/metrics/{metric_name}", response_model=MetricHistoryResponse)
 async def get_specific_metric_history(metric_name: str, minutes: int = 10):
     """Get time series data for a specific metric"""
     from kato.services.kato_fastapi import app_state
@@ -390,7 +400,7 @@ async def get_specific_metric_history(metric_name: str, minutes: int = 10):
         raise HTTPException(status_code=500, detail=f"Failed to retrieve metric: {str(e)}")
 
 
-@router.get("/connection-pools")
+@router.get("/connection-pools", response_model=ConnectionPoolsResponse)
 async def connection_pools_status():
     """Get connection pool health and statistics for monitoring."""
     logger.debug("Connection pools status endpoint called")

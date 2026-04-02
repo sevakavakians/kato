@@ -10,11 +10,14 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter
 
+from kato import __version__
+from kato.api.schemas.health import HealthResponse, StatusResponse
+
 router = APIRouter(tags=["health"])
 logger = logging.getLogger('kato.api.health')
 
 
-@router.get("/status")
+@router.get("/status", response_model=StatusResponse)
 async def get_system_status():
     """Get overall system status including session statistics"""
     from kato.services.kato_fastapi import app_state
@@ -28,11 +31,11 @@ async def get_system_status():
         "uptime_seconds": time.time() - app_state.startup_time,
         "sessions": session_stats,
         "processors": processor_stats,
-        "version": "1.0.0"
+        "version": __version__
     }
 
 
-@router.get("/health")
+@router.get("/health", response_model=HealthResponse)
 async def health_check():
     """Enhanced health check endpoint for v2 with metrics integration"""
     from kato.services.kato_fastapi import app_state

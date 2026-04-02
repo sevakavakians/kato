@@ -18,6 +18,9 @@ from typing import Optional
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
+from kato import __version__
+from kato.api.schemas.root import RootResponse
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 # Import modular API endpoints
@@ -42,7 +45,7 @@ logger = logging.getLogger('kato.fastapi')
 app = FastAPI(
     title="KATO API",
     description="Knowledge Abstraction for Traceable Outcomes with Multi-User Support",
-    version="1.0.0"
+    version=__version__
 )
 
 # Add CORS middleware
@@ -372,12 +375,12 @@ app.include_router(websocket_events_router)
 # Root Endpoint
 # ============================================================================
 
-@app.get("/")
+@app.get("/", response_model=RootResponse)
 async def root():
     """Root endpoint with service information"""
     return {
         "service": "KATO API",
-        "version": "1.0.0",
+        "version": __version__,
         "description": "Knowledge Abstraction for Traceable Outcomes with Multi-User Support",
         "docs": "/docs",
         "health": "/health",

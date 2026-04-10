@@ -52,5 +52,8 @@ Raw pattern matching treats all symbols as equally important. Symbol affinity (i
 - **Deterministic**: Same session config + same patterns + same observations produce identical weighted scores (consistent with KATO's determinism guarantee)
 - **Non-destructive**: Existing similarity, evidence, confidence, and SNR fields are unchanged; weighted variants are additive
 
+## Follow-Up Bug Fix
+**2026-04-09**: The `valid_algorithms` whitelist in `configuration_service.py` was not updated to include the 4 weighted `rank_sort_algo` values, causing config updates with weighted algorithms to be rejected with HTTP 400. Fixed in [2026-04-09-rank-sort-algo-validation-missing-weighted-algorithms](../bugs/2026-04-09-rank-sort-algo-validation-missing-weighted-algorithms.md).
+
 ## Completion Date
 2026-03-31

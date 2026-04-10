@@ -242,7 +242,9 @@ class ConfigurationService:
                 'fragmentation', 'frequency', 'normalized_entropy',
                 'global_normalized_entropy', 'itfdf_similarity', 'confluence',
                 'predictive_information', 'bayesian_posterior', 'bayesian_prior',
-                'bayesian_likelihood', 'tfidf_score'
+                'bayesian_likelihood', 'tfidf_score',
+                'weighted_similarity', 'weighted_evidence',
+                'weighted_confidence', 'weighted_snr',
             ]
             if not isinstance(value, str) or value not in valid_algorithms:
                 errors['rank_sort_algo'] = f'Must be one of: {", ".join(valid_algorithms)}'

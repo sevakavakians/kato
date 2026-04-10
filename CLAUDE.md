@@ -246,13 +246,6 @@ POST /sessions/{session_id}/config
 
 ## Automated Planning System Protocol
 
-### ⚠️ CRITICAL RULE: NEVER EDIT planning-docs/ FILES DIRECTLY ⚠️
-
-**Claude Code's Role**:
-- **READ-ONLY** access to planning documentation
-- **TRIGGER** project-manager agent for ALL planning updates
-- **EXECUTE** development tasks only
-
 **Trigger project-manager agent when**:
 - Task completion
 - New tasks created
@@ -264,8 +257,6 @@ POST /sessions/{session_id}/config
 1. Always read `planning-docs/README.md` first
 2. Read `planning-docs/SESSION_STATE.md` for current task
 3. Load additional context on-demand
-
-**Details**: See section "Automated Planning System Protocol" in original CLAUDE.md (lines 901-972)
 
 ## Test Execution Protocol
 

@@ -125,25 +125,6 @@ searcher_training = PatternSearcher(
 
 All three access the same ClickHouse and Redis instances, but their data is **completely isolated** via kb_id.
 
-### Migration and kb_id
-
-The migration scripts automatically extract `kb_id` from MongoDB database name:
-
-```bash
-# MongoDB database name becomes kb_id
-python scripts/migrate_mongodb_to_clickhouse.py \
-    --mongo-url mongodb://localhost:27017/node0
-    # Extracts kb_id='node0' and sets it for all patterns
-
-python scripts/migrate_mongodb_to_redis.py \
-    --mongo-url mongodb://localhost:27017/node0
-    # Extracts kb_id='node0' and prefixes all Redis keys
-```
-
-**Result**:
-- MongoDB: `node0.patterns_kb` → ClickHouse: `kb_id='node0'` + Redis: `node0:*`
-- MongoDB: `node1.patterns_kb` → ClickHouse: `kb_id='node1'` + Redis: `node1:*`
-
 ### Best Practices
 
 1. **Use descriptive kb_ids**:
@@ -289,93 +270,15 @@ filter_pipeline=['minhash', 'length', 'jaccard', 'bloom', 'rapidfuzz']
 ### 1. Deploy Services
 
 ```bash
-# Start ClickHouse, Redis, MongoDB
+# Start ClickHouse, Redis
 docker compose up -d
 
 # Verify services
 curl http://localhost:8123/  # ClickHouse
 redis-cli ping               # Redis → PONG
-mongo --eval "db.version()"  # MongoDB
 ```
 
-### 2. Migrate Data
-
-#### Single Node Migration
-
-```bash
-# Migrate pattern data to ClickHouse (with MinHash pre-computation)
-python scripts/migrate_mongodb_to_clickhouse.py \
-    --mongo-url mongodb://localhost:27017/node0 \
-    --clickhouse-host localhost \
-    --clickhouse-port 8123 \
-    --batch-size 1000
-
-# Migrate metadata to Redis
-python scripts/migrate_mongodb_to_redis.py \
-    --mongo-url mongodb://localhost:27017/node0 \
-    --redis-host localhost \
-    --redis-port 6379 \
-    --batch-size 1000
-```
-
-#### Multi-Node Migration (Recommended)
-
-If you have multiple trained nodes (e.g., node0, node1, node2, node3), use the batch migration script:
-
-```bash
-# Migrate all nodes at once
-./scripts/migrate_all_nodes.sh
-
-# Migrate specific nodes
-./scripts/migrate_all_nodes.sh --nodes "node0 node1"
-
-# Dry run to test without writing
-./scripts/migrate_all_nodes.sh --dry-run
-
-# Custom batch size for performance tuning
-./scripts/migrate_all_nodes.sh --batch-size 5000
-
-# Skip ClickHouse or Redis migration
-./scripts/migrate_all_nodes.sh --skip-clickhouse  # Only migrate to Redis
-./scripts/migrate_all_nodes.sh --skip-redis       # Only migrate to ClickHouse
-```
-
-**Migration Features:**
-- **Parallel node processing** - All nodes migrated sequentially with progress tracking
-- **Error handling** - Failed nodes reported, successful ones continue
-- **Progress tracking** - Real-time progress for each node
-- **Verification** - Automatic count verification after migration
-- **Dry-run mode** - Test migration without writing to databases
-- **Configurable** - Custom hosts, ports, batch sizes
-
-**Expected Performance:**
-- ~1000 patterns/second per node
-- 10,000 patterns per node: ~10 seconds
-- 100,000 patterns per node: ~100 seconds (1.5 minutes)
-- 1,000,000 patterns per node: ~1000 seconds (~16 minutes)
-
-#### Verify Migration
-
-After migration, verify data integrity:
-
-```bash
-# Verify all nodes
-python scripts/verify_migration.py
-
-# Verify specific nodes
-python scripts/verify_migration.py --nodes node0 node1
-
-# More thorough sampling
-python scripts/verify_migration.py --sample-size 100
-```
-
-**Verification checks:**
-- ✓ Pattern counts match between MongoDB and ClickHouse
-- ✓ Frequency keys match pattern counts in Redis
-- ✓ Sample patterns have matching data across all databases
-- ✓ Data integrity preserved (frequencies, pattern_data, etc.)
-
-### 3. Enable Hybrid Architecture
+### 2. Enable Hybrid Architecture
 
 ```python
 from kato.config.session_config import SessionConfiguration
@@ -519,45 +422,9 @@ If filter pipeline fails, check logs for:
 
 **Note**: System will raise an error if ClickHouse or Redis are unavailable (no MongoDB fallback in v3.0+).
 
-## Migration Scripts
-
-### MongoDB → ClickHouse
-
-```bash
-python scripts/migrate_mongodb_to_clickhouse.py --help
-
-Options:
-  --mongo-url TEXT            MongoDB connection string
-  --clickhouse-host TEXT      ClickHouse host
-  --clickhouse-port INTEGER   ClickHouse port
-  --clickhouse-db TEXT        ClickHouse database
-  --batch-size INTEGER        Patterns per batch (default: 1000)
-  --processor-id TEXT         Specific processor ID to migrate
-  --dry-run                   Test without writing to ClickHouse
-```
-
-### MongoDB → Redis
-
-```bash
-python scripts/migrate_mongodb_to_redis.py --help
-
-Options:
-  --mongo-url TEXT         MongoDB connection string
-  --redis-host TEXT        Redis host
-  --redis-port INTEGER     Redis port
-  --redis-db INTEGER       Redis database number
-  --batch-size INTEGER     Patterns per batch (default: 1000)
-  --processor-id TEXT      Specific processor ID to migrate
-  --dry-run                Test without writing to Redis
-```
-
 ## Best Practices
 
-1. **Always migrate data before enabling hybrid architecture**
-   - Run both migration scripts
-   - Verify data with sample queries
-
-2. **Start with permissive filters, then tune**
+1. **Start with permissive filters, then tune**
    - Begin with default thresholds
    - Monitor metrics to find bottlenecks
    - Adjust thresholds to balance precision/recall
@@ -582,7 +449,6 @@ Options:
 - Infrastructure (ClickHouse, Redis, connection managers)
 - Filter framework (base classes, executor, registry)
 - Individual filters (5 filters implemented)
-- Data migration scripts (2 scripts with dry-run mode)
 - PatternSearcher integration (automatic hybrid mode detection)
 
 ⏳ **Remaining (Phase 5-6)**:

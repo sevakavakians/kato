@@ -56,10 +56,16 @@ services:
     image: redis:7-alpine
     container_name: kato-redis
     # Use mounted config file for better management
-    # Includes: 8GB memory limit, LRU eviction, optimized persistence
+    # Includes: 8GB memory limit, LRU eviction
+    # Persistence: enable with REDIS_PERSISTENCE=true in .env
     command: >-
       sh -c 'redis-server /etc/redis/redis.conf
-      ${REDIS_PASSWORD:+--requirepass "$REDIS_PASSWORD"}'
+      ${REDIS_PASSWORD:+--requirepass "$REDIS_PASSWORD"}
+      ${REDIS_PERSISTENCE:+--save "900 1" --save "300 10" --save "60 10000"
+      --dbfilename kato_patterns.rdb --rdbcompression yes --rdbchecksum yes
+      --appendonly yes --appendfilename kato_patterns.aof --appendfsync everysec
+      --aof-use-rdb-preamble yes --auto-aof-rewrite-percentage 100
+      --auto-aof-rewrite-min-size 64mb}'
     ports:
       - "6379:6379"
     volumes:

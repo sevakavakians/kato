@@ -258,6 +258,14 @@ Make KatoProcessor stateless following standard web application patterns:
 - **Related Work**: planning-docs/initiatives/hybrid-clickhouse-redis.md (v3.0 architecture)
 
 ## Recent Achievements
+- **Redis Rehydration & Persistence Fix - COMPLETE** (2026-04-13): BUG FIX + RESILIENCE
+  - **Problem**: 250,850 patterns trained across 4 hierarchical nodes (node0_kato–node3_kato) returned zero prediction metrics because Redis (no persistence enabled) lost all metadata on restart while ClickHouse retained pattern data
+  - **Fix 1**: Created `scripts/rehydrate_redis.py` — standalone script rebuilding all Redis metadata (frequency=1, symbol stats, global counters, pre-computed entropy/TF metrics) from ClickHouse; 250,850 patterns rehydrated in 51 seconds
+  - **Fix 2**: Enabled `REDIS_PERSISTENCE=true` as default in `deployment/.env.example`; added data-loss warning comments to `config/redis.conf`
+  - **Fix 3**: Added defensive frequency floor (floor at 1 with warning log) in `pattern_search.py` and `pattern_processor.py` — prevents silent metric cascading to zero when pattern exists in ClickHouse but has frequency=0 in Redis
+  - **Verification**: 193,900 frequency keys, 31,029 symbols, pre-computed metrics confirmed present for node0_kato; Redis at 361MB of 8GB
+  - **Files Modified**: `scripts/rehydrate_redis.py` (new), `deployment/.env.example`, `config/redis.conf`, `kato/searches/pattern_search.py`, `kato/workers/pattern_processor.py`
+  - **Archive**: planning-docs/completed/features/2026-04-13-redis-rehydration-persistence-fix.md
 - **Affinity-Weighted Pattern Matching - COMPLETE** (2026-03-31): NEW PREDICTION FEATURE
   - **What**: Opt-in weighted prediction metrics that use per-symbol affinity scores (from Symbol Affinity, 2026-03-27) to amplify predictions whose matched symbols carry stronger emotive weight. Activates when `affinity_emotive` is set in session config.
   - **Weight Formula**: `|affinity[s]| / (freq[s] + epsilon)` — frequency-normalized affinity magnitude

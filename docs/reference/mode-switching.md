@@ -162,17 +162,13 @@ docker exec kato-redis redis-cli ping
 
 KATO fails hard if ClickHouse or Redis is unavailable. Both services are required.
 
-### Data Not Migrated
+### Data Not Present
 ```bash
 # Check ClickHouse has data
 docker exec kato-clickhouse clickhouse-client --query "SELECT COUNT(*) FROM default.patterns_data"
 
 # Check Redis has data
 docker exec kato-redis redis-cli DBSIZE
-
-# Re-run migrations if needed
-python scripts/migrate_mongodb_to_clickhouse.py
-python scripts/migrate_mongodb_to_redis.py
 ```
 
 ## Detailed Error Messages
@@ -241,21 +237,16 @@ docker compose logs redis
 
 ```
 ⚠️  WARNING: patterns_data table is EMPTY!
-  Hybrid mode will return no results until data is migrated.
-  Run: python scripts/migrate_mongodb_to_clickhouse.py
+  Hybrid mode will return no results until patterns are learned.
 ```
 
 **How to Fix:**
 ```bash
-# Run migration script
-python scripts/migrate_mongodb_to_clickhouse.py \
-    --mongo-url mongodb://localhost:27017 \
-    --clickhouse-host localhost \
-    --clickhouse-port 8123
-
-# Verify data migrated
+# Verify table status
 docker exec kato-clickhouse clickhouse-client \
     --query "SELECT COUNT(*) FROM default.patterns_data"
+
+# Learn patterns through the API to populate the table
 ```
 
 ### Query Execution Failed

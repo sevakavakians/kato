@@ -1452,11 +1452,20 @@ class PatternSearcher:
                     metadata = metadata_batch.get(pattern_hash, {'name': pattern_hash, 'frequency': 1})
 
                     # Reconstruct pattern_data dict for Prediction object
+                    # Floor frequency at 1: if pattern exists in ClickHouse but has
+                    # frequency=0 in Redis, Redis metadata was lost — not unlearned
+                    raw_freq = metadata.get('frequency', 1)
+                    if raw_freq == 0:
+                        logger.warning(
+                            f"Pattern {pattern_hash} found in ClickHouse but has frequency=0 "
+                            f"in Redis — possible Redis data loss. Defaulting to 1."
+                        )
+                        raw_freq = 1
                     pattern_data = {
                         'name': pattern_hash,
                         'pattern_data': pattern_dict.get('pattern_data', []),
                         'length': pattern_dict.get('length', 0),
-                        'frequency': metadata.get('frequency', 1),
+                        'frequency': raw_freq,
                         'emotives': metadata.get('emotives', {}),
                         'metadata': metadata.get('metadata', {})
                     }

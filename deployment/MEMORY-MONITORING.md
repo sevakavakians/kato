@@ -280,13 +280,6 @@ Memory Fragmentation: 2.35
    ../scripts/restore_redis.sh /path/to/backup
    ```
 
-3. **Rebuild from ClickHouse** (partial recovery):
-   ```bash
-   # Only rebuilds symbol frequencies
-   # Emotives and metadata permanently lost
-   python scripts/populate_redis_symbols_from_clickhouse.py --kb-id your_kb_id
-   ```
-
 ## Disabled System Logs
 
 KATO disables several ClickHouse system logs that would otherwise consume excessive resources during training:

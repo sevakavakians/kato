@@ -788,6 +788,14 @@ class PatternProcessor:
 
                     metadata = _metadata_batch.get(pattern_dict['name'], {'name': pattern_dict['name'], 'frequency': 1})
                     frequency = metadata.get('frequency', 1)
+                    # Floor frequency at 1: pattern exists in ClickHouse, so frequency=0
+                    # indicates Redis data loss, not an unlearned pattern
+                    if frequency == 0:
+                        logger.warning(
+                            f"Pattern {pattern_dict['name']} found in ClickHouse but has "
+                            f"frequency=0 in Redis — possible Redis data loss. Defaulting to 1."
+                        )
+                        frequency = 1
                     emotives = metadata.get('emotives', [])
 
                     total_pattern_symbols = len(pattern)

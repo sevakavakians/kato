@@ -123,14 +123,7 @@ docker run -v new_empty_volume:/data ...
    ./scripts/restore_redis.sh 20260115_120000
    ```
 
-2. **Rebuild symbol frequencies** from ClickHouse:
-   ```bash
-   python3 scripts/populate_redis_symbols_from_clickhouse.py \
-     --clickhouse-host localhost \
-     --redis-url redis://localhost:6379
-   ```
-
-3. **Verify restoration**:
+2. **Verify restoration**:
    ```bash
    docker exec kato-redis redis-cli DBSIZE
    docker exec kato-redis redis-cli --scan --pattern "*:emotives:*" | wc -l
@@ -296,7 +289,6 @@ docker exec kato-redis redis-cli INFO memory | grep used_memory_human
 - This file: `docs/operations/redis-data-protection.md`
 - Backup script: `scripts/backup_redis.sh`
 - Restore script: `scripts/restore_redis.sh`
-- Rebuild script: `scripts/populate_redis_symbols_from_clickhouse.py`
 
 **When to Panic** 🚨:
 - Redis has 0 keys AND no recent backup exists

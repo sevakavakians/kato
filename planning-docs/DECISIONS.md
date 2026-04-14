@@ -1,6 +1,30 @@
 # DECISIONS.md - Architectural & Design Decision Log
 *Append-Only Log - Started: 2025-08-29*
-*Last Updated: 2026-03-25*
+*Last Updated: 2026-04-13*
+
+---
+
+## 2026-04-13 - DECISION-012: Defensive Frequency Floor + Redis Persistence Default
+**Decision**: (1) Floor pattern frequency at 1 (with warning log) when a pattern exists in ClickHouse but has frequency=0 in Redis, preventing silent metric cascading to zero. (2) Change `REDIS_PERSISTENCE` default to `true` in `deployment/.env.example`.
+**Status**: COMPLETE
+**Confidence**: High
+**Impact**: Eliminates entire class of silent metric-zeroing failures caused by Redis data loss; makes production deployments safe by default
+
+### Context
+After training 250,850 patterns across 4 hierarchical nodes, all prediction metrics returned zeros in the generation notebook. Root cause: Redis had no persistence enabled and lost all metadata on restart while ClickHouse retained pattern data. The frequency=0 values flowed silently through the prediction pipeline without any warning, producing zero metrics.
+
+### Decision
+1. **Frequency floor**: When `pattern_search.py` or `pattern_processor.py` encounters a pattern with frequency=0 in Redis but the pattern is confirmed to exist in ClickHouse, floor frequency to 1 and emit a warning log. This is a defensive measure — a valid pattern cannot have zero frequency.
+2. **Persistence default**: Set `REDIS_PERSISTENCE=true` as the default in `deployment/.env.example` so new deployments do not silently lose metadata on Redis restart.
+3. **Rehydration script**: Provide `scripts/rehydrate_redis.py` for operators whose Redis has already lost metadata — rebuilds frequency, symbol stats, global metadata, and pre-computed metrics from ClickHouse.
+
+### Rationale
+- Silent zeroing is worse than a loud failure — operators had no indication metadata was missing
+- Frequency floor preserves prediction functionality at a safe default rather than returning garbage zeros
+- Persistence-on by default matches user expectations; operators who need memory-only Redis can explicitly opt out
+
+### Affected Files
+`kato/searches/pattern_search.py`, `kato/workers/pattern_processor.py`, `deployment/.env.example`, `config/redis.conf`, `scripts/rehydrate_redis.py` (new)
 
 ---
 

@@ -3,6 +3,23 @@
 
 ---
 
+## 2026-04-13 - Task Completion: Redis Rehydration & Persistence Fix (FULLY COMPLETED)
+
+**Trigger**: Task completion event — Redis metadata loss causing zero prediction metrics resolved
+
+**Event Type**: Bug fix + resilience improvement (primary triggers: task completion + architectural decision)
+
+**Actions Taken**:
+1. Created `planning-docs/completed/features/2026-04-13-redis-rehydration-persistence-fix.md` — full archive entry
+2. Updated `planning-docs/SESSION_STATE.md` — added to Recent Achievements
+3. Updated `planning-docs/README.md` — Last Major Update field
+4. Updated `planning-docs/DECISIONS.md` — added DECISION-012 (frequency floor + persistence default)
+5. Updated `planning-docs/project-manager/maintenance-log.md` (this entry)
+
+**Summary**: 250,850 patterns trained across 4 hierarchical nodes returned zero prediction metrics after Redis lost all metadata on restart. Three-part fix: rehydration script, persistence-on default, defensive frequency floor in prediction pipeline.
+
+---
+
 ## 2026-04-02 - Task Completion: Swagger/OpenAPI Documentation Fix (FULLY COMPLETED)
 
 **Trigger**: Task completion event — Swagger/OpenAPI documentation issues fixed across all 36 API endpoints

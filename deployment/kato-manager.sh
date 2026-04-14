@@ -420,10 +420,14 @@ case "$COMMAND" in
 
             # Check persistence configuration
             AOF_ENABLED=$(docker exec kato-redis redis-cli ${REDIS_PASSWORD:+-a "$REDIS_PASSWORD" --no-auth-warning} CONFIG GET appendonly 2>/dev/null | tail -1)
-            if [ "$AOF_ENABLED" = "yes" ]; then
-                echo "  AOF persistence: Enabled ✓"
+            RDB_SAVE=$(docker exec kato-redis redis-cli ${REDIS_PASSWORD:+-a "$REDIS_PASSWORD" --no-auth-warning} CONFIG GET save 2>/dev/null | tail -1)
+            if [ "$AOF_ENABLED" = "yes" ] && [ -n "$RDB_SAVE" ] && [ "$RDB_SAVE" != "" ]; then
+                echo "  Persistence: Enabled (RDB + AOF hybrid) ✓"
+            elif [ -n "${REDIS_PERSISTENCE:-}" ]; then
+                echo -e "  ${YELLOW}⚠${NC} Persistence: REDIS_PERSISTENCE is set but not active — restart Redis"
             else
-                echo -e "  ${YELLOW}⚠${NC} AOF persistence: Disabled (risk of data loss)"
+                echo "  Persistence: Disabled (in-memory mode)"
+                echo "    Enable with: ./kato-manager.sh enable-persistence"
             fi
         fi
         echo ""
@@ -926,6 +930,62 @@ AUTHEOF
         fi
         ;;
 
+    enable-persistence)
+        ENV_FILE="$SCRIPT_DIR/.env"
+
+        # Check if already enabled
+        if [ -f "$ENV_FILE" ] && grep -q "^REDIS_PERSISTENCE=true" "$ENV_FILE" 2>/dev/null; then
+            print_info "Redis persistence is already enabled"
+            print_info "Restart Redis to apply if not yet active: ./kato-manager.sh restart redis"
+            exit 0
+        fi
+
+        # Add REDIS_PERSISTENCE=true to .env
+        if [ -f "$ENV_FILE" ]; then
+            # Remove any existing REDIS_PERSISTENCE line, then append
+            sed -i.bak '/^REDIS_PERSISTENCE=/d' "$ENV_FILE" && rm -f "$ENV_FILE.bak"
+            sed -i.bak '/^# Redis persistence/d' "$ENV_FILE" && rm -f "$ENV_FILE.bak"
+            echo "" >> "$ENV_FILE"
+            echo "# Redis persistence (RDB + AOF hybrid)" >> "$ENV_FILE"
+            echo "REDIS_PERSISTENCE=true" >> "$ENV_FILE"
+        else
+            cat > "$ENV_FILE" <<ENVEOF
+# Redis persistence (RDB + AOF hybrid)
+REDIS_PERSISTENCE=true
+ENVEOF
+        fi
+
+        print_info "Redis persistence ENABLED (RDB + AOF hybrid mode)"
+        echo ""
+        echo "  Persistence settings:"
+        echo "    RDB snapshots: every 15min/1key, 5min/10keys, 1min/10000keys"
+        echo "    AOF: enabled with everysec fsync"
+        echo "    Hybrid mode: RDB preamble in AOF for fast loading"
+        echo "    Data files: kato_patterns.rdb, kato_patterns.aof"
+        echo ""
+        print_warn "BGSAVE requires ~2x Redis memory. Ensure Docker memory limit is sufficient."
+        print_warn "Use './kato-manager.sh memory' to check BGSAVE safety after restart."
+        echo ""
+        print_info "Restart Redis to apply: ./kato-manager.sh restart redis"
+        ;;
+
+    disable-persistence)
+        ENV_FILE="$SCRIPT_DIR/.env"
+
+        if [ -f "$ENV_FILE" ] && grep -q "^REDIS_PERSISTENCE=" "$ENV_FILE" 2>/dev/null; then
+            sed -i.bak '/^REDIS_PERSISTENCE=/d' "$ENV_FILE" && rm -f "$ENV_FILE.bak"
+            sed -i.bak '/^# Redis persistence/d' "$ENV_FILE" && rm -f "$ENV_FILE.bak"
+            print_info "Redis persistence DISABLED"
+            echo ""
+            print_warn "Existing RDB/AOF files in the redis-data volume are NOT deleted."
+            print_warn "Redis will operate as pure in-memory cache after restart."
+            echo ""
+            print_info "Restart Redis to apply: ./kato-manager.sh restart redis"
+        else
+            print_info "Redis persistence is not currently enabled"
+        fi
+        ;;
+
     help|*)
         echo "KATO Deployment Manager"
         echo ""
@@ -947,6 +1007,8 @@ AUTHEOF
         echo "  clean-data         - Delete all data in ClickHouse, Qdrant, and Redis"
         echo "  setup-auth         - Generate database credentials (.env + Qdrant auth override)"
         echo "  disable-auth       - Remove Qdrant auth override (keep .env for Redis/ClickHouse)"
+        echo "  enable-persistence - Enable Redis RDB+AOF persistence (requires restart)"
+        echo "  disable-persistence - Disable Redis persistence (requires restart)"
         echo "  clean              - Remove all containers and volumes"
         echo "  help               - Show this help message"
         echo ""
@@ -971,6 +1033,11 @@ AUTHEOF
         echo "  1. Before training: ./kato-manager.sh verify"
         echo "  2. During training: ./kato-manager.sh monitor (in separate terminal)"
         echo "  3. If low memory:   ./kato-manager.sh clean-logs"
+        echo ""
+        echo "Redis Persistence:"
+        echo "  Persistence is OFF by default (pure in-memory mode)."
+        echo "  ./kato-manager.sh enable-persistence   # Enable RDB+AOF, then restart redis"
+        echo "  ./kato-manager.sh disable-persistence  # Disable, then restart redis"
         echo ""
         echo "Documentation:"
         echo "  KATO API:  http://localhost:8000/docs (when running)"

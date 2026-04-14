@@ -81,49 +81,6 @@ WHERE kb_id = 'node0'      ← CRITICAL: Added automatically
 - ✅ **Zero data leakage**: `node1` patterns never returned
 - ✅ **Performance**: Index optimized for `(kb_id, length, name)` access
 
-## Migration Path
-
-### 1. MongoDB → ClickHouse
-
-```bash
-# Migrate node0
-python scripts/migrate_mongodb_to_clickhouse.py \
-    --mongo-url mongodb://localhost:27017/node0
-
-# Migrate node1
-python scripts/migrate_mongodb_to_clickhouse.py \
-    --mongo-url mongodb://localhost:27017/node1
-```
-
-**What happens**:
-- Script extracts `node0` from MongoDB URL
-- Sets `kb_id = 'node0'` for all patterns from that database
-- Inserts into ClickHouse with `kb_id` column populated
-
-### 2. MongoDB → Redis
-
-```bash
-# Migrate node0 metadata
-python scripts/migrate_mongodb_to_redis.py \
-    --mongo-url mongodb://localhost:27017/node0
-
-# Migrate node1 metadata
-python scripts/migrate_mongodb_to_redis.py \
-    --mongo-url mongodb://localhost:27017/node1
-```
-
-**What happens**:
-- Script extracts `node0` from MongoDB URL
-- Creates Redis keys like `node0:frequency:PTRN|abc123`
-- Different kb_id → different keys → isolated metadata
-
-### 3. Batch Migration
-
-```bash
-# Migrate all nodes at once
-./scripts/migrate_all_nodes.sh --nodes "node0 node1 node2 node3"
-```
-
 ## Code Changes Summary
 
 ### 1. ClickHouse Schema (`config/clickhouse/init.sql`)
@@ -139,33 +96,7 @@ PARTITION BY kb_id  -- NEW: Physical isolation
 ORDER BY (kb_id, length, name);  -- NEW: Partition pruning
 ```
 
-### 2. Migration Scripts
-
-**ClickHouse Migration** (`scripts/migrate_mongodb_to_clickhouse.py`):
-```python
-# Extract kb_id from MongoDB URL
-self.kb_id = db_name  # e.g., "node0"
-
-# Add to all inserts
-columns = {
-    'kb_id': [self.kb_id] * len(batch),  # NEW
-    'name': [p['name'] for p in batch],
-    ...
-}
-```
-
-**Redis Migration** (`scripts/migrate_mongodb_to_redis.py`):
-```python
-# Extract kb_id from MongoDB URL
-self.kb_id = db_name  # e.g., "node0"
-
-# Namespace all Redis keys
-redis_conn.set(f'{self.kb_id}:frequency:{name}', frequency)  # NEW prefix
-redis_conn.hset(f'{self.kb_id}:emotives:{name}', ...)
-redis_conn.hset(f'{self.kb_id}:metadata:{name}', ...)
-```
-
-### 3. Filter Executor (`kato/filters/executor.py`)
+### 2. Filter Executor (`kato/filters/executor.py`)
 
 ```python
 class FilterPipelineExecutor:
@@ -349,4 +280,3 @@ SELECT * FROM patterns_data WHERE kb_id = 'node0' AND length = 10;
 
 - ClickHouse Partitioning: https://clickhouse.com/docs/en/engines/table-engines/mergetree-family/custom-partitioning-key
 - Redis Key Naming: https://redis.io/docs/management/optimization/memory-optimization/
-- Migration Scripts: `scripts/migrate_mongodb_to_clickhouse.py`, `scripts/migrate_mongodb_to_redis.py`

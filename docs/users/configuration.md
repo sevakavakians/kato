@@ -257,17 +257,45 @@ Metric for ranking predictions.
 ```
 
 **Options**:
+
+*Core metrics:*
 - **potential** (default): Information-theoretic value (recommended)
 - **similarity**: Pattern match score
 - **evidence**: Observation count
 - **confidence**: Bayesian confidence
 - **snr**: Signal-to-noise ratio
+- **fragmentation**: Pattern fragmentation score
+- **frequency**: Pattern frequency count
+
+*Information-theoretic:*
+- **normalized_entropy**: Entropy-normalized score
+- **global_normalized_entropy**: Global entropy normalization
+- **predictive_information**: Predictive information content
+
+*TF-IDF / confluence:*
+- **itfdf_similarity**: TF-IDF-inspired similarity
+- **tfidf_score**: TF-IDF score
+- **confluence**: Pattern confluence score
+
+*Bayesian:*
+- **bayesian_posterior**: Bayesian posterior probability
+- **bayesian_prior**: Bayesian prior probability
+- **bayesian_likelihood**: Bayesian likelihood
+
+*Affinity-weighted (emotive-weighted variants):*
+- **weighted_similarity**: Emotive-weighted similarity
+- **weighted_evidence**: Emotive-weighted evidence
+- **weighted_confidence**: Emotive-weighted confidence
+- **weighted_snr**: Emotive-weighted SNR
 
 **Use Cases**:
 - **potential**: General purpose (default)
 - **similarity**: Exact match priority
 - **evidence**: Popular patterns first
 - **confidence**: Risk-averse applications
+- **predictive_information**: Maximum information gain
+- **bayesian_posterior**: Probabilistic inference
+- **weighted_similarity**: Emotionally-relevant matches
 
 **Example - Similarity Ranking**:
 ```bash

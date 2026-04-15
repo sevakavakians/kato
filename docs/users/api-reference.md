@@ -337,7 +337,7 @@ This enables continuous learning where every new observation after reaching 3 ev
 - `persistence`: Rolling window size for emotive values per pattern
 - `max_pattern_length`: Auto-learn threshold (0 = manual only)
 - `stm_mode`: Short-term memory mode ('CLEAR' or 'ROLLING')
-- `rank_sort_algo`: Prediction ranking metric ('potential', 'similarity', 'evidence', 'confidence', 'snr', 'frequency', 'fragmentation', 'normalized_entropy', 'global_normalized_entropy', 'itfdf_similarity', 'confluence', 'predictive_information')
+- `rank_sort_algo`: Prediction ranking metric ('potential', 'similarity', 'evidence', 'confidence', 'snr', 'fragmentation', 'frequency', 'normalized_entropy', 'global_normalized_entropy', 'itfdf_similarity', 'tfidf_score', 'confluence', 'predictive_information', 'bayesian_posterior', 'bayesian_prior', 'bayesian_likelihood', 'weighted_similarity', 'weighted_evidence', 'weighted_confidence', 'weighted_snr')
 - `process_predictions`: Enable/disable prediction processing (true/false)
 - And others (see Configuration guide)
 

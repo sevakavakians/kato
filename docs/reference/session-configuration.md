@@ -45,8 +45,16 @@ The `rank_sort_algo` parameter controls how predictions are sorted and prioritiz
 | `normalized_entropy` | Entropy-normalized score | Information density |
 | `global_normalized_entropy` | Global entropy normalization | Cross-pattern comparison |
 | `itfdf_similarity` | TF-IDF-inspired similarity | Text-like patterns |
+| `tfidf_score` | TF-IDF score | Term frequency ranking |
 | `confluence` | Pattern confluence score | Convergent patterns |
 | `predictive_information` | Predictive information content | Maximum information gain |
+| `bayesian_posterior` | Bayesian posterior probability | Probabilistic inference |
+| `bayesian_prior` | Bayesian prior probability | Prior-weighted ranking |
+| `bayesian_likelihood` | Bayesian likelihood | Likelihood-based ranking |
+| `weighted_similarity` | Emotive-weighted similarity | Emotionally-relevant matches |
+| `weighted_evidence` | Emotive-weighted evidence | Emotionally-relevant evidence |
+| `weighted_confidence` | Emotive-weighted confidence | Emotionally-relevant confidence |
+| `weighted_snr` | Emotive-weighted SNR | Emotionally-relevant signals |
 
 **Example:**
 ```json

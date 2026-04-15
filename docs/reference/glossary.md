@@ -61,15 +61,15 @@ The current cognitive state after processing, including:
 - Averaged emotives
 - Processing metadata
 
-### Genes
-Configuration parameters that control processor behavior. These can be updated at runtime and include:
+### Session Configuration
+Configuration parameters that control processor behavior. These can be updated at runtime per session via `POST /sessions/{session_id}/config` and include:
 - `recall_threshold`: Pattern matching sensitivity
 - `max_predictions`: Maximum predictions to return
 - `persistence`: Rolling window size for emotive values per pattern
-- And many others
+- And many others (see [Configuration Reference](../users/configuration.md))
 
-### Genome Manifest
-The complete configuration profile for a processor instance, containing all genes and their values.
+### Configuration Profile
+The complete configuration for a session, containing all parameters and their effective values (session overrides merged with system defaults).
 
 ## Pattern Processing
 

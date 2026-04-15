@@ -590,7 +590,7 @@ TestCluster(
 *Symptoms:*
 - Code changes don't take effect after restart
 - Debug logs missing from container output
-- Gene updates work locally but not in container
+- Config updates work locally but not in container
 
 *Solution:* Rebuild Docker image from scratch:
 ```bash
@@ -600,21 +600,21 @@ docker compose build --no-cache
 docker compose restart
 ```
 
-2. **Test Isolation Issues with Gene Values**
+2. **Test Isolation Issues with Config Values**
 
-*Problem:* Gene values persist between tests, causing unpredictable failures.
+*Problem:* Config values persist between tests, causing unpredictable failures.
 
 *Symptoms:*
 - Tests pass individually but fail when run together
-- Gene values from previous tests affect subsequent tests
+- Config values from previous tests affect subsequent tests
 - Intermittent test failures
 
-*Solution:* Modified `kato_fixtures.py` to handle gene isolation:
+*Solution:* Modified `kato_fixtures.py` to handle config isolation:
 ```python
-def clear_all_memory(self, reset_genes: bool = True) -> str:
-    """Clear all memory and optionally reset genes to defaults."""
-    if reset_genes:
-        self.reset_genes_to_defaults()
+def clear_all_memory(self, reset_config: bool = True) -> str:
+    """Clear all memory and optionally reset config to defaults."""
+    if reset_config:
+        self.reset_config_to_defaults()
     # ... rest of method
 ```
 
@@ -623,13 +623,13 @@ def clear_all_memory(self, reset_genes: bool = True) -> str:
 After fixing auto-learning issues, verify with:
 
 ```bash
-# 1. Test gene updates work
-curl -X POST http://localhost:8000/genes/update \
+# 1. Test config updates work
+curl -X POST http://localhost:8000/sessions/{session_id}/config \
   -H "Content-Type: application/json" \
-  -d '{"genes": {"max_pattern_length": 3}}'
+  -d '{"config": {"max_pattern_length": 3}}'
 
-# 2. Verify gene value changed  
-curl http://localhost:8000/gene/max_pattern_length
+# 2. Verify config value changed  
+curl http://localhost:8000/sessions/{session_id}/config
 
 # 3. Run specific auto-learning tests
 ./run_tests.sh --no-start --no-stop tests/tests/unit/ -k "test_max_pattern_length" -v

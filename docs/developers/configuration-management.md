@@ -226,25 +226,25 @@ def validate_configuration(self) -> List[str]:
 
 Some configuration can be updated at runtime through the API:
 
-### Update Gene Values
+### Update Session Config
 
 ```bash
 # Update recall threshold
-curl -X POST http://localhost:8000/genes/update \
+curl -X POST http://localhost:8000/sessions/{session_id}/config \
   -H "Content-Type: application/json" \
   -d '{
-    "genes": {
+    "config": {
       "recall_threshold": 0.5,
       "max_predictions": 50
     }
   }'
 ```
 
-### Query Current Values
+### Query Current Config
 
 ```bash
-# Get specific gene value
-curl http://localhost:8000/gene/recall_threshold
+# Get session configuration
+curl http://localhost:8000/sessions/{session_id}/config
 
 # Get full status including configuration
 curl http://localhost:8000/status

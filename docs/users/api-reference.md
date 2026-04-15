@@ -298,18 +298,18 @@ Retrieves a specific pattern by ID.
 }
 ```
 
-### Update Genes
+### Update Session Config
 
 ```http
-POST /genes/update
+POST /sessions/{session_id}/config
 ```
 
-Updates processor configuration parameters.
+Updates session configuration parameters.
 
-**Request Model: `GeneUpdates`**
+**Request Body:**
 ```json
 {
-  "genes": {
+  "config": {
     "recall_threshold": 0.5,
     "max_predictions": 50,
     "persistence": 10,
@@ -323,7 +323,7 @@ Updates processor configuration parameters.
 **Rolling Window Example:**
 ```json
 {
-  "genes": {
+  "config": {
     "max_pattern_length": 3,
     "stm_mode": "ROLLING"
   }
@@ -331,7 +331,7 @@ Updates processor configuration parameters.
 ```
 This enables continuous learning where every new observation after reaching 3 events will trigger pattern learning while maintaining a sliding window of the last 2 events.
 
-**Available Genes:**
+**Available Configuration Parameters:**
 - `recall_threshold`: Pattern matching threshold (0.0-1.0)
 - `max_predictions`: Maximum predictions to return
 - `persistence`: Rolling window size for emotive values per pattern
@@ -341,20 +341,23 @@ This enables continuous learning where every new observation after reaching 3 ev
 - `process_predictions`: Enable/disable prediction processing (true/false)
 - And others (see Configuration guide)
 
-### Get Gene
+### Get Session Config
 
 ```http
-GET /gene/{gene_name}
+GET /sessions/{session_id}/config
 ```
 
-Retrieves current value of a specific gene.
+Retrieves effective configuration for a session (session overrides merged with system defaults).
 
 **Response:**
 ```json
 {
-  "gene_name": "recall_threshold",
-  "gene_value": 0.1,
-  "session_id": "primary"
+  "session_id": "abc123",
+  "config": {
+    "recall_threshold": 0.1,
+    "max_predictions": 100,
+    "rank_sort_algo": "potential"
+  }
 }
 ```
 

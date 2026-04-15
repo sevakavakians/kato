@@ -38,7 +38,7 @@ API validates session config (Layer 1)
        ↓
 session_config.validate() returns False ❌
        ↓
-Gene update fails with "Invalid gene values"
+Config update fails with "Configuration validation failed"
        ↓
 Test never reaches observation processor (Layer 2)
        ↓
@@ -51,8 +51,8 @@ STM remains full instead of being cleared
 
 ### Error Trace
 ```
-curl -X POST /genes/update -d '{"stm_mode": "INVALID_MODE"}'
-→ {"status":"error","message":"Invalid gene values"}
+curl -X POST /sessions/{session_id}/config -d '{"config": {"stm_mode": "INVALID_MODE"}}'
+→ {"error": "Configuration validation failed", "validation_errors": {...}}
 
 Log: "Invalid stm_mode: INVALID_MODE" (session_config.py:91)
 ```

@@ -26,8 +26,22 @@ Complete guide to understanding and working with KATO predictions.
       "confidence": 0.88,
       "evidence": 0.90,
       "snr": 0.75,
-      "potential": 2.45,
       "fragmentation": 0.0,
+      "entropy": 1.58,
+      "normalized_entropy": 0.72,
+      "global_normalized_entropy": 0.65,
+      "itfdf_similarity": 0.82,
+      "tfidf_score": 1.12,
+      "confluence": 0.34,
+      "predictive_information": 0.45,
+      "bayesian_posterior": 0.62,
+      "bayesian_prior": 0.15,
+      "bayesian_likelihood": 0.85,
+      "potential": 2.45,
+      "weighted_similarity": 0.88,
+      "weighted_evidence": 0.92,
+      "weighted_confidence": 0.90,
+      "weighted_snr": 0.78,
       "emotives": {"joy": 0.7, "energy": 0.6}
     }
   ],
@@ -393,6 +407,157 @@ predictions = kato.get_predictions()
 - **Pattern quality**: Identify consistent vs noisy patterns
 - **Anomaly detection**: Low SNR indicates unusual behavior
 
+### fragmentation
+
+**Number of discontinuous match blocks minus 1.**
+
+**Range**: 0 to n (0 = perfectly cohesive match)
+
+```python
+# Pattern: A B C D E
+# STM:     A B C D E  → fragmentation = 0 (one contiguous block)
+# STM:     A C E      → fragmentation = 2 (three separate blocks)
+```
+
+**Use Cases**:
+- **Match quality**: Lower fragmentation = more cohesive match
+- **Filtering**: Prefer contiguous matches over scattered ones
+
+### Information-Theoretic Metrics
+
+#### entropy
+
+**Shannon entropy of the present symbols.**
+
+**Formula**: `entropy = Σ(-p(symbol) * log2(p(symbol)))`
+
+**Range**: 0.0 to log2(n) where n is vocabulary size
+
+**Use Cases**:
+- **Complexity assessment**: Higher entropy = more diverse symbols
+- **Pattern characterization**: Distinguish simple vs complex patterns
+
+#### normalized_entropy
+
+**Entropy normalized to local symbol distribution within the pattern.**
+
+**Range**: 0.0 to 1.0 (theoretical maximum depends on symbol distribution)
+
+**Use Cases**:
+- **Cross-pattern comparison**: Comparable entropy across patterns of different sizes
+- **Information density**: How much information per symbol
+
+#### global_normalized_entropy
+
+**Entropy using global symbol probabilities across the entire knowledge base.**
+
+**Range**: 0.0 to theoretical maximum
+
+**Use Cases**:
+- **Rarity assessment**: Patterns with rare symbols score differently than common ones
+- **Cross-domain comparison**: Context-aware entropy relative to the full corpus
+
+#### predictive_information
+
+**How much information this pattern contributes to predicting future events, relative to other patterns in the ensemble.**
+
+**Range**: 0.0 to 1.0 (normalized)
+
+**Use Cases**:
+- **Maximum information gain**: Rank by which patterns are most informative
+- **Pattern selection**: Choose the most predictive patterns for downstream tasks
+
+### Frequency/Relevance Metrics
+
+#### itfdf_similarity
+
+**Inverse Term-Document Frequency similarity, adapted from information retrieval.**
+
+**Formula**: `itfdf_similarity = 1 - (distance * frequency / total_ensemble_frequencies)`
+
+**Range**: 0.0 to 1.0
+
+**Use Cases**:
+- **Balanced ranking**: Weights both local frequency and global rarity
+- **Component of potential**: Contributes to the default ranking formula
+
+#### tfidf_score
+
+**TF-IDF score measuring pattern distinctiveness.**
+
+**Formula**: Mean of `TF(symbol) * IDF(symbol)` for all unique symbols in the pattern.
+
+**Range**: Typically 0.0 to ~2.0
+
+**Use Cases**:
+- **Distinctive patterns**: High scores indicate patterns with rare, informative symbols
+- **Filtering generic patterns**: Low scores indicate patterns with only common symbols
+
+#### confluence
+
+**Probability the pattern is meaningful (frequent AND non-random).**
+
+**Formula**: `confluence = P(pattern in observations) * (1 - P(pattern occurring randomly))`
+
+**Range**: 0.0 to 1.0
+
+**Use Cases**:
+- **Signal vs noise**: Identifies patterns that are both common and non-coincidental
+- **Pattern quality**: High confluence = genuinely meaningful pattern
+
+### Bayesian Metrics
+
+#### bayesian_posterior
+
+**Posterior probability that this pattern generated the observation.**
+
+**Formula**: `P(pattern|obs) = P(obs|pattern) * P(pattern) / P(obs)` (Bayes' theorem)
+
+**Range**: 0.0 to 1.0. **Sums to 1.0 across all predictions in the ensemble.**
+
+**Use Cases**:
+- **Probabilistic decision-making**: True probability distribution over patterns
+- **Uncertainty quantification**: "62% chance this is the right pattern"
+
+#### bayesian_prior
+
+**Base rate probability of this pattern before observing current data.**
+
+**Formula**: `P(pattern) = frequency / total_frequencies`
+
+**Range**: 0.0 to 1.0
+
+**Use Cases**:
+- **Frequency-based ranking**: How common is this pattern overall
+- **Prior analysis**: Understand base rates before observation
+
+#### bayesian_likelihood
+
+**How well this pattern explains the current observation.**
+
+**Formula**: `P(obs|pattern) = similarity`
+
+**Range**: 0.0 to 1.0
+
+**Note**: Identical to `similarity`, labeled as likelihood for Bayesian interpretation.
+
+### Affinity-Weighted Metrics
+
+When emotive affinity is configured (`affinity_emotive`), these metrics weight the base metrics by emotive similarity between the current observation and the pattern's historical emotive profile.
+
+- **weighted_similarity**: Similarity weighted by emotive affinity
+- **weighted_evidence**: Evidence weighted by emotive affinity
+- **weighted_confidence**: Confidence weighted by emotive affinity
+- **weighted_snr**: SNR weighted by emotive affinity
+
+**Values**: `None` when no affinity emotive is configured; otherwise same range as their base metric.
+
+**Use Cases**:
+- **Emotionally-relevant matching**: Prioritize patterns with similar emotional context
+- **Personalization**: Weight predictions by user sentiment or mood
+
+For complete mathematical details on all metrics, see the [Prediction Object Reference](../reference/prediction-object.md).
+
 ## Emotive Predictions
 
 ### Statistics from Rolling Windows
@@ -434,11 +599,36 @@ curl -X POST http://localhost:8000/sessions \
 ```
 
 **Options**:
-- `potential`: Information value (default)
-- `similarity`: Match quality
-- `evidence`: Observation count
-- `confidence`: Bayesian confidence
-- `snr`: Signal-to-noise ratio
+
+*Core metrics:*
+- **potential** (default): Information-theoretic value (recommended)
+- **similarity**: Pattern match score
+- **evidence**: Observation count
+- **confidence**: Bayesian confidence
+- **snr**: Signal-to-noise ratio
+- **fragmentation**: Pattern fragmentation score
+- **frequency**: Pattern frequency count
+
+*Information-theoretic:*
+- **normalized_entropy**: Entropy-normalized score
+- **global_normalized_entropy**: Global entropy normalization
+- **predictive_information**: Predictive information content
+
+*TF-IDF / confluence:*
+- **itfdf_similarity**: TF-IDF-inspired similarity
+- **tfidf_score**: TF-IDF score
+- **confluence**: Pattern confluence score
+
+*Bayesian:*
+- **bayesian_posterior**: Bayesian posterior probability
+- **bayesian_prior**: Bayesian prior probability
+- **bayesian_likelihood**: Bayesian likelihood
+
+*Affinity-weighted (emotive-weighted variants):*
+- **weighted_similarity**: Emotive-weighted similarity
+- **weighted_evidence**: Emotive-weighted evidence
+- **weighted_confidence**: Emotive-weighted confidence
+- **weighted_snr**: Emotive-weighted SNR
 
 ### Max Predictions
 
@@ -710,6 +900,7 @@ def get_weighted_predictions(predictions):
 
 ## Related Documentation
 
+- [Prediction Object Reference](../reference/prediction-object.md) - Complete field reference with mathematical formulas
 - [First Session Tutorial](first-session.md)
 - [Pattern Learning](pattern-learning.md)
 - [Configuration Guide](configuration.md)

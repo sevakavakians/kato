@@ -1,15 +1,15 @@
 # SESSION_STATE.md - Current Development State
-*Last Updated: 2026-03-31 (Affinity-Weighted Pattern Matching - COMPLETE)*
+*Last Updated: 2026-04-20 (Multi-Worker Uvicorn + Concurrent Training Safety - ACTIVE)*
 
 ## Current Task
-**Phase 2: Stateless Processor Refactor - Test Updates - ACTIVE** 🎯
-- Status: 🎯 HIGH PRIORITY - Phase 1 Complete
-- Started: 2025-11-26
-- Priority: P1 (Required for verification)
-- Objective: Update test suite to work with stateless processor architecture
-- Phase: 2 of 5 (Test updates)
-- Duration: 1 day estimated (14-19 hours)
-- Success Criteria: ✅ All tests passing, ✅ Session isolation verified, ✅ Metrics tests created
+**Multi-Worker Uvicorn + Concurrent Training Safety - ACTIVE**
+- Status: ACTIVE - Implementation in progress
+- Started: 2026-04-20
+- Priority: P1 (Performance + correctness for parallel wikitext training)
+- Plan File: `/Users/sevakavakians/.claude/plans/ultrathink-enable-multi-worker-recursive-marble.md`
+- Objective: Enable `--workers N` uvicorn, fix per-worker ClickHouse buffer orphan risk, and close SETNX/frequency races in `learnPattern`
+- Three focused changes: (1) `KATO_WORKERS` env var + kato-manager.sh flag, (2) `DEFAULT_BATCH_SIZE=1` + ClickHouse `async_insert`, (3) SETNX gate in `learnPattern` + `write_metadata(frequency=None)`
+- Note: Distributed session locks are NOT in scope — training never accesses the same session concurrently; sessions are already STM-isolated
 
 ## Critical Issue Discovered
 
@@ -149,42 +149,32 @@
 - `kato/workers/pattern_operations.py` - Update to stateless
 
 ## Next Immediate Action
-**Bottleneck Fixes: Verify, Test, and Merge Branch** (Active)
-
-### Objective
-Verify the three bottleneck fixes on `perf/bottleneck-profiling`, run the full test suite to confirm no regressions, run benchmarks to confirm expected speedups, then merge and release.
+**Multi-Worker Uvicorn: Implement Three Changes** (Active)
 
 ### Approach
-1. Ensure services are running: `./start.sh`
-2. Run full test suite: `./run_tests.sh --no-start --no-stop`
-3. Run benchmark suite: `python benchmarks/bottleneck_runner.py`
-4. Confirm all three speedup targets are met (see DECISION-011 table)
-5. Merge branch to main
-6. Run container-manager.sh with `patch` bump (bug/perf fixes, no API changes)
+Implement the three changes from the approved plan in order:
+
+1. **Change 1 — Multi-worker wiring**
+   - Update `Dockerfile` CMD to shell form with `${KATO_WORKERS:-4}`
+   - Add `KATO_WORKERS=${KATO_WORKERS:-4}` to both compose files
+   - Add `--workers N` / `-w N` pre-parse flag to `deployment/kato-manager.sh`
+
+2. **Change 2 — ClickHouse server-side async_insert**
+   - Set `DEFAULT_BATCH_SIZE = 1` in `kato/storage/clickhouse_writer.py`
+   - Pass `async_insert=1, wait_for_async_insert=1` settings on every insert call
+
+3. **Change 3 — SETNX gate in learnPattern**
+   - Restructure `kato/informatics/knowledge_base.py` `learnPattern` to use `SET freq_key 1 NX` as new-pattern claim
+   - Change `write_metadata` in `kato/storage/redis_writer.py` to `frequency: Optional[int] = None`; skip SET when `None`
+
+4. **Verify**
+   - `docker compose build kato` then start with `KATO_WORKERS=5`; confirm 5 PIDs in logs
+   - `./run_tests.sh --no-start --no-stop`
+   - ClickHouse duplicate-row SQL check
+   - Redis vs ClickHouse pattern count parity
 
 ### Estimated Duration
-2-3 hours (test + benchmark + merge + release)
-
-### Success Criteria
-- All 444+ tests pass, zero regressions
-- Learning throughput reaches 100+/sec
-- `get_all_symbols_batch` completes in under 10ms at 10K symbols
-- Single-symbol prediction succeeds at 10K patterns in under 20ms
-- Clean merge to main with version bump
-
----
-
-**Phase 2 Task 2.4: Create Configuration Tests** (Queued — resumes after profiling)
-
-### Objective
-Create comprehensive tests for session configuration management to verify:
-- Session config creation with defaults
-- Session config updates via API
-- Config parameter validation
-- Config persistence across observations
-
-### Estimated Duration
-4-6 hours
+3-5 hours (implementation + build + test)
 
 ## Blockers
 **ACTIVE BLOCKER** ⚠️

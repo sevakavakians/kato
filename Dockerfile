@@ -49,19 +49,19 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import requests; requests.get('http://localhost:8000/health').raise_for_status()" || exit 1
 
-# Run the FastAPI application with production settings
-# --workers 1: Single worker for testing (multi-worker has 50% failure rate)
-# --limit-concurrency 100: Max concurrent connections per worker
-# --timeout-keep-alive 5: Keep-alive timeout in seconds
-# --timeout-graceful-shutdown 30: Allow in-flight requests to finish on shutdown
-# --backlog 2048: Maximum queued connections (OS-level)
-# --access-log: Enable request logging
-CMD ["uvicorn", "kato.services.kato_fastapi:app", \
-     "--host", "0.0.0.0", \
-     "--port", "8000", \
-     "--workers", "1", \
-     "--limit-concurrency", "100", \
-     "--timeout-keep-alive", "5", \
-     "--timeout-graceful-shutdown", "30", \
-     "--backlog", "2048", \
-     "--access-log"]
+# Run the FastAPI application with production settings.
+# KATO_WORKERS: uvicorn worker processes (default 4). Set via kato-manager.sh
+#   --workers N, docker-compose env, .env, or shell env. Multi-worker is safe
+#   because (a) sessions are externally stateless and independent, (b)
+#   ClickHouse writes use server-side async_insert with wait=1 (no per-worker
+#   buffer), and (c) pattern creation is gated by Redis SETNX.
+# KATO_LIMIT_CONCURRENCY: max concurrent connections per worker (default 100).
+# Shell form so env-vars expand; `exec` so uvicorn is PID 1 for signal handling.
+CMD ["sh", "-c", "exec uvicorn kato.services.kato_fastapi:app \
+     --host 0.0.0.0 --port 8000 \
+     --workers ${KATO_WORKERS:-4} \
+     --limit-concurrency ${KATO_LIMIT_CONCURRENCY:-100} \
+     --timeout-keep-alive 5 \
+     --timeout-graceful-shutdown 30 \
+     --backlog 2048 \
+     --access-log"]

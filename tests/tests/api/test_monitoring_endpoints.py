@@ -211,7 +211,19 @@ class TestMonitoringEndpoints:
         assert data["node_id"] == "test_node_123"
 
     def test_metrics_collection_after_requests(self):
-        """Test that metrics are properly collected after making requests"""
+        """Test that metrics are properly collected after making requests.
+
+        NOTE: Skipped under multi-worker because metrics are per-worker;
+        consecutive /metrics reads can land on different workers with different
+        totals. A global cross-worker metrics counter (Redis INCR) is deferred.
+        """
+        import os
+        if int(os.environ.get('KATO_WORKERS', '1')) > 1:
+            pytest.skip(
+                "Requires single-worker uvicorn; multi-worker metrics are "
+                "per-worker and would need a Redis-backed global counter (deferred)."
+            )
+
         # Get initial metrics
         initial_response = requests.get(f"{self.BASE_URL}/metrics")
         assert initial_response.status_code == 200

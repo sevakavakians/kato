@@ -101,6 +101,19 @@ fi
 export KATO_TEST_MODE=local
 export KATO_CLUSTER_MODE=false
 
+# Surface the running KATO container's worker count so tests can conditionally
+# skip ones that only hold under single-worker (e.g. same-session concurrent-
+# write serialization, per-worker metrics counters). Defaults to 1 if the
+# container isn't running or the env var isn't set.
+if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^kato$'; then
+    _detected_workers=$(docker inspect kato --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null | grep '^KATO_WORKERS=' | cut -d= -f2)
+    export KATO_WORKERS=${_detected_workers:-1}
+    unset _detected_workers
+else
+    export KATO_WORKERS=${KATO_WORKERS:-1}
+fi
+echo -e "${GREEN}Detected KATO_WORKERS=${KATO_WORKERS}${NC}"
+
 # Run tests
 echo
 echo -e "${GREEN}Running tests: $TEST_PATH${NC}"

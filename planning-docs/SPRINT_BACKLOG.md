@@ -1,7 +1,59 @@
 # SPRINT_BACKLOG.md - Upcoming Work
-*Last Updated: 2025-11-12*
+*Last Updated: 2026-04-20*
 
 ## Active Projects
+
+### Multi-Worker Uvicorn + Concurrent Training Safety
+**Priority**: High - Performance / Correctness
+**Status**: ACTIVE - Implementation in progress
+**Plan File**: `/Users/sevakavakians/.claude/plans/ultrathink-enable-multi-worker-recursive-marble.md`
+**Target Workload**: `kato-notebooks/kato-lm/training.ipynb` — 5 threads × 4 hierarchy layers, parallel wikitext training
+
+#### Background
+KATO runs `--workers 1` today; 20 concurrent HTTP calls (5 threads × 4 layers) serialize on one Python interpreter. The machine has 12 cores, 11 idle. Two server-side hazards appear when flipping to multi-worker, plus a pre-existing frequency-clobber bug.
+
+Note: **Distributed session locks are NOT needed and NOT in scope.** Training never accesses the same session concurrently — sessions are already STM-isolated, and the knowledge base is already shared per `kb_id`. Any prior references to distributed session locks for this work were based on a rejected approach.
+
+#### Change 1: Multi-worker uvicorn (startup-configurable)
+- `Dockerfile` — shell-form CMD with `${KATO_WORKERS:-4}` default
+- `docker-compose.yml` + `deployment/docker-compose.yml` — add `KATO_WORKERS=${KATO_WORKERS:-4}` to kato env block
+- `deployment/kato-manager.sh` — add `--workers N` / `-w N` flag (pre-parse + export pattern; existing command structure preserved)
+
+#### Change 2: ClickHouse server-side async_insert
+- `kato/storage/clickhouse_writer.py` — `DEFAULT_BATCH_SIZE=1`; pass `async_insert=1, wait_for_async_insert=1` on every insert
+- Eliminates per-worker client-side buffer that orphans patterns at `finalize_training` time; makes every written pattern immediately queryable by all workers
+
+#### Change 3: SETNX gate on new-pattern creation
+- `kato/informatics/knowledge_base.py` — atomic `SET freq_key 1 NX` as the new-pattern claim in `learnPattern`; only the SETNX winner calls `write_pattern` and passes `is_new_pattern=True`
+- `kato/storage/redis_writer.py` — `write_metadata(frequency: Optional[int] = None)`; skip the frequency `SET` when `None`
+- Closes three races: duplicate `patterns_data` rows, double-incremented `total_unique_patterns`, and pre-existing SET-clobbers-INCR frequency undercount on concurrent re-learn
+
+#### Out of Scope (explicitly deferred)
+- Distributed session locks
+- WebSocket cross-worker broadcast
+- `_global_metadata_cache` cross-worker invalidation
+- Emotives/metadata rolling-window RMW races
+- `ReplacingMergeTree` migration
+
+#### Files Touched
+| File | Change |
+|---|---|
+| `Dockerfile` | CMD → shell form, `${KATO_WORKERS:-4}` |
+| `docker-compose.yml` | `KATO_WORKERS` env var |
+| `deployment/docker-compose.yml` | `KATO_WORKERS` env var |
+| `deployment/kato-manager.sh` | `--workers N` / `-w N` flag |
+| `kato/storage/clickhouse_writer.py` | `DEFAULT_BATCH_SIZE=1`, async_insert settings |
+| `kato/informatics/knowledge_base.py` | SETNX gate, drop frequency from write_metadata calls |
+| `kato/storage/redis_writer.py` | `frequency: Optional[int] = None`, skip SET when None |
+
+#### Verification
+1. Build + start with `KATO_WORKERS=5`, confirm 5 PIDs in logs
+2. `./run_tests.sh --no-start --no-stop` — expected to pass (modulo 2-4 pre-existing deferred WebSocket tests)
+3. ClickHouse duplicate-row check: `SELECT kb_id, name, count() FROM kato.patterns_data GROUP BY kb_id, name HAVING count() > 1`
+4. Redis vs ClickHouse pattern count parity check
+5. Scale test with `MAX_SAMPLES=10000` — expect ~4-5x speedup over single-worker baseline
+
+---
 
 ### Phase 5 Follow-up: MongoDB Removal
 **Priority**: High - Architecture Cleanup

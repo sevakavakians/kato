@@ -3,6 +3,22 @@
 
 ---
 
+## 2026-04-20 - New Specifications: Multi-Worker Uvicorn + Concurrent Training Safety
+
+**Trigger**: New implementation plan approved (replaces rejected distributed-lock draft)
+
+**Event Type**: New specifications + context switch + architectural decision (prior rejected approach corrected)
+
+**Actions Taken**:
+1. Updated `planning-docs/SESSION_STATE.md` — replaced Current Task with multi-worker plan; replaced Next Immediate Action with three-step implementation sequence; corrected stale distributed-lock language
+2. Updated `planning-docs/SPRINT_BACKLOG.md` — added "Multi-Worker Uvicorn + Concurrent Training Safety" as top active item with full plan summary, file table, and verification steps; noted distributed locks NOT in scope
+
+**Key Correction**: Prior draft referenced distributed session locks. That approach was rejected — training never accesses the same session concurrently. The approved plan has three targeted changes: (1) `KATO_WORKERS` env var + kato-manager.sh flag, (2) `DEFAULT_BATCH_SIZE=1` + ClickHouse `async_insert`, (3) SETNX gate in `learnPattern` + `write_metadata(frequency=None)`.
+
+**Plan File**: `/Users/sevakavakians/.claude/plans/ultrathink-enable-multi-worker-recursive-marble.md`
+
+---
+
 ## 2026-04-13 - Task Completion: Redis Rehydration & Persistence Fix (FULLY COMPLETED)
 
 **Trigger**: Task completion event — Redis metadata loss causing zero prediction metrics resolved

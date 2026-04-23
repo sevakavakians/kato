@@ -3,6 +3,27 @@
 
 ---
 
+## 2026-04-20 - New Specifications (Multi-Worker Uvicorn + Concurrent Training Safety)
+
+**Trigger Type**: Primary — New Specifications + Context Switch
+**Event**: Approved implementation plan for multi-worker uvicorn support; prior distributed-lock draft rejected
+**Source**: User — plan file at `/Users/sevakavakians/.claude/plans/ultrathink-enable-multi-worker-recursive-marble.md`
+
+**Plan Summary**:
+- Change 1: `KATO_WORKERS` env var wired into Dockerfile, both compose files, and kato-manager.sh `--workers N` flag
+- Change 2: `DEFAULT_BATCH_SIZE=1` + ClickHouse `async_insert=1, wait_for_async_insert=1` — eliminates per-worker buffer orphan at finalize
+- Change 3: SETNX gate in `learnPattern` + `write_metadata(frequency=None)` — closes duplicate row, double-increment, and SET-clobbers-INCR races
+
+**Rejected approach noted**: Distributed session locks were in the prior draft. Explicitly out of scope — training never accesses the same session concurrently.
+
+**Documentation Actions**:
+- Updated: `planning-docs/SESSION_STATE.md` (current task, next action)
+- Updated: `planning-docs/SPRINT_BACKLOG.md` (new active item at top)
+- Updated: `planning-docs/project-manager/maintenance-log.md`
+- Updated: `planning-docs/project-manager/triggers.md` (this entry)
+
+---
+
 ## 2026-04-02 - Task Completion (Swagger/OpenAPI Documentation Fix — FULLY COMPLETED)
 
 **Trigger Type**: Primary — Task Completion

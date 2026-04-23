@@ -360,6 +360,12 @@ class SuperKnowledgeBase:
         Core machine learning function.
         Store pattern in ClickHouse + Redis.
 
+        Uses Redis SETNX on the frequency key as an atomic "is this brand new?"
+        claim. This prevents the TOCTOU race where two uvicorn workers learning
+        the same pattern hash simultaneously both see frequency=0 and both take
+        the new-pattern branch (which would duplicate ClickHouse rows and
+        double-increment global counters).
+
         Args:
             pattern_object: Pattern object with name, pattern_data, length
             emotives: Emotional context dictionary (optional)
@@ -385,102 +391,41 @@ class SuperKnowledgeBase:
                             self.emotives_available.update(emotive_dict.keys())
                 # No filtering needed - store raw list as rolling window
 
-            # Check if pattern already exists in Redis
-            existing_frequency = self.redis_writer.get_frequency(pattern_object.name)
-            logger.debug(f"[HYBRID] Existing frequency for {pattern_object.name}: {existing_frequency}")
+            # Atomic "is this a brand-new pattern?" claim via Redis SETNX.
+            # Only one worker can succeed for a given pattern hash; all others
+            # see the key already exists and take the re-learn branch.
+            freq_key = f"{self.id}:frequency:{pattern_object.name}"
+            is_new = self.redis_writer.client.set(freq_key, 1, nx=True)
 
-            if existing_frequency > 0:
-                # Pattern exists - increment frequency
-                self.redis_writer.increment_frequency(pattern_object.name)
-                logger.debug(f"[HYBRID] Incremented frequency for pattern {pattern_object.name}")
+            # Precompute symbol counts (shared by both branches)
+            all_symbols = list(chain(*pattern_object.pattern_data))
+            symbol_counts = Counter(all_symbols)
 
-                # Update/merge emotives and metadata if provided
-                if emotives or metadata:
-                    # Get existing metadata
-                    existing_meta = self.redis_writer.get_metadata(pattern_object.name)
-
-                    # Process emotives: append to rolling window list
-                    updated_emotives = existing_meta.get('emotives', [])
-                    if emotives:
-                        # Ensure we're working with a list
-                        if not isinstance(updated_emotives, list):
-                            updated_emotives = []  # Reset if corrupted
-
-                        # Append new emotives to rolling window
-                        if isinstance(emotives, list):
-                            updated_emotives.extend(emotives)  # Extend with list
-                        else:
-                            # Shouldn't happen after Change 1, but handle gracefully
-                            logger.warning(f"Received non-list emotives during re-learning: {type(emotives)}")
-                            updated_emotives.append(emotives)
-
-                        # Enforce PERSISTENCE rolling window
-                        if len(updated_emotives) > self.persistence:
-                            updated_emotives = updated_emotives[-self.persistence:]  # Keep last N entries
-                            logger.debug(f"Trimmed emotives to {self.persistence} entries for pattern {pattern_object.name}")
-
-                    # Process metadata: accumulate unique values
-                    updated_metadata = existing_meta.get('metadata', {})
-                    if metadata:
-                        # Merge metadata: combine lists and keep unique values
-                        merged_metadata = {}
-                        all_keys = set(updated_metadata.keys()) | set(metadata.keys())
-                        for key in all_keys:
-                            existing_values = set(updated_metadata.get(key, []))
-                            new_values = set(metadata.get(key, []))
-                            merged_metadata[key] = sorted(list(existing_values | new_values))
-                        updated_metadata = merged_metadata
-
-                    # Write both emotives and metadata together
-                    self.redis_writer.write_metadata(
-                        pattern_name=pattern_object.name,
-                        frequency=existing_frequency + 1,
-                        emotives=updated_emotives,  # List with rolling window enforced
-                        metadata=updated_metadata
-                    )
-                    logger.debug(f"Updated emotives (len={len(updated_emotives)}) and metadata for pattern {pattern_object.name}")
-
-                # Update symbol statistics (pattern seen again) - batched pipeline
-                all_symbols = list(chain(*pattern_object.pattern_data))
-                symbol_counts = Counter(all_symbols)
-
-                self.redis_writer.batch_update_symbol_stats(
-                    symbol_counts=symbol_counts,
-                    pattern_name=pattern_object.name,
-                    is_new_pattern=False,
-                    total_symbol_count=len(all_symbols)
-                )
-                logger.debug(f"[HYBRID] Updated symbol stats: {len(symbol_counts)} unique symbols, {len(all_symbols)} total")
-
-                # Update per-symbol affinity with averaged emotives
-                self._update_symbol_affinity(emotives, symbol_counts)
-
-                return False  # Not a new pattern
-
-            else:
-                # New pattern - write to ClickHouse (buffered) and Redis
+            if is_new:
+                # Sole winner of the new-pattern race. Persist row + initial metadata.
                 self.clickhouse_writer.write_pattern(pattern_object)
-                # Buffer accumulates; auto-flushes at batch_size (default 50).
-                # Prediction paths call flush_if_pending() before querying.
+                # (clickhouse_writer uses server-side async_insert with
+                # wait_for_async_insert=1, so the row is queryable by any
+                # worker once write_pattern returns.)
 
-                # Enforce persistence window for NEW patterns (same as re-learned patterns)
+                # Enforce persistence window for NEW patterns
                 trimmed_emotives = emotives if emotives else []
                 if isinstance(trimmed_emotives, list) and len(trimmed_emotives) > self.persistence:
                     trimmed_emotives = trimmed_emotives[-self.persistence:]
                     logger.debug(f"[HYBRID] Trimmed emotives from {len(emotives)} to {self.persistence} entries for NEW pattern {pattern_object.name}")
 
-                # Write metadata to Redis
+                # Write emotives + metadata. Frequency=None: the SETNX above
+                # already set it atomically; a SET here would clobber any
+                # concurrent INCRs from subsequent re-learners.
                 self.redis_writer.write_metadata(
                     pattern_name=pattern_object.name,
-                    frequency=1,
+                    frequency=None,
                     emotives=trimmed_emotives,
                     metadata=metadata if metadata else {}
                 )
 
-                # Update symbol statistics for new pattern - batched pipeline
-                all_symbols = list(chain(*pattern_object.pattern_data))
-                symbol_counts = Counter(all_symbols)
-
+                # Update symbol statistics for NEW pattern (increments global
+                # total_unique_patterns etc.) - only the SETNX winner does this.
                 self.redis_writer.batch_update_symbol_stats(
                     symbol_counts=symbol_counts,
                     pattern_name=pattern_object.name,
@@ -494,6 +439,66 @@ class SuperKnowledgeBase:
 
                 logger.info(f"[HYBRID] Successfully learned new pattern {pattern_object.name} to ClickHouse + Redis")
                 return True  # New pattern
+
+            # Pattern already exists - atomic INCR, merge emotives/metadata.
+            self.redis_writer.increment_frequency(pattern_object.name)
+            logger.debug(f"[HYBRID] Incremented frequency for pattern {pattern_object.name}")
+
+            # Update/merge emotives and metadata if provided
+            if emotives or metadata:
+                existing_meta = self.redis_writer.get_metadata(pattern_object.name)
+
+                # Process emotives: append to rolling window list
+                updated_emotives = existing_meta.get('emotives', [])
+                if emotives:
+                    if not isinstance(updated_emotives, list):
+                        updated_emotives = []  # Reset if corrupted
+
+                    if isinstance(emotives, list):
+                        updated_emotives.extend(emotives)
+                    else:
+                        logger.warning(f"Received non-list emotives during re-learning: {type(emotives)}")
+                        updated_emotives.append(emotives)
+
+                    # Enforce PERSISTENCE rolling window
+                    if len(updated_emotives) > self.persistence:
+                        updated_emotives = updated_emotives[-self.persistence:]
+                        logger.debug(f"Trimmed emotives to {self.persistence} entries for pattern {pattern_object.name}")
+
+                # Process metadata: accumulate unique values
+                updated_metadata = existing_meta.get('metadata', {})
+                if metadata:
+                    merged_metadata = {}
+                    all_keys = set(updated_metadata.keys()) | set(metadata.keys())
+                    for key in all_keys:
+                        existing_values = set(updated_metadata.get(key, []))
+                        new_values = set(metadata.get(key, []))
+                        merged_metadata[key] = sorted(list(existing_values | new_values))
+                    updated_metadata = merged_metadata
+
+                # Write emotives + metadata. Frequency=None: INCR above already
+                # advanced it; SETting here would clobber concurrent INCRs.
+                self.redis_writer.write_metadata(
+                    pattern_name=pattern_object.name,
+                    frequency=None,
+                    emotives=updated_emotives,
+                    metadata=updated_metadata
+                )
+                logger.debug(f"Updated emotives (len={len(updated_emotives)}) and metadata for pattern {pattern_object.name}")
+
+            # Update symbol statistics (pattern seen again) - batched pipeline
+            self.redis_writer.batch_update_symbol_stats(
+                symbol_counts=symbol_counts,
+                pattern_name=pattern_object.name,
+                is_new_pattern=False,
+                total_symbol_count=len(all_symbols)
+            )
+            logger.debug(f"[HYBRID] Updated symbol stats: {len(symbol_counts)} unique symbols, {len(all_symbols)} total")
+
+            # Update per-symbol affinity with averaged emotives
+            self._update_symbol_affinity(emotives, symbol_counts)
+
+            return False  # Not a new pattern
 
         except Exception as e:
             logger.error(f"[HYBRID] Exception in learnPattern: {pattern_object.name}, {e}")

@@ -363,8 +363,13 @@ class PatternProcessor:
         import time
         start = time.perf_counter()
 
-        # Flush pending ClickHouse writes so all patterns are visible
+        # Flush pending ClickHouse writes so all patterns are visible.
+        # flush_if_pending is a no-op now (client-side buffer is always empty
+        # with batch_size=1), but flush_async_insert_queue drains the server-
+        # side async_insert buffer — necessary since wait_for_async_insert=0
+        # means learn() returns before rows are durably in the target table.
         self.superkb.clickhouse_writer.flush_if_pending()
+        self.superkb.clickhouse_writer.flush_async_insert_queue()
 
         # Query all patterns for this kb_id from ClickHouse
         from kato.storage.connection_manager import get_clickhouse_client

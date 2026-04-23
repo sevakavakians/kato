@@ -112,6 +112,9 @@ services:
       - LOG_LEVEL=INFO
       - SESSION_TTL=3600
       - SESSION_AUTO_EXTEND=true
+      # Multi-worker uvicorn (set via kato-manager.sh --workers N, .env, or shell env).
+      - KATO_WORKERS=${KATO_WORKERS:-4}
+      - KATO_LIMIT_CONCURRENCY=${KATO_LIMIT_CONCURRENCY:-100}
       # Architecture mode configuration
       - KATO_ARCHITECTURE_MODE=${KATO_ARCHITECTURE_MODE:-hybrid}
       - KATO_STRICT_MODE=${KATO_STRICT_MODE:-true}

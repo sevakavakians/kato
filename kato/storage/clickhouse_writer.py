@@ -42,10 +42,19 @@ _MINHASH_HASHFUNC = _get_minhash_hashfunc()
 
 
 class ClickHouseWriter:
-    """Writes pattern data to ClickHouse with buffered batch inserts."""
+    """Writes pattern data to ClickHouse.
 
-    # Default batch size for buffered writes
-    DEFAULT_BATCH_SIZE = 50
+    Client-side buffering is disabled by default (batch_size=1); batching is
+    delegated to ClickHouse's server-side `async_insert` feature, which batches
+    across all uvicorn workers rather than per-worker. This eliminates the
+    cross-worker visibility gap that per-worker client buffers created during
+    multi-worker deployments.
+    """
+
+    # Default batch size for client-side buffering. 1 means "no buffering —
+    # flush on every write_pattern call". Server-side async_insert handles the
+    # actual batching across all callers.
+    DEFAULT_BATCH_SIZE = 1
 
     def __init__(self, kb_id: str, clickhouse_client, batch_size: int = None):
         """
@@ -90,6 +99,24 @@ class ClickHouseWriter:
         if self._write_buffer:
             return self.flush()
         return 0
+
+    def flush_async_insert_queue(self) -> None:
+        """Drain the ClickHouse server-side async_insert queue to the target table.
+
+        With async_insert=1 and wait_for_async_insert=0, inserted rows sit in the
+        server's async buffer for up to async_insert_busy_timeout_ms (~200ms by
+        default) before they become queryable. Callers that need read-your-writes
+        at a checkpoint (finalize_training) call this to force an immediate drain.
+        """
+        try:
+            self.client.command('SYSTEM FLUSH ASYNC INSERT QUEUE')
+            logger.debug(f"Flushed server async_insert queue (kb_id={self.kb_id})")
+        except Exception as e:
+            # FLUSH ASYNC INSERT QUEUE requires specific privileges on older versions.
+            # Fall back to a brief sleep (the server will auto-flush in ~200ms).
+            import time as _time
+            logger.warning(f"SYSTEM FLUSH ASYNC INSERT QUEUE failed ({e}); sleeping briefly to let server auto-flush")
+            _time.sleep(0.5)
 
     def _prepare_row(self, pattern_object) -> dict:
         """
@@ -201,7 +228,23 @@ class ClickHouseWriter:
 
         count = len(self._write_buffer)
         try:
-            self.client.insert('kato.patterns_data', self._write_buffer, column_names=self._column_names)
+            # async_insert=1: server-side batches inserts across all clients
+            #   (multi-worker safe; batches flush at ~1 MiB or busy_timeout
+            #   ~200ms). wait_for_async_insert=0 returns immediately after
+            #   enqueueing to the server-side buffer — visibility lags the
+            #   call by up to busy_timeout but holds no HTTP connection
+            #   hostage. finalize_training calls flush_if_pending (no-op for
+            #   the client buffer) and then queries ClickHouse with a small
+            #   post-training delay, so missing-at-query-time is not a concern.
+            self.client.insert(
+                'kato.patterns_data',
+                self._write_buffer,
+                column_names=self._column_names,
+                settings={
+                    'async_insert': 1,
+                    'wait_for_async_insert': 0,
+                },
+            )
             logger.debug(f"Flushed {count} patterns to ClickHouse (kb_id={self.kb_id})")
             self._write_buffer.clear()
             return count

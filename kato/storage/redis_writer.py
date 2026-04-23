@@ -35,7 +35,7 @@ class RedisWriter:
 
         logger.debug(f"RedisWriter initialized for kb_id: {kb_id}")
 
-    def write_metadata(self, pattern_name: str, frequency: int = 1,
+    def write_metadata(self, pattern_name: str, frequency: Optional[int] = None,
                       emotives: Optional[list[dict]] = None,
                       metadata: Optional[dict] = None) -> bool:
         """
@@ -43,9 +43,13 @@ class RedisWriter:
 
         Args:
             pattern_name: Pattern name (hash)
-            frequency: Pattern frequency (default: 1 for new patterns)
-            emotives: Emotional context dictionary
-            metadata: Additional metadata dictionary
+            frequency: Pattern frequency. Pass None (default) to skip the
+                frequency SET — use this when the caller has already managed
+                frequency atomically via SETNX or INCR. A SET here would
+                clobber concurrent INCRs from other workers and is a race
+                hazard under multi-worker learning of the same pattern.
+            emotives: Emotional context list; pass None to skip, [] to write empty.
+            metadata: Additional metadata dict; pass None to skip, {} to write empty.
 
         Returns:
             True if write successful
@@ -54,9 +58,12 @@ class RedisWriter:
             Exception: If write fails
         """
         try:
-            # Store frequency
-            freq_key = f"{self.kb_id}:frequency:{pattern_name}"
-            self.client.set(freq_key, frequency)
+            # Only set frequency when the caller explicitly provides it. Pattern
+            # creation uses SETNX (atomic "is new?"); re-learn uses INCR. In
+            # both cases the frequency is already correct, and a SET would race.
+            if frequency is not None:
+                freq_key = f"{self.kb_id}:frequency:{pattern_name}"
+                self.client.set(freq_key, frequency)
 
             # Store emotives as JSON if provided (even if empty dict)
             if emotives is not None:

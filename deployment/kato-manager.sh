@@ -89,6 +89,44 @@ fi
 # Available services
 ALL_SERVICES="clickhouse redis qdrant kato dashboard"
 
+# Pre-parse flag args (e.g. --workers N, -w N, --workers=N) from anywhere in the
+# argument list, export them as env vars for docker-compose substitution, and
+# strip them out of the positional args before we assign COMMAND/SERVICE. This
+# keeps existing commands' positional handling (e.g. `logs kato 100`) intact.
+# Done inline (not in a function) so `export` lands in the parent shell.
+_filtered_args=()
+_i=0
+_argv=("$@")
+while [[ $_i -lt ${#_argv[@]} ]]; do
+    _arg="${_argv[$_i]}"
+    case "$_arg" in
+        --workers|-w)
+            _next_i=$((_i+1))
+            if [[ $_next_i -lt ${#_argv[@]} ]]; then
+                export KATO_WORKERS="${_argv[$_next_i]}"
+                _i=$((_i+2))
+                continue
+            fi
+            _i=$((_i+1))
+            ;;
+        --workers=*)
+            export KATO_WORKERS="${_arg#*=}"
+            _i=$((_i+1))
+            ;;
+        *)
+            _filtered_args+=("$_arg")
+            _i=$((_i+1))
+            ;;
+    esac
+done
+set -- "${_filtered_args[@]}"
+unset _filtered_args _i _argv _arg _next_i
+
+# Log worker override if present
+if [[ -n "${KATO_WORKERS:-}" ]]; then
+    print_info "KATO_WORKERS=${KATO_WORKERS} (uvicorn worker processes)"
+fi
+
 # Command to execute
 COMMAND=${1:-help}
 SERVICE=${2:-all}
@@ -204,7 +242,9 @@ case "$COMMAND" in
         # Check KATO health
         echo ""
         if curl -s http://localhost:8000/health > /dev/null 2>&1; then
-            print_info "✓ KATO API is responding"
+            _workers=$(docker inspect kato --format '{{range .Config.Env}}{{println .}}{{end}}' | grep '^KATO_WORKERS=' | cut -d= -f2)
+            print_info "✓ KATO API is responding (KATO_WORKERS=${_workers:-unknown})"
+            unset _workers
         else
             print_warn "✗ KATO API is not responding"
         fi
@@ -991,6 +1031,10 @@ ENVEOF
         echo ""
         echo "Usage: ./kato-manager.sh [COMMAND] [SERVICE] [OPTIONS]"
         echo ""
+        echo "Global options (usable with any command):"
+        echo "  --workers N, -w N     Uvicorn worker count for KATO (exports KATO_WORKERS)"
+        echo "  --workers=N           Equivalent (no space)"
+        echo ""
         echo "Commands:"
         echo "  start [SERVICE]    - Start service(s) (default: all)"
         echo "  stop [SERVICE]     - Stop service(s) (default: all)"
@@ -1016,6 +1060,8 @@ ENVEOF
         echo ""
         echo "Examples:"
         echo "  ./kato-manager.sh start              # Start all services (including dashboard)"
+        echo "  ./kato-manager.sh start --workers 5  # Start with 5 uvicorn workers (for parallel training)"
+        echo "  ./kato-manager.sh restart kato -w 5  # Restart kato only, 5 workers"
         echo "  ./kato-manager.sh start dashboard    # Start dashboard only"
         echo "  ./kato-manager.sh update             # Update KATO to latest version"
         echo "  ./kato-manager.sh status             # Check all services"

@@ -22,6 +22,7 @@ Welcome to the KATO user documentation! This section helps you get started with 
 - **[Session Management](session-management.md)** - Managing sessions and state
 - **[Pattern Learning](pattern-learning.md)** - How to train KATO effectively
 - **[Working with Predictions](predictions.md)** - Understanding and using predictions
+- **[Parallel Processing](parallel-processing.md)** - Multi-worker training and concurrent serving
 
 ### Reference
 - **[Troubleshooting](troubleshooting.md)** - Common issues and solutions
@@ -36,6 +37,7 @@ Welcome to the KATO user documentation! This section helps you get started with 
 - **Understand how KATO works** → [Core Concepts](concepts.md)
 - **Look up an API endpoint** → [API Reference](api-reference.md)
 - **Integrate KATO into my app** → [Python Client Library](python-client.md)
+- **Run training or serving in parallel** → [Parallel Processing](parallel-processing.md)
 - **Understand data persistence** → [Database Persistence](database-persistence.md)
 - **Fix a problem** → [Troubleshooting](troubleshooting.md)
 - **See code examples** → [Examples](examples/)

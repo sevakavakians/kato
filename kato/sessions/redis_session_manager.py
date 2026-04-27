@@ -63,6 +63,12 @@ class RedisSessionManager(session_manager_module.SessionManager):
         self.redis_client: Optional[redis.Redis] = None
         self._connected = False
         self._init_lock = asyncio.Lock()  # CRITICAL FIX: Lock for thread-safe initialization
+        # Active session index (SET of active session_ids). SCARD avoids the
+        # O(total-keyspace) cost of `KEYS kato:session:session-*` for counting.
+        # Membership may drift if a session expires via Redis TTL without an
+        # explicit delete_session() call — get_active_session_count is
+        # documented as an approximation, so this is acceptable.
+        self.active_sessions_key = f"{self.key_prefix}_active_index"
 
         logger.info(f"RedisSessionManager initialized with URL: {redis_url}, auto_extend: {auto_extend}")
 
@@ -153,6 +159,11 @@ class RedisSessionManager(session_manager_module.SessionManager):
 
                 logger.info("Redis connection established")
 
+                # One-time backfill of the active-sessions index from any
+                # session keys persisted by an older build. Uses non-blocking
+                # SCAN so it doesn't pin the Redis main thread.
+                asyncio.create_task(self._backfill_active_sessions_index())
+
                 # Start cleanup task
                 if not self._cleanup_task:
                     self._cleanup_task = asyncio.create_task(self._cleanup_loop())
@@ -160,6 +171,38 @@ class RedisSessionManager(session_manager_module.SessionManager):
             except Exception as e:
                 logger.error(f"Failed to connect to Redis: {e}")
                 raise
+
+    async def _backfill_active_sessions_index(self) -> None:
+        """
+        Populate the active-sessions index from existing session keys.
+
+        Runs once after Redis connect. Skipped if the index already has
+        entries (assumes a recent build is responsible). Uses SCAN (cursor-
+        based, non-blocking) instead of KEYS to avoid stalling Redis.
+        """
+        try:
+            existing = await self.redis_client.scard(self.active_sessions_key)
+            if existing:
+                logger.info(f"Active sessions index already populated ({existing} entries) — skipping backfill")
+                return
+
+            session_ids: list[str] = []
+            match = f"{self.key_prefix}session-*"
+            async for key in self.redis_client.scan_iter(match=match, count=1000):
+                session_ids.append(key[len(self.key_prefix):])
+
+            if not session_ids:
+                logger.info("No existing session keys found — active sessions index left empty")
+                return
+
+            # SADD in chunks to keep individual commands small.
+            chunk = 1000
+            for i in range(0, len(session_ids), chunk):
+                await self.redis_client.sadd(self.active_sessions_key, *session_ids[i:i + chunk])
+
+            logger.info(f"Backfilled active sessions index with {len(session_ids)} session ids")
+        except Exception as e:
+            logger.warning(f"Failed to backfill active sessions index: {e}")
 
     async def get_or_create_session(
         self,
@@ -270,6 +313,12 @@ class RedisSessionManager(session_manager_module.SessionManager):
         await self._save_session(session, ttl)
         logger.debug(f"Session {session_id} saved successfully")
 
+        # Track in active-sessions index for O(1) counting via SCARD.
+        try:
+            await self.redis_client.sadd(self.active_sessions_key, session_id)
+        except Exception as e:
+            logger.warning(f"Failed to add {session_id} to active sessions index: {e}")
+
         # Create lock for this session (use setdefault for safety)
         self.session_locks.setdefault(session_id, asyncio.Lock())
 
@@ -306,22 +355,18 @@ class RedisSessionManager(session_manager_module.SessionManager):
         Returns:
             SessionState if found and not expired, None otherwise
         """
-        logger.debug(f"Starting get_session for session_id: {session_id}")
-        logger.info(f"Getting session {session_id}, connected: {self._connected}")
+        logger.debug(f"Starting get_session for session_id: {session_id}, connected: {self._connected}")
         if not self._connected:
-            logger.info("Not connected, initializing Redis connection")
+            logger.debug("Not connected, initializing Redis connection")
             await self.initialize()
 
         key = f"{self.key_prefix}{session_id}"
         logger.debug(f"Looking for Redis key: {key}")
-        logger.info(f"Looking for Redis key: {key}")
 
         try:
             # Get session data from Redis
-            logger.debug(f"Calling Redis GET for {key}")
             session_data = await self.redis_client.get(key)
             logger.debug(f"Redis GET returned: {'DATA' if session_data else 'NULL'} for {key}")
-            logger.info(f"Redis returned data: {session_data is not None}")
 
             if not session_data:
                 logger.debug(f"Session {session_id} NOT FOUND in Redis")
@@ -330,7 +375,6 @@ class RedisSessionManager(session_manager_module.SessionManager):
             # Deserialize session
             try:
                 session_dict = json.loads(session_data)
-                logger.info(f"Loaded session dict for {session_id}: {list(session_dict.keys())}")
             except json.JSONDecodeError as e:
                 logger.error(f"Failed to decode JSON for session {session_id}: {e}")
                 logger.error(f"Raw data: {session_data}")
@@ -342,7 +386,6 @@ class RedisSessionManager(session_manager_module.SessionManager):
                 return None
             try:
                 session = self._deserialize_session(session_dict)
-                logger.info(f"Successfully deserialized session {session_id}")
             except Exception as e:
                 logger.error(f"Failed to deserialize session {session_id}: {e}")
                 logger.error(f"Session dict: {session_dict}")
@@ -356,7 +399,7 @@ class RedisSessionManager(session_manager_module.SessionManager):
                 await self.delete_session(session_id)
                 return None
 
-            logger.info(f"Session {session_id} is valid, updating access time")
+            logger.debug(f"Session {session_id} is valid, updating access time")
 
             # Update access time and expiration (unless check_only mode)
             if not check_only:
@@ -448,6 +491,13 @@ class RedisSessionManager(session_manager_module.SessionManager):
 
         # Delete session from Redis
         deleted = await self.redis_client.delete(key)
+
+        # Drop from active-sessions index regardless of whether the key was
+        # found (handles cleanup after TTL expiry without a prior delete call).
+        try:
+            await self.redis_client.srem(self.active_sessions_key, session_id)
+        except Exception as e:
+            logger.warning(f"Failed to remove {session_id} from active sessions index: {e}")
 
         # If session existed, also delete node tracking key
         if session:
@@ -545,22 +595,13 @@ class RedisSessionManager(session_manager_module.SessionManager):
 
     def get_active_session_count(self) -> int:
         """
-        Get count of active sessions.
+        Get count of active sessions (sync API).
 
-        Note: This is an approximation in Redis-backed mode.
-        For exact count, use get_all_sessions().
+        The Redis client here is async-only, so this sync entry point
+        always returns the in-memory locks count. Use the async variant
+        for an authoritative count.
         """
-        # In Redis mode, count all session keys
-        if self.redis_client:
-            try:
-                # Count only actual session keys (not node tracking keys)
-                # Actual sessions have pattern: kato:session:session-{uuid}-{timestamp}
-                keys = self.redis_client.keys(f"{self.key_prefix}session-*")
-                return len(keys)
-            except Exception:
-                # Fallback to local locks count
-                return len(self.session_locks)
-        return len(self.session_locks)  # Approximate based on local locks
+        return len(self.session_locks)
 
     async def get_active_session_count_async(self) -> int:
         """
@@ -572,16 +613,13 @@ class RedisSessionManager(session_manager_module.SessionManager):
         # Ensure we're connected
         await self.initialize()
 
-        # In Redis mode, count all session keys
+        # In Redis mode, count via SCARD on the maintained active-sessions index.
+        # Avoids the O(total-keyspace) cost of `KEYS kato:session:session-*`.
         if self.redis_client:
             try:
-                # Count only actual session keys (not node tracking keys)
-                # Actual sessions have pattern: kato:session:session-{uuid}-{timestamp}
-                keys = await self.redis_client.keys(f"{self.key_prefix}session-*")
-                return len(keys)
+                return await self.redis_client.scard(self.active_sessions_key) or 0
             except Exception as e:
-                logger.warning(f"Failed to count Redis keys, using fallback: {e}")
-                # Fallback to local locks count
+                logger.warning(f"Failed to read active sessions index, using fallback: {e}")
                 return len(self.session_locks)
         return len(self.session_locks)  # Approximate based on local locks
 

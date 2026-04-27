@@ -27,6 +27,14 @@ from kato.storage.pattern_cache import get_cache_manager
 router = APIRouter(tags=["monitoring"])
 logger = logging.getLogger('kato.api.monitoring')
 
+# Per-process TTL cache for the comprehensive /metrics response.
+# The dashboard polls /metrics every ~13s and previously each call invoked
+# get_active_session_count_async() up to 4 times — together with /sessions/count
+# polling, this kept Redis pinned. A short TTL collapses bursts without
+# meaningfully aging the metric data.
+_METRICS_CACHE_TTL = float(os.getenv('METRICS_CACHE_TTL_SECONDS', '5'))
+_metrics_cache: dict = {"value": None, "expires_at": 0.0}
+
 
 @router.get("/concurrency", response_model=ConcurrencyResponse)
 async def get_concurrency_metrics():
@@ -245,16 +253,31 @@ async def get_comprehensive_metrics():
     """Get comprehensive v2 metrics including system resources and performance"""
     from kato.services.kato_fastapi import app_state
 
+    now = time.time()
+    cached = _metrics_cache["value"]
+    if cached is not None and now < _metrics_cache["expires_at"]:
+        return cached
+
     try:
+        # Resolve session count exactly once per response (and reuse below).
+        try:
+            session_count = await app_state.session_manager.get_active_session_count_async() or 0
+        except Exception as e:
+            logger.warning(f"Failed to resolve active session count: {e}")
+            session_count = 0
+
         if not hasattr(app_state, 'metrics_collector'):
             # Return basic metrics if collector not available
-            return {
+            result = {
                 "error": "Metrics collector not available",
-                "timestamp": time.time(),
+                "timestamp": now,
                 "processor_manager": app_state.processor_manager.get_stats() if app_state.processor_manager else {},
-                "uptime_seconds": time.time() - app_state.startup_time,
-                "active_sessions": await app_state.session_manager.get_active_session_count_async()
+                "uptime_seconds": now - app_state.startup_time,
+                "active_sessions": session_count
             }
+            _metrics_cache["value"] = result
+            _metrics_cache["expires_at"] = now + _METRICS_CACHE_TTL
+            return result
 
         # Get comprehensive metrics from collector
         try:
@@ -263,8 +286,8 @@ async def get_comprehensive_metrics():
         except Exception as e:
             logger.error(f"Error getting metrics: {e}")
             # Return fallback metrics with basic structure for compatibility
-            return {
-                "timestamp": time.time(),
+            result = {
+                "timestamp": now,
                 "sessions": {"total_created": 0, "total_deleted": 0, "active": 0, "operations_total": 0},
                 "performance": {"total_requests": 0, "total_errors": 0, "error_rate": 0.0, "average_response_time": 0.0},
                 "resources": {"cpu_percent": 0.0, "memory_percent": 0.0, "disk_percent": 0.0},
@@ -275,12 +298,12 @@ async def get_comprehensive_metrics():
                 },
                 "rates": {},
                 "processor_manager": app_state.processor_manager.get_stats() if app_state.processor_manager else {},
-                "uptime_seconds": time.time() - app_state.startup_time,
-                "active_sessions": await app_state.session_manager.get_active_session_count_async() or 0
+                "uptime_seconds": now - app_state.startup_time,
+                "active_sessions": session_count
             }
-
-        # Enhance with processor-specific and session data
-        session_count = await app_state.session_manager.get_active_session_count_async() or 0
+            _metrics_cache["value"] = result
+            _metrics_cache["expires_at"] = now + _METRICS_CACHE_TTL
+            return result
 
         # Merge processor manager data into summary
         summary_metrics["processor_manager"] = app_state.processor_manager.get_stats() if app_state.processor_manager else {}
@@ -289,16 +312,18 @@ async def get_comprehensive_metrics():
         summary_metrics["sessions"]["active"] = session_count
         summary_metrics["rates"] = rates
 
+        _metrics_cache["value"] = summary_metrics
+        _metrics_cache["expires_at"] = now + _METRICS_CACHE_TTL
         return summary_metrics
     except Exception as e:
         logger.error(f"Failed to get v2 metrics: {e}")
-        # Return basic fallback metrics
+        # Return basic fallback metrics — do not cache errors.
         return {
             "error": f"Metrics collection failed: {str(e)}",
-            "timestamp": time.time(),
+            "timestamp": now,
             "processor_manager": app_state.processor_manager.get_stats() if app_state.processor_manager else {},
-            "uptime_seconds": time.time() - app_state.startup_time,
-            "active_sessions": await app_state.session_manager.get_active_session_count_async()
+            "uptime_seconds": now - app_state.startup_time,
+            "active_sessions": 0
         }
 
 

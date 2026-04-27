@@ -6,6 +6,8 @@ Handles session creation, management, and session-scoped KATO operations.
 
 import asyncio
 import logging
+import os
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -40,6 +42,12 @@ from kato.api.schemas.session_extra import (
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 logger = logging.getLogger('kato.api.sessions')
+
+# Per-process TTL cache for /sessions/count. Dashboard polls this every few
+# seconds; the underlying Redis lookup is cheap with the active-sessions
+# index, but back-to-back polls collapse here for free.
+_SESSION_COUNT_CACHE_TTL = float(os.getenv('SESSION_COUNT_CACHE_TTL_SECONDS', '5'))
+_session_count_cache: dict = {"value": None, "expires_at": 0.0}
 
 
 @router.get("/test/{test_id}", response_model=TestResponse)
@@ -92,9 +100,16 @@ async def get_active_session_count():
     """Get the count of active sessions"""
     from kato.services.kato_fastapi import app_state
 
+    now = time.time()
+    cached = _session_count_cache["value"]
+    if cached is not None and now < _session_count_cache["expires_at"]:
+        return {"active_session_count": cached}
+
     logger.debug("Getting active session count")
     try:
         count = await app_state.session_manager.get_active_session_count_async()
+        _session_count_cache["value"] = count
+        _session_count_cache["expires_at"] = now + _SESSION_COUNT_CACHE_TTL
         return {"active_session_count": count}
     except Exception as e:
         logger.error(f"Error getting session count: {e}")

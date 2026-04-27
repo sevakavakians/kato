@@ -43,6 +43,7 @@ class MetricsCacheManager:
         self.ttl = ttl
         self.redis = None
         self.cache_prefix = "kato:metrics"
+        self.index_key = f"{self.cache_prefix}:_index"
 
         # Cache hit/miss statistics
         self.stats = {
@@ -163,13 +164,37 @@ class MetricsCacheManager:
 
         try:
             cache_key = self._generate_cache_key(metric_type, **kwargs)
-            await self.redis.setex(cache_key, self.ttl, str(value))
+            # Pipeline the SET and index update so they're a single round-trip.
+            # The index lets invalidation skip a full-keyspace KEYS scan.
+            pipe = self.redis.pipeline(transaction=False)
+            pipe.setex(cache_key, self.ttl, str(value))
+            pipe.sadd(self.index_key, cache_key)
+            pipe.expire(self.index_key, self.ttl * 2)
+            await pipe.execute()
             self.stats["updates"] += 1
             return True
 
         except Exception as e:
             logger.warning(f"Failed to cache metric {metric_type}: {e}")
             return False
+
+    async def _invalidate_indexed_keys(self) -> int:
+        """
+        Drop every cache key tracked in the index, then clear the index.
+
+        Uses SMEMBERS + UNLINK pipeline (UNLINK is non-blocking, unlike DEL on
+        large sets). Avoids the O(total-keyspace) cost of a KEYS scan.
+        """
+        cache_keys = await self.redis.smembers(self.index_key)
+        if not cache_keys:
+            return 0
+
+        pipe = self.redis.pipeline(transaction=False)
+        for key in cache_keys:
+            pipe.unlink(key)
+        pipe.unlink(self.index_key)
+        await pipe.execute()
+        return len(cache_keys)
 
     async def invalidate_pattern_metrics(self, pattern_name: str) -> int:
         """
@@ -185,18 +210,10 @@ class MetricsCacheManager:
             return 0
 
         try:
-            # Find all keys that might be affected by this pattern
-            pattern_keys = await self.redis.keys(f"{self.cache_prefix}:*")
-
-            invalidated = 0
-            for key in pattern_keys:
-                # For simplicity, invalidate all metrics when any pattern changes
-                # In a more sophisticated implementation, we could track dependencies
-                await self.redis.delete(key)
-                invalidated += 1
-
-            self.stats["evictions"] += invalidated
-            logger.debug(f"Invalidated {invalidated} metric cache entries for pattern {pattern_name}")
+            invalidated = await self._invalidate_indexed_keys()
+            if invalidated:
+                self.stats["evictions"] += invalidated
+                logger.debug(f"Invalidated {invalidated} metric cache entries for pattern {pattern_name}")
             return invalidated
 
         except Exception as e:
@@ -214,13 +231,11 @@ class MetricsCacheManager:
             return 0
 
         try:
-            pattern_keys = await self.redis.keys(f"{self.cache_prefix}:*")
-            if pattern_keys:
-                invalidated = await self.redis.delete(*pattern_keys)
+            invalidated = await self._invalidate_indexed_keys()
+            if invalidated:
                 self.stats["evictions"] += invalidated
                 logger.info(f"Invalidated all {invalidated} metric cache entries")
-                return invalidated
-            return 0
+            return invalidated
 
         except Exception as e:
             logger.warning(f"Failed to invalidate all metrics cache: {e}")

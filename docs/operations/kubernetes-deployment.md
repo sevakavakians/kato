@@ -1,5 +1,7 @@
 # Kubernetes Deployment Guide
 
+> **For most enterprise deployments, use the Helm chart.** See [helm-deployment.md](./helm-deployment.md), [helm-air-gapped.md](./helm-air-gapped.md), and [helm-grants.md](./helm-grants.md). The chart installs only the KATO API service and points it at externally-managed ClickHouse, Redis, and Qdrant. The raw-manifest content below is retained as a reference for environments that do not use Helm.
+
 Complete guide to deploying KATO on Kubernetes for production environments.
 
 ## Overview

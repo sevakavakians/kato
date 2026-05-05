@@ -1,0 +1,36 @@
+KATO {{ .Chart.AppVersion }} has been deployed as release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+External dependencies (you must provide these):
+  ClickHouse: {{ .Values.clickhouse.host }}:{{ .Values.clickhouse.port }} (db={{ .Values.clickhouse.database }}, secure={{ .Values.clickhouse.secure }})
+  Qdrant:     {{ .Values.qdrant.host }}:{{ .Values.qdrant.port }} (grpc={{ .Values.qdrant.grpcPort }}, https={{ .Values.qdrant.https }})
+  Redis:      {{ if .Values.redis.urlExistingSecret }}<URL from secret {{ .Values.redis.urlExistingSecret }}>{{ else }}{{ .Values.redis.host }}:{{ .Values.redis.port }} (tls={{ .Values.redis.tls }}){{ end }}
+
+{{- if .Values.bootstrap.enabled }}
+
+Schema bootstrap Job ran as a pre-install hook. To verify it succeeded:
+  kubectl logs -n {{ .Release.Namespace }} job/{{ include "kato.fullname" . }}-bootstrap
+{{- end }}
+
+Verify KATO is healthy:
+  kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "kato.fullname" . }} 8000:{{ .Values.service.port }}
+  curl http://localhost:8000/health
+  curl http://localhost:8000/docs
+
+{{- if .Values.serviceMonitor.enabled }}
+
+Prometheus scraping is enabled at path {{ .Values.serviceMonitor.path }}. Verify scrape targets in your Prometheus UI.
+{{- else }}
+
+Prometheus metrics: KATO exposes Prometheus text format at /metrics-prom. Set serviceMonitor.enabled=true to register a ServiceMonitor with the Prometheus Operator.
+{{- end }}
+
+{{- if .Values.secrets.create }}
+
+WARNING: secrets.create=true. Inline credentials are stored in a chart-rendered
+Secret. This is for evaluation only. For production, pre-create Secrets via
+your own pipeline (External Secrets Operator, Vault CSI, sealed-secrets) and
+reference them via *.auth.existingSecret values.
+{{- end }}
+
+For the full configuration reference, see:
+  https://github.com/intelligent-artifacts/kato/blob/main/charts/kato/README.md

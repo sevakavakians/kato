@@ -1,0 +1,127 @@
+# Exercises every templated path: HPA + PDB + NetworkPolicy + Ingress + ServiceMonitor +
+# extra envs, extra volumes, custom topologySpreadConstraints, etc. Used by CI to ensure
+# nothing rendering fails when all gates are flipped.
+image:
+  repository: ghcr.io/sevakavakians/kato
+  tag: "3.10.1"
+  pullPolicy: IfNotPresent
+  pullSecrets:
+    - name: ghcr-pull
+
+replicaCount: 3
+
+podAnnotations:
+  example.com/owner: data-platform
+podLabels:
+  tier: backend
+
+serviceAccount:
+  create: true
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/kato-irsa
+
+resources:
+  requests: { cpu: "2", memory: 4Gi }
+  limits:   { cpu: "4", memory: 8Gi }
+
+service:
+  type: ClusterIP
+  port: 8000
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: 100m
+  hosts:
+    - host: kato.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: kato-tls
+      hosts: [kato.example.com]
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 12
+  targetCPUUtilizationPercentage: 70
+
+pdb:
+  enabled: true
+  minAvailable: 2
+
+networkPolicy:
+  enabled: true
+  ingressFrom:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress
+  egressCIDRs:
+    - 10.20.0.0/16
+    - 10.21.0.0/16
+
+serviceMonitor:
+  enabled: true
+  interval: 15s
+  labels:
+    release: prometheus
+
+clickhouse:
+  host: clickhouse.data.svc.cluster.local
+  port: 8443
+  database: kato
+  secure: true
+  auth:
+    existingSecret: kato-clickhouse
+    userKey: username
+    passwordKey: password
+
+redis:
+  urlExistingSecret: kato-redis
+  urlKey: redis-url
+
+qdrant:
+  host: qdrant.data.svc.cluster.local
+  port: 6443
+  grpcPort: 6444
+  https: true
+  collectionPrefix: prod-vectors
+  auth:
+    existingSecret: kato-qdrant
+    apiKeyKey: api-key
+
+tls:
+  caBundle:
+    existingConfigMap: kato-ca-bundle
+
+bootstrap:
+  enabled: true
+  resources:
+    requests: { cpu: 200m, memory: 512Mi }
+
+kato:
+  workers: 6
+  limitConcurrency: 200
+  recallThreshold: 0.3
+  logLevel: WARNING
+  logFormat: json
+  environment: production
+
+extraEnv:
+  - name: KATO_CUSTOM_FLAG
+    value: "true"
+
+extraVolumes:
+  - name: extra-cfg
+    configMap:
+      name: extra-cfg
+extraVolumeMounts:
+  - name: extra-cfg
+    mountPath: /etc/extra-cfg
+    readOnly: true

@@ -1,0 +1,20 @@
+# Patterns to ignore when packaging the Helm chart.
+.DS_Store
+.git/
+.gitignore
+.bzr/
+.hg/
+.svn/
+*.swp
+*.bak
+*.tmp
+*.orig
+*~
+.idea/
+.vscode/
+.project
+*.tgz
+OWNERS
+README.md.gotmpl
+ci/
+tests/

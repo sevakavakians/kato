@@ -1,0 +1,48 @@
+{{- if .Values.networkPolicy.enabled -}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "kato.fullname" . }}
+  labels:
+    {{- include "kato.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "kato.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - ports:
+        - port: http
+          protocol: TCP
+      {{- with .Values.networkPolicy.ingressFrom }}
+      from:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  egress:
+    # DNS — required for pod-to-service and external hostname resolution
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    {{- if .Values.networkPolicy.egressCIDRs }}
+    # Restrict external egress to caller-supplied CIDRs (typically the
+    # ClickHouse / Redis / Qdrant subnets). NetworkPolicy cannot resolve
+    # external DNS hostnames — the chart relies on you to supply the
+    # correct IP ranges. If you don't know them, leave egressCIDRs empty
+    # to allow all egress.
+    - to:
+        {{- range .Values.networkPolicy.egressCIDRs }}
+        - ipBlock:
+            cidr: {{ . }}
+        {{- end }}
+    {{- else }}
+    # No egressCIDRs supplied — allow all egress. Replace with explicit
+    # CIDRs in production once your network team supplies them.
+    - {}
+    {{- end }}
+{{- end }}

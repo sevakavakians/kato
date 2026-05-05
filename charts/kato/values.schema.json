@@ -1,0 +1,106 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "kato chart values",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["image", "clickhouse", "qdrant", "redis"],
+  "properties": {
+    "image": {
+      "type": "object",
+      "required": ["repository"],
+      "properties": {
+        "repository": {"type": "string"},
+        "tag": {"type": "string"},
+        "pullPolicy": {"type": "string", "enum": ["Always", "IfNotPresent", "Never"]},
+        "pullSecrets": {"type": "array"}
+      }
+    },
+    "replicaCount": {"type": "integer", "minimum": 1},
+    "clickhouse": {
+      "type": "object",
+      "required": ["port", "database"],
+      "properties": {
+        "host": {"type": "string"},
+        "port": {"type": "integer", "minimum": 1, "maximum": 65535},
+        "database": {"type": "string"},
+        "secure": {"type": "boolean"},
+        "auth": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "existingSecret": {"type": "string"},
+            "userKey": {"type": "string"},
+            "passwordKey": {"type": "string"},
+            "username": {"type": "string"},
+            "password": {"type": "string"}
+          }
+        }
+      }
+    },
+    "redis": {
+      "type": "object",
+      "required": ["enabled"],
+      "additionalProperties": true,
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "urlExistingSecret": {"type": "string"},
+        "urlKey": {"type": "string"},
+        "host": {"type": "string"},
+        "port": {"type": "integer", "minimum": 1, "maximum": 65535},
+        "tls": {"type": "boolean"},
+        "database": {"type": "integer", "minimum": 0, "maximum": 15},
+        "auth": {"type": "object", "additionalProperties": true}
+      }
+    },
+    "qdrant": {
+      "type": "object",
+      "required": ["port"],
+      "additionalProperties": true,
+      "properties": {
+        "host": {"type": "string"},
+        "port": {"type": "integer", "minimum": 1, "maximum": 65535},
+        "grpcPort": {"type": "integer", "minimum": 1, "maximum": 65535},
+        "https": {"type": "boolean"},
+        "collectionPrefix": {"type": "string"},
+        "auth": {"type": "object", "additionalProperties": true}
+      }
+    },
+    "service": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "type": {"type": "string", "enum": ["ClusterIP", "NodePort", "LoadBalancer"]},
+        "port": {"type": "integer", "minimum": 1, "maximum": 65535},
+        "sessionAffinity": {"type": "string", "enum": ["None", "ClientIP"]}
+      }
+    },
+    "autoscaling": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "minReplicas": {"type": "integer", "minimum": 1},
+        "maxReplicas": {"type": "integer", "minimum": 1}
+      }
+    },
+    "bootstrap": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": {"type": "boolean"}
+      }
+    },
+    "kato": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "workers": {"type": "integer", "minimum": 1},
+        "limitConcurrency": {"type": "integer", "minimum": 1},
+        "logLevel": {"type": "string", "enum": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]},
+        "logFormat": {"type": "string", "enum": ["json", "human"]},
+        "stmMode": {"type": "string", "enum": ["CLEAR", "ROLLING"]},
+        "recallThreshold": {"type": "number", "minimum": 0.0, "maximum": 1.0}
+      }
+    }
+  }
+}

@@ -151,8 +151,14 @@ if [[ -f "kato/__init__.py" ]]; then
     rm -f kato/__init__.py.bak
 fi
 
+# Keep the Helm chart's appVersion in lockstep with the image tag.
+if [[ -f "charts/kato/Chart.yaml" ]]; then
+    sed -i.bak "s/^appVersion: \"${CURRENT_VERSION}\"/appVersion: \"${NEW_VERSION}\"/" charts/kato/Chart.yaml
+    rm -f charts/kato/Chart.yaml.bak
+fi
+
 # Commit and tag
-git add pyproject.toml setup.py kato/__init__.py
+git add pyproject.toml setup.py kato/__init__.py charts/kato/Chart.yaml
 git commit -m "chore: bump version to ${NEW_VERSION}"
 git tag -a "v${NEW_VERSION}" -m "Release v${NEW_VERSION}: ${DESCRIPTION}"
 
@@ -191,25 +197,13 @@ git push origin "v${NEW_VERSION}"
 
 echo -e "${GREEN}✓ Changes and tag pushed to remote${NC}"
 
-# Step 4: Build container images
+# Step 4: Create deployment tarball and GitHub release
+# IMPORTANT: this runs BEFORE the (slow) image build so the chart-publish
+# GitHub Actions workflow (triggered by the tag push in Step 3) can attach
+# the chart .tgz to an already-existing release. If we build the image
+# first, the workflow tries to upload before the release exists.
 echo ""
-echo -e "${BLUE}Step 4: Building container images${NC}"
-echo "────────────────────────────────────────────────────────────"
-
-# Check if logged into container registry
-if ! docker info &> /dev/null; then
-    echo -e "${RED}Error: Docker is not running${NC}"
-    exit 1
-fi
-
-echo "Building multi-tag images..."
-./build-and-push.sh
-
-echo -e "${GREEN}✓ Container images built and pushed${NC}"
-
-# Step 5: Create deployment tarball and GitHub release
-echo ""
-echo -e "${BLUE}Step 5: Creating deployment bundle and GitHub release${NC}"
+echo -e "${BLUE}Step 4: Creating deployment bundle and GitHub release${NC}"
 echo "────────────────────────────────────────────────────────────"
 
 STAGING_DIR=$(mktemp -d)
@@ -253,6 +247,22 @@ gh release create "v${NEW_VERSION}" \
 
 rm -f "${TARBALL_NAME}"
 echo -e "${GREEN}✓ GitHub release created with deployment bundle${NC}"
+
+# Step 5: Build container images
+echo ""
+echo -e "${BLUE}Step 5: Building container images${NC}"
+echo "────────────────────────────────────────────────────────────"
+
+# Check if logged into container registry
+if ! docker info &> /dev/null; then
+    echo -e "${RED}Error: Docker is not running${NC}"
+    exit 1
+fi
+
+echo "Building multi-tag images..."
+./build-and-push.sh
+
+echo -e "${GREEN}✓ Container images built and pushed${NC}"
 
 # Step 6: Verify deployment
 echo ""

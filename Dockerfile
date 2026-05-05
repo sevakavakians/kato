@@ -38,6 +38,13 @@ RUN echo "Cache bust: $CACHE_BUST"
 # Copy the KATO package
 COPY kato/ ./kato/
 
+# Create non-root user for PSS-restricted compatibility (uid/gid 10001).
+# Some enterprise admission controllers reject images whose OCI config.User
+# field is empty even when the pod sets runAsUser. Setting USER here makes
+# the image PSS-restricted-compatible at the image level.
+RUN groupadd -r kato -g 10001 && useradd -r -u 10001 -g kato kato \
+    && chown -R kato:kato /app
+
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PORT=8000
@@ -48,6 +55,8 @@ EXPOSE 8000
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import requests; requests.get('http://localhost:8000/health').raise_for_status()" || exit 1
+
+USER 10001
 
 # Run the FastAPI application with production settings.
 # KATO_WORKERS: uvicorn worker processes (default 4). Set via kato-manager.sh

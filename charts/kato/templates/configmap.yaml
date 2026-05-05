@@ -1,0 +1,64 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "kato.fullname" . }}-config
+  labels:
+    {{- include "kato.labels" . | nindent 4 }}
+data:
+  # Connection: ClickHouse
+  CLICKHOUSE_HOST: {{ required "clickhouse.host is required" .Values.clickhouse.host | quote }}
+  CLICKHOUSE_PORT: {{ .Values.clickhouse.port | quote }}
+  CLICKHOUSE_DB: {{ .Values.clickhouse.database | quote }}
+  CLICKHOUSE_SECURE: {{ .Values.clickhouse.secure | quote }}
+
+  # Connection: Redis
+  REDIS_ENABLED: {{ .Values.redis.enabled | quote }}
+  {{- if not .Values.redis.urlExistingSecret }}
+  REDIS_HOST: {{ .Values.redis.host | quote }}
+  REDIS_PORT: {{ .Values.redis.port | quote }}
+  REDIS_TLS: {{ .Values.redis.tls | quote }}
+  {{- end }}
+
+  # Connection: Qdrant
+  QDRANT_HOST: {{ required "qdrant.host is required" .Values.qdrant.host | quote }}
+  QDRANT_PORT: {{ .Values.qdrant.port | quote }}
+  QDRANT_GRPC_PORT: {{ .Values.qdrant.grpcPort | quote }}
+  QDRANT_HTTPS: {{ .Values.qdrant.https | quote }}
+  QDRANT_COLLECTION_PREFIX: {{ .Values.qdrant.collectionPrefix | quote }}
+
+  # Service / logging
+  SERVICE_NAME: {{ .Values.kato.serviceName | quote }}
+  ENVIRONMENT: {{ .Values.kato.environment | quote }}
+  LOG_LEVEL: {{ .Values.kato.logLevel | quote }}
+  LOG_FORMAT: {{ .Values.kato.logFormat | quote }}
+  LOG_OUTPUT: {{ .Values.kato.logOutput | quote }}
+
+  # Uvicorn / API
+  KATO_WORKERS: {{ .Values.kato.workers | quote }}
+  KATO_LIMIT_CONCURRENCY: {{ .Values.kato.limitConcurrency | quote }}
+  KATO_BATCH_SIZE: {{ .Values.kato.batchSize | quote }}
+  CONNECTION_POOL_SIZE: {{ .Values.kato.connectionPoolSize | quote }}
+  REQUEST_TIMEOUT: {{ .Values.kato.requestTimeout | quote }}
+
+  # Sessions
+  SESSION_TTL: {{ .Values.kato.sessionTtl | quote }}
+  SESSION_AUTO_EXTEND: {{ .Values.kato.sessionAutoExtend | quote }}
+
+  # Pattern processing
+  MAX_PATTERN_LENGTH: {{ .Values.kato.maxPatternLength | quote }}
+  RECALL_THRESHOLD: {{ .Values.kato.recallThreshold | quote }}
+  STM_MODE: {{ .Values.kato.stmMode | quote }}
+  AUTO_LEARN_ENABLED: {{ .Values.kato.autoLearnEnabled | quote }}
+  AUTO_LEARN_THRESHOLD: {{ .Values.kato.autoLearnThreshold | quote }}
+  MAX_PREDICTIONS: {{ .Values.kato.maxPredictions | quote }}
+  KATO_USE_TOKEN_MATCHING: {{ .Values.kato.useTokenMatching | quote }}
+  RANK_SORT_ALGO: {{ .Values.kato.rankSortAlgo | quote }}
+
+  # Filesystem (readOnlyRootFilesystem requires a writable TMPDIR)
+  TMPDIR: "/tmp"
+
+  {{- if or .Values.tls.caBundle.existingConfigMap .Values.tls.caBundle.existingSecret }}
+  # Custom CA bundle (mounted at /etc/ssl/kato-ca/)
+  SSL_CERT_FILE: "/etc/ssl/kato-ca/ca.crt"
+  REQUESTS_CA_BUNDLE: "/etc/ssl/kato-ca/ca.crt"
+  {{- end }}

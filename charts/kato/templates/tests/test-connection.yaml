@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "kato.fullname" . }}-test-connection"
+  labels:
+    {{- include "kato.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: curl
+      image: curlimages/curl:8.10.1
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: [ALL]
+      command:
+        - sh
+        - -c
+        - |
+          set -eu
+          echo "Probing /health..."
+          curl -fsS --max-time 10 \
+            "http://{{ include "kato.fullname" . }}:{{ .Values.service.port }}/health" \
+            | head -c 4096
+          echo
+          echo "Probing /docs..."
+          curl -fsS --max-time 10 -o /dev/null \
+            "http://{{ include "kato.fullname" . }}:{{ .Values.service.port }}/docs"
+          echo "OK"

@@ -1,0 +1,19 @@
+{{- if .Values.bootstrap.enabled -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "kato.fullname" . }}-bootstrap
+  labels:
+    {{- include "kato.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+data:
+  # NOTE: init.sql is vendored from config/clickhouse/init.sql at the repo root.
+  # CI verifies the two stay in sync (see .github/workflows/helm.yaml).
+  bootstrap.py: |-
+{{ .Files.Get "scripts/bootstrap.py" | indent 4 }}
+  init.sql: |-
+{{ .Files.Get "scripts/init.sql" | indent 4 }}
+{{- end }}

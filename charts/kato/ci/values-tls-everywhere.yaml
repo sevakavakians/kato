@@ -1,0 +1,25 @@
+# TLS to every external backend, with a custom CA bundle mounted via ConfigMap.
+clickhouse:
+  host: clickhouse.internal.example.com
+  port: 8443
+  secure: true
+  auth:
+    existingSecret: kato-clickhouse
+    passwordKey: clickhouse-password
+
+redis:
+  urlExistingSecret: kato-redis
+  urlKey: redis-url   # caller stores rediss://:pw@host:6380/0 in this key
+
+qdrant:
+  host: qdrant.internal.example.com
+  port: 6443
+  grpcPort: 6444
+  https: true
+  auth:
+    existingSecret: kato-qdrant
+    apiKeyKey: qdrant-api-key
+
+tls:
+  caBundle:
+    existingConfigMap: enterprise-ca-bundle

@@ -1,0 +1,335 @@
+# Default values for kato.
+# This is a YAML-formatted file. Declare variables to be passed into your templates.
+
+# -- KATO container image
+image:
+  # -- Image repository
+  repository: ghcr.io/sevakavakians/kato
+  # -- Image tag — defaults to .Chart.AppVersion when empty
+  tag: ""
+  # -- Image pull policy
+  pullPolicy: IfNotPresent
+  # -- Image pull secrets (list of {name: ...})
+  pullSecrets: []
+
+# -- Override the chart name
+nameOverride: ""
+# -- Override the full release name
+fullnameOverride: ""
+
+# -- Number of KATO replicas (KATO is stateless; sessions live in Redis)
+replicaCount: 2
+
+# -- Deployment update strategy
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+
+# -- Annotations applied to the pod template (also gets a checksum/config annotation injected by the chart)
+podAnnotations: {}
+# -- Labels applied to the pod template
+podLabels: {}
+
+# -- Service account configuration
+serviceAccount:
+  # -- Create a dedicated ServiceAccount
+  create: true
+  # -- Override the service account name (defaults to fullname)
+  name: ""
+  # -- Annotations on the ServiceAccount (e.g., IRSA, GKE Workload Identity, Azure WI)
+  annotations: {}
+
+# -- Pod-level security context (PSS-restricted-friendly defaults)
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+
+# -- Container-level security context (PSS-restricted-friendly defaults)
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+# -- Resource requests and limits
+resources:
+  requests:
+    cpu: "1"
+    memory: 2Gi
+  limits:
+    cpu: "2"
+    memory: 4Gi
+
+# -- Node selector
+nodeSelector: {}
+# -- Tolerations
+tolerations: []
+# -- Affinity rules
+affinity: {}
+# -- Pod topology spread constraints (defaults to spreading across hostnames)
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector: {}  # filled in by the helper at render time
+
+# -- How long the pod has to gracefully shut down (matches uvicorn --timeout-graceful-shutdown 30 + buffer)
+terminationGracePeriodSeconds: 35
+
+# -- Service configuration
+service:
+  type: ClusterIP
+  port: 8000
+  annotations: {}
+  # -- sessionAffinity: None is correct because sessions are Redis-backed.
+  # Set to ClientIP only if you want pod-local cache locality (no correctness benefit).
+  sessionAffinity: None
+  sessionAffinityConfig: {}
+
+# -- Ingress (optional)
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts: []
+  # - host: kato.example.com
+  #   paths:
+  #     - path: /
+  #       pathType: Prefix
+  tls: []
+
+# -- Horizontal Pod Autoscaler (optional)
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+# -- PodDisruptionBudget (optional)
+pdb:
+  enabled: false
+  # -- Use minAvailable OR maxUnavailable, not both
+  minAvailable: 1
+  # maxUnavailable: 25%
+
+# -- NetworkPolicy (optional). NOTE: egress to external DBs is by IP/CIDR only —
+# Kubernetes NetworkPolicy cannot resolve external DNS hostnames. If you supply
+# egressCIDRs, the chart restricts egress to those plus DNS. If empty, egress is
+# left unrestricted with a warning rendered as a comment in the policy.
+networkPolicy:
+  enabled: false
+  ingressFrom: []
+  egressCIDRs: []
+
+# -- Prometheus Operator ServiceMonitor (optional). Targets /metrics-prom which exposes
+# metrics in Prometheus text format (added in KATO 3.10.2+).
+serviceMonitor:
+  enabled: false
+  interval: 30s
+  scrapeTimeout: 10s
+  path: /metrics-prom
+  port: http
+  labels: {}
+  relabelings: []
+  metricRelabelings: []
+
+# ---------------------------------------------------------------------------
+# Externally-managed backing stores. The enterprise customer is expected to
+# provision and manage ClickHouse / Redis / Qdrant separately. Provide their
+# connection details below.
+# ---------------------------------------------------------------------------
+
+# -- ClickHouse connection (REQUIRED)
+clickhouse:
+  # -- ClickHouse hostname (required)
+  host: ""
+  # -- ClickHouse HTTP port (NOT the native 9000)
+  port: 8123
+  # -- ClickHouse database name (auto-created on first connect if grants permit)
+  database: kato
+  # -- Use HTTPS for the ClickHouse HTTP API
+  secure: false
+  auth:
+    # -- Name of an existing Secret containing ClickHouse credentials
+    existingSecret: ""
+    # -- Key inside the Secret holding the username
+    userKey: clickhouse-user
+    # -- Key inside the Secret holding the password
+    passwordKey: clickhouse-password
+    # -- Inline username (used only when existingSecret is empty AND secrets.create=true)
+    username: "default"
+    # -- Inline password (eval/dev only; production should use existingSecret)
+    password: ""
+
+# -- Redis connection (used for sessions, cache, and pattern metadata)
+redis:
+  enabled: true
+
+  # ---- Option 1: Pre-built REDIS_URL in a Secret (RECOMMENDED) ----
+  # -- Name of an existing Secret containing a fully-formed Redis URL
+  # (e.g., redis://:password@host:6379/0 or rediss://... for TLS).
+  # When set, this overrides all component-wise fields below.
+  urlExistingSecret: ""
+  # -- Key inside the urlExistingSecret holding the URL
+  urlKey: redis-url
+
+  # ---- Option 2: Component-wise fields (fallback) ----
+  # -- Redis hostname (used only if urlExistingSecret is empty)
+  host: ""
+  # -- Redis port
+  port: 6379
+  # -- Use TLS — chart upgrades the URL scheme to rediss://
+  tls: false
+  # -- Redis logical database number
+  database: 0
+  auth:
+    # -- Name of an existing Secret containing the Redis password
+    existingSecret: ""
+    # -- Key inside the Secret holding the password
+    passwordKey: redis-password
+    # -- Inline password (eval/dev only)
+    password: ""
+
+# -- Qdrant connection (REQUIRED)
+qdrant:
+  # -- Qdrant hostname (required)
+  host: ""
+  # -- Qdrant HTTP REST port
+  port: 6333
+  # -- Qdrant gRPC port (preferred by the client)
+  grpcPort: 6334
+  # -- Use HTTPS for the Qdrant REST API
+  https: false
+  # -- Prefix applied to all collections KATO creates
+  collectionPrefix: vectors
+  auth:
+    # -- Name of an existing Secret containing the Qdrant API key
+    existingSecret: ""
+    # -- Key inside the Secret holding the API key
+    apiKeyKey: qdrant-api-key
+    # -- Inline API key (eval/dev only)
+    apiKey: ""
+
+# -- Custom CA bundle for TLS connections to self-signed/internal-CA backends.
+# Mounted at /etc/ssl/kato-ca/ and exported via SSL_CERT_FILE / REQUESTS_CA_BUNDLE.
+tls:
+  caBundle:
+    # -- Name of an existing ConfigMap containing the CA bundle (key: ca.crt)
+    existingConfigMap: ""
+    # -- Alternative: name of a Secret containing the CA bundle (key: ca.crt)
+    existingSecret: ""
+
+# -- Schema bootstrap Job (runs as pre-install + pre-upgrade Helm hook).
+# The Job runs a small Python script that creates the ClickHouse schema
+# (idempotent CREATE IF NOT EXISTS), pings Redis, and verifies Qdrant is
+# reachable. Disable for DBA-managed-schema customers (in which case ensure
+# the SQL from config/clickhouse/init.sql is applied before installing).
+bootstrap:
+  enabled: true
+  # -- Image used by the bootstrap Job (defaults to the main KATO image)
+  image: {}
+  # -- Resources for the bootstrap Job
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  # -- Service account for the bootstrap Job (defaults to the main one)
+  serviceAccountName: ""
+  # -- Pod annotations for the bootstrap Job
+  podAnnotations: {}
+  # -- Activeness deadline in seconds
+  activeDeadlineSeconds: 300
+  # -- Backoff limit
+  backoffLimit: 2
+
+# -- Convenience block for templating a Secret with inline credentials.
+# DO NOT USE in production — provide existingSecret references instead and
+# create Secrets via External Secrets Operator, Vault CSI, or sealed-secrets.
+secrets:
+  # -- When true, the chart renders a Secret containing whatever inline
+  # credentials are set above (clickhouse.auth.password, redis.auth.password,
+  # qdrant.auth.apiKey). Provided for evaluation/quickstart only.
+  create: false
+
+# -- KATO application tunables. These are non-secret env vars surfaced via ConfigMap.
+kato:
+  # -- Number of uvicorn worker processes (KATO is multi-worker safe)
+  workers: 4
+  # -- Per-worker max concurrent in-flight requests
+  limitConcurrency: 100
+  # -- Pattern processing batch size
+  batchSize: 100
+  # -- Database connection pool size per worker
+  connectionPoolSize: 50
+  # -- Per-request timeout in seconds
+  requestTimeout: 30
+  # -- Session TTL in seconds
+  sessionTtl: 3600
+  # -- Auto-extend session TTL on each access
+  sessionAutoExtend: true
+  # -- Max pattern length before auto-learn triggers (0 = manual learning only)
+  maxPatternLength: 0
+  # -- Pattern matching sensitivity (0.0-1.0; lower = more matches)
+  recallThreshold: 0.1
+  # -- STM mode after auto-learn: CLEAR or ROLLING
+  stmMode: CLEAR
+  # -- Enable automatic pattern learning
+  autoLearnEnabled: false
+  # -- Observations before auto-learning fires (only if maxPatternLength > 0)
+  autoLearnThreshold: 50
+  # -- Max predictions returned per query
+  maxPredictions: 100
+  # -- Token-level (true) vs character-level (false) matching
+  useTokenMatching: false
+  # -- Ranking algorithm for predictions
+  rankSortAlgo: default
+  # -- Service identifier used in logs and metrics
+  serviceName: kato
+  # -- Environment label (production, staging, development)
+  environment: production
+  # -- Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+  logLevel: INFO
+  # -- Log format: json (recommended for production) or human
+  logFormat: json
+  # -- Log destination
+  logOutput: stdout
+
+# -- Liveness, readiness, and startup probes
+probes:
+  startup:
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    failureThreshold: 30
+  liveness:
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+# -- Extra environment variables (list of {name, value} or {name, valueFrom})
+extraEnv: []
+
+# -- Extra envFrom entries (list of {configMapRef} / {secretRef})
+extraEnvFrom: []
+
+# -- Extra volumes added to the pod
+extraVolumes: []
+
+# -- Extra volumeMounts added to the container
+extraVolumeMounts: []

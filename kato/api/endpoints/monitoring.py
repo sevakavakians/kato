@@ -10,7 +10,7 @@ import time
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 
 from kato.api.schemas.monitoring import (
     CacheInvalidateResponse,
@@ -325,6 +325,14 @@ async def get_comprehensive_metrics():
             "uptime_seconds": now - app_state.startup_time,
             "active_sessions": 0
         }
+
+
+@router.get("/metrics-prom", include_in_schema=False)
+async def get_metrics_prometheus() -> Response:
+    """Expose metrics in Prometheus text exposition format for ServiceMonitor scraping."""
+    from kato.monitoring.metrics import get_metrics_collector
+    body = get_metrics_collector().get_prometheus_format()
+    return Response(content=body, media_type="text/plain; version=0.0.4; charset=utf-8")
 
 
 @router.get("/stats", response_model=StatsResponse)

@@ -1,0 +1,21 @@
+# Minimum viable override for `helm template` rendering. Uses externally-pre-created
+# secrets for every credential. Suitable as a starting point for enterprise installs.
+clickhouse:
+  host: clickhouse.data.svc.cluster.local
+  auth:
+    existingSecret: kato-clickhouse
+    userKey: clickhouse-user
+    passwordKey: clickhouse-password
+
+redis:
+  urlExistingSecret: kato-redis
+  urlKey: redis-url
+
+qdrant:
+  host: qdrant.data.svc.cluster.local
+  auth:
+    existingSecret: kato-qdrant
+    apiKeyKey: qdrant-api-key
+
+bootstrap:
+  enabled: true

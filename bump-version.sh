@@ -117,13 +117,21 @@ if [[ -f "kato/__init__.py" ]]; then
     rm -f kato/__init__.py.bak
 fi
 
+# Update charts/kato/Chart.yaml appVersion (chart version stays decoupled,
+# bump it manually when chart templates/values change).
+if [[ -f "charts/kato/Chart.yaml" ]]; then
+    echo "Updating charts/kato/Chart.yaml appVersion..."
+    sed -i.bak "s/^appVersion: \"${CURRENT_VERSION}\"/appVersion: \"${NEW_VERSION}\"/" charts/kato/Chart.yaml
+    rm -f charts/kato/Chart.yaml.bak
+fi
+
 echo ""
 echo -e "${GREEN}Version bumped successfully!${NC}"
 echo ""
 
 # Show what changed
 echo "Files updated:"
-git diff --stat pyproject.toml setup.py kato/__init__.py 2>/dev/null || true
+git diff --stat pyproject.toml setup.py kato/__init__.py charts/kato/Chart.yaml 2>/dev/null || true
 echo ""
 
 # Ask about committing
@@ -131,7 +139,7 @@ read -p "Create git commit? (y/N) " -n 1 -r
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     FULL_COMMIT_MSG="${COMMIT_MSG} ${NEW_VERSION}"
-    git add pyproject.toml setup.py kato/__init__.py
+    git add pyproject.toml setup.py kato/__init__.py charts/kato/Chart.yaml
     git commit -m "$FULL_COMMIT_MSG"
     echo -e "${GREEN}Committed changes${NC}"
     echo ""

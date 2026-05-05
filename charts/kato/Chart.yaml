@@ -1,0 +1,25 @@
+apiVersion: v2
+name: kato
+description: |
+  KATO (Knowledge Abstraction for Traceable Outcomes) — deterministic memory and
+  prediction system. This chart installs the KATO API service only; ClickHouse,
+  Redis, and Qdrant must be provided externally and configured via values.
+type: application
+version: 0.1.0
+appVersion: "3.10.1"
+kubeVersion: ">=1.24.0-0"
+home: https://github.com/intelligent-artifacts/kato
+sources:
+  - https://github.com/intelligent-artifacts/kato
+keywords:
+  - kato
+  - prediction
+  - memory
+  - patterns
+  - ai
+maintainers:
+  - name: Intelligent Artifacts
+    url: https://github.com/intelligent-artifacts
+annotations:
+  category: AI/ML
+  licenses: MIT

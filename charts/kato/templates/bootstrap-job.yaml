@@ -16,7 +16,6 @@ spec:
     metadata:
       labels:
         {{- include "kato.labels" . | nindent 8 }}
-        app.kubernetes.io/component: bootstrap
       {{- with .Values.bootstrap.podAnnotations }}
       annotations:
         {{- toYaml . | nindent 8 }}

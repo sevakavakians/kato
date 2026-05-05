@@ -5,7 +5,7 @@ description: |
   prediction system. This chart installs the KATO API service only; ClickHouse,
   Redis, and Qdrant must be provided externally and configured via values.
 type: application
-version: 0.1.0
+version: 0.1.1
 appVersion: "3.10.2"
 kubeVersion: ">=1.24.0-0"
 home: https://github.com/intelligent-artifacts/kato

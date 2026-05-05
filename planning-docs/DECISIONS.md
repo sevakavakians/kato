@@ -1,6 +1,34 @@
 # DECISIONS.md - Architectural & Design Decision Log
 *Append-Only Log - Started: 2025-08-29*
-*Last Updated: 2026-04-13*
+*Last Updated: 2026-05-05*
+
+---
+
+## 2026-05-05 - DECISION-013: Relicense to Apache 2.0 and Consolidate Ownership Under Sevak Avakians
+**Decision**: Replace LGPL 2.1 with Apache 2.0 as the project license and remove all "Intelligent Artifacts" entity references, replacing them with the single canonical author (Sevak Avakians, sevakavakians@gmail.com).
+**Status**: COMPLETE
+**Confidence**: High
+**Commit**: `781cb18`
+**Impact**: Broader corporate adoption; patent grant closes a gap LGPL 2.1 did not address; eliminates the LGPL Python-import linking ambiguity; all metadata now consistent across pyproject.toml, setup.py, Dockerfile OCI labels, Helm chart, and documentation.
+
+### Context
+`git shortlog` confirmed all commits were authored by Sevak Avakians (two email addresses, same individual). No third-party contributors existed, so no CLA backfill or third-party consent was required before changing license terms.
+
+### Decision Details
+1. **Why Apache 2.0 over LGPL 2.1**: Apache 2.0 is on fewer corporate approved-license lists as a blocker; includes an explicit patent grant and patent-retaliation clause absent from LGPL 2.1; removes the "dynamic linking" ambiguity that applies when KATO is imported as a Python library.
+2. **Git history not rewritten**: Historical commits attributed to `sevak@intelligent-artifacts.com` intentionally remain unchanged. Only current/future metadata was updated.
+3. **Per-file SPDX headers not added**: Out of scope for a single-author repo; the top-level LICENSE + NOTICE files satisfy Apache 2.0 §4(d) attribution requirements.
+4. **Already-published artifacts**: PyPI packages and ghcr.io images published before this commit retain their original license metadata; new publishes will pick up Apache-2.0.
+
+### Files Changed (14)
+License: `LICENSE`, `NOTICE` (new), `pyproject.toml`, `setup.py`, `Dockerfile`, `charts/kato/Chart.yaml`, `README.md`, `docs/developers/contributing.md`, `docs/users/faq.md`
+Ownership: `setup.py`, `Dockerfile`, `charts/kato/Chart.yaml`, `charts/kato/README.md`, `charts/kato/templates/NOTES.txt`, `docs/operations/helm-air-gapped.md`, `docs/operations/production-scale-migration.md`, `docs/reference/prediction-object.md`
+
+### Canonical Values Going Forward
+- Author/copyright holder: `Sevak Avakians`
+- Email: `sevakavakians@gmail.com`
+- Repository: `https://github.com/sevakavakians/kato`
+- License: Apache-2.0
 
 ---
 

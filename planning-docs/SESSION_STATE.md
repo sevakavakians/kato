@@ -248,6 +248,12 @@ Make KatoProcessor stateless following standard web application patterns:
 - **Related Work**: planning-docs/initiatives/hybrid-clickhouse-redis.md (v3.0 architecture)
 
 ## Recent Achievements
+- **Relicense Apache 2.0 + Ownership Consolidation - COMPLETE** (2026-05-05): ADMINISTRATIVE
+  - **License**: LGPL 2.1 replaced with Apache 2.0 (explicit patent grant, no linking ambiguity, broader corporate adoption)
+  - **Ownership**: All "Intelligent Artifacts" references replaced with `Sevak Avakians <sevakavakians@gmail.com>` across 14 files (pyproject.toml, setup.py, Dockerfile OCI labels, Helm chart, docs)
+  - **NOTICE** file created (Apache 2.0 §4(d)); git history not rewritten; per-file SPDX headers out of scope
+  - **Commit**: `781cb18` on `main`; already-published artifacts retain prior license metadata
+  - **Decision**: DECISION-013 in DECISIONS.md
 - **Redis Rehydration & Persistence Fix - COMPLETE** (2026-04-13): BUG FIX + RESILIENCE
   - **Problem**: 250,850 patterns trained across 4 hierarchical nodes (node0_kato–node3_kato) returned zero prediction metrics because Redis (no persistence enabled) lost all metadata on restart while ClickHouse retained pattern data
   - **Fix 1**: Created `scripts/rehydrate_redis.py` — standalone script rebuilding all Redis metadata (frequency=1, symbol stats, global counters, pre-computed entropy/TF metrics) from ClickHouse; 250,850 patterns rehydrated in 51 seconds

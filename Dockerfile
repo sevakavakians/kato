@@ -11,10 +11,10 @@ LABEL org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.created="${BUILD_DATE}" \
       org.opencontainers.image.title="KATO" \
       org.opencontainers.image.description="Knowledge Abstraction for Traceable Outcomes - Deterministic memory and prediction system" \
-      org.opencontainers.image.vendor="Intelligent Artifacts" \
-      org.opencontainers.image.source="https://github.com/intelligent-artifacts/kato" \
-      org.opencontainers.image.documentation="https://github.com/intelligent-artifacts/kato/blob/main/README.md" \
-      org.opencontainers.image.licenses="MIT"
+      org.opencontainers.image.vendor="Sevak Avakians" \
+      org.opencontainers.image.source="https://github.com/sevakavakians/kato" \
+      org.opencontainers.image.documentation="https://github.com/sevakavakians/kato/blob/main/README.md" \
+      org.opencontainers.image.licenses="Apache-2.0"
 
 # Set working directory
 WORKDIR /app

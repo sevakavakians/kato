@@ -8,9 +8,9 @@ type: application
 version: 0.1.1
 appVersion: "3.10.3"
 kubeVersion: ">=1.24.0-0"
-home: https://github.com/intelligent-artifacts/kato
+home: https://github.com/sevakavakians/kato
 sources:
-  - https://github.com/intelligent-artifacts/kato
+  - https://github.com/sevakavakians/kato
 keywords:
   - kato
   - prediction
@@ -18,8 +18,9 @@ keywords:
   - patterns
   - ai
 maintainers:
-  - name: Intelligent Artifacts
-    url: https://github.com/intelligent-artifacts
+  - name: Sevak Avakians
+    url: https://github.com/sevakavakians
+    email: sevakavakians@gmail.com
 annotations:
   category: AI/ML
-  licenses: MIT
+  licenses: Apache-2.0

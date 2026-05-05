@@ -2,8 +2,10 @@
 name = "kato"
 version = "3.10.3"
 description = "Knowledge Abstraction for Traceable Outcomes - Deterministic memory and prediction system"
-authors = [{name = "KATO Team"}]
+authors = [{name = "Sevak Avakians", email = "sevakavakians@gmail.com"}]
 readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
 requires-python = ">=3.9"
 
 [tool.ruff]

@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Prediction Object is the core output structure of the KATO cognitive processor, derived from the GAIuS (General Autonomous Intelligence using Symbols) architecture developed by Intelligent Artifacts. It represents a comprehensive analysis of how well observed patterns match learned patterns, providing both matching metrics and temporal context.
+The Prediction Object is the core output structure of the KATO cognitive processor, derived from the GAIuS (General Autonomous Intelligence using Symbols) architecture. It represents a comprehensive analysis of how well observed patterns match learned patterns, providing both matching metrics and temporal context.
 
 A Prediction Object is generated when KATO's pattern recognition engine identifies potential matches between current observations and previously learned patterns. Each prediction contains detailed information about the quality of the match, temporal relationships, and various information-theoretic metrics that quantify the prediction's reliability and significance.
 

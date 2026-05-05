@@ -107,7 +107,7 @@ LABEL org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.created="${BUILD_DATE}" \
       org.opencontainers.image.title="KATO" \
       org.opencontainers.image.description="Knowledge Abstraction for Traceable Outcomes - Production" \
-      org.opencontainers.image.vendor="Intelligent Artifacts"
+      org.opencontainers.image.vendor="Sevak Avakians"
 
 WORKDIR /app
 

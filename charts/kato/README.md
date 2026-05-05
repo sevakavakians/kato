@@ -7,7 +7,7 @@ KATO (Knowledge Abstraction for Traceable Outcomes) — deterministic memory and
 | Type         | `application`                                |
 | Chart version | `0.1.0`                                     |
 | App version  | `3.10.1`                                     |
-| Source       | <https://github.com/intelligent-artifacts/kato> |
+| Source       | <https://github.com/sevakavakians/kato> |
 | Container    | `ghcr.io/sevakavakians/kato`                 |
 
 ## TL;DR

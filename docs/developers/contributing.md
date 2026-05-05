@@ -375,7 +375,7 @@ Brief description of changes
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the same license as KATO (see LICENSE file).
+By contributing, you agree that your contributions will be licensed under the Apache License, Version 2.0 — the same license as KATO. See the [LICENSE](../../LICENSE) file for the full text.
 
 ## Recognition
 

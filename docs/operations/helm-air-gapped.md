@@ -32,7 +32,7 @@ helm registry login registry.internal.example.com
 helm push kato-0.1.0.tgz oci://registry.internal.example.com/charts
 ```
 
-Alternative: download the `kato-0.1.0.tgz` artifact from the [GitHub Release](https://github.com/intelligent-artifacts/kato/releases) page and copy it into your network. The release attachment is byte-identical to the OCI artifact.
+Alternative: download the `kato-0.1.0.tgz` artifact from the [GitHub Release](https://github.com/sevakavakians/kato/releases) page and copy it into your network. The release attachment is byte-identical to the OCI artifact.
 
 ## Step 3 — Override `image.repository` in values
 

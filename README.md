@@ -1019,7 +1019,7 @@ We welcome contributions! Please see our [Contributing Guide](docs/developers/co
 
 ## License
 
-This project is licensed under the terms in the [LICENSE](LICENSE) file.
+Licensed under the Apache License, Version 2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE).
 
 ## Heritage
 

@@ -33,4 +33,4 @@ reference them via *.auth.existingSecret values.
 {{- end }}
 
 For the full configuration reference, see:
-  https://github.com/intelligent-artifacts/kato/blob/main/charts/kato/README.md
+  https://github.com/sevakavakians/kato/blob/main/charts/kato/README.md

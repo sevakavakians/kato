@@ -17,7 +17,10 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  # contents: write is required for the publish job to attach the chart .tgz
+  # to the GitHub Release via `gh release upload`. The default GITHUB_TOKEN
+  # only grants contents: read, which produces an HTTP 403 on uploads.
+  contents: write
   packages: write
   id-token: write
 

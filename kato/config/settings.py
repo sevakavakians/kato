@@ -376,6 +376,38 @@ class SessionConfig(BaseSettings):
     model_config = ConfigDict(env_prefix='')
 
 
+class MetadataMigrationConfig(BaseSettings):
+    """Feature flags for the per-pattern metadata migration from Redis → ClickHouse.
+
+    Gates the staged rollout of moving emotives/metadata/entropy/tf_vector out of
+    Redis and into the patterns_metadata sidecar table to relieve Redis RAM pressure.
+
+    Env var wiring uses `validation_alias` because Pydantic v2 ignores the
+    `json_schema_extra={'env': ...}` mapping that v1 honored — it now only feeds
+    schema generation, not env var resolution.
+    """
+
+    dual_write: bool = Field(
+        True,
+        validation_alias='KATO_METADATA_DUAL_WRITE',
+        description="Write per-pattern metadata to BOTH Redis (existing) and ClickHouse (new). Set to false only after read cutover is fully validated."
+    )
+
+    read_from: Literal['redis', 'clickhouse'] = Field(
+        'redis',
+        validation_alias='KATO_METADATA_READ_FROM',
+        description="Which store the predict/getPattern paths read per-pattern metadata from. Start at 'redis' during rollout, switch to 'clickhouse' after backfill + verify."
+    )
+
+    read_verify: bool = Field(
+        False,
+        validation_alias='KATO_METADATA_READ_VERIFY',
+        description="When true, the predict path reads from both stores, logs field-level diffs, and returns whichever read_from selects. For staging validation only — adds latency."
+    )
+
+    model_config = ConfigDict(env_prefix='', populate_by_name=True)
+
+
 class APIConfig(BaseSettings):
     """API service configuration."""
 
@@ -442,6 +474,7 @@ class Settings(BaseSettings):
     processing: ProcessingConfig = Field(default_factory=ProcessingConfig)
     performance: PerformanceConfig = Field(default_factory=PerformanceConfig)
     session: SessionConfig = Field(default_factory=SessionConfig)
+    metadata_migration: MetadataMigrationConfig = Field(default_factory=MetadataMigrationConfig)
     api: APIConfig = Field(default_factory=APIConfig)
 
     # Environment and deployment

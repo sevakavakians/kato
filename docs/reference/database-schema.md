@@ -70,21 +70,49 @@ Engine: `MergeTree()`, partitioned by `kb_id`, ordered by `(kb_id, date)`.
 
 ---
 
+### `patterns_metadata` (per-pattern KV sidecar)
+
+Engine: `ReplacingMergeTree(updated_at)`, partitioned by `kb_id`, ordered by `(kb_id, name)`.
+
+Holds the per-pattern KV data that was previously stored in Redis (emotives, metadata, pre-computed entropy/TF metrics). Moved to ClickHouse to bound Redis RAM use under large training workloads. Re-learn writes a new row; `ReplacingMergeTree` dedupes by `(kb_id, name)` on background merge using `updated_at` as the version column. Readers MUST use `argMax(field, updated_at) GROUP BY name` to get the latest values rather than the `FINAL` modifier.
+
+| Field | Type | Description | Example |
+|---|---|---|---|
+| `kb_id` | String | Knowledge base / node identifier (partition key) | `"node_weather_bot"` |
+| `name` | String | Pattern SHA1 hash (matches `patterns_data.name`) | `"7729f0ed..."` |
+| `emotives` | String (JSON list) | Rolling-window list of emotive dicts (default `'[]'`) | `[{"joy": 0.8}]` |
+| `metadata` | String (JSON dict) | Set-union accumulator of tags/sources (default `'{}'`) | `{"source": "chat"}` |
+| `entropy` | Nullable(Float64) | Pre-computed Shannon entropy (populated by finalize-training) | `2.317` |
+| `normalized_entropy` | Nullable(Float64) | Pre-computed normalized entropy | `0.891` |
+| `global_normalized_entropy` | Nullable(Float64) | Pre-computed global normalized entropy | `0.654` |
+| `tf_vector` | String (JSON dict) | Pre-computed term-frequency vector (default `'{}'`) | `{"hello": 0.5}` |
+| `updated_at` | DateTime | Version column for ReplacingMergeTree | `2026-05-20 10:00:00` |
+
+**Source**: [`config/clickhouse/init.sql`](../../config/clickhouse/init.sql), [`kato/storage/clickhouse_writer.py`](../../kato/storage/clickhouse_writer.py)
+
+---
+
 ## Redis
 
 All keys are namespaced by `kb_id` (except sessions and caches). Keys without explicit TTL are persistent.
 
 ### Pattern metadata
 
-Stored per pattern at learn time. No TTL (persistent).
+Pattern frequency is stored in Redis to preserve atomic `INCR` semantics; emotives / metadata / pre-computed metrics live in [`patterns_metadata`](#patterns_metadata-per-pattern-kv-sidecar) (ClickHouse) after the migration. During the rollout window the moved keys may still be present in Redis under the dual-write flag.
 
 | Key pattern | Redis type | Fields / Value | Example |
 |---|---|---|---|
-| `{kb_id}:frequency:{pattern_name}` | STRING | Integer count of pattern observations | `"42"` |
-| `{kb_id}:emotives:{pattern_name}` | STRING (JSON) | List of emotive context dicts from observations | `[{"joy": 0.8, "surprise": 0.3}]` |
-| `{kb_id}:metadata:{pattern_name}` | STRING (JSON) | Arbitrary metadata dict (tags, source, etc.) | `{"source": "chat", "tags": ["greeting"]}` |
+| `{kb_id}:frequency:{pattern_name}` | STRING | Integer count of pattern observations (atomic `INCR`) | `"42"` |
 
-**Source**: [`kato/storage/redis_writer.py`](../../kato/storage/redis_writer.py)
+**Migration flags** (`kato/config/settings.py`):
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `KATO_METADATA_DUAL_WRITE` | `true` | Write per-pattern metadata to both Redis (legacy) and ClickHouse (new) during rollout |
+| `KATO_METADATA_READ_FROM` | `redis` | Which store the predict path reads from. Flip to `clickhouse` after backfill + verify |
+| `KATO_METADATA_READ_VERIFY` | `false` | Read both stores and log field-level diffs; staging only |
+
+**Source**: [`kato/storage/redis_writer.py`](../../kato/storage/redis_writer.py), [`kato/storage/metadata_router.py`](../../kato/storage/metadata_router.py)
 
 ---
 
@@ -115,15 +143,17 @@ Aggregate statistics per knowledge base. No TTL (persistent).
 
 ### Pre-computed metrics
 
-Populated by the [`POST /sessions/{session_id}/finalize-training`](api/learning.md#finalize-training) endpoint. Call once after training completes to pre-compute Shannon entropy and TF vectors for all patterns. If not populated, these metrics are computed at runtime during predictions (slower). No TTL (persistent).
+Populated by the [`POST /sessions/{session_id}/finalize-training`](api/learning.md#finalize-training) endpoint. Call once after training completes to pre-compute Shannon entropy and TF vectors for all patterns. If not populated, these metrics are computed at runtime during predictions (slower).
 
-| Key pattern | Redis type | Description | Example |
-|---|---|---|---|
-| `{kb_id}:entropy:{pattern_name}` | STRING | Pre-computed entropy value | `"2.317"` |
-| `{kb_id}:normalized_entropy:{pattern_name}` | STRING | Pre-computed normalized entropy | `"0.891"` |
-| `{kb_id}:global_normalized_entropy:{pattern_name}` | STRING | Pre-computed global normalized entropy | `"0.654"` |
-| `{kb_id}:tf_vector:{pattern_name}` | STRING (JSON) | Pre-computed term frequency vector | `{"hello": 0.5, "world": 0.5}` |
-| `{kb_id}:prediction:{id}` | STRING (JSON) | Stored prediction results | `[{"pattern": "7729...", "score": 0.85}]` |
+**Storage location**: As of the Redis → ClickHouse migration, these metrics live in [`patterns_metadata`](#patterns_metadata-per-pattern-kv-sidecar) (columns: `entropy`, `normalized_entropy`, `global_normalized_entropy`, `tf_vector`). The legacy Redis keys below remain populated during the dual-write rollout window and are cleared in Phase 6 via `scripts/delete_moved_redis_keys.py`.
+
+| Legacy Redis key (rollout-only) | Redis type | Description |
+|---|---|---|
+| `{kb_id}:entropy:{pattern_name}` | STRING | Pre-computed entropy (now `patterns_metadata.entropy`) |
+| `{kb_id}:normalized_entropy:{pattern_name}` | STRING | Pre-computed normalized entropy |
+| `{kb_id}:global_normalized_entropy:{pattern_name}` | STRING | Pre-computed global normalized entropy |
+| `{kb_id}:tf_vector:{pattern_name}` | STRING (JSON) | Pre-computed term frequency vector |
+| `{kb_id}:prediction:{id}` | STRING (JSON) | Stored prediction results (stays in Redis) |
 
 ---
 

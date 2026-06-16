@@ -458,8 +458,8 @@ class PatternProcessor:
                 'tf_vector': tf_vector
             })
 
-        # Batch-write to Redis
-        written = self.superkb.redis_writer.write_precomputed_metrics_batch(metrics_batch)
+        # Batch-write to the active metadata store(s) per the migration flags.
+        written = self.superkb.metadata_router.update_precomputed_metrics_batch(metrics_batch)
 
         elapsed_ms = round((time.perf_counter() - start) * 1000, 2)
         logger.info(
@@ -476,19 +476,20 @@ class PatternProcessor:
     def delete_pattern(self, name: str) -> str:
         if not self.patterns_searcher.delete_pattern(name):
             raise Exception(f'Unable to find and delete pattern {name} in RAM')
-        # Delete from ClickHouse
+        # Delete pattern row from ClickHouse patterns_data
         try:
             self.superkb.clickhouse_writer.client.command(
                 f"ALTER TABLE kato.patterns_data DELETE WHERE kb_id = '{self.kb_id}' AND name = '{name}'"
             )
         except Exception as e:
             logger.warning(f"Failed to delete pattern {name} from ClickHouse: {e}")
-        # Delete metadata from Redis
+        # Frequency lives in Redis only — delete it directly.
         try:
-            for key_type in ['frequency', 'emotives', 'metadata']:
-                self.superkb.redis_writer.client.delete(f"{self.kb_id}:{key_type}:{name}")
+            self.superkb.redis_writer.client.delete(f"{self.kb_id}:frequency:{name}")
         except Exception as e:
-            logger.warning(f"Failed to delete pattern {name} metadata from Redis: {e}")
+            logger.warning(f"Failed to delete frequency for pattern {name}: {e}")
+        # Delete emotives/metadata/metric data from both stores via the router.
+        self.superkb.metadata_router.delete_pattern_metadata(name)
         # Invalidate symbol cache since pattern data changed
         self.query_manager.invalidate_caches()
         return 'deleted'
@@ -510,8 +511,14 @@ class PatternProcessor:
         for emotive, values_list in emotives.items():
             if len(values_list) > self.persistence:
                 raise Exception(f'{emotive} array length ({len(values_list)}) exceeds system persistence ({self.persistence})')
-        # Update metadata in Redis
-        self.superkb.redis_writer.write_metadata(name, frequency=frequency, emotives=emotives)
+        # Admin override: explicitly set frequency in Redis (the only path that bypasses
+        # the SETNX/INCR atomic flow), then upsert emotives via the router.
+        self.superkb.redis_writer.client.set(f"{self.kb_id}:frequency:{name}", frequency)
+        self.superkb.metadata_router.upsert_pattern_metadata(
+            pattern_name=name,
+            emotives=emotives,
+            metadata=None,
+        )
         return {'name': name, 'frequency': frequency, 'emotives': emotives}
 
     async def processEvents(self, current_unique_id: str) -> list[dict[str, Any]]:
@@ -764,9 +771,9 @@ class PatternProcessor:
             # since we're already filtering to patterns that START with this symbol.
             single_symbol_threshold = 0.0
 
-            # Pre-load all pattern metadata in a single batch call
+            # Pre-load all pattern metadata in a single batch call via the migration router
             candidate_names = [p['name'] for p in candidate_patterns]
-            metadata_batch = self.superkb.redis_writer.get_metadata_batch(candidate_names)
+            metadata_batch = self.superkb.metadata_router.get_metadata_batch(candidate_names)
 
             # Compute affinity weights if affinity_emotive is configured
             affinity_weights = self._compute_affinity_weights(state, candidate_patterns)
@@ -1092,10 +1099,10 @@ class PatternProcessor:
             if total_ensemble_pattern_frequencies == 0:
                 logger.warning(f" {self.name} [ PatternProcessor predictPattern (async) ] total_ensemble_pattern_frequencies is 0")
 
-            # Batch-load pre-computed pattern-intrinsic metrics from Redis
+            # Batch-load pre-computed pattern-intrinsic metrics via the migration router
             # (entropy, normalized_entropy, global_normalized_entropy, tf_vector)
             prediction_names = [p.get('name', '') for p in causal_patterns]
-            precomputed_metrics = self.superkb.redis_writer.get_precomputed_metrics_batch(prediction_names)
+            precomputed_metrics = self.superkb.metadata_router.get_precomputed_metrics_batch(prediction_names)
             precomputed_hit = len(precomputed_metrics)
             precomputed_miss = len(prediction_names) - precomputed_hit
             if precomputed_hit > 0:

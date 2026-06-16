@@ -232,6 +232,34 @@ class RedisWriter:
                 results[name] = self.get_metadata(name)
             return results
 
+    def get_frequency_batch(self, pattern_names: list[str]) -> dict[str, int]:
+        """
+        Batch fetch pattern frequencies via a single MGET.
+
+        Used by predict-path callers that previously pulled frequency through
+        get_metadata_batch but no longer need the full metadata (emotives,
+        metadata) bundle from Redis — those fields now live in ClickHouse
+        patterns_metadata. Frequency stays in Redis to preserve atomic INCR.
+
+        Args:
+            pattern_names: List of pattern name hashes
+
+        Returns:
+            Dict mapping pattern_name → frequency (0 if not found)
+        """
+        if not pattern_names:
+            return {}
+        try:
+            keys = [f"{self.kb_id}:frequency:{name}" for name in pattern_names]
+            values = self.client.mget(keys)
+            return {
+                name: int(val) if val else 0
+                for name, val in zip(pattern_names, values)
+            }
+        except Exception as e:
+            logger.error(f"Failed to batch get frequencies for {len(pattern_names)} patterns: {e}")
+            return {name: 0 for name in pattern_names}
+
     def batch_update_symbol_stats(self, symbol_counts: dict[str, int],
                                    pattern_name: str,
                                    is_new_pattern: bool,

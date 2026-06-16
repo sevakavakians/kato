@@ -64,6 +64,7 @@ class SuperKnowledgeBase:
             # Get ClickHouse and Redis clients (REQUIRED)
             from kato.storage.connection_manager import get_clickhouse_client, get_redis_client
             from kato.storage.clickhouse_writer import ClickHouseWriter
+            from kato.storage.metadata_router import MetadataRouter
             from kato.storage.redis_writer import RedisWriter
 
             clickhouse_client = get_clickhouse_client()
@@ -84,6 +85,12 @@ class SuperKnowledgeBase:
             # Initialize hybrid storage writers
             self.clickhouse_writer = ClickHouseWriter(self.id, clickhouse_client)
             self.redis_writer = RedisWriter(self.id, redis_client)
+            self.metadata_router = MetadataRouter(
+                kb_id=self.id,
+                redis_writer=self.redis_writer,
+                clickhouse_writer=self.clickhouse_writer,
+                config=settings.metadata_migration,
+            )
 
             # Set emotives tracking and observation counts
             self.emotives_available = set()
@@ -414,14 +421,13 @@ class SuperKnowledgeBase:
                     trimmed_emotives = trimmed_emotives[-self.persistence:]
                     logger.debug(f"[HYBRID] Trimmed emotives from {len(emotives)} to {self.persistence} entries for NEW pattern {pattern_object.name}")
 
-                # Write emotives + metadata. Frequency=None: the SETNX above
-                # already set it atomically; a SET here would clobber any
-                # concurrent INCRs from subsequent re-learners.
-                self.redis_writer.write_metadata(
+                # Write emotives + metadata via the migration router.
+                # Frequency is owned by the SETNX above and never touched here
+                # (a SET would clobber concurrent INCRs from re-learners).
+                self.metadata_router.upsert_pattern_metadata(
                     pattern_name=pattern_object.name,
-                    frequency=None,
                     emotives=trimmed_emotives,
-                    metadata=metadata if metadata else {}
+                    metadata=metadata if metadata else {},
                 )
 
                 # Update symbol statistics for NEW pattern (increments global
@@ -446,7 +452,7 @@ class SuperKnowledgeBase:
 
             # Update/merge emotives and metadata if provided
             if emotives or metadata:
-                existing_meta = self.redis_writer.get_metadata(pattern_object.name)
+                existing_meta = self.metadata_router.get_metadata(pattern_object.name)
 
                 # Process emotives: append to rolling window list
                 updated_emotives = existing_meta.get('emotives', [])
@@ -476,13 +482,12 @@ class SuperKnowledgeBase:
                         merged_metadata[key] = sorted(list(existing_values | new_values))
                     updated_metadata = merged_metadata
 
-                # Write emotives + metadata. Frequency=None: INCR above already
-                # advanced it; SETting here would clobber concurrent INCRs.
-                self.redis_writer.write_metadata(
+                # Write emotives + metadata via the migration router.
+                # Frequency is owned by INCR above and never touched here.
+                self.metadata_router.upsert_pattern_metadata(
                     pattern_name=pattern_object.name,
-                    frequency=None,
                     emotives=updated_emotives,
-                    metadata=updated_metadata
+                    metadata=updated_metadata,
                 )
                 logger.debug(f"Updated emotives (len={len(updated_emotives)}) and metadata for pattern {pattern_object.name}")
 
@@ -525,22 +530,22 @@ class SuperKnowledgeBase:
             if not pattern_data:
                 return None
 
-            # Get metadata from Redis
-            redis_metadata = self.redis_writer.get_metadata(pattern)
+            # Get metadata via the migration router (Redis or ClickHouse per flags)
+            pattern_metadata = self.metadata_router.get_metadata(pattern)
 
             # Combine ClickHouse and Redis data
             result = {
                 'name': pattern,
                 'pattern_data': pattern_data['pattern_data'],
                 'length': pattern_data['length'],
-                'frequency': redis_metadata.get('frequency', 1)
+                'frequency': pattern_metadata.get('frequency', 1)
             }
 
             # Add emotives and metadata if present
-            if 'emotives' in redis_metadata:
-                result['emotives'] = redis_metadata['emotives']
-            if 'metadata' in redis_metadata:
-                result['metadata'] = redis_metadata['metadata']
+            if 'emotives' in pattern_metadata:
+                result['emotives'] = pattern_metadata['emotives']
+            if 'metadata' in pattern_metadata:
+                result['metadata'] = pattern_metadata['metadata']
 
             return result
 

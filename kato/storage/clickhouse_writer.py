@@ -9,6 +9,7 @@ Handles writing pattern data to ClickHouse patterns_data table with:
 - Buffered batch inserts for high-throughput learning
 """
 
+import json
 import logging
 from datetime import datetime
 from itertools import chain
@@ -56,6 +57,9 @@ class ClickHouseWriter:
     # actual batching across all callers.
     DEFAULT_BATCH_SIZE = 1
 
+    # Class-level flag: ensure-DDL runs once per process, not once per kb_id.
+    _metadata_table_ensured: bool = False
+
     def __init__(self, kb_id: str, clickhouse_client, batch_size: int = None):
         """
         Initialize ClickHouse writer.
@@ -84,6 +88,42 @@ class ClickHouseWriter:
                 logger.warning("MINHASH_HASH_FUNC=xxhash but xxhash not installed. Using default SHA-1.")
 
         logger.debug(f"ClickHouseWriter initialized for kb_id: {kb_id}, batch_size: {self.batch_size}")
+
+        # One-time DDL for the patterns_metadata sidecar (idempotent CREATE IF NOT EXISTS).
+        # Lets the dual-write rollout succeed on clusters whose init.sql predates this column set.
+        if not ClickHouseWriter._metadata_table_ensured:
+            self._ensure_patterns_metadata_table()
+            ClickHouseWriter._metadata_table_ensured = True
+
+    def _ensure_patterns_metadata_table(self) -> None:
+        """Create the patterns_metadata sidecar table if it doesn't exist.
+
+        Safe to run on every process startup. Existing tables are untouched
+        because of CREATE TABLE IF NOT EXISTS. Logs a warning on failure rather
+        than raising — if the DDL fails the metadata-write paths will surface
+        the real error later.
+        """
+        ddl = """
+            CREATE TABLE IF NOT EXISTS kato.patterns_metadata (
+                kb_id                     String,
+                name                      String,
+                emotives                  String  DEFAULT '[]',
+                metadata                  String  DEFAULT '{}',
+                entropy                   Nullable(Float64),
+                normalized_entropy        Nullable(Float64),
+                global_normalized_entropy Nullable(Float64),
+                tf_vector                 String  DEFAULT '{}',
+                updated_at                DateTime DEFAULT now()
+            )
+            ENGINE = ReplacingMergeTree(updated_at)
+            PARTITION BY kb_id
+            ORDER BY (kb_id, name)
+        """
+        try:
+            self.client.command(ddl)
+            logger.debug("Ensured kato.patterns_metadata table exists")
+        except Exception as e:
+            logger.warning(f"Could not ensure kato.patterns_metadata table: {e}")
 
     @property
     def has_pending(self) -> bool:
@@ -355,3 +395,201 @@ class ClickHouseWriter:
         except Exception as e:
             logger.error(f"Failed to get pattern data for {pattern_name}: {e}")
             return None
+
+    # ── Pattern metadata sidecar (offloaded from Redis) ─────────────────
+
+    _METADATA_COLUMNS = (
+        'kb_id', 'name', 'emotives', 'metadata',
+        'entropy', 'normalized_entropy', 'global_normalized_entropy',
+        'tf_vector', 'updated_at'
+    )
+
+    def _build_metadata_row(
+        self,
+        name: str,
+        emotives: list[dict] | None,
+        metadata: dict | None,
+        entropy: float | None,
+        normalized_entropy: float | None,
+        global_normalized_entropy: float | None,
+        tf_vector: dict | None,
+        now: datetime,
+    ) -> list:
+        return [
+            self.kb_id,
+            name,
+            json.dumps(emotives if emotives is not None else []),
+            json.dumps(metadata if metadata is not None else {}),
+            entropy,
+            normalized_entropy,
+            global_normalized_entropy,
+            json.dumps(tf_vector if tf_vector is not None else {}),
+            now,
+        ]
+
+    def write_pattern_metadata(
+        self,
+        name: str,
+        emotives: list[dict] | None = None,
+        metadata: dict | None = None,
+        entropy: float | None = None,
+        normalized_entropy: float | None = None,
+        global_normalized_entropy: float | None = None,
+        tf_vector: dict | None = None,
+    ) -> bool:
+        """
+        INSERT a row into patterns_metadata (ReplacingMergeTree dedupes by (kb_id, name)).
+
+        Callers must provide the full intended state of the row. To preserve
+        existing fields, read via get_pattern_metadata_batch first and merge
+        in Python — there is no partial-update semantics, omitted columns are
+        written as their DEFAULTs.
+        """
+        try:
+            row = self._build_metadata_row(
+                name, emotives, metadata,
+                entropy, normalized_entropy, global_normalized_entropy,
+                tf_vector, datetime.now(),
+            )
+            self.client.insert(
+                'kato.patterns_metadata',
+                [row],
+                column_names=list(self._METADATA_COLUMNS),
+                settings={'async_insert': 1, 'wait_for_async_insert': 0},
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Failed to write metadata for pattern {name}: {e}")
+            raise
+
+    def write_pattern_metadata_batch(self, rows: list[dict]) -> int:
+        """
+        Bulk INSERT multiple metadata rows in one ClickHouse call.
+
+        Each dict accepts the same keys as write_pattern_metadata's kwargs
+        (name, emotives, metadata, entropy, normalized_entropy,
+        global_normalized_entropy, tf_vector). Missing keys → DEFAULT.
+        """
+        if not rows:
+            return 0
+        now = datetime.now()
+        values = [
+            self._build_metadata_row(
+                r['name'],
+                r.get('emotives'),
+                r.get('metadata'),
+                r.get('entropy'),
+                r.get('normalized_entropy'),
+                r.get('global_normalized_entropy'),
+                r.get('tf_vector'),
+                now,
+            )
+            for r in rows
+        ]
+        try:
+            self.client.insert(
+                'kato.patterns_metadata',
+                values,
+                column_names=list(self._METADATA_COLUMNS),
+                settings={'async_insert': 1, 'wait_for_async_insert': 0},
+            )
+            logger.debug(f"Batch wrote {len(rows)} metadata rows (kb_id={self.kb_id})")
+            return len(rows)
+        except Exception as e:
+            logger.error(f"Failed to batch write {len(rows)} metadata rows: {e}")
+            raise
+
+    def get_pattern_metadata_batch(self, names: list[str]) -> dict[str, dict]:
+        """
+        Batch fetch metadata for multiple patterns.
+
+        Uses argMax(field, updated_at) GROUP BY name to retrieve the latest
+        values across unmerged ReplacingMergeTree parts, without depending on
+        the FINAL modifier's merge timing.
+
+        Returns:
+            Dict mapping pattern_name → {emotives, metadata, entropy,
+            normalized_entropy, global_normalized_entropy, tf_vector}.
+            Patterns absent from the table are omitted from the result —
+            callers must default appropriately.
+        """
+        if not names:
+            return {}
+        try:
+            result = self.client.query(
+                """
+                SELECT
+                  name,
+                  argMax(emotives, updated_at)                  AS emotives,
+                  argMax(metadata, updated_at)                  AS metadata,
+                  argMax(entropy, updated_at)                   AS entropy,
+                  argMax(normalized_entropy, updated_at)        AS normalized_entropy,
+                  argMax(global_normalized_entropy, updated_at) AS global_normalized_entropy,
+                  argMax(tf_vector, updated_at)                 AS tf_vector
+                FROM kato.patterns_metadata
+                WHERE kb_id = %(kb_id)s AND name IN %(names)s
+                GROUP BY name
+                """,
+                parameters={'kb_id': self.kb_id, 'names': tuple(names)},
+            )
+            out: dict[str, dict] = {}
+            for row in result.result_rows:
+                (
+                    name,
+                    emotives_str,
+                    metadata_str,
+                    entropy,
+                    norm_entropy,
+                    global_norm_entropy,
+                    tf_str,
+                ) = row
+                entry: dict[str, Any] = {'name': name}
+                try:
+                    entry['emotives'] = json.loads(emotives_str) if emotives_str else []
+                except (json.JSONDecodeError, TypeError):
+                    entry['emotives'] = []
+                try:
+                    entry['metadata'] = json.loads(metadata_str) if metadata_str else {}
+                except (json.JSONDecodeError, TypeError):
+                    entry['metadata'] = {}
+                if entropy is not None:
+                    entry['entropy'] = float(entropy)
+                if norm_entropy is not None:
+                    entry['normalized_entropy'] = float(norm_entropy)
+                if global_norm_entropy is not None:
+                    entry['global_normalized_entropy'] = float(global_norm_entropy)
+                try:
+                    entry['tf_vector'] = json.loads(tf_str) if tf_str else {}
+                except (json.JSONDecodeError, TypeError):
+                    entry['tf_vector'] = {}
+                out[name] = entry
+            return out
+        except Exception as e:
+            logger.error(f"Failed to batch get pattern metadata for {len(names)} patterns: {e}")
+            return {}
+
+    def delete_pattern_metadata(self, name: str) -> bool:
+        """Delete a single pattern's metadata row (async ALTER ... DELETE)."""
+        try:
+            self.client.command(
+                f"ALTER TABLE kato.patterns_metadata "
+                f"DELETE WHERE kb_id = '{self.kb_id}' AND name = '{name}'"
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Failed to delete metadata for pattern {name}: {e}")
+            return False
+
+    def delete_all_pattern_metadata(self) -> bool:
+        """Drop the metadata partition for this kb_id (matches delete_all_patterns)."""
+        try:
+            self.client.command(
+                f"ALTER TABLE kato.patterns_metadata DROP PARTITION '{self.kb_id}'"
+            )
+            logger.info(f"Dropped patterns_metadata partition for kb_id: {self.kb_id}")
+            return True
+        except Exception as e:
+            if "doesn't exist" in str(e).lower() or "not found" in str(e).lower():
+                return True
+            logger.error(f"Failed to drop metadata partition for {self.kb_id}: {e}")
+            raise

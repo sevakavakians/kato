@@ -473,6 +473,7 @@ class PatternSearcher:
         self.clickhouse_client = kwargs.get("clickhouse_client", None)
         self.redis_client = kwargs.get("redis_client", None)
         self.filter_executor: Optional[FilterPipelineExecutor] = None
+        self._metadata_router = None  # lazily built on first prediction batch
 
         # Validate hybrid architecture requirements
         if not FILTER_PIPELINE_AVAILABLE:
@@ -1400,6 +1401,29 @@ class PatternSearcher:
 
         return active_list
 
+    def _get_metadata_router(self):
+        """Lazily build (and cache) a MetadataRouter scoped to this PatternSearcher.
+
+        Returns None if either backing client is missing. The router is constructed
+        once per PatternSearcher instance — instantiating ClickHouseWriter triggers
+        a one-time-per-process DDL check, so caching here avoids that on every batch.
+        """
+        if self._metadata_router is not None:
+            return self._metadata_router
+        if not self.redis_client or not self.clickhouse_client:
+            return None
+        from kato.config.settings import get_settings
+        from kato.storage.clickhouse_writer import ClickHouseWriter
+        from kato.storage.metadata_router import MetadataRouter
+        from kato.storage.redis_writer import RedisWriter
+        self._metadata_router = MetadataRouter(
+            kb_id=self.kb_id,
+            redis_writer=RedisWriter(self.kb_id, self.redis_client),
+            clickhouse_writer=ClickHouseWriter(self.kb_id, self.clickhouse_client),
+            config=get_settings().metadata_migration,
+        )
+        return self._metadata_router
+
     async def _build_predictions_batch(self, batch: list, stm_events: Optional[list[list[str]]] = None) -> list[dict[str, Any]]:
         """
         Build predictions for a batch of results.
@@ -1418,13 +1442,8 @@ class PatternSearcher:
         if not batch:
             return predictions
 
-        # Import RedisWriter for loading pattern metadata
-        from kato.storage.redis_writer import RedisWriter
-
-        # Create RedisWriter for loading emotives and metadata
-        redis_writer = None
-        if self.redis_client:
-            redis_writer = RedisWriter(self.kb_id, self.redis_client)
+        # Route metadata reads through the migration router (Redis or ClickHouse per flags)
+        metadata_router = self._get_metadata_router()
 
         if self.filter_executor is None:
             raise RuntimeError("FilterPipelineExecutor not initialized - hybrid architecture required")
@@ -1436,8 +1455,8 @@ class PatternSearcher:
                 pattern_hashes.append(result[0])  # pattern_hash is first element
 
         metadata_batch = {}
-        if redis_writer and pattern_hashes:
-            metadata_batch = redis_writer.get_metadata_batch(pattern_hashes)
+        if metadata_router and pattern_hashes:
+            metadata_batch = metadata_router.get_metadata_batch(pattern_hashes)
 
         for result in batch:
             if len(result) >= 9:

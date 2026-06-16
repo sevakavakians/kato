@@ -4,8 +4,9 @@
 
 KATO's hybrid architecture provides **100-300x performance improvement** for pattern matching at billion-scale by splitting responsibilities between specialized databases:
 
-- **ClickHouse**: Pattern data with multi-stage filtering (billions → thousands)
-- **Redis**: Pattern metadata (emotives, frequency, metadata) with fast K/V lookups
+- **ClickHouse `patterns_data`**: Pattern data with multi-stage filtering (billions → thousands)
+- **ClickHouse `patterns_metadata`**: Per-pattern KV sidecar (emotives, metadata, pre-computed entropy/TF metrics) — keeps Redis RAM bounded under large training workloads
+- **Redis**: Atomic counters (`frequency`, symbol HASHes, global totals), session state with per-key TTL — anything ClickHouse can't safely emulate
 
 ## Architecture Design
 
@@ -23,8 +24,19 @@ Billions (ClickHouse) → Millions (LSH) → Thousands (Jaccard) → Hundreds (R
 
 | Database | Stores | Optimized For |
 |----------|--------|---------------|
-| **ClickHouse** | `pattern_data`, length, tokens, MinHash, LSH bands | Full-table scans with WHERE clause pushdown |
-| **Redis** | `emotives`, `metadata`, `frequency` | Fast point lookups by pattern name |
+| **ClickHouse `patterns_data`** | `pattern_data`, length, tokens, MinHash, LSH bands | Full-table scans with WHERE clause pushdown |
+| **ClickHouse `patterns_metadata`** | `emotives`, `metadata`, pre-computed `entropy` / `normalized_entropy` / `global_normalized_entropy` / `tf_vector` | Disk-backed `WHERE name IN (...)` batch reads via `ReplacingMergeTree` |
+| **Redis** | `frequency` (atomic `INCR`), symbol HASHes (`HINCRBY`), `affinity:*` (`HINCRBYFLOAT`), global counters, sessions | Atomic counter operations + per-key TTL — capabilities ClickHouse cannot safely emulate |
+
+The per-pattern KV sidecar (`patterns_metadata`) was added to bound Redis RAM use under large training workloads (the dominant per-pattern key growth driver — emotives, metadata, and the four pre-computed metric keys — accounted for the bulk of Redis bytes). Rollout is gated by three env vars:
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `KATO_METADATA_DUAL_WRITE` | `true` | Write to both Redis (legacy) and ClickHouse (new) during the rollout window |
+| `KATO_METADATA_READ_FROM` | `redis` | Which store the predict path reads from; flip to `clickhouse` after backfill + verify |
+| `KATO_METADATA_READ_VERIFY` | `false` | Read both stores and log field-level diffs; staging only |
+
+Backfill: `scripts/backfill_pattern_metadata.py`. Cleanup of legacy Redis keys after read-cutover: `scripts/delete_moved_redis_keys.py`. All routing is centralized in [`kato/storage/metadata_router.py`](../../kato/storage/metadata_router.py).
 
 ## Node Isolation via kb_id
 

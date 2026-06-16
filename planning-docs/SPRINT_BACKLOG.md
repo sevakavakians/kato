@@ -1,7 +1,69 @@
 # SPRINT_BACKLOG.md - Upcoming Work
-*Last Updated: 2026-04-20*
+*Last Updated: 2026-05-22*
 
 ## Active Projects
+
+### Redis OOM Fix: Move Per-Pattern Metadata to ClickHouse
+**Priority**: P1 — Memory / reliability
+**Status**: PHASES 3/4/5 VALIDATED IN STAGING — Awaiting production cutover (Phases 6 cleanup, 7 code removal deferred)
+**Staging Validated**: 2026-05-22 (localhost)
+**Plan File**: `/Users/sevakavakians/.claude/plans/ultrathink-currently-kato-uses-peaceful-micali.md`
+**Initiative File**: `planning-docs/initiatives/redis-oom-clickhouse-metadata-migration.md`
+**Decision**: DECISION-014
+**Quality Gate**: 13 unit tests in `tests/tests/unit/test_metadata_router.py` — all pass (2 added for Pydantic v2 env-var regression)
+
+#### What Was Implemented (2026-05-20)
+
+All engineering work is complete. The following landed in a single session:
+
+**Schema + Storage (Phase 0)**
+- `kato.patterns_metadata` DDL added to all three init.sql mirrors (`config/clickhouse/init.sql`, `deployment/config/clickhouse/init.sql`, `charts/kato/scripts/init.sql`)
+- `kato/storage/clickhouse_writer.py`: 5 new methods + `_ensure_patterns_metadata_table()` DDL check
+- `kato/storage/redis_writer.py`: `get_frequency_batch(names)` MGET helper
+- `kato/storage/metadata_router.py` (NEW): centralises dual-store routing with read-merge-write upsert, verify-mode diff logging, and batch methods
+
+**Feature Flags (Phase 1)**
+- `kato/config/settings.py`: `MetadataMigrationConfig` with `KATO_METADATA_DUAL_WRITE=true`, `KATO_METADATA_READ_FROM=redis`, `KATO_METADATA_READ_VERIFY=false`
+
+**Call-Site Rewiring (Phase 1)** — all 7 swap points wired through `metadata_router`
+- `kato/informatics/knowledge_base.py` (3 learn + 1 getPattern swap points)
+- `kato/workers/pattern_processor.py` (finalize_training, update_pattern, delete_pattern, _predict_single_symbol_fast, predictPattern)
+- `kato/searches/pattern_search.py` (_build_predictions_batch)
+
+**Scripts (Phases 2 + 6)**
+- `scripts/backfill_pattern_metadata.py` (NEW) — chunked, idempotent, supports `--all` / `--kb-ids` / `--dry-run`
+- `scripts/delete_moved_redis_keys.py` (NEW) — chunked SCAN + UNLINK for 6 moved key families; preserves frequency, symbols, sessions
+
+**Docs**
+- `docs/reference/database-schema.md` — `patterns_metadata` section + Redis restructure
+- `docs/developers/hybrid-architecture.md` — 3-tier storage split; env-var flags; script references
+
+#### Phase Validation Summary
+
+| Phase | Status | Notes |
+|---|---|---|
+| 3 — Read-verify | VALIDATED IN STAGING | Zero mismatch warnings over 3 learn cycles + predict; Redis/ClickHouse in sync |
+| 4 — Read cutover | VALIDATED IN STAGING | `READ_FROM=clickhouse`; emotives from `argMax(field, updated_at) GROUP BY name`; correct merged results |
+| 5 — Stop Redis writes | VALIDATED IN STAGING | `DUAL_WRITE=false`; moved key families no longer written on learn; predict works end-to-end |
+| 6 — Cleanup | DEFERRED (production) | Dry-run validated: ~8 stale keys; execution is an operational call |
+| 7 — Code removal | DEFERRED (production) | Delete dead Redis paths and feature flag branches after Phase 5 confirmed stable in production |
+
+**Critical fix during staging**: `MetadataMigrationConfig` used `json_schema_extra={'env': '...'}` (Pydantic v1 pattern); Pydantic v2 silently ignores this, so all `KATO_METADATA_*` vars had no effect. Fixed by switching to `validation_alias='KATO_METADATA_...'`. Two regression tests added (`test_metadata_migration_config_reads_env_vars`, `test_metadata_migration_config_defaults_safe`).
+
+**Current staging config** (Phase 4 end-state — production-ready):
+- `KATO_METADATA_DUAL_WRITE=true`
+- `KATO_METADATA_READ_FROM=clickhouse`
+- `KATO_METADATA_READ_VERIFY=false`
+
+**Deployment note**: OrbStack `HTTP_PROXY` interception (502 on kato → ClickHouse) patched via `deployment/docker-compose.override.yml` with internal hostnames in `NO_PROXY`. Confirm this file is present in the production deployment.
+
+#### Verification (unchanged from plan)
+1. Train 500k patterns across 4 kb_ids; `redis-cli INFO memory` plateau below 8 GB
+2. `./run_tests.sh --no-start --no-stop` with `KATO_METADATA_READ_FROM=clickhouse`
+3. Determinism golden file — prediction output byte-identical before/after migration
+4. p50/p95 predict latency within ±20%
+
+---
 
 ### Multi-Worker Uvicorn + Concurrent Training Safety
 **Priority**: High - Performance / Correctness

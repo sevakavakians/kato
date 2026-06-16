@@ -1,15 +1,27 @@
 # SESSION_STATE.md - Current Development State
-*Last Updated: 2026-04-20 (Multi-Worker Uvicorn + Concurrent Training Safety - ACTIVE)*
+*Last Updated: 2026-05-22 (Redis OOM Fix: Phases 3/4/5 validated in staging — awaiting production cutover for Phase 6 cleanup and Phase 7 code removal)*
 
 ## Current Task
-**Multi-Worker Uvicorn + Concurrent Training Safety - ACTIVE**
-- Status: ACTIVE - Implementation in progress
-- Started: 2026-04-20
-- Priority: P1 (Performance + correctness for parallel wikitext training)
+**Redis OOM Fix: Move Per-Pattern Metadata from Redis to ClickHouse — MIGRATION VALIDATED IN STAGING THROUGH PHASE 5; AWAITING PRODUCTION CUTOVER**
+- Status: Phases 3/4/5 validated in staging (localhost, 2026-05-22); Phase 6 (cleanup execution) and Phase 7 (code removal) are deferred operational decisions for production
+- Engineering complete since: 2026-05-20
+- Staging validated: 2026-05-22
+- Priority: P1 (Memory / reliability — eliminates Redis 8 GB OOM ceiling under large training workloads)
+- Plan File: `/Users/sevakavakians/.claude/plans/ultrathink-currently-kato-uses-peaceful-micali.md`
+- Initiative File: `planning-docs/initiatives/redis-oom-clickhouse-metadata-migration.md`
+- Decision: DECISION-014 in `planning-docs/DECISIONS.md`
+- Quality Gate: 13 unit tests in `tests/tests/unit/test_metadata_router.py` — all pass (2 regression tests added during staging for Pydantic v2 env-var fix)
+- Staging config (Phase 4 end-state): `KATO_METADATA_DUAL_WRITE=true`, `KATO_METADATA_READ_FROM=clickhouse`, `KATO_METADATA_READ_VERIFY=false`
+- Rollback always available: flip `READ_FROM=redis` while `DUAL_WRITE=true` is set
+- Remaining (production operational): Phase 6 — run `scripts/delete_moved_redis_keys.py` and verify `used_memory_human` drop; Phase 7 — delete dead Redis paths and feature flag branches
+- Expected memory reduction: ~60–80% of current Redis footprint at 250k patterns (realised once Phase 6 cleanup is executed)
+
+## Previous Task (context preserved)
+**Multi-Worker Uvicorn + Concurrent Training Safety**
+- Status: ACTIVE (implementation in progress as of 2026-04-20) — superseded by Redis OOM initiative
 - Plan File: `/Users/sevakavakians/.claude/plans/ultrathink-enable-multi-worker-recursive-marble.md`
-- Objective: Enable `--workers N` uvicorn, fix per-worker ClickHouse buffer orphan risk, and close SETNX/frequency races in `learnPattern`
-- Three focused changes: (1) `KATO_WORKERS` env var + kato-manager.sh flag, (2) `DEFAULT_BATCH_SIZE=1` + ClickHouse `async_insert`, (3) SETNX gate in `learnPattern` + `write_metadata(frequency=None)`
-- Note: Distributed session locks are NOT in scope — training never accesses the same session concurrently; sessions are already STM-isolated
+- Objective: Enable `--workers N` uvicorn, fix per-worker ClickHouse buffer orphan risk, close SETNX/frequency races
+- Note: Distributed session locks are NOT in scope
 
 ## Critical Issue Discovered
 
@@ -149,32 +161,22 @@
 - `kato/workers/pattern_operations.py` - Update to stateless
 
 ## Next Immediate Action
-**Multi-Worker Uvicorn: Implement Three Changes** (Active)
+**Redis OOM Fix: Awaiting Production Cutover Decision**
 
-### Approach
-Implement the three changes from the approved plan in order:
+Staging is fully validated at the Phase 4 end-state. The remaining steps are production operational decisions:
 
-1. **Change 1 — Multi-worker wiring**
-   - Update `Dockerfile` CMD to shell form with `${KATO_WORKERS:-4}`
-   - Add `KATO_WORKERS=${KATO_WORKERS:-4}` to both compose files
-   - Add `--workers N` / `-w N` pre-parse flag to `deployment/kato-manager.sh`
+1. **Phase 6 — Cleanup (production, when ready)**
+   - Run `scripts/delete_moved_redis_keys.py --all` on the production deployment (interactive confirmation required)
+   - Validate via `docker exec kato-redis redis-cli INFO memory` that `used_memory_human` drops
+   - ~60–80% Redis memory reduction expected at 250k patterns
 
-2. **Change 2 — ClickHouse server-side async_insert**
-   - Set `DEFAULT_BATCH_SIZE = 1` in `kato/storage/clickhouse_writer.py`
-   - Pass `async_insert=1, wait_for_async_insert=1` settings on every insert call
+2. **Phase 7 — Code Removal** (after Phase 5 confirmed stable in production)
+   - Delete dead branches in `redis_writer.py` (emotives/metadata write paths, `get_metadata`, `get_metadata_batch`, `write_precomputed_metrics_batch`, `get_precomputed_metrics_batch`)
+   - Delete `MetadataMigrationConfig` and its conditional branches from `settings.py`
 
-3. **Change 3 — SETNX gate in learnPattern**
-   - Restructure `kato/informatics/knowledge_base.py` `learnPattern` to use `SET freq_key 1 NX` as new-pattern claim
-   - Change `write_metadata` in `kato/storage/redis_writer.py` to `frequency: Optional[int] = None`; skip SET when `None`
+3. **Production deployment note**: The OrbStack-specific `HTTP_PROXY` interception that caused 502 errors on kato → ClickHouse traffic is patched via `deployment/docker-compose.override.yml` (internal service hostnames added to `NO_PROXY`). Verify this file is present in the production deployment.
 
-4. **Verify**
-   - `docker compose build kato` then start with `KATO_WORKERS=5`; confirm 5 PIDs in logs
-   - `./run_tests.sh --no-start --no-stop`
-   - ClickHouse duplicate-row SQL check
-   - Redis vs ClickHouse pattern count parity
-
-### Estimated Duration
-3-5 hours (implementation + build + test)
+See `planning-docs/initiatives/redis-oom-clickhouse-metadata-migration.md` for full spec and verification criteria.
 
 ## Blockers
 **ACTIVE BLOCKER** ⚠️

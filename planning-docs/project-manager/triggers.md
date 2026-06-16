@@ -3,6 +3,77 @@
 
 ---
 
+## 2026-05-22 - Milestone Completion (Redis OOM Fix: Phases 3/4/5 Validated in Staging)
+
+**Trigger Type**: Primary — Milestone Completion + Knowledge Refinement (Pydantic v2 env-var assumption corrected)
+**Event**: Phases 3 (Read-Verify), 4 (Read Cutover), and 5 (Stop Redis Writes) validated in staging (localhost). Critical bug found and fixed: `MetadataMigrationConfig` Pydantic v2 env-var silent ignore. Staging left at Phase 4 end-state: `DUAL_WRITE=true`, `READ_FROM=clickhouse`, `READ_VERIFY=false`.
+
+**Key Findings**:
+- Pydantic v2 silently ignores `json_schema_extra={'env': '...'}` — must use `validation_alias`
+- Two regression tests added; quality gate count corrected from 11 to 13
+- Zero mismatch warnings across all three phase verifications
+- Cleanup dry-run validated (~8 keys); execution deferred
+- OrbStack `HTTP_PROXY` interception patched via `deployment/docker-compose.override.yml`
+- Test suite regression delta is within run-to-run variance (pre-existing async_insert flakiness)
+
+**Documentation Actions**:
+- Updated: `planning-docs/initiatives/redis-oom-clickhouse-metadata-migration.md` (status, Phase 3/4/5 rows, steady-state config block)
+- Updated: `planning-docs/DECISIONS.md` (DECISION-014 staging validation note + Pydantic v2 bug record)
+- Updated: `planning-docs/SESSION_STATE.md` (current task, quality gate count, next immediate action)
+- Updated: `planning-docs/SPRINT_BACKLOG.md` (phase validation table, critical fix note, deployment note)
+- Updated: `planning-docs/project-manager/maintenance-log.md`
+- Updated: `planning-docs/project-manager/triggers.md` (this entry)
+
+---
+
+## 2026-05-20 - Milestone Completion (Redis OOM Fix: Phases 0/1/2/6 Implemented)
+
+**Trigger Type**: Primary — Milestone Completion + Task Status Change
+**Event**: Engineering implementation complete for Phases 0 (Schema), 1 (Dual Write + call-site rewiring), 2 (Backfill script), and 6 (Cleanup script). Quality gate: 11/11 unit tests passing in `test_metadata_router.py`.
+**Remaining**: Phases 3–5 and 7 are operational steps only (env-var flips + monitoring — no code changes).
+
+**Key New Artifacts**:
+- `kato/storage/metadata_router.py` (NEW)
+- `scripts/backfill_pattern_metadata.py` (NEW)
+- `scripts/delete_moved_redis_keys.py` (NEW)
+- `tests/tests/unit/test_metadata_router.py` (NEW — 11 tests, all pass)
+- `tests/tests/integration/test_pattern_metadata_migration.py` (NEW — 3 tests, require live services)
+
+**Documentation Actions**:
+- Updated: `planning-docs/initiatives/redis-oom-clickhouse-metadata-migration.md` (status + implementation notes)
+- Updated: `planning-docs/DECISIONS.md` (DECISION-014 status)
+- Updated: `planning-docs/SESSION_STATE.md` (current task, next action)
+- Updated: `planning-docs/SPRINT_BACKLOG.md` (active item reflects implemented state)
+- Updated: `planning-docs/project-manager/maintenance-log.md`
+- Updated: `planning-docs/project-manager/triggers.md` (this entry)
+
+---
+
+## 2026-05-20 - New Specifications (Redis OOM Fix: Per-Pattern Metadata Migration to ClickHouse)
+
+**Trigger Type**: Primary — New Specifications + Architectural Decision + Context Switch
+**Event**: Approved plan for moving six per-pattern Redis keys to new ClickHouse sidecar table `kato.patterns_metadata`
+**Source**: User — plan file at `/Users/sevakavakians/.claude/plans/ultrathink-currently-kato-uses-peaceful-micali.md`
+
+**Plan Summary**:
+- Root cause: 7 Redis keys per pattern, never expiring, grow linearly with LTM; JSON blobs dominate memory
+- Solution: Move 6 keys to `kato.patterns_metadata` (ReplacingMergeTree); frequency stays in Redis (INCR atomicity)
+- Rejected: EmbeddedRocksDB — async-only INCR, table-wide TTL, no HASH/SET semantics, write-stall risk
+- Rollout: 7 phases gated by KATO_METADATA_DUAL_WRITE / KATO_METADATA_READ_FROM / KATO_METADATA_READ_VERIFY
+- Expected outcome: ~60–80% Redis memory reduction at 250k patterns; predict latency within ±20%
+
+**Decision logged**: DECISION-014 in `planning-docs/DECISIONS.md`
+
+**Documentation Actions**:
+- Created: `planning-docs/initiatives/redis-oom-clickhouse-metadata-migration.md`
+- Updated: `planning-docs/DECISIONS.md` (DECISION-014)
+- Updated: `planning-docs/SESSION_STATE.md` (current task, next action)
+- Updated: `planning-docs/SPRINT_BACKLOG.md` (new active item at top)
+- Updated: `planning-docs/project-manager/maintenance-log.md`
+- Updated: `planning-docs/project-manager/triggers.md` (this entry)
+
+---
+
 ## 2026-04-20 - New Specifications (Multi-Worker Uvicorn + Concurrent Training Safety)
 
 **Trigger Type**: Primary — New Specifications + Context Switch

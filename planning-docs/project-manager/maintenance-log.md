@@ -3,6 +3,82 @@
 
 ---
 
+## 2026-05-22 - Milestone Completion: Redis OOM Fix Phases 3/4/5 Validated in Staging
+
+**Trigger**: Milestone completion — Phases 3 (Read-Verify), 4 (Read Cutover), and 5 (Stop Redis Writes) all validated in staging (localhost)
+
+**Event Type**: Milestone completion + knowledge refinement (critical bug found and fixed during staging; assumption about Pydantic v2 env-var behavior corrected with verified facts)
+
+**Actions Taken**:
+1. Updated `planning-docs/initiatives/redis-oom-clickhouse-metadata-migration.md` — header status changed; Status Tracking table updated (Phases 3/4/5 VALIDATED IN STAGING; Phases 6/7 DEFERRED); new "Staging Steady-State Configuration" block added
+2. Updated `planning-docs/DECISIONS.md` — DECISION-014 appended with "Staging Validation (2026-05-22)" section covering: Pydantic v2 env-var bug and `validation_alias` fix, regression tests added, per-phase verification results, cleanup dry-run outcome, and current steady-state config; Last Updated timestamp updated
+3. Updated `planning-docs/SESSION_STATE.md` — Current Task updated to reflect staging validation complete; quality gate count corrected from 11 to 13; Next Immediate Action changed from "Enable Read-Verify in Staging" to production cutover decision steps including Phase 6/7 instructions and OrbStack HTTP_PROXY note
+4. Updated `planning-docs/SPRINT_BACKLOG.md` — Redis OOM item status updated; quality gate count corrected; "Remaining Steps" table replaced with "Phase Validation Summary" table plus critical fix note, current staging config, and deployment note; Last Updated timestamp updated
+5. Updated `planning-docs/project-manager/triggers.md` — logged activation event
+6. Updated `planning-docs/project-manager/maintenance-log.md` (this entry)
+
+**Key Facts Captured**:
+- Critical bug: `MetadataMigrationConfig` used `json_schema_extra={'env': '...'}` (Pydantic v1 pattern); Pydantic v2 silently ignores it; all `KATO_METADATA_*` env vars had no effect until fixed with `validation_alias`
+- Fix: switched to `validation_alias='KATO_METADATA_...'` for all three flags
+- Regression tests added: `test_metadata_migration_config_reads_env_vars`, `test_metadata_migration_config_defaults_safe`; total unit tests in `test_metadata_router.py` now 13 (up from 11)
+- Phase 3: zero `metadata-verify` / `metric-verify` mismatch warnings; Redis and ClickHouse in sync
+- Phase 4: predict path reads emotives from `patterns_metadata` via `argMax(field, updated_at) GROUP BY name`; correct merged results
+- Phase 5: Redis no longer receives emotives/metadata/entropy/norm_entropy/global_norm_entropy/tf_vector on learn; frequency key only remains
+- Cleanup dry-run: ~8 stale keys across 2 kb_ids; NOT executed — operational call
+- OrbStack `HTTP_PROXY` interception bug: caused 502 on kato → ClickHouse; patched via `deployment/docker-compose.override.yml` with `NO_PROXY` for internal service hostnames
+- `_ensure_patterns_metadata_table()` DDL guard successfully created `kato.patterns_metadata` on the existing-data deployment where `init.sql` would not re-run
+- Staging left running at Phase 4 end-state: `DUAL_WRITE=true`, `READ_FROM=clickhouse`, `READ_VERIFY=false`
+- Test suite: 32 failed / 434 passed / 4 skipped under migration code; regression delta vs baseline is within run-to-run variance (pre-existing async_insert visibility flakiness), not a deterministic regression
+- All 3 integration tests in `test_pattern_metadata_migration.py` pass in isolation
+
+---
+
+## 2026-05-20 - Milestone Completion: Redis OOM Fix Phases 0/1/2/6 Implemented
+
+**Trigger**: Task completion — Phases 0 (Schema), 1 (Dual Write), 2 (Backfill), and 6 (Cleanup scripts) all implemented in single session
+
+**Event Type**: Milestone completion + knowledge refinement (status moves from APPROVED/pending to engineering complete)
+
+**Actions Taken**:
+1. Updated `planning-docs/initiatives/redis-oom-clickhouse-metadata-migration.md` — header status changed; added "Implementation Notes" section documenting every file that landed; updated Status Tracking table (Phases 0/1/2/6 COMPLETE; Phases 3–5/7 PENDING with operational notes)
+2. Updated `planning-docs/DECISIONS.md` (DECISION-014) — status line updated from "APPROVED — Implementation pending" to "Phases 0/1/2/6 IMPLEMENTED — Phases 3–5/7 remaining"; quality gate (11 passing unit tests) noted
+3. Updated `planning-docs/SESSION_STATE.md` — Current Task updated to reflect implementation complete; Next Immediate Action updated from Phase 0 Schema to Phase 3 Read-Verify operational steps
+4. Updated `planning-docs/SPRINT_BACKLOG.md` — Redis OOM item status updated; "What Was Implemented" section added; Files to Touch table replaced with Remaining Steps table
+5. Updated `planning-docs/project-manager/triggers.md` — logged activation event
+6. Updated `planning-docs/project-manager/maintenance-log.md` (this entry)
+
+**Key Facts Captured**:
+- New file: `kato/storage/metadata_router.py` (centralised dual-store routing)
+- 11 unit tests in `tests/tests/unit/test_metadata_router.py` — all pass (quality gate)
+- 3 integration tests in `tests/tests/integration/test_pattern_metadata_migration.py` (require live services)
+- Phases 3–5 and 7 are purely operational (env-var flips + monitoring) — zero engineering work remaining
+- Frequency key stays in Redis; `metadata_router` handles all moved-key reads/writes transparently
+
+---
+
+## 2026-05-20 - New Specifications: Redis OOM Fix — Per-Pattern Metadata Migration to ClickHouse
+
+**Trigger**: Approved plan at `/Users/sevakavakians/.claude/plans/ultrathink-currently-kato-uses-peaceful-micali.md`
+
+**Event Type**: New specifications + architectural decision + context switch
+
+**Actions Taken**:
+1. Created `planning-docs/initiatives/redis-oom-clickhouse-metadata-migration.md` — full initiative spec with schema, rollout phases, feature flags, file list, verification criteria, and risk table
+2. Prepended DECISION-014 to `planning-docs/DECISIONS.md` — captures the move rationale, engine choice, rejected RocksDB alternative, and rollout summary; updated Last Updated timestamp
+3. Updated `planning-docs/SESSION_STATE.md` — replaced Current Task with Redis OOM initiative; preserved Multi-Worker task as Previous Task for context; updated Next Immediate Action to Phase 0 (Schema) steps; updated Last Updated timestamp
+4. Updated `planning-docs/SPRINT_BACKLOG.md` — added Redis OOM initiative as top active item with background, 7-phase rollout table, files-to-touch summary, and verification steps; updated Last Updated timestamp
+5. Updated `planning-docs/project-manager/triggers.md` — logged activation event
+6. Updated `planning-docs/project-manager/maintenance-log.md` (this entry)
+
+**Key Design Points Captured**:
+- Six keys move to ClickHouse `patterns_metadata` (`ReplacingMergeTree`, `argMax` reads, sidecar pattern)
+- Frequency key stays in Redis (atomic INCR requirement)
+- EmbeddedRocksDB rejected (async-only INCR, table-wide TTL, no HASH/SET, write-stall risk)
+- Dual-write + read-verify + read-cutover + cleanup phases with explicit feature flag gating
+- Expected ~60–80% Redis memory reduction; predict latency target ±20%
+
+---
+
 ## 2026-04-20 - New Specifications: Multi-Worker Uvicorn + Concurrent Training Safety
 
 **Trigger**: New implementation plan approved (replaces rejected distributed-lock draft)

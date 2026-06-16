@@ -1,6 +1,61 @@
 # DECISIONS.md - Architectural & Design Decision Log
 *Append-Only Log - Started: 2025-08-29*
-*Last Updated: 2026-05-05*
+*Last Updated: 2026-05-22*
+
+---
+
+## 2026-05-20 - DECISION-014: Move Per-Pattern Metadata from Redis to ClickHouse Sidecar Table
+**Decision**: Migrate six per-pattern Redis keys (emotives, metadata, entropy, normalized_entropy, global_normalized_entropy, tf_vector) into a new ClickHouse sidecar table `kato.patterns_metadata`. Keep frequency (atomic INCR) and all symbol-side/global/session keys in Redis.
+**Status**: Phases 0/1/2/6 IMPLEMENTED — Phases 3–5/7 remaining (operational cutover, no engineering work required)
+**Confidence**: High
+**Impact**: Eliminates Redis 8 GB OOM under large training workloads (~60–80% Redis memory reduction at 250k patterns); predict latency expected within ±20% of current. Quality gate: 11 unit tests for metadata_router all pass.
+
+### Context
+The April 2026 OOM incident (250k+ patterns across 4 kb_ids, Redis lost all metadata) exposed a structural problem: seven Redis keys written per learned pattern, never expiring, grow linearly with the LTM. JSON blobs (emotives, metadata, tf_vector) dominate bytes and have no reason to live in RAM — they are written once (occasionally merged) and read in batches during predict.
+
+### Decision Details
+1. **Why ClickHouse sidecar, not new columns on `patterns_data`**: the filter-pipeline scan table must remain lean. Separate tables allow independent merges, TTL, and OPTIMIZE TABLE runs. Matches the existing `lsh_buckets`/`pattern_stats` sidecar pattern.
+2. **Engine — `ReplacingMergeTree(updated_at)`**: re-learn appends a new row; background merge dedupes by `(kb_id, name)` keeping the latest `updated_at`. Reads use `argMax(field, updated_at) GROUP BY name` to avoid `FINAL` quirks with unmerged parts.
+3. **Why frequency stays in Redis**: `INCR` atomicity cannot be safely replicated in ClickHouse MergeTree. Symbol-side hashes (`HINCRBY`/`HINCRBYFLOAT`), global counters (`INCR`), and sessions (`SETEX` per-key TTL) stay in Redis for the same reason.
+4. **Why not EmbeddedRocksDB**: async-only `ALTER UPDATE` cannot safely emulate `INCR`; table-wide TTL only (no per-key TTL for sessions); no native HASH/SET; documented write-stall + OOM-drift risks under sustained writes (ClickHouse issue #59128).
+5. **Rollout gating via feature flags**: `KATO_METADATA_DUAL_WRITE`, `KATO_METADATA_READ_FROM`, `KATO_METADATA_READ_VERIFY` allow phased cutover with zero-downtime rollback.
+
+### Rollout Summary (7 phases)
+- Phase 0: Schema DDL applied to init.sql files
+- Phase 1: Dual-write enabled (Redis + ClickHouse); reads still from Redis
+- Phase 2: Backfill script populates ClickHouse from Redis for all existing patterns
+- Phase 3: Read-verify mode in staging (diff logged, Redis authoritative)
+- Phase 4: Read cutover to ClickHouse; dual-write kept for rollback safety
+- Phase 5: Redis writes for moved keys stopped
+- Phase 6: Existing Redis keys deleted (chunked SCAN + UNLINK)
+- Phase 7: Dead code and feature flags removed from redis_writer.py
+
+### Staging Validation (2026-05-22)
+All five operational phases (3–5) validated in staging (localhost). Key findings during the staging run:
+
+**Critical Bug Found and Fixed — Pydantic v2 env-var silent ignore**
+`MetadataMigrationConfig` fields originally used `json_schema_extra={'env': 'KATO_METADATA_...'}` to map environment variables. Pydantic v1 honored this pattern; Pydantic v2 silently ignores `json_schema_extra` for field-level env binding. Result: `KATO_METADATA_*` env vars had no effect; settings always returned defaults (`dual_write=true`, `read_from=redis`). The phases appeared to work but were not actually testing the intended configuration.
+
+**Fix**: All three `MetadataMigrationConfig` fields switched to `validation_alias='KATO_METADATA_...'`, which is the correct Pydantic v2 mechanism for binding environment variable names.
+
+**Regression tests added** (`tests/tests/unit/test_metadata_router.py`):
+- `test_metadata_migration_config_reads_env_vars` — verifies all three flags are correctly loaded from environment variables
+- `test_metadata_migration_config_defaults_safe` — verifies defaults remain correct when env vars are absent
+- All 13 unit tests in `test_metadata_router.py` pass after the fix (up from 11 in the original implementation)
+
+**Phase verification results after the env-var fix**:
+- Phase 3 (`READ_VERIFY=true`): zero `metadata-verify` / `metric-verify` mismatch warnings over 3 learn cycles + predict; Redis and ClickHouse in sync
+- Phase 4 (`READ_FROM=clickhouse`): predict path reads emotives from `patterns_metadata` via `argMax(field, updated_at) GROUP BY name`; frequency from Redis; correct merged results
+- Phase 5 (`DUAL_WRITE=false`): Redis no longer receives emotives/metadata/entropy/norm_entropy/global_norm_entropy/tf_vector on learn; only `{kb_id}:frequency:{name}` remains; predict still works end-to-end
+
+**Cleanup dry-run**: `scripts/delete_moved_redis_keys.py --all --dry-run` — would clean ~8 stale keys across 2 kb_ids in the staging environment. Not executed; execution is an operational call.
+
+**Current staging config** (Phase 4 end-state): `DUAL_WRITE=true`, `READ_FROM=clickhouse`, `READ_VERIFY=false`. One-flag rollback (`READ_FROM=redis`) always available while dual-write remains on.
+
+**Status updated to**: Phases 3/4/5 VALIDATED IN STAGING — Phase 6 (cleanup execution) and Phase 7 (code removal) deferred to production operational decision.
+
+### Initiative File
+`planning-docs/initiatives/redis-oom-clickhouse-metadata-migration.md`
 
 ---
 

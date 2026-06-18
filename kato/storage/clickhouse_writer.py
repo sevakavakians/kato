@@ -11,6 +11,7 @@ Handles writing pattern data to ClickHouse patterns_data table with:
 
 import json
 import logging
+import time
 from datetime import datetime
 from itertools import chain
 from os import environ
@@ -113,9 +114,10 @@ class ClickHouseWriter:
                 normalized_entropy        Nullable(Float64),
                 global_normalized_entropy Nullable(Float64),
                 tf_vector                 String  DEFAULT '{}',
-                updated_at                DateTime DEFAULT now()
+                version                   UInt64,
+                updated_at                DateTime64(3) DEFAULT now64(3)
             )
-            ENGINE = ReplacingMergeTree(updated_at)
+            ENGINE = ReplacingMergeTree(version)
             PARTITION BY kb_id
             ORDER BY (kb_id, name)
         """
@@ -401,7 +403,7 @@ class ClickHouseWriter:
     _METADATA_COLUMNS = (
         'kb_id', 'name', 'emotives', 'metadata',
         'entropy', 'normalized_entropy', 'global_normalized_entropy',
-        'tf_vector', 'updated_at'
+        'tf_vector', 'version', 'updated_at'
     )
 
     def _build_metadata_row(
@@ -413,6 +415,7 @@ class ClickHouseWriter:
         normalized_entropy: float | None,
         global_normalized_entropy: float | None,
         tf_vector: dict | None,
+        version: int,
         now: datetime,
     ) -> list:
         return [
@@ -424,6 +427,7 @@ class ClickHouseWriter:
             normalized_entropy,
             global_normalized_entropy,
             json.dumps(tf_vector if tf_vector is not None else {}),
+            version,
             now,
         ]
 
@@ -444,18 +448,25 @@ class ClickHouseWriter:
         existing fields, read via get_pattern_metadata_batch first and merge
         in Python — there is no partial-update semantics, omitted columns are
         written as their DEFAULTs.
+
+        The row carries a strictly-monotonic `version` (time.time_ns()) that
+        serves as the ReplacingMergeTree version and the argMax read tiebreaker,
+        so a later write to the same (kb_id, name) always wins — even when two
+        writes land in the same wall-clock second. Metadata is low-volume, so
+        this uses wait_for_async_insert=1 for immediate read-after-write
+        visibility (unlike the high-throughput patterns_data path).
         """
         try:
             row = self._build_metadata_row(
                 name, emotives, metadata,
                 entropy, normalized_entropy, global_normalized_entropy,
-                tf_vector, datetime.now(),
+                tf_vector, time.time_ns(), datetime.now(),
             )
             self.client.insert(
                 'kato.patterns_metadata',
                 [row],
                 column_names=list(self._METADATA_COLUMNS),
-                settings={'async_insert': 1, 'wait_for_async_insert': 0},
+                settings={'async_insert': 1, 'wait_for_async_insert': 1},
             )
             return True
         except Exception as e:
@@ -473,6 +484,9 @@ class ClickHouseWriter:
         if not rows:
             return 0
         now = datetime.now()
+        # Strictly-increasing version per row (base ns + index) so even repeated
+        # names within one batch get distinct, monotonic versions.
+        base_version = time.time_ns()
         values = [
             self._build_metadata_row(
                 r['name'],
@@ -482,16 +496,17 @@ class ClickHouseWriter:
                 r.get('normalized_entropy'),
                 r.get('global_normalized_entropy'),
                 r.get('tf_vector'),
+                base_version + i,
                 now,
             )
-            for r in rows
+            for i, r in enumerate(rows)
         ]
         try:
             self.client.insert(
                 'kato.patterns_metadata',
                 values,
                 column_names=list(self._METADATA_COLUMNS),
-                settings={'async_insert': 1, 'wait_for_async_insert': 0},
+                settings={'async_insert': 1, 'wait_for_async_insert': 1},
             )
             logger.debug(f"Batch wrote {len(rows)} metadata rows (kb_id={self.kb_id})")
             return len(rows)
@@ -503,9 +518,12 @@ class ClickHouseWriter:
         """
         Batch fetch metadata for multiple patterns.
 
-        Uses argMax(field, updated_at) GROUP BY name to retrieve the latest
+        Uses argMax(field, version) GROUP BY name to retrieve the latest
         values across unmerged ReplacingMergeTree parts, without depending on
-        the FINAL modifier's merge timing.
+        the FINAL modifier's merge timing. `version` is a strictly-monotonic
+        time.time_ns() stamp, so same-second re-writes are ordered correctly
+        (the prior DateTime `updated_at` version tied at 1-second resolution
+        and could return a stale row).
 
         Returns:
             Dict mapping pattern_name → {emotives, metadata, entropy,
@@ -520,12 +538,12 @@ class ClickHouseWriter:
                 """
                 SELECT
                   name,
-                  argMax(emotives, updated_at)                  AS emotives,
-                  argMax(metadata, updated_at)                  AS metadata,
-                  argMax(entropy, updated_at)                   AS entropy,
-                  argMax(normalized_entropy, updated_at)        AS normalized_entropy,
-                  argMax(global_normalized_entropy, updated_at) AS global_normalized_entropy,
-                  argMax(tf_vector, updated_at)                 AS tf_vector
+                  argMax(emotives, version)                  AS emotives,
+                  argMax(metadata, version)                  AS metadata,
+                  argMax(entropy, version)                   AS entropy,
+                  argMax(normalized_entropy, version)        AS normalized_entropy,
+                  argMax(global_normalized_entropy, version) AS global_normalized_entropy,
+                  argMax(tf_vector, version)                 AS tf_vector
                 FROM kato.patterns_metadata
                 WHERE kb_id = %(kb_id)s AND name IN %(names)s
                 GROUP BY name

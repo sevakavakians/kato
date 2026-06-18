@@ -3,6 +3,29 @@
 
 ---
 
+## 2026-06-18 - Task Completion + Knowledge Refinement (Redis OOM Fix: All Phases Complete, Correctness Bug Fixed)
+
+**Trigger Type**: Primary — Task Completion + Knowledge Refinement (ReplacingMergeTree same-second version-tie assumption corrected) + Architectural Decision Update (DECISION-014 COMPLETE)
+**Event**: Migration fully complete. Dual-write scaffolding removed, ClickHouse sole metadata store. Version-tie correctness bug discovered and fixed (`updated_at DateTime` → `version UInt64 time.time_ns()`). Two pre-existing bugs documented in backlog (async_insert race, session delete active-count).
+
+**Key Findings**:
+- `ReplacingMergeTree(updated_at)` + `argMax(field, updated_at)` with 1-second resolution is unsafe for sub-second re-learns; `time.time_ns()` UInt64 version eliminates the ambiguity
+- `test_emotive_persistence_with_rolling_window` was the canary: 2 emotives vs expected 4 under `KATO_METADATA_READ_FROM=clickhouse`
+- `KATO_METADATA_*` env vars can now be removed from all deployment configs (code removed)
+- 6 pre-existing failures remain (root cause #1: async_insert race; root cause #3: session accounting + WebSocket timeouts)
+- Test improvement: 23 failed → 6 failed (445 → 446 passed)
+
+**Documentation Actions**:
+- Updated: `planning-docs/DECISIONS.md` (DECISION-014 status COMPLETE + finalization section)
+- Updated: `planning-docs/initiatives/redis-oom-clickhouse-metadata-migration.md` (all phases COMPLETE, correctness fix, finalization summary)
+- Updated: `planning-docs/SESSION_STATE.md` (no active task, migration to Previous Task, new bugs in Next Immediate Action, leading Recent Achievement)
+- Updated: `planning-docs/SPRINT_BACKLOG.md` (active item removed, two new backlog bugs, Recently Completed entry)
+- Created: `planning-docs/completed/features/2026-06-18-redis-clickhouse-metadata-migration-complete.md`
+- Updated: `planning-docs/project-manager/maintenance-log.md`
+- Updated: `planning-docs/project-manager/triggers.md` (this entry)
+
+---
+
 ## 2026-05-22 - Milestone Completion (Redis OOM Fix: Phases 3/4/5 Validated in Staging)
 
 **Trigger Type**: Primary — Milestone Completion + Knowledge Refinement (Pydantic v2 env-var assumption corrected)

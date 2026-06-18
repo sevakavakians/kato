@@ -2,7 +2,7 @@
 Comprehensive metadata tests to verify metadata storage and retrieval.
 
 These tests verify that metadata:
-1. Is stored in Redis (not ClickHouse)
+1. Is stored in ClickHouse (the patterns_metadata sidecar), not Redis
 2. Accumulates correctly with set-union behavior
 3. Appears in predictions
 4. Handles large metadata sets
@@ -11,8 +11,8 @@ These tests verify that metadata:
 import pytest
 
 
-def test_metadata_stored_in_redis_not_clickhouse(kato_fixture):
-    """Test that metadata is stored in Redis, not ClickHouse."""
+def test_metadata_stored_in_clickhouse_not_redis(kato_fixture):
+    """Test that metadata is stored in ClickHouse, not Redis (post-migration)."""
     kato_fixture.clear_all_memory()
 
     # Learn pattern with metadata
@@ -20,11 +20,15 @@ def test_metadata_stored_in_redis_not_clickhouse(kato_fixture):
     kato_fixture.observe({'strings': ['B'], 'vectors': [], 'emotives': {}, 'metadata': {'source': 'test2'}})
     pattern_name = kato_fixture.learn()
 
-    # Verify metadata is in Redis
-    redis_metadata = kato_fixture.get_redis_metadata(pattern_name)
-    assert redis_metadata is not None, "Metadata should exist in Redis"
-    assert 'source' in redis_metadata, "Redis should have 'source' metadata"
-    assert set(redis_metadata['source']) == {'test1', 'test2'}, "Redis metadata should match"
+    # Verify metadata is in ClickHouse (the sidecar is now the source of truth)
+    stored_metadata = kato_fixture.get_redis_metadata(pattern_name)
+    assert stored_metadata is not None, "Metadata should exist in ClickHouse"
+    assert 'source' in stored_metadata, "ClickHouse should have 'source' metadata"
+    assert set(stored_metadata['source']) == {'test1', 'test2'}, "ClickHouse metadata should match"
+
+    # And NOT in Redis — the migration moved per-pattern metadata off Redis
+    assert not kato_fixture.redis_has_metadata_keys(pattern_name), \
+        "Per-pattern metadata keys should no longer exist in Redis after the ClickHouse migration"
 
 
 def test_metadata_accumulation_with_relearning(kato_fixture):

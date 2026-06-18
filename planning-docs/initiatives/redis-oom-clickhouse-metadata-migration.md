@@ -1,7 +1,7 @@
 # Initiative: Move Per-Pattern Metadata from Redis to ClickHouse
 *Created: 2026-05-20*
-*Last Updated: 2026-05-22*
-*Status: Phases 0/1/2/3/4/5/6 VALIDATED IN STAGING — Phase 6 (cleanup execution) and Phase 7 (code removal) are deferred operational decisions for production*
+*Last Updated: 2026-06-18*
+*Status: COMPLETE — ClickHouse sole metadata store, dual-write scaffolding removed, version-tie bug fixed (2026-06-18)*
 *Plan File: `/Users/sevakavakians/.claude/plans/ultrathink-currently-kato-uses-peaceful-micali.md`*
 
 ## Problem Statement
@@ -219,16 +219,25 @@ Three new env vars in `kato/config/settings.py`:
 | Phase 0 — Schema | COMPLETE | DDL in all 3 init.sql mirrors; `clickhouse_writer.py` extended; `metadata_router.py` created |
 | Phase 1 — Dual Write | COMPLETE | Feature flags live; all 7 call-site swap points wired; `DUAL_WRITE=true`, `READ_FROM=redis` defaults |
 | Phase 2 — Backfill | COMPLETE | `scripts/backfill_pattern_metadata.py` implemented and idempotent |
-| Phase 3 — Verify | VALIDATED IN STAGING (localhost) | `READ_VERIFY=true`; 3 learn cycles + predict; zero `metadata-verify` / `metric-verify` mismatch warnings; Redis and ClickHouse perfectly in sync |
-| Phase 4 — Read Cutover | VALIDATED IN STAGING (localhost) | `READ_FROM=clickhouse`, `READ_VERIFY=false`; emotives read from `patterns_metadata` via `argMax(field, updated_at) GROUP BY name`; frequency still from Redis; predict path returns correct merged results |
-| Phase 5 — Stop Redis Writes | VALIDATED IN STAGING (localhost) | `DUAL_WRITE=false`; confirmed Redis no longer receives emotives/metadata/entropy/norm_entropy/global_norm_entropy/tf_vector key families on learn; only `{kb_id}:frequency:{name}` remains; predict still works end-to-end |
-| Phase 6 — Cleanup | DEFERRED (operational) | `scripts/delete_moved_redis_keys.py` dry-run validated: ~8 stale keys (2 kb_ids) would be cleaned; execution is an operational call for production |
-| Phase 7 — Code Removal | DEFERRED (operational) | Delete dead Redis paths and feature flag branches after Phase 5 confirmed stable in production |
+| Phase 3 — Verify | COMPLETE | `READ_VERIFY=true`; 3 learn cycles + predict; zero `metadata-verify` / `metric-verify` mismatch warnings; Redis and ClickHouse perfectly in sync |
+| Phase 4 — Read Cutover | COMPLETE | `READ_FROM=clickhouse`, `READ_VERIFY=false`; emotives read from `patterns_metadata` via `argMax(field, version) GROUP BY name`; frequency still from Redis; correct merged results |
+| Phase 5 — Stop Redis Writes | COMPLETE | `DUAL_WRITE=false`; Redis no longer receives moved key families on learn; frequency key only |
+| Phase 6 — Cleanup | COMPLETE (2026-06-18) | Dual-write scaffolding, migration env vars, dead Redis metadata methods, migration scripts, and migration-specific tests all deleted |
+| Phase 7 — Code Removal | COMPLETE (2026-06-18) | `MetadataRouter` simplified to ClickHouse-only; `MetadataMigrationConfig` removed from `settings.py`; dead Redis methods purged |
 
-### Staging Steady-State Configuration (2026-05-22)
-Staging kato is running the validated production-ready configuration:
-- `KATO_METADATA_DUAL_WRITE=true`
-- `KATO_METADATA_READ_FROM=clickhouse`
-- `KATO_METADATA_READ_VERIFY=false`
+### Correctness Fix Applied (2026-06-18)
+`kato.patterns_metadata` had a version-tie bug: `updated_at DateTime` (1-second resolution) was used as both `ReplacingMergeTree(updated_at)` and `argMax(field, updated_at)`. Patterns re-learned within the same second produced rows with identical versions, causing `argMax`/merges to return a stale row — silently losing emotive rolling-window merges, metadata set-union accumulation, and finalize-training metric updates.
 
-This is the Phase 4 end-state: reads from ClickHouse, Redis still written so a one-flag rollback (`READ_FROM=redis`) is always available.
+**Fix**: Added `version UInt64` column (`time.time_ns()`, strictly monotonic). `ReplacingMergeTree(version)` and `argMax(field, version)` both key off `version`. `updated_at` downgraded to `DateTime64(3)`, informational only. Metadata writes switched to `wait_for_async_insert=1`. Schema updated in `clickhouse_writer.py` and all three init.sql files.
+
+### Final Test Results (2026-06-18)
+Full suite: 446 passed, 6 failed (pre-existing, unrelated to migration). Previously 23 failed. `test_emotive_persistence_with_rolling_window` now passes.
+
+### Finalization Summary (2026-06-18)
+- `MetadataRouter` simplified to ClickHouse-only (frequency still merged from Redis)
+- `MetadataMigrationConfig` and `metadata_migration` field removed from `kato/config/settings.py`
+- Dead Redis metadata methods removed from `kato/storage/redis_writer.py`
+- Migration scripts `scripts/backfill_pattern_metadata.py` and `scripts/delete_moved_redis_keys.py` deleted
+- Migration-specific tests `tests/tests/unit/test_metadata_router.py` and `tests/tests/integration/test_pattern_metadata_migration.py` deleted
+- `test_emotives_comprehensive.py` and `test_metadata_comprehensive.py` updated to read from ClickHouse; `redis_has_metadata_keys` helper + assertion added
+- `docs/reference/database-schema.md` updated; live `kato.patterns_metadata` table recreated with new schema

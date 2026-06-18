@@ -28,15 +28,7 @@ Billions (ClickHouse) → Millions (LSH) → Thousands (Jaccard) → Hundreds (R
 | **ClickHouse `patterns_metadata`** | `emotives`, `metadata`, pre-computed `entropy` / `normalized_entropy` / `global_normalized_entropy` / `tf_vector` | Disk-backed `WHERE name IN (...)` batch reads via `ReplacingMergeTree` |
 | **Redis** | `frequency` (atomic `INCR`), symbol HASHes (`HINCRBY`), `affinity:*` (`HINCRBYFLOAT`), global counters, sessions | Atomic counter operations + per-key TTL — capabilities ClickHouse cannot safely emulate |
 
-The per-pattern KV sidecar (`patterns_metadata`) was added to bound Redis RAM use under large training workloads (the dominant per-pattern key growth driver — emotives, metadata, and the four pre-computed metric keys — accounted for the bulk of Redis bytes). Rollout is gated by three env vars:
-
-| Env var | Default | Purpose |
-|---|---|---|
-| `KATO_METADATA_DUAL_WRITE` | `true` | Write to both Redis (legacy) and ClickHouse (new) during the rollout window |
-| `KATO_METADATA_READ_FROM` | `redis` | Which store the predict path reads from; flip to `clickhouse` after backfill + verify |
-| `KATO_METADATA_READ_VERIFY` | `false` | Read both stores and log field-level diffs; staging only |
-
-Backfill: `scripts/backfill_pattern_metadata.py`. Cleanup of legacy Redis keys after read-cutover: `scripts/delete_moved_redis_keys.py`. All routing is centralized in [`kato/storage/metadata_router.py`](../../kato/storage/metadata_router.py).
+The per-pattern KV sidecar (`patterns_metadata`) was added to bound Redis RAM use under large training workloads (the dominant per-pattern key growth driver — emotives, metadata, and the four pre-computed metric keys — accounted for the bulk of Redis bytes). The Redis → ClickHouse migration is complete: ClickHouse is the sole store for per-pattern metadata, and the dual-write/dual-read rollout flags (`KATO_METADATA_*`) have been removed. Frequency stays in Redis (atomic `INCR`). Access is centralized in [`kato/storage/metadata_router.py`](../../kato/storage/metadata_router.py), which reads metadata from ClickHouse and merges frequency from Redis.
 
 ## Node Isolation via kb_id
 

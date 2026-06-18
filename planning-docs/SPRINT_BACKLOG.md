@@ -1,69 +1,7 @@
 # SPRINT_BACKLOG.md - Upcoming Work
-*Last Updated: 2026-05-22*
+*Last Updated: 2026-06-18*
 
 ## Active Projects
-
-### Redis OOM Fix: Move Per-Pattern Metadata to ClickHouse
-**Priority**: P1 — Memory / reliability
-**Status**: PHASES 3/4/5 VALIDATED IN STAGING — Awaiting production cutover (Phases 6 cleanup, 7 code removal deferred)
-**Staging Validated**: 2026-05-22 (localhost)
-**Plan File**: `/Users/sevakavakians/.claude/plans/ultrathink-currently-kato-uses-peaceful-micali.md`
-**Initiative File**: `planning-docs/initiatives/redis-oom-clickhouse-metadata-migration.md`
-**Decision**: DECISION-014
-**Quality Gate**: 13 unit tests in `tests/tests/unit/test_metadata_router.py` — all pass (2 added for Pydantic v2 env-var regression)
-
-#### What Was Implemented (2026-05-20)
-
-All engineering work is complete. The following landed in a single session:
-
-**Schema + Storage (Phase 0)**
-- `kato.patterns_metadata` DDL added to all three init.sql mirrors (`config/clickhouse/init.sql`, `deployment/config/clickhouse/init.sql`, `charts/kato/scripts/init.sql`)
-- `kato/storage/clickhouse_writer.py`: 5 new methods + `_ensure_patterns_metadata_table()` DDL check
-- `kato/storage/redis_writer.py`: `get_frequency_batch(names)` MGET helper
-- `kato/storage/metadata_router.py` (NEW): centralises dual-store routing with read-merge-write upsert, verify-mode diff logging, and batch methods
-
-**Feature Flags (Phase 1)**
-- `kato/config/settings.py`: `MetadataMigrationConfig` with `KATO_METADATA_DUAL_WRITE=true`, `KATO_METADATA_READ_FROM=redis`, `KATO_METADATA_READ_VERIFY=false`
-
-**Call-Site Rewiring (Phase 1)** — all 7 swap points wired through `metadata_router`
-- `kato/informatics/knowledge_base.py` (3 learn + 1 getPattern swap points)
-- `kato/workers/pattern_processor.py` (finalize_training, update_pattern, delete_pattern, _predict_single_symbol_fast, predictPattern)
-- `kato/searches/pattern_search.py` (_build_predictions_batch)
-
-**Scripts (Phases 2 + 6)**
-- `scripts/backfill_pattern_metadata.py` (NEW) — chunked, idempotent, supports `--all` / `--kb-ids` / `--dry-run`
-- `scripts/delete_moved_redis_keys.py` (NEW) — chunked SCAN + UNLINK for 6 moved key families; preserves frequency, symbols, sessions
-
-**Docs**
-- `docs/reference/database-schema.md` — `patterns_metadata` section + Redis restructure
-- `docs/developers/hybrid-architecture.md` — 3-tier storage split; env-var flags; script references
-
-#### Phase Validation Summary
-
-| Phase | Status | Notes |
-|---|---|---|
-| 3 — Read-verify | VALIDATED IN STAGING | Zero mismatch warnings over 3 learn cycles + predict; Redis/ClickHouse in sync |
-| 4 — Read cutover | VALIDATED IN STAGING | `READ_FROM=clickhouse`; emotives from `argMax(field, updated_at) GROUP BY name`; correct merged results |
-| 5 — Stop Redis writes | VALIDATED IN STAGING | `DUAL_WRITE=false`; moved key families no longer written on learn; predict works end-to-end |
-| 6 — Cleanup | DEFERRED (production) | Dry-run validated: ~8 stale keys; execution is an operational call |
-| 7 — Code removal | DEFERRED (production) | Delete dead Redis paths and feature flag branches after Phase 5 confirmed stable in production |
-
-**Critical fix during staging**: `MetadataMigrationConfig` used `json_schema_extra={'env': '...'}` (Pydantic v1 pattern); Pydantic v2 silently ignores this, so all `KATO_METADATA_*` vars had no effect. Fixed by switching to `validation_alias='KATO_METADATA_...'`. Two regression tests added (`test_metadata_migration_config_reads_env_vars`, `test_metadata_migration_config_defaults_safe`).
-
-**Current staging config** (Phase 4 end-state — production-ready):
-- `KATO_METADATA_DUAL_WRITE=true`
-- `KATO_METADATA_READ_FROM=clickhouse`
-- `KATO_METADATA_READ_VERIFY=false`
-
-**Deployment note**: OrbStack `HTTP_PROXY` interception (502 on kato → ClickHouse) patched via `deployment/docker-compose.override.yml` with internal hostnames in `NO_PROXY`. Confirm this file is present in the production deployment.
-
-#### Verification (unchanged from plan)
-1. Train 500k patterns across 4 kb_ids; `redis-cli INFO memory` plateau below 8 GB
-2. `./run_tests.sh --no-start --no-stop` with `KATO_METADATA_READ_FROM=clickhouse`
-3. Determinism golden file — prediction output byte-identical before/after migration
-4. p50/p95 predict latency within ±20%
-
----
 
 ### Multi-Worker Uvicorn + Concurrent Training Safety
 **Priority**: High - Performance / Correctness
@@ -507,6 +445,30 @@ Phase 4 (Symbol Statistics & Fail-Fast Architecture) is 100% complete. The Click
 
 ## Backlog (Future Work)
 
+### Bug: patterns_data async_insert visibility race (Root cause #1)
+**Priority**: P2 — flaky test, real correctness risk under load
+**Status**: Identified 2026-06-18 (not addressed in metadata migration work)
+**Symptom**: `test_bayesian_likelihood_equals_similarity` — "0 predictions" under load; passes in isolation
+**Root Cause**: `knowledge_base.py:~413` uses `wait_for_async_insert=0` for `patterns_data` writes with no server-queue drain on the learn/predict hot path. Under concurrent or rapid-succession learn→predict, ClickHouse has not yet flushed the pattern to disk when predict executes, returning zero candidates.
+**Fix Options**:
+1. Switch `patterns_data` writes to `wait_for_async_insert=1` (simplest; latency cost per learn)
+2. Add explicit `SYSTEM FLUSH ASYNC INSERT QUEUE` call on the predict path before the filter pipeline executes
+**Files**: `kato/storage/clickhouse_writer.py`, `kato/storage/knowledge_base.py`
+**Note**: Comment at `knowledge_base.py:~413` was corrected during migration work to accurately describe the `wait=0` behavior.
+
+---
+
+### Bug: session delete does not decrement active-session count + WebSocket event timeouts (Root cause #3)
+**Priority**: P2 — deterministic test failures (5 tests), real session-management bug
+**Status**: Identified 2026-06-18 (pre-existing, not addressed in metadata migration work)
+**Symptom 1**: `test_session_cleanup` asserts a global active-session counter decrements on session delete; counter does not decrement → assertion fails deterministically
+**Symptom 2**: 5 tests assert WebSocket `session.created` and `session.destroyed` events are received within 5 seconds; events not delivered within timeout
+**Root Cause (symptom 1)**: Session delete endpoint does not update the global active-session atomic counter in Redis. Counter increments on session create but is never decremented.
+**Root Cause (symptom 2)**: WebSocket event dispatch path for session lifecycle events either does not emit the events or the test WebSocket connection is not established before the events fire.
+**Files**: `kato/sessions/redis_session_manager.py`, `kato/api/endpoints/sessions.py`, WebSocket session event dispatch code
+
+---
+
 ### Production Scale Migration Plan (PSMP)
 **Status**: Documented, Not Yet Implemented
 **Priority**: Future Enhancement (Implement when traffic exceeds 100 req/sec)
@@ -549,6 +511,24 @@ Phased plan for scaling KATO to production workloads:
 ---
 
 ## Recently Completed
+
+### Redis OOM Fix: Metadata Migration to ClickHouse — COMPLETE (2026-06-18)
+**Priority**: P1 — resolved
+**Archive**: `planning-docs/completed/features/2026-06-18-redis-clickhouse-metadata-migration-complete.md`
+**Decision**: DECISION-014
+
+All seven rollout phases complete. ClickHouse is now the sole store for per-pattern metadata (emotives, metadata dict, entropy, normalized_entropy, global_normalized_entropy, tf_vector). Frequency stays in Redis.
+
+Key deliverables:
+- Correctness bug fixed: `version UInt64` (`time.time_ns()`) replaces `updated_at DateTime` as `ReplacingMergeTree` version and `argMax` tiebreaker (eliminates same-second row ambiguity)
+- Dual-write scaffolding removed: `MetadataRouter` is ClickHouse-only; `MetadataMigrationConfig` and `KATO_METADATA_*` env vars removed from codebase
+- Dead Redis metadata methods removed from `redis_writer.py`
+- Migration scripts and migration-specific tests deleted
+- Test suite updated: reads metadata from ClickHouse; asserts Redis has no metadata keys
+- `docs/reference/database-schema.md` updated; live `kato.patterns_metadata` recreated with new schema
+- Test results: 446 passed, 6 pre-existing failures (23 → 6 improvement)
+
+---
 
 ### Technical Debt Phase 5 (2025-10-06)
 - 96% overall debt reduction (6,315 → 67 issues)

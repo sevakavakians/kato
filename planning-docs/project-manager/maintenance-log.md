@@ -3,6 +3,34 @@
 
 ---
 
+## 2026-06-18 - Task Completion: Redis OOM Fix Migration FULLY COMPLETE + Correctness Bug Fixed
+
+**Trigger**: Task completion — all migration phases done; dual-write scaffolding removed; ClickHouse is now sole metadata store; version-tie correctness bug fixed; two pre-existing bugs added to backlog
+
+**Event Type**: Milestone completion + architectural decision update + knowledge refinement (version-tie bug was an unknown assumption about `ReplacingMergeTree` same-second behaviour)
+
+**Actions Taken**:
+1. Updated `planning-docs/DECISIONS.md` — DECISION-014 status changed to COMPLETE; "Finalization (2026-06-18)" section added; Last Updated timestamp updated to 2026-06-18
+2. Updated `planning-docs/initiatives/redis-oom-clickhouse-metadata-migration.md` — header status COMPLETE; all phase rows updated; correctness fix and finalization summary sections added
+3. Updated `planning-docs/SESSION_STATE.md` — Current Task cleared (no active task); Previous Task updated; Next Immediate Action updated; Blockers cleared; leading Recent Achievement added; Last Updated timestamp updated
+4. Updated `planning-docs/SPRINT_BACKLOG.md` — Redis OOM active section removed; two new backlog bug items added; "Redis OOM Fix COMPLETE" added to Recently Completed; Last Updated timestamp updated
+5. Created `planning-docs/completed/features/2026-06-18-redis-clickhouse-metadata-migration-complete.md` — full archive entry
+6. Updated `planning-docs/project-manager/triggers.md` — logged activation event
+7. Updated `planning-docs/project-manager/maintenance-log.md` (this entry)
+
+**Key Facts Captured**:
+- Version-tie bug: `updated_at DateTime` (1-second resolution) as `ReplacingMergeTree` version caused same-second re-learns to silently return stale rows; `test_emotive_persistence_with_rolling_window` received 2 emotives instead of 4
+- Fix: `version UInt64` (`time.time_ns()`) as strictly-monotonic version column; `wait_for_async_insert=1` on metadata writes; `updated_at` downgraded to `DateTime64(3)` informational only; applied in `clickhouse_writer.py` and all three init.sql files
+- Dual-write removed: `MetadataRouter` ClickHouse-only; `MetadataMigrationConfig` and `KATO_METADATA_*` env vars removed from codebase
+- Dead Redis methods purged from `redis_writer.py`: `write_metadata`, `get_metadata`, `get_metadata_batch`, `write_precomputed_metrics_batch`, `get_precomputed_metrics_batch`
+- Deleted: `scripts/backfill_pattern_metadata.py`, `scripts/delete_moved_redis_keys.py`, `tests/tests/unit/test_metadata_router.py`, `tests/tests/integration/test_pattern_metadata_migration.py`
+- Tests updated: `test_emotives_comprehensive.py` and `test_metadata_comprehensive.py` now read from ClickHouse; `redis_has_metadata_keys` helper added; assertion confirms metadata absent from Redis
+- `docs/reference/database-schema.md` and live `kato.patterns_metadata` table updated
+- Final test results: 23 failed → 6 failed (445 → 446 passed)
+- Two pre-existing bugs newly documented in backlog: async_insert visibility race (root cause #1, 1 flaky test), session delete active-count + WebSocket event timeouts (root cause #3, 5 deterministic failures)
+
+---
+
 ## 2026-05-22 - Milestone Completion: Redis OOM Fix Phases 3/4/5 Validated in Staging
 
 **Trigger**: Milestone completion — Phases 3 (Read-Verify), 4 (Read Cutover), and 5 (Stop Redis Writes) all validated in staging (localhost)

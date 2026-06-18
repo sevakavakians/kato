@@ -324,11 +324,11 @@ def test_emotives_empty_observations_not_stored(kato_fixture):
     assert non_empty[1] == {'mood': 0.7}, "Second non-empty should match"
 
 
-def test_emotives_api_vs_redis_consistency(kato_fixture):
+def test_emotives_api_vs_storage_consistency(kato_fixture):
     """
-    CRITICAL: Test that API response emotives match Redis storage emotives.
+    CRITICAL: Test that API response emotives match the ClickHouse-stored emotives.
 
-    This ensures get_pattern() reads from Redis, not from cache or memory.
+    This ensures get_pattern() reads from storage, not from cache or memory.
     """
     kato_fixture.clear_all_memory()
 
@@ -343,16 +343,16 @@ def test_emotives_api_vs_redis_consistency(kato_fixture):
         kato_fixture.observe({'strings': [f'test_{i}'], 'vectors': [], 'emotives': emotive})
     pattern_name = kato_fixture.learn()
 
-    # Get emotives via Redis (ground truth)
-    redis_emotives = kato_fixture.get_redis_emotives(pattern_name)
+    # Get emotives via storage (ClickHouse ground truth)
+    stored_emotives = kato_fixture.get_redis_emotives(pattern_name)
 
     # Get emotives via API
     pattern_result = kato_fixture.get_pattern(pattern_name)
     api_emotives = pattern_result['pattern'].get('emotives', [])
 
-    # API should return EXACT same emotives as Redis
-    assert api_emotives == redis_emotives, \
-        f"API emotives {api_emotives} should match Redis emotives {redis_emotives}"
+    # API should return EXACT same emotives as storage
+    assert api_emotives == stored_emotives, \
+        f"API emotives {api_emotives} should match stored emotives {stored_emotives}"
 
 
 def test_emotives_frequency_counter_created(kato_fixture):
@@ -364,7 +364,7 @@ def test_emotives_frequency_counter_created(kato_fixture):
     kato_fixture.observe({'strings': ['freq_end'], 'vectors': [], 'emotives': {'test': 0.5}})
     pattern_name = kato_fixture.learn()
 
-    # Both emotives AND frequency should be in Redis
+    # Emotives in ClickHouse, frequency still in Redis
     redis_emotives = kato_fixture.get_redis_emotives(pattern_name)
     redis_freq = kato_fixture.get_redis_frequency(pattern_name)
 

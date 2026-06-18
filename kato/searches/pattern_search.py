@@ -1412,7 +1412,6 @@ class PatternSearcher:
             return self._metadata_router
         if not self.redis_client or not self.clickhouse_client:
             return None
-        from kato.config.settings import get_settings
         from kato.storage.clickhouse_writer import ClickHouseWriter
         from kato.storage.metadata_router import MetadataRouter
         from kato.storage.redis_writer import RedisWriter
@@ -1420,7 +1419,6 @@ class PatternSearcher:
             kb_id=self.kb_id,
             redis_writer=RedisWriter(self.kb_id, self.redis_client),
             clickhouse_writer=ClickHouseWriter(self.kb_id, self.clickhouse_client),
-            config=get_settings().metadata_migration,
         )
         return self._metadata_router
 
@@ -1442,7 +1440,7 @@ class PatternSearcher:
         if not batch:
             return predictions
 
-        # Route metadata reads through the migration router (Redis or ClickHouse per flags)
+        # Metadata reads come from ClickHouse (frequency merged from Redis) via the facade
         metadata_router = self._get_metadata_router()
 
         if self.filter_executor is None:

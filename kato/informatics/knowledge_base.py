@@ -89,7 +89,6 @@ class SuperKnowledgeBase:
                 kb_id=self.id,
                 redis_writer=self.redis_writer,
                 clickhouse_writer=self.clickhouse_writer,
-                config=settings.metadata_migration,
             )
 
             # Set emotives tracking and observation counts
@@ -411,9 +410,10 @@ class SuperKnowledgeBase:
             if is_new:
                 # Sole winner of the new-pattern race. Persist row + initial metadata.
                 self.clickhouse_writer.write_pattern(pattern_object)
-                # (clickhouse_writer uses server-side async_insert with
-                # wait_for_async_insert=1, so the row is queryable by any
-                # worker once write_pattern returns.)
+                # NOTE: write_pattern uses server-side async_insert with
+                # wait_for_async_insert=0, so the patterns_data row may lag the
+                # call by up to async_insert_busy_timeout_ms before it is
+                # queryable. (The metadata sidecar below uses wait=1.)
 
                 # Enforce persistence window for NEW patterns
                 trimmed_emotives = emotives if emotives else []

@@ -1,14 +1,14 @@
 # DECISIONS.md - Architectural & Design Decision Log
 *Append-Only Log - Started: 2025-08-29*
-*Last Updated: 2026-05-22*
+*Last Updated: 2026-06-18*
 
 ---
 
 ## 2026-05-20 - DECISION-014: Move Per-Pattern Metadata from Redis to ClickHouse Sidecar Table
 **Decision**: Migrate six per-pattern Redis keys (emotives, metadata, entropy, normalized_entropy, global_normalized_entropy, tf_vector) into a new ClickHouse sidecar table `kato.patterns_metadata`. Keep frequency (atomic INCR) and all symbol-side/global/session keys in Redis.
-**Status**: Phases 0/1/2/6 IMPLEMENTED — Phases 3–5/7 remaining (operational cutover, no engineering work required)
+**Status**: COMPLETE (2026-06-18) — dual-write scaffolding removed, ClickHouse is the sole metadata store, version-tie correctness bug fixed
 **Confidence**: High
-**Impact**: Eliminates Redis 8 GB OOM under large training workloads (~60–80% Redis memory reduction at 250k patterns); predict latency expected within ±20% of current. Quality gate: 11 unit tests for metadata_router all pass.
+**Impact**: Eliminates Redis 8 GB OOM under large training workloads (~60–80% Redis memory reduction at 250k patterns). Full test suite result after finalization: 446 passed, 6 pre-existing failures (unrelated to migration).
 
 ### Context
 The April 2026 OOM incident (250k+ patterns across 4 kb_ids, Redis lost all metadata) exposed a structural problem: seven Redis keys written per learned pattern, never expiring, grow linearly with the LTM. JSON blobs (emotives, metadata, tf_vector) dominate bytes and have no reason to live in RAM — they are written once (occasionally merged) and read in batches during predict.
@@ -53,6 +53,29 @@ All five operational phases (3–5) validated in staging (localhost). Key findin
 **Current staging config** (Phase 4 end-state): `DUAL_WRITE=true`, `READ_FROM=clickhouse`, `READ_VERIFY=false`. One-flag rollback (`READ_FROM=redis`) always available while dual-write remains on.
 
 **Status updated to**: Phases 3/4/5 VALIDATED IN STAGING — Phase 6 (cleanup execution) and Phase 7 (code removal) deferred to production operational decision.
+
+### Finalization (2026-06-18)
+All remaining deferred phases executed. The dual-write migration scaffold was retired and ClickHouse became the sole metadata store.
+
+**Correctness Bug Found and Fixed — ReplacingMergeTree version-tie**
+`kato.patterns_metadata` used `updated_at DateTime` (1-second resolution) as both the `ReplacingMergeTree` version column and the `argMax(field, updated_at)` read tiebreaker. When a pattern was learned and re-learned within the same wall-clock second (the common case in tests and rapid-training workloads), the two rows got identical version values, so `argMax`/`FINAL`/background merges returned an arbitrary (often stale) row — silently losing emotive rolling-window merges, metadata set-union accumulation, and finalize-training metric updates. The symptom was `test_emotive_persistence_with_rolling_window` receiving 2 emotives instead of the expected 4 under `KATO_METADATA_READ_FROM=clickhouse`.
+
+**Fix**: `kato.patterns_metadata` now has a `version UInt64` column populated by `time.time_ns()` (strictly monotonic). `ReplacingMergeTree(version)` and `argMax(field, version)` both key off this column. `updated_at` downgraded to `DateTime64(3)`, informational only. Metadata writes switched from `wait_for_async_insert=0` to `wait_for_async_insert=1` (metadata is low-volume; gives immediate read-after-write visibility). Schema updated in `kato/storage/clickhouse_writer.py` and all three init.sql files (`config/`, `charts/`, `deployment/`).
+
+**Dual-write removal (Phases 5/6/7 executed)**
+- `MetadataRouter` simplified to ClickHouse-only; `dual_write` / `read_from` / `read_verify` branches removed
+- `MetadataMigrationConfig` and `metadata_migration` field removed from `kato/config/settings.py`; `KATO_METADATA_DUAL_WRITE`, `KATO_METADATA_READ_FROM`, `KATO_METADATA_READ_VERIFY` env vars are now no-ops and can be dropped from deployments
+- Dead Redis metadata methods removed from `kato/storage/redis_writer.py` (`write_metadata`, `get_metadata`, `get_metadata_batch`, `write_precomputed_metrics_batch`, `get_precomputed_metrics_batch`); frequency and symbol-stats methods retained
+- Migration scripts `scripts/backfill_pattern_metadata.py` and `scripts/delete_moved_redis_keys.py` deleted (migration complete, no longer needed)
+- Migration-specific tests `tests/tests/unit/test_metadata_router.py` and `tests/tests/integration/test_pattern_metadata_migration.py` deleted
+- Tests `test_emotives_comprehensive.py` and `test_metadata_comprehensive.py` updated to read metadata from ClickHouse as source of truth; `redis_has_metadata_keys` helper added; test asserts metadata is in ClickHouse and absent from Redis
+- `docs/reference/database-schema.md` updated; live `kato.patterns_metadata` table recreated with new schema (test-only data; no production metadata existed)
+
+**Final test results**: Full suite went from 23 failed → 6 failed (445 → 446 passed). `test_emotive_persistence_with_rolling_window` passes. All 6 remaining failures are pre-existing and unrelated to this work (see Known Issues section below).
+
+**Known pre-existing failures (NOT addressed in this task)**:
+- Root cause #1 (1 test, flaky): `test_bayesian_likelihood_equals_similarity` — `patterns_data` writes use `wait_for_async_insert=0` with no server-queue drain on the learn/predict hot path; produces "0 predictions" under load; passes in isolation. Tracking comment added at `knowledge_base.py:~413`.
+- Root cause #3 (5 tests, deterministic): `test_session_cleanup` asserts on a global active-session count that is not decremented on session delete (real bug); WebSocket `session.created` / `session.destroyed` events not received within 5-second test timeout.
 
 ### Initiative File
 `planning-docs/initiatives/redis-oom-clickhouse-metadata-migration.md`

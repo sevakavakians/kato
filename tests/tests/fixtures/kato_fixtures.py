@@ -691,69 +691,85 @@ class KATOFastAPIFixture:
 
         return full_name
 
+    def _get_clickhouse_metadata_field(self, pattern_name: str, field: str) -> Optional[str]:
+        """Read a single metadata field from the ClickHouse patterns_metadata sidecar.
+
+        Per-pattern metadata (emotives, metadata, entropy, tf_vector) lives in
+        ClickHouse as of the Redis → ClickHouse migration; frequency stays in
+        Redis. Uses argMax(field, version) to get the latest value without
+        depending on ReplacingMergeTree merge timing.
+
+        Returns the raw stored string, or None if no row exists for the pattern.
+        """
+        clean_name = pattern_name[5:] if pattern_name.startswith('PTRN|') else pattern_name
+        kb_id = self._get_actual_kb_id(self.processor_id)
+
+        query = (
+            f"SELECT argMax({field}, version) FROM kato.patterns_metadata "
+            f"WHERE kb_id = '{kb_id}' AND name = '{clean_name}' "
+            f"GROUP BY name FORMAT TabSeparatedRaw"
+        )
+        resp = requests.post("http://localhost:8123/", data=query.encode("utf-8"))
+        resp.raise_for_status()
+        value = resp.text.rstrip("\n")
+        if value == "":
+            return None
+        return value
+
     def get_redis_emotives(self, pattern_name: str) -> Optional[list[dict]]:
         """
-        Get emotives directly from Redis for validation.
+        Get a pattern's emotives directly from storage (ClickHouse) for validation.
 
-        This bypasses the API and knowledge_base layers to validate actual storage.
+        Bypasses the API and knowledge_base layers to validate actual storage.
+        (Named get_redis_* for historical reasons; emotives moved from Redis to
+        the ClickHouse patterns_metadata sidecar.)
 
         Args:
             pattern_name: Pattern name (with or without PTRN| prefix)
 
         Returns:
-            List of emotive dicts if found, None if key doesn't exist
+            List of emotive dicts if the pattern has a metadata row, None otherwise
         """
-        import redis
-
-        # Strip PTRN| prefix if present
-        clean_name = pattern_name[5:] if pattern_name.startswith('PTRN|') else pattern_name
-
-        # Use the actual kb_id (with truncation if needed)
-        kb_id = self._get_actual_kb_id(self.processor_id)
-
-        # Connect to Redis
-        redis_client = redis.Redis(host='localhost', port=6379, decode_responses=True)
-
-        # Query emotives key
-        emotives_key = f"{kb_id}:emotives:{clean_name}"
-        emotives_value = redis_client.get(emotives_key)
-
-        if emotives_value is None:
+        value = self._get_clickhouse_metadata_field(pattern_name, "emotives")
+        if value is None:
             return None
-
-        return json.loads(emotives_value)
+        return json.loads(value)
 
     def get_redis_metadata(self, pattern_name: str) -> Optional[dict]:
         """
-        Get metadata directly from Redis for validation.
+        Get a pattern's metadata directly from storage (ClickHouse) for validation.
 
-        This bypasses the API and knowledge_base layers to validate actual storage.
+        Bypasses the API and knowledge_base layers to validate actual storage.
+        (Named get_redis_* for historical reasons; metadata moved from Redis to
+        the ClickHouse patterns_metadata sidecar.)
 
         Args:
             pattern_name: Pattern name (with or without PTRN| prefix)
 
         Returns:
-            Metadata dict if found, None if key doesn't exist
+            Metadata dict if the pattern has a metadata row, None otherwise
+        """
+        value = self._get_clickhouse_metadata_field(pattern_name, "metadata")
+        if value is None:
+            return None
+        return json.loads(value)
+
+    def redis_has_metadata_keys(self, pattern_name: str) -> bool:
+        """True if any legacy Redis emotives/metadata key exists for the pattern.
+
+        After the ClickHouse migration these should always be absent — used to
+        assert the migration left no per-pattern metadata in Redis. Frequency
+        keys are intentionally NOT checked here (frequency stays in Redis).
         """
         import redis
 
-        # Strip PTRN| prefix if present
         clean_name = pattern_name[5:] if pattern_name.startswith('PTRN|') else pattern_name
-
-        # Use the actual kb_id (with truncation if needed)
         kb_id = self._get_actual_kb_id(self.processor_id)
-
-        # Connect to Redis
         redis_client = redis.Redis(host='localhost', port=6379, decode_responses=True)
-
-        # Query metadata key
-        metadata_key = f"{kb_id}:metadata:{clean_name}"
-        metadata_value = redis_client.get(metadata_key)
-
-        if metadata_value is None:
-            return None
-
-        return json.loads(metadata_value)
+        return any(
+            redis_client.exists(f"{kb_id}:{key_type}:{clean_name}")
+            for key_type in ('emotives', 'metadata')
+        )
 
     def get_redis_frequency(self, pattern_name: str) -> int:
         """

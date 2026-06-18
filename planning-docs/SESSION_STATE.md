@@ -1,24 +1,22 @@
 # SESSION_STATE.md - Current Development State
-*Last Updated: 2026-05-22 (Redis OOM Fix: Phases 3/4/5 validated in staging — awaiting production cutover for Phase 6 cleanup and Phase 7 code removal)*
+*Last Updated: 2026-06-18 (Redis OOM Fix: FULLY COMPLETE — dual-write removed, ClickHouse sole metadata store, version-tie bug fixed; two pre-existing bugs added to backlog)*
 
 ## Current Task
-**Redis OOM Fix: Move Per-Pattern Metadata from Redis to ClickHouse — MIGRATION VALIDATED IN STAGING THROUGH PHASE 5; AWAITING PRODUCTION CUTOVER**
-- Status: Phases 3/4/5 validated in staging (localhost, 2026-05-22); Phase 6 (cleanup execution) and Phase 7 (code removal) are deferred operational decisions for production
-- Engineering complete since: 2026-05-20
-- Staging validated: 2026-05-22
-- Priority: P1 (Memory / reliability — eliminates Redis 8 GB OOM ceiling under large training workloads)
-- Plan File: `/Users/sevakavakians/.claude/plans/ultrathink-currently-kato-uses-peaceful-micali.md`
-- Initiative File: `planning-docs/initiatives/redis-oom-clickhouse-metadata-migration.md`
-- Decision: DECISION-014 in `planning-docs/DECISIONS.md`
-- Quality Gate: 13 unit tests in `tests/tests/unit/test_metadata_router.py` — all pass (2 regression tests added during staging for Pydantic v2 env-var fix)
-- Staging config (Phase 4 end-state): `KATO_METADATA_DUAL_WRITE=true`, `KATO_METADATA_READ_FROM=clickhouse`, `KATO_METADATA_READ_VERIFY=false`
-- Rollback always available: flip `READ_FROM=redis` while `DUAL_WRITE=true` is set
-- Remaining (production operational): Phase 6 — run `scripts/delete_moved_redis_keys.py` and verify `used_memory_human` drop; Phase 7 — delete dead Redis paths and feature flag branches
-- Expected memory reduction: ~60–80% of current Redis footprint at 250k patterns (realised once Phase 6 cleanup is executed)
+**No active task — Redis OOM Fix migration is COMPLETE. Pick next item from sprint backlog.**
 
 ## Previous Task (context preserved)
+**Redis OOM Fix: Move Per-Pattern Metadata from Redis to ClickHouse — COMPLETE (2026-06-18)**
+- Status: COMPLETE — all phases done, dual-write scaffolding removed, ClickHouse sole metadata store
+- Engineering complete (phases 0–5): 2026-05-20 / Staging validated (phases 3–5): 2026-05-22
+- Correctness bug fixed + finalization (phases 6–7, dual-write removal): 2026-06-18
+- Initiative File: `planning-docs/initiatives/redis-oom-clickhouse-metadata-migration.md`
+- Decision: DECISION-014 in `planning-docs/DECISIONS.md`
+- Archive: `planning-docs/completed/features/2026-06-18-redis-clickhouse-metadata-migration-complete.md`
+- Final test results: 446 passed, 6 pre-existing failures (unrelated to migration)
+- Key correctness fix: `version UInt64` (`time.time_ns()`) replaces `updated_at DateTime` as `ReplacingMergeTree` version and `argMax` tiebreaker — eliminates same-second row ambiguity that lost emotive rolling-window merges
+
 **Multi-Worker Uvicorn + Concurrent Training Safety**
-- Status: ACTIVE (implementation in progress as of 2026-04-20) — superseded by Redis OOM initiative
+- Status: QUEUED (planned 2026-04-20, superseded by Redis OOM initiative — now ready to resume)
 - Plan File: `/Users/sevakavakians/.claude/plans/ultrathink-enable-multi-worker-recursive-marble.md`
 - Objective: Enable `--workers N` uvicorn, fix per-worker ClickHouse buffer orphan risk, close SETNX/frequency races
 - Note: Distributed session locks are NOT in scope
@@ -161,34 +159,21 @@
 - `kato/workers/pattern_operations.py` - Update to stateless
 
 ## Next Immediate Action
-**Redis OOM Fix: Awaiting Production Cutover Decision**
+**Resume Multi-Worker Uvicorn + Concurrent Training Safety**
 
-Staging is fully validated at the Phase 4 end-state. The remaining steps are production operational decisions:
+Redis OOM Fix is complete. The next queued initiative is multi-worker uvicorn support (see SPRINT_BACKLOG.md for full plan). Two newly-identified bugs are also in the backlog:
 
-1. **Phase 6 — Cleanup (production, when ready)**
-   - Run `scripts/delete_moved_redis_keys.py --all` on the production deployment (interactive confirmation required)
-   - Validate via `docker exec kato-redis redis-cli INFO memory` that `used_memory_human` drops
-   - ~60–80% Redis memory reduction expected at 250k patterns
+1. **Bug: patterns_data async_insert visibility race (Root cause #1)** — P2
+   - `knowledge_base.py:~413` `wait_for_async_insert=0` on patterns_data writes; no server-queue drain on the learn/predict hot path
+   - Symptom: flaky "0 predictions" under load; `test_bayesian_likelihood_equals_similarity` passes in isolation but fails in full suite
+   - Fix: add server-side queue drain or switch specific write to `wait_for_async_insert=1`
 
-2. **Phase 7 — Code Removal** (after Phase 5 confirmed stable in production)
-   - Delete dead branches in `redis_writer.py` (emotives/metadata write paths, `get_metadata`, `get_metadata_batch`, `write_precomputed_metrics_batch`, `get_precomputed_metrics_batch`)
-   - Delete `MetadataMigrationConfig` and its conditional branches from `settings.py`
-
-3. **Production deployment note**: The OrbStack-specific `HTTP_PROXY` interception that caused 502 errors on kato → ClickHouse traffic is patched via `deployment/docker-compose.override.yml` (internal service hostnames added to `NO_PROXY`). Verify this file is present in the production deployment.
-
-See `planning-docs/initiatives/redis-oom-clickhouse-metadata-migration.md` for full spec and verification criteria.
+2. **Bug: session delete does not decrement active-session count (Root cause #3)** — P2
+   - `test_session_cleanup` fails because global active-session counter is not decremented on delete
+   - 5 tests also fail on WebSocket `session.created`/`session.destroyed` event timeouts (5s)
 
 ## Blockers
-**ACTIVE BLOCKER** ⚠️
-
-**Blocker 1: Phase 1 Incomplete - Pattern Processor Not Stateless**
-- **Severity**: CRITICAL
-- **Impact**: Session isolation broken, tests failing, cannot proceed to Phase 2
-- **Root Cause**: pattern_processor stores STM as instance variable, shared across sessions
-- **Legacy Code**: get_session_stm endpoint syncs FROM processor TO session
-- **Test Failures**: 2 of 5 session isolation tests failing
-- **Fix Required**: Complete Phase 1.11 (make pattern_processor stateless)
-- **Temporary Workaround**: Re-added processor locks to prevent data corruption
+**No active blockers** (Redis OOM Fix complete; backlog bugs are P2, non-blocking)
 
 ## Context
 **Current Initiative**: Stateless Processor Refactor (Critical Priority)
@@ -250,6 +235,15 @@ Make KatoProcessor stateless following standard web application patterns:
 - **Related Work**: planning-docs/initiatives/hybrid-clickhouse-redis.md (v3.0 architecture)
 
 ## Recent Achievements
+- **Redis OOM Fix: Metadata Migration to ClickHouse — FULLY COMPLETE** (2026-06-18): CORRECTNESS FIX + MIGRATION FINALIZATION
+  - **Correctness Bug Fixed**: `kato.patterns_metadata` used `updated_at DateTime` (1-second resolution) as both `ReplacingMergeTree` version and `argMax` tiebreaker; same-second re-learns produced identical versions, silently losing emotive rolling-window merges. Fixed by adding `version UInt64` (`time.time_ns()`) as strictly-monotonic version column; `updated_at` downgraded to `DateTime64(3)` informational only.
+  - **wait_for_async_insert**: Metadata writes switched to `wait_for_async_insert=1` (low-volume; gives immediate read-after-write visibility).
+  - **Dual-write removal**: `MetadataRouter` simplified to ClickHouse-only; `MetadataMigrationConfig` and `metadata_migration` field removed from `settings.py`; `KATO_METADATA_*` env vars are now no-ops.
+  - **Dead code removed**: `write_metadata`, `get_metadata`, `get_metadata_batch`, `write_precomputed_metrics_batch`, `get_precomputed_metrics_batch` removed from `redis_writer.py`; migration scripts `backfill_pattern_metadata.py` and `delete_moved_redis_keys.py` deleted; migration-specific tests `test_metadata_router.py` and `test_pattern_metadata_migration.py` deleted.
+  - **Test suite updated**: `test_emotives_comprehensive.py` and `test_metadata_comprehensive.py` read metadata from ClickHouse as source of truth; `redis_has_metadata_keys` helper + assertion added confirming metadata absent from Redis.
+  - **Test results**: 23 failed → 6 failed (445 → 446 passed); `test_emotive_persistence_with_rolling_window` now passes.
+  - **Remaining 6 failures (pre-existing, NOT this work)**: 1 flaky async_insert visibility race (`test_bayesian_likelihood_equals_similarity`), 5 session-cleanup active-count + WebSocket event timeout tests.
+  - **Archive**: `planning-docs/completed/features/2026-06-18-redis-clickhouse-metadata-migration-complete.md`
 - **Relicense Apache 2.0 + Ownership Consolidation - COMPLETE** (2026-05-05): ADMINISTRATIVE
   - **License**: LGPL 2.1 replaced with Apache 2.0 (explicit patent grant, no linking ambiguity, broader corporate adoption)
   - **Ownership**: All "Intelligent Artifacts" references replaced with `Sevak Avakians <sevakavakians@gmail.com>` across 14 files (pyproject.toml, setup.py, Dockerfile OCI labels, Helm chart, docs)

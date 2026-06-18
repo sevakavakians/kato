@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-06-18
+
+Completes the Redis → ClickHouse per-pattern metadata migration and fixes a metadata-loss regression.
+
+### Fixed
+- **Metadata loss on rapid re-learn (regression)**: The `patterns_metadata` ReplacingMergeTree used `updated_at DateTime` (1-second resolution) as both the engine version and the `argMax` read tiebreaker. Same-second learn→re-learn produced tied versions, so reads/merges could return a stale row — silently dropping emotive rolling-window merges, metadata set-union accumulation, and finalize-training metric updates. Now uses a strictly-monotonic `version UInt64` (`time.time_ns()`).
+
+### Changed
+- **Metadata version column**: `patterns_metadata` now has a `version UInt64` column used as `ReplacingMergeTree(version)` and `argMax(field, version)`; `updated_at` downgraded to informational `DateTime64(3)`.
+- **Metadata write durability**: per-pattern metadata writes now use `wait_for_async_insert=1` (low volume) for immediate read-after-write visibility.
+- `MetadataRouter` is now ClickHouse-only (frequency still merged from Redis).
+
+### Removed (BREAKING)
+- **`KATO_METADATA_*` configuration parameters** removed (`KATO_METADATA_DUAL_WRITE`, `KATO_METADATA_READ_FROM`, `KATO_METADATA_READ_VERIFY`); these rollout flags are now no-ops. ClickHouse is the sole store for per-pattern metadata.
+- Dead Redis metadata methods (`write_metadata`, `get_metadata`, `get_metadata_batch`, `write_precomputed_metrics_batch`, `get_precomputed_metrics_batch`); frequency and symbol-stats methods retained.
+- Migration scripts `scripts/backfill_pattern_metadata.py` and `scripts/delete_moved_redis_keys.py`, and migration-specific tests.
+
+### Migration
+- **Required**: the `kato.patterns_metadata` table must be recreated with the new schema (it gains a `version UInt64` column and switches the engine version column from `updated_at` to `version`). The column cannot be altered in place. Drop and recreate the table (`init.sql` updated; `_ensure_patterns_metadata_table` recreates on startup if absent).
+
+## [3.x Unreleased backlog]
+
 ### Removed
 - **MongoDB Dead Code**: Removed `connection_pool.py`, `MongoDBConfig`, `DatabaseManager`, and pymongo imports
 - **MongoDB Fallback Logic**: Hybrid architecture (ClickHouse + Redis) is now the only mode; no MongoDB fallback

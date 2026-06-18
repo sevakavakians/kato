@@ -70,19 +70,23 @@ PARTITION BY kb_id                        -- Partition by node for independent m
 ORDER BY (kb_id, date);
 
 -- Pattern metadata sidecar (per-pattern KV data offloaded from Redis to bound RAM use)
--- ReplacingMergeTree dedupes by (kb_id, name) on background merges using updated_at as the
--- version column. Readers MUST use argMax(field, updated_at) GROUP BY name (not the FINAL
+-- ReplacingMergeTree dedupes by (kb_id, name) on background merges using `version` as the
+-- version column. Readers MUST use argMax(field, version) GROUP BY name (not the FINAL
 -- modifier) to retrieve the latest values without depending on merge timing.
+-- `version` is a strictly-monotonic time.time_ns() stamp from the writer, so a later write
+-- to the same (kb_id, name) always wins — even within the same wall-clock second. (The prior
+-- DateTime `updated_at` version tied at 1-second resolution and could return a stale row.)
 CREATE TABLE IF NOT EXISTS patterns_metadata (
-    kb_id                     String,                -- Knowledge base / node identifier
-    name                      String,                -- Pattern SHA1 hash
-    emotives                  String  DEFAULT '[]',  -- JSON list of dicts (rolling window)
-    metadata                  String  DEFAULT '{}',  -- JSON dict, set-union accumulator
-    entropy                   Nullable(Float64),     -- Pre-computed Shannon entropy
-    normalized_entropy        Nullable(Float64),     -- Pre-computed normalized entropy
-    global_normalized_entropy Nullable(Float64),     -- Pre-computed global normalized entropy
-    tf_vector                 String  DEFAULT '{}',  -- JSON dict (token → frequency)
-    updated_at                DateTime DEFAULT now() -- Version column for ReplacingMergeTree
-) ENGINE = ReplacingMergeTree(updated_at)
+    kb_id                     String,                    -- Knowledge base / node identifier
+    name                      String,                    -- Pattern SHA1 hash
+    emotives                  String  DEFAULT '[]',      -- JSON list of dicts (rolling window)
+    metadata                  String  DEFAULT '{}',      -- JSON dict, set-union accumulator
+    entropy                   Nullable(Float64),         -- Pre-computed Shannon entropy
+    normalized_entropy        Nullable(Float64),         -- Pre-computed normalized entropy
+    global_normalized_entropy Nullable(Float64),         -- Pre-computed global normalized entropy
+    tf_vector                 String  DEFAULT '{}',      -- JSON dict (token → frequency)
+    version                   UInt64,                    -- Monotonic version (time.time_ns) for ReplacingMergeTree
+    updated_at                DateTime64(3) DEFAULT now64(3) -- Informational only (not the version)
+) ENGINE = ReplacingMergeTree(version)
 PARTITION BY kb_id                        -- Physical isolation per node (matches patterns_data)
 ORDER BY (kb_id, name);                   -- Point-lookup ordering for batch WHERE name IN (...)

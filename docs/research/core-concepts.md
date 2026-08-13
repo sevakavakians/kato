@@ -74,9 +74,10 @@ Patterns are identified by deterministic SHA-1 hashing:
 # Pattern hash calculation
 pattern_string = str(sorted_events)
 pattern_hash = hashlib.sha1(pattern_string.encode()).hexdigest()
-pattern_name = f"PTN|{pattern_hash[:12]}"
+pattern_name = f"PTRN|{pattern_hash}"
 
-# Example: PTN|a1b2c3d4e5f6
+# Example: PTRN|a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2
+# (Databases store the plain SHA1 hash without the PTRN| prefix)
 ```
 
 **Properties**:
@@ -127,7 +128,7 @@ stm = deque([
 - Events added sequentially
 - FIFO (First In, First Out) structure
 - Can be cleared manually or automatically (STM_MODE)
-- Minimum 2 strings required for predictions
+- Minimum 1+ strings required for predictions (single-symbol fast path since v3.2; vectors contribute strings)
 
 **STM Modes**:
 
@@ -152,7 +153,7 @@ stm = deque([
 **Structure**:
 ```python
 pattern = {
-  "name": "PTN|a1b2c3d4e5f6",
+  "name": "PTRN|a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
   "length": 3,
   "events": [
     ["morning", "coffee"],

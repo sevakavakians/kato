@@ -50,7 +50,7 @@ No. KATO is CPU-optimized and runs efficiently without GPU.
 ### How do I install KATO?
 
 ```bash
-git clone https://github.com/your-org/kato.git
+git clone https://github.com/sevakavakians/kato.git
 cd kato
 ./start.sh
 ```
@@ -145,7 +145,7 @@ See [Pattern Learning](pattern-learning.md).
 
 ### What's the minimum pattern length?
 
-**2 events** (observations). Single-event patterns are not meaningful for prediction.
+**2 events** (observations) for temporal patterns, where sequence order drives prediction. Single-event **profile patterns** are also supported for non-temporal associations — see the next question.
 
 ### Can I learn non-sequential patterns?
 
@@ -454,7 +454,7 @@ See [Vector Embeddings](../research/vector-embeddings.md).
 - **Start Here**: [docs/00-START-HERE.md](../00-START-HERE.md)
 - **Quick Start**: [quick-start.md](quick-start.md)
 - **API Reference**: [docs/reference/api/](../reference/api/)
-- **GitHub Issues**: https://github.com/your-org/kato/issues
+- **GitHub Issues**: https://github.com/sevakavakians/kato/issues
 
 ### How do I report a bug?
 

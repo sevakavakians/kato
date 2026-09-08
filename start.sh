@@ -189,15 +189,19 @@ case "$COMMAND" in
                 print_info "No Qdrant collections to delete"
             fi
 
-            # Clear Redis - flush all data
+            # Clear Redis - flush all data, then rewrite the AOF so the on-disk
+            # append-only files actually shrink (FLUSHALL alone leaves them intact)
             print_info "Clearing Redis data..."
             docker exec kato-redis redis-cli ${REDIS_PASSWORD:+-a "$REDIS_PASSWORD" --no-auth-warning} FLUSHALL || print_error "Failed to clear Redis"
+            docker exec kato-redis redis-cli ${REDIS_PASSWORD:+-a "$REDIS_PASSWORD" --no-auth-warning} BGREWRITEAOF || print_warn "Failed to rewrite Redis AOF (disk will not be reclaimed)"
 
-            # Clear ClickHouse - drop patterns_data table
+            # Clear ClickHouse - truncate the pattern tables (they live in the
+            # `kato` database, not `default`). TRUNCATE keeps the schema and
+            # partitioning, so init.sql does not need to re-run.
             print_info "Clearing ClickHouse data..."
-            docker exec kato-clickhouse clickhouse-client --user "${CLICKHOUSE_USER:-default}" --password "${CLICKHOUSE_PASSWORD:-}" --query "DROP TABLE IF EXISTS default.patterns_data" 2>/dev/null || print_warn "ClickHouse not available or already empty"
-            # Recreate table from init script
-            docker exec kato-clickhouse clickhouse-client --user "${CLICKHOUSE_USER:-default}" --password "${CLICKHOUSE_PASSWORD:-}" --queries-file /docker-entrypoint-initdb.d/init.sql 2>/dev/null || print_warn "Could not recreate ClickHouse table"
+            for table in patterns_data patterns_metadata lsh_buckets pattern_stats; do
+                docker exec kato-clickhouse clickhouse-client --user "${CLICKHOUSE_USER:-default}" --password "${CLICKHOUSE_PASSWORD:-}" --query "TRUNCATE TABLE IF EXISTS kato.$table" || print_warn "Failed to truncate kato.$table"
+            done
 
             print_info "✓ All database data has been cleared!"
             print_warn "Services are still running. Use './start.sh restart' if needed."

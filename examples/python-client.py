@@ -42,7 +42,7 @@ USAGE:
         predictions = client.get_predictions()
 
 Author: KATO Team
-Version: 3.5.0 - Removed processor genes (update_genes/get_gene) - session config only (breaking change)
+Version: 3.6.0 - Added get_pattern_count() for node-scoped learned-pattern counts
 """
 
 import json
@@ -748,6 +748,30 @@ class KATOClient:
         """
         params = {'node_id': self.node_id}
         return self._request('GET', f'/pattern/{pattern_id}', params=params)
+
+    def get_pattern_count(self, flush: bool = True) -> Dict[str, Any]:
+        """
+        Get the number of patterns learned in this client's node.
+
+        Pattern counts are node-scoped: long-term memory is shared by every
+        session using the same node_id, so this is not limited to this
+        client's session.
+
+        Args:
+            flush: Flush pending database writes before counting (default True).
+                Set False for frequent polling where a count ~200ms stale is fine.
+
+        Returns:
+            Result with pattern_count and node_id
+
+        Example:
+            >>> client.observe(strings=['A'])
+            >>> client.learn()
+            >>> client.get_pattern_count()['pattern_count']
+            1
+        """
+        params = {'node_id': self.node_id, 'flush': flush}
+        return self._request('GET', '/patterns/count', params=params)
 
     def get_percept_data(self) -> Dict[str, Any]:
         """

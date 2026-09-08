@@ -137,6 +137,10 @@ class KatoProcessor:
         """Retrieve pattern information by pattern ID - delegates to pattern operations"""
         return self.pattern_operations.get_pattern(pattern_id)
 
+    def get_pattern_count(self, flush: bool = True):
+        """Count learned patterns in this node's LTM - delegates to pattern operations"""
+        return self.pattern_operations.get_pattern_count(flush=flush)
+
     def get_vector(self, name):
         """Retrieve vector values - delegates to pattern operations"""
         return self.pattern_operations.get_vector(name)

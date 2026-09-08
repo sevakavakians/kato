@@ -520,9 +520,10 @@ curl http://localhost:8000/pattern/PTRN|abc123...
 ### 3. Monitor Pattern Growth
 
 ```python
-# Check learned pattern count
-response = requests.get(f"http://localhost:8000/status")
-patterns_count = response.json()["processors"]["patterns_count"]
+# Check learned pattern count (long-term memory is node-scoped)
+response = requests.get("http://localhost:8000/patterns/count",
+                        params={"node_id": "user_alice"})
+patterns_count = response.json()["pattern_count"]
 ```
 
 ### 4. Use Metadata for Pattern Organization

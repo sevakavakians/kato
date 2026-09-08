@@ -674,12 +674,16 @@ logger.info(
 GET /metrics
 
 {
-  "patterns_count": 1234,
-  "sessions_active": 56,
-  "memory_usage_mb": 512,
-  "requests_per_second": 45
+  "resources": {"cpu_percent": 12.5, "memory_percent": 41.2, "disk_percent": 63.0},
+  "performance": {"total_requests": 10000, "total_errors": 3, "average_response_time": 8.4},
+  "sessions": {"active": 56, "total_created": 1234, "total_deleted": 1178},
+  "processor_manager": {"total_processors": 3, "max_processors": 100},
+  "uptime_seconds": 3600.5
 }
 ```
+
+Learned-pattern counts are not part of `/metrics`; query `GET /patterns/count`
+(node-scoped) instead.
 
 ### Health Checks
 

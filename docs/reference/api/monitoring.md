@@ -188,8 +188,10 @@ GET /metrics
     }
   },
   "processor_manager": {
-    "active_processors": 3,
-    "patterns_count": 5678
+    "total_processors": 3,
+    "max_processors": 100,
+    "eviction_ttl_seconds": 3600,
+    "processors": []
   },
   "uptime_seconds": 3600.5,
   "active_sessions": 42

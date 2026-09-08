@@ -7,6 +7,7 @@ Note: All core KATO operations (observe, learn, predictions) must now use
 session-based endpoints under /sessions/{session_id}/.
 """
 
+import asyncio
 import logging
 from typing import Any, Optional
 
@@ -15,6 +16,7 @@ from fastapi import APIRouter, HTTPException, Path, Query, Request
 from kato.api.schemas.kato_ops import (
     DeprecatedCognitionDataResponse,
     DeprecatedPerceptDataResponse,
+    PatternCountResponse,
     PatternResponse,
     SymbolAffinitiesResponse,
     SymbolAffinityResponse,
@@ -60,6 +62,45 @@ async def get_pattern(
     except Exception as e:
         logger.error(f"Error getting pattern {pattern_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Pattern retrieval failed: {str(e)}")
+
+
+@router.get("/patterns/count", response_model=PatternCountResponse)
+async def get_pattern_count(
+    request: Request,
+    node_id: Optional[str] = Query(None, description="Node identifier"),
+    flush: bool = Query(True, description="Drain pending writes for read-your-writes accuracy")
+):
+    """
+    Get the number of patterns learned in this node's long-term memory.
+
+    Patterns are scoped to node_id (long-term memory is shared by all sessions
+    on the same node), so this count is node-wide, not session-specific.
+
+    Args:
+        node_id: Node identifier (defaults to header-based node_id)
+        flush: Flush pending writes before counting. Patterns are written with
+            wait_for_async_insert=0, so a count taken immediately after learn()
+            can miss rows unless the async insert queue is drained first.
+            Set false for frequent polling where a ~200ms lag is acceptable.
+
+    Returns:
+        Pattern count and node_id
+    """
+    from kato.services.kato_fastapi import app_state, get_node_id_from_request
+
+    if node_id is None:
+        node_id = get_node_id_from_request(request)
+
+    processor = await app_state.processor_manager.get_processor(node_id)
+
+    try:
+        # Offloaded to a thread: the ClickHouse count is a sync driver call and
+        # flush_async_insert_queue() sleeps 0.5s if it lacks the FLUSH privilege.
+        count = await asyncio.to_thread(processor.get_pattern_count, flush)
+        return {"pattern_count": count, "node_id": processor.id}
+    except Exception as e:
+        logger.error(f"Error getting pattern count: {e}")
+        raise HTTPException(status_code=500, detail=f"Pattern count retrieval failed: {str(e)}")
 
 
 @router.get("/percept-data", deprecated=True, response_model=DeprecatedPerceptDataResponse)

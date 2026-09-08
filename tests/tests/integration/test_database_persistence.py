@@ -141,29 +141,12 @@ def count_patterns_for_node(base_url: str, node_id: str) -> int:
     """
     Count total patterns learned for a specific node.
 
-    Creates a temporary session to check pattern count via predictions.
-
     Returns:
-        Number of unique patterns accessible to this node
+        Number of unique patterns in this node's long-term memory
     """
-    session_id = create_session_with_node(base_url, node_id)
-
-    try:
-        # Get all accessible patterns by querying with minimal observation
-        # This is a workaround since we can't directly query pattern count
-        # We'll observe a unique symbol and see how many patterns exist
-        obs = {'strings': [f'count_check_{uuid.uuid4().hex[:4]}'], 'vectors': [], 'emotives': {}}
-        requests.post(f"{base_url}/sessions/{session_id}/observe", json=obs)
-
-        # Get predictions (will return patterns that might match)
-        # Note: This is not a perfect count, but gives us insight
-        response = requests.get(f"{base_url}/sessions/{session_id}/predictions")
-        if response.status_code == 200:
-            predictions = response.json().get('predictions', [])
-            return len(predictions)
-        return 0
-    finally:
-        delete_session(base_url, session_id)
+    response = requests.get(f"{base_url}/patterns/count", params={'node_id': node_id})
+    response.raise_for_status()
+    return response.json()['pattern_count']
 
 
 # ============================================================================

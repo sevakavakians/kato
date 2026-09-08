@@ -36,3 +36,8 @@ class SymbolAffinityResponse(BaseModel):
     symbol: str
     affinity: Any
     node_id: str
+
+
+class PatternCountResponse(BaseModel):
+    pattern_count: int
+    node_id: str

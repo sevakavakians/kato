@@ -67,8 +67,19 @@ GET /status
     "total_deleted": 1192
   },
   "processors": {
-    "active_processors": 3,
-    "patterns_count": 5678
+    "total_processors": 3,
+    "max_processors": 100,
+    "eviction_ttl_seconds": 3600,
+    "processors": [
+      {
+        "processor_id": "kato_primary",
+        "node_id": "user_alice",
+        "created_at": "2025-11-01T12:00:00+00:00",
+        "last_accessed": "2025-11-01T12:30:00+00:00",
+        "access_count": 42,
+        "idle_seconds": 12.5
+      }
+    ]
   },
   "version": "1.0.0"
 }
@@ -79,6 +90,10 @@ GET /status
 ```bash
 curl http://localhost:8000/status
 ```
+
+**Note**: `processors` reports the processor cache only — it does not include a
+learned-pattern count. For that, use
+[`GET /patterns/count`](utility.md#get-pattern-count).
 
 ---
 

@@ -53,6 +53,47 @@ curl "http://localhost:8000/pattern/PTRN|abc123def456...?node_id=user_alice"
 
 ---
 
+### Get Pattern Count
+
+Count the patterns learned in a node's long-term memory.
+
+Long-term memory is shared by every session using the same `node_id`, so this
+count is node-wide, not session-specific.
+
+```http
+GET /patterns/count?node_id={node_id}&flush={flush}
+```
+
+**Parameters**:
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `node_id` | string (query) | No | Node identifier |
+| `flush` | boolean (query) | No | Drain pending writes before counting (default `true`). Pass `false` for frequent polling: it avoids the flush but the count may lag new patterns by ~200ms |
+
+**Response** (`200 OK`):
+
+```json
+{
+  "pattern_count": 42,
+  "node_id": "user_alice_kato"
+}
+```
+
+The count is of *unique* patterns. Re-learning an identical sequence increments
+that pattern's frequency rather than adding to this count.
+
+Pass the bare node identifier: the service name is appended to form the storage
+`kb_id`, which is what the response echoes back (`user_alice` → `user_alice_kato`
+for a service named `kato`).
+
+**Example**:
+
+```bash
+curl "http://localhost:8000/patterns/count?node_id=user_alice"
+```
+
+---
+
 ### Get Percept Data (Node-Level)
 
 Get current percept data from a processor.

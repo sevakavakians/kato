@@ -98,6 +98,7 @@ Pattern retrieval and processor data access.
 
 **Endpoints**:
 - `GET /pattern/{pattern_id}` - Get specific pattern by ID
+- `GET /patterns/count` - Count patterns learned for a node
 - `GET /percept-data` - Get percept data from processor
 - `GET /cognition-data` - Get cognition data from processor
 - `GET /sessions/{session_id}/percept-data` - Get session percept data

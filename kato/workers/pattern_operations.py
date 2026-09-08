@@ -316,14 +316,25 @@ class PatternOperations:
         # Pass config directly to pattern processor's get_predictions_async
         return await self.pattern_processor.get_predictions_async(stm, config=config)
 
-    def get_pattern_count(self) -> int:
+    def get_pattern_count(self, flush: bool = True) -> int:
         """
         Get the total count of patterns in the database.
+
+        Args:
+            flush: Drain pending ClickHouse writes first. Required for
+                read-your-writes: patterns are inserted with
+                wait_for_async_insert=0, so recently learned rows sit in the
+                server-side async_insert buffer (~200ms) and are not yet
+                queryable. Pass False for pollers tolerating a stale count.
 
         Returns:
             Number of patterns in database
         """
         try:
+            if flush:
+                writer = self.pattern_processor.superkb.clickhouse_writer
+                writer.flush_if_pending()
+                writer.flush_async_insert_queue()
             count = self.patterns_kb.count_documents({})
             logger.debug(f"Pattern count: {count}")
             return count

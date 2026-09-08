@@ -353,6 +353,60 @@ def test_session_error_handling_missing_fields(kato_fixture):
         assert data['status'] in ['ok', 'okay', 'observed']
 
 
+def test_pattern_count_endpoint(kato_fixture):
+    """Test the node-scoped pattern count endpoint."""
+    kato_fixture.clear_all_memory()
+    headers = {'x-test-id': kato_fixture.processor_id}
+
+    response = requests.get(f"{kato_fixture.base_url}/patterns/count", headers=headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert data['pattern_count'] == 0
+    assert 'node_id' in data
+
+    kato_fixture.observe({'strings': ['pc1'], 'vectors': [], 'emotives': {}})
+    kato_fixture.observe({'strings': ['pc2'], 'vectors': [], 'emotives': {}})
+    kato_fixture.learn()
+
+    # Must be visible immediately: the endpoint flushes the ClickHouse async
+    # insert queue, so this asserts the flush actually happens.
+    response = requests.get(f"{kato_fixture.base_url}/patterns/count", headers=headers)
+    assert response.status_code == 200
+    assert response.json()['pattern_count'] == 1
+
+
+def test_pattern_count_no_flush_param(kato_fixture):
+    """flush=false is accepted and returns a valid (possibly stale) count."""
+    headers = {'x-test-id': kato_fixture.processor_id}
+    response = requests.get(f"{kato_fixture.base_url}/patterns/count",
+                            params={'flush': 'false'}, headers=headers)
+    assert response.status_code == 200
+    assert isinstance(response.json()['pattern_count'], int)
+
+
+def test_pattern_count_counts_unique_patterns(kato_fixture):
+    """Re-learning an identical sequence increments frequency, not the count."""
+    kato_fixture.clear_all_memory()
+    headers = {'x-test-id': kato_fixture.processor_id}
+
+    for _ in range(3):
+        kato_fixture.observe({'strings': ['dup1'], 'vectors': [], 'emotives': {}})
+        kato_fixture.observe({'strings': ['dup2'], 'vectors': [], 'emotives': {}})
+        kato_fixture.learn()
+
+    response = requests.get(f"{kato_fixture.base_url}/patterns/count", headers=headers)
+    assert response.status_code == 200
+    assert response.json()['pattern_count'] == 1
+
+    # A different sequence is a new pattern
+    kato_fixture.observe({'strings': ['dup1'], 'vectors': [], 'emotives': {}})
+    kato_fixture.observe({'strings': ['dup3'], 'vectors': [], 'emotives': {}})
+    kato_fixture.learn()
+
+    response = requests.get(f"{kato_fixture.base_url}/patterns/count", headers=headers)
+    assert response.json()['pattern_count'] == 2
+
+
 def test_error_handling_invalid_pattern(kato_fixture):
     """Test error handling for invalid pattern ID."""
     response = requests.get(f"{kato_fixture.base_url}/pattern/invalid_pattern_id")

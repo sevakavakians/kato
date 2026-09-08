@@ -90,10 +90,10 @@ docker compose up -d --build
 
 **Status**: Stable and production-ready (maintenance mode)
 **Architecture**: FastAPI with direct processor embedding (ClickHouse + Redis hybrid)
-**Test Coverage**: 454 tests passed, 0 failures (2026-04-09); test suite audited and hardened (2026-03-25)
+**Test Coverage**: 446 passed, 2 skipped, 6 failed against current build, excluding performance suite (2026-09-08) — the 6 failures are a characterized pre-existing multi-worker (`KATO_WORKERS=4`) websocket/concurrency bug, confirmed unrelated to the current Redis test-fixture fix
 **Performance**: ~10ms average response time; Redis round-trips batched; ClickHouse writes buffered; symbol table cached; MinHash optional xxhash acceleration; prediction pipeline vectorized with top-K pruning and executor parallelism
 **Code Quality**: 96% technical debt reduction achieved (6,315 → 67 ruff issues)
-**Last Major Update**: Redis Rehydration & Persistence Fix — `scripts/rehydrate_redis.py` rebuilds all Redis metadata from ClickHouse; `REDIS_PERSISTENCE=true` set as default; defensive frequency floor added to `pattern_search.py` and `pattern_processor.py` (2026-04-13)
+**Last Major Update**: Bug fix — `start.sh clean-data`'s ClickHouse step was a silent no-op (wrong database: `default` instead of `kato`, masked by `IF EXISTS` + suppressed stderr); fixed with a `TRUNCATE`-based loop over the correct tables. Verified, then used to purge all local test data at the user's direction (238/1,313 kb_ids across ClickHouse tables, 56 Redis keys, 13 Qdrant collections; Redis disk 4.4 GB → 40 KB). An earlier same-day claim that Redis persistence was disabled was also corrected — it is and has been enabled (`REDIS_PERSISTENCE=true`) since 2026-04-13 (2026-09-08)
 
 ## Directory Structure
 ```

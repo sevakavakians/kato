@@ -1,5 +1,5 @@
 # SPRINT_BACKLOG.md - Upcoming Work
-*Last Updated: 2026-06-18*
+*Last Updated: 2026-09-08 (start.sh clean-data ClickHouse fix + local test data purge added to Recently Completed)*
 
 ## Active Projects
 
@@ -469,6 +469,32 @@ Phase 4 (Symbol Statistics & Fail-Fast Architecture) is 100% complete. The Click
 
 ---
 
+### Bug: REDIS_PERSISTENCE=true in .env crashes KATO server run outside Docker
+**Priority**: P2 — blocks local (non-Docker) server runs when using the repo's default `.env`
+**Status**: Identified 2026-09-08 (discovered during Pattern Count Endpoint work)
+**Symptom**: Running the KATO FastAPI server locally (outside Docker) with the repo's `.env` sourced crashes at startup with a pydantic `ValidationError`
+**Root Cause**: `.env` sets `REDIS_PERSISTENCE=true` for use in `docker-compose.yml`'s redis service command line; `kato/config/settings.py`'s `Settings` class forbids extra/unrecognized env vars, so when `REDIS_PERSISTENCE` leaks into the kato process's own env (as it does outside Docker, where compose-level env scoping doesn't apply), `Settings` construction fails. The Docker container itself is unaffected since that var is never injected into the kato service's environment there.
+**Fix Options**:
+1. Add `REDIS_PERSISTENCE` as a recognized (ignored) field on `Settings`
+2. Move `REDIS_PERSISTENCE` out of the shared `.env` into a docker-compose-only env file
+**Files**: `kato/config/settings.py`, `.env`
+
+---
+
+### Bug: Multi-worker (KATO_WORKERS=4) breaks websocket event delivery and concurrent session modification consistency
+**Priority**: P2 — deterministic test failures (5 tests), real correctness gap under the container's default multi-worker config
+**Status**: Identified 2026-09-08 (characterized during conftest.py FLUSHALL fix verification)
+**Symptom**: 4 websocket tests (`session.created`/`session.destroyed` event delivery) and `test_concurrent_session_modifications` fail against the container running `KATO_WORKERS=4`; `test_concurrent_session_modifications` loses half its concurrent writes (`assert 5 == 10`)
+**Root Cause**: Websocket events are published in-process only and are not fanned out across uvicorn workers — a client connected to one worker never sees events published by another worker. Concurrent session writes are similarly lost across workers (no shared coordination), so half of concurrent modifications silently disappear.
+**Evidence**: The same websocket tests passed 7/7 against a single-worker instance; they fail only under the 4-worker container. Confirmed independent of the conftest.py Redis FLUSHALL fix — re-running with `KATO_TEST_REDIS_FLUSHALL=1` (old FLUSHALL behavior) produces the identical failures.
+**Fix Options**:
+1. Move websocket event fan-out to a shared pub/sub layer (Redis pub/sub) so all workers publish/receive the same events
+2. Move concurrent session-write coordination to a shared store rather than per-worker in-process state
+**Files**: websocket event dispatch code, `kato/sessions/redis_session_manager.py`
+**Related**: Overlaps with the "Multi-Worker Uvicorn + Concurrent Training Safety" initiative queued above — this bug is in-scope for that work.
+
+---
+
 ### Production Scale Migration Plan (PSMP)
 **Status**: Documented, Not Yet Implemented
 **Priority**: Future Enhancement (Implement when traffic exceeds 100 req/sec)
@@ -511,6 +537,22 @@ Phased plan for scaling KATO to production workloads:
 ---
 
 ## Recently Completed
+
+### Bug Fix: `start.sh clean-data` ClickHouse No-Op + Local Test Data Purge — COMPLETE (2026-09-08)
+**Priority**: Medium — operational tooling correctness
+**Archive**: `planning-docs/completed/bugs/2026-09-08-start-sh-clean-data-clickhouse-noop.md`
+
+`./start.sh clean-data`'s ClickHouse step ran `DROP TABLE IF EXISTS default.patterns_data`, but the pattern tables live in the `kato` database — the command silently no-opped (masked by `IF EXISTS` + suppressed stderr) while always reporting success, and never touched `patterns_metadata`, `lsh_buckets`, or `pattern_stats` either. Fixed with a `TRUNCATE TABLE IF EXISTS kato.$table` loop over all four tables, stderr suppression removed, and a Redis `BGREWRITEAOF` added after `FLUSHALL` to reclaim AOF disk.
+
+Verified end-to-end (347/370 rows + 1721 Redis keys + 2 Qdrant collections all cleared, schema intact). Immediately used to purge all local test data at the user's explicit direction — 238 kb_ids/2,977 rows + 1,313 kb_ids/3,595 rows from ClickHouse, 56 Redis keys, 13 Qdrant collections; Redis disk 4.4 GB → 40 KB. Post-cleanup: `tests/tests/api/` + `tests/tests/integration/test_database_persistence.py` — 60 passed / 1 skipped. Also corrected an earlier same-day claim that Redis persistence was disabled — it is and has been enabled since 2026-04-13; persistence doesn't protect against explicit deletion, which is why the FLUSHALL risks were real regardless.
+
+### Bug Fix: conftest.py Redis FLUSHALL Scoped to Ephemeral Keys — COMPLETE (2026-09-08)
+**Priority**: P2 — resolved
+**Archive**: `planning-docs/completed/bugs/2026-09-08-conftest-redis-flushall-scoped-to-ephemeral-keys.md`
+
+`tests/tests/conftest.py`'s `flush_redis_before_tests` fixture no longer runs an unconditional `docker exec kato-redis redis-cli FLUSHALL`. It now deletes only ephemeral session/STM keys (`EPHEMERAL_KEY_PATTERNS = ("kato:session:*", "stm:events:*", "stm:global")`) via the `redis` Python client (`scan_iter()` + batched deletes), honoring `REDIS_HOST`/`REDIS_PORT`. `KATO_TEST_REDIS_FLUSHALL=1` remains as an opt-in full-flush escape hatch for a dedicated test Redis.
+
+Verified: durable kb_id-namespaced metadata (including a `kb_id` literally named `"kato"`) survives with values intact; ephemeral keys are cleared; `KATO_TEST_REDIS_FLUSHALL=1` still full-flushes; ruff clean. Full suite: 446 passed, 2 skipped, 6 failed — the 6 failures are pre-existing and confirmed unrelated to this fix (identical failures reproduce under the old FLUSHALL behavior too); root cause characterized as a new multi-worker (`KATO_WORKERS=4`) websocket/concurrency bug, added to the backlog above.
 
 ### Redis OOM Fix: Metadata Migration to ClickHouse — COMPLETE (2026-06-18)
 **Priority**: P1 — resolved

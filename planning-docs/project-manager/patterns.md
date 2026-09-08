@@ -82,6 +82,24 @@ absolute latency differences across machines.
 
 ## Documentation Correctness Patterns
 
+### 2026-09-08 - Dead Storage-Layer Code Paired with Documentation for a Field That Never Existed
+
+**Pattern**: A storage-layer method (`PatternOperations.get_pattern_count()`) was fully implemented but never called from any endpoint or processor method — pure dead code. Simultaneously, `docs/reference/api/learning.md` documented a `GET /status` -> `processors.patterns_count` response field that had never existed anywhere in the codebase. The two facts look related (both "about pattern counting") but were independent: the doc's fabricated field was not a stale reference to the dead method: they were unconnected. Wiring up the dead method into a new, correctly-scoped endpoint (`GET /patterns/count`) fixed the capability gap; separately, three other docs files (`health.md`, `monitoring.md`, `docs/developers/architecture.md`) turned out to have the exact same fabricated `/status` shape and needed independent correction.
+
+**Discovery Trigger**: Implementing the client-facing count feature required checking what `/status` actually returns, which surfaced the doc/code mismatch.
+
+**Assumption → Reality**:
+- Assumed: `/status` returns `processors.patterns_count` and `processors.active_processors` (per docs)
+- Reality: `/status` returns `total_processors`/`max_processors`/`eviction_ttl_seconds`/`processors[]` — no `patterns_count` field exists or ever existed there
+
+**Resolution Pattern**: When a documented field/endpoint is needed for new work and turns out not to exist, grep the same claim across sibling docs (health/monitoring/architecture files often duplicate response-shape examples) rather than fixing only the file that triggered the discovery.
+
+**Lesson**: Dead code and documentation drift are separate defect classes that often coexist without being causally linked. Finding one is a good trigger to check for the other, but don't assume they explain each other — verify each independently against the real code.
+
+**Recurrence Risk**: Medium — any response-shape example duplicated across multiple reference docs is a drift risk each time the actual response shape changes. Consider a single source-of-truth schema doc referenced from the others instead of duplicating example JSON.
+
+---
+
 ### 2026-03-19 - Documentation Drift During Multi-Phase Refactors
 
 **Pattern**: After a large architectural change (e.g., MongoDB → ClickHouse + Redis), documentation across 20+ files is updated in batches. Version-tagged items (container image tags, test counts, port numbers, column names) and behavioral claims (stateless model, minimum input lengths, sort behavior) are the most common drift points because they are easy to miss in bulk find-replace passes.
@@ -141,6 +159,62 @@ absolute latency differences across machines.
 ---
 
 ## Bug Patterns
+
+### 2026-09-08 - Test Infrastructure Data-Loss Risk Surfaced by Unrelated Feature Work
+
+**Pattern**: While verifying a new endpoint, `tests/tests/conftest.py:24`'s unconditional `docker exec kato-redis redis-cli FLUSHALL` fired at test-session start and destroyed live Redis metadata (frequency, emotives, symbol affinity) that has no reliable reconstruction path per `scripts/rehydrate_redis.py`'s own documented limitations. This is the same underlying fragility — Redis metadata, once destroyed, has no exact reconstruction path — previously encountered in production in the 2026-04-13 Redis Rehydration & Persistence Fix (see `planning-docs/completed/features/2026-04-13-redis-rehydration-persistence-fix.md`, where persistence *was* off at the time and was subsequently turned on by default as part of that fix) but left unaddressed in test infrastructure, which still targets a live-named container (`kato-redis`) unconditionally.
+
+**Discovery Trigger**: Running the local test suite during Pattern Count Endpoint verification.
+
+**Assumption → Reality**:
+- Assumed: test suite setup only affects an isolated/ephemeral test database
+- Reality: `conftest.py` flushes whatever Redis is reachable at the well-known container name `kato-redis`, with no guard against that being a live/shared instance
+
+**Resolution Pattern**: Treat any unconditional destructive operation in shared test fixtures (`FLUSHALL`, `DROP TABLE`, `rm -rf`) as a standing risk, not just at the time it was written. Persistence protects against restarts and crashes, not against explicit deletion commands — it cannot substitute for scoping destructive operations to what actually needs clearing.
+
+**Lesson**: A previously-fixed production bug class (Redis metadata loss with no exact reconstruction path) can still be live in adjacent tooling (test fixtures) that was not in scope for the original fix, even after the original root cause was independently closed. When auditing for a specific bug class, check test/ops scripts alongside application code, and don't assume a related production fix also closed the risk elsewhere.
+
+**Correction (2026-09-08)**: This entry originally stated the risk was "combined with no Redis persistence by default" and called it "the same underlying fragility (no Redis persistence)" as the 2026-04-13 incident — implying Redis persistence was currently disabled. That was wrong. `REDIS_PERSISTENCE=true` has been set in `.env` and `deployment/.env` since the April 2026 fix (confirmed unchanged; the running container has `--save "900 1" ...` plus `--appendonly yes`, `aof_enabled:1`). Persistence was never the missing safeguard here — persistence durably commits whatever state Redis is in, including a deliberately emptied one, so it offers no protection against an explicit `FLUSHALL`. The actual risk was always an unconditional destructive command with no scope-guard. Corrected during the `start.sh clean-data` bug fix session — see `planning-docs/completed/bugs/2026-09-08-start-sh-clean-data-clickhouse-noop.md`.
+
+**Recurrence Risk**: ~~Medium~~ RESOLVED 2026-09-08 — `conftest.py` now scopes deletion to ephemeral keys only, with `KATO_TEST_REDIS_FLUSHALL=1` as an explicit opt-in for full-flush. See archive: `planning-docs/completed/bugs/2026-09-08-conftest-redis-flushall-scoped-to-ephemeral-keys.md`.
+
+---
+
+### 2026-09-08 - Fix Verified, Then a Second Bug Surfaced Behind the First (Multi-Worker Websocket/Concurrency)
+
+**Pattern**: Fixing the conftest.py FLUSHALL data-loss bug required a full-suite regression run to verify no new failures were introduced. That run showed 6 failures — the same 6 that were already known/pre-existing. Rather than assume "pre-existing" without checking, the failures were re-run with the *old* FLUSHALL behavior (`KATO_TEST_REDIS_FLUSHALL=1`) restored, producing identical results — proving the fix was not the cause. Digging into *why* those 6 fail at all (not just confirming they're unrelated) surfaced a second, previously uncharacterized bug: the container's `KATO_WORKERS=4` config breaks websocket event fan-out and concurrent session write consistency across workers, because websocket publishing is in-process only and session writes aren't coordinated across workers.
+
+**Discovery Trigger**: Comparing failure counts/identities between the fix and an old-behavior control run (`KATO_TEST_REDIS_FLUSHALL=1`), then noticing the failing tests were all either websocket-event or concurrent-write tests — a pattern pointing at worker count rather than Redis behavior. Confirmed by noting the same websocket tests passed 7/7 against an earlier single-worker run.
+
+**Assumption → Reality**:
+- Assumed: "6 pre-existing failures" (as already noted in `SESSION_STATE.md` from 2026-06-18) was a stable, already-understood baseline
+- Reality: the failures had never been root-caused to a specific mechanism; the actual cause (`KATO_WORKERS=4` breaking in-process websocket fan-out and cross-worker write consistency) was only characterized now, and is itself a new actionable P2 bug rather than acceptable baseline noise
+
+**Resolution Pattern**: When a fix's verification run shows failures that look "pre-existing," don't stop at "unrelated" — (1) prove it with a control run under the old behavior, and (2) root-cause the failure pattern itself if it hasn't been root-caused before. A previously-uncharacterized bug can be sitting inside a bucket of already-tolerated "known failures" indefinitely if nobody looks closer.
+
+**Lesson**: "Pre-existing failure" is not the same as "understood failure." Multi-worker deployments (`KATO_WORKERS=N`) need in-process state (websocket subscriber lists, per-request session mutation) replaced with cross-worker-safe mechanisms (e.g., Redis pub/sub) — this is exactly the class of correctness gap the already-queued "Multi-Worker Uvicorn + Concurrent Training Safety" initiative exists to close.
+
+**Recurrence Risk**: Medium until the multi-worker initiative lands — every test run against the `KATO_WORKERS=4` container will keep showing these failures. Tracked as a new P2 backlog bug in `planning-docs/SPRINT_BACKLOG.md`, explicitly scoped as in-scope for the queued multi-worker initiative.
+
+---
+
+### 2026-09-08 - Silent-Success Ops Command: Wrong Database Name, `IF EXISTS` Masked the Failure
+
+**Pattern**: `./start.sh clean-data`'s ClickHouse step ran `DROP TABLE IF EXISTS default.patterns_data`, but KATO's pattern tables live in the `kato` database, not `default`. `IF EXISTS` made the DROP against a nonexistent table a silent success (no error, nothing to drop), and `2>/dev/null` would have hidden any error anyway. The script unconditionally printed "✓ All database data has been cleared!" regardless of whether anything was actually cleared, so the no-op was invisible — Redis and Qdrant genuinely cleared, giving the whole command an appearance of working.
+
+**Discovery Trigger**: Investigating whether `clean-data` had ever actually cleared ClickHouse; confirmed via `system.tables` that only `kato.patterns_data` exists, never `default.patterns_data`.
+
+**Assumption → Reality**:
+- Assumed: `clean-data` fully resets local state across all three databases, as its help text and success message claim
+- Reality: ClickHouse was never touched — every row in `patterns_data`, `patterns_metadata`, `lsh_buckets`, and `pattern_stats` persisted across every prior "clean-data" run; only `patterns_data` was even targeted (the other three tables were never referenced at all)
+
+**Resolution Pattern**: `IF EXISTS`/`IF NOT EXISTS` guards are appropriate for idempotency, but combined with wrong-target names and suppressed stderr, they convert a hard failure into total silence. Any destructive ops command that prints an unconditional success message should either (a) check affected-row/object counts before declaring success, or (b) let real failures surface (no blanket stderr suppression) so a wrong-target mistake is visible the first time it's run.
+
+**Lesson**: A command that "has always worked" (no errors, expected success message) is not evidence it does what its name says — verify against the actual data (row counts, `system.tables`), not against the absence of errors, especially for any command using `IF EXISTS`/`IF NOT EXISTS` plus suppressed stderr together.
+
+**Recurrence Risk**: Low — fixed by switching to `TRUNCATE TABLE IF EXISTS kato.$table` for all four real tables in a loop, with `2>/dev/null` removed so future name/permission mismatches surface per-table warnings instead of silent success. See archive: `planning-docs/completed/bugs/2026-09-08-start-sh-clean-data-clickhouse-noop.md`.
+
+---
 
 ### 2026-03-17 - Compound Bug: Silent Failure in Async Context
 

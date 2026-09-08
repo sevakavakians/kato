@@ -1,10 +1,27 @@
 # SESSION_STATE.md - Current Development State
-*Last Updated: 2026-06-18 (Redis OOM Fix: FULLY COMPLETE — dual-write removed, ClickHouse sole metadata store, version-tie bug fixed; two pre-existing bugs added to backlog)*
+*Last Updated: 2026-09-08 (start.sh clean-data ClickHouse no-op bug: FIXED; all local test data purged at user's direction; earlier Redis-persistence-disabled claim corrected — persistence was and is enabled)*
 
 ## Current Task
-**No active task — Redis OOM Fix migration is COMPLETE. Pick next item from sprint backlog.**
+**No active task — start.sh clean-data ClickHouse fix + local test data purge is COMPLETE. Pick next item from sprint backlog (Multi-Worker Uvicorn + Concurrent Training Safety is next queued).**
 
 ## Previous Task (context preserved)
+**`start.sh clean-data` ClickHouse No-Op Bug Fix + Local Test Data Purge — COMPLETE (2026-09-08)**
+- Status: COMPLETE — bug fixed, verified end-to-end, then used to purge all local test data at the user's explicit direction
+- Ad-hoc bug fix + user-directed maintenance action (not from a queued initiative); Multi-Worker Uvicorn initiative below remains next in the sprint backlog
+- Archive: `planning-docs/completed/bugs/2026-09-08-start-sh-clean-data-clickhouse-noop.md`
+- Bug: ClickHouse step ran `DROP TABLE IF EXISTS default.patterns_data`, but pattern tables live in the `kato` database, not `default` — silent no-op (masked by `IF EXISTS` + suppressed stderr) that unconditionally reported success while never touching `patterns_data`, `patterns_metadata`, `lsh_buckets`, or `pattern_stats`
+- Fix: `TRUNCATE TABLE IF EXISTS kato.$table` loop over all four tables; `2>/dev/null` suppression removed so future failures surface; `BGREWRITEAOF` added after Redis `FLUSHALL` to reclaim AOF disk
+- Maintenance: purged 238 kb_ids / 2,977 rows (patterns_data) + 1,313 kb_ids / 3,595 rows (patterns_metadata) from ClickHouse, 56 Redis keys, 13 Qdrant `vectors_test_*` collections; Redis disk reclaimed 4.4 GB → 40 KB
+- Verification: all four ClickHouse tables 0 rows/schema intact, Redis DBSIZE 0, Qdrant no collections, `/health` 200, learn→count→clear-all smoke test correct (0→1→0); `tests/tests/api/` + `tests/tests/integration/test_database_persistence.py` — 60 passed / 1 skipped from the empty state
+- Knowledge refinement: corrected an earlier same-day claim that Redis persistence was disabled — `REDIS_PERSISTENCE=true` has been set in `.env`/`deployment/.env` since 2026-04-13; persistence protects against restarts/crashes, not explicit deletion, so it never prevented the FLUSHALL data-loss risk
+
+**Pattern Count Endpoint — COMPLETE (2026-09-08)**
+- Status: COMPLETE — `GET /patterns/count` added, storage-layer dead code wired up, doc drift fixed
+- Ad-hoc feature work (not from a queued initiative); Multi-Worker Uvicorn initiative below remains next in the sprint backlog
+- Decision: DECISION-015 in `planning-docs/DECISIONS.md`
+- Archive: `planning-docs/completed/features/2026-09-08-pattern-count-endpoint.md`
+- Test results: full suite 448 passed / 2 skipped / 4 failed (4 failures target a stale port-8000 container, unrelated); API suite 50 passed; integration persistence suite 10 passed
+
 **Redis OOM Fix: Move Per-Pattern Metadata from Redis to ClickHouse — COMPLETE (2026-06-18)**
 - Status: COMPLETE — all phases done, dual-write scaffolding removed, ClickHouse sole metadata store
 - Engineering complete (phases 0–5): 2026-05-20 / Staging validated (phases 3–5): 2026-05-22
@@ -161,7 +178,7 @@
 ## Next Immediate Action
 **Resume Multi-Worker Uvicorn + Concurrent Training Safety**
 
-Redis OOM Fix is complete. The next queued initiative is multi-worker uvicorn support (see SPRINT_BACKLOG.md for full plan). Two newly-identified bugs are also in the backlog:
+Pattern Count Endpoint work is complete. The next queued initiative is multi-worker uvicorn support (see SPRINT_BACKLOG.md for full plan). Known backlog bugs (all P2, non-blocking):
 
 1. **Bug: patterns_data async_insert visibility race (Root cause #1)** — P2
    - `knowledge_base.py:~413` `wait_for_async_insert=0` on patterns_data writes; no server-queue drain on the learn/predict hot path
@@ -171,9 +188,21 @@ Redis OOM Fix is complete. The next queued initiative is multi-worker uvicorn su
 2. **Bug: session delete does not decrement active-session count (Root cause #3)** — P2
    - `test_session_cleanup` fails because global active-session counter is not decremented on delete
    - 5 tests also fail on WebSocket `session.created`/`session.destroyed` event timeouts (5s)
+   - Confirmed still reproducing 2026-09-08 during Pattern Count Endpoint verification (fails in isolation even against a freshly flushed Redis)
+
+3. **Bug: `REDIS_PERSISTENCE=true` in `.env` crashes KATO server run outside Docker** — P2 (discovered 2026-09-08)
+   - `.env` sets `REDIS_PERSISTENCE=true`; `kato/config/settings.py` `Settings` forbids extra inputs, so running the KATO server locally (outside Docker) crashes with a pydantic `ValidationError`
+   - Docker container unaffected — that var is only consumed by redis's command line in docker-compose, never injected into the kato service
+   - Fix: either allow/ignore the extra env var in `Settings`, or scope it out of the shared `.env` so it's not visible to the kato process's env
+
+4. **Bug: Multi-worker (`KATO_WORKERS=4`) breaks websocket event delivery and concurrent session modification consistency** — P2 (discovered 2026-09-08, characterized during conftest.py FLUSHALL bug fix verification)
+   - Websocket events are published in-process only and are not fanned out across uvicorn workers — a client connected to one worker misses events published by another
+   - `test_concurrent_session_modifications` loses half its concurrent writes (`assert 5 == 10`) — writes split across workers aren't consistently visible to each other
+   - Evidence: same websocket tests passed 7/7 against a single-worker instance; fail only under the 4-worker container. Confirmed unrelated to the conftest.py FLUSHALL fix — identical failures reproduce with `KATO_TEST_REDIS_FLUSHALL=1` (old FLUSHALL behavior)
+   - Overlaps with the "Multi-Worker Uvicorn + Concurrent Training Safety" initiative — see `planning-docs/SPRINT_BACKLOG.md`
 
 ## Blockers
-**No active blockers** (Redis OOM Fix complete; backlog bugs are P2, non-blocking)
+**No active blockers** (backlog bugs above are P2, non-blocking)
 
 ## Context
 **Current Initiative**: Stateless Processor Refactor (Critical Priority)
@@ -235,6 +264,34 @@ Make KatoProcessor stateless following standard web application patterns:
 - **Related Work**: planning-docs/initiatives/hybrid-clickhouse-redis.md (v3.0 architecture)
 
 ## Recent Achievements
+- **Bug Fix: `start.sh clean-data` ClickHouse No-Op — COMPLETE + Local Test Data Purge** (2026-09-08): BUG FIX + MAINTENANCE
+  - **What**: `./start.sh clean-data`'s ClickHouse step ran `DROP TABLE IF EXISTS default.patterns_data` — wrong database (tables live in `kato`, not `default`), so the command silently no-opped (masked by `IF EXISTS` + `2>/dev/null`) while unconditionally printing "✓ All database data has been cleared!" It also never referenced `patterns_metadata`, `lsh_buckets`, or `pattern_stats` at all
+  - **Fix**: Replaced with a `TRUNCATE TABLE IF EXISTS kato.$table` loop over all four real tables (preserves schema/partitioning, no `init.sql` re-run needed); removed `2>/dev/null` so future failures print a per-table warning; added Redis `BGREWRITEAOF` after the existing `FLUSHALL` (FLUSHALL empties the keyspace but doesn't shrink the on-disk AOF)
+  - **Verification**: 347/370 rows across `patterns_data`/`patterns_metadata`, 1721 Redis keys, 2 Qdrant collections all brought to 0/empty by one `clean-data` run; ClickHouse tables confirmed still present with schema intact; `bash -n` clean
+  - **Maintenance action**: user confirmed all local data is test data, not production ("They can all be cleared out"), closing out a separate open question about recovering pre-flush Redis metadata (no recovery needed/attempted). Purged 238 kb_ids / 2,977 rows (`patterns_data`) + 1,313 kb_ids / 3,595 rows (`patterns_metadata`, including the former `node0_kato`/`node1_kato`), 56 Redis keys, 13 Qdrant `vectors_test_*` collections; Redis disk reclaimed 4.4 GB → 40 KB via `BGREWRITEAOF` (AOF had a 2.69 GB Apr 28 base + 2.07 GB incremental log)
+  - **Post-cleanup verification**: all 4 ClickHouse tables 0 rows/schema intact, Redis `DBSIZE` 0, Qdrant no collections, `/health` 200; learn→count→clear-all smoke test correct (0→1→0); `tests/tests/api/` + `tests/tests/integration/test_database_persistence.py` — 60 passed / 1 skipped from the empty state
+  - **Knowledge refinement**: corrected an earlier same-day claim (in this file and two archive docs) that Redis persistence was disabled/absent by default. It was wrong — `REDIS_PERSISTENCE=true` is set in both `.env` and `deployment/.env`, unchanged since the 2026-04-13 fix, and the running container has `--appendonly yes`, `aof_enabled:1`. Persistence protects against restarts/crashes, not explicit deletion commands — it never prevented the FLUSHALL-related data-loss risks
+  - **Archive**: `planning-docs/completed/bugs/2026-09-08-start-sh-clean-data-clickhouse-noop.md`
+- **Bug Fix: conftest.py Redis FLUSHALL Scoped to Ephemeral Keys — COMPLETE** (2026-09-08): BUG FIX (P2, data-loss risk)
+  - **What**: `tests/tests/conftest.py`'s `flush_redis_before_tests` fixture no longer runs an unconditional `docker exec kato-redis redis-cli FLUSHALL`. It now deletes only ephemeral session/STM keys via a new `EPHEMERAL_KEY_PATTERNS = ("kato:session:*", "stm:events:*", "stm:global")` constant, using `redis.Redis(...).scan_iter()` with batched deletes (batches of 1000)
+  - **Connection**: Uses the `redis` Python client honoring `REDIS_HOST`/`REDIS_PORT` env vars instead of hardcoded `docker exec kato-redis`; `subprocess` import removed, `os`/`redis` added
+  - **Escape hatch**: `KATO_TEST_REDIS_FLUSHALL=1` restores the full FLUSHALL (with a printed warning) for a Redis dedicated to testing
+  - **Why safe**: Durable pattern metadata is namespaced under `kb_id` (`<kb_id>:frequency:*`, `:symbols:freq`, `:symbols:pmf`, `:symbol_to_patterns:*`, `:affinity:*`, `:global:*`, `:prediction:*` per `kato/storage/redis_writer.py`), which cannot match any of the three ephemeral patterns
+  - **Verification**: Seeded durable metadata (including adversarial `kb_id="kato"`) plus ephemeral keys, ran a test session, confirmed durable keys survived intact and ephemeral keys were cleared; confirmed `KATO_TEST_REDIS_FLUSHALL=1` still full-flushes; ruff clean
+  - **Test results**: full suite (excluding performance) 446 passed, 2 skipped, 6 failed — all 6 failures confirmed pre-existing and unrelated (identical failures reproduce under old FLUSHALL behavior via `KATO_TEST_REDIS_FLUSHALL=1`)
+  - **New bug characterized from the 6 failures**: multi-worker (`KATO_WORKERS=4`) breaks websocket event fan-out and concurrent session write consistency — added as new backlog item 4 above, see `planning-docs/SPRINT_BACKLOG.md`
+  - **Archive**: `planning-docs/completed/bugs/2026-09-08-conftest-redis-flushall-scoped-to-ephemeral-keys.md`
+- **Pattern Count Endpoint — COMPLETE** (2026-09-08): NEW API FEATURE + DOC FIX
+  - **What**: New `GET /patterns/count` endpoint (node-scoped via `node_id` param/header, `flush` param default `true`) returns `{"pattern_count": int, "node_id": str}`. Wires up previously-dead `PatternOperations.get_pattern_count()`.
+  - **Path choice**: `/patterns/count` (plural), not `/pattern/count`, to avoid being shadowed by the existing `GET /pattern/{pattern_id}` route
+  - **Flush**: Handler runs in `asyncio.to_thread` (sync ClickHouse driver call); `flush=True` default guarantees read-your-writes since pattern inserts use `wait_for_async_insert=0`
+  - **Decision**: ClickHouse is the authoritative count source, not the Redis `total_unique_patterns` counter (which has no decrement path and drifts high after deletions) — DECISION-015
+  - **Doc fix**: `docs/reference/api/learning.md` documented a `GET /status` -> `processors.patterns_count` field that never existed; fixed. Also corrected the `/status` response shape (`total_processors`/`max_processors`/`eviction_ttl_seconds`/`processors[]`) in `docs/reference/api/health.md`, `docs/reference/api/monitoring.md`, `docs/developers/architecture.md`
+  - **Client**: `examples/python-client.py` `get_pattern_count()` added, version bumped to 3.6.0
+  - **Tests**: 3 new tests in `tests/tests/api/test_fastapi_endpoints.py`; dead prediction-count proxy in `tests/tests/integration/test_database_persistence.py::count_patterns_for_node` replaced with a real call to the new endpoint
+  - **Test results**: full suite 448 passed / 2 skipped / 4 failed (4 failures target a stale port-8000 container, unrelated to this work); API suite 50 passed; integration persistence suite 10 passed; functional smoke confirmed 0 -> 1 after learn (12.7ms), relearn stays 1, distinct sequence goes to 2
+  - **Two pre-existing issues discovered (not part of this change)**: `tests/tests/conftest.py:24` unconditional Redis FLUSHALL destroys live metadata regardless of persistence (persistence protects against restarts/crashes, not explicit deletion); `.env`'s `REDIS_PERSISTENCE=true` crashes KATO run locally outside Docker (pydantic `Settings` forbids extra inputs) — both added to backlog, see Next Immediate Action above
+  - **Archive**: `planning-docs/completed/features/2026-09-08-pattern-count-endpoint.md`
 - **Redis OOM Fix: Metadata Migration to ClickHouse — FULLY COMPLETE** (2026-06-18): CORRECTNESS FIX + MIGRATION FINALIZATION
   - **Correctness Bug Fixed**: `kato.patterns_metadata` used `updated_at DateTime` (1-second resolution) as both `ReplacingMergeTree` version and `argMax` tiebreaker; same-second re-learns produced identical versions, silently losing emotive rolling-window merges. Fixed by adding `version UInt64` (`time.time_ns()`) as strictly-monotonic version column; `updated_at` downgraded to `DateTime64(3)` informational only.
   - **wait_for_async_insert**: Metadata writes switched to `wait_for_async_insert=1` (low-volume; gives immediate read-after-write visibility).

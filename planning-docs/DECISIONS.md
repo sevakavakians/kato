@@ -1,6 +1,31 @@
 # DECISIONS.md - Architectural & Design Decision Log
 *Append-Only Log - Started: 2025-08-29*
-*Last Updated: 2026-06-18*
+*Last Updated: 2026-09-08*
+
+---
+
+## 2026-09-08 - DECISION-015: ClickHouse is the Authoritative Pattern Count Source (Not the Redis Counter)
+**Decision**: The new `GET /patterns/count` endpoint counts patterns directly from ClickHouse (`PatternOperations.get_pattern_count()`), not from the existing Redis `total_unique_patterns` counter.
+**Status**: COMPLETE (2026-09-08)
+**Confidence**: High
+
+**Context**: While wiring up client-facing pattern counting (see `planning-docs/completed/features/2026-09-08-pattern-count-endpoint.md`), two candidate count sources existed: the Redis `total_unique_patterns` atomic counter (incremented on new-pattern learn), and a direct ClickHouse row count against `patterns_data`.
+
+**Rationale**:
+- The Redis `total_unique_patterns` counter has no decrement path — `PatternOperations.delete_pattern()` increments/decrements symbol stats and frequency but never touches `total_unique_patterns` — so the counter silently drifts high (overcounts) relative to reality after any pattern deletions
+- ClickHouse `patterns_data` is the actual source of truth for which patterns exist; counting it directly is correct by construction, with no separate counter to keep in sync
+- The correctness cost is an explicit flush-before-count (`flush=True` default) to guarantee read-your-writes, since pattern inserts use `wait_for_async_insert=0`
+
+**Alternatives Considered**:
+- Use the existing Redis `total_unique_patterns` counter directly: rejected — known to drift after deletions, would silently return wrong counts with no warning
+- Fix the Redis counter's decrement path instead: rejected for this change — larger scope (touches `delete_pattern`), and ClickHouse is already the authoritative store for pattern existence, so counting it directly removes an entire class of counter-drift bugs rather than patching one instance
+
+**Impact**:
+- **Positive**: Pattern count is always correct, independent of delete-path bugs in the Redis counter
+- **Trade-off**: Slightly higher latency per count call (ClickHouse query + optional flush) vs. an O(1) Redis GET; acceptable for an introspection endpoint, not a hot-path call
+- **Follow-up**: The Redis `total_unique_patterns` counter itself remains un-decremented and should not be relied on elsewhere as an authoritative count; not fixed as part of this change (out of scope)
+
+**Related**: `planning-docs/completed/features/2026-09-08-pattern-count-endpoint.md`
 
 ---
 

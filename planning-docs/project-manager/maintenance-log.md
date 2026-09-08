@@ -3,6 +3,89 @@
 
 ---
 
+## 2026-09-08 - Task Completion: start.sh clean-data ClickHouse No-Op FIXED + Local Test Data Purged + Persistence Claim Corrected
+
+**Trigger**: Task completion (bug fix: `./start.sh clean-data` never actually cleared ClickHouse) + maintenance action (full local test-data purge at user's explicit direction) + knowledge refinement (an earlier same-day claim that Redis persistence was disabled was wrong)
+
+**Event Type**: Task completion (bug fix) + secondary trigger (dependency/ops tooling change) + knowledge refinement (propagated assumption correction)
+
+**Actions Taken**:
+1. Created `planning-docs/completed/bugs/2026-09-08-start-sh-clean-data-clickhouse-noop.md` — full archive entry covering both the bug fix and the maintenance purge as a combined "Additional Action" section
+2. Updated `planning-docs/SPRINT_BACKLOG.md` — new "Recently Completed" entry added; Last Updated timestamp refreshed
+3. Updated `planning-docs/SESSION_STATE.md` — Current Task line refreshed; new "Previous Task" block prepended (above Pattern Count Endpoint); new leading Recent Achievements entry added; corrected the persistence-claim wording inside the existing Pattern Count Endpoint achievement bullet; Last Updated header refreshed
+4. Updated `planning-docs/README.md` — Last Major Update line refreshed
+5. Updated `planning-docs/completed/bugs/2026-09-08-conftest-redis-flushall-scoped-to-ephemeral-keys.md` — corrected the summary's "no Redis persistence enabled by default" claim; added a `> Correction (2026-09-08)` blockquote explaining what was wrong and citing the source of truth
+6. Updated `planning-docs/project-manager/patterns.md` — corrected the "no Redis persistence by default" / "same underlying fragility (no Redis persistence)" claims in the 2026-09-08 "Test Infrastructure Data-Loss Risk" entry; added a `**Correction (2026-09-08)**` note within that entry; added a new pattern entry ("Silent-Success Ops Command: Wrong Database Name, `IF EXISTS` Masked the Failure") for the clean-data bug itself
+7. Updated `planning-docs/project-manager/triggers.md` — logged activation event
+8. Updated `planning-docs/project-manager/maintenance-log.md` (this entry)
+
+**Key Facts Captured**:
+- Bug: `start.sh`'s `clean-data` case ran `DROP TABLE IF EXISTS default.patterns_data`; KATO's pattern tables live in `kato.*`, not `default.*` (confirmed via `system.tables` — only `kato.patterns_data` exists). `IF EXISTS` plus `2>/dev/null` made the wrong-database DROP a silent no-op; the command unconditionally printed "✓ All database data has been cleared!" regardless. `patterns_metadata`, `lsh_buckets`, and `pattern_stats` were never referenced at all — only `patterns_data` was ever targeted, and against the wrong database. Net effect: Redis and Qdrant genuinely cleared every time; ClickHouse never did.
+- Fix: replaced with `for table in patterns_data patterns_metadata lsh_buckets pattern_stats; do ... TRUNCATE TABLE IF EXISTS kato.$table ...`; `2>/dev/null` removed (failures now print a per-table warning); `BGREWRITEAOF` added after the existing Redis `FLUSHALL` since FLUSHALL doesn't shrink the on-disk AOF
+- Verification: 347 rows (`patterns_data`) / 370 rows (`patterns_metadata`) / 1721 Redis keys / 2 Qdrant collections all brought to 0/empty by one `clean-data` run; ClickHouse tables confirmed still present afterward with schema intact; `bash -n start.sh` passed
+- Maintenance action: user explicitly confirmed all local data is test data, not production ("These are all just my tests and are not production data. They can all be cleared out"), which also closed out a separate open question (recovering pre-flush Redis metadata from an Apr 28 AOF base snapshot) — no recovery needed or attempted
+- Purged: ClickHouse 238 kb_ids / 2,977 rows (`patterns_data`), 1,313 kb_ids / 3,595 rows (`patterns_metadata`, including the former `node0_kato` 301 rows and `node1_kato` 62 rows); Redis 56 keys; Qdrant 13 `vectors_test_*` collections; Redis disk reclaimed 4.4 GB → 40 KB via `BGREWRITEAOF` (AOF had a 2.69 GB Apr 28 base file plus a 2.07 GB incremental log)
+- Post-cleanup verification: all 4 ClickHouse tables 0 rows/schema intact, Redis `DBSIZE` 0, Qdrant no collections, `/health` 200; learn→count→clear-all smoke test on a fresh node correct (0→1→0); `tests/tests/api/` + `tests/tests/integration/test_database_persistence.py` — 60 passed / 1 skipped from the empty state
+- **Knowledge refinement (propagation check performed)**: earlier the same day, three planning-doc locations stated or implied Redis persistence was disabled by default — (1) the conftest.py FLUSHALL archive's summary ("combined with no Redis persistence enabled by default"), (2) `patterns.md`'s matching pattern entry (same phrase, plus "same underlying fragility (no Redis persistence)" as the April incident), (3) `SESSION_STATE.md`'s Pattern Count Endpoint achievement bullet ("destroys live metadata given no Redis persistence"). All three were wrong. Verified fact: `REDIS_PERSISTENCE=true` is set in both `.env` and `deployment/.env`, unchanged since the 2026-04-13 fix (`planning-docs/completed/features/2026-04-13-redis-rehydration-persistence-fix.md`); the running container has `--save "900 1" ...` plus `--appendonly yes`, `aof_enabled:1`. Persistence protects against restarts and crashes, not explicit deletion commands — an intentional `FLUSHALL` gets durably persisted too, emptied state and all. All three locations corrected; the April 2026 historical records (which describe a period when persistence genuinely was off, before that fix enabled it) were left untouched since they are accurate for that point in time.
+
+---
+
+## 2026-09-08 - Task Completion: conftest.py Redis FLUSHALL Bug FIXED + New Multi-Worker Bug Characterized
+
+**Trigger**: Task completion — the P2 backlog bug "conftest.py unconditional Redis FLUSHALL destroys live metadata" (logged earlier today) is now fixed; verification of the fix characterized a new pre-existing multi-worker (`KATO_WORKERS=4`) websocket/concurrency bug
+
+**Event Type**: Task completion (bug fix) + new task creation (new P2 backlog bug from verification)
+
+**Actions Taken**:
+1. Created `planning-docs/completed/bugs/2026-09-08-conftest-redis-flushall-scoped-to-ephemeral-keys.md` — full archive entry
+2. Updated `planning-docs/SPRINT_BACKLOG.md` — removed the "conftest.py unconditional Redis FLUSHALL" bug from the open Backlog section; added a "Recently Completed" entry linking the archive; added new P2 backlog bug "Multi-worker (KATO_WORKERS=4) breaks websocket event delivery and concurrent session modification consistency"
+3. Updated `planning-docs/SESSION_STATE.md` — removed the FLUSHALL bug from Next Immediate Action's numbered backlog list (renumbered remaining items), added the new multi-worker bug as item 4; prepended a new Recent Achievements entry for the fix; Last Updated header line refreshed
+4. Updated `planning-docs/README.md` — Current System State test coverage and Last Major Update lines refreshed to reflect the fix and the new characterized failure cause
+5. Updated `planning-docs/project-manager/triggers.md` — logged activation event
+6. Updated `planning-docs/project-manager/patterns.md` — logged resolution pattern (scoped deletion) and the assumption-to-reality correction for the 6 test failures
+7. Updated `planning-docs/project-manager/maintenance-log.md` (this entry)
+
+**Key Facts Captured**:
+- Fix: `flush_redis_before_tests` fixture in `tests/tests/conftest.py` no longer runs `docker exec kato-redis redis-cli FLUSHALL`; now deletes only `EPHEMERAL_KEY_PATTERNS = ("kato:session:*", "stm:events:*", "stm:global")` via `redis.Redis(...).scan_iter()` with batched deletes (1000/batch), connecting via `REDIS_HOST`/`REDIS_PORT` env vars instead of hardcoded `docker exec kato-redis`; `subprocess` import removed, `os`/`redis` added
+- Escape hatch: `KATO_TEST_REDIS_FLUSHALL=1` restores full FLUSHALL with a printed warning, documented as "only for a Redis dedicated to testing"
+- Safety argument: all durable pattern metadata is `kb_id`-namespaced (`<kb_id>:frequency:*`, `:symbols:freq`, `:symbols:pmf`, `:symbol_to_patterns:*`, `:affinity:*`, `:global:*`, `:prediction:*` per `kato/storage/redis_writer.py`) and cannot match any of the three ephemeral patterns
+- Verification: seeded durable keys (including adversarial `kb_id="kato"`) plus ephemeral keys, ran a test session, confirmed durable keys survived intact and ephemeral keys cleared; confirmed `KATO_TEST_REDIS_FLUSHALL=1` still full-flushes; ruff clean, compiles
+- Test results: full suite (excluding performance) 446 passed, 2 skipped, 6 failed
+- Critical finding: the 6 failures are NOT caused by this fix — re-running with `KATO_TEST_REDIS_FLUSHALL=1` (old FLUSHALL behavior) produces the identical 6 failures. Root cause is the container's `KATO_WORKERS=4`: 4 websocket tests fail because websocket events are published in-process only (a client on one worker misses events from another); `test_concurrent_session_modifications` loses half its concurrent writes (`assert 5 == 10`); `test_session_cleanup` fails even in isolation on a freshly flushed Redis (pre-existing session-count accounting bug, root cause #3, already tracked). The same websocket tests passed 7/7 earlier against a single-worker instance.
+- New P2 backlog bug added: "Multi-worker (KATO_WORKERS=4) breaks websocket event delivery and concurrent session modification consistency" — overlaps with the already-queued "Multi-Worker Uvicorn + Concurrent Training Safety" initiative, so this bug is in-scope for that work rather than a separate fix
+
+---
+
+## 2026-09-08 - Task Completion: Pattern Count Endpoint COMPLETE + Two New Backlog Bugs
+
+**Trigger**: Task completion — new `GET /patterns/count` endpoint delivered, previously-dead `PatternOperations.get_pattern_count()` wired up, and stale `/status` doc claims corrected; two new pre-existing bugs discovered during verification
+
+**Event Type**: Task completion (new feature) + architectural decision (DECISION-015: ClickHouse as authoritative count source) + knowledge refinement (docs claimed a `processors.patterns_count` field on `GET /status` that never existed; real shape confirmed)
+
+**Actions Taken**:
+1. Created `planning-docs/completed/features/2026-09-08-pattern-count-endpoint.md` — full archive entry
+2. Updated `planning-docs/DECISIONS.md` — added DECISION-015 (ClickHouse authoritative count source, not Redis `total_unique_patterns` counter); Last Updated timestamp updated to 2026-09-08
+3. Updated `planning-docs/SESSION_STATE.md` — Current Task line refreshed; Previous Task section prepended with this work; leading Recent Achievement added; Next Immediate Action expanded with two new backlog bugs (items 3 and 4) plus confirmation that bug #2 (session cleanup) still reproduces; Blockers section reworded; Last Updated timestamp updated
+4. Updated `planning-docs/SPRINT_BACKLOG.md` — two new P2 backlog bug entries added (conftest.py FLUSHALL data-loss risk; REDIS_PERSISTENCE env crash outside Docker); Last Updated timestamp updated
+5. Updated `planning-docs/README.md` — Current System State test coverage and Last Major Update lines refreshed
+6. Updated `planning-docs/project-manager/triggers.md` — logged activation event
+7. Updated `planning-docs/project-manager/maintenance-log.md` (this entry)
+
+**Key Facts Captured**:
+- New endpoint `GET /patterns/count` in `kato/api/endpoints/kato_ops.py`, path deliberately plural (`/patterns/count`) to avoid route-shadowing by `GET /pattern/{pattern_id}`
+- `PatternOperations.get_pattern_count(flush=True)` was pre-existing dead code (storage layer had it, nothing called it) — now wired up via `KatoProcessor.get_pattern_count()` delegate
+- `flush=True` default required for read-your-writes correctness since `patterns_data` inserts use `wait_for_async_insert=0`; handler runs in `asyncio.to_thread` since the ClickHouse count call is sync and `flush_async_insert_queue()` sleeps 0.5s without FLUSH privilege
+- DECISION-015: count from ClickHouse directly, not Redis `total_unique_patterns` — that counter has no decrement path (`delete_pattern()` never touches it) and drifts high after deletions
+- Doc drift fixed: `docs/reference/api/learning.md` referenced a `GET /status` -> `processors.patterns_count` field that never existed; corrected alongside 3 other docs (`health.md`, `monitoring.md`, `docs/developers/architecture.md`) that had the same wrong `/status` shape — real shape is `total_processors`/`max_processors`/`eviction_ttl_seconds`/`processors[]`
+- Client: `examples/python-client.py` gets `get_pattern_count()`; version bumped 3.6.0
+- Test results: full suite 448 passed / 2 skipped / 4 failed (failures isolated to a stale port-8000 container, not the new code); API suite 50 passed; integration persistence suite 10 passed; functional smoke 0→1→1→2 confirmed correct
+- Two new pre-existing bugs discovered (not part of this change, added to `SPRINT_BACKLOG.md`):
+  1. `tests/tests/conftest.py:24` unconditional `redis-cli FLUSHALL` at every test session start, destructive against any live/shared Redis given no persistence by default
+  2. `.env`'s `REDIS_PERSISTENCE=true` crashes a locally-run (non-Docker) KATO server via pydantic `Settings` rejecting unrecognized env vars — Docker unaffected since the var never reaches the kato service's env there
+- Existing backlog bug #2 (session delete active-count / WebSocket timeouts, root cause #3) reconfirmed still reproducing during this session's testing, even against a freshly flushed Redis
+
+---
+
 ## 2026-06-18 - Task Completion: Redis OOM Fix Migration FULLY COMPLETE + Correctness Bug Fixed
 
 **Trigger**: Task completion — all migration phases done; dual-write scaffolding removed; ClickHouse is now sole metadata store; version-tie correctness bug fixed; two pre-existing bugs added to backlog

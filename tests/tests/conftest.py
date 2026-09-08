@@ -4,32 +4,70 @@ Shared pytest fixtures for KATO tests.
 
 import asyncio
 import contextlib
+import os
 import uuid
-
-import subprocess
 
 import pytest
 import pytest_asyncio
+import redis
 from fixtures.kato_session_client import KatoSessionClient
+
+# Redis key namespaces that hold ephemeral session/STM state. Clearing these
+# gives tests a clean slate; nothing durable lives here.
+#   kato:session:*  - session records, active index, per-node active pointers
+#                     (RedisSessionManager key_prefix, see redis_session_manager.py:47)
+#   stm:events:*    - per-processor distributed STM streams (redis_streams.py:92)
+#   stm:global      - global STM stream (redis_streams.py:93)
+EPHEMERAL_KEY_PATTERNS = ("kato:session:*", "stm:events:*", "stm:global")
+
+# Durable pattern metadata is always namespaced under the kb_id -
+# "<kb_id>:frequency:*", ":symbols:freq", ":symbols:pmf", ":symbol_to_patterns:*",
+# ":affinity:*", ":global:*", ":prediction:*" (see kato/storage/redis_writer.py).
+# None of those can match the patterns above, so a scoped delete cannot touch them.
 
 
 @pytest.fixture(scope="session", autouse=True)
 def flush_redis_before_tests():
-    """Flush Redis before test session to ensure clean state.
+    """Clear stale session/STM state from Redis before the test session.
 
     This prevents old session data from previous test runs from
     interfering with current tests.
+
+    Deliberately scoped: only the ephemeral namespaces in
+    EPHEMERAL_KEY_PATTERNS are deleted. This fixture used to run FLUSHALL,
+    which also destroyed durable pattern metadata (frequencies, symbol stats,
+    affinities, global counters) for every kb_id in the instance - including
+    live non-test data whenever tests point at a shared Redis. Pattern data
+    itself survives in ClickHouse, but those Redis-only metrics are not
+    recoverable (see scripts/rehydrate_redis.py limitations).
+
+    Set KATO_TEST_REDIS_FLUSHALL=1 to opt back into a full FLUSHALL. Only do
+    that against a Redis dedicated to testing.
     """
+    host = os.environ.get("REDIS_HOST", "localhost")
+    port = int(os.environ.get("REDIS_PORT", "6379"))
+
     try:
-        subprocess.run(
-            ["docker", "exec", "kato-redis", "redis-cli", "FLUSHALL"],
-            check=True,
-            capture_output=True,
-            timeout=5
-        )
-        print("\n✓ Redis flushed - clean test state ensured")
+        client = redis.Redis(host=host, port=port, decode_responses=True)
+
+        if os.environ.get("KATO_TEST_REDIS_FLUSHALL") == "1":
+            client.flushall()
+            print("\n⚠ Redis FLUSHALL (KATO_TEST_REDIS_FLUSHALL=1) - all keys destroyed")
+        else:
+            deleted = 0
+            for pattern in EPHEMERAL_KEY_PATTERNS:
+                batch = []
+                for key in client.scan_iter(match=pattern, count=1000):
+                    batch.append(key)
+                    if len(batch) >= 1000:
+                        deleted += client.delete(*batch)
+                        batch = []
+                if batch:
+                    deleted += client.delete(*batch)
+            print(f"\n✓ Cleared {deleted} stale session/STM Redis keys - clean test state ensured")
     except Exception as e:
-        print(f"\n⚠ Warning: Could not flush Redis: {e}")
+        # Redis may not be running for some tests, which is okay.
+        print(f"\n⚠ Warning: Could not clear Redis session state: {e}")
     yield
 
 

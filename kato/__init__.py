@@ -2,6 +2,12 @@ import logging
 import sys
 from os import environ
 
+from kato.env_loader import load_env_file
+
+# Populate os.environ from .env before anything reads configuration -- including
+# the LOG_LEVEL check below, which runs at import time. See kato/env_loader.py.
+load_env_file()
+
 logger = logging.getLogger('kato')
 
 # Set up logging if LOG_LEVEL is defined

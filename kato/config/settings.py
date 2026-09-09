@@ -545,10 +545,21 @@ class Settings(BaseSettings):
 
         return warnings
 
+    # NOTE: do NOT add env_file= here. pydantic-settings' DotEnvSettingsSource
+    # enumerates every key in the file and forwards the ones it cannot match onto
+    # this model; with extra='forbid' (the BaseSettings default) any key that is
+    # not one of the fields above raises extra_forbidden. That crashed every
+    # non-Docker start on REDIS_PERSISTENCE, a docker-compose-only variable.
+    #
+    # .env is loaded into os.environ by kato/env_loader.py instead. That is also
+    # the only way the nested configs above (each built via default_factory and
+    # reading os.environ independently) and the raw os.environ readers elsewhere
+    # in kato/ can see it.
+    #
+    # extra stays 'forbid': it is what makes an unknown key in a KATO_CONFIG_FILE
+    # YAML/JSON fail loudly in load_from_file() above.
     model_config = ConfigDict(
         env_prefix='',
-        env_file='.env',
-        env_file_encoding='utf-8',
         case_sensitive=False
     )
 

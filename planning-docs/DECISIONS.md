@@ -1,6 +1,45 @@
 # DECISIONS.md - Architectural & Design Decision Log
 *Append-Only Log - Started: 2025-08-29*
-*Last Updated: 2026-09-09 (DECISION-021: cross-worker WebSocket broadcaster fixed via Redis pub/sub, closing the DECISION-020 follow-up)*
+*Last Updated: 2026-09-09 (DECISION-022: KATO v5.0.0 released — major bump for the breaking anomalies/fuzzy_matches split, resolving DECISION-019's open version-bump question)*
+
+---
+
+## 2026-09-09 - DECISION-022: Release KATO v5.0.0 — Major Bump for the Breaking `anomalies`/`fuzzy_matches` Split
+
+**Decision**: Release the accumulated post-4.0.0 work as **v5.0.0**, a major version bump, via `./container-manager.sh major "..."` (AUTO_MODE). This resolves the version-bump question DECISION-019 left open.
+**Status**: COMPLETE and RELEASED — tag `v5.0.0` pushed to origin; GitHub release published; images built, pushed, and verified.
+**Classification**: Release / Process Decision
+**Confidence**: High
+
+### Context
+DECISION-019 (same day) redefined the `anomalies` prediction field and introduced `fuzzy_matches`, explicitly flagging the release-version-bump question as a human decision rather than making it unilaterally (see `planning-docs/project-manager/pending-updates.md`). By the time of this release, several other same-day items had also accumulated uncommitted/unreleased on top of the 4.0.0 baseline: DECISION-020 (worker-topology tests + `worker_pid`), DECISION-021 (cross-worker WebSocket broadcaster), DECISION-018 (metadata sidecar duplicate-SELECT elimination), DECISION-017 (configuration audit), plus the already-committed DECISION-016 (`.env` crash fix), DECISION-015 (`/patterns/count`), and the `start.sh clean-data` / conftest FLUSHALL bug fixes.
+
+### Rationale
+Per `CLAUDE.md`'s "Container Manager Workflow Protocol" (major = breaking changes, API incompatibilities, required migrations), DECISION-019's `anomalies` → `fuzzy_matches` field split is a breaking change for any consumer reading fuzzy-match detail from `anomalies`. That single breaking change is sufficient to require **major**, independent of everything else bundled into the same release — the rest of the accumulated work (features, fixes, config wiring) would only have warranted minor/patch on its own.
+
+### Release Contents
+- Bump commit `5c4b282` "chore: bump version to 5.0.0" — `pyproject.toml`, `setup.py`, `kato/__init__.py`, `charts/kato/Chart.yaml` `appVersion`
+- Tag `v5.0.0` pushed to origin; `main` at `5c4b282`, in sync with `origin/main`
+- GitHub release: https://github.com/sevakavakians/kato/releases/tag/v5.0.0 (assets `kato-deployment-v5.0.0.tar.gz`, `kato-0.1.1.tgz` Helm chart — attached by the tag-triggered workflow)
+- Images: `ghcr.io/sevakavakians/kato:5.0.0`, `:5.0`, `:5`, `:latest` — verified pushed, all the same digest `sha256:c0bb53152507…`
+- `CHANGELOG.md` promoted `[Unreleased]` → `[5.0.0] - 2026-09-09` in commit `6b621ac`, backfilling entries for eleven previously-unlogged post-4.0.0 commits (`GET /patterns/count`, `make run` + `.env.example`, python-dotenv/lock regeneration, the configuration audit's fixes/removals, `/concurrency` worker-count fix, `start.sh clean-data` ClickHouse fix, conftest FLUSHALL scoping, `kato.api.main` doc fix), plus a new "Migration from 4.x" section. Sections: Added (`worker_pid`, worker-topology tests, `/patterns/count`, `make run`, python-dotenv, config docs), Changed BREAKING (`anomalies`/`fuzzy_matches`, env names now bind, inert settings now active incl. logs-to-stdout), Removed (4 zero-importer modules, vestigial settings fields, dead deployment vars), Fixed (cross-worker WebSocket delivery, repeated-symbol missing/extras, non-Docker `.env` crash, `/concurrency` reporting, `clean-data`, test-suite FLUSHALL, docs)
+- Pre-release verification: full suite **475 passed / 4 skipped / 0 failed**; ruff finding count in `kato/` unchanged from the pre-change baseline (283, all pre-existing)
+
+### Alternatives Considered
+1. **Ship as minor/patch, treat `anomalies`'s new meaning as additive** — rejected: a consumer reading `{observed, expected, similarity}` dicts out of `anomalies` today gets a `list[str]` after upgrade with no field carrying the old shape under the old name; that is a contract break regardless of how the rest of the release is framed.
+2. **Hold the release until a deprecation shim for `anomalies` consumers ships** — rejected (implicitly, by proceeding): no shim was requested or built; the major bump itself is the signal to consumers, per semver, rather than a compatibility layer. Not revisited as an open question — DECISION-019's "whether a shim is warranted" sub-question is superseded by shipping without one.
+3. **Chosen: major bump, no shim, ship now** — consistent with this repo's documented semver policy and the user's own direction to proceed via AUTO_MODE.
+
+### Process Notes (for next release)
+1. **Registry auth must be verified before running `container-manager.sh`.** The shell's `GITHUB_PERSONAL_ACCESS_TOKEN` was an expired token (GitHub API returned 401), and the keychain's cached `ghcr.io` credential was also dead (403 on push). Fix that worked: `source ~/.bash_profile` to pick up the current PAT (scopes include `write:packages`), then `docker login ghcr.io -u sevakavakians --password-stdin`.
+2. **`container-manager.sh` pushes the tag and publishes the GitHub release BEFORE it builds/pushes the image.** With bad registry auth, a failed image push leaves a tagged release with no matching image live on `ghcr.io` — worth a pre-flight `docker login` check before invoking the script, since the script does not perform one itself.
+3. **Hold out uncommitted WIP before bumping.** The metadata-sidecar planning file's uncommitted follow-up work was set aside via `git stash push -u` for the duration of the release and restored immediately after, so it neither landed in the bump commit nor was lost. This is the pattern to repeat for any future release with in-flight uncommitted work.
+
+### Resolves
+- `planning-docs/project-manager/pending-updates.md` "2026-09-09 - Release Version Bump Decision Needed" — moved to Resolved Issues (this entry).
+- DECISION-019's "Open Item — Flagged, Not Decided" section (updated below to point here).
+
+**Archive**: `planning-docs/completed/features/2026-09-09-kato-v5.0.0-release.md`
 
 ---
 
@@ -89,7 +128,7 @@ Whether to fix the cross-worker broadcaster (e.g. Redis pub/sub fan-out) before 
 
 ## 2026-09-09 - DECISION-019: Split `anomalies` into `anomalies` (flat deviation list) + new `fuzzy_matches` (fuzzy-match detail) — BREAKING CHANGE
 **Decision**: Redefine the `anomalies` prediction field as a flat list of every symbol that deviates from the matched pattern — missing symbols, then extras, then the observed token of each fuzzy match, in that order. The fuzzy-match detail records (`{observed, expected, similarity}`) that `anomalies` previously held are moved to a **new** `fuzzy_matches` field.
-**Status**: COMPLETE — code, tests, and docs updated; **release version bump NOT decided** (flagged for human review, see `planning-docs/project-manager/pending-updates.md`)
+**Status**: COMPLETE, COMMITTED (`a0e4acf`), and RELEASED as part of **v5.0.0** (2026-09-09) — the release version-bump question below is now resolved, see DECISION-022
 **Classification**: BREAKING CHANGE
 **Confidence**: High (user-selected from three options presented)
 
@@ -134,8 +173,8 @@ Event-aligned `missing`/`extras` (and the flat fallback `missing`) computed memb
 ### Verification
 233 passed / 1 skipped across `tests/tests/unit/` prediction suites, `tests/tests/integration/` prediction suites, and `tests/tests/api/`. One failure, pre-existing and unrelated: `tests/tests/api/test_monitoring_endpoints.py::TestMonitoringEndpoints::test_metrics_collection_after_requests` (`assert 3204.0 > 3204.0`) — `/metrics` `total_requests` bounces between two values across consecutive reads (3208 → 1454 → 3208), consistent with per-worker in-process metrics under multiple uvicorn workers. Filed as a known issue, not treated as a regression from this change — see `planning-docs/SPRINT_BACKLOG.md`.
 
-### Open Item — Flagged, Not Decided
-This is a breaking change to the prediction API contract. Whether it warrants a major version bump (if released as-is) has **not been decided** — flagged for human review in `planning-docs/project-manager/pending-updates.md` rather than decided unilaterally. Nothing from this work has been committed yet.
+### Open Item — RESOLVED 2026-09-09
+This was a breaking change to the prediction API contract; whether it warranted a major version bump was deliberately left to human review rather than decided unilaterally. **Resolved**: released as **KATO v5.0.0** via `./container-manager.sh major` — see DECISION-022 and `planning-docs/completed/features/2026-09-09-kato-v5.0.0-release.md`. No deprecation/compatibility shim for `anomalies` consumers was added (see DECISION-022's Alternatives Considered).
 
 ### Operational Note Recorded (Knowledge Refinement)
 The live `kato` container on `:8000` belongs to the `deployment/` compose project (`deployment/docker-compose.override.yml` pins `image: kato:latest`). Running `docker compose restart` from the repo root does **not** pick up code changes against that container — the working rebuild sequence is `docker compose build kato` (repo root) then `docker compose -f deployment/docker-compose.yml -f deployment/docker-compose.override.yml up -d kato`. Also: `./run_tests.sh` only honors its first path argument — a multi-file/multi-directory run needs pytest directly: `PYTHONPATH="$PWD:$PWD/tests" ./venv/bin/python -m pytest <paths...>`.

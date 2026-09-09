@@ -612,7 +612,7 @@ Phased plan for scaling KATO to production workloads:
 
 **Design decision**: Redis pub/sub chosen over per-worker sticky routing (doesn't exist in uvicorn) and Redis Streams (overkill for fire-and-forget notifications with no replay requirement) — see DECISION-021 for full rationale.
 
-**Still open**: `test_concurrent_session_modifications`'s concurrent-write-loss symptom (separate from websocket delivery, never confirmed to share this root cause) remains open — see "Bug: Multi-worker (KATO_WORKERS=4) breaks websocket event delivery..." above. DECISION-019's major-version-bump question is unrelated and also still open.
+**Still open**: `test_concurrent_session_modifications`'s concurrent-write-loss symptom (separate from websocket delivery, never confirmed to share this root cause) remains open — see "Bug: Multi-worker (KATO_WORKERS=4) breaks websocket event delivery..." above. DECISION-019's major-version-bump question is unrelated and is now **resolved** — KATO v5.0.0 released 2026-09-09, see DECISION-022.
 
 ---
 
@@ -630,7 +630,7 @@ Replaced the five known-flaky/failing tests (4 websocket event-delivery tests + 
 
 **Verification**: rewritten `test_session_cleanup` passes; trimmed `test_websocket_events.py` (3 tests) passes; `tests/tests/api` 32 passed / 1 skipped / 1 failed (pre-existing `test_metrics_collection_after_requests` flake, unaffected); new topology file ruff-clean.
 
-**Open follow-up (not started)**: fix the cross-worker broadcaster (e.g. Redis pub/sub fan-out) — flagged for human decision on priority before the next release, alongside the still-open DECISION-019 major-version-bump question. See `planning-docs/project-manager/pending-updates.md`.
+**Open follow-up**: RESOLVED same day — see "Bug Fix: Cross-Worker WebSocket Broadcaster via Redis Pub/Sub" above (DECISION-021). The DECISION-019 major-version-bump question is also resolved — KATO v5.0.0 released 2026-09-09, see DECISION-022.
 
 ---
 
@@ -638,7 +638,7 @@ Replaced the five known-flaky/failing tests (4 websocket event-delivery tests + 
 **Priority**: Architectural decision + correctness bug fix
 **Archive**: `planning-docs/completed/features/2026-09-09-anomalies-fuzzy-matches-field-split.md`
 **Decision**: DECISION-019
-**Status**: Code/tests/docs complete; NOT committed; release version bump NOT decided — flagged in `planning-docs/project-manager/pending-updates.md`
+**Status**: Code/tests/docs complete; committed as `a0e4acf`; **released as part of KATO v5.0.0** (major bump) — see DECISION-022
 
 **New test coverage**: `tests/tests/unit/test_hello_world_character_predictions.py` (new file, 3 tests) — learns "hello world" one character per event, asserts past/present/future/missing/extras/anomalies for "hello", "world", and perturbed "o wxld". All 3 pass.
 

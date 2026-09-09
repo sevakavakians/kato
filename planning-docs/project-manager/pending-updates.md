@@ -15,16 +15,20 @@ Track issues and updates that require human intervention or review.
 
 ## Current Issues
 
-## 2026-09-09 - Release Version Bump Decision Needed (Breaking API Change, Not Yet Released)
-**Issue**: DECISION-019 (`planning-docs/DECISIONS.md`) redefines the `anomalies` prediction field (flat deviation list) and adds a new `fuzzy_matches` field, moving the `{observed, expected, similarity}` fuzzy-match detail out of `anomalies`. This is a breaking change for any API consumer currently reading fuzzy-match details from `anomalies`. Nothing from this work has been committed yet.
-**Impact**: If released as-is per this repo's semver workflow (see `CLAUDE.md` "Container Manager Workflow Protocol"), this would warrant a **major** version bump, not patch/minor — but that call was deliberately left to the user rather than made unilaterally by the agent doing the code work.
-**Suggested Action**: Decide (a) whether to release this change at all in its current form, (b) if released, confirm a major version bump via `./container-manager.sh major "..."`, and (c) whether any deprecation/compatibility shim for `anomalies` consumers is warranted before release.
-**Priority**: Medium — not urgent (nothing committed or released yet), but should be resolved before this work is committed/released so it isn't accidentally shipped as a patch/minor bump.
-**Status**: Open
+*No open issues.*
 
 ---
 
 ## Resolved Issues
+
+## 2026-09-09 - Release Version Bump Decision Needed (Breaking API Change, Not Yet Released) — RESOLVED
+**Issue (as originally filed)**: DECISION-019 (`planning-docs/DECISIONS.md`) redefined the `anomalies` prediction field (flat deviation list) and added a new `fuzzy_matches` field, moving the `{observed, expected, similarity}` fuzzy-match detail out of `anomalies`. This is a breaking change for any API consumer currently reading fuzzy-match details from `anomalies`. At filing time, nothing from this work had been committed.
+**Impact**: Per this repo's semver workflow (`CLAUDE.md` "Container Manager Workflow Protocol"), this warranted a **major** version bump, not patch/minor — the call was deliberately left to the user rather than made unilaterally by the agent doing the code work.
+**Resolution**: The user decided to proceed. KATO **v5.0.0** was released the same day (2026-09-09) via `./container-manager.sh major` (AUTO_MODE) — bump commit `5c4b282`, tag `v5.0.0` pushed to origin, GitHub release published (https://github.com/sevakavakians/kato/releases/tag/v5.0.0), images `ghcr.io/sevakavakians/kato:5.0.0`/`:5.0`/`:5`/`:latest` built and verified. No deprecation/compatibility shim for `anomalies` consumers was added — the major bump itself is the compatibility signal. See DECISION-022 (`planning-docs/DECISIONS.md`) and `planning-docs/completed/features/2026-09-09-kato-v5.0.0-release.md`.
+**Verification**: Pre-release full suite 475 passed / 4 skipped / 0 failed; ruff finding count in `kato/` unchanged (283, pre-existing).
+**Resolved**: 2026-09-09
+
+---
 
 ## 2026-09-09 - Cross-Worker WebSocket Broadcaster Fix: Priority Decision Needed — RESOLVED
 **Issue (as originally filed)**: DECISION-020 confirmed deterministically that `kato/websocket/event_broadcaster.py`'s in-process `EventBroadcaster` cannot deliver websocket events across uvicorn workers at `KATO_WORKERS=2`/`4` (the container's default). The fix had not been started and needed a human priority decision before the next release.

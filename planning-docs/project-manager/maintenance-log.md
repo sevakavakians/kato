@@ -2856,6 +2856,33 @@ networks:
 
 ---
 
+## 2026-09-09 - Milestone: KATO v5.0.0 Released (Major Version Bump)
+
+**Trigger**: Milestone event — KATO v5.0.0 released via `./container-manager.sh major` (AUTO_MODE)
+
+**What Happened**: The user released the accumulated post-4.0.0 work as v5.0.0. Bump commit `5c4b282`, tag `v5.0.0` pushed to origin, GitHub release published (https://github.com/sevakavakians/kato/releases/tag/v5.0.0, assets `kato-deployment-v5.0.0.tar.gz` + `kato-0.1.1.tgz` Helm chart), images `ghcr.io/sevakavakians/kato:5.0.0`/`:5.0`/`:5`/`:latest` built, pushed, and verified at the same digest. `CHANGELOG.md` promoted `[Unreleased]` → `[5.0.0]` in commit `6b621ac`, backfilling 11 previously-unlogged post-4.0.0 commits. Pre-release verification: full suite 475 passed / 4 skipped / 0 failed; ruff findings in `kato/` unchanged (283, pre-existing).
+
+**Why Major**: DECISION-019's `anomalies` → `fuzzy_matches` prediction-field split is a breaking API change. Per `CLAUDE.md`'s Container Manager Workflow Protocol, a single breaking change is sufficient to force major regardless of what else ships alongside it.
+
+**Documentation Updates**:
+1. `planning-docs/DECISIONS.md` — new DECISION-022 recording the release and its rationale; DECISION-019's "Open Item" section updated to point to it (resolved)
+2. `planning-docs/project-manager/pending-updates.md` — the "Release Version Bump Decision Needed" entry moved from Current Issues to Resolved Issues
+3. `planning-docs/SESSION_STATE.md` — new top "Previous Task" entry for the release; stale "still open"/"NOT decided" mentions of the version-bump question (4 locations) annotated as resolved
+4. `planning-docs/SPRINT_BACKLOG.md` — 3 stale "still open"/"NOT decided"/"not started" mentions of the version-bump question and the (already-fixed) broadcaster follow-up corrected
+5. `planning-docs/README.md` — new **Version** line in "Current System State" naming 5.0.0 and the release artifacts
+6. New archive: `planning-docs/completed/features/2026-09-09-kato-v5.0.0-release.md`
+
+**Process Notes Recorded (for next release — full detail in DECISION-022 and the archive entry above)**:
+1. **Registry auth expires silently and must be checked before releasing.** The running shell's `GITHUB_PERSONAL_ACCESS_TOKEN` was an expired token (GitHub API 401 on use), and separately, the macOS keychain's cached `ghcr.io` Docker credential was also dead (403 on push) — two independent stale-credential failures, not one. Recovery: `source ~/.bash_profile` picked up the current PAT (scopes include `write:packages`), then `docker login ghcr.io -u sevakavakians --password-stdin` succeeded. **Lesson**: verify both GitHub API auth and `ghcr.io` Docker auth before invoking `container-manager.sh`, not after a failure partway through.
+2. **`container-manager.sh` does not log in to the registry itself, and its operation order is tag/release-publish first, image-build-and-push second.** This means a registry-auth failure is discovered *after* the tag is pushed and the GitHub release is already published — the failure mode is a released version with no matching container image, not a clean abort. Worth a pre-flight `docker login` check (manual or scripted) before running the release, rather than trusting the script to fail before making anything public.
+3. **Held-out uncommitted WIP pattern**: the metadata-sidecar planning file's uncommitted follow-up work was set aside via `git stash push -u` before the release and restored immediately after, keeping it out of the bump commit without losing it. This is the repeatable pattern for any future release with in-flight uncommitted work that isn't ready to ship.
+
+**Classification**: Milestone / Release (Process notes: Recurring-Risk, filed for pattern tracking — see `patterns.md`)
+
+**Next Steps**: None — release complete. Multi-Worker Uvicorn + Concurrent Training Safety remains the next queued initiative per `SESSION_STATE.md`.
+
+---
+
 *Agent execution time: < 5 seconds*
-*Response type: Silent operation (maintenance log update only)*
+*Response type: Silent operation (documentation update following milestone release)*
 

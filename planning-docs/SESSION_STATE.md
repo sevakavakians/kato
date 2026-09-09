@@ -1,10 +1,23 @@
 # SESSION_STATE.md - Current Development State
-*Last Updated: 2026-09-09 (cross-worker WebSocket broadcaster fixed via Redis pub/sub, DECISION-021, committed as `ba3d194`; closes the DECISION-020 follow-up)*
+*Last Updated: 2026-09-09 (KATO v5.0.0 released — major bump for the breaking anomalies/fuzzy_matches split, DECISION-022; resolves the DECISION-019 version-bump question)*
 
 ## Current Task
-**No active task — cross-worker WebSocket broadcaster fix (Redis pub/sub) is COMPLETE and COMMITTED (`ba3d194`). Pick next item from sprint backlog (Multi-Worker Uvicorn + Concurrent Training Safety is next queued — the broadcaster fix removes one of that initiative's known blockers; the `test_concurrent_session_modifications` concurrent-write-loss symptom remains open and unconfirmed).**
+**No active task — KATO v5.0.0 is RELEASED. Pick next item from sprint backlog (Multi-Worker Uvicorn + Concurrent Training Safety is next queued — the broadcaster fix released in v5.0.0 removes one of that initiative's known blockers; the `test_concurrent_session_modifications` concurrent-write-loss symptom remains open and unconfirmed).**
 
 ## Previous Task (context preserved)
+**KATO v5.0.0 Release (MAJOR) — COMPLETE (2026-09-09)**
+- Status: RELEASED — `./container-manager.sh major` (AUTO_MODE). Bump commit `5c4b282` "chore: bump version to 5.0.0" (`pyproject.toml`, `setup.py`, `kato/__init__.py`, `charts/kato/Chart.yaml` `appVersion`); tag `v5.0.0` pushed to origin; `main` at `5c4b282`, in sync with `origin/main`
+- Milestone release, not a queued initiative; Multi-Worker Uvicorn initiative below remains next in the sprint backlog
+- Decision: DECISION-022 in `planning-docs/DECISIONS.md` (resolves DECISION-019's open version-bump question)
+- Archive: `planning-docs/completed/features/2026-09-09-kato-v5.0.0-release.md`
+- GitHub release: https://github.com/sevakavakians/kato/releases/tag/v5.0.0 (assets `kato-deployment-v5.0.0.tar.gz`, `kato-0.1.1.tgz` Helm chart)
+- Images: `ghcr.io/sevakavakians/kato:5.0.0`, `:5.0`, `:5`, `:latest` — pushed and verified, all the same digest `sha256:c0bb53152507…`
+- Rationale: MAJOR because the breaking `anomalies`→`fuzzy_matches` prediction-field change (DECISION-019) is a contract break for any consumer reading fuzzy detail from `anomalies`; this resolves the previously-open "major-version-bump" item in `planning-docs/project-manager/pending-updates.md` (now moved to Resolved)
+- `CHANGELOG.md` promoted `[Unreleased]` → `[5.0.0] - 2026-09-09` in commit `6b621ac`, backfilling 11 previously-unlogged post-4.0.0 commits plus a "Migration from 4.x" section
+- Pre-release verification: full suite **475 passed / 4 skipped / 0 failed**; ruff finding count in `kato/` unchanged from baseline (283, pre-existing)
+- Process notes recorded for next release (see `planning-docs/project-manager/maintenance-log.md` and DECISION-022): (1) verify `ghcr.io` registry auth (`docker login`) before invoking `container-manager.sh` — it does not log in itself, and it pushes the tag + publishes the GitHub release **before** building/pushing the image, so a failed push leaves a tagged release with no matching image; (2) hold out any in-flight uncommitted WIP via `git stash push -u` before bumping and restore it after (done here for the metadata-sidecar planning file's uncommitted follow-up work, which is **not** part of this release)
+- **Not part of this release**: the metadata-sidecar structural follow-up (append-only emotives/metadata, see `planning-docs/SPRINT_BACKLOG.md` "Follow-up: Metadata sidecar read-modify-write shape") remains open, uncommitted, and out of scope for v5.0.0
+
 **Cross-Worker WebSocket Broadcaster Fix via Redis Pub/Sub — COMPLETE (2026-09-09)**
 - Status: COMPLETE — committed as `ba3d194` "fix(websocket): fan events out across uvicorn workers via Redis pub/sub" (same commit also carries the worker-topology-tests/worker_pid work below, previously recorded as DECISION-020 but not yet committed at the time)
 - Ad-hoc bug fix, closing the open follow-up flagged by DECISION-020; Multi-Worker Uvicorn initiative below remains next in the sprint backlog
@@ -16,7 +29,7 @@
 - Docs: `docs/integration/websocket-integration.md` (new "Cross-Worker Delivery" section), `docs/operations/environment-variables.md` (`KATO_WS_EVENTS_CHANNEL`), `CHANGELOG.md` `[Unreleased]` "Fixed" entry.
 - Verification: full suite after rebuild with default `KATO_WORKERS=4` — **475 passed, 4 skipped, 0 failed (585s)**. Previous full-suite baseline was 453 passed / 5 failed. The pre-existing `test_metrics_collection_after_requests` flake (10s metrics interval vs. 1s test sleep) passed this run but remains flaky by construction — kept as an open, low-priority, unrelated item; see `planning-docs/SPRINT_BACKLOG.md`.
 - **Resolved**: the `planning-docs/project-manager/pending-updates.md` "Cross-Worker WebSocket Broadcaster Fix: Priority Decision Needed" entry (filed alongside DECISION-020) — moved to that file's Resolved Issues section.
-- **Still open, unrelated**: DECISION-019's major-version-bump decision (breaking `anomalies`/`fuzzy_matches` field split) remains undecided. `test_concurrent_session_modifications`'s concurrent-write-loss symptom (from the original 2026-09-08 multi-worker bug report) was never established to share this root cause and was out of scope here — still tracked as open/unconfirmed in `planning-docs/SPRINT_BACKLOG.md`.
+- **Still open, unrelated**: DECISION-019's major-version-bump decision (breaking `anomalies`/`fuzzy_matches` field split) remains undecided **as of this point in the day — resolved later the same day via the v5.0.0 release, see DECISION-022 and the "Previous Task" entry above**. `test_concurrent_session_modifications`'s concurrent-write-loss symptom (from the original 2026-09-08 multi-worker bug report) was never established to share this root cause and was out of scope here — still tracked as open/unconfirmed in `planning-docs/SPRINT_BACKLOG.md`.
 
 **Worker-Topology Tests Replace Flaky Multi-Worker Tests + `worker_pid` Field — COMPLETE (2026-09-09)**
 - Status: COMPLETE — tests written, run, characterized; NOT committed; broadcaster fix itself NOT started (not requested)
@@ -33,10 +46,10 @@
 - Lint: new topology file ruff-clean; other ruff findings in touched files pre-existing.
 - **Full-suite expectation update**: the "3 known multi-worker failures" characterization is superseded — expect **6 deterministic topology failures** (workers=2/4 delivery tests) plus the flaky metrics test until the broadcaster follow-up lands. See `planning-docs/SPRINT_BACKLOG.md`.
 - **Knowledge refinement**: the 2026-06-18-filed "session delete does not decrement active-session count" bug (Root cause #3) is recharacterized — not a product bug. The count converges correctly; the original test read a per-process TTL-cached value before it expired. The websocket-timeout half of that same entry is merged into the multi-worker broadcaster bug above rather than treated as separate.
-- **Resolved 2026-09-09** (same day, later): the cross-worker broadcaster fix (Redis pub/sub) was requested and completed — see "Previous Task" (Cross-Worker WebSocket Broadcaster Fix, DECISION-021) above. The DECISION-019 major-version-bump question remains open — see `planning-docs/project-manager/pending-updates.md`.
+- **Resolved 2026-09-09** (same day, later): the cross-worker broadcaster fix (Redis pub/sub) was requested and completed — see "Previous Task" (Cross-Worker WebSocket Broadcaster Fix, DECISION-021) above. The DECISION-019 major-version-bump question **is now also resolved** — KATO v5.0.0 released the same day, see DECISION-022 and the top "Previous Task" entry above.
 
 **Anomalies/Fuzzy_Matches Field Split (Breaking) + Repeated-Symbol Multiset Fix + New Hello-World Character-Prediction Tests — COMPLETE (2026-09-09)**
-- Status: COMPLETE — code, tests, and docs updated; NOT committed; release version bump NOT decided (flagged for human review)
+- Status: COMPLETE — code, tests, and docs updated; **now committed as `a0e4acf` and released as part of v5.0.0** (see DECISION-022 and the top "Previous Task" entry above)
 - Ad-hoc bug fix + architectural decision (not from a queued initiative); Multi-Worker Uvicorn initiative below remains next in the sprint backlog
 - Decision: DECISION-019 in `planning-docs/DECISIONS.md`
 - Archive: `planning-docs/completed/features/2026-09-09-anomalies-fuzzy-matches-field-split.md`
@@ -48,7 +61,7 @@
 - Docs updated (8 files): `docs/reference/prediction-object.md`, `docs/reference/session-configuration.md`, `docs/reference/api/predictions.md`, `docs/reference/api/configuration.md`, `docs/research/pattern-matching.md`, `docs/users/predictions.md`, `docs/users/configuration.md`, `docs/users/api-reference.md`. `CHANGELOG.md` `[Unreleased]` has a "Changed (BREAKING)" entry for anomalies/fuzzy_matches and a "Fixed" entry for the repeated-symbol bug.
 - Verification: 233 passed / 1 skipped across unit prediction suites, integration prediction suites, and `tests/tests/api`. One failure, pre-existing and unrelated: `tests/tests/api/test_monitoring_endpoints.py::TestMonitoringEndpoints::test_metrics_collection_after_requests` (`assert 3204.0 > 3204.0`) — `/metrics` `total_requests` bounces between two values across consecutive reads (3208 → 1454 → 3208), consistent with per-worker in-process metrics under multiple uvicorn workers. Recorded as a known issue/follow-up, not part of this task — see `planning-docs/SPRINT_BACKLOG.md`.
 - Operational notes recorded (knowledge refinement): the live `kato` container on `:8000` belongs to the `deployment/` compose project (`deployment/docker-compose.override.yml` pins `image: kato:latest`) — `docker compose restart` from the repo root does **not** pick up code changes; working sequence is `docker compose build kato` (root) then `docker compose -f deployment/docker-compose.yml -f deployment/docker-compose.override.yml up -d kato`. Also `./run_tests.sh` only honors its first path argument — multi-file runs need pytest directly with `PYTHONPATH="$PWD:$PWD/tests" ./venv/bin/python -m pytest`.
-- **Open, flagged for human review (not decided)**: this is a breaking API change; whether it warrants a major version bump if released has not been decided — see `planning-docs/project-manager/pending-updates.md`. Nothing from this work has been committed yet.
+- **RESOLVED 2026-09-09**: this breaking API change was released as part of **KATO v5.0.0** with a major version bump — see DECISION-022 and `planning-docs/completed/features/2026-09-09-kato-v5.0.0-release.md`. Now committed as `a0e4acf`.
 
 **Metadata Sidecar Re-Learn Duplicate SELECT Eliminated (+ Backlog Item Framing Correction) — COMPLETE (2026-09-09)**
 - Status: COMPLETE (round-trip elimination) — the P2 "Metadata sidecar write path is un-batched" item is **partially** resolved, not closed; the append-only structural fix remains open

@@ -220,6 +220,24 @@ absolute latency differences across machines.
 
 ## Bug Patterns
 
+### 2026-09-09 - Two Independent Stale-Credential Failures Blocked a Release, and the Release Script's Operation Order Made the Failure Mode Worse Than a Clean Abort
+
+**Pattern**: Releasing KATO v5.0.0 via `./container-manager.sh major` first failed on `GITHUB_PERSONAL_ACCESS_TOKEN` being an expired token in the running shell (GitHub API 401), and — separately, not as a symptom of the same cause — the macOS keychain's cached `ghcr.io` Docker credential was also dead (403 on push). Two unrelated stale-credential failures had to be found and fixed, not one. Compounding this: `container-manager.sh` does not perform its own registry login, and it pushes the tag + publishes the GitHub release **before** building and pushing the container image — so a registry-auth failure surfaces only after the release is already public, leaving a tagged, released version with no matching image on `ghcr.io`, rather than a clean pre-flight abort.
+
+**Discovery Trigger**: Running the release script and hitting the auth failures in sequence — first the GitHub API call, then (after fixing that) the Docker push.
+
+**Assumption → Reality**:
+- Assumed: a single valid credential (or a single `source ~/.bash_profile`) would cover both GitHub API access and `ghcr.io` Docker registry access for the release
+- Reality: these are two independently-cached credentials (shell env var vs. Docker/keychain credential store) that can go stale on different schedules; fixing one does not fix the other
+
+**Resolution Pattern**: `source ~/.bash_profile` refreshed the shell's `GITHUB_PERSONAL_ACCESS_TOKEN` to a current token (scopes include `write:packages`); `docker login ghcr.io -u sevakavakians --password-stdin` then re-established the Docker registry credential. Both were required before `container-manager.sh` could complete successfully.
+
+**Lesson**: Before invoking `container-manager.sh` (or any release tooling with a similar tag-then-build order), verify *both* GitHub API auth and `ghcr.io` Docker auth explicitly — don't assume one implies the other, and don't rely on the script to fail safely, since its release-artifacts-first ordering means a late-stage auth failure leaves a public release with no image. See DECISION-022 and `planning-docs/completed/features/2026-09-09-kato-v5.0.0-release.md` for the full release record.
+
+**Recurrence Risk**: Medium — both credentials (PAT, Docker/keychain) can expire independently again on future releases; this project's release cadence is currently ad hoc (not scheduled), so credential expiry between releases is plausible. No permanent fix (e.g., a pre-flight auth-check step added to `container-manager.sh` itself) has been implemented — this is process knowledge only, not yet automated.
+
+---
+
 ### 2026-09-09 - Manufacture the Failure Condition Instead of Waiting to Observe It: Flaky-by-Topology Tests Fixed by Owning the Container
 
 **Pattern**: Four websocket event-delivery tests plus `test_session_cleanup` had been intermittently failing for months against the one shared dev container (`KATO_WORKERS=4`), and every unrelated piece of work that day (anomalies/fuzzy_matches, metadata-sidecar, configuration-audit) had to separately re-confirm "yes, those are the known pre-existing failures, not caused by my change." The actual fix wasn't a smarter assertion or a longer timeout — it was making the test launch its own throwaway containers at each worker count and proving, per-connection, that the test client had landed on ≥2 distinct worker PIDs before asserting cross-worker behavior. This turned "sometimes fails, depending on which worker a websocket connection happens to land on" into "fails every single time, with the exact missed worker PIDs named in the assertion."

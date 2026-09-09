@@ -175,7 +175,7 @@ class OptimizedConnectionManager:
             if redis_url:
                 self._redis_client = redis.from_url(
                     redis_url,
-                    max_connections=200,
+                    max_connections=self.settings.performance.connection_pool_size,
                     retry_on_timeout=True,
                     socket_keepalive=True,
                     socket_keepalive_options={},
@@ -189,7 +189,7 @@ class OptimizedConnectionManager:
                     'host': self.settings.database.redis_host,
                     'port': self.settings.database.redis_port,
                     'db': 0,
-                    'max_connections': 200,
+                    'max_connections': self.settings.performance.connection_pool_size,
                     'retry_on_timeout': True,
                     'socket_keepalive': True,
                     'socket_keepalive_options': {},
@@ -328,7 +328,7 @@ class OptimizedConnectionManager:
                 password=clickhouse_password,
                 secure=clickhouse_secure,
                 connect_timeout=10,
-                send_receive_timeout=30,
+                send_receive_timeout=self.settings.performance.request_timeout,
                 compress=True,  # Enable compression for better network performance
             )
 

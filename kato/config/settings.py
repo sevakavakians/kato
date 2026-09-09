@@ -11,7 +11,7 @@ import os
 from pathlib import Path
 from typing import Any, Literal, Optional
 
-from pydantic import ConfigDict, Field, field_validator, model_validator
+from pydantic import AliasChoices, ConfigDict, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -22,11 +22,6 @@ class ServiceConfig(BaseSettings):
         'kato',
         json_schema_extra={'env': 'SERVICE_NAME'},
         description="Service name identifier"
-    )
-    service_version: str = Field(
-        '2.0',
-        json_schema_extra={'env': 'SERVICE_VERSION'},
-        description="Service version"
     )
 
     model_config = ConfigDict(env_prefix='')
@@ -74,10 +69,6 @@ class DatabaseConfig(BaseSettings):
         le=65535,
         description="Qdrant gRPC port number"
     )
-    QDRANT_COLLECTION_PREFIX: str = Field(
-        'vectors',
-        description="Prefix for Qdrant collection names"
-    )
 
     @property
     def qdrant_host(self) -> str:
@@ -91,9 +82,6 @@ class DatabaseConfig(BaseSettings):
     def qdrant_grpc_port(self) -> int:
         return self.QDRANT_GRPC_PORT
 
-    @property
-    def qdrant_collection_prefix(self) -> str:
-        return self.QDRANT_COLLECTION_PREFIX
 
     # Redis settings (optional, for caching and sessions)
     REDIS_URL: Optional[str] = Field(
@@ -227,17 +215,6 @@ class LearningConfig(BaseSettings):
         le=1.0,
         description="Minimum similarity threshold for pattern matching"
     )
-    auto_learn_enabled: bool = Field(
-        False,
-        json_schema_extra={'env': 'AUTO_LEARN_ENABLED'},
-        description="Enable automatic pattern learning"
-    )
-    auto_learn_threshold: int = Field(
-        50,
-        json_schema_extra={'env': 'AUTO_LEARN_THRESHOLD'},
-        ge=1,
-        description="Number of observations before auto-learning"
-    )
     stm_mode: Literal['CLEAR', 'ROLLING'] = Field(
         'CLEAR',
         json_schema_extra={'env': 'STM_MODE'},
@@ -272,7 +249,6 @@ class ProcessingConfig(BaseSettings):
     )
     sort_symbols: bool = Field(
         True,
-        json_schema_extra={'env': 'SORT'},
         description="Sort symbols alphabetically within events"
     )
     process_predictions: bool = Field(
@@ -282,12 +258,12 @@ class ProcessingConfig(BaseSettings):
     )
     use_token_matching: bool = Field(
         True,
-        json_schema_extra={'env': 'KATO_USE_TOKEN_MATCHING'},
+        validation_alias=AliasChoices('use_token_matching', 'KATO_USE_TOKEN_MATCHING'),
         description="Use token-level matching (True) vs character-level matching (False)"
     )
     fuzzy_token_threshold: float = Field(
         0.0,
-        json_schema_extra={'env': 'KATO_FUZZY_TOKEN_THRESHOLD'},
+        validation_alias=AliasChoices('fuzzy_token_threshold', 'KATO_FUZZY_TOKEN_THRESHOLD'),
         description="Fuzzy token matching threshold (0.0-1.0, 0.0=disabled). Tokens above threshold are fuzzy matched."
     )
     rank_sort_algo: str = Field(
@@ -304,53 +280,32 @@ class PerformanceConfig(BaseSettings):
 
     use_fast_matching: bool = Field(
         True,
-        json_schema_extra={'env': 'KATO_USE_FAST_MATCHING'},
+        validation_alias=AliasChoices('use_fast_matching', 'KATO_USE_FAST_MATCHING'),
         description="Use optimized fast matching algorithms"
     )
     use_indexing: bool = Field(
         True,
-        json_schema_extra={'env': 'KATO_USE_INDEXING'},
+        validation_alias=AliasChoices('use_indexing', 'KATO_USE_INDEXING'),
         description="Use pattern indexing for faster lookups"
     )
-    use_optimized: bool = Field(
-        True,
-        json_schema_extra={'env': 'KATO_USE_OPTIMIZED'},
-        description="Use general optimizations"
-    )
-    batch_size: int = Field(
-        1000,
-        json_schema_extra={'env': 'KATO_BATCH_SIZE'},
-        ge=1,
-        le=100000,
-        description="Batch size for bulk operations"
-    )
-    vector_batch_size: int = Field(
-        1000,
-        json_schema_extra={'env': 'KATO_VECTOR_BATCH_SIZE'},
-        ge=1,
-        le=100000,
-        description="Batch size for vector operations"
-    )
-    vector_search_limit: int = Field(
-        100,
-        json_schema_extra={'env': 'KATO_VECTOR_SEARCH_LIMIT'},
-        ge=1,
-        le=10000,
-        description="Maximum vector search results"
-    )
     connection_pool_size: int = Field(
-        10,
-        json_schema_extra={'env': 'CONNECTION_POOL_SIZE'},
+        200,
         ge=1,
-        le=100,
-        description="Database connection pool size"
+        le=1000,
+        description=(
+            "Max Redis connections per worker. Default 200 matches the value "
+            "previously hardcoded in connection_manager.py."
+        )
     )
     request_timeout: float = Field(
         30.0,
-        json_schema_extra={'env': 'REQUEST_TIMEOUT'},
         ge=1.0,
         le=300.0,
-        description="Request timeout in seconds"
+        description=(
+            "ClickHouse send/receive timeout in seconds. Default 30.0 matches "
+            "the value previously hardcoded in connection_manager.py. Does not "
+            "affect the Qdrant or Redis clients, which have their own timeouts."
+        )
     )
 
     model_config = ConfigDict(env_prefix='')
@@ -376,61 +331,6 @@ class SessionConfig(BaseSettings):
     model_config = ConfigDict(env_prefix='')
 
 
-class APIConfig(BaseSettings):
-    """API service configuration."""
-
-    host: str = Field(
-        '0.0.0.0',
-        json_schema_extra={'env': 'HOST'},
-        description="API host address"
-    )
-    port: int = Field(
-        8000,
-        json_schema_extra={'env': 'PORT'},
-        ge=1,
-        le=65535,
-        description="API port number"
-    )
-    workers: int = Field(
-        1,
-        json_schema_extra={'env': 'WORKERS'},
-        ge=1,
-        le=16,
-        description="Number of worker processes"
-    )
-    cors_enabled: bool = Field(
-        True,
-        json_schema_extra={'env': 'CORS_ENABLED'},
-        description="Enable CORS support"
-    )
-    cors_origins: list[str] = Field(
-        ['*'],
-        json_schema_extra={'env': 'CORS_ORIGINS'},
-        description="Allowed CORS origins"
-    )
-    docs_enabled: bool = Field(
-        True,
-        json_schema_extra={'env': 'DOCS_ENABLED'},
-        description="Enable API documentation endpoints"
-    )
-    max_request_size: int = Field(
-        100 * 1024 * 1024,  # 100MB
-        json_schema_extra={'env': 'MAX_REQUEST_SIZE'},
-        ge=1024,
-        description="Maximum request size in bytes"
-    )
-
-    @field_validator('cors_origins', mode='before')
-    @classmethod
-    def parse_cors_origins(cls, v):
-        """Parse CORS origins from string or list."""
-        if isinstance(v, str):
-            return v.split(',')
-        return v
-
-    model_config = ConfigDict(env_prefix='')
-
-
 class Settings(BaseSettings):
     """Main settings class combining all configuration sections."""
 
@@ -442,7 +342,6 @@ class Settings(BaseSettings):
     processing: ProcessingConfig = Field(default_factory=ProcessingConfig)
     performance: PerformanceConfig = Field(default_factory=PerformanceConfig)
     session: SessionConfig = Field(default_factory=SessionConfig)
-    api: APIConfig = Field(default_factory=APIConfig)
 
     # Environment and deployment
     environment: Literal['development', 'testing', 'production'] = Field(
@@ -457,7 +356,7 @@ class Settings(BaseSettings):
     )
     config_file: Optional[Path] = Field(
         None,
-        json_schema_extra={'env': 'KATO_CONFIG_FILE'},
+        validation_alias=AliasChoices('config_file', 'KATO_CONFIG_FILE'),
         description="Path to configuration file (YAML or JSON)"
     )
 
@@ -528,20 +427,8 @@ class Settings(BaseSettings):
         """Validate configuration and return any warnings."""
         warnings = []
 
-        # Check database connectivity settings
-        if self.environment == 'production':
-            if self.debug:
-                warnings.append("Debug mode enabled in production environment")
-            if self.api.cors_origins == ['*']:
-                warnings.append("CORS allows all origins in production environment")
-
-        # Check learning configuration consistency
-        if self.learning.auto_learn_enabled and self.learning.max_pattern_length == 0:
-            warnings.append("Auto-learning enabled with unlimited pattern length")
-
-        # Check performance settings
-        if self.performance.batch_size > 10000:
-            warnings.append(f"Large batch size ({self.performance.batch_size}) may cause memory issues")
+        if self.environment == 'production' and self.debug:
+            warnings.append("Debug mode enabled in production environment")
 
         return warnings
 
@@ -607,8 +494,3 @@ def get_database_config() -> DatabaseConfig:
 def get_learning_config() -> LearningConfig:
     """Get learning configuration."""
     return get_settings().learning
-
-
-def get_api_config() -> APIConfig:
-    """Get API configuration."""
-    return get_settings().api

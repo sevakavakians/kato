@@ -94,6 +94,7 @@ class ConfigurationService:
             'sort': self.settings.processing.sort_symbols,  # Alias for backward compatibility
             'process_predictions': self.settings.processing.process_predictions,
             'use_token_matching': self.settings.processing.use_token_matching,
+            'fuzzy_token_threshold': self.settings.processing.fuzzy_token_threshold,
             'rank_sort_algo': self.settings.processing.rank_sort_algo,
 
             # Filter Pipeline Configuration (defaults based on documentation)

@@ -88,9 +88,6 @@ class PatternProcessor:
 
         self.superkb = SuperKnowledgeBase(self.kb_id, self.persistence, settings=self.settings)
 
-        # Check architecture mode from environment
-        arch_mode = environ.get('KATO_ARCHITECTURE_MODE', 'hybrid').lower()
-
         # Initialize PatternSearcher with appropriate configuration
         searcher_kwargs = {
             'kb_id': self.kb_id,

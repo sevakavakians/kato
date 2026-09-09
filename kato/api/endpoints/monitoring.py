@@ -49,10 +49,11 @@ async def get_concurrency_metrics():
         _max_concurrent_seen,
         CONCURRENCY_LIMIT,
         CONCURRENCY_WARNING_THRESHOLD,
-        CONCURRENCY_CRITICAL_THRESHOLD
+        CONCURRENCY_CRITICAL_THRESHOLD,
+        WORKER_COUNT
     )
 
-    workers = int(os.getenv('UVICORN_WORKERS', '1'))
+    workers = WORKER_COUNT
     current_utilization = int(_concurrent_count / CONCURRENCY_LIMIT * 100) if CONCURRENCY_LIMIT > 0 else 0
     max_utilization = int(_max_concurrent_seen / CONCURRENCY_LIMIT * 100) if CONCURRENCY_LIMIT > 0 else 0
 

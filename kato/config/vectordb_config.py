@@ -145,8 +145,6 @@ class VectorDBConfig:
     cache: CacheConfig = field(default_factory=CacheConfig)
 
     # Performance tuning
-    batch_size: int = 1000  # Batch size for bulk operations
-    search_limit: int = 100  # Maximum search results
     search_timeout: float = 10.0  # Search timeout in seconds
     connection_pool_size: int = 10  # Connection pool size
 
@@ -200,8 +198,6 @@ class VectorDBConfig:
                 config.qdrant.host = host
             if port := os.getenv('QDRANT_PORT'):
                 config.qdrant.port = int(port)
-            if collection := os.getenv('QDRANT_COLLECTION'):
-                config.qdrant.collection_name = collection
             if api_key := os.getenv('QDRANT_API_KEY'):
                 config.qdrant.api_key = api_key
             if qdrant_https := os.getenv('QDRANT_HTTPS'):
@@ -226,12 +222,6 @@ class VectorDBConfig:
             config.cache.host = redis_host
         if redis_port := os.getenv('REDIS_PORT'):
             config.cache.port = int(redis_port)
-
-        # Performance tuning
-        if batch_size := os.getenv('KATO_VECTOR_BATCH_SIZE'):
-            config.batch_size = int(batch_size)
-        if search_limit := os.getenv('KATO_VECTOR_SEARCH_LIMIT'):
-            config.search_limit = int(search_limit)
 
         return config
 
@@ -283,14 +273,6 @@ class VectorDBConfig:
         # Validate vector dimensions if specified
         if self.vector_dim is not None and self.vector_dim <= 0:
             errors.append(f"Invalid vector dimension: {self.vector_dim}")
-
-        # Validate batch size
-        if self.batch_size <= 0:
-            errors.append(f"Invalid batch size: {self.batch_size}")
-
-        # Validate search limit
-        if self.search_limit <= 0:
-            errors.append(f"Invalid search limit: {self.search_limit}")
 
         # Backend-specific validation
         if self.backend == "qdrant":
@@ -370,7 +352,6 @@ EXAMPLE_CONFIGS = {
         quantization=QuantizationConfig(enabled=True, type="scalar"),
         cache=CacheConfig(enabled=True, size=50000, ttl=7200),
         gpu=GPUConfig(enabled=False),
-        batch_size=5000,
         connection_pool_size=20
     ),
 
@@ -386,8 +367,7 @@ EXAMPLE_CONFIGS = {
         backend="qdrant",
         quantization=QuantizationConfig(enabled=True, type="binary"),
         index=IndexConfig(type="flat"),  # Simple but memory-efficient
-        cache=CacheConfig(enabled=False),  # Disable cache to save memory
-        batch_size=500
+        cache=CacheConfig(enabled=False)  # Disable cache to save memory
     ),
 
 }

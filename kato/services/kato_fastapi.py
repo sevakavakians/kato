@@ -33,7 +33,7 @@ from kato.processors.processor_manager import ProcessorManager
 from kato.sessions.redis_session_manager import get_redis_session_manager
 from kato.sessions.session_manager import get_session_manager
 from kato.sessions.session_middleware_simple import SessionMiddleware
-from kato.config.logging_config import generate_trace_id, trace_context
+from kato.config.logging_config import configure_logging, generate_trace_id, trace_context
 
 # Standard logger configuration
 logger = logging.getLogger('kato.fastapi')
@@ -70,8 +70,13 @@ _concurrent_count = 0
 _concurrent_lock = asyncio.Lock()
 _max_concurrent_seen = 0
 
-# Configuration from uvicorn CMD (--limit-concurrency 100)
-CONCURRENCY_LIMIT = int(os.getenv('UVICORN_LIMIT_CONCURRENCY', '100'))
+# Configuration from the uvicorn CMD in Dockerfile, which expands
+# ${KATO_WORKERS} and ${KATO_LIMIT_CONCURRENCY}. Those are the names actually
+# set by docker-compose; the UVICORN_* spellings are accepted as a fallback but
+# uvicorn does not export them, so relying on them alone reported stale defaults
+# (workers=1, capacity=100) no matter how the service was actually launched.
+CONCURRENCY_LIMIT = int(os.getenv('KATO_LIMIT_CONCURRENCY') or os.getenv('UVICORN_LIMIT_CONCURRENCY') or '100')
+WORKER_COUNT = int(os.getenv('KATO_WORKERS') or os.getenv('UVICORN_WORKERS') or '1')
 CONCURRENCY_WARNING_THRESHOLD = int(CONCURRENCY_LIMIT * 0.8)  # Warn at 80%
 CONCURRENCY_CRITICAL_THRESHOLD = int(CONCURRENCY_LIMIT * 0.95)  # Critical at 95%
 
@@ -185,6 +190,14 @@ class AppState:
     def __init__(self):
         self.processor_manager: Optional[ProcessorManager] = None
         self.settings = get_settings()
+        # Apply LOG_LEVEL / LOG_FORMAT / LOG_OUTPUT. configure_logging() already
+        # implements JSON vs human formatting and stdout/stderr/file output; it
+        # simply was never called, so those settings had no effect.
+        configure_logging(
+            level=self.settings.logging.log_level,
+            format_type=self.settings.logging.log_format,
+            output=self.settings.logging.log_output,
+        )
         self.config_service = get_configuration_service(self.settings)
         self.startup_time = time.time()
         self._session_manager = None
@@ -227,7 +240,7 @@ async def startup_event():
     logger.info("=" * 80)
     logger.info("UVICORN CONFIGURATION")
     logger.info("=" * 80)
-    logger.info(f"Workers: {os.getenv('UVICORN_WORKERS', 'Not set (default: 1)')}")
+    logger.info(f"Workers: {WORKER_COUNT}")
     logger.info(f"Limit Concurrency: {CONCURRENCY_LIMIT} per worker")
     logger.info(f"  → Warning threshold: {CONCURRENCY_WARNING_THRESHOLD} concurrent requests (80%)")
     logger.info(f"  → Critical threshold: {CONCURRENCY_CRITICAL_THRESHOLD} concurrent requests (95%)")
@@ -237,7 +250,7 @@ async def startup_event():
     logger.info(f"")
     logger.info(f"CAPACITY ESTIMATES (per worker):")
     logger.info(f"  → Safe concurrent: {CONCURRENCY_WARNING_THRESHOLD} requests")
-    logger.info(f"  → Total with {os.getenv('UVICORN_WORKERS', '1')} workers: {CONCURRENCY_WARNING_THRESHOLD * int(os.getenv('UVICORN_WORKERS', '1'))} concurrent")
+    logger.info(f"  → Total with {WORKER_COUNT} workers: {CONCURRENCY_WARNING_THRESHOLD * WORKER_COUNT} concurrent")
     logger.info("=" * 80)
 
     # Initialize Redis session manager if using Redis

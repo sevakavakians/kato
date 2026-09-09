@@ -208,8 +208,6 @@ qdrant:
   grpcPort: 6334
   # -- Use HTTPS for the Qdrant REST API
   https: false
-  # -- Prefix applied to all collections KATO creates
-  collectionPrefix: vectors
   auth:
     # -- Name of an existing Secret containing the Qdrant API key
     existingSecret: ""
@@ -268,11 +266,9 @@ kato:
   workers: 4
   # -- Per-worker max concurrent in-flight requests
   limitConcurrency: 100
-  # -- Pattern processing batch size
-  batchSize: 100
-  # -- Database connection pool size per worker
-  connectionPoolSize: 50
-  # -- Per-request timeout in seconds
+  # -- Max Redis connections per worker (matches the previously hardcoded 200)
+  connectionPoolSize: 200
+  # -- ClickHouse send/receive timeout in seconds
   requestTimeout: 30
   # -- Session TTL in seconds
   sessionTtl: 3600
@@ -284,10 +280,6 @@ kato:
   recallThreshold: 0.1
   # -- STM mode after auto-learn: CLEAR or ROLLING
   stmMode: CLEAR
-  # -- Enable automatic pattern learning
-  autoLearnEnabled: false
-  # -- Observations before auto-learning fires (only if maxPatternLength > 0)
-  autoLearnThreshold: 50
   # -- Max predictions returned per query
   maxPredictions: 100
   # -- Token-level (true) vs character-level (false) matching

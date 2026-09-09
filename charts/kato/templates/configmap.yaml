@@ -24,7 +24,6 @@ data:
   QDRANT_PORT: {{ .Values.qdrant.port | quote }}
   QDRANT_GRPC_PORT: {{ .Values.qdrant.grpcPort | quote }}
   QDRANT_HTTPS: {{ .Values.qdrant.https | quote }}
-  QDRANT_COLLECTION_PREFIX: {{ .Values.qdrant.collectionPrefix | quote }}
 
   # Service / logging
   SERVICE_NAME: {{ .Values.kato.serviceName | quote }}
@@ -36,7 +35,6 @@ data:
   # Uvicorn / API
   KATO_WORKERS: {{ .Values.kato.workers | quote }}
   KATO_LIMIT_CONCURRENCY: {{ .Values.kato.limitConcurrency | quote }}
-  KATO_BATCH_SIZE: {{ .Values.kato.batchSize | quote }}
   CONNECTION_POOL_SIZE: {{ .Values.kato.connectionPoolSize | quote }}
   REQUEST_TIMEOUT: {{ .Values.kato.requestTimeout | quote }}
 
@@ -48,8 +46,6 @@ data:
   MAX_PATTERN_LENGTH: {{ .Values.kato.maxPatternLength | quote }}
   RECALL_THRESHOLD: {{ .Values.kato.recallThreshold | quote }}
   STM_MODE: {{ .Values.kato.stmMode | quote }}
-  AUTO_LEARN_ENABLED: {{ .Values.kato.autoLearnEnabled | quote }}
-  AUTO_LEARN_THRESHOLD: {{ .Values.kato.autoLearnThreshold | quote }}
   MAX_PREDICTIONS: {{ .Values.kato.maxPredictions | quote }}
   KATO_USE_TOKEN_MATCHING: {{ .Values.kato.useTokenMatching | quote }}
   RANK_SORT_ALGO: {{ .Values.kato.rankSortAlgo | quote }}

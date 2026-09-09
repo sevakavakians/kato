@@ -115,12 +115,8 @@ services:
       # Multi-worker uvicorn (set via kato-manager.sh --workers N, .env, or shell env).
       - KATO_WORKERS=${KATO_WORKERS:-4}
       - KATO_LIMIT_CONCURRENCY=${KATO_LIMIT_CONCURRENCY:-100}
-      # Architecture mode configuration
-      - KATO_ARCHITECTURE_MODE=${KATO_ARCHITECTURE_MODE:-hybrid}
-      - KATO_STRICT_MODE=${KATO_STRICT_MODE:-true}
-      # Performance optimizations for hierarchical training
-      - KATO_BATCH_SIZE=10000
-      - CONNECTION_POOL_SIZE=50
+      # ClickHouse send/receive timeout. Now actually applied (previously the
+      # setting existed but nothing read it; the client hardcoded 30s).
       - REQUEST_TIMEOUT=120.0
     ports:
       - "8000:8000"

@@ -175,7 +175,7 @@ scrape_configs:
 
 ### KATO Metrics Endpoint
 
-**Add Prometheus metrics** (`kato/api/main.py`):
+**Add Prometheus metrics** (`kato/services/kato_fastapi.py`):
 ```python
 from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
 from fastapi import Response
@@ -772,7 +772,7 @@ groups:
 pip install opentelemetry-api opentelemetry-sdk opentelemetry-instrumentation-fastapi
 ```
 
-**Configure tracing** (`kato/api/main.py`):
+**Configure tracing** (`kato/services/kato_fastapi.py`):
 ```python
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider

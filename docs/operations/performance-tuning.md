@@ -408,10 +408,10 @@ docker exec redis-kb redis-cli INFO memory
 
 ```bash
 # Single instance (development)
-uvicorn kato.api.main:app --host 0.0.0.0 --port 8000
+uvicorn kato.services.kato_fastapi:app --host 0.0.0.0 --port 8000
 
 # Multiple workers (production)
-gunicorn kato.api.main:app \
+gunicorn kato.services.kato_fastapi:app \
   --workers 4 \
   --worker-class uvicorn.workers.UvicornWorker \
   --bind 0.0.0.0:8000 \

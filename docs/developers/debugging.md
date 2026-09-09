@@ -240,7 +240,7 @@ cl 1              # Clear breakpoint 1
 # Install debugpy in container
 pip install debugpy
 
-# Add to kato/api/main.py
+# Add to kato/services/kato_fastapi.py
 import debugpy
 debugpy.listen(("0.0.0.0", 5678))
 # debugpy.wait_for_client()  # Optional: pause until debugger attaches

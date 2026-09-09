@@ -352,7 +352,7 @@ CORS_METHODS=GET,POST,PUT,DELETE
 CORS_HEADERS=Content-Type,Authorization,X-API-Key
 ```
 
-**FastAPI Configuration** (`kato/api/main.py`):
+**FastAPI Configuration** (`kato/services/kato_fastapi.py`):
 ```python
 from fastapi.middleware.cors import CORSMiddleware
 

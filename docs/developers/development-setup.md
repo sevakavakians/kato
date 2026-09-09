@@ -191,17 +191,26 @@ docker compose up -d
 #### Option 2: Local Python (Advanced)
 
 ```bash
-# Start dependencies only
-docker compose up -d kato-clickhouse qdrant-kb redis-kb
+# Start the backing services only
+docker compose up -d clickhouse qdrant redis
+
+# Configure. The defaults in .env.example already point at localhost,
+# so for a standard setup no edits are needed.
+cp .env.example .env
 
 # Run KATO locally
-export CLICKHOUSE_HOST=localhost
-export CLICKHOUSE_PORT=8123
-export CLICKHOUSE_DB=kato
-export QDRANT_HOST=localhost
-export REDIS_URL=redis://localhost:6379/0
+make run
+```
 
-python -m uvicorn kato.api.main:app --reload --port 8000
+`make run` accepts overrides, e.g. `make run PORT=8080` or `make run RELOAD=` to
+disable auto-reload. It runs `uvicorn kato.services.kato_fastapi:app`.
+
+Configuration is read from `.env` (loaded by `kato/env_loader.py`), using the same
+variable names docker-compose passes to the kato service. Exported shell variables
+take precedence over the file, so you can override a single value inline:
+
+```bash
+QDRANT_PORT=7777 make run
 ```
 
 **Benefits**:
@@ -336,7 +345,7 @@ Create `.vscode/launch.json`:
       "request": "launch",
       "module": "uvicorn",
       "args": [
-        "kato.api.main:app",
+        "kato.services.kato_fastapi:app",
         "--reload",
         "--port", "8000"
       ],
@@ -376,7 +385,7 @@ Create `.vscode/launch.json`:
 
 **KATO API**:
 - Script path: `<venv>/bin/uvicorn`
-- Parameters: `kato.api.main:app --reload --port 8000`
+- Parameters: `kato.services.kato_fastapi:app --reload --port 8000`
 - Environment variables: (same as VS Code)
 
 **Pytest**:
@@ -466,7 +475,7 @@ docker compose logs --tail 100 kato
 import pdb; pdb.set_trace()
 
 # Run script
-python -m uvicorn kato.api.main:app --reload
+python -m uvicorn kato.services.kato_fastapi:app --reload
 
 # When breakpoint hits:
 # (Pdb) print(variable_name)

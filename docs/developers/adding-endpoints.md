@@ -205,9 +205,9 @@ async def my_module_action():
     return {"result": "action performed"}
 ```
 
-**Register in main app** (`kato/api/main.py`):
+**Register in main app** (`kato/services/kato_fastapi.py`):
 ```python
-# kato/api/main.py
+# kato/services/kato_fastapi.py
 from kato.api.endpoints import sessions, kato_ops, my_new_module
 
 app = FastAPI(title="KATO API", version="3.0")

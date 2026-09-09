@@ -62,7 +62,7 @@ stats.print_stats(20)  # Top 20 functions
 
 **Profile Entire Script**:
 ```bash
-python -m cProfile -o profile.stats kato/api/main.py
+python -m cProfile -o profile.stats kato/services/kato_fastapi.py
 
 # Analyze results
 python -c "import pstats; p = pstats.Stats('profile.stats'); p.sort_stats('cumulative').print_stats(30)"
@@ -171,7 +171,7 @@ py-spy top --pid $(pgrep -f kato)
 py-spy record -o profile.svg --pid $(pgrep -f kato)
 
 # Profile for 30 seconds
-py-spy record -o profile.svg --duration 30 -- python -m kato.api.main
+py-spy record -o profile.svg --duration 30 -- python -m kato.services.kato_fastapi
 ```
 
 **Flame Graph**:

@@ -193,7 +193,7 @@ kubectl top pods -n kato
 
 # Profile CPU usage (if Python debugging enabled)
 docker exec -it kato python -m cProfile -o profile.stats \
-  -m kato.api.main
+  -m kato.services.kato_fastapi
 
 # View profile
 python -c "

@@ -56,7 +56,7 @@ KATO (Knowledge Abstraction for Traceable Outcomes) is a deterministic memory an
 #### FastAPI Application
 
 ```python
-# kato/api/main.py
+# kato/services/kato_fastapi.py
 app = FastAPI(
     title="KATO API",
     version="3.0",

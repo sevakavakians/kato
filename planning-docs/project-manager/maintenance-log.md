@@ -3,6 +3,36 @@
 
 ---
 
+## 2026-09-09 - Task Completion: Cross-Worker WebSocket Broadcaster Fixed via Redis Pub/Sub (Closes DECISION-020 Follow-Up) + Architectural Decision + Pending-Update Resolved
+
+**Trigger**: Task completion (`kato/websocket/event_broadcaster.py` fixed to fan events out across uvicorn workers via Redis pub/sub; committed as `ba3d194`, which also carries the previously-uncommitted worker-topology-tests/`worker_pid` work recorded as DECISION-020) + architectural decision (Redis pub/sub chosen over per-worker sticky routing and Redis Streams) + resolution of a previously-flagged human-review item
+
+**Event Type**: Task completion (bug fix) + architectural decision + pending-updates.md resolution
+
+**Actions Taken**:
+1. Created `planning-docs/completed/features/2026-09-09-websocket-cross-worker-broadcaster-redis-pubsub.md` — full archive entry (fix detail, tests, verification, design alternatives, resolved/still-open tracking items)
+2. Updated `planning-docs/DECISIONS.md` — new `DECISION-021: Fan WebSocket Events Out Across Uvicorn Workers via Redis Pub/Sub` prepended above DECISION-020; header timestamp refreshed
+3. Updated `planning-docs/SPRINT_BACKLOG.md` — header timestamp refreshed; Multi-Worker Uvicorn initiative's verification step and "Out of Scope" list updated to reflect the resolved websocket blocker; "Bug: Multi-worker (KATO_WORKERS=4) breaks websocket event delivery..." rewritten to mark the websocket-delivery half RESOLVED while keeping the concurrent-write half open; `test_metrics_collection_after_requests` entry annotated (passed this run, still flaky by construction); new "Recently Completed" entry prepended for the broadcaster fix
+4. Updated `planning-docs/SESSION_STATE.md` — header refreshed; new "Previous Task" block prepended (above the worker-topology-tests entry) documenting the fix; the worker-topology entry's "Open, flagged for human review" line updated to "Resolved"; Next Immediate Action item 3 rewritten to mark the websocket-delivery bug resolved while keeping the concurrent-write symptom open
+5. Updated `planning-docs/README.md` — Test Coverage line rewritten to 475 passed / 4 skipped / 0 failed (supersedes the "6 deterministic topology failures" expectation); Last Major Update line rewritten to lead with this fix, DECISION-021 cross-referenced
+6. Updated `planning-docs/project-manager/pending-updates.md` — moved the "Cross-Worker WebSocket Broadcaster Fix: Priority Decision Needed" entry from Current Issues to Resolved Issues with resolution detail; DECISION-019's version-bump question left open and untouched
+7. Updated `planning-docs/project-manager/patterns.md` — new pattern entry: a deterministic test (built specifically to reproduce a bug on demand) pays off doubly — first by confirming the bug, then by immediately proving the fix once one is applied, with no new test-writing effort required
+8. Logging this activation event in `planning-docs/project-manager/triggers.md`
+
+**Documents Updated**: `planning-docs/DECISIONS.md`, `planning-docs/SPRINT_BACKLOG.md`, `planning-docs/SESSION_STATE.md`, `planning-docs/README.md`, `planning-docs/project-manager/pending-updates.md`, `planning-docs/project-manager/patterns.md`, `planning-docs/project-manager/triggers.md`, new `planning-docs/completed/features/2026-09-09-websocket-cross-worker-broadcaster-redis-pubsub.md`
+
+**Human Alert Status**: One previously-open item resolved (broadcaster fix priority — now fixed, no longer needs a decision). No new human alerts raised. DECISION-019's major-version-bump question remains the sole open item in `pending-updates.md`.
+
+**Agent Response Time**: Immediate
+**Action Result**: All planning docs updated silently; no blocking issues found; uncommitted metadata-sidecar-related working-tree changes (`kato/informatics/knowledge_base.py`, `kato/storage/metadata_router.py`) left untouched as instructed
+
+---
+
+*Agent execution time: < 5 seconds*
+*Response type: Silent operation (planning documentation update only)*
+
+---
+
 ## 2026-09-09 - Task Completion: Worker-Topology Tests Replace Flaky Multi-Worker Tests + `worker_pid` Field + Architectural Decision + Backlog Bug Recharacterized + Human-Review Flag (Broadcaster Fix Priority)
 
 **Trigger**: Task completion (5 flaky/failing multi-worker tests replaced with 5 deterministic ones; new `worker_pid` field shipped) + architectural decision (deterministic topology-testing strategy; cross-worker broadcaster gap confirmed) + knowledge refinement ("session delete does not decrement active-session count" backlog bug recharacterized as a test issue, not a product bug) + human alert (broadcaster-fix priority flagged, not decided)

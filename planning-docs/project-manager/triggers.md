@@ -3,6 +3,27 @@
 
 ---
 
+## 2026-09-09 - Task Completion + Architectural Decision (Cross-Worker WebSocket Broadcaster Fixed via Redis Pub/Sub)
+
+**Trigger Type**: Primary — Task Completion (`kato/websocket/event_broadcaster.py` now fans events out across uvicorn workers via Redis pub/sub; committed as `ba3d194`) + Architectural Decision (DECISION-021: Redis pub/sub chosen over per-worker sticky routing and Redis Streams)
+**Secondary**: Resolution of a previously-open human-alert item (`pending-updates.md` "Cross-Worker WebSocket Broadcaster Fix: Priority Decision Needed", filed alongside DECISION-020)
+
+**Event**: `EventBroadcaster.broadcast_event` now publishes to a Redis pub/sub channel (`kato:ws_events`) that every uvicorn worker subscribes to at startup, delivering received events only to that worker's own local connections — closing the gap the DECISION-020 worker-topology tests had proven deterministic (3 delivery tests failing every run at `KATO_WORKERS` in {2, 4}). Those same tests now pass 15/15 across `KATO_WORKERS` in {1, 2, 4} with no changes to the tests themselves — only the product code changed. Full suite: 475 passed / 4 skipped / 0 failed, up from 453 passed / 5 failed.
+
+**Key Findings**:
+- A test suite built to manufacture a failure condition deterministically (DECISION-020's topology tests) pays off twice: once to confirm the bug with a stable, citable failure count, and again — with zero additional test-authoring effort — to prove the fix once one lands. The same 5 tests flip from "6 deterministic failures" to "15/15 passing" purely because the product code changed underneath them.
+- Fire-and-forget notification semantics (no delivery guarantee beyond best-effort to currently-connected clients, no replay requirement) should be matched to the messaging primitive's actual guarantees rather than reached for the most feature-rich option available (Redis Streams was considered and rejected as overkill for exactly this reason).
+- A human-alert item filed as "needs a priority decision before the next release" can be resolved same-day if the fix turns out to be straightforward and gets requested promptly — the alert did its job (surfacing the open question) without blocking or being ignored.
+
+**Documentation Actions**:
+- Created: `planning-docs/completed/features/2026-09-09-websocket-cross-worker-broadcaster-redis-pubsub.md`
+- Updated: `planning-docs/DECISIONS.md` (DECISION-021), `planning-docs/SPRINT_BACKLOG.md`, `planning-docs/SESSION_STATE.md`, `planning-docs/README.md`, `planning-docs/project-manager/pending-updates.md` (item moved to Resolved), `planning-docs/project-manager/patterns.md`, `planning-docs/project-manager/maintenance-log.md`
+
+**Agent Response Time**: Immediate
+**Action Result**: All docs updated; the one previously-open alert for this issue is now resolved; DECISION-019's major-version-bump question remains the sole open pending-updates.md item
+
+---
+
 ## 2026-09-09 - Task Completion + Architectural Decision + Knowledge Refinement + Human Alert (Worker-Topology Tests Replace Flaky Multi-Worker Tests, `worker_pid` Field Added)
 
 **Trigger Type**: Primary — Task Completion (5 flaky/failing multi-worker tests replaced with 5 deterministic ones; new `worker_pid` field shipped) + Architectural Decision (DECISION-020: deterministic topology-testing strategy; confirms the cross-worker websocket broadcaster gap) + Knowledge Refinement (2026-06-18 "session delete does not decrement active-session count" backlog bug recharacterized as a TTL-cache test issue, not a product bug)

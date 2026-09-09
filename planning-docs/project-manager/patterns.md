@@ -3,6 +3,24 @@
 
 ---
 
+## Testing Strategy Patterns
+
+### 2026-09-09 - A Deterministic Bug-Reproduction Test Pays Off Twice: Confirmation, Then Free Fix Verification
+
+**Pattern**: When a test suite is built specifically to manufacture the exact runtime condition needed to reproduce a bug on demand (rather than hoping to observe it intermittently), the investment pays off a second time, for free, when the fix lands — the same tests, unmodified, flip from deterministic failure to deterministic pass and constitute the fix's verification.
+
+**Discovery Trigger**: `tests/tests/integration/test_worker_topology.py` (DECISION-020) was built same-day to prove the cross-worker WebSocket broadcaster gap deterministically (3 tests failing every run at `KATO_WORKERS` in {2, 4}, 0 failures at {1}) rather than relying on the previous 2-4 intermittent failures per full-suite run. Later the same day, once the Redis pub/sub fix (DECISION-021) landed, those exact same tests — no changes made to them — passed 15/15 across all three topologies, serving as the fix's primary evidence.
+
+**Assumption → Reality**:
+- Assumed: writing a rigorous reproduction test for a bug that "isn't being fixed right now" is scoped work whose payoff ends at confirmation.
+- Reality: if the reproduction is deterministic and topology-parametrized (rather than a one-off repro script), it doubles as the regression test for whenever the fix does land — with zero additional authoring cost at fix time.
+
+**Resolution Pattern**: When confirming a bug deterministically (even with no fix requested yet), prefer building the reproduction as a proper parametrized test in the permanent suite over a throwaway diagnostic script. Structure it so the "control" case (the topology/condition where the bug does NOT manifest) is also asserted — this is what makes the later fix's before/after comparison unambiguous.
+
+**Recurrence Risk**: Low as a risk, high as an opportunity — this is a pattern worth repeating deliberately whenever a bug is confirmed-but-deferred rather than confirmed-and-fixed-immediately.
+
+---
+
 ## Performance Optimization Patterns
 
 ### 2026-03-25 - Profiling-Driven Fix Scope Decision: Bottleneck Type Determines Remedy

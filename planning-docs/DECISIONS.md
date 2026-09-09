@@ -1,6 +1,39 @@
 # DECISIONS.md - Architectural & Design Decision Log
 *Append-Only Log - Started: 2025-08-29*
-*Last Updated: 2026-09-09 (DECISION-020: worker-topology tests replace flaky multi-worker tests; broadcaster gap confirmed deterministically)*
+*Last Updated: 2026-09-09 (DECISION-021: cross-worker WebSocket broadcaster fixed via Redis pub/sub, closing the DECISION-020 follow-up)*
+
+---
+
+## 2026-09-09 - DECISION-021: Fan WebSocket Events Out Across Uvicorn Workers via Redis Pub/Sub
+**Decision**: Fix the cross-worker WebSocket delivery gap confirmed by DECISION-020 by having `EventBroadcaster.broadcast_event` publish the event JSON to a Redis pub/sub channel (`kato:ws_events`, overridable via `KATO_WS_EVENTS_CHANNEL`) instead of only iterating its own process's connection list. Every uvicorn worker subscribes to that channel at startup and a per-worker listener task delivers received events to that worker's own local connections.
+**Status**: COMPLETE and committed — `ba3d194` "fix(websocket): fan events out across uvicorn workers via Redis pub/sub". This closes the open follow-up DECISION-020 flagged (and the corresponding `planning-docs/project-manager/pending-updates.md` entry, now resolved).
+**Classification**: Architectural fix (messaging/fan-out design) + bug fix
+**Confidence**: High — verified via new deterministic unit tests (`tests/tests/unit/test_event_broadcaster.py`) and the existing worker-topology integration suite, which now passes 15/15 across `KATO_WORKERS` in {1, 2, 4} (previously 6 deterministic failures at {2, 4}).
+
+### Context
+DECISION-020 (same day) replaced flaky multi-worker tests with a deterministic topology suite that proved `EventBroadcaster`'s per-process `active_connections` list cannot deliver `session.created`/`session.destroyed` events to clients connected to a different uvicorn worker than the one handling the triggering request. The fix was explicitly out of scope for that test-infrastructure work and flagged for human decision on priority. This decision records that the fix was then requested and completed the same day, in the same commit as the topology-test work.
+
+### Decision Detail
+- `broadcast_event` (`kato/websocket/event_broadcaster.py`) publishes the event to the Redis channel. The publishing worker does **not** also deliver the event to its own local connections directly from `broadcast_event` — delivery to that worker's own clients happens only via its own listener task receiving the pub/sub message it just published, giving exactly-once delivery per client regardless of which worker originated the event or how many workers are running.
+- `EventBroadcaster.start(REDIS_URL)` is called from the FastAPI startup hook in `kato/services/kato_fastapi.py`, immediately after the Redis session manager initializes; `stop()` is called on shutdown. `start()` blocks until Redis acknowledges the `SUBSCRIBE`, so no event published after startup completes can be missed by a listener that hasn't subscribed yet.
+- Fallback behavior (no locks, fails toward local-only delivery rather than raising): no `REDIS_URL` configured, or Redis unreachable at `start()` → local-only delivery with a log line; a publish call that fails → falls back to local delivery for that event; a listener that errors → resubscribes after a 1-second backoff rather than dying silently.
+- `worker_pid` (added under DECISION-020) is what let the new topology tests keep proving cross-worker delivery after the fix, this time asserting it *succeeds* rather than fails.
+
+### Rationale
+Redis is already a hard dependency for session state in this architecture (`kato/sessions/redis_session_manager.py`), so pub/sub reuses existing infrastructure rather than adding a new one. Fire-and-forget notification semantics (no delivery guarantee needed beyond "best effort to currently-connected clients," no replay/history requirement) match Redis pub/sub's at-most-once, no-persistence delivery model exactly — there is no mismatch between what the feature needs and what the mechanism provides.
+
+### Alternatives Considered
+1. **Per-worker sticky routing (route a given client's HTTP/WS traffic to the same worker consistently)** — rejected: uvicorn has no built-in mechanism for this; would require an external reverse proxy layer with sticky-session support that doesn't exist in this deployment, adding infrastructure for a problem pub/sub solves without it.
+2. **Redis Streams** — rejected as overkill: Streams add consumer groups, offsets, and replay semantics designed for durable, at-least-once, resumable consumption. WebSocket session-lifecycle notifications have no replay requirement (a client that wasn't connected when `session.created` fired has no use for it after the fact) and no need for durability across a listener restart — plain pub/sub's simpler at-most-once model is a better fit, not a lesser one.
+3. **Chosen: Redis pub/sub** — matches the actual delivery requirements, reuses infrastructure already required by the architecture, and required no new locks (consistent with this project's no-locks constraint).
+
+### Verification
+New `tests/tests/unit/test_event_broadcaster.py` (6 tests, using fakes): local-fallback delivery, publish-once-no-double-delivery-on-the-origin-worker, publish-failure falls back to local delivery, listener-side delivery, dead-connection pruning, `start(None)` stays local-only. `tests/tests/integration/test_worker_topology.py` (from DECISION-020) now passes 15/15 across `KATO_WORKERS` in {1, 2, 4} (previously 6 deterministic failures at {2, 4}). Full suite after a rebuild with the default `KATO_WORKERS=4`: 475 passed, 4 skipped, 0 failed (585s) — up from the prior 453 passed / 5 failed baseline. The pre-existing `test_metrics_collection_after_requests` flake (10s metrics-collection interval vs. a 1s sleep in the test — see `planning-docs/SPRINT_BACKLOG.md`) passed this particular run but remains flaky by construction and is tracked separately; it is not a websocket/broadcaster issue.
+
+**Affected Files**: `kato/websocket/event_broadcaster.py`, `kato/services/kato_fastapi.py`, `tests/tests/unit/test_event_broadcaster.py` (new), `docs/integration/websocket-integration.md`, `docs/operations/environment-variables.md` (`KATO_WS_EVENTS_CHANNEL`), `CHANGELOG.md`
+**Archive**: `planning-docs/completed/features/2026-09-09-websocket-cross-worker-broadcaster-redis-pubsub.md`
+**Resolves**: The open follow-up flagged in DECISION-020 and `planning-docs/project-manager/pending-updates.md` ("Cross-Worker WebSocket Broadcaster Fix: Priority Decision Needed") — now moved to that file's Resolved Issues section.
+**Still open (unrelated to this decision)**: DECISION-019's major-version-bump question (breaking `anomalies`/`fuzzy_matches` field split) remains undecided.
 
 ---
 

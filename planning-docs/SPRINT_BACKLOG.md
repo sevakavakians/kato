@@ -1,5 +1,5 @@
 # SPRINT_BACKLOG.md - Upcoming Work
-*Last Updated: 2026-09-09 (worker-topology tests replace flaky multi-worker tests, DECISION-020; Root cause #3 backlog bug resolved/recharacterized; multi-worker websocket bug now confirmed deterministically; full-suite failure-count expectation updated to 6 deterministic topology failures)*
+*Last Updated: 2026-09-09 (cross-worker WebSocket broadcaster fixed via Redis pub/sub, DECISION-021, committed as `ba3d194`; full-suite expectation updated to 475 passed / 4 skipped / 0 failed with only the metrics flake as known-intermittent)*
 
 ## Active Projects
 
@@ -30,7 +30,7 @@ Note: **Distributed session locks are NOT needed and NOT in scope.** Training ne
 
 #### Out of Scope (explicitly deferred)
 - Distributed session locks
-- WebSocket cross-worker broadcast
+- ~~WebSocket cross-worker broadcast~~ — **RESOLVED 2026-09-09 outside this initiative**, see DECISION-021 (Redis pub/sub fan-out, `kato/websocket/event_broadcaster.py`)
 - `_global_metadata_cache` cross-worker invalidation
 - Emotives/metadata rolling-window RMW races
 - `ReplacingMergeTree` migration
@@ -48,7 +48,7 @@ Note: **Distributed session locks are NOT needed and NOT in scope.** Training ne
 
 #### Verification
 1. Build + start with `KATO_WORKERS=5`, confirm 5 PIDs in logs
-2. `./run_tests.sh --no-start --no-stop` — expected to pass modulo the 6 deterministic worker-topology delivery failures at `KATO_WORKERS` in {2, 4} (`tests/tests/integration/test_worker_topology.py`, see DECISION-020 2026-09-09) until the websocket broadcaster fan-out (Change/fix below, not yet scoped into this plan) is implemented; this initiative should decide whether that fix belongs here or as a separate follow-up
+2. `./run_tests.sh --no-start --no-stop` — the websocket-delivery blocker is now resolved (see DECISION-021, 2026-09-09: `tests/tests/integration/test_worker_topology.py` passes 15/15 across `KATO_WORKERS` in {1, 2, 4}); expect a clean full-suite run modulo the known-intermittent `test_metrics_collection_after_requests` flake (unrelated, see Backlog below). `test_concurrent_session_modifications`'s concurrent-write-loss symptom remains unconfirmed/open and is in-scope for this initiative's SETNX-gate work (Change 3 below)
 3. ClickHouse duplicate-row check: `SELECT kb_id, name, count() FROM kato.patterns_data GROUP BY kb_id, name HAVING count() > 1`
 4. Redis vs ClickHouse pattern count parity check
 5. Scale test with `MAX_SAMPLES=10000` — expect ~4-5x speedup over single-worker baseline
@@ -469,19 +469,16 @@ Phase 4 (Symbol Statistics & Fail-Fast Architecture) is 100% complete. The Click
 ---
 
 ### Bug: Multi-worker (KATO_WORKERS=4) breaks websocket event delivery and concurrent session modification consistency
-**Priority**: P2 — websocket-delivery half now **deterministically confirmed** (2026-09-09); concurrent-write half still open/unverified
-**Status**: Identified 2026-09-08 (characterized during conftest.py FLUSHALL fix verification); websocket-delivery half re-confirmed deterministically 2026-09-09 (DECISION-020); absorbs the former Root cause #3 websocket-timeout symptom (see that entry above, now marked resolved/merged)
-**Symptom (2026-09-09, deterministic)**: `tests/tests/integration/test_worker_topology.py` — at `KATO_WORKERS=2` and `4`, 3 tests (`session_created_event_reaches_every_client`, `session_destroyed_event_reaches_every_client`, `client_sees_full_session_lifecycle_in_order`) fail **every run**, with the specific missed worker pids named in the assertion (e.g. "reached 0 client(s), missed pids [7, 10]"); at `KATO_WORKERS=1` all 5 topology tests pass. This supersedes the original 2026-09-08 "4 websocket tests fail intermittently against the shared container" characterization — it is no longer intermittent, it is guaranteed once test clients are proven to span ≥2 worker pids.
-**Symptom (original, 2026-09-08, not re-verified 2026-09-09)**: `test_concurrent_session_modifications` fails against the container running `KATO_WORKERS=4`, losing half its concurrent writes (`assert 5 == 10`). Out of scope for the 2026-09-09 topology-test work; still tracked as open and unconfirmed since.
-**Root Cause (websocket delivery, confirmed)**: `kato/websocket/event_broadcaster.py`'s `EventBroadcaster` maintains a per-process `active_connections` list — websocket events are published in-process only and are not fanned out across uvicorn workers, so a client connected to one worker never sees events published by another.
-**Root Cause (concurrent writes, unconfirmed as of 2026-09-09)**: Concurrent session writes are similarly hypothesized to be lost across workers (no shared coordination), so half of concurrent modifications silently disappear. Not re-verified in the 2026-09-09 work.
-**Evidence**: `test_worker_topology.py` reproduces the websocket-delivery failure deterministically at `KATO_WORKERS` in {2, 4} and passes at `KATO_WORKERS=1` (2026-09-09) — see `planning-docs/completed/features/2026-09-09-worker-topology-tests-and-worker-pid.md`. Earlier evidence (2026-09-08): the same websocket tests passed 7/7 against a single-worker instance and failed only under the 4-worker container; confirmed independent of the conftest.py Redis FLUSHALL fix (`KATO_TEST_REDIS_FLUSHALL=1` reproduces identical failures).
-**Fix Options**:
-1. Move websocket event fan-out to a shared pub/sub layer (Redis pub/sub) so all workers publish/receive the same events
-2. Move concurrent session-write coordination to a shared store rather than per-worker in-process state
-**Fix status**: **NOT started** (not requested) — flagged for human decision on priority relative to the next release, see `planning-docs/project-manager/pending-updates.md`
-**Files**: `kato/websocket/event_broadcaster.py`, `kato/sessions/redis_session_manager.py`, `tests/tests/integration/test_worker_topology.py`
-**Related**: Overlaps with the "Multi-Worker Uvicorn + Concurrent Training Safety" initiative queued above — this bug is in-scope for that work.
+**Priority**: P2 — websocket-delivery half **RESOLVED 2026-09-09**; concurrent-write half still open/unverified
+**Status**: Identified 2026-09-08 (characterized during conftest.py FLUSHALL fix verification); websocket-delivery half confirmed deterministically 2026-09-09 (DECISION-020) then **fixed** the same day (DECISION-021); absorbs the former Root cause #3 websocket-timeout symptom (see that entry above, marked resolved/merged)
+**Symptom (websocket delivery) — RESOLVED 2026-09-09**: `tests/tests/integration/test_worker_topology.py` previously failed 3 tests (`session_created_event_reaches_every_client`, `session_destroyed_event_reaches_every_client`, `client_sees_full_session_lifecycle_in_order`) every run at `KATO_WORKERS=2` and `4`. Fixed via Redis pub/sub fan-out (DECISION-021, `kato/websocket/event_broadcaster.py`, committed as `ba3d194`) — the suite now passes 15/15 across `KATO_WORKERS` in {1, 2, 4}. See `planning-docs/completed/features/2026-09-09-websocket-cross-worker-broadcaster-redis-pubsub.md`.
+**Symptom (concurrent writes) — still open, not re-verified since 2026-09-08**: `test_concurrent_session_modifications` fails against the container running `KATO_WORKERS=4`, losing half its concurrent writes (`assert 5 == 10`). This was never confirmed to share the websocket-delivery root cause and the 2026-09-09 pub/sub fix does **not** address it (it targets `EventBroadcaster`, not session-write coordination). Remains open and unconfirmed.
+**Root Cause (websocket delivery) — fixed**: `kato/websocket/event_broadcaster.py`'s `EventBroadcaster` maintained a per-process `active_connections` list — websocket events were published in-process only and not fanned out across uvicorn workers. Fixed by publishing to a Redis pub/sub channel (`kato:ws_events`) that every worker subscribes to at startup; see DECISION-021.
+**Root Cause (concurrent writes) — still unconfirmed**: Concurrent session writes are hypothesized to be lost across workers (no shared coordination), so half of concurrent modifications silently disappear. Not re-verified since 2026-09-08; not addressed by the websocket fix.
+**Evidence**: `test_worker_topology.py` — 6 deterministic failures at `KATO_WORKERS` in {2, 4} before the fix, 0 failures (15/15) after, see `planning-docs/completed/features/2026-09-09-websocket-cross-worker-broadcaster-redis-pubsub.md`. Full suite post-fix: 475 passed / 4 skipped / 0 failed.
+**Fix (concurrent-write half, not yet done)**: Move concurrent session-write coordination to a shared store rather than per-worker in-process state — this is the SETNX-gate work already planned under "Multi-Worker Uvicorn + Concurrent Training Safety" above (Change 3), which should confirm and close this remaining symptom.
+**Files**: `kato/websocket/event_broadcaster.py` (fixed), `kato/services/kato_fastapi.py` (fixed), `kato/sessions/redis_session_manager.py` (concurrent-write half, still open), `tests/tests/integration/test_worker_topology.py`, `tests/tests/unit/test_event_broadcaster.py` (new)
+**Related**: The concurrent-write half overlaps with and is in-scope for the "Multi-Worker Uvicorn + Concurrent Training Safety" initiative queued above.
 
 ---
 
@@ -540,7 +537,7 @@ Phase 4 (Symbol Statistics & Fail-Fast Architecture) is 100% complete. The Click
 
 ### Bug: `test_metrics_collection_after_requests` fails intermittently — `/metrics` `total_requests` bounces across reads
 **Priority**: P3 — test flakiness / monitoring correctness gap, not caused by this session's work
-**Status**: Identified 2026-09-09 (observed during anomalies/fuzzy_matches breaking-change verification — see DECISION-019, `planning-docs/completed/features/2026-09-09-anomalies-fuzzy-matches-field-split.md`)
+**Status**: Identified 2026-09-09 (observed during anomalies/fuzzy_matches breaking-change verification — see DECISION-019, `planning-docs/completed/features/2026-09-09-anomalies-fuzzy-matches-field-split.md`). Passed on the 2026-09-09 post-broadcaster-fix full-suite run (475 passed / 4 skipped / 0 failed) but is flaky by construction (see Root Cause below) — remains open as known-intermittent, not resolved.
 **Symptom**: `tests/tests/api/test_monitoring_endpoints.py::TestMonitoringEndpoints::test_metrics_collection_after_requests` failed with `assert 3204.0 > 3204.0`. Reading `/metrics` across consecutive requests showed `total_requests` bouncing between two values (3208 → 1454 → 3208) instead of monotonically increasing.
 **Likely Cause**: `total_requests` is tracked in-process (per uvicorn worker) rather than in a shared store; under `KATO_WORKERS>1`, consecutive requests can land on different workers with different local counters, so the metric is non-monotonic from the client's point of view. Consistent with the already-tracked multi-worker cross-worker-state-sharing gap (see "Bug: Multi-worker (KATO_WORKERS=4) breaks websocket event delivery..." above).
 **Fix Options**:
@@ -603,11 +600,27 @@ Phased plan for scaling KATO to production workloads:
 
 ## Recently Completed
 
+### Bug Fix: Cross-Worker WebSocket Broadcaster via Redis Pub/Sub — COMPLETE (2026-09-09)
+**Priority**: P2 → RESOLVED — closes the DECISION-020 open follow-up
+**Archive**: `planning-docs/completed/features/2026-09-09-websocket-cross-worker-broadcaster-redis-pubsub.md`
+**Decision**: DECISION-021
+**Status**: COMPLETE and COMMITTED as `ba3d194` "fix(websocket): fan events out across uvicorn workers via Redis pub/sub"
+
+`kato/websocket/event_broadcaster.py`'s `broadcast_event` now publishes to a Redis pub/sub channel (`kato:ws_events`, override via `KATO_WS_EVENTS_CHANNEL`); every uvicorn worker subscribes at startup (wired into `kato/services/kato_fastapi.py`'s startup/shutdown hooks) and delivers received events to its own local connections only, giving exactly-once delivery per client. No locks used; falls back to local-only delivery if Redis is absent/unreachable/publish fails.
+
+**Result**: New `tests/tests/unit/test_event_broadcaster.py` (6 tests, fakes) pins the transport rules. `tests/tests/integration/test_worker_topology.py` (from DECISION-020) now passes **15/15** across `KATO_WORKERS` in {1, 2, 4} — previously 6 deterministic failures at {2, 4}. Full suite: **475 passed / 4 skipped / 0 failed** (585s), up from the 453 passed / 5 failed baseline. `test_metrics_collection_after_requests` passed this run but remains a known-intermittent flake, unrelated (see Backlog above).
+
+**Design decision**: Redis pub/sub chosen over per-worker sticky routing (doesn't exist in uvicorn) and Redis Streams (overkill for fire-and-forget notifications with no replay requirement) — see DECISION-021 for full rationale.
+
+**Still open**: `test_concurrent_session_modifications`'s concurrent-write-loss symptom (separate from websocket delivery, never confirmed to share this root cause) remains open — see "Bug: Multi-worker (KATO_WORKERS=4) breaks websocket event delivery..." above. DECISION-019's major-version-bump question is unrelated and also still open.
+
+---
+
 ### Test Infrastructure: Worker-Topology Tests Replace Flaky Multi-Worker Tests + `worker_pid` Field — COMPLETE (2026-09-09)
 **Priority**: Test reliability / bug confirmation
 **Archive**: `planning-docs/completed/features/2026-09-09-worker-topology-tests-and-worker-pid.md`
 **Decision**: DECISION-020
-**Status**: Tests complete, run, and characterized; NOT committed; broadcaster fix NOT started (not requested)
+**Status**: Tests complete, run, and characterized; committed as `ba3d194` alongside the broadcaster fix above (was uncommitted at authoring time)
 
 Replaced the five known-flaky/failing tests (4 websocket event-delivery tests + `test_session_cleanup`) with a new `tests/tests/integration/test_worker_topology.py`: launches throwaway `kato:latest` containers at `KATO_WORKERS` in {1, 2, 4}, forces test clients onto ≥2 distinct worker pids before asserting cross-worker delivery, and verifies readiness/worker-count from uvicorn's own log lines. New `worker_pid` field added to `/health` and websocket `state.snapshot` to make this possible.
 

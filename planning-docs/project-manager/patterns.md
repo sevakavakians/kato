@@ -160,6 +160,42 @@ absolute latency differences across machines.
 
 ## Bug Patterns
 
+### 2026-09-08 - A Narrowly-Logged Bug (One Crashing Env Var) Turned Out to Be a Systemic One (Nearly All of Them)
+
+**Pattern**: A P2 bug was logged as `.env`'s `REDIS_PERSISTENCE=true` crashing a locally-run (non-Docker) KATO server. Investigating the actual crash mechanism — `Settings.model_config`'s `env_file='.env'` combined with inherited `extra='forbid'` — revealed that pydantic-settings' dotenv loader forwards *every* `.env` key it can't match onto the model, not just the one that happened to be reported first. Since `Settings` only declares 8 top-level fields and `.env` contains dozens of real leaf variable names, nearly every `.env` key crashed it; `REDIS_PERSISTENCE` was simply the alphabetically/positionally first one anyone hit and reported.
+
+**Discovery Trigger**: Reproducing the reported crash and reading the actual pydantic-settings traceback/source (`DotEnvSettingsSource`) instead of assuming the fix was "add `REDIS_PERSISTENCE` as an ignored field" (the narrowest fix that would have satisfied the literal bug report).
+
+**Assumption → Reality**:
+- Assumed (from the bug report): one specific env var (`REDIS_PERSISTENCE`) was the problem
+- Reality: the mechanism causing it (`env_file=` + `extra='forbid'`) affected essentially all of `.env`, and a couple of other names (`SERVICE_NAME`, `SESSION_TTL`) were being silently swallowed without ever taking effect, an even quieter failure than a crash
+
+**Resolution Pattern**: When a bug report names one specific instance of a class of input (one env var, one file, one endpoint), check whether the reported instance is representative or just the first one someone happened to hit. Reproduce the actual failure and read the real error/traceback before scoping the fix — a fix scoped to the literal report (add `REDIS_PERSISTENCE` as a field) would have left the underlying mechanism, and every other real variable, still broken.
+
+**Lesson**: "It crashes on X" bug reports for config/env-loading code deserve a check of *why X specifically* triggered it, not just *how to make X stop triggering it* — the failure surface for loader/validation code is often the entire input space, not the one value that happened to be logged. This is doubly true when the loader's `extra='forbid'`-style strictness means the *first* unrecognized key found aborts the whole load; a report from one such bug says nothing about how many other keys would also fail.
+
+**Recurrence Risk**: Low for this specific mechanism — fixed by removing `env_file=` from `Settings.model_config` entirely (loading is now via `os.environ` in `kato/env_loader.py`, called from `kato/__init__.py`) and documenting in that module's docstring why `env_file=` must not be reintroduced. See archive: `planning-docs/completed/bugs/2026-09-08-env-dotenv-settings-crash.md`, decision: DECISION-016.
+
+---
+
+### 2026-09-08 - Stale Lock File Discovered as a Side Effect of an Unrelated Fix (`xxhash` Never Installed, `pymongo`/`dnspython` Never Removed)
+
+**Pattern**: Regenerating `requirements.lock` as a routine step of the `.env`-loading fix (needed because `python-dotenv` was promoted from transitive to explicit) surfaced two pieces of unrelated drift that had been silently live for some time: `xxhash` was declared in `requirements.txt` but absent from `requirements.lock`, so it was never actually installed in the container — the `MINHASH_HASH_FUNC=xxhash` optimization had been silently falling back to SHA-1 the entire time it was documented as an active performance feature. Separately, `pymongo`/`dnspython` were still pinned in the lock file despite MongoDB being fully removed from the codebase in v3.0, and were confirmed still installed in the running container.
+
+**Discovery Trigger**: Running `pip-compile` for an unrelated reason and diffing the regenerated lock file against the previous one.
+
+**Assumption → Reality**:
+- Assumed: `requirements.lock` accurately reflects `requirements.txt` and the codebase's actual dependencies at all times
+- Reality: it can silently drift — a declared dependency can be missing from the installed set (`xxhash`), and a fully-removed dependency can still be installed (`pymongo`/`dnspython`) — with no error or warning anywhere, because nothing forces `requirements.lock` regeneration except manually running `pip-compile`
+
+**Resolution Pattern**: A lock file's correctness is only as good as the last time someone regenerated it after `requirements.txt` changed. Neither a missing-but-declared package nor a present-but-no-longer-declared package produces any runtime signal — both require someone to actually diff the regenerated lock, which happened here only as an incidental side effect of unrelated work.
+
+**Lesson**: Consider periodically regenerating and diffing `requirements.lock` even with no `requirements.txt` change pending, specifically to catch this class of silent drift — a documented "optional acceleration" feature (`MINHASH_HASH_FUNC=xxhash`) can be silently non-functional for an extended period with zero test failures, since the code correctly falls back to a slower default rather than erroring.
+
+**Recurrence Risk**: Low for these two specific packages (both now corrected in the lock file, effective on the next `docker compose build --no-cache kato`), but the general risk (lock/manifest drift going undetected) remains until/unless a periodic check is added. Not currently tracked as a backlog item — noted here for awareness only.
+
+---
+
 ### 2026-09-08 - Test Infrastructure Data-Loss Risk Surfaced by Unrelated Feature Work
 
 **Pattern**: While verifying a new endpoint, `tests/tests/conftest.py:24`'s unconditional `docker exec kato-redis redis-cli FLUSHALL` fired at test-session start and destroyed live Redis metadata (frequency, emotives, symbol affinity) that has no reliable reconstruction path per `scripts/rehydrate_redis.py`'s own documented limitations. This is the same underlying fragility — Redis metadata, once destroyed, has no exact reconstruction path — previously encountered in production in the 2026-04-13 Redis Rehydration & Persistence Fix (see `planning-docs/completed/features/2026-04-13-redis-rehydration-persistence-fix.md`, where persistence *was* off at the time and was subsequently turned on by default as part of that fix) but left unaddressed in test infrastructure, which still targets a live-named container (`kato-redis`) unconditionally.

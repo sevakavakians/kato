@@ -1,5 +1,5 @@
 # SPRINT_BACKLOG.md - Upcoming Work
-*Last Updated: 2026-09-08 (start.sh clean-data ClickHouse fix + local test data purge added to Recently Completed)*
+*Last Updated: 2026-09-08 (.env/dotenv-settings crash fix added to Recently Completed; REDIS_PERSISTENCE crash bug removed from Backlog; new dead-KATO_*-env-names P2 bug added)*
 
 ## Active Projects
 
@@ -469,15 +469,15 @@ Phase 4 (Symbol Statistics & Fail-Fast Architecture) is 100% complete. The Click
 
 ---
 
-### Bug: REDIS_PERSISTENCE=true in .env crashes KATO server run outside Docker
-**Priority**: P2 — blocks local (non-Docker) server runs when using the repo's default `.env`
-**Status**: Identified 2026-09-08 (discovered during Pattern Count Endpoint work)
-**Symptom**: Running the KATO FastAPI server locally (outside Docker) with the repo's `.env` sourced crashes at startup with a pydantic `ValidationError`
-**Root Cause**: `.env` sets `REDIS_PERSISTENCE=true` for use in `docker-compose.yml`'s redis service command line; `kato/config/settings.py`'s `Settings` class forbids extra/unrecognized env vars, so when `REDIS_PERSISTENCE` leaks into the kato process's own env (as it does outside Docker, where compose-level env scoping doesn't apply), `Settings` construction fails. The Docker container itself is unaffected since that var is never injected into the kato service's environment there.
+### Bug: Dead `KATO_*` env names via `json_schema_extra={'env': ...}` have no effect (pydantic-v1 idiom, ignored by v2)
+**Priority**: P2 — silent configuration no-op, not a crash
+**Status**: Identified 2026-09-08 (discovered during `.env`/dotenv-settings-crash bug fix)
+**Symptom**: `docker-compose.yml`'s `KATO_BATCH_SIZE=10000` has no effect; the container runs with `batch_size=1000` regardless
+**Root Cause**: `kato/config/settings.py` fields use `json_schema_extra={'env': 'KATO_BATCH_SIZE'}` (and likely other similarly-declared fields) to name an alternate env var — this is a pydantic-v1 idiom. pydantic-settings v2 does not read `json_schema_extra` for env-var resolution at all, so it is silently ignored; the field only ever binds to its v2-derived name (prefix + field name), never to the `KATO_*` name declared this way.
 **Fix Options**:
-1. Add `REDIS_PERSISTENCE` as a recognized (ignored) field on `Settings`
-2. Move `REDIS_PERSISTENCE` out of the shared `.env` into a docker-compose-only env file
-**Files**: `kato/config/settings.py`, `.env`
+1. Replace `json_schema_extra={'env': ...}` with the pydantic-settings v2 mechanism (`Field(validation_alias=...)` or an `AliasChoices`) for each affected field
+2. Audit all `Settings` fields for this pattern (not just `batch_size`) and correct each one
+**Files**: `kato/config/settings.py`, `docker-compose.yml` (env vars that assume the old names work)
 
 ---
 
@@ -537,6 +537,17 @@ Phased plan for scaling KATO to production workloads:
 ---
 
 ## Recently Completed
+
+### Bug Fix: `.env`'s `REDIS_PERSISTENCE` (and Nearly Every Other Key) Crashed KATO Run Outside Docker — COMPLETE (2026-09-08)
+**Priority**: P2 — resolved (root cause turned out far broader than originally logged)
+**Archive**: `planning-docs/completed/bugs/2026-09-08-env-dotenv-settings-crash.md`
+**Decision**: DECISION-016
+
+Originally logged as `REDIS_PERSISTENCE=true` crashing a locally-run (non-Docker) server. Real root cause: `Settings.model_config` declared `env_file='.env'` while inheriting `extra='forbid'`; pydantic-settings' dotenv loader forwards every `.env` key it can't match onto the model, so nearly every real KATO variable (`LOG_LEVEL`, `QDRANT_HOST`, `REDIS_URL`, `CLICKHOUSE_HOST`, ...) crashed it — `.env` was effectively unusable outside Docker, not merely fragile. Docker was always unaffected (`.env` never `COPY`ed into the image).
+
+Fix: new `kato/env_loader.py` loads `.env` into `os.environ` via `python-dotenv` (deterministic resolution order: `KATO_ENV_FILE` → repo-root `.env` → CWD `.env`; `KATO_SKIP_DOTENV=1` opt-out), called from `kato/__init__.py` before any config read since several hot paths read `os.environ` directly and never go through pydantic. `env_file`/`env_file_encoding` removed from `Settings.model_config`; `extra='forbid'` deliberately kept (still protects `KATO_CONFIG_FILE` YAML/JSON loading). `.env.example` rewritten (dead names removed); `kato.api.main` → `kato.services.kato_fastapi` corrected across 12 docs; new `make run` target; `requirements.lock` regenerated.
+
+Verified: crash gone, `.env` values genuinely apply, process env still beats `.env`, Docker unaffected, `make run` fully functional (observe/learn/count/predictions/clear-all all 200). Full suite 447 passed / 2 skipped / 5 failed (improvement on 446/2/6 baseline; remaining 5 are the known multi-worker backlog bug). Incidental lock-file drift also fixed: `xxhash` was missing from `requirements.lock` (never installed — `MINHASH_HASH_FUNC=xxhash` silently fell back to SHA-1) and stale `pymongo`/`dnspython` were still pinned despite MongoDB's v3.0 removal; both corrected, effective on the next `docker compose build --no-cache kato`. New P2 backlog item added for a still-open related issue: dead `KATO_*` env names via `json_schema_extra={'env': ...}` (pydantic-v1 idiom, ignored by v2) — see Backlog above.
 
 ### Bug Fix: `start.sh clean-data` ClickHouse No-Op + Local Test Data Purge — COMPLETE (2026-09-08)
 **Priority**: Medium — operational tooling correctness

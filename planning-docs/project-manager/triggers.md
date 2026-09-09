@@ -3,6 +3,32 @@
 
 ---
 
+## 2026-09-08 - Task Completion + Architectural Decision (`.env`/dotenv-settings Crash Bug Fixed — Root Cause Broader Than Originally Logged)
+
+**Trigger Type**: Primary — Task Completion (bug fix) + Architectural Decision (DECISION-016: load `.env` via `os.environ` in `kato/__init__.py`, not pydantic-settings `env_file=`)
+**Secondary**: New backlog item added (dead `KATO_*` env names); two incidental dependency-lock findings recorded
+
+**Event**: A P2 bug originally logged as `.env`'s `REDIS_PERSISTENCE=true` crashing a locally-run (non-Docker) KATO server was fixed. Investigation found the actual root cause was systemic: `Settings.model_config`'s `env_file='.env'` plus inherited `extra='forbid'` caused pydantic-settings' dotenv loader to forward every unmatched `.env` key onto the model, crashing on nearly all of them (not just `REDIS_PERSISTENCE`) while silently swallowing a couple of others (`SERVICE_NAME`, `SESSION_TTL`) without effect. Fixed by loading `.env` into `os.environ` via a new `kato/env_loader.py`, called first thing in `kato/__init__.py`, instead of through pydantic-settings' `env_file` mechanism — `extra='forbid'` deliberately kept. Full suite improved from 446/2/6 baseline to 447/2/5 (remaining 5 are the known multi-worker backlog bug, unrelated).
+
+**Key Findings**:
+- The bug report named one symptom (`REDIS_PERSISTENCE`) of a mechanism that affected nearly the entire `.env` file — reproducing the actual crash and reading the real pydantic-settings error, rather than fixing the literal reported symptom, was necessary to find the true scope
+- A fix scoped only to pydantic `Settings` would not have reached the several hot code paths that read `os.environ` directly and never go through pydantic at all (`kato/__init__.py` LOG_LEVEL, `pattern_processor.py` KATO_ARCHITECTURE_MODE, `kato_fastapi.py` SERVICE_NAME, `storage/*` REDIS_URL) — loading into `os.environ` itself was the only mechanism reaching all consumers uniformly
+- `extra='forbid'` was deliberately kept on `Settings` even after removing `env_file=` — it still protects `KATO_CONFIG_FILE` YAML/JSON validation, an unrelated but real safety net
+- Regenerating `requirements.lock` (needed because `python-dotenv` was promoted to explicit) as a side effect surfaced two unrelated pieces of drift: `xxhash` was declared but never actually installed (silent SHA-1 fallback for the documented `MINHASH_HASH_FUNC=xxhash` optimization), and `pymongo`/`dnspython` were still installed despite MongoDB's v3.0 removal
+- A new P2 backlog bug was identified but NOT fixed: `json_schema_extra={'env': ...}` on `Settings` fields is a pydantic-v1 idiom silently ignored by pydantic-settings v2, so `docker-compose.yml`'s `KATO_BATCH_SIZE=10000` has no effect
+
+**Documentation Actions**:
+- Created: `planning-docs/completed/bugs/2026-09-08-env-dotenv-settings-crash.md`
+- Updated: `planning-docs/DECISIONS.md` (new DECISION-016)
+- Updated: `planning-docs/SPRINT_BACKLOG.md` (removed fixed bug from Backlog, new Recently Completed entry, new P2 backlog item for dead `KATO_*` env names)
+- Updated: `planning-docs/SESSION_STATE.md` (Current Task, new Previous Task block, Next Immediate Action renumbered with new item, new Recent Achievements entry, Last Updated)
+- Updated: `planning-docs/README.md` (Last Major Update refreshed, Performance line corrected for the `xxhash` finding)
+- Updated: `planning-docs/project-manager/patterns.md` (two new pattern entries: narrow-report-vs-systemic-cause, stale-lock-file discovery)
+- Updated: `planning-docs/project-manager/maintenance-log.md`
+- Updated: `planning-docs/project-manager/triggers.md` (this entry)
+
+---
+
 ## 2026-09-08 - Task Completion + Knowledge Refinement (start.sh clean-data ClickHouse No-Op Fixed; Local Test Data Purged; Persistence Claim Corrected)
 
 **Trigger Type**: Primary — Task Completion (bug fix: `start.sh clean-data` ClickHouse no-op) + Knowledge Refinement (an earlier same-day claim that Redis persistence was disabled was wrong; propagated to 3 planning-doc locations, all corrected)

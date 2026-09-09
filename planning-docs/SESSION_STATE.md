@@ -1,10 +1,22 @@
 # SESSION_STATE.md - Current Development State
-*Last Updated: 2026-09-08 (start.sh clean-data ClickHouse no-op bug: FIXED; all local test data purged at user's direction; earlier Redis-persistence-disabled claim corrected — persistence was and is enabled)*
+*Last Updated: 2026-09-08 (.env/dotenv-settings crash bug: FIXED — root cause was broader than originally logged; nearly all .env keys crashed or were silently swallowed outside Docker)*
 
 ## Current Task
-**No active task — start.sh clean-data ClickHouse fix + local test data purge is COMPLETE. Pick next item from sprint backlog (Multi-Worker Uvicorn + Concurrent Training Safety is next queued).**
+**No active task — `.env`/dotenv-settings crash fix is COMPLETE. Pick next item from sprint backlog (Multi-Worker Uvicorn + Concurrent Training Safety is next queued).**
 
 ## Previous Task (context preserved)
+**`.env`/dotenv-settings Crash Bug Fix — COMPLETE (2026-09-08)**
+- Status: COMPLETE — bug fixed, verified end-to-end
+- Ad-hoc bug fix (originally logged P2 backlog item, not from a queued initiative); Multi-Worker Uvicorn initiative below remains next in the sprint backlog
+- Decision: DECISION-016 in `planning-docs/DECISIONS.md`
+- Archive: `planning-docs/completed/bugs/2026-09-08-env-dotenv-settings-crash.md`
+- Bug (as originally logged): `.env`'s `REDIS_PERSISTENCE=true` crashed a locally-run (non-Docker) KATO server with a pydantic `ValidationError`
+- Real root cause (broader): `Settings.model_config` declared `env_file='.env'` while inheriting `extra='forbid'`; pydantic-settings' dotenv loader forwards every unmatched `.env` key onto the model, so nearly every real KATO variable (`LOG_LEVEL`, `QDRANT_HOST`, `REDIS_URL`, `CLICKHOUSE_HOST`) crashed it, while a couple (`SERVICE_NAME`, `SESSION_TTL`) were silently swallowed via accidental field-name prefix matching. `.env` was effectively unusable outside Docker. Docker was never affected (`.env` not `COPY`ed into the image)
+- Fix: new `kato/env_loader.py` loads `.env` into `os.environ` via `python-dotenv` (deterministic order: `KATO_ENV_FILE` -> repo-root `.env` -> CWD `.env`; `KATO_SKIP_DOTENV=1` opt-out), called first thing in `kato/__init__.py` (reaches both pydantic `Settings` and the several hot paths that read `os.environ` directly and never go through pydantic); `env_file`/`env_file_encoding` removed from `Settings.model_config`; `extra='forbid'` deliberately kept (still protects `KATO_CONFIG_FILE` validation); `.env.example` rewritten (dead names removed); `kato.api.main` -> `kato.services.kato_fastapi` corrected across 12 docs; new `make run` target; `requirements.lock` regenerated
+- Verification: crash gone; `.env` values (`QDRANT_PORT`/`LOG_LEVEL`/`REDIS_ENABLED`/`SESSION_TTL`) confirmed genuinely applying; process env still beats `.env`; `KATO_SKIP_DOTENV` opts out; CWD-independent; `make run` fully functional (observe/learn/patterns-count/predictions/clear-all all 200, learn->count 0->1->0); Docker unaffected (no `.env` in image, compose values still win). Full suite 447 passed / 2 skipped / 5 failed (improvement on 446/2/6 baseline; remaining 5 are the known multi-worker websocket/session backlog bug)
+- Incidental findings fixed via the lock regeneration: `xxhash` was declared in `requirements.txt` but missing from `requirements.lock` (never installed in the container — `MINHASH_HASH_FUNC=xxhash` silently fell back to SHA-1); stale `pymongo`/`dnspython` were still pinned despite MongoDB's v3.0 removal (currently installed in the running container). Both corrected in the lock file; not yet reflected in the running container until the next `docker compose build --no-cache kato`
+- New backlog item added: dead `KATO_*` env names via `json_schema_extra={'env': ...}` (pydantic-v1 idiom, ignored by pydantic-settings v2) — `docker-compose.yml`'s `KATO_BATCH_SIZE=10000` has no effect; P2, see `planning-docs/SPRINT_BACKLOG.md`
+
 **`start.sh clean-data` ClickHouse No-Op Bug Fix + Local Test Data Purge — COMPLETE (2026-09-08)**
 - Status: COMPLETE — bug fixed, verified end-to-end, then used to purge all local test data at the user's explicit direction
 - Ad-hoc bug fix + user-directed maintenance action (not from a queued initiative); Multi-Worker Uvicorn initiative below remains next in the sprint backlog
@@ -178,7 +190,7 @@
 ## Next Immediate Action
 **Resume Multi-Worker Uvicorn + Concurrent Training Safety**
 
-Pattern Count Endpoint work is complete. The next queued initiative is multi-worker uvicorn support (see SPRINT_BACKLOG.md for full plan). Known backlog bugs (all P2, non-blocking):
+The `.env`/dotenv-settings crash fix is complete. The next queued initiative is multi-worker uvicorn support (see SPRINT_BACKLOG.md for full plan). Known backlog bugs (all P2, non-blocking):
 
 1. **Bug: patterns_data async_insert visibility race (Root cause #1)** — P2
    - `knowledge_base.py:~413` `wait_for_async_insert=0` on patterns_data writes; no server-queue drain on the learn/predict hot path
@@ -190,10 +202,10 @@ Pattern Count Endpoint work is complete. The next queued initiative is multi-wor
    - 5 tests also fail on WebSocket `session.created`/`session.destroyed` event timeouts (5s)
    - Confirmed still reproducing 2026-09-08 during Pattern Count Endpoint verification (fails in isolation even against a freshly flushed Redis)
 
-3. **Bug: `REDIS_PERSISTENCE=true` in `.env` crashes KATO server run outside Docker** — P2 (discovered 2026-09-08)
-   - `.env` sets `REDIS_PERSISTENCE=true`; `kato/config/settings.py` `Settings` forbids extra inputs, so running the KATO server locally (outside Docker) crashes with a pydantic `ValidationError`
-   - Docker container unaffected — that var is only consumed by redis's command line in docker-compose, never injected into the kato service
-   - Fix: either allow/ignore the extra env var in `Settings`, or scope it out of the shared `.env` so it's not visible to the kato process's env
+3. **Bug: Dead `KATO_*` env names via `json_schema_extra={'env': ...}` have no effect** — P2 (discovered 2026-09-08, during `.env`/dotenv-settings crash bug fix)
+   - `json_schema_extra={'env': 'KATO_BATCH_SIZE'}` is a pydantic-v1 idiom; pydantic-settings v2 does not read it for env-var resolution, so it's silently ignored
+   - Symptom: `docker-compose.yml`'s `KATO_BATCH_SIZE=10000` has no effect — container runs with `batch_size=1000` regardless
+   - Fix: replace with the v2 mechanism (`Field(validation_alias=...)` / `AliasChoices`); audit all `Settings` fields for the same pattern, not just `batch_size`
 
 4. **Bug: Multi-worker (`KATO_WORKERS=4`) breaks websocket event delivery and concurrent session modification consistency** — P2 (discovered 2026-09-08, characterized during conftest.py FLUSHALL bug fix verification)
    - Websocket events are published in-process only and are not fanned out across uvicorn workers — a client connected to one worker misses events published by another
@@ -264,6 +276,15 @@ Make KatoProcessor stateless following standard web application patterns:
 - **Related Work**: planning-docs/initiatives/hybrid-clickhouse-redis.md (v3.0 architecture)
 
 ## Recent Achievements
+- **Bug Fix: `.env`/dotenv-settings Crash — COMPLETE** (2026-09-08): BUG FIX (P2, root cause broader than originally logged)
+  - **What**: Originally logged as `.env`'s `REDIS_PERSISTENCE=true` crashing a locally-run (non-Docker) KATO server. Real root cause: `Settings.model_config` declared `env_file='.env'` while inheriting `extra='forbid'`; pydantic-settings' dotenv loader forwards every key it can't match onto the model, so nearly every real `.env` variable (`LOG_LEVEL`, `QDRANT_HOST`, `REDIS_URL`, `CLICKHOUSE_HOST`) crashed it, while a couple (`SERVICE_NAME`, `SESSION_TTL`) were silently swallowed via accidental prefix-matching. `.env` was effectively unusable outside Docker; Docker itself was never affected (`.env` not `COPY`ed into the image)
+  - **Fix**: New `kato/env_loader.py` loads `.env` into `os.environ` via `python-dotenv` (order: `KATO_ENV_FILE` -> repo-root `.env` -> CWD `.env`; `KATO_SKIP_DOTENV=1` opt-out), called first in `kato/__init__.py` so it reaches both pydantic `Settings` and the several hot paths reading `os.environ` directly (never through pydantic). `env_file`/`env_file_encoding` removed from `Settings.model_config`; `extra='forbid'` deliberately kept (still protects `KATO_CONFIG_FILE` validation). `.env.example` rewritten (dead names removed); `kato.api.main` -> `kato.services.kato_fastapi` corrected across 12 docs; new `make run` target; `requirements.lock` regenerated
+  - **Verification**: crash reproduced then gone; `.env` values (`QDRANT_PORT`/`LOG_LEVEL`/`REDIS_ENABLED`/`SESSION_TTL`) confirmed genuinely applying; process env still beats `.env`; `KATO_SKIP_DOTENV` opts out; CWD-independent; `make run` produced a fully working non-Docker server (observe/learn/patterns-count/predictions/clear-all all 200, learn->count 0->1->0); Docker unaffected (compose values still win)
+  - **Test results**: full suite 447 passed / 2 skipped / 5 failed — improvement on the 446/2/6 baseline; remaining 5 are the already-characterized multi-worker websocket/session backlog bug (item 4 below), unrelated
+  - **Incidental findings fixed via lock regeneration**: `xxhash` was declared in `requirements.txt` but missing from `requirements.lock` (never installed in the container; `MINHASH_HASH_FUNC=xxhash` silently fell back to SHA-1); stale `pymongo`/`dnspython` still pinned in the lock despite MongoDB's v3.0 removal (currently installed in the running container). Both corrected in the lock file — effective on the next `docker compose build --no-cache kato`, not yet in the running container
+  - **New backlog item**: dead `KATO_*` env names via `json_schema_extra={'env': ...}` (pydantic-v1 idiom, ignored by pydantic-settings v2) — `docker-compose.yml`'s `KATO_BATCH_SIZE=10000` has no effect — P2, see item 3 above and `planning-docs/SPRINT_BACKLOG.md`
+  - **Decision**: DECISION-016 in `planning-docs/DECISIONS.md`
+  - **Archive**: `planning-docs/completed/bugs/2026-09-08-env-dotenv-settings-crash.md`
 - **Bug Fix: `start.sh clean-data` ClickHouse No-Op — COMPLETE + Local Test Data Purge** (2026-09-08): BUG FIX + MAINTENANCE
   - **What**: `./start.sh clean-data`'s ClickHouse step ran `DROP TABLE IF EXISTS default.patterns_data` — wrong database (tables live in `kato`, not `default`), so the command silently no-opped (masked by `IF EXISTS` + `2>/dev/null`) while unconditionally printing "✓ All database data has been cleared!" It also never referenced `patterns_metadata`, `lsh_buckets`, or `pattern_stats` at all
   - **Fix**: Replaced with a `TRUNCATE TABLE IF EXISTS kato.$table` loop over all four real tables (preserves schema/partitioning, no `init.sql` re-run needed); removed `2>/dev/null` so future failures print a per-table warning; added Redis `BGREWRITEAOF` after the existing `FLUSHALL` (FLUSHALL empties the keyspace but doesn't shrink the on-disk AOF)

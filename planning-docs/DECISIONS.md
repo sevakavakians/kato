@@ -4,6 +4,37 @@
 
 ---
 
+## 2026-09-08 - DECISION-016: Load `.env` via `os.environ` in `kato/__init__.py`, Not via pydantic-settings `env_file`
+**Decision**: KATO no longer reads `.env` through pydantic-settings' `env_file=` mechanism on `Settings.model_config`. Instead, a new module `kato/env_loader.py` loads `.env` into `os.environ` (via `python-dotenv`, `override=False`) as the very first action in `kato/__init__.py`, before any config or settings code runs. `Settings` keeps `extra='forbid'`.
+**Status**: COMPLETE (2026-09-08)
+**Confidence**: High
+
+**Context**: A P2 bug was logged as `.env`'s `REDIS_PERSISTENCE=true` crashing a locally-run (non-Docker) KATO server. Investigation found the actual root cause was far broader: `Settings.model_config` declared `env_file='.env'`, and pydantic-settings' `DotEnvSettingsSource` enumerates the *entire* `.env` file, forwarding every key it cannot match as a declared field onto the model. `Settings` inherits `extra='forbid'` and declares only 8 top-level fields (7 nested config objects plus `environment`/`debug`/`config_file`) — it does not flatten to the individual leaf variable names KATO's own code actually reads (`LOG_LEVEL`, `QDRANT_HOST`, `REDIS_URL`, `CLICKHOUSE_HOST`, etc.). The practical effect: nearly every real `.env` key crashed `Settings()` construction with `extra_forbidden`, while a couple (`SERVICE_NAME`, `SESSION_TTL`) were silently swallowed via accidental prefix-matching against the `service`/`session` nested fields without ever taking effect. `.env` was effectively unusable outside Docker. Docker itself was never exposed to this — `.env` is not `COPY`ed into the image, and compose supplies env vars directly.
+
+Compounding the problem: several hot code paths read `os.environ` directly and never go through pydantic `Settings` at all (`kato/__init__.py`'s `LOG_LEVEL`, `kato/workers/pattern_processor.py`'s `KATO_ARCHITECTURE_MODE`, `kato/services/kato_fastapi.py`'s `SERVICE_NAME`, `kato/storage/*`'s `REDIS_URL`). A fix scoped only to `Settings` (e.g. relaxing `extra` or adding every leaf name as a field) would not have reached these.
+
+**Decision Details**:
+1. **Populate `os.environ`, not a pydantic source**: A dedicated loader (`kato/env_loader.py`) calls `load_dotenv(path, override=False)` so `.env` values land in `os.environ` exactly where every consumer — pydantic `Settings` (via its existing env-var reading) and the direct `os.environ` readers alike — already looks. This is the only mechanism that reaches both without duplicating logic in each direct-reader call site.
+2. **Call it from `kato/__init__.py`, first**: The parent package `__init__` always executes before `kato/config/` (or any submodule) is imported, and before the import-time `LOG_LEVEL` read in that same file. This is the earliest point that is guaranteed to run for every entry path into the package.
+3. **Deterministic path resolution**: `KATO_ENV_FILE` (if set) short-circuits to exactly that path; otherwise repo-root `.env`; otherwise CWD `.env`. Explicitly not "search upward from CWD" — deterministic and easy to reason about. `KATO_SKIP_DOTENV=1` is a hard opt-out for environments (e.g. some CI, some Docker paths) that want no `.env` involvement at all. The loader is idempotent (`_loaded` guard) and never raises — a missing or malformed `.env` degrades to "no values loaded," not a crash.
+4. **`extra='forbid'` stays on `Settings`**: With `env_file` removed, the dotenv-forwarding path that caused the original crash can no longer fire — `Settings` now only ever sees `os.environ`, which was always subject to `extra='forbid'` in the same way. Relaxing `extra` was considered and rejected: `forbid` is exactly what makes an unrecognized key in a `KATO_CONFIG_FILE` YAML/JSON fail loudly during `load_from_file`, which is a real, independent protection worth keeping.
+5. **Do not reintroduce `env_file=` on `Settings.model_config`**: recorded directly in `kato/env_loader.py`'s module docstring as well as here, since the failure mode this decision fixes is not obvious from reading `settings.py` alone.
+
+**Rationale**:
+- A fix inside `Settings` alone could not have reached the `os.environ`-direct readers; a fix inside `os.environ` alone (this decision) reaches every consumer uniformly with no per-call-site special-casing
+- Keeping `extra='forbid'` preserves a real safety net (`KATO_CONFIG_FILE` validation) that had nothing to do with the actual bug once `env_file=` is gone
+- `override=False` preserves the existing, expected precedence (explicit process/shell env wins over `.env` defaults) with no behavior change for anyone already setting env vars explicitly
+
+**Alternatives Considered**:
+- Add every real leaf variable name as a recognized field on `Settings` (or a catch-all): rejected — doesn't fix the `os.environ`-direct readers, and permanently couples `Settings`' schema to `.env`'s contents
+- Relax `Settings` to `extra='ignore'`/`'allow'`: rejected — silently reintroduces the "SERVICE_NAME/SESSION_TTL swallowed without effect" failure mode for any future accidental name collision, and removes the `KATO_CONFIG_FILE` validation safety net
+- Scope `REDIS_PERSISTENCE` out of the shared `.env` into a docker-compose-only file (the original narrower fix option): rejected once the broader root cause was found — would have left every other crashing/swallowed key unfixed
+
+**Affected Files**: `kato/env_loader.py` (new), `kato/__init__.py`, `kato/config/settings.py`, `requirements.txt`, `requirements.lock`, `Makefile`, `.env.example`, 12 documentation files
+**Archive**: `planning-docs/completed/bugs/2026-09-08-env-dotenv-settings-crash.md`
+
+---
+
 ## 2026-09-08 - DECISION-015: ClickHouse is the Authoritative Pattern Count Source (Not the Redis Counter)
 **Decision**: The new `GET /patterns/count` endpoint counts patterns directly from ClickHouse (`PatternOperations.get_pattern_count()`), not from the existing Redis `total_unique_patterns` counter.
 **Status**: COMPLETE (2026-09-08)

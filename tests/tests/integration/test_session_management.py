@@ -13,6 +13,7 @@ Tests cover:
 """
 
 import asyncio
+import os
 import time
 import uuid
 
@@ -225,7 +226,26 @@ class TestSessionLifecycle:
 
     @pytest.mark.asyncio
     async def test_session_cleanup(self, kato_client):
-        """Test manual session cleanup"""
+        """Test manual session cleanup.
+
+        /sessions/count is served from a per-process TTL cache
+        (SESSION_COUNT_CACHE_TTL_SECONDS, default 5s), and the service runs
+        several uvicorn workers. A count read inside the TTL may be stale on
+        whichever worker answers, so the contract under test is: once the TTL
+        has elapsed, every worker reports the true count. Each read is made
+        after the TTL and repeated enough times to reach every worker.
+        """
+        cache_ttl = float(os.environ.get('SESSION_COUNT_CACHE_TTL_SECONDS', '5'))
+        settle = cache_ttl + 0.5
+        reads_per_check = 16
+
+        async def read_settled_count() -> int:
+            await asyncio.sleep(settle)
+            counts = [await kato_client.get_active_session_count() for _ in range(reads_per_check)]
+            assert len(set(counts)) == 1, \
+                f"Workers disagree on active session count after cache TTL: {sorted(set(counts))}"
+            return counts[0]
+
         # Create sessions
         sessions = []
         for i in range(5):
@@ -237,8 +257,8 @@ class TestSessionLifecycle:
                 {"strings": [f"data_{i}"]}
             )
 
-        # Get active session count
-        initial_count = await kato_client.get_active_session_count()
+        # Get active session count (after the cache TTL, so it includes ours)
+        initial_count = await read_settled_count()
         assert initial_count >= 5
 
         # Delete sessions
@@ -250,8 +270,8 @@ class TestSessionLifecycle:
             with pytest.raises(SessionNotFoundError):
                 await kato_client.get_session_stm(session['session_id'])
 
-        # Active count should be reduced
-        final_count = await kato_client.get_active_session_count()
+        # Active count should be reduced on every worker once the TTL elapses
+        final_count = await read_settled_count()
         assert final_count == initial_count - 5
 
     @pytest.mark.asyncio

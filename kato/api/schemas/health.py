@@ -24,3 +24,4 @@ class HealthResponse(BaseModel):
     last_collection: float
     active_sessions: int
     timestamp: str
+    worker_pid: int

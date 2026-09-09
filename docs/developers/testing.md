@@ -134,6 +134,7 @@ tests/tests/
 ├── integration/          # End-to-end workflow tests
 │   ├── test_pattern_learning.py
 │   ├── test_vector_e2e.py
+│   ├── test_worker_topology.py   # Per-KATO_WORKERS containers (see below)
 │   └── ...
 ├── api/                  # FastAPI endpoint tests
 │   └── test_fastapi_endpoints.py
@@ -143,6 +144,30 @@ tests/tests/
     ├── kato_fixtures.py
     └── test_helpers.py
 ```
+
+### Worker-Topology Tests
+
+`tests/tests/integration/test_worker_topology.py` covers behaviour that lives
+inside a single uvicorn worker process — WebSocket event delivery and the
+per-process `/sessions/count` cache. Rather than test against the shared
+service (where the outcome depends on which worker happens to accept a
+connection), each test is parametrized over `KATO_WORKERS` ∈ {1, 2, 4}: a
+module-scoped fixture launches a throwaway `kato:latest` container per value
+on the compose network, copying the running `kato` container's environment so
+only the variable under test differs.
+
+Determinism comes from three things: the fixture verifies the worker count
+from uvicorn's `Started server process [pid]` lines; `/health` and the
+WebSocket `state.snapshot` carry `worker_pid`, so a test proves it holds
+clients on at least two distinct workers before asserting an event reaches all
+of them; and `/sessions/count` is read only after its cache TTL. A cross-worker
+delivery gap therefore fails on every run, with the missed worker pids in the
+assertion message.
+
+Requirements: docker CLI, the `kato:latest` image, and the compose `kato`
+container running (`./start.sh start`). The module skips itself otherwise.
+Override the image or reference container with `KATO_TOPOLOGY_IMAGE` /
+`KATO_TOPOLOGY_REFERENCE_CONTAINER`.
 
 ## Current Test Status
 

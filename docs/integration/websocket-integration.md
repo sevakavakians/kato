@@ -152,9 +152,19 @@ ws://kato:8000/ws/events
 - Use same auth as HTTP API (JWT token in query param or header)
 - Example: `ws://kato:8000/ws/events?token=<jwt_token>`
 
+**Cross-Worker Delivery:**
+KATO runs several uvicorn workers and each holds only the WebSocket
+connections it accepted. When `REDIS_URL` is set, every event is published to
+the Redis pub/sub channel `kato:ws_events` (override with
+`KATO_WS_EVENTS_CHANNEL`) and each worker delivers what it receives to its own
+connections — so an event reaches every client exactly once regardless of
+which worker served the HTTP request that raised it. Without Redis, delivery is
+local to the worker, which is complete only for single-worker deployments.
+
 **Connection Lifecycle:**
 1. Client connects to `/ws/events`
-2. Server sends initial state snapshot (optional)
+2. Server sends initial state snapshot (optional). Its `data.worker_pid` is the
+   uvicorn worker process that owns this connection.
 3. Server pushes events as they occur
 4. Client sends heartbeat/ping every 30s
 5. Server responds with pong
@@ -310,7 +320,8 @@ class EventBroadcaster:
             "timestamp": datetime.now().isoformat(),
             "data": {
                 "active_sessions": await get_active_session_count(),
-                "system_status": "healthy"
+                "system_status": "healthy",
+                "worker_pid": os.getpid()  # worker that owns this connection
             }
         }
         await websocket.send_text(json.dumps(state))

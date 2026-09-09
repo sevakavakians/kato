@@ -1,6 +1,56 @@
 # DECISIONS.md - Architectural & Design Decision Log
 *Append-Only Log - Started: 2025-08-29*
-*Last Updated: 2026-09-09 (DECISION-019: anomalies/fuzzy_matches breaking field split + repeated-symbol multiset fix added)*
+*Last Updated: 2026-09-09 (DECISION-020: worker-topology tests replace flaky multi-worker tests; broadcaster gap confirmed deterministically)*
+
+---
+
+## 2026-09-09 - DECISION-020: Replace Flaky Multi-Worker Tests with Deterministic Worker-Topology Tests
+**Decision**: Delete the five tests whose pass/fail depended on the shared dev container's fixed `KATO_WORKERS=4` runtime topology (4 websocket event-delivery tests in `test_websocket_events.py` + `test_session_cleanup` in `test_session_management.py`) and replace them with a new `tests/tests/integration/test_worker_topology.py` that launches its own throwaway `kato:latest` containers at `KATO_WORKERS` in {1, 2, 4} and proves each test client sits on ≥2 distinct worker PIDs before asserting cross-worker behavior.
+**Status**: COMPLETE — tests written, run, and results characterized; NOT committed yet. The underlying cross-worker broadcaster bug this reveals is confirmed but **NOT fixed** (out of scope, not requested).
+**Classification**: Testing strategy / infrastructure decision, bundled with a bug re-characterization (not a code fix)
+**Confidence**: High — reproduced deterministically across repeated runs at each topology, not sampled from a single run
+
+### Context
+Cross-worker bugs (websocket event fan-out not reaching all workers, session-count consistency) were previously only observable as intermittent failures against the one shared `kato` container on `:8000` (`KATO_WORKERS=4` by default). This made three things hard: (1) telling a genuine regression apart from "just the known multi-worker flakiness" during unrelated verification work — this happened repeatedly earlier the same day, during the `anomalies`/fuzzy_matches (DECISION-019), metadata-sidecar (DECISION-018), and configuration-audit (DECISION-017) work; (2) testing the `KATO_WORKERS=1` (works) vs. `>1` (fails) contrast at all, since the shared container can't be reconfigured mid-suite without disrupting other work; (3) getting a stable failure count to report as the full-suite baseline.
+
+### Decision
+Own the container lifecycle inside the test suite instead of testing against whatever the shared dev container happens to be running. `test_worker_topology.py`'s fixture launches a throwaway container per `KATO_WORKERS` value (1, 2, 4), copying the real container's environment so only worker count (and a shortened `SESSION_COUNT_CACHE_TTL_SECONDS=2`, for faster iteration) differ. Readiness and true worker count come from parsing uvicorn's own `"Started server process [pid]"` log lines, not from trusting the requested `KATO_WORKERS` value. Delivery-assertion tests open websocket clients until they provably span ≥2 distinct worker PIDs (bounded at `16 * workers` attempts) before asserting — this is what turns "sometimes fails depending on which worker a connection lands on" into "fails every time an in-process broadcaster is used."
+
+A new `worker_pid` (`os.getpid()`) field was added to `/health` and websocket `state.snapshot` responses (`kato/api/endpoints/health.py`, `kato/api/schemas/health.py`, `kato/websocket/event_broadcaster.py`) — this is what lets a test client discover which worker it's talking to, which the PID-spanning mechanism above depends on.
+
+### Rationale
+- A test that manufactures the exact topology it needs to observe a bug is strictly better evidence than a test that happens to fail sometimes against a container someone else configured for unrelated reasons.
+- Bounding client connections until PID diversity is proven (rather than opening a fixed number and hoping) removes the last source of test-level nondeterminism — the *test's own connection distribution* — leaving only the real product behavior (broadcaster does or doesn't fan out) as the source of pass/fail.
+- Testing `KATO_WORKERS=1` alongside `2` and `4` gives a genuine control: passing at 1 and failing at 2/4 is direct causal evidence the topology (not something else) is the failure driver.
+
+### Bundled Finding (Bug Confirmation, Not a Fix)
+Running the new suite confirms deterministically — not intermittently — that the in-process `EventBroadcaster` (`kato/websocket/event_broadcaster.py`, a per-process `active_connections` list) cannot deliver websocket events across uvicorn workers: at `KATO_WORKERS=2` and `4`, the 3 delivery tests (`session_created_event_reaches_every_client`, `session_destroyed_event_reaches_every_client`, `client_sees_full_session_lifecycle_in_order`) fail every run with the specific missed worker PIDs named in the assertion (e.g. "reached 0 client(s), missed pids [7, 10]"); at `KATO_WORKERS=1` all 5 tests pass. `container_runs_requested_worker_count` and `session_count_converges_on_every_worker` pass at every topology. **This moves the known full-suite failure count from "2-4 random failures per run" to exactly 6 deterministic failures (3 tests × 2 multi-worker topologies) — a characterization change, not a regression.** The fix itself (making the broadcaster cross-worker, most likely via Redis pub/sub fan-out) was **not started** — not requested, and out of scope for this test-infrastructure change.
+
+### Knowledge Refinement Bundled In: Root Cause #3 Recharacterized
+The 2026-06-18-filed backlog bug "session delete does not decrement active-session count" (Root cause #3, `test_session_cleanup`) is **not a product bug** as originally characterized. The rewritten test waits for `SESSION_COUNT_CACHE_TTL_SECONDS` (default 5) + 0.5s before reading `/sessions/count`, and requires 16 consecutive reads to agree; it now passes deterministically against the live 4-worker container. The count converges correctly — the original test simply read a per-process cached value before its TTL expired. The websocket-event-timeout half of the same Root cause #3 entry is likewise not a distinct bug: it is the same cross-worker broadcaster gap covered above, now merged into that backlog entry with deterministic confirmation instead of the original "5 tests time out" symptom description. See `planning-docs/SPRINT_BACKLOG.md`.
+
+### Alternatives Considered
+1. **Leave the flaky tests as-is, keep dismissing them case-by-case during unrelated verification** — rejected: this cost real time repeatedly the same day (three separate pieces of unrelated work each had to re-confirm "yes, those are the known failures") and never produced a stable, citable failure count.
+2. **Just delete the flaky tests with no replacement** — rejected: would lose the only test coverage that exercises multi-worker websocket delivery and session-count convergence at all, and would hide a real (if out-of-scope-to-fix-today) product gap.
+3. **Chosen: replace with self-contained topology tests that manufacture the exact condition needed** — deterministic, gives a real single-worker control, and produces a stable, well-understood failure count going forward.
+
+### Implementation
+**New file**: `tests/tests/integration/test_worker_topology.py` (5 tests: `container_runs_requested_worker_count`, `session_created_event_reaches_every_client`, `session_destroyed_event_reaches_every_client`, `client_sees_full_session_lifecycle_in_order`, `session_count_converges_on_every_worker`).
+
+**Modified**: `tests/tests/integration/test_websocket_events.py` (removed `test_session_created_event`, `test_session_destroyed_event`, `test_multiple_websocket_connections`, `TestQuickStartExample` — moved to the topology module; kept connection/ping-pong/disconnect-cleanup tests); `tests/tests/integration/test_session_management.py::test_session_cleanup` (rewritten to honor the `/sessions/count` TTL cache, see above).
+
+**Product code** (3 files): `kato/api/endpoints/health.py`, `kato/api/schemas/health.py` — `worker_pid` added to `/health`; `kato/websocket/event_broadcaster.py` — `worker_pid` added to `state.snapshot`.
+
+**Docs updated** (4 files): `docs/reference/api/health.md`, `docs/integration/websocket-integration.md`, `docs/developers/testing.md` (new "Worker-Topology Tests" section), `CHANGELOG.md` `[Unreleased]` "Added".
+
+### Verification
+`KATO_WORKERS=1`: 5/5 topology tests pass. `KATO_WORKERS=2` and `4`: 2/5 pass (the 3 delivery tests fail deterministically as described above) on each. Trimmed `test_websocket_events.py`: 3/3 pass. Rewritten `test_session_cleanup`: passes against the live 4-worker container. `tests/tests/api`: 32 passed / 1 skipped / 1 failed (`test_metrics_collection_after_requests`, pre-existing, unrelated — see `planning-docs/SPRINT_BACKLOG.md`). Ruff: new topology file clean; other findings in touched files pre-existing.
+
+### Open Item — Flagged, Not Decided
+Whether to fix the cross-worker broadcaster (e.g. Redis pub/sub fan-out) before the next release is a human decision, not made here — flagged in `planning-docs/project-manager/pending-updates.md` alongside the still-open DECISION-019 major-version-bump question. Nothing from this work has been committed yet.
+
+**Affected Files**: `tests/tests/integration/test_worker_topology.py` (new), `tests/tests/integration/test_websocket_events.py`, `tests/tests/integration/test_session_management.py`, `kato/api/endpoints/health.py`, `kato/api/schemas/health.py`, `kato/websocket/event_broadcaster.py`, `docs/reference/api/health.md`, `docs/integration/websocket-integration.md`, `docs/developers/testing.md`, `CHANGELOG.md`
+**Archive**: `planning-docs/completed/features/2026-09-09-worker-topology-tests-and-worker-pid.md`
 
 ---
 

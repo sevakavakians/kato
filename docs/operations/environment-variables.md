@@ -285,6 +285,18 @@ REDIS_ENABLED=false  # Disable (testing/minimal setup)
 
 ## Learning Configuration
 
+#### KATO_WS_EVENTS_CHANNEL
+**Type**: string | **Default**: `kato:ws_events` | **Required**: No
+
+Redis pub/sub channel used to fan WebSocket events (`session.created`,
+`session.destroyed`, ...) out to every uvicorn worker. Each worker subscribes at
+startup and delivers what it receives to the WebSocket connections it holds, so
+an event reaches every client exactly once regardless of which worker served the
+HTTP request. Only used when `REDIS_URL` is set; without Redis, events are
+delivered to the publishing worker's own connections only (complete for
+`KATO_WORKERS=1`). Change it when several KATO deployments share one Redis and
+must not see each other's events.
+
 ### MAX_PATTERN_LENGTH
 **Type**: integer | **Default**: `0` (manual) | **Range**: 0-1000
 

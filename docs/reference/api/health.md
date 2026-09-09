@@ -24,9 +24,15 @@ GET /health
   "metrics_collected": 1234,
   "last_collection": 1699900000.0,
   "active_sessions": 42,
-  "timestamp": "2025-11-13T12:00:00Z"
+  "timestamp": "2025-11-13T12:00:00Z",
+  "worker_pid": 7
 }
 ```
+
+`worker_pid` is the uvicorn worker process that served this request. Under
+multi-worker deployments (`KATO_WORKERS` > 1) consecutive calls may be answered
+by different workers; the field lets clients and tests attribute per-process
+state (metrics, caches, WebSocket connections) to a specific worker.
 
 **Status Values**:
 - `healthy`: All systems operational

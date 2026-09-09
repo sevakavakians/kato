@@ -7,11 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`worker_pid`** on `/health` responses and on the WebSocket `state.snapshot` event: the uvicorn worker process that served the request / owns the connection. Lets clients and tests reason about cross-worker delivery.
+- **Worker-topology tests** (`tests/tests/integration/test_worker_topology.py`): launch a dedicated `kato:latest` container per `KATO_WORKERS` value (1, 2, 4) and assert the same WebSocket-delivery and `/sessions/count` contracts against each. Clients are provably placed on ≥2 workers before asserting delivery, so the in-process `EventBroadcaster` limitation now fails deterministically instead of by scheduling luck. Replaces the four scheduling-dependent websocket tests and the immediate-consistency assertion in `test_session_cleanup`, which now honours the documented `/sessions/count` cache TTL.
+
 ### Changed (BREAKING)
 - **`anomalies` prediction field** is now a flat list of every symbol that deviates from the pattern: missing symbols, then extras, then the observed token of each fuzzy match. It was previously the list of fuzzy-match records.
 - **New `fuzzy_matches` prediction field** carries the `{observed, expected, similarity}` records that `anomalies` used to hold. Consumers reading fuzzy-match details from `anomalies` must switch to `fuzzy_matches`.
 
 ### Fixed
+- **WebSocket events lost across uvicorn workers**: `EventBroadcaster` kept its connection list per process, so `session.created` / `session.destroyed` only reached clients whose WebSocket happened to be held by the worker that served the HTTP request. Events are now published to a Redis pub/sub channel (`kato:ws_events`, override with `KATO_WS_EVENTS_CHANNEL`) and each worker delivers what it receives to its own connections — exactly-once per client on any worker count. Falls back to local delivery without `REDIS_URL`.
 - **Repeated symbols under-reported in `missing`/`extras`**: event alignment used a flat membership test, so an earlier occurrence of a symbol masked a later unobserved one (e.g. the second `o` of `world`). Symbols are now consumed as a multiset.
 
 ## [4.0.0] - 2026-06-18

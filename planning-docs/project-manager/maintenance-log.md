@@ -3,6 +3,36 @@
 
 ---
 
+## 2026-09-09 - Task Completion: Worker-Topology Tests Replace Flaky Multi-Worker Tests + `worker_pid` Field + Architectural Decision + Backlog Bug Recharacterized + Human-Review Flag (Broadcaster Fix Priority)
+
+**Trigger**: Task completion (5 flaky/failing multi-worker tests replaced with 5 deterministic ones; new `worker_pid` field shipped) + architectural decision (deterministic topology-testing strategy; cross-worker broadcaster gap confirmed) + knowledge refinement ("session delete does not decrement active-session count" backlog bug recharacterized as a test issue, not a product bug) + human alert (broadcaster-fix priority flagged, not decided)
+
+**Event Type**: Task completion (test infra + small product feature) + architectural decision + knowledge refinement (propagated correction to a 2026-06-18 backlog item) + human alert (pending-updates.md entry)
+
+**Actions Taken**:
+1. Created `planning-docs/completed/features/2026-09-09-worker-topology-tests-and-worker-pid.md` — full archive entry (new test file, determinism mechanism, product addition, results, knowledge refinements, open follow-up)
+2. Updated `planning-docs/DECISIONS.md` — new `DECISION-020: Replace Flaky Multi-Worker Tests with Deterministic Worker-Topology Tests` prepended above DECISION-019; header timestamp refreshed
+3. Updated `planning-docs/SPRINT_BACKLOG.md` — new "Recently Completed" entry prepended; "Bug: session delete does not decrement active-session count..." (Root cause #3) marked RESOLVED/RECHARACTERIZED; "Bug: Multi-worker (KATO_WORKERS=4) breaks websocket event delivery..." rewritten with deterministic 2026-09-09 evidence and merged Root-cause-#3 pointer; Multi-Worker Uvicorn initiative's verification step updated to reflect the new deterministic failure count; header timestamp refreshed
+4. Updated `planning-docs/SESSION_STATE.md` — Current Task and header refreshed; new "Previous Task" block prepended (above the anomalies/fuzzy_matches entry); Next Immediate Action items 2 and 3 rewritten (item 2 resolved/struck through, item 3 updated with deterministic confirmation and fix-not-started flag)
+5. Updated `planning-docs/README.md` — Test Coverage line rewritten to supersede the "3 known multi-worker failures" characterization with the new 6-deterministic-failures expectation; Last Major Update line rewritten to lead with this change, DECISION-020 cross-referenced
+6. Updated `planning-docs/project-manager/pending-updates.md` — new Open item: whether to fix the cross-worker websocket broadcaster before the next release; explicitly **not** decided by this agent
+7. Updated `planning-docs/project-manager/patterns.md` — new pattern entry (Bug Patterns): manufacturing the failure condition (own container, own topology, proven worker-PID diversity) instead of waiting to observe it intermittently against a shared instance
+8. Updated `planning-docs/project-manager/triggers.md` — logged activation event
+9. Updated `planning-docs/project-manager/maintenance-log.md` (this entry)
+
+**Task Summary**: Replaced 4 websocket event-delivery tests + `test_session_cleanup` (all previously flaky/intermittently-failing against the shared 4-worker dev container) with a new `tests/tests/integration/test_worker_topology.py` — launches throwaway `kato:latest` containers at `KATO_WORKERS` in {1, 2, 4}, verifies actual worker count/readiness from uvicorn's own log lines, and forces test clients onto ≥2 distinct worker PIDs before asserting cross-worker delivery. New `worker_pid` (`os.getpid()`) field added to `/health` and websocket `state.snapshot` to make the PID-proving mechanism possible.
+
+**Result**: `KATO_WORKERS=1` — 5/5 pass. `KATO_WORKERS=2`/`4` — 3 delivery tests fail **deterministically every run** (exact missed worker PIDs named in the assertion); count/worker-count tests pass at every topology. Confirms the in-process `EventBroadcaster` (`kato/websocket/event_broadcaster.py`) cannot fan events out across uvicorn workers — turns a previously intermittent 2-4-failures-per-run signal into exactly 6 deterministic failures (3 tests × 2 topologies). The broadcaster fix itself was **not started** (not requested).
+
+**Knowledge Refinement Recorded**: the 2026-06-18-filed "session delete does not decrement active-session count" bug (Root cause #3) is not a product bug — the rewritten `test_session_cleanup` waits for the documented per-process `/sessions/count` TTL cache to expire before reading, and passes deterministically; the count converges correctly. The websocket-timeout half of that same entry is the same broadcaster gap as above, not a separate root cause — the two backlog entries were merged accordingly.
+
+**Human Alert Raised**: Yes — `planning-docs/project-manager/pending-updates.md` gained a new Open item: whether to fix the cross-worker websocket broadcaster (e.g. Redis pub/sub) before the next release, and whether that belongs inside the queued "Multi-Worker Uvicorn + Concurrent Training Safety" initiative or as separate work. This sits alongside the still-open DECISION-019 major-version-bump question. Genuine priority/scope call for a human, not decided by this agent.
+
+**Agent Response Time**: Immediate
+**Action Result**: All docs updated; one human alert raised (broadcaster-fix priority) per explicit instruction to flag rather than decide
+
+---
+
 ## 2026-09-09 - Task Completion: anomalies/fuzzy_matches Breaking Field Split + Repeated-Symbol Multiset Bug Fix + New Test File + Architectural Decision + Human-Review Flag (Version Bump)
 
 **Trigger**: Task completion (new test file passing; repeated-symbol `missing`/`extras` bug fixed) + architectural decision (`anomalies` field redefined as a flat deviation list; new `fuzzy_matches` field added — breaking change) + knowledge refinement (deployment-container rebuild sequence and `run_tests.sh` single-path-argument limitation) + human alert (release version bump for a breaking, uncommitted change flagged, not decided)

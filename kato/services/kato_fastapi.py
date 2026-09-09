@@ -33,6 +33,7 @@ from kato.processors.processor_manager import ProcessorManager
 from kato.sessions.redis_session_manager import get_redis_session_manager
 from kato.sessions.session_manager import get_session_manager
 from kato.sessions.session_middleware_simple import SessionMiddleware
+from kato.websocket import get_event_broadcaster
 from kato.config.logging_config import configure_logging, generate_trace_id, trace_context
 
 # Standard logger configuration
@@ -258,6 +259,10 @@ async def startup_event():
         await app_state.session_manager.initialize()
         logger.info("Redis session manager initialized")
 
+    # Fan WebSocket events out across worker processes. Same REDIS_URL the
+    # session manager uses; without it events stay local to this worker.
+    await get_event_broadcaster().start(os.environ.get('REDIS_URL'))
+
     # Initialize ProcessorManager for per-user isolation
     settings = app_state.settings
     # Use service name instead of processor_id
@@ -317,6 +322,13 @@ async def shutdown_event():
             logger.info("Metrics collection stopped")
         except Exception as e:
             logger.error(f"Error stopping metrics collection: {e}")
+
+    # Stop cross-worker event fan-out before the session manager goes away
+    try:
+        await get_event_broadcaster().stop()
+        logger.info("Event broadcaster stopped")
+    except Exception as e:
+        logger.error(f"Error stopping event broadcaster: {e}")
 
     # Close session manager
     if hasattr(app_state.session_manager, 'close'):

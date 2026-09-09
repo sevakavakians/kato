@@ -5,6 +5,7 @@ Handles system health checks and status reporting.
 """
 
 import logging
+import os
 import time
 from datetime import datetime, timezone
 
@@ -51,6 +52,7 @@ async def health_check():
                 "processor_status": processor_status,
                 "service_name": app_state.settings.service.service_name,
                 "uptime_seconds": time.time() - app_state.startup_time,
+                "worker_pid": os.getpid(),
                 "issues": health_status.get("issues", []),
                 "metrics_collected": len(app_state.metrics_collector.metrics),
                 "last_collection": app_state.startup_time,
@@ -64,6 +66,7 @@ async def health_check():
                 "processor_status": "healthy" if app_state.processor_manager else "unhealthy",
                 "service_name": app_state.settings.service.service_name,
                 "uptime_seconds": time.time() - app_state.startup_time,
+                "worker_pid": os.getpid(),
                 "issues": [],
                 "metrics_collected": 0,
                 "last_collection": app_state.startup_time,
@@ -77,6 +80,7 @@ async def health_check():
             "processor_status": "unknown",
             "service_name": app_state.settings.service.service_name,
             "uptime_seconds": time.time() - app_state.startup_time,
+                "worker_pid": os.getpid(),
             "issues": [f"Health check error: {str(e)}"],
             "metrics_collected": 0,
             "last_collection": app_state.startup_time,

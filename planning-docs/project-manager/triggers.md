@@ -3,6 +3,28 @@
 
 ---
 
+## 2026-09-09 - Task Completion + Architectural Decision + Knowledge Refinement + Human Alert (Worker-Topology Tests Replace Flaky Multi-Worker Tests, `worker_pid` Field Added)
+
+**Trigger Type**: Primary — Task Completion (5 flaky/failing multi-worker tests replaced with 5 deterministic ones; new `worker_pid` field shipped) + Architectural Decision (DECISION-020: deterministic topology-testing strategy; confirms the cross-worker websocket broadcaster gap) + Knowledge Refinement (2026-06-18 "session delete does not decrement active-session count" backlog bug recharacterized as a TTL-cache test issue, not a product bug)
+**Secondary**: Human Alert — cross-worker broadcaster fix priority flagged for review rather than decided; multi-worker backlog bug entry rewritten with deterministic (not intermittent) evidence
+
+**Event**: `tests/tests/integration/test_worker_topology.py` was added, launching throwaway `kato:latest` containers at `KATO_WORKERS` in {1, 2, 4} and requiring test websocket clients to provably span ≥2 distinct worker PIDs before asserting cross-worker event delivery. This replaced 4 previously-flaky websocket event-delivery tests and `test_session_cleanup` (all of which had been intermittently failing against the shared 4-worker dev container for months). Result: `KATO_WORKERS=1` passes 5/5; `KATO_WORKERS=2`/`4` fail the 3 delivery tests **every run**, with exact missed worker PIDs named in the assertion. This confirms deterministically — not intermittently — that `kato/websocket/event_broadcaster.py`'s in-process `EventBroadcaster` cannot fan events out across uvicorn workers. Separately, the rewritten `test_session_cleanup` (which waits for the documented `/sessions/count` TTL cache to expire before reading) now passes, revealing that the 2026-06-18-filed "session delete does not decrement active-session count" bug was never a real product bug — the count converges correctly; the original test just read a cached value too early.
+
+**Key Findings**:
+- A test that manufactures its own failure condition (own container, own topology, proven worker-PID diversity) produces strictly better evidence than a test that happens to fail sometimes against a shared instance configured for unrelated reasons — it also stops costing verification time on every unrelated piece of work that has to re-confirm "yes, that's the known failure"
+- A years-old backlog bug can turn out to be a mischaracterized test, not a product defect — this was only discovered by rewriting the test more rigorously (honoring a documented TTL cache) rather than continuing to assume the original symptom description was correct
+- Confirming a bug deterministically (vs. leaving it as "known but intermittent") is valuable even when the fix itself is explicitly out of scope — it produces a stable, citable failure count and converts a vague "some multi-worker tests are flaky" into an exact, well-understood gap with named root cause and file
+- A small, targeted product addition (`worker_pid` on two existing response shapes) can be the specific unlock that makes an otherwise-impossible-to-write-deterministically test class possible
+
+**Documentation Actions**:
+- Created: `planning-docs/completed/features/2026-09-09-worker-topology-tests-and-worker-pid.md`
+- Updated: `planning-docs/DECISIONS.md` (new DECISION-020), `planning-docs/SPRINT_BACKLOG.md` (Recently Completed entry, Root-cause-#3 bug marked resolved, multi-worker bug entry rewritten, initiative verification step updated), `planning-docs/SESSION_STATE.md` (Current Task, new Previous Task block, Next Immediate Action items 2-3 rewritten), `planning-docs/README.md` (Test Coverage + Last Major Update), `planning-docs/project-manager/pending-updates.md` (new Open item), `planning-docs/project-manager/patterns.md` (new pattern entry)
+
+**Agent Response Time**: Immediate
+**Action Result**: All docs updated; 1 human alert raised in `pending-updates.md` (broadcaster-fix priority decision) — not resolved by the agent, per explicit instruction
+
+---
+
 ## 2026-09-09 - Task Completion + Architectural Decision + Knowledge Refinement + Human Alert (anomalies/fuzzy_matches Breaking Field Split, Repeated-Symbol Bug Fixed, New Test File)
 
 **Trigger Type**: Primary — Task Completion (new passing test file; repeated-symbol `missing`/`extras` under-reporting bug fixed) + Architectural Decision (DECISION-019: `anomalies` redefined as a flat deviation list, new `fuzzy_matches` field added — BREAKING) + Knowledge Refinement (deployment-container rebuild sequence; `run_tests.sh` single-path-argument limitation)

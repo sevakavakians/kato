@@ -202,6 +202,24 @@ absolute latency differences across machines.
 
 ## Bug Patterns
 
+### 2026-09-09 - Manufacture the Failure Condition Instead of Waiting to Observe It: Flaky-by-Topology Tests Fixed by Owning the Container
+
+**Pattern**: Four websocket event-delivery tests plus `test_session_cleanup` had been intermittently failing for months against the one shared dev container (`KATO_WORKERS=4`), and every unrelated piece of work that day (anomalies/fuzzy_matches, metadata-sidecar, configuration-audit) had to separately re-confirm "yes, those are the known pre-existing failures, not caused by my change." The actual fix wasn't a smarter assertion or a longer timeout — it was making the test launch its own throwaway containers at each worker count and proving, per-connection, that the test client had landed on ≥2 distinct worker PIDs before asserting cross-worker behavior. This turned "sometimes fails, depending on which worker a websocket connection happens to land on" into "fails every single time, with the exact missed worker PIDs named in the assertion."
+
+**Discovery Trigger**: Repeatedly having to dismiss the same 3-5 failures as "known, pre-existing, unrelated" during unrelated verification work made the actual cost of *not* having a deterministic reproduction visible — every dismissal required re-deriving the same evidence (single-worker passes, multi-worker fails) from scratch or citing an old archive note.
+
+**Assumption → Reality**:
+- Assumed: a test that depends on multi-worker behavior can only be as deterministic as the shared container's topology happens to allow at test-run time
+- Reality: the test can own its own container lifecycle and topology entirely, making the "worker count" variable something the test controls and varies (1, 2, 4) rather than something it passively inherits — turning an environmental flake into a controlled experiment with a real single-worker control group
+
+**Resolution Pattern**: When a bug is topology/environment-dependent (multi-worker, multi-process, timing-window, etc.) and only reproduces intermittently against a long-lived shared instance, consider whether the test can instead spin up its own instance(s) at the exact parameter values needed to force the condition — and verify the condition was actually achieved (here: parsing worker PIDs from the log, and proving client connections span ≥2 of them) rather than assuming the requested configuration took effect. This converts "randomly reproduces sometimes" into "reproduces every time," which is strictly more useful even when — especially when — the underlying bug isn't being fixed yet.
+
+**Lesson**: A flaky test and a deterministic test of the same underlying condition are not equally informative even if the "known failure" conclusion is the same either way — the deterministic version gives an exact, stable failure count (here: 6, not "2-4 depending on the run") and stops costing verification time on every unrelated piece of work. This is also how a previously-uninvestigated backlog item (Root cause #3, "session delete does not decrement active-session count") turned out to be a mischaracterized test (reading a TTL-cached value too early) rather than a real product bug — writing a more rigorous test revealed the original test, not the product, was wrong.
+
+**Recurrence Risk**: Low for this specific gap — see `planning-docs/completed/features/2026-09-09-worker-topology-tests-and-worker-pid.md`, DECISION-020. General risk (other topology/timing-dependent tests still asserting against the shared container rather than a controlled one) not separately tracked — noted here for awareness.
+
+---
+
 ### 2026-09-09 - A Bug Report's Own Impact Framing Overstated the Problem (No Performance Was Ever Lost)
 
 **Pattern**: A P2 backlog item logged 2026-09-08 described `KATO_BATCH_SIZE`'s dead `json_schema_extra={'env': ...}` binding with the symptom "container runs with `batch_size=1000` instead of `10000`" — phrasing that implied real throughput was being left on the table by the broken binding. A follow-up configuration audit found `settings.performance.batch_size` had **zero consumers anywhere** in the codebase. The binding really was broken (pydantic-v1 idiom, ignored by pydantic-settings v2) — but even a working binding would have changed nothing, because nothing ever read the resulting value. The root-cause diagnosis in the original report was correct as far as it went; its *impact* framing was not.

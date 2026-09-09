@@ -1,5 +1,5 @@
 # SPRINT_BACKLOG.md - Upcoming Work
-*Last Updated: 2026-09-09 (Configuration audit, wiring, and dead-parameter removal added to Recently Completed; dead-KATO_*-env-names P2 bug corrected and resolved; 5 new backlog items filed: metadata-sidecar-un-batched-write-path P2, 4 P3 doc/cleanup items)*
+*Last Updated: 2026-09-09 (anomalies/fuzzy_matches breaking field split + repeated-symbol multiset fix added to Recently Completed, DECISION-019; new P3 test-flakiness item for `test_metrics_collection_after_requests`; new P3 ops-docs item for the deployment-compose rebuild gotcha and `run_tests.sh` single-path-argument limitation)*
 
 ## Active Projects
 
@@ -483,13 +483,15 @@ Phase 4 (Symbol Statistics & Fail-Fast Architecture) is 100% complete. The Click
 
 ---
 
-### Bug: Metadata sidecar write path is un-batched (synchronous ClickHouse round trip per learned pattern)
-**Priority**: P2 — real batching win, distinct from the client-side buffering that was deliberately removed
-**Status**: Identified 2026-09-09 (discovered during configuration audit)
-**Symptom**: Every learned pattern pays two blocking ClickHouse round trips on the metadata sidecar path.
-**Root Cause**: `metadata_router.upsert_pattern_metadata` does a read (`get_pattern_metadata_batch`) followed by a **synchronous** insert with `wait_for_async_insert=1` (`kato/storage/clickhouse_writer.py:469`) for every single learned pattern. `write_pattern_metadata_batch` already exists and already batches correctly, but is currently only invoked at finalize, not on the per-learn hot path.
-**Fix Direction**: This needs a batched upsert call shape at the `learnPattern` level (accumulate and flush in batches at learn time, the same way finalize already does) — **not** a config knob. See DECISION-017 (`planning-docs/DECISIONS.md`) for why a `batch_size`-style setting is explicitly the wrong shape for this fix.
-**Files**: `kato/api/endpoints/metadata_router.py` (or equivalent metadata router module), `kato/storage/clickhouse_writer.py`
+### Follow-up: Metadata sidecar read-modify-write shape (structural fix — make emotives/metadata append-only)
+**Priority**: P2 — structural remaining work
+**Status**: Re-scoped and partially resolved 2026-09-09. The duplicate-SELECT half of the original item is DONE — see "Recently Completed" below. This entry covers what's left.
+**Framing correction (2026-09-09)**: the item as originally filed (2026-09-09, during the configuration audit) said the fix "needs a batched upsert call shape at the `learnPattern` level." That is **not achievable**: `pattern_processor.learn()` builds exactly one `Pattern` per call and clears STM, and `POST /sessions/{id}/learn` never fans out — there is no batch to form *within* a request. Forming one *across* requests would require a per-worker buffer, which is exactly what commit `f809a84` removed (per-worker buffers orphaned rows across the 4 uvicorn workers — see DECISION-017). The correct framing is: **eliminate round trips, don't group them.** (Nuance: `observe-sequence` with `learn_after_each=True` can issue N+1 `learnPattern` calls in one request, but that loop is strictly sequential — each `learnPattern` mutates Redis stats that the next iteration reads — so grouping those calls isn't safe either.) See DECISION-018 (`planning-docs/DECISIONS.md`) for the full record.
+**What's already fixed**: the re-learn path's duplicate ClickHouse SELECT is eliminated (2 SELECTs → 1) — see `planning-docs/completed/optimizations/2026-09-09-metadata-sidecar-relearn-duplicate-select-eliminated.md`.
+**What's left (open, structural)**: the read-modify-write shape itself. Emotives accumulation and the metadata set-union are read-modify-write against ClickHouse, which is why `upsert_pattern_metadata` must read before it writes at all, and why this path is forced onto blocking `wait_for_async_insert=1` instead of the fire-and-forget `wait_for_async_insert=0` used on `patterns_data`. The real fix: make emotives/metadata **append-only**, applying `persistence` at read time (`groupArray` + tail for emotives; `groupUniqArray` for the metadata set-union) instead of merging on write. That removes the read-modify-write entirely, allows `wait_for_async_insert=0` on this path too, and collapses both the new-pattern and re-learn paths to a single non-blocking insert.
+**Cost**: a schema split of `patterns_metadata` into an append-only emotives/metadata table plus a replace-semantics metrics table (entropy/normalized_entropy/global_normalized_entropy/tf_vector), a backfill of existing rows, and updates to every emotives reader.
+**Design constraint to preserve when this is done**: the seemingly-redundant read on the NEW-pattern branch of `upsert_pattern_metadata` must not be dropped without a replacement safeguard — `is_new` comes from a Redis `SETNX` that can be empty while ClickHouse still holds the row (post Redis-loss-then-rehydrate, which has happened twice in this project). Any append-only redesign still needs a way to avoid destroying a rehydrated pattern's retained emotives/metrics on its next learn. Full detail in the archive linked above.
+**Files**: `kato/storage/metadata_router.py`, `kato/storage/clickhouse_writer.py`, `kato/informatics/knowledge_base.py`, ClickHouse schema (`patterns_metadata`)
 
 ---
 
@@ -522,6 +524,37 @@ Phase 4 (Symbol Statistics & Fail-Fast Architecture) is 100% complete. The Click
 **Status**: Identified 2026-09-09 (discovered during configuration audit)
 **Detail**: The page recommends launching under gunicorn with worker-count math that doesn't account for `KATO_WORKERS` (the actual mechanism now controlling uvicorn worker count, expanded in the Dockerfile CMD). Stale relative to the current deployment model.
 **Files**: `docs/operations/performance-tuning.md`
+
+---
+
+### Test Flakiness: `test_bayesian_likelihood_equals_similarity` fails intermittently under full-suite load
+**Priority**: P3 — test flakiness, not a regression
+**Status**: Identified 2026-09-09 (observed during metadata sidecar re-learn optimization verification)
+**Symptom**: `tests/tests/unit/test_bayesian_metrics.py::test_bayesian_likelihood_equals_similarity` failed once with "Should have at least one prediction" during a full-suite run, then passed 5/5 in isolation.
+**Likely Cause**: A learn→predict race against the ~200ms `patterns_data` `async_insert` visibility window — same underlying mechanism as the already-tracked "patterns_data async_insert visibility race (Root cause #1)" item in `planning-docs/SESSION_STATE.md`. Not caused by the duplicate-SELECT fix (that change touches `patterns_metadata`, not `patterns_data`).
+**Files**: `tests/tests/unit/test_bayesian_metrics.py`
+
+---
+
+### Bug: `test_metrics_collection_after_requests` fails intermittently — `/metrics` `total_requests` bounces across reads
+**Priority**: P3 — test flakiness / monitoring correctness gap, not caused by this session's work
+**Status**: Identified 2026-09-09 (observed during anomalies/fuzzy_matches breaking-change verification — see DECISION-019, `planning-docs/completed/features/2026-09-09-anomalies-fuzzy-matches-field-split.md`)
+**Symptom**: `tests/tests/api/test_monitoring_endpoints.py::TestMonitoringEndpoints::test_metrics_collection_after_requests` failed with `assert 3204.0 > 3204.0`. Reading `/metrics` across consecutive requests showed `total_requests` bouncing between two values (3208 → 1454 → 3208) instead of monotonically increasing.
+**Likely Cause**: `total_requests` is tracked in-process (per uvicorn worker) rather than in a shared store; under `KATO_WORKERS>1`, consecutive requests can land on different workers with different local counters, so the metric is non-monotonic from the client's point of view. Consistent with the already-tracked multi-worker cross-worker-state-sharing gap (see "Bug: Multi-worker (KATO_WORKERS=4) breaks websocket event delivery..." above).
+**Fix Options**:
+1. Move request-count tracking to a shared store (Redis) so all workers report the same monotonic counter
+2. Scope the test to a single-worker instance if a shared counter is out of scope for now
+**Files**: `tests/tests/api/test_monitoring_endpoints.py`, metrics/monitoring endpoint implementation
+**Related**: Same class of problem as the multi-worker websocket/concurrency bug above — likely worth fixing together under the Multi-Worker Uvicorn initiative.
+
+---
+
+### Docs/Ops: `docker compose restart` does not rebuild the live `:8000` container; `run_tests.sh` only honors its first path argument
+**Priority**: P3 — operational gotcha, discovered rather than caused
+**Status**: Identified 2026-09-09 (discovered during anomalies/fuzzy_matches breaking-change verification)
+**Detail 1**: The live `kato` container on `:8000` belongs to the `deployment/` compose project (`deployment/docker-compose.override.yml` pins `image: kato:latest`). Running `docker compose restart` from the repo root does **not** pick up code changes against that container — it restarts the same image without rebuilding. Working sequence: `docker compose build kato` (repo root) then `docker compose -f deployment/docker-compose.yml -f deployment/docker-compose.override.yml up -d kato`. Worth calling out explicitly in developer-facing docs (e.g. `CLAUDE.md` or `docs/developers/testing.md`) since the root `docker compose build --no-cache kato` step alone is easy to assume is sufficient.
+**Detail 2**: `./run_tests.sh` only honors its **first** path argument — passing multiple test files/directories silently runs only the first one. Multi-target runs need pytest directly: `PYTHONPATH="$PWD:$PWD/tests" ./venv/bin/python -m pytest <paths...>`.
+**Files**: `CLAUDE.md`, `docs/developers/testing.md`, `run_tests.sh`, `deployment/docker-compose.override.yml`
 
 ---
 
@@ -567,6 +600,45 @@ Phased plan for scaling KATO to production workloads:
 ---
 
 ## Recently Completed
+
+### Breaking Change + Bug Fix: `anomalies`/`fuzzy_matches` Field Split + Repeated-Symbol Multiset Fix — COMPLETE (2026-09-09)
+**Priority**: Architectural decision + correctness bug fix
+**Archive**: `planning-docs/completed/features/2026-09-09-anomalies-fuzzy-matches-field-split.md`
+**Decision**: DECISION-019
+**Status**: Code/tests/docs complete; NOT committed; release version bump NOT decided — flagged in `planning-docs/project-manager/pending-updates.md`
+
+**New test coverage**: `tests/tests/unit/test_hello_world_character_predictions.py` (new file, 3 tests) — learns "hello world" one character per event, asserts past/present/future/missing/extras/anomalies for "hello", "world", and perturbed "o wxld". All 3 pass.
+
+**Bug fixed**: `kato/representations/prediction.py`'s event-aligned `missing`/`extras` (and the flat fallback `missing`) used a flat `in` membership test against `matches`/`present`, under-reporting repeated symbols — an earlier occurrence masked a later unobserved one (the second `'o'` of "world" was never reported missing for "o wxld"). Fixed via multiset (`collections.Counter`) accounting.
+
+**Architectural decision** (user chose from three options): `anomalies` redefined as a flat list of every symbol deviating from the pattern (missing, then extras, then each fuzzy match's observed token). The `{observed, expected, similarity}` fuzzy-match records `anomalies` previously held move to a **new** `fuzzy_matches` field. **BREAKING** for consumers reading fuzzy detail from `anomalies`. Rejected alternatives: replace outright (loses fuzzy detail), mode-dependent typing (inconsistent type by config).
+
+**Files**: `kato/representations/prediction.py`, `kato/searches/pattern_search.py`, `kato/workers/pattern_processor.py` (code); `tests/tests/unit/test_fuzzy_token_matching.py`, `tests/tests/unit/test_filter_pipeline_parameters.py` (updated), `tests/tests/unit/test_hello_world_character_predictions.py` (new); 8 doc files; `CHANGELOG.md`.
+
+**Verification**: 233 passed / 1 skipped across unit + integration prediction suites and `tests/tests/api`. 1 pre-existing unrelated failure (`test_metrics_collection_after_requests` — see new Backlog item above), not caused by this change.
+
+**Operational notes recorded**: the live `:8000` container is the `deployment/` compose project and needs `docker compose build kato` + the `-f deployment/...` up command to pick up code changes (plain `docker compose restart` does not rebuild); `./run_tests.sh` only honors its first path argument. See new Backlog item above.
+
+---
+
+### Optimization: Metadata Sidecar Re-Learn Duplicate SELECT Eliminated — COMPLETE (2026-09-09)
+**Priority**: P2 — partially resolves and corrects the "Metadata sidecar write path is un-batched" item logged earlier the same day
+**Archive**: `planning-docs/completed/optimizations/2026-09-09-metadata-sidecar-relearn-duplicate-select-eliminated.md`
+**Decision**: DECISION-018
+
+**Corrects a same-day backlog item**: the item said the fix "needs a batched upsert call shape at the `learnPattern` level." That's unachievable — `learn()` produces exactly one Pattern per call and never fans out, so there's no batch to form within a request; forming one across requests would need a per-worker buffer, which is exactly what `f809a84` removed to fix a correctness bug. Corrected framing: **eliminate round trips, don't group them**.
+
+**Root cause found**: on the re-learn path, the same ClickHouse row was SELECTed twice per learn. `knowledge_base.py` called `metadata_router.get_metadata()`, which fetches the full row via `get_pattern_metadata_batch` and then discards the metric columns (entropy/normalized_entropy/global_normalized_entropy/tf_vector), plus an unused Redis `MGET` for frequency. `upsert_pattern_metadata` then re-issued the identical SELECT purely to recover those discarded columns.
+
+**Fix** (2 files, +39/-5): `kato/storage/metadata_router.py` gained `get_metadata_for_merge()` (returns the raw full row, skips the unused Redis lookup) and an optional `prev` parameter on `upsert_pattern_metadata` so a caller that already read the row can hand it over (`prev=None` preserves prior behavior for other callers). `kato/informatics/knowledge_base.py`'s re-learn branch now threads the same dict through as `prev=`.
+
+**Measured** (not estimated): re-learn path 2 SELECTs → 1 (deterministic unit-level instrumentation); end-to-end against the running container, background noise subtracted: 8 → 7.27 ClickHouse queries per re-learn. Entropy/tf_vector survival verified directly through the `prev`-threaded path. `test_emotives_comprehensive.py` + `test_metadata_comprehensive.py`: 22 passed. Full suite: 452 passed, 4 skipped, 3 failed (best result this session; the 3 are the known multi-worker session_cleanup + websocket failures).
+
+**Design constraint recorded** (see archive and DECISION-018 for full detail): the read on the NEW-pattern branch of `upsert_pattern_metadata` looks redundant but is deliberately kept — `is_new` comes from a Redis `SETNX` that can be empty while ClickHouse still holds the row post Redis-loss-then-rehydrate (has happened twice in this project). Also: `wait_for_async_insert=1` on this path is load-bearing, unlike `patterns_data`'s `=0` — emotives accumulation is a cross-process read-modify-write and a re-learn inside the ~200ms async-insert window would read stale emotives.
+
+**Open follow-up (not done)**: the structural fix — make emotives/metadata append-only, apply `persistence` at read time — remains open. See "Follow-up: Metadata sidecar read-modify-write shape" above in the Backlog section.
+
+**Also filed**: P3 test flakiness in `test_bayesian_likelihood_equals_similarity` (see Backlog section above) — unrelated to this fix, observed during its verification.
 
 ### Configuration Audit: Env Var Wiring, Dead-Parameter Removal, and `/concurrency` 4x Undercount Fix — COMPLETE (2026-09-09)
 **Priority**: P2 — resolved (supersedes and corrects the dead-`KATO_*`-env-names item previously logged here)

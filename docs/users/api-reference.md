@@ -198,7 +198,8 @@ Returns predictions based on the session's current STM or specific observation.
       "matches": ["hello", "world"],
       "missing": [["foo"]],
       "extras": [["bar"]],
-      "anomalies": [],
+      "anomalies": ["foo", "bar"],
+      "fuzzy_matches": [],
       "past": [["previous"]],
       "present": [["hello", "world", "foo"]],
       "future": [["next"]],
@@ -552,7 +553,8 @@ Common HTTP status codes:
 - `matches`: Symbols matching observation (flat list)
 - `missing`: Symbols in pattern but not observed (event-aligned with present)
 - `extras`: Observed symbols not in pattern (event-aligned with STM)
-- `anomalies`: Fuzzy token matches with similarity scores (when fuzzy matching enabled)
+- `anomalies`: Flat list of every deviating symbol — missing, then extras, then fuzzy-observed tokens
+- `fuzzy_matches`: Fuzzy token matches with similarity scores (when fuzzy matching enabled)
 - `past`: Events before first match
 - `present`: All events from first to last match (complete events)
 - `future`: Events after last match

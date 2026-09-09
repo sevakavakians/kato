@@ -869,7 +869,7 @@ class PatternSearcher:
                         extras,
                         similarity,
                         number_of_blocks,
-                        anomalies=anomalies,
+                        fuzzy_matches=anomalies,
                         stm_events=stm_events,
                         weighted_similarity=weighted_similarity
                     )
@@ -1495,7 +1495,7 @@ class PatternSearcher:
                         extras,
                         similarity,
                         number_of_blocks,
-                        anomalies=anomalies,
+                        fuzzy_matches=anomalies,
                         stm_events=stm_events,
                         weighted_similarity=weighted_similarity
                     )

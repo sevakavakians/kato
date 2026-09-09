@@ -180,7 +180,7 @@ Fuzzy token matching allows KATO to match similar-but-not-identical tokens, trea
 2. Compare against all pattern tokens using `fuzz.ratio()` (RapidFuzz)
 3. If similarity ≥ threshold, treat as match
 4. Select best match (highest similarity) per observed token
-5. Track non-exact matches in `anomalies` field
+5. Track non-exact matches in `fuzzy_matches` field
 
 **Similarity Calculation**:
 ```python
@@ -189,13 +189,14 @@ from rapidfuzz import fuzz
 similarity = fuzz.ratio("bannana", "banana") / 100.0  # Returns 0.93
 ```
 
-**Anomalies Tracking**:
+**Fuzzy Match Tracking**:
 
-Fuzzy matches generate anomaly records in prediction objects:
+Fuzzy matches generate `fuzzy_matches` records in prediction objects, and the
+observed token is also listed in `anomalies` alongside any missing/extras symbols:
 ```json
 {
   "matches": ["bannana", "cherry"],  // Includes fuzzy matches
-  "anomalies": [
+  "fuzzy_matches": [
     {
       "observed": "bannana",
       "expected": "banana",
@@ -203,15 +204,16 @@ Fuzzy matches generate anomaly records in prediction objects:
     }
   ],
   "missing": [],  // Fuzzy-matched tokens NOT in missing
-  "extras": []    // Fuzzy-matched tokens NOT in extras
+  "extras": [],   // Fuzzy-matched tokens NOT in extras
+  "anomalies": ["bannana"]  // missing + extras + fuzzy-observed tokens
 }
 ```
 
 **Behavior**:
-- **Threshold = 0.0** (default): Exact matching only, anomalies always empty
+- **Threshold = 0.0** (default): Exact matching only, `fuzzy_matches` always empty
 - **Threshold > 0.0**: Tokens with similarity ≥ threshold are treated as matches
-- **Below threshold**: Tokens treated as mismatches, appear in `missing`/`extras`
-- **Exact matches**: Do not generate anomaly entries (only fuzzy matches tracked)
+- **Below threshold**: Tokens treated as mismatches, appear in `missing`/`extras` (and therefore `anomalies`)
+- **Exact matches**: Do not generate fuzzy match entries (only non-exact matches tracked)
 
 **Performance**:
 - Uses RapidFuzz for 5-10x faster similarity calculation vs difflib

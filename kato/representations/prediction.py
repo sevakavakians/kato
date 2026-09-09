@@ -1,9 +1,19 @@
+from collections import Counter
 from itertools import chain
+
+
+def _flatten(symbols):
+    """Yield symbols from either a flat list or an event-structured list of lists."""
+    for item in symbols:
+        if isinstance(item, list):
+            yield from item
+        else:
+            yield item
 
 
 class Prediction(dict):
     "Pattern prediction."
-    def __init__(self, _pattern, matching_intersection, past, present, missing, extras, similarity, number_of_blocks, anomalies=None, stm_events=None, weighted_similarity=None):
+    def __init__(self, _pattern, matching_intersection, past, present, missing, extras, similarity, number_of_blocks, fuzzy_matches=None, stm_events=None, weighted_similarity=None):
         super().__init__(self)
         self['type'] = 'prototypical'
         self['name'] = _pattern['name']
@@ -20,7 +30,8 @@ class Prediction(dict):
         self['present'] = present
         self['missing'] = missing
         self['extras'] = extras
-        self['anomalies'] = anomalies if anomalies else []
+        self['fuzzy_matches'] = fuzzy_matches if fuzzy_matches else []
+        self['anomalies'] = []  # Populated below once missing/extras are final
         self['potential'] = float(0)
         self['evidence'] = float(len(self['matches'])/_pattern["length"]) if _pattern["length"] > 0 else 0.0
         self['similarity'] = similarity
@@ -76,31 +87,58 @@ class Prediction(dict):
             except Exception as e:
                 raise Exception("Error matching events in predictions! CODE-55 {}".format(e))
 
-        # Calculate event-aligned missing and extras using proper alignment
+        # Calculate event-aligned missing and extras using proper alignment.
+        # Symbols are consumed as a multiset so a repeated symbol is only
+        # accounted for as many times as it actually matched: an earlier
+        # occurrence must not mask a later unobserved one.
         if stm_events and len(stm_events) > 0:
             # Missing: aligned with PRESENT events (pattern events)
             # Each sub-list corresponds to a present event
             # Contains symbols from that pattern event that were not observed (not in matches)
             self['missing'] = []
+            unmatched = Counter(self['matches'])
             for present_event in self['present']:
-                event_missing = [s for s in present_event if s not in self['matches']]
+                event_missing = []
+                for s in present_event:
+                    if unmatched[s] > 0:
+                        unmatched[s] -= 1
+                    else:
+                        event_missing.append(s)
                 self['missing'].append(event_missing)
 
             # Extras: aligned with STM events (observed events)
             # Each sub-list corresponds to an STM event
             # Contains symbols observed in STM but not expected in the pattern present
             self['extras'] = []
-            flattened_present = list(chain(*self['present']))
+            unexpected = Counter(chain(*self['present']))
             for stm_event in stm_events:
-                event_extras = [s for s in stm_event if s not in flattened_present]
+                event_extras = []
+                for s in stm_event:
+                    if unexpected[s] > 0:
+                        unexpected[s] -= 1
+                    else:
+                        event_extras.append(s)
                 self['extras'].append(event_extras)
         else:
             # Fallback: Use old flat-list behavior (for backward compatibility)
             self['missing'] = []
+            unmatched = Counter(self['matches'])
             for _symbol in chain(*self['present']):
-                if _symbol not in self['matches']:
+                if unmatched[_symbol] > 0:
+                    unmatched[_symbol] -= 1
+                else:
                     self['missing'].append(_symbol)
             # extras already set from constructor parameter
+
+        # Anomalies: every symbol that deviates from the pattern, as a flat list.
+        # Missing symbols (expected but not observed) come first, then extras
+        # (observed but not expected), then the observed token of each fuzzy
+        # match (matched, but not spelled the way the pattern has it).
+        self['anomalies'] = (
+            list(_flatten(self['missing']))
+            + list(_flatten(self['extras']))
+            + [fm['observed'] for fm in self['fuzzy_matches']]
+        )
 
         __present_length__ = sum([len(_event) for _event in self['present']])
         self['confidence'] = float(len(self['matches'])/__present_length__) if __present_length__ > 0 else 0.0

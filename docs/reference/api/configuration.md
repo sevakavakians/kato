@@ -410,9 +410,10 @@ curl -X POST http://localhost:8000/sessions/$SESSION_ID/clear-stm
 curl -X POST http://localhost:8000/sessions/$SESSION_ID/observe \
   -d '{"strings": ["apple", "bannana", "chery"]}'  # Typos!
 
-# Get predictions - check anomalies field for fuzzy matches
-curl http://localhost:8000/sessions/$SESSION_ID/predictions | jq '.[0].anomalies'
+# Get predictions - check fuzzy_matches field for fuzzy matches
+curl http://localhost:8000/sessions/$SESSION_ID/predictions | jq '.[0].fuzzy_matches'
 # Output: [{"observed": "bannana", "expected": "banana", "similarity": 0.93}, ...]
+# The observed tokens also appear in .anomalies: ["bannana", "chery"]
 ```
 
 **Recommended Thresholds**:

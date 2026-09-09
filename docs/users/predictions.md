@@ -22,6 +22,7 @@ Complete guide to understanding and working with KATO predictions.
       "missing": [[]],
       "extras": [[]],
       "anomalies": [],
+      "fuzzy_matches": [],
       "similarity": 0.85,
       "confidence": 0.88,
       "evidence": 0.90,
@@ -221,13 +222,35 @@ predictions = kato.get_predictions()
 
 ### anomalies
 
+**Every symbol that deviates from the pattern**, as one flat list.
+
+**Structure**: Missing symbols (in pattern order), then extras (in observation
+order), then the observed token of each fuzzy match. Repeated symbols are
+counted per occurrence.
+
+```python
+# Learned "hello world" one character per event, observed "o wxld"
+# predictions[0]:
+{
+  "missing": [[], [], [], ["o"], ["r"], [], []],
+  "extras":  [[], [], [], ["x"], [], []],
+  "anomalies": ["o", "r", "x"]
+}
+```
+
+**When Present**:
+- Empty array `[]` when the observation matches the pattern exactly
+- Non-empty whenever `missing`, `extras`, or `fuzzy_matches` has content
+
+### fuzzy_matches
+
 **Fuzzy token matches with similarity scores** (when fuzzy matching is enabled).
 
 **Structure**: Array of objects documenting non-exact matches.
 
 ```json
 {
-  "anomalies": [
+  "fuzzy_matches": [
     {
       "observed": "bannana",
       "expected": "banana",
@@ -267,12 +290,13 @@ predictions = kato.get_predictions()
   "matches": ["apple", "bannana", "chery"],  # All matched (exact + fuzzy)
   "missing": [],  # Nothing missing (fuzzy matches count)
   "extras": [],   # Nothing extra
-  "anomalies": [
+  "fuzzy_matches": [
     {"observed": "bannana", "expected": "banana", "similarity": 0.93},
     {"observed": "chery", "expected": "cherry", "similarity": 0.91}
-  ]
+  ],
+  "anomalies": ["bannana", "chery"]  # Observed tokens surface here too
 }
-# ↑ Anomalies highlight the fuzzy matches for review
+# ↑ fuzzy_matches highlight the fuzzy matches for review
 ```
 
 **Example - Data Quality Alert**:
@@ -280,17 +304,17 @@ predictions = kato.get_predictions()
 # Check for data quality issues
 predictions = kato.get_predictions()
 for pred in predictions:
-    if pred['anomalies']:
+    if pred['fuzzy_matches']:
         print(f"⚠️ Data quality alert!")
-        for anomaly in pred['anomalies']:
-            print(f"  Found '{anomaly['observed']}' "
-                  f"(expected '{anomaly['expected']}', "
-                  f"similarity: {anomaly['similarity']:.2f})")
+        for fuzzy_match in pred['fuzzy_matches']:
+            print(f"  Found '{fuzzy_match['observed']}' "
+                  f"(expected '{fuzzy_match['expected']}', "
+                  f"similarity: {fuzzy_match['similarity']:.2f})")
 ```
 
 **Configuration**:
 ```python
-# Enable fuzzy matching and anomaly tracking
+# Enable fuzzy matching and fuzzy_matches tracking
 kato.update_config({
     'fuzzy_token_threshold': 0.85,  # 0.0 = disabled, 0.85 = recommended
     'recall_threshold': 0.3          # Pattern matching threshold
@@ -800,13 +824,8 @@ if next_event:
 ### Check for Anomalies
 
 ```python
-def has_anomalies(prediction):
-    """Check if extras exist."""
-    extras = prediction.get('extras', [])
-    return any(event for event in extras)
-
-if has_anomalies(top):
-    print(f"Warning: Unexpected symbols {top['extras']}")
+if top['anomalies']:
+    print(f"Warning: deviating symbols {top['anomalies']}")
 ```
 
 ### Filter by Confidence

@@ -80,7 +80,49 @@ absolute latency differences across machines.
 
 ---
 
+## Correctness / API Design Patterns
+
+### 2026-09-09 - Flat Membership Tests Under-Report Repeated Symbols; Overloaded Fields Should Split Rather Than Type-Switch
+
+**Pattern**: Two related but distinct lessons from the same day's work on `kato/representations/prediction.py`.
+
+**(1) Multiset bugs hide behind "mostly correct" output.** `missing`/`extras` computed membership via a flat `in` test against `matches`/`present`. For a repeated symbol, this is wrong: an *earlier* occurrence satisfies the check for a *later* occurrence that was never actually observed. The bug was invisible in the common case (few repeats) and only surfaced when a new test deliberately exercised a repeated character ("hello world" has a repeated `'o'`; perturbing the second occurrence exposed the masking).
+
+**(2) A field whose type depends on session config is a worse API than two consistently-typed fields.** `anomalies` held fuzzy-match detail dicts under character-level matching but (implicitly) nothing consistent under token-level matching. Rather than "fix" this by formalizing the mode-dependent type, the decision (DECISION-019) split it: `anomalies` becomes a flat `list[str]` always, and a new `fuzzy_matches` field carries the mode-specific detail. Consumers no longer need to know the session's matching mode to safely handle the field's shape.
+
+**Discovery Trigger**: Writing `tests/tests/unit/test_hello_world_character_predictions.py` — a test that happened to include a repeated character in its learned pattern and then perturbed the repeated instance, which is exactly the condition a flat membership check gets wrong.
+
+**Assumption → Reality**:
+- Assumed: `in matches` is a correct way to ask "was this symbol observed"
+- Reality: for a value that can appear multiple times in both the pattern and the observation, "was *this occurrence* observed" requires counting, not membership — `collections.Counter` (multiset) is the correct primitive
+
+**Resolution Pattern**: Any time code asks "is X in this collection" where X is a symbol/token that can legitimately repeat, check whether occurrence-count matters to the caller's semantics. If it does (as with missing/extra accounting), use multiset (`Counter`) subtraction, not `in`. Separately: when a field's meaning already varies by configuration, prefer splitting it into two consistently-typed fields over formalizing the variation — write the two-vs-one-field trade-off into an explicit decision record even when it's "just" a field rename, because it's an API compatibility decision, not merely an implementation detail.
+
+**Lesson**: A test that deliberately includes a repeated element ("hello world" as `character` events) is a cheap, high-value regression guard against multiset-shaped bugs. When writing tests for anything that touches match/observed accounting, deliberately include repeats — the common case (no repeats) gives multiset and membership logic identical output, so it never catches this bug class.
+
+**Recurrence Risk**: Medium — anywhere else in the codebase that computes a "what wasn't observed" or "what was extra" set via `in`/set-difference against a sequence that can contain repeats (rather than a true set) is at risk of the same class of under-reporting. Worth an audit pass if similar accounting logic exists elsewhere (e.g., symbol frequency reconciliation).
+
+---
+
 ## Documentation Correctness Patterns
+
+### 2026-09-09 - A Backlog Item's Fix Direction, Not Just Its Symptom, Can Be Architecturally Impossible
+
+**Pattern**: The P2 "Metadata sidecar write path is un-batched" item was filed same-day with a specific proposed fix: "needs a batched upsert call shape at the `learnPattern` level." The symptom (two blocking ClickHouse round trips per learn) was correctly diagnosed. The proposed *fix direction* was not — there is no batch to form. `pattern_processor.learn()` builds exactly one Pattern per call and never fans out, so nothing exists at the `learnPattern` level to group into a batch. This is a distinct failure mode from DECISION-017's same-day correction, which fixed an overstated *impact* claim (a dead field with zero consumers, implying a performance cost that never existed) — here the symptom and impact were both real, only the remedy was unreachable.
+
+**Discovery Trigger**: Attempting the fix. Investigation into "how would batching actually work here" revealed the batch-forming premise didn't exist, which redirected the work toward the real, achievable win one layer deeper — a duplicate SELECT hiding inside the existing single-pattern write path.
+
+**Assumption → Reality**:
+- Assumed: the fix is architectural (change the call shape to batch multiple learns' metadata writes together)
+- Reality: the fix is local (eliminate a redundant read inside the existing single-call path); the architectural batching premise was invalid — a per-request buffer can't exist (nothing to batch with) and a cross-request buffer reintroduces the exact per-worker-orphaned-row bug commit `f809a84` already removed
+
+**Resolution Pattern**: When a filed item's "fix direction" line describes a specific mechanism (not just a goal), verify that mechanism is actually constructible before starting implementation — trace the actual call path end to end first. Here, tracing `get_metadata()` → discard columns → `upsert_pattern_metadata()` → re-fetch same columns surfaced the real, narrower, achievable fix.
+
+**Lesson**: Filing a backlog item under load (mid-audit, multiple findings at once) can correctly identify a symptom while guessing wrong about the remedy. Treat a filed "fix direction" as a hypothesis to verify at implementation time, not a spec to execute — and when it turns out wrong, correct the record (here: DECISION-018, plus rewriting the backlog entry) rather than silently implementing something different under the old label.
+
+**Recurrence Risk**: Medium — any backlog item filed by pattern-matching against a similar-looking prior fix (here: "just like the pattern-write batching that already exists via `async_insert`, do the same for metadata") is at risk of this if the two code paths don't actually share the same call shape.
+
+---
 
 ### 2026-09-08 - Dead Storage-Layer Code Paired with Documentation for a Field That Never Existed
 

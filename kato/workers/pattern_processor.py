@@ -863,7 +863,10 @@ class PatternProcessor:
                         'confidence': confidence,
                         'snr': snr,
                         'fragmentation': fragmentation,
-                        'anomalies': anomalies,
+                        # Fast path runs with fuzzy matching off, so the only
+                        # deviations are missing/extras symbols.
+                        'fuzzy_matches': anomalies,
+                        'anomalies': list(missing) + list(extras) + [fm['observed'] for fm in anomalies],
                         'weighted_similarity': weighted_similarity,
                         'weighted_evidence': weighted_evidence,
                         'weighted_confidence': weighted_confidence,

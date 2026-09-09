@@ -8,7 +8,7 @@ Predictions represent KATO's forecasts based on pattern matching between current
 
 Each prediction contains:
 - **Temporal segmentation**: past/present/future
-- **Match analysis**: matches/missing/extras/anomalies
+- **Match analysis**: matches/missing/extras/anomalies/fuzzy_matches
 - **Information metrics**: confidence, evidence, similarity, SNR, entropy, potential, Bayesian posteriors
 - **Pattern metadata**: frequency, emotives
 
@@ -34,7 +34,8 @@ GET /sessions/{session_id}/predictions
       "matches": ["hello", "world"],
       "missing": [["goodbye"]],
       "extras": [["unexpected"]],
-      "anomalies": [],
+      "anomalies": ["goodbye", "unexpected"],
+      "fuzzy_matches": [],
       "past": [["start"]],
       "present": [["hello", "world", "goodbye"]],
       "future": [["end"]],

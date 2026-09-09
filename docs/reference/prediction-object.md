@@ -177,7 +177,21 @@ A Prediction Object is generated when KATO's pattern recognition engine identifi
 **Purpose**: Allows patterns to carry emotional salience or utility information for decision-making.
 **Example**: `{"utility": 50.0, "danger": -10.0}`
 
-### 26. **anomalies** (array of objects)
+### 26. **anomalies** (array of strings)
+**Description**: Flat list of every symbol that deviates from the pattern in this prediction.
+**Structure**: Missing symbols (expected in `present` but not observed) in pattern order, followed by extras (observed but not expected) in STM order, followed by the `observed` token of each entry in `fuzzy_matches`.
+**Purpose**: A single place to see everything that went wrong in the match, without walking the event-aligned `missing`/`extras` structures.
+**Example**: Pattern `hello world` (one character per event) observed as `o wxld`:
+```json
+"missing": [[], [], [], ["o"], ["r"], [], []],
+"extras": [[], [], [], ["x"], [], []],
+"anomalies": ["o", "r", "x"]
+```
+**Behavior**:
+- Empty array `[]` when the observation matches the pattern exactly
+- Repeated symbols are counted per occurrence, so a pattern symbol that appears twice but is observed once is reported missing once
+
+### 26a. **fuzzy_matches** (array of objects)
 **Description**: List of fuzzy token matches documenting non-exact matches when fuzzy token matching is enabled.
 **Structure**: Array of objects, each containing:
   - `observed` (string): The token that was actually observed
@@ -186,7 +200,7 @@ A Prediction Object is generated when KATO's pattern recognition engine identifi
 **Purpose**: Provides transparency about which tokens were fuzzy-matched versus exact-matched, enabling detection of data quality issues like typos and misspellings.
 **Example**:
 ```json
-"anomalies": [
+"fuzzy_matches": [
   {
     "observed": "bannana",
     "expected": "banana",
@@ -202,8 +216,8 @@ A Prediction Object is generated when KATO's pattern recognition engine identifi
 **Behavior**:
 - Empty array `[]` when fuzzy matching is disabled (`fuzzy_token_threshold=0.0`)
 - Empty array `[]` when all matches are exact
-- Contains entries only for non-exact fuzzy matches (exact matches don't generate anomaly entries)
-- Fuzzy-matched tokens appear in `matches` field, not in `missing` or `extras`
+- Contains entries only for non-exact fuzzy matches (exact matches don't generate entries)
+- Fuzzy-matched tokens appear in `matches` field, not in `missing` or `extras`; their `observed` token is also listed in `anomalies`
 - Tokens below fuzzy threshold appear in `missing`/`extras` as normal mismatches
 
 **Configuration**: Enable via `fuzzy_token_threshold` parameter (see [Session Configuration](session-configuration.md#fuzzy-token-matching))
@@ -229,7 +243,8 @@ A Prediction Object is generated when KATO's pattern recognition engine identifi
 
 ### Matching Metrics
 - **matches, missing, extras**: Direct comparison between expected and observed
-- **anomalies**: Fuzzy token matches with similarity scores (when fuzzy matching enabled)
+- **anomalies**: Flat list of all deviating symbols (missing + extras + fuzzy-observed)
+- **fuzzy_matches**: Fuzzy token matches with similarity scores (when fuzzy matching enabled)
 - **confidence, evidence**: Proportional matching scores
 - **similarity, snr**: Quality of the match
 

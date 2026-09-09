@@ -1,6 +1,94 @@
 # DECISIONS.md - Architectural & Design Decision Log
 *Append-Only Log - Started: 2025-08-29*
-*Last Updated: 2026-09-09*
+*Last Updated: 2026-09-09 (DECISION-019: anomalies/fuzzy_matches breaking field split + repeated-symbol multiset fix added)*
+
+---
+
+## 2026-09-09 - DECISION-019: Split `anomalies` into `anomalies` (flat deviation list) + new `fuzzy_matches` (fuzzy-match detail) — BREAKING CHANGE
+**Decision**: Redefine the `anomalies` prediction field as a flat list of every symbol that deviates from the matched pattern — missing symbols, then extras, then the observed token of each fuzzy match, in that order. The fuzzy-match detail records (`{observed, expected, similarity}`) that `anomalies` previously held are moved to a **new** `fuzzy_matches` field.
+**Status**: COMPLETE — code, tests, and docs updated; **release version bump NOT decided** (flagged for human review, see `planning-docs/project-manager/pending-updates.md`)
+**Classification**: BREAKING CHANGE
+**Confidence**: High (user-selected from three options presented)
+
+### Context
+Before this change, `anomalies` held the fuzzy-match detail records (`{observed, expected, similarity}`) when fuzzy/character-level matching was in effect. This overloaded a field named for "things that deviate from the pattern" with a narrow, mode-specific payload shape, and gave prediction consumers no single place to see *every* symbol-level deviation (missing + extras + fuzzy) in one flat list.
+
+### Decision
+- `anomalies`: now a flat `list[str]` — every deviating symbol, concatenated in this order: all `missing` symbols, then all `extras` symbols, then the `observed` token of each fuzzy match.
+- `fuzzy_matches`: new field — the `{observed, expected, similarity}` records `anomalies` used to hold.
+- Constructor kwarg on `Prediction` renamed `anomalies` → `fuzzy_matches`; `anomalies` itself is now computed internally, after `missing`/`extras` are finalized (so it can consume the same corrected multiset accounting — see the bundled bug fix below).
+
+### Rationale
+- A prediction consumer that wants "what went wrong with this match" now has one flat, type-consistent list (`anomalies`) regardless of matching mode (token-level vs fuzzy/character-level), instead of a field whose shape silently changed based on `use_token_matching`.
+- Fuzzy-match detail is still fully available, just under a name (`fuzzy_matches`) that says what it actually contains.
+- This was a three-way choice; see Alternatives Considered.
+
+### Alternatives Considered
+1. **Replace `anomalies`'s meaning outright, drop the fuzzy detail** — rejected: silently deletes information (`expected`, `similarity`) that fuzzy-matching consumers currently rely on, with no field to migrate to.
+2. **Mode-dependent typing** (`anomalies` is `list[str]` in token-level mode, `list[dict]` in fuzzy mode) — rejected: a field whose type depends on session config is a worse API than two separately-named, consistently-typed fields; it also makes generic prediction-consumer code (that doesn't know the session's matching mode) unsafe to write.
+3. **Chosen: split into `anomalies` (flat, always `list[str]`) + `fuzzy_matches` (fuzzy detail, only populated under fuzzy/character-level matching)** — consistent typing regardless of mode, no information loss, `anomalies` becomes strictly more useful (covers missing/extras too, not just fuzzy tokens).
+
+### Bundled Bug Fix (same change, same files)
+Event-aligned `missing`/`extras` (and the flat fallback `missing`) computed membership via a flat `in` test against `matches`/`present`. A **repeated symbol** was under-reported: an earlier occurrence of the symbol in `matches` masked a later, genuinely-unobserved occurrence in the pattern. Concretely: learning "hello world" one character per event, observing "o wxld" failed to report the second `'o'` (from "world") as missing, because the first `'o'` (from "hello") satisfied the `in` check. Fixed by consuming `matches`/`present` as a multiset (`collections.Counter`) so each occurrence is accounted for independently. New test file `tests/tests/unit/test_hello_world_character_predictions.py` (3 tests, learning "hello world" one character per event) locks in the corrected past/present/future/missing/extras/anomalies behavior for "hello", "world", and the perturbed "o wxld" observations — all 3 pass.
+
+### Implementation
+**Code** (3 files):
+- `kato/representations/prediction.py` — constructor kwarg `anomalies` → `fuzzy_matches`; `anomalies` now computed after `missing`/`extras` (flat list: missing then extras then each fuzzy match's `observed` token); multiset (`Counter`) accounting for `missing`/`extras`.
+- `kato/searches/pattern_search.py` — both `Prediction()` call sites updated to pass `fuzzy_matches=` instead of `anomalies=`.
+- `kato/workers/pattern_processor.py` — single-symbol fast-path dict now emits both `anomalies` and `fuzzy_matches` (previously only `anomalies`, fuzzy-shaped).
+
+**Tests updated** (2 files):
+- `tests/tests/unit/test_fuzzy_token_matching.py` — 5 assertions updated to read `fuzzy_matches`; test class renamed `TestAnomaliesStructure` → `TestFuzzyMatchesStructure`.
+- `tests/tests/unit/test_filter_pipeline_parameters.py` — 1 assertion updated.
+
+**Test added** (1 file):
+- `tests/tests/unit/test_hello_world_character_predictions.py` — new, 3 tests, all passing.
+
+**Docs updated** (8 files): `docs/reference/prediction-object.md`, `docs/reference/session-configuration.md`, `docs/reference/api/predictions.md`, `docs/reference/api/configuration.md`, `docs/research/pattern-matching.md`, `docs/users/predictions.md`, `docs/users/configuration.md`, `docs/users/api-reference.md`.
+
+**Changelog**: `CHANGELOG.md` `[Unreleased]` — one "Changed (BREAKING)" entry for the `anomalies`/`fuzzy_matches` split, one "Fixed" entry for the repeated-symbol multiset bug.
+
+### Verification
+233 passed / 1 skipped across `tests/tests/unit/` prediction suites, `tests/tests/integration/` prediction suites, and `tests/tests/api/`. One failure, pre-existing and unrelated: `tests/tests/api/test_monitoring_endpoints.py::TestMonitoringEndpoints::test_metrics_collection_after_requests` (`assert 3204.0 > 3204.0`) — `/metrics` `total_requests` bounces between two values across consecutive reads (3208 → 1454 → 3208), consistent with per-worker in-process metrics under multiple uvicorn workers. Filed as a known issue, not treated as a regression from this change — see `planning-docs/SPRINT_BACKLOG.md`.
+
+### Open Item — Flagged, Not Decided
+This is a breaking change to the prediction API contract. Whether it warrants a major version bump (if released as-is) has **not been decided** — flagged for human review in `planning-docs/project-manager/pending-updates.md` rather than decided unilaterally. Nothing from this work has been committed yet.
+
+### Operational Note Recorded (Knowledge Refinement)
+The live `kato` container on `:8000` belongs to the `deployment/` compose project (`deployment/docker-compose.override.yml` pins `image: kato:latest`). Running `docker compose restart` from the repo root does **not** pick up code changes against that container — the working rebuild sequence is `docker compose build kato` (repo root) then `docker compose -f deployment/docker-compose.yml -f deployment/docker-compose.override.yml up -d kato`. Also: `./run_tests.sh` only honors its first path argument — a multi-file/multi-directory run needs pytest directly: `PYTHONPATH="$PWD:$PWD/tests" ./venv/bin/python -m pytest <paths...>`.
+
+**Affected Files**: `kato/representations/prediction.py`, `kato/searches/pattern_search.py`, `kato/workers/pattern_processor.py`, `tests/tests/unit/test_fuzzy_token_matching.py`, `tests/tests/unit/test_filter_pipeline_parameters.py`, `tests/tests/unit/test_hello_world_character_predictions.py` (new), 8 doc files, `CHANGELOG.md`
+**Archive**: `planning-docs/completed/features/2026-09-09-anomalies-fuzzy-matches-field-split.md`
+
+---
+
+## 2026-09-09 - DECISION-018: Metadata Sidecar Fix Is Round-Trip Elimination, Not Call-Level Batching — Corrects the P2 Item's Framing
+**Decision**: The P2 backlog item "Metadata sidecar write path is un-batched" (filed 2026-09-09, same day, during the configuration audit) was filed with an unachievable fix direction. It said the fix "needs a batched upsert call shape at the `learnPattern` level." That is corrected here: `learnPattern` cannot be batched, because there is nothing to batch it *with*. The actually-achievable fix is eliminating redundant round trips on the existing per-learn call, not grouping multiple calls into one.
+**Status**: COMPLETE for the round-trip-elimination half; OPEN for the structural (append-only) half — see Follow-Up below
+**Confidence**: High
+
+**Context**: `pattern_processor.learn()` builds exactly one `Pattern` per call and clears STM as part of that call; `POST /sessions/{id}/learn` never fans out to multiple patterns. There is therefore no batch of patterns to accumulate *within* a single request — the premise of "batch the upsert call" does not exist at the `learnPattern` level. Forming a batch *across* separate requests would require a per-worker buffer to hold pending metadata writes until flush — which is exactly the shape commit `f809a84` removed from `clickhouse_writer.py`, because a per-worker buffer orphans rows invisible to KATO's other uvicorn workers (see DECISION-017). Re-introducing that shape here, even scoped to metadata, would reopen the same correctness bug in a different table.
+
+**Nuance considered and rejected**: `observe-sequence` with `learn_after_each=True` can issue N+1 `learnPattern` calls inside a single HTTP request, which does look like an in-request batching opportunity. It is not: that loop is strictly sequential by requirement, not by accident — each `learnPattern` call mutates Redis stats (frequency via `SETNX`/INCR, which drives `is_new`) that the *next* iteration's `learnPattern` call reads to decide new-vs-relearn handling. Grouping those calls together would race that dependency.
+
+**What was actually fixed instead**: on the re-learn path, the same ClickHouse row was being SELECTed twice per learn — once by `metadata_router.get_metadata()` (which then discards the metric columns it fetched) and again by `upsert_pattern_metadata` (to recover exactly those discarded columns). Threading the already-read row through a new `prev` parameter on `upsert_pattern_metadata` collapses this to one SELECT. Measured: 2 ClickHouse SELECTs → 1 per re-learn (unit-level instrumentation); 8 → 7.27 ClickHouse queries per re-learn end-to-end against the running container (background noise subtracted). See `planning-docs/completed/optimizations/2026-09-09-metadata-sidecar-relearn-duplicate-select-eliminated.md`.
+
+**Design constraint this decision protects** (do not regress): the read inside `upsert_pattern_metadata`'s NEW-pattern branch looks redundant — a genuinely new pattern has no existing row, so the SELECT returns empty — but must be kept. `is_new` is derived from a Redis `SETNX`, and Redis can be empty while ClickHouse still holds the row: exactly the state after a Redis data-loss-then-rehydrate-from-ClickHouse, which this project has hit twice (the April 2026 Redis persistence incident, and the conftest `FLUSHALL` bug fixed during this same session). Skipping that read would silently destroy the retained emotives and precomputed metrics of every rehydrated pattern on its next learn.
+
+**Also recorded**: `wait_for_async_insert=1` on this metadata sidecar path is load-bearing, unlike `patterns_data`'s `wait_for_async_insert=0`. Emotives accumulation is a cross-process read-modify-write; a re-learn landing inside the ~200ms `async_insert` buffer window would read stale emotives and silently drop the intervening learn's contribution. This path cannot move to `wait_for_async_insert=0` until the read-modify-write shape itself is removed (see Follow-Up).
+
+**Follow-Up (open, not done)**: the structural fix is to make emotives/metadata append-only — apply `persistence` at read time (`groupArray` + tail for emotives; `groupUniqArray` for the metadata set-union) instead of merging on write. This removes the read-modify-write entirely, allows `wait_for_async_insert=0` on this path, and collapses both the new-pattern and re-learn paths to a single non-blocking insert. Cost: a schema split of `patterns_metadata` into an append-only emotives/metadata table plus a replace-semantics metrics table, a backfill, and updates to every emotives reader. Tracked in `planning-docs/SPRINT_BACKLOG.md` ("Follow-up: Metadata sidecar read-modify-write shape").
+
+**Rationale**:
+- A backlog item's *fix direction*, not just its symptom framing, can be wrong — this is the second time in one day a P2 item filed during the configuration audit needed correction after deeper investigation (compare DECISION-017's correction of the dead-`KATO_*`-env-names impact framing)
+- Recording the "batching is impossible here, only elimination is possible" reasoning prevents a future contributor from re-attempting call-level batching, which would require reintroducing the exact per-worker-buffer shape `f809a84` deliberately removed
+
+**Alternatives Considered**:
+- Batch metadata writes across the N+1 calls in an `observe-sequence` request: rejected — the sequential Redis dependency between iterations makes this unsafe, not merely unbatched
+- Leave the item's original framing uncorrected and just do the round-trip fix silently: rejected — the wrong framing would resurface the next time someone looked at this item, exactly the failure mode DECISION-017 already flagged as worth avoiding
+
+**Affected Files**: `kato/storage/metadata_router.py`, `kato/informatics/knowledge_base.py` (fixed); `kato/storage/clickhouse_writer.py`, ClickHouse `patterns_metadata` schema (open follow-up)
+**Archive**: `planning-docs/completed/optimizations/2026-09-09-metadata-sidecar-relearn-duplicate-select-eliminated.md`
 
 ---
 

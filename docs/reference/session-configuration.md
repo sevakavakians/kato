@@ -142,13 +142,13 @@ With threshold=0.85, the following fuzzy matches would occur:
 - `"chery"` → `"cherry"` (similarity ~0.91) ✓ Match
 - `"wrld"` → `"world"` (similarity ~0.80) ✗ Below threshold
 
-### Anomalies Field
+### Fuzzy Matches Field
 
-When fuzzy matching is enabled, predictions include an `anomalies` array documenting non-exact matches:
+When fuzzy matching is enabled, predictions include a `fuzzy_matches` array documenting non-exact matches:
 
 ```json
 {
-  "anomalies": [
+  "fuzzy_matches": [
     {
       "observed": "bannana",
       "expected": "banana",
@@ -165,9 +165,10 @@ When fuzzy matching is enabled, predictions include an `anomalies` array documen
 
 **Key Points:**
 - Fuzzy-matched tokens appear in `matches`, not `missing` or `extras`
-- Only non-exact matches appear in `anomalies` (exact matches have no anomaly entry)
+- Only non-exact matches appear in `fuzzy_matches` (exact matches have no entry)
 - Tokens below threshold are treated as mismatches and appear in `missing`/`extras`
-- The anomalies field is always present (empty array when fuzzy matching disabled)
+- The `fuzzy_matches` field is always present (empty array when fuzzy matching disabled)
+- The observed token of each fuzzy match is also listed in `anomalies`, the flat list of every symbol that deviates from the pattern (missing + extras + fuzzy-observed)
 
 ### Recommended Thresholds
 

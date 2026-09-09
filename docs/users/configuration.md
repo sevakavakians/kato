@@ -162,14 +162,16 @@ When enabled, KATO will treat similar tokens as matches if their similarity scor
 # Result: Partial match only
 ```
 
-**Anomalies Tracking**:
+**Fuzzy Match Tracking**:
 
-Fuzzy matches are tracked in the `anomalies` field of predictions:
+Fuzzy matches are tracked in the `fuzzy_matches` field of predictions, and the
+observed tokens are also listed in `anomalies` (the flat list of every symbol
+that deviates from the pattern — missing, extras, and fuzzy-observed):
 
 ```json
 {
   "matches": ["apple", "bannana", "chery"],
-  "anomalies": [
+  "fuzzy_matches": [
     {
       "observed": "bannana",
       "expected": "banana",
@@ -180,7 +182,8 @@ Fuzzy matches are tracked in the `anomalies` field of predictions:
       "expected": "cherry",
       "similarity": 0.91
     }
-  ]
+  ],
+  "anomalies": ["bannana", "chery"]
 }
 ```
 

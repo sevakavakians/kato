@@ -1,11 +1,11 @@
 """
-Tests for fuzzy token matching with anomalies field.
+Tests for fuzzy token matching with the fuzzy_matches field.
 
 Verifies that:
 1. Fuzzy matching correctly matches similar tokens (e.g., 'bannana' → 'banana')
 2. Anomalies field captures fuzzy matches with similarity scores
 3. Missing/extras only include tokens that don't fuzzy match
-4. Exact matches do not appear in anomalies
+4. Exact matches do not appear in fuzzy_matches
 5. Threshold behavior works correctly
 6. Backward compatibility (threshold=0.0 disables fuzzy matching)
 """
@@ -46,19 +46,24 @@ class TestBasicFuzzyMatching:
 
         pred = predictions[0]
 
-        # Check that anomalies field exists and contains fuzzy matches
-        assert 'anomalies' in pred, "Prediction should have anomalies field"
-        assert len(pred['anomalies']) >= 2, f"Should have at least 2 anomalies for misspellings, got {len(pred['anomalies'])}"
+        # Check that fuzzy_matches field exists and contains fuzzy matches
+        assert 'fuzzy_matches' in pred, "Prediction should have fuzzy_matches field"
+        assert len(pred['fuzzy_matches']) >= 2, f"Should have at least 2 fuzzy matches for misspellings, got {len(pred['fuzzy_matches'])}"
 
-        # Check structure of anomalies
-        for anomaly in pred['anomalies']:
-            assert 'observed' in anomaly, "Anomaly should have 'observed' field"
-            assert 'expected' in anomaly, "Anomaly should have 'expected' field"
-            assert 'similarity' in anomaly, "Anomaly should have 'similarity' field"
-            assert 0.0 <= anomaly['similarity'] <= 1.0, "Similarity should be between 0 and 1"
+        # Check structure of fuzzy matches
+        for fuzzy_match in pred['fuzzy_matches']:
+            assert 'observed' in fuzzy_match, "Fuzzy match should have 'observed' field"
+            assert 'expected' in fuzzy_match, "Fuzzy match should have 'expected' field"
+            assert 'similarity' in fuzzy_match, "Fuzzy match should have 'similarity' field"
+            assert 0.0 <= fuzzy_match['similarity'] <= 1.0, "Similarity should be between 0 and 1"
+
+        # The observed (misspelled) tokens surface as anomalies too
+        observed = {fm['observed'] for fm in pred['fuzzy_matches']}
+        assert observed <= set(pred['anomalies']), \
+            f"Fuzzy-observed tokens {observed} should appear in anomalies {pred['anomalies']}"
 
     def test_exact_matches_no_anomalies(self, kato_fixture):
-        """Test that exact matches don't create anomalies."""
+        """Test that exact matches create neither fuzzy matches nor anomalies."""
         kato = kato_fixture
         kato.clear_all_memory()
 
@@ -78,7 +83,9 @@ class TestBasicFuzzyMatching:
         assert len(predictions) > 0
         pred = predictions[0]
 
-        # Exact matches should not create anomalies
+        # Exact matches should create neither fuzzy matches nor anomalies
+        assert 'fuzzy_matches' in pred
+        assert len(pred['fuzzy_matches']) == 0, f"Exact matches should have no fuzzy matches, got {pred['fuzzy_matches']}"
         assert 'anomalies' in pred
         assert len(pred['anomalies']) == 0, f"Exact matches should have no anomalies, got {pred['anomalies']}"
 
@@ -101,11 +108,14 @@ class TestBasicFuzzyMatching:
         predictions = kato.get_predictions()
 
         # May or may not get predictions depending on exact matching
-        # But if we do, anomalies should be empty (fuzzy matching disabled)
+        # But if we do, fuzzy_matches should be empty (fuzzy matching disabled)
+        # and the misspelling shows up as a plain extras anomaly instead
         if len(predictions) > 0:
             pred = predictions[0]
-            assert 'anomalies' in pred
-            assert len(pred['anomalies']) == 0, "Disabled fuzzy matching should have no anomalies"
+            assert 'fuzzy_matches' in pred
+            assert len(pred['fuzzy_matches']) == 0, "Disabled fuzzy matching should have no fuzzy matches"
+            assert 'bannana' in pred['anomalies'], \
+                f"Unmatched misspelling should be an anomaly, got {pred['anomalies']}"
 
 
 class TestThresholdBehavior:
@@ -155,6 +165,7 @@ class TestThresholdBehavior:
         assert isinstance(predictions, list)
         if len(predictions) > 0:
             pred = predictions[0]
+            assert 'fuzzy_matches' in pred
             assert 'anomalies' in pred
 
 
@@ -211,11 +222,11 @@ class TestMissingExtras:
             assert 'extras' in pred
 
 
-class TestAnomaliesStructure:
-    """Test the structure and content of anomalies field."""
+class TestFuzzyMatchesStructure:
+    """Test the structure and content of the fuzzy_matches field."""
 
-    def test_anomalies_contain_similarity_scores(self, kato_fixture):
-        """Test that anomalies include similarity scores."""
+    def test_fuzzy_matches_contain_similarity_scores(self, kato_fixture):
+        """Test that fuzzy matches include similarity scores."""
         kato = kato_fixture
         kato.clear_all_memory()
 
@@ -233,16 +244,16 @@ class TestAnomaliesStructure:
 
         if len(predictions) > 0:
             pred = predictions[0]
-            anomalies = pred.get('anomalies', [])
+            fuzzy_matches = pred.get('fuzzy_matches', [])
 
-            for anomaly in anomalies:
-                assert 'observed' in anomaly
-                assert 'expected' in anomaly
-                assert 'similarity' in anomaly
+            for fuzzy_match in fuzzy_matches:
+                assert 'observed' in fuzzy_match
+                assert 'expected' in fuzzy_match
+                assert 'similarity' in fuzzy_match
                 # Similarity should be high enough to pass threshold
-                assert anomaly['similarity'] >= 0.80
+                assert fuzzy_match['similarity'] >= 0.80
 
-    def test_multiple_anomalies_in_one_prediction(self, kato_fixture):
+    def test_multiple_fuzzy_matches_in_one_prediction(self, kato_fixture):
         """Test handling multiple fuzzy matches in single prediction."""
         kato = kato_fixture
         kato.clear_all_memory()
@@ -261,10 +272,10 @@ class TestAnomaliesStructure:
 
         if len(predictions) > 0:
             pred = predictions[0]
-            anomalies = pred.get('anomalies', [])
+            fuzzy_matches = pred.get('fuzzy_matches', [])
 
-            # Should have multiple anomalies
-            assert len(anomalies) >= 2, "Should detect multiple fuzzy matches"
+            # Should have multiple fuzzy matches
+            assert len(fuzzy_matches) >= 2, "Should detect multiple fuzzy matches"
 
 
 class TestIntegration:
@@ -332,11 +343,12 @@ class TestBackwardCompatibility:
 
         predictions = kato.get_predictions()
 
-        # Behavior should be exact matching
-        # Anomalies should be empty
+        # Behavior should be exact matching: no fuzzy matches, and the
+        # near-miss 'mach' is reported as a plain anomaly rather than matched
         if len(predictions) > 0:
             pred = predictions[0]
-            assert len(pred.get('anomalies', [])) == 0
+            assert len(pred.get('fuzzy_matches', [])) == 0
+            assert 'mach' in pred.get('anomalies', [])
 
 
 class TestEdgeCases:

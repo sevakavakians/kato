@@ -3,6 +3,69 @@
 
 ---
 
+## 2026-09-09 - Task Completion: anomalies/fuzzy_matches Breaking Field Split + Repeated-Symbol Multiset Bug Fix + New Test File + Architectural Decision + Human-Review Flag (Version Bump)
+
+**Trigger**: Task completion (new test file passing; repeated-symbol `missing`/`extras` bug fixed) + architectural decision (`anomalies` field redefined as a flat deviation list; new `fuzzy_matches` field added — breaking change) + knowledge refinement (deployment-container rebuild sequence and `run_tests.sh` single-path-argument limitation) + human alert (release version bump for a breaking, uncommitted change flagged, not decided)
+
+**Event Type**: Task completion (bug fix + new tests) + architectural decision (breaking change) + knowledge refinement (2 operational facts) + human alert (pending-updates.md entry)
+
+**Actions Taken**:
+1. Created `planning-docs/completed/features/2026-09-09-anomalies-fuzzy-matches-field-split.md` — full archive entry (new test file, bug fix, architectural decision detail, verification, operational notes)
+2. Updated `planning-docs/DECISIONS.md` — new `DECISION-019: Split anomalies into anomalies (flat deviation list) + new fuzzy_matches (fuzzy-match detail) — BREAKING CHANGE` prepended above DECISION-018; header timestamp refreshed
+3. Updated `planning-docs/SPRINT_BACKLOG.md` — new "Recently Completed" entry prepended at the top of that section; 2 new backlog items added (P3 `test_metrics_collection_after_requests` flakiness; P3 ops/docs gotcha for deployment-compose rebuild + `run_tests.sh` single-path limitation); header timestamp refreshed
+4. Updated `planning-docs/SESSION_STATE.md` — Current Task and header refreshed; new "Previous Task" block prepended (above the Metadata Sidecar entry)
+5. Updated `planning-docs/README.md` — Test Coverage line extended with the targeted 233/1/1 re-verification result; Last Major Update line rewritten to lead with this change, DECISION-019 cross-referenced alongside DECISION-017/018
+6. Created `planning-docs/project-manager/pending-updates.md` (did not previously exist at this path) — flagged the release-version-bump decision for human review; explicitly **not** decided by this agent
+7. Updated `planning-docs/project-manager/patterns.md` — new pattern entry: a flat `in` membership test against a match/present list under-reports repeated symbols; multiset (`Counter`) accounting is required whenever "was this symbol observed" must be asked per-occurrence, not just per-value
+8. Updated `planning-docs/project-manager/triggers.md` — logged activation event
+9. Updated `planning-docs/project-manager/maintenance-log.md` (this entry)
+
+**Bug Fix Summary**: `kato/representations/prediction.py`'s event-aligned `missing`/`extras` (and the flat fallback `missing`) used a flat `in` test against `matches`/`present`, so an earlier occurrence of a repeated symbol masked a later, genuinely-unobserved occurrence — the second `'o'` of "world" was never reported missing when observing the perturbed "o wxld". Fixed via `collections.Counter` multiset accounting. New test file `tests/tests/unit/test_hello_world_character_predictions.py` (3 tests) locks this in; all 3 pass.
+
+**Architectural Decision Summary** (DECISION-019, user chose from three presented options): `anomalies` redefined as a flat list of every deviating symbol (missing, then extras, then each fuzzy match's observed token); the `{observed, expected, similarity}` fuzzy-match records it used to hold move to a new `fuzzy_matches` field. Breaking for API consumers reading fuzzy detail from `anomalies`. Rejected: replace outright (loses fuzzy detail), mode-dependent typing (inconsistent type by config). 3 code files, 2 tests updated + 1 new, 8 docs updated, `CHANGELOG.md` updated (Changed-BREAKING + Fixed entries).
+
+**Verification**: 233 passed / 1 skipped across unit + integration prediction suites and `tests/tests/api`. 1 pre-existing, unrelated failure (`test_metrics_collection_after_requests` — `/metrics` `total_requests` bounces across workers under `KATO_WORKERS>1`) filed as a new P3 backlog item, not treated as a regression.
+
+**Knowledge Refinement Recorded**: (1) the live `:8000` container belongs to the `deployment/` compose project and is not rebuilt by a plain `docker compose restart` from repo root — needs `docker compose build kato` then the `-f deployment/...` up command; (2) `./run_tests.sh` only honors its first path argument, multi-target runs need pytest directly with `PYTHONPATH` set. Both filed as a new P3 backlog item (ops/docs) in addition to being recorded in DECISION-019 and the archive.
+
+**Human Alert Raised**: Yes — `planning-docs/project-manager/pending-updates.md` created with one Open item: whether this breaking, uncommitted change should be released with a major version bump per `CLAUDE.md`'s container-manager workflow. This is a genuine "architectural conflict / scope decision only a human should make" case (breaking API change), not a routine silent update — the agent explicitly did not decide it.
+
+**Agent Response Time**: Immediate
+**Action Result**: All docs updated; one human alert raised (version-bump decision) per explicit instruction to flag rather than decide
+
+---
+
+## 2026-09-09 - Task Completion: Metadata Sidecar Re-Learn Duplicate SELECT Eliminated + Architectural Decision + Corrected Prior Backlog Item's Framing (Partial Resolution, Open Follow-Up Kept)
+
+**Trigger**: Task completion (root cause found and fixed: duplicate ClickHouse SELECT on the metadata sidecar re-learn path) + knowledge refinement (the P2 "Metadata sidecar write path is un-batched" item, filed earlier the same day, proposed an unachievable fix direction — corrected here, not merely re-worded) + architectural decision (why the fix is round-trip elimination, not call-level batching, and why a specific "redundant-looking" read must be preserved)
+
+**Event Type**: Task completion (optimization/bug-fix) + knowledge refinement (propagated correction to a same-day backlog item) + architectural decision + 1 new backlog item (P3 test flakiness, filed not fixed)
+
+**Actions Taken**:
+1. Created `planning-docs/completed/optimizations/2026-09-09-metadata-sidecar-relearn-duplicate-select-eliminated.md` — full archive entry (root cause, fix, measured results, design constraint, open follow-up, minor flaky-test finding)
+2. Updated `planning-docs/DECISIONS.md` — new `DECISION-018: Metadata Sidecar Fix Is Round-Trip Elimination, Not Call-Level Batching — Corrects the P2 Item's Framing` prepended above DECISION-017
+3. Updated `planning-docs/SPRINT_BACKLOG.md` — replaced the "Bug: Metadata sidecar write path is un-batched" backlog entry with a corrected, re-scoped "Follow-up: Metadata sidecar read-modify-write shape" entry (open, structural work only — the duplicate-SELECT half is done); added a new "Recently Completed" entry at the top of that section; added a new P3 backlog item (`test_bayesian_likelihood_equals_similarity` flakiness, observed during verification, unrelated to this fix); Last Updated header refreshed
+4. Updated `planning-docs/SESSION_STATE.md` — Current Task and header refreshed; new "Previous Task" block prepended (above the Configuration Audit entry); numbered backlog-bug item 4 rewritten to reflect partial resolution + corrected framing; added a corrective pointer to the same-day Configuration Audit block's now-outdated "needs batched call shape" line rather than rewriting that historical record
+5. Updated `planning-docs/README.md` — Test Coverage line refreshed (452 passed / 4 skipped / 3 failed, best result recorded); Last Major Update line rewritten to lead with this fix, DECISION-018 cross-referenced alongside DECISION-017
+6. Updated `planning-docs/project-manager/patterns.md` — new pattern entry: a backlog item's proposed *fix direction* can itself be architecturally impossible, not just its symptom/impact framing (compare DECISION-017, which corrected impact framing on the same day) — this one wasn't caught until the fix was actually attempted
+7. Updated `planning-docs/project-manager/triggers.md` — logged activation event
+8. Updated `planning-docs/project-manager/maintenance-log.md` (this entry)
+
+**Framing Correction Detail**: the original item said the fix "needs a batched upsert call shape at the `learnPattern` level." Corrected: `pattern_processor.learn()` builds exactly one Pattern per call and never fans out, so there is no batch to form within a request; forming one across requests would require a per-worker buffer, which is exactly what commit `f809a84` removed to fix a correctness bug (orphaned rows across the 4 uvicorn workers). Corrected framing: eliminate round trips, don't group them. Nuance considered and rejected: `observe-sequence`'s N+1 `learnPattern` calls under `learn_after_each=True` are strictly sequential (each mutates Redis stats the next iteration reads), so even in-request call grouping isn't safe.
+
+**Fix Summary**: root cause was a duplicate ClickHouse SELECT on the re-learn path (`get_metadata()` fetched the full row then discarded the metric columns; `upsert_pattern_metadata` re-SELECTed to recover them). Fix: new `get_metadata_for_merge()` plus an optional `prev=` parameter on `upsert_pattern_metadata` so the already-read row can be threaded through instead of re-read. 2 files, +39/-5. Measured: 2 SELECTs → 1 per re-learn (unit-level); 8 → 7.27 ClickHouse queries per re-learn end-to-end (background noise subtracted). Full suite: 452 passed / 4 skipped / 3 failed (best result this session).
+
+**Design Constraint Recorded** (do not regress): the NEW-pattern-branch read in `upsert_pattern_metadata` looks redundant but must be kept — `is_new` comes from a Redis `SETNX` that can be empty while ClickHouse still holds the row post Redis-loss-then-rehydrate (hit twice in this project). `wait_for_async_insert=1` on this path is also load-bearing (unlike `patterns_data`'s `=0`) — emotives accumulation is a cross-process read-modify-write.
+
+**Open Follow-Up Kept** (not marked done): the structural fix — making emotives/metadata append-only, applying `persistence` at read time — remains an open P2 backlog item. This work only fixed the achievable half (round-trip elimination); the item was not closed.
+
+**Human Alert Needed**: None. This is a routine partial-resolution + framing-correction cycle, not a pattern of consistently-wrong estimates, a recurring blocker, or scope creep — no `pending-updates.md` entry warranted.
+
+**Agent Response Time**: Immediate
+**Action Result**: All docs updated silently; no human alert required
+
+---
+
 ## 2026-09-09 - Task Completion: Configuration Audit, Wiring, and Dead-Parameter Removal + Architectural Decision + Corrected/Resolved Prior Backlog Item + 5 New Backlog Items
 
 **Trigger**: Task completion (full configuration audit: every `Settings` field and every documented/`KATO_*` env var checked for both binding and consumption) + architectural decision (why `performance.batch_size` was deleted, not wired) + knowledge refinement (corrects the impact framing of the P2 "dead `KATO_*` env names" item logged 2026-09-08) + new task creation (5 new backlog items filed from discoveries made during the audit)

@@ -209,12 +209,12 @@ def test_fuzzy_token_threshold_affects_matching(kato_fixture):
     with_fuzzy = kato_fixture.get_predictions()
 
     # Both should find the pattern (exact 'apple' match is enough)
-    # But fuzzy matching should detect anomalies
+    # But fuzzy matching should detect the misspelling as a fuzzy match
     if len(with_fuzzy) > 0:
         for pred in with_fuzzy:
-            anomalies = pred.get('anomalies', [])
-            # Fuzzy matching should detect 'bannana' → 'banana' as anomaly
-            if len(anomalies) > 0:
-                assert any(a.get('observed') == 'bannana' for a in anomalies), \
-                    f"Should detect 'bannana' as fuzzy match anomaly, got {anomalies}"
+            fuzzy_matches = pred.get('fuzzy_matches', [])
+            # Fuzzy matching should detect 'bannana' → 'banana' as a fuzzy match
+            if len(fuzzy_matches) > 0:
+                assert any(fm.get('observed') == 'bannana' for fm in fuzzy_matches), \
+                    f"Should detect 'bannana' as fuzzy match, got {fuzzy_matches}"
                 break

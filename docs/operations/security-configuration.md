@@ -340,58 +340,51 @@ JWT_EXPIRE_MINUTES=30
 
 ## CORS Configuration
 
-### Production CORS Settings
+### Current Behaviour
 
-**Environment Configuration**:
-```bash
-# .env.production
-CORS_ENABLED=true
-CORS_ORIGINS=https://app.yourdomain.com,https://admin.yourdomain.com
-CORS_CREDENTIALS=true
-CORS_METHODS=GET,POST,PUT,DELETE
-CORS_HEADERS=Content-Type,Authorization,X-API-Key
-```
+KATO applies CORS unconditionally and permissively. There are **no** CORS
+environment variables — `CORS_ENABLED`, `CORS_ORIGINS`, `CORS_CREDENTIALS`,
+`CORS_METHODS` and `CORS_HEADERS` are not read by any code.
 
-**FastAPI Configuration** (`kato/services/kato_fastapi.py`):
+**Shipped configuration** (`kato/services/kato_fastapi.py`):
 ```python
-from fastapi.middleware.cors import CORSMiddleware
-
-app = FastAPI()
-
-# Configure CORS
-if os.getenv("CORS_ENABLED", "false").lower() == "true":
-    origins = os.getenv("CORS_ORIGINS", "*").split(",")
-
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=origins,
-        allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "DELETE"],
-        allow_headers=["Content-Type", "Authorization", "X-API-Key"],
-        max_age=3600,  # Cache preflight requests for 1 hour
-    )
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 ```
 
-### CORS Security Best Practices
+### Restricting Origins
 
-1. **Never use `*` in production**:
-```bash
-# BAD - allows all origins
-CORS_ORIGINS=*
+Because the middleware is not configurable at runtime, restrict cross-origin
+access one of two ways:
 
-# GOOD - explicit origins only
-CORS_ORIGINS=https://app.yourdomain.com,https://admin.yourdomain.com
+1. **At the reverse proxy** (recommended): terminate CORS in nginx/Envoy/an API
+   gateway in front of KATO and reject disallowed origins there.
+2. **In code**: change the `add_middleware` call above to an explicit origin
+   list, and rebuild the image.
+
+```python
+# Explicit origins instead of "*"
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://app.yourdomain.com",
+        "https://admin.yourdomain.com",
+    ],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Content-Type", "Authorization", "X-API-Key"],
+    max_age=3600,
+)
 ```
 
-2. **Limit methods to required only**:
-```bash
-CORS_METHODS=GET,POST  # Don't allow DELETE if not needed
-```
-
-3. **Use credentials carefully**:
-```bash
-CORS_CREDENTIALS=true  # Only if you need cookies/auth headers
-```
+**Best practices**: never leave `*` exposed to the public internet; limit
+methods to those actually used; and enable credentials only if cookies or auth
+headers are genuinely needed.
 
 ## Database Security
 

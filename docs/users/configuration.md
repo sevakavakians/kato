@@ -761,30 +761,28 @@ Filter 'rapidfuzz': 234 candidates (45.2ms)
 
 ## Performance Configuration
 
-### Batch Sizes
+### Connections and Timeouts
 
 **Global Configuration** (Environment Variables):
 ```bash
 # .env file
-KATO_BATCH_SIZE=1000
-KATO_VECTOR_BATCH_SIZE=1000
-KATO_VECTOR_SEARCH_LIMIT=100
+CONNECTION_POOL_SIZE=200
+REQUEST_TIMEOUT=30
 ```
 
-**KATO_BATCH_SIZE**:
-- Pattern retrieval batch size
-- Higher = fewer DB queries, more memory
-- Default: 1000
+**CONNECTION_POOL_SIZE**:
+- Maximum Redis connections **per worker**
+- Total connections ≈ `CONNECTION_POOL_SIZE × KATO_WORKERS`
+- Default: 200
 
-**KATO_VECTOR_BATCH_SIZE**:
-- Vector operation batch size
-- Higher = better throughput, more memory
-- Default: 1000
+**REQUEST_TIMEOUT**:
+- ClickHouse send/receive timeout, in seconds
+- Does not affect Qdrant or Redis, which have their own timeouts
+- Default: 30
 
-**KATO_VECTOR_SEARCH_LIMIT**:
-- Maximum vector search results
-- Higher = more candidates, slower search
-- Default: 100
+**Batching**: there is no batch-size setting. ClickHouse batches inserts
+server-side via `async_insert`; the client-side write buffer is deliberately
+disabled because per-worker buffers orphaned rows across workers.
 
 ### Optimization Flags
 
@@ -793,21 +791,30 @@ KATO_VECTOR_SEARCH_LIMIT=100
 # .env file
 KATO_USE_FAST_MATCHING=true
 KATO_USE_INDEXING=true
-KATO_USE_OPTIMIZED=true
+KATO_USE_BLOOM_FILTER=true
+KATO_USE_REDIS_CACHE=true
 ```
 
-**KATO_USE_FAST_MATCHING**:
+**KATO_USE_FAST_MATCHING** (also accepted as `USE_FAST_MATCHING`):
 - Use RapidFuzz for pattern matching
 - 9x-75x faster than legacy difflib
 - Default: true
 
-**KATO_USE_INDEXING**:
+**KATO_USE_INDEXING** (also accepted as `USE_INDEXING`):
 - Use pattern indexing for faster lookups
 - Default: true
 
-**KATO_USE_OPTIMIZED**:
-- Enable all optimizations
+**KATO_USE_BLOOM_FILTER**:
+- Bloom filter pre-screening in pattern search
 - Default: true
+
+**KATO_USE_REDIS_CACHE**:
+- Redis-backed pattern cache in pattern search
+- Default: true
+
+**MINHASH_HASH_FUNC**:
+- `sha1` (default) or `xxhash` (faster)
+- Changing it changes stored signatures — existing patterns must be reindexed
 
 **Recommendation**: Keep all optimizations enabled unless debugging.
 
@@ -896,8 +903,10 @@ For complete list of environment variables, see [Environment Variables Reference
 ### Quick Reference
 
 **Service**:
+- `SERVICE_NAME`: Service name identifier (default `kato`)
 - `LOG_LEVEL`: DEBUG, INFO, WARNING, ERROR
-- `LOG_FORMAT`: json, human
+- `LOG_FORMAT`: `json` (structured, includes `trace_id` and `duration_ms`) or `human`
+- `LOG_OUTPUT`: `stdout` (default), `stderr`, or a file path
 
 **Database**:
 - `QDRANT_HOST`: qdrant host
@@ -912,6 +921,19 @@ For complete list of environment variables, see [Environment Variables Reference
 **Session**:
 - `SESSION_TTL`: Session timeout (seconds)
 - `SESSION_AUTO_EXTEND`: Auto-extend on access (true/false)
+
+**Processing**:
+- `SORT_SYMBOLS`: Sort symbols alphabetically within events (true/false)
+- `USE_TOKEN_MATCHING` / `KATO_USE_TOKEN_MATCHING`: Token- vs character-level matching
+- `FUZZY_TOKEN_THRESHOLD` / `KATO_FUZZY_TOKEN_THRESHOLD`: Fuzzy token threshold
+
+**Workers**:
+- `KATO_WORKERS`: uvicorn worker processes (default 4)
+- `KATO_LIMIT_CONCURRENCY`: concurrent connections per worker (default 100)
+
+**Loading**:
+- `KATO_ENV_FILE`: explicit `.env` path
+- `KATO_SKIP_DOTENV=1`: disable `.env` loading
 
 ## Configuration File
 

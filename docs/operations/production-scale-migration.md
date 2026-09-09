@@ -7,30 +7,37 @@
 
 ## Executive Summary
 
-This guide documents industry best practices for deploying FastAPI applications at production scale. KATO currently uses single-worker Uvicorn, which is appropriate for development and testing. When production scaling is needed, this guide provides the migration path.
+This guide documents industry best practices for deploying FastAPI applications at production scale. KATO runs multi-worker Uvicorn, sized by `KATO_WORKERS` (default 4) and `KATO_LIMIT_CONCURRENCY` (default 100 per worker). When scaling beyond that is needed, this guide provides the migration path.
 
 ## Current State Analysis
 
 ### KATO's Current Setup
 
 ```dockerfile
-# Current Dockerfile configuration (Dockerfile:59-67)
-CMD ["uvicorn", "kato.services.kato_fastapi:app",
-     "--host", "0.0.0.0", "--port", "8000",
-     "--workers", "1",                    # Single worker
-     "--limit-concurrency", "100",        # 100 concurrent connections per worker
-     "--limit-max-requests", "10000"]     # Auto-restart after 10k requests
+# Current Dockerfile configuration (shell form so env vars expand)
+CMD ["sh", "-c", "exec uvicorn kato.services.kato_fastapi:app \
+     --host 0.0.0.0 --port 8000 \
+     --workers ${KATO_WORKERS:-4} \
+     --limit-concurrency ${KATO_LIMIT_CONCURRENCY:-100} \
+     --timeout-keep-alive 5 \
+     --timeout-graceful-shutdown 30 \
+     --backlog 2048 \
+     --access-log"]
 ```
+
+`KATO_WORKERS` and `KATO_LIMIT_CONCURRENCY` are the only worker/concurrency
+knobs, and the `/concurrency` endpoint reports capacity from the same two
+variables.
 
 ### Current Limitations
 
 | Aspect | Current State | Impact |
 |--------|---------------|--------|
-| **Parallelism** | Single worker = 1 CPU core | Cannot utilize multi-core CPUs |
-| **Fault Tolerance** | Worker crash = service down | No isolation between requests |
-| **Worker Restarts** | Restart after 10k requests | Training sessions interrupted |
-| **Load Balancing** | No internal load balancing | All requests to single worker |
-| **Concurrency** | 100 connections per worker | Limited for high-traffic scenarios |
+| **Parallelism** | `KATO_WORKERS` uvicorn workers (default 4) | Bounded by the single container's CPUs |
+| **Fault Tolerance** | Uvicorn supervises its own workers | No cross-host isolation |
+| **Worker Restarts** | No max-requests recycling by default | Long-lived workers accumulate memory |
+| **Load Balancing** | Uvicorn round-robins across workers | No health-aware routing |
+| **Concurrency** | `KATO_LIMIT_CONCURRENCY` per worker (default 100) | Ceiling is limit × workers |
 
 ### When Current Setup is Sufficient
 
@@ -169,9 +176,9 @@ CMD ["gunicorn", "kato.services.kato_fastapi:app", \
 --workers 8   # Moderate (2x cores)
 --workers 16  # Aggressive (4x cores)
 
-# Dynamic calculation in docker compose:
+# Dynamic calculation in docker compose (the shipped uvicorn CMD reads this):
 environment:
-  - GUNICORN_WORKERS=${GUNICORN_WORKERS:-4}
+  - KATO_WORKERS=${KATO_WORKERS:-4}
 ```
 
 #### Key Parameters Explained
@@ -266,12 +273,12 @@ services:
       - LOG_LEVEL=INFO
       - SESSION_TTL=3600
       - SESSION_AUTO_EXTEND=true
-      # Gunicorn configuration
-      - GUNICORN_WORKERS=${GUNICORN_WORKERS:-4}
+      # Worker configuration
+      - KATO_WORKERS=${KATO_WORKERS:-4}
+      - KATO_LIMIT_CONCURRENCY=${KATO_LIMIT_CONCURRENCY:-100}
       # Performance optimizations
-      - KATO_BATCH_SIZE=10000
-      - CONNECTION_POOL_SIZE=50
-      - REQUEST_TIMEOUT=120.0
+      - CONNECTION_POOL_SIZE=200   # Redis connections per worker
+      - REQUEST_TIMEOUT=120.0      # ClickHouse send/receive timeout (seconds)
     ports:
       - "8000:8000"
     networks:
@@ -752,10 +759,10 @@ Need better performance/reliability?
 
 ## Conclusion
 
-**Current Status:** KATO's single-worker Uvicorn setup is appropriate for development and testing.
+**Current Status:** KATO's multi-worker Uvicorn setup (`KATO_WORKERS`, `KATO_LIMIT_CONCURRENCY`) covers development, testing, and single-host production.
 
 **Future Scaling Path:**
-1. **Short-term**: Increase `--limit-max-requests` to prevent training interruptions
+1. **Short-term**: Tune `KATO_WORKERS` and `KATO_LIMIT_CONCURRENCY` for the host
 2. **Medium-term**: Implement Gunicorn + Uvicorn for multi-core utilization
 3. **Long-term**: Migrate to Kubernetes for cloud-native auto-scaling
 

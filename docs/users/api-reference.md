@@ -129,7 +129,7 @@ Processes an observation and adds it to the session's short-term memory.
 
 **Notes:**
 - Vectors are converted to symbolic representations (e.g., `VCTR|<hash>`)
-- Symbols within events are sorted alphabetically if SORT=true
+- Symbols within events are sorted alphabetically if SORT_SYMBOLS=true
 - Auto-learning triggers when STM length reaches MAX_PATTERN_LENGTH
 
 ### Get Short-Term Memory (Session-Based)
@@ -675,7 +675,7 @@ For theoretical details, see: `docs/PREDICTIVE_INFORMATION.md`
 
 1. **Pattern Naming**: Pattern names are plain SHA1 hashes of pattern data (the `PTRN|` prefix only appears in display/repr output)
 2. **Minimum Prediction Requirement**: STM must contain at least 1 string to generate predictions (single-symbol uses optimized fast path)
-3. **Sorting**: Symbols within events are sorted alphabetically when SORT=true (default)
+3. **Sorting**: Symbols within events are sorted alphabetically when SORT_SYMBOLS=true (default)
 4. **Auto-Learning**: Triggers when STM reaches MAX_PATTERN_LENGTH (if > 0)
 5. **Recall Threshold**: Controls pattern matching sensitivity (0.0 = all patterns, 1.0 = exact matches only)
 6. **Dynamic Calculation**: Predictive information is calculated at prediction time using ensemble statistics

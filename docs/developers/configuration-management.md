@@ -18,14 +18,21 @@ KATO's configuration management system provides a robust, type-safe way to confi
 
 ```
 Settings (Main Configuration Class)
-├── ProcessorConfig      # Instance identification and naming
+├── ServiceConfig        # Service name identifier
 ├── LoggingConfig        # Logging levels, formats, and outputs
 ├── DatabaseConfig       # ClickHouse, Qdrant, and Redis connections
 ├── LearningConfig       # Pattern learning and memory parameters
 ├── ProcessingConfig     # Prediction and pattern processing
 ├── PerformanceConfig    # Optimization and tuning settings
-└── APIConfig           # Web service configuration
+└── SessionConfig        # Session TTL and auto-extension
 ```
+
+Two configuration readers live outside this model and read `os.environ`
+directly: `kato/config/vectordb_config.py` (vector database `KATO_*`
+variables) and the hot paths in `kato/searches/pattern_search.py` and
+`kato/storage/clickhouse_writer.py`. `kato/env_loader.py` populates
+`os.environ` from `.env` before any of the three run, so all of them observe
+the same values.
 
 ## Implementation Details
 
@@ -83,16 +90,20 @@ The system handles Pydantic v2's requirement that field names match environment 
 ```python
 class DatabaseConfig(BaseSettings):
     # Field name MUST match env var for pydantic-settings v2
-    MONGO_BASE_URL: str = Field(
-        'mongodb://localhost:27017',
-        description="MongoDB connection URL"
+    CLICKHOUSE_HOST: str = Field(
+        'localhost',
+        description="ClickHouse host address"
     )
-    
+
     @property
-    def mongo_url(self) -> str:
-        """Backward compatibility property."""
-        return self.MONGO_BASE_URL
+    def clickhouse_host(self) -> str:
+        """Lower-case accessor for call sites."""
+        return self.CLICKHOUSE_HOST
 ```
+
+Fields whose names differ from their environment variable use
+`validation_alias=AliasChoices(...)`, which is how both `USE_TOKEN_MATCHING`
+and `KATO_USE_TOKEN_MATCHING` resolve to the same setting.
 
 ## Configuration Sources
 
@@ -101,9 +112,9 @@ class DatabaseConfig(BaseSettings):
 Environment variables are the primary configuration source:
 
 ```bash
-export PROCESSOR_ID=my-processor
 export LOG_LEVEL=DEBUG
-export MONGO_BASE_URL=mongodb://custom:27017
+export CLICKHOUSE_HOST=clickhouse
+export REDIS_URL=redis://redis:6379/0
 export RECALL_THRESHOLD=0.5
 ```
 
@@ -113,12 +124,8 @@ YAML or JSON configuration files can be loaded:
 
 ```yaml
 # config.yaml
-processor:
-  session_id: "my-processor"
-  processor_name: "Custom Processor"
-
 database:
-  MONGO_BASE_URL: "mongodb://custom:27017"
+  CLICKHOUSE_HOST: "clickhouse-server"
   QDRANT_HOST: "qdrant-server"
 
 learning:
@@ -132,6 +139,19 @@ Load via environment variable:
 export KATO_CONFIG_FILE=/path/to/config.yaml
 ```
 
+Unknown keys in this file fail loudly — the `Settings` model keeps Pydantic's
+default `extra='forbid'`.
+
+### 2b. `.env` File
+
+`kato/env_loader.py` loads a `.env` file into `os.environ` before any
+configuration is read. Related variables:
+
+```bash
+export KATO_ENV_FILE=/path/to/.env   # Explicit file instead of discovery
+export KATO_SKIP_DOTENV=1            # Disable .env loading entirely
+```
+
 ### 3. Docker Compose (Production)
 
 Docker Compose provides environment variables to containers:
@@ -141,9 +161,9 @@ services:
   kato:
     image: kato:latest
     environment:
-      - PROCESSOR_ID=primary
-      - PROCESSOR_NAME=Primary
-      - MONGO_BASE_URL=mongodb://mongodb:27017
+      - SERVICE_NAME=kato
+      - CLICKHOUSE_HOST=clickhouse
+      - REDIS_URL=redis://redis:6379/0
       - QDRANT_HOST=qdrant
       - LOG_LEVEL=INFO
       - MAX_PATTERN_LENGTH=0
@@ -155,15 +175,14 @@ services:
 Create configuration programmatically for testing:
 
 ```python
-from kato.config.settings import Settings, ProcessorConfig, DatabaseConfig
+from kato.config.settings import DatabaseConfig, LearningConfig, Settings
 
 settings = Settings(
-    processor=ProcessorConfig(
-        session_id="test-123",
-        processor_name="Test Processor"
-    ),
     database=DatabaseConfig(
-        MONGO_BASE_URL="mongodb://test:27017"
+        CLICKHOUSE_HOST="clickhouse-test"
+    ),
+    learning=LearningConfig(
+        recall_threshold=0.5
     )
 )
 ```
@@ -189,16 +208,15 @@ Pydantic automatically validates:
 
 Example validators:
 ```python
-class ProcessorConfig(BaseSettings):
-    session_id: Optional[str] = Field(None, env='PROCESSOR_ID')
-    
-    @validator('session_id', pre=True, always=True)
-    def generate_session_id(cls, v):
-        """Generate processor ID if not provided."""
-        if not v:
-            import uuid
-            import time
-            return f"kato-{uuid.uuid4().hex[:8]}-{int(time.time())}"
+class LearningConfig(BaseSettings):
+    max_pattern_length: int = Field(0, ge=0)
+
+    @field_validator('max_pattern_length')
+    @classmethod
+    def validate_pattern_length(cls, v):
+        """Validate pattern length configuration."""
+        if v < 0:
+            raise ValueError("max_pattern_length must be non-negative")
         return v
 ```
 
@@ -207,18 +225,14 @@ class ProcessorConfig(BaseSettings):
 The system checks for configuration issues at startup:
 
 ```python
-def validate_configuration(self) -> List[str]:
+def validate_configuration(self) -> list[str]:
     """Validate configuration and return warnings."""
     warnings = []
-    
+
     if self.environment == 'production':
-        if self.database.mongo_url == 'mongodb://localhost:27017':
-            warnings.append("Using localhost MongoDB in production")
         if self.debug:
-            warnings.append("Debug mode enabled in production")
-        if self.api.cors_origins == ['*']:
-            warnings.append("CORS allows all origins in production")
-    
+            warnings.append("Debug mode enabled in production environment")
+
     return warnings
 ```
 
@@ -252,12 +266,11 @@ curl http://localhost:8000/status
 
 ## Configuration Reference
 
-### ProcessorConfig
+### ServiceConfig
 
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
-| PROCESSOR_ID | str | auto-generated | Unique identifier for processor instance |
-| PROCESSOR_NAME | str | "KatoProcessor" | Display name for the processor |
+| SERVICE_NAME | str | "kato" | Service name identifier |
 
 ### LoggingConfig
 
@@ -267,19 +280,33 @@ curl http://localhost:8000/status
 | LOG_FORMAT | str | "human" | Output format ("json" or "human") |
 | LOG_OUTPUT | str | "stdout" | Output destination (stdout, stderr, or file path) |
 
+`LOG_FORMAT=json` emits structured records including `trace_id` and
+`duration_ms`. Logs default to **stdout**; earlier versions initialized logging
+with `logging.basicConfig` and therefore wrote to stderr.
+
 ### DatabaseConfig
 
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
-| MONGO_BASE_URL | str | "mongodb://localhost:27017" | MongoDB connection URL |
-| MONGO_TIMEOUT | int | 5000 | Connection timeout in milliseconds |
+| CLICKHOUSE_HOST | str | "localhost" | ClickHouse host address |
+| CLICKHOUSE_PORT | int | 8123 | ClickHouse HTTP port |
+| CLICKHOUSE_DB | str | "kato" | ClickHouse database name |
+| CLICKHOUSE_USER | str | "default" | ClickHouse username |
+| CLICKHOUSE_PASSWORD | str | None | ClickHouse password |
+| CLICKHOUSE_SECURE | bool | false | Use HTTPS for ClickHouse |
 | QDRANT_HOST | str | "localhost" | Qdrant host address |
 | QDRANT_PORT | int | 6333 | Qdrant HTTP port |
 | QDRANT_GRPC_PORT | int | 6334 | Qdrant gRPC port |
-| QDRANT_COLLECTION_PREFIX | str | "vectors" | Collection name prefix |
+| QDRANT_API_KEY | str | None | Qdrant API key |
+| QDRANT_HTTPS | bool | false | Use HTTPS for Qdrant |
+| REDIS_URL | str | None | Redis connection URL (preferred) |
 | REDIS_ENABLED | bool | false | Enable Redis caching |
-| REDIS_HOST | str | None | Redis host (if enabled) |
-| REDIS_PORT | int | 6379 | Redis port |
+| REDIS_HOST | str | None | Redis host (deprecated, use REDIS_URL) |
+| REDIS_PORT | int | 6379 | Redis port (deprecated) |
+| REDIS_TLS | bool | false | Use TLS for Redis |
+
+Qdrant collection names are not configurable; KATO always uses
+`vectors_{processor_id}`.
 
 ### LearningConfig
 
@@ -288,8 +315,10 @@ curl http://localhost:8000/status
 | MAX_PATTERN_LENGTH | int | 0 | Auto-learn after N observations (0 = manual) |
 | PERSISTENCE | int | 5 | Rolling window size for emotive values per pattern |
 | RECALL_THRESHOLD | float | 0.1 | Pattern matching threshold (0.0-1.0) |
-| AUTO_LEARN_ENABLED | bool | false | Enable automatic learning |
-| AUTO_LEARN_THRESHOLD | int | 50 | Observations before auto-learning |
+| STM_MODE | str | "CLEAR" | STM mode after auto-learn (CLEAR or ROLLING) |
+
+Auto-learning is driven solely by `MAX_PATTERN_LENGTH`: any value above `0`
+enables it.
 
 ### ProcessingConfig
 
@@ -297,33 +326,51 @@ curl http://localhost:8000/status
 |----------|------|---------|-------------|
 | INDEXER_TYPE | str | "VI" | Type of vector indexer |
 | MAX_PREDICTIONS | int | 100 | Maximum predictions to return |
-| SORT | bool | true | Sort symbols alphabetically |
+| SORT_SYMBOLS | bool | true | Sort symbols alphabetically |
 | PROCESS_PREDICTIONS | bool | true | Enable prediction processing |
+| USE_TOKEN_MATCHING / KATO_USE_TOKEN_MATCHING | bool | true | Token-level vs character-level matching |
+| FUZZY_TOKEN_THRESHOLD / KATO_FUZZY_TOKEN_THRESHOLD | float | 0.0 | Fuzzy token threshold (0.0 = disabled) |
+| RANK_SORT_ALGO | str | "potential" | Prediction ranking metric |
 
 ### PerformanceConfig
 
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
-| KATO_USE_FAST_MATCHING | bool | true | Use optimized matching algorithms |
-| KATO_USE_INDEXING | bool | true | Use pattern indexing |
-| KATO_USE_OPTIMIZED | bool | true | Enable general optimizations |
-| KATO_BATCH_SIZE | int | 1000 | Batch size for bulk operations |
-| KATO_VECTOR_BATCH_SIZE | int | 1000 | Batch size for vector operations |
-| KATO_VECTOR_SEARCH_LIMIT | int | 100 | Maximum vector search results |
-| CONNECTION_POOL_SIZE | int | 10 | Database connection pool size |
-| REQUEST_TIMEOUT | float | 30.0 | Request timeout in seconds |
+| USE_FAST_MATCHING / KATO_USE_FAST_MATCHING | bool | true | Use optimized matching algorithms |
+| USE_INDEXING / KATO_USE_INDEXING | bool | true | Use pattern indexing |
+| KATO_USE_BLOOM_FILTER | bool | true | Bloom filter pre-screening in pattern search |
+| KATO_USE_REDIS_CACHE | bool | true | Redis-backed pattern cache in pattern search |
+| CONNECTION_POOL_SIZE | int | 200 | Max Redis connections per worker |
+| REQUEST_TIMEOUT | float | 30.0 | ClickHouse send/receive timeout in seconds |
+| MINHASH_HASH_FUNC | str | "sha1" | MinHash hash function ("sha1" or "xxhash") |
 
-### APIConfig
+`REQUEST_TIMEOUT` applies to the ClickHouse client only; Qdrant and Redis have
+their own timeouts. There is no batch-size setting: ClickHouse batching is
+server-side via `async_insert`, and the client-side write buffer is
+deliberately disabled because per-worker buffers orphaned rows across uvicorn
+workers.
+
+Switching `MINHASH_HASH_FUNC` to `xxhash` is faster but changes the hashes, so
+existing patterns must be reindexed.
+
+### SessionConfig
 
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
-| HOST | str | "0.0.0.0" | API host address |
-| PORT | int | 8000 | API port number |
-| WORKERS | int | 1 | Number of worker processes |
-| CORS_ENABLED | bool | true | Enable CORS support |
-| CORS_ORIGINS | str | "*" | Allowed origins (comma-separated) |
-| DOCS_ENABLED | bool | true | Enable API documentation |
-| MAX_REQUEST_SIZE | int | 104857600 | Maximum request size (bytes) |
+| SESSION_TTL | int | 3600 | Session time-to-live in seconds |
+| SESSION_AUTO_EXTEND | bool | true | Extend TTL on each access |
+
+### Worker and Concurrency
+
+Read by the uvicorn command in the Dockerfile and by the `/concurrency`
+endpoint. There is no `APIConfig`: host, port and worker count come from the
+uvicorn command line, and CORS is applied unconditionally with
+`allow_origins=["*"]`.
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| KATO_WORKERS | int | 4 | uvicorn worker processes |
+| KATO_LIMIT_CONCURRENCY | int | 100 | Max concurrent connections per worker |
 
 ## Troubleshooting
 
@@ -337,7 +384,7 @@ curl http://localhost:8000/status
 ```yaml
 # docker compose.yml
 environment:
-  - MONGO_BASE_URL=mongodb://mongodb:27017  # Use service name, not localhost
+  - CLICKHOUSE_HOST=clickhouse  # Use service name, not localhost
 ```
 
 #### 2. Pydantic Validation Errors
@@ -367,11 +414,13 @@ docker compose restart
 **Solution**: Use Docker service names, not localhost:
 ```yaml
 # Correct for Docker
-MONGO_BASE_URL: "mongodb://mongodb:27017"
+CLICKHOUSE_HOST: "clickhouse"
+REDIS_URL: "redis://redis:6379/0"
 QDRANT_HOST: "qdrant"
 
 # Wrong for Docker (only works locally)
-MONGO_BASE_URL: "mongodb://localhost:27017"
+CLICKHOUSE_HOST: "localhost"
+REDIS_URL: "redis://localhost:6379/0"
 QDRANT_HOST: "localhost"
 ```
 

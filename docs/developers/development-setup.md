@@ -108,9 +108,6 @@ SESSION_AUTO_EXTEND=true
 
 # Development Settings
 DEBUG=true
-DOCS_ENABLED=true
-CORS_ENABLED=true
-CORS_ORIGINS=*
 EOF
 ```
 

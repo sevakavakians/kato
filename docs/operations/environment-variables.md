@@ -28,24 +28,6 @@ SERVICE_NAME=kato-production
 - If metrics appear under wrong service name, verify this variable
 - Check Prometheus/Grafana service label matches
 
-### SERVICE_VERSION
-**Type**: string | **Default**: `3.0` | **Required**: No
-
-```bash
-SERVICE_VERSION=3.0.1
-```
-
-**Operational Context**:
-- Used for version tracking in logs and metrics
-- Update during deployments for rollback tracking
-- Semver format recommended: MAJOR.MINOR.PATCH
-
-**Production Best Practice**:
-```bash
-# Tag with git commit for traceability
-SERVICE_VERSION=3.0.1-${GIT_COMMIT_SHA}
-```
-
 ## Logging Configuration
 
 ### LOG_LEVEL
@@ -73,10 +55,9 @@ LOG_LEVEL=DEBUG # Development/Troubleshooting
 
 **Troubleshooting**:
 ```bash
-# Temporarily increase log level without restart
-curl -X POST http://localhost:8000/admin/log-level \
-  -H "Content-Type: application/json" \
-  -d '{"level": "DEBUG"}'
+# Log level is read at startup; change it and restart
+docker compose restart kato
+docker compose logs kato | head
 ```
 
 ### LOG_FORMAT
@@ -125,6 +106,10 @@ LOG_OUTPUT=/var/log/kato/app.log    # File-based
 - **File path**: Legacy systems, requires volume mount
 
 **Production Recommendation**: Always use `stdout` for containerized deployments.
+
+**Behaviour change**: logs now default to **stdout**. Earlier versions
+initialized logging through `logging.basicConfig`, which wrote to stderr. Set
+`LOG_OUTPUT=stderr` if your log collection depends on the old destination.
 
 ## Database Configuration
 
@@ -206,9 +191,11 @@ QDRANT_GRPC_PORT=6334   # gRPC (faster)
 **High-Performance Configuration**:
 ```bash
 QDRANT_HOST=qdrant-kb
-QDRANT_PORT=6334  # Use gRPC port
-QDRANT_USE_GRPC=true
+QDRANT_GRPC_PORT=6334
 ```
+
+Collection names are not configurable; KATO always uses
+`vectors_{processor_id}`.
 
 **Troubleshooting**:
 ```bash
@@ -432,29 +419,67 @@ Indexing OFF: 1200ms search time
 Indexing ON:  45ms search time (26x improvement)
 ```
 
-### KATO_BATCH_SIZE
-**Type**: integer | **Default**: `1000` | **Range**: 100-10000
+### CONNECTION_POOL_SIZE
+**Type**: integer | **Default**: `200` | **Range**: 1-1000
 
 ```bash
-KATO_BATCH_SIZE=1000   # Standard batch size
-KATO_BATCH_SIZE=5000   # Large batches (more memory, faster)
+CONNECTION_POOL_SIZE=200  # Max Redis connections per worker
 ```
 
 **Operational Context**:
-- Larger batches = Better throughput, more memory
-- Smaller batches = Lower memory, more overhead
+- Applies to the Redis client, **per uvicorn worker**
+- Total Redis connections ≈ `CONNECTION_POOL_SIZE × KATO_WORKERS`
+- Raise only after confirming Redis `maxclients` has headroom
 
-**Tuning Guidelines**:
+### REQUEST_TIMEOUT
+**Type**: float | **Default**: `30.0` | **Range**: 1.0-300.0
+
 ```bash
-# Memory-constrained environments
-KATO_BATCH_SIZE=500
-
-# High-throughput environments
-KATO_BATCH_SIZE=5000
-
-# Balanced
-KATO_BATCH_SIZE=1000
+REQUEST_TIMEOUT=30   # ClickHouse send/receive timeout (seconds)
 ```
+
+**Operational Context**:
+- Applies to the ClickHouse client only
+- Does **not** affect Qdrant or Redis, which have their own timeouts
+- Raise for very large analytical queries; lower to fail fast
+
+### MINHASH_HASH_FUNC
+**Type**: string | **Default**: `sha1` | **Values**: `sha1`, `xxhash`
+
+```bash
+MINHASH_HASH_FUNC=sha1    # Default
+MINHASH_HASH_FUNC=xxhash  # Faster MinHash computation
+```
+
+**Operational Context**:
+- `xxhash` requires the `xxhash` package; KATO falls back to SHA-1 with a
+  warning if it is missing
+- Changing this changes the stored hashes — **existing patterns must be
+  reindexed**
+
+### About Batching
+
+There is no batch-size environment variable. ClickHouse batching happens
+server-side via `async_insert` (`async_insert=1`, `wait_for_async_insert=0`),
+which batches across all uvicorn workers. The client-side write buffer is
+deliberately disabled because per-worker buffers orphaned rows across workers.
+
+## Worker and Concurrency Configuration
+
+### KATO_WORKERS / KATO_LIMIT_CONCURRENCY
+**Type**: integer | **Defaults**: `4`, `100`
+
+```bash
+KATO_WORKERS=8
+KATO_LIMIT_CONCURRENCY=200
+```
+
+**Operational Context**:
+- Both are expanded by the `uvicorn` command in the Dockerfile
+- The `/concurrency` endpoint reads these same variables and reports
+  `KATO_LIMIT_CONCURRENCY × KATO_WORKERS` as total capacity
+- There are no `HOST`, `PORT` or `WORKERS` variables; host and port come from
+  the uvicorn command line
 
 ## Session Configuration
 
@@ -525,8 +550,8 @@ KATO_USE_INDEXING=true
 
 ### Staging
 ```bash
-# .env.staging
-ENVIRONMENT=staging
+# .env.staging (ENVIRONMENT only accepts development, testing or production)
+ENVIRONMENT=production
 LOG_LEVEL=INFO
 LOG_FORMAT=json
 LOG_OUTPUT=stdout
@@ -547,7 +572,6 @@ SESSION_AUTO_EXTEND=true
 
 KATO_USE_FAST_MATCHING=true
 KATO_USE_INDEXING=true
-KATO_BATCH_SIZE=1000
 ```
 
 ### Production
@@ -555,7 +579,6 @@ KATO_BATCH_SIZE=1000
 # .env.production
 ENVIRONMENT=production
 SERVICE_NAME=kato-production
-SERVICE_VERSION=3.0.1
 LOG_LEVEL=INFO
 LOG_FORMAT=json
 LOG_OUTPUT=stdout
@@ -569,8 +592,8 @@ CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}  # From secrets
 
 # Qdrant cluster
 QDRANT_HOST=qdrant-cluster
-QDRANT_PORT=6334  # gRPC for performance
-QDRANT_USE_GRPC=true
+QDRANT_PORT=6333
+QDRANT_GRPC_PORT=6334
 
 # Redis Sentinel
 REDIS_URL=redis-sentinel://sentinel1:26379,sentinel2:26379/mymaster/0
@@ -589,14 +612,14 @@ SESSION_AUTO_EXTEND=true
 # Performance
 KATO_USE_FAST_MATCHING=true
 KATO_USE_INDEXING=true
-KATO_USE_OPTIMIZED=true
-KATO_BATCH_SIZE=1000
-CONNECTION_POOL_SIZE=100
+KATO_USE_BLOOM_FILTER=true
+KATO_USE_REDIS_CACHE=true
+CONNECTION_POOL_SIZE=200
+REQUEST_TIMEOUT=30
 
-# API Configuration
-WORKERS=4
-CORS_ENABLED=true
-CORS_ORIGINS=https://yourdomain.com
+# Workers and concurrency
+KATO_WORKERS=4
+KATO_LIMIT_CONCURRENCY=100
 ```
 
 ## Troubleshooting
@@ -606,8 +629,8 @@ CORS_ORIGINS=https://yourdomain.com
 # Verify environment variables are loaded
 docker exec kato env | grep KATO
 
-# Check FastAPI settings
-curl http://localhost:8000/admin/config
+# Check active service configuration
+curl http://localhost:8000/status
 
 # Restart to apply changes
 docker compose restart kato
@@ -630,8 +653,8 @@ docker exec kato python -c "import redis; print(redis.from_url(os.environ['REDIS
 # Check if optimizations are enabled
 curl http://localhost:8000/metrics | grep -E "(fast_matching|indexing)"
 
-# Verify batch size
-docker exec kato env | grep BATCH_SIZE
+# Verify worker count and total capacity
+curl http://localhost:8000/concurrency
 
 # Check recall threshold impact
 curl http://localhost:8000/metrics | grep prediction_count

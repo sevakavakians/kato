@@ -171,8 +171,11 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD curl -f http://localhost:8000/health || exit 1
 
-# Start KATO
-CMD ["uvicorn", "kato.services.kato_fastapi:app", "--host", "0.0.0.0", "--port", "8000"]
+# Start KATO (KATO_WORKERS and KATO_LIMIT_CONCURRENCY are expanded here)
+CMD ["sh", "-c", "exec uvicorn kato.services.kato_fastapi:app \
+     --host 0.0.0.0 --port 8000 \
+     --workers ${KATO_WORKERS:-4} \
+     --limit-concurrency ${KATO_LIMIT_CONCURRENCY:-100}"]
 ```
 
 ## Environment Configuration
@@ -182,7 +185,6 @@ CMD ["uvicorn", "kato.services.kato_fastapi:app", "--host", "0.0.0.0", "--port",
 ```bash
 # Service Configuration
 SERVICE_NAME=kato
-SERVICE_VERSION=3.0
 ENVIRONMENT=production
 
 # Logging
@@ -190,12 +192,10 @@ LOG_LEVEL=INFO
 LOG_FORMAT=json
 LOG_OUTPUT=stdout
 
-# API Configuration
-HOST=0.0.0.0
-PORT=8000
-WORKERS=4
-CORS_ENABLED=true
-CORS_ORIGINS=https://yourdomain.com
+# Workers and concurrency (expanded by the uvicorn CMD; host and port are
+# command-line arguments, not environment variables)
+KATO_WORKERS=4
+KATO_LIMIT_CONCURRENCY=100
 
 # Database Configuration
 CLICKHOUSE_HOST=kato-clickhouse
@@ -218,9 +218,16 @@ SESSION_AUTO_EXTEND=true
 # Performance Configuration
 KATO_USE_FAST_MATCHING=true
 KATO_USE_INDEXING=true
-KATO_BATCH_SIZE=1000
-CONNECTION_POOL_SIZE=50
+KATO_USE_BLOOM_FILTER=true
+KATO_USE_REDIS_CACHE=true
+CONNECTION_POOL_SIZE=200
+REQUEST_TIMEOUT=30
 ```
+
+`CONNECTION_POOL_SIZE` is per worker, so plan for
+`CONNECTION_POOL_SIZE × KATO_WORKERS` Redis connections. `REQUEST_TIMEOUT`
+applies to the ClickHouse client only. There is no batch-size variable —
+ClickHouse batches server-side via `async_insert`.
 
 ## Deployment Scenarios
 
@@ -525,7 +532,7 @@ docker exec redis-kb redis-cli ping
 ## Production Checklist
 
 - [ ] Set ENVIRONMENT=production
-- [ ] Configure proper CORS_ORIGINS
+- [ ] Restrict cross-origin access at the reverse proxy (KATO's own CORS middleware is unconditional, `allow_origins=["*"]`)
 - [ ] Set strong ClickHouse authentication (if enabled)
 - [ ] Enable Redis persistence (AOF)
 - [ ] Configure backup strategy

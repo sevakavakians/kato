@@ -30,7 +30,7 @@ Welcome to the KATO reference documentation! This section provides technical spe
 ### Specifications
 - **[Logging Specification](logging-specification.md)** - Logging system specification
 - **[Performance Guide](performance-guide.md)** - Performance specifications and tuning
-- **[Mode Switching](mode-switching.md)** - Filter pipeline mode switching
+- **[Architecture Mode](mode-switching.md)** - Hybrid is the only mode; there is no mode switch
 - **[Filter Pipeline Guide](filter-pipeline-guide.md)** - MinHash/LSH tuning
 
 ### Terminology

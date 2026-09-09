@@ -148,7 +148,7 @@ Conversion of numerical vectors to symbolic representations:
 3. Represented symbolically as `VCTR|<hash>`
 
 ### Sorting Mode
-When `SORT=true` (default), symbols within events are sorted alphabetically for deterministic pattern matching.
+When `SORT_SYMBOLS=true` (default), symbols within events are sorted alphabetically for deterministic pattern matching.
 
 ## Architecture Components
 

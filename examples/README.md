@@ -156,7 +156,7 @@ await client.observe(session_id, [
     ["event2_symbol1"]
 ])
 
-# 4. Trigger learning (if AUTO_LEARN_THRESHOLD = 0)
+# 4. Trigger learning (needed when MAX_PATTERN_LENGTH = 0, i.e. manual learning)
 await client.auto_learn(session_id)
 
 # 5. Get predictions

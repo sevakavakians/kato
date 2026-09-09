@@ -1,4 +1,4 @@
-.PHONY: help install install-dev lint format security dead-code quality test test-cov clean
+.PHONY: help install install-dev run lint format security dead-code quality test test-cov clean
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -12,6 +12,19 @@ install: ## Install production dependencies
 install-dev: ## Install development dependencies
 	pip install -r requirements-dev.txt
 	pre-commit install
+
+# Local (non-Docker) run. Override on the command line, e.g.
+#   make run PORT=8080
+#   make run RELOAD=          (disable auto-reload)
+# Configuration comes from .env (see .env.example); exported shell variables win.
+# Backing services must be reachable at the configured hosts -- the defaults are
+# localhost, which matches the ports ./start.sh publishes.
+HOST ?= 0.0.0.0
+PORT ?= 8000
+RELOAD ?= --reload
+
+run: ## Run KATO locally without Docker (override HOST/PORT/RELOAD)
+	uvicorn kato.services.kato_fastapi:app --host $(HOST) --port $(PORT) $(RELOAD)
 
 lint: ## Run linter (ruff)
 	ruff check kato/ tests/

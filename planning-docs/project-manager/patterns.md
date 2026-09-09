@@ -160,6 +160,24 @@ absolute latency differences across machines.
 
 ## Bug Patterns
 
+### 2026-09-09 - A Bug Report's Own Impact Framing Overstated the Problem (No Performance Was Ever Lost)
+
+**Pattern**: A P2 backlog item logged 2026-09-08 described `KATO_BATCH_SIZE`'s dead `json_schema_extra={'env': ...}` binding with the symptom "container runs with `batch_size=1000` instead of `10000`" — phrasing that implied real throughput was being left on the table by the broken binding. A follow-up configuration audit found `settings.performance.batch_size` had **zero consumers anywhere** in the codebase. The binding really was broken (pydantic-v1 idiom, ignored by pydantic-settings v2) — but even a working binding would have changed nothing, because nothing ever read the resulting value. The root-cause diagnosis in the original report was correct as far as it went; its *impact* framing was not.
+
+**Discovery Trigger**: A full configuration audit that checked every `Settings` field against two separate questions — "does the name bind" and "does the bound value have a consumer" — rather than stopping at the first (binding) question, which is what the original bug report had checked.
+
+**Assumption → Reality**:
+- Assumed (from the original report): fixing the binding would restore the intended `batch_size=10000` behavior and its associated performance benefit
+- Reality: there was no performance benefit to restore — `batch_size` had never been read by any code path, at any point in its history (traced back to `f1c862d`, the commit that introduced the field with no consumer ever added)
+
+**Resolution Pattern**: When auditing a "config value doesn't bind" bug, always check the second half of the chain too — does anything actually consume the value once bound — before writing (or accepting) a symptom description that implies a specific real-world impact. A broken binding on a field with no consumer has *zero* behavioral impact, not a degraded one; conflating "the binding is broken" with "therefore the intended behavior is being lost" produces an inaccurate severity/impact picture even when the technical root cause is correctly identified.
+
+**Lesson**: "It's not wired up correctly" and "therefore it's not working as intended" are not the same claim — the second requires confirming intended behavior actually exists downstream of the wiring, not just that the wiring itself is broken. This is the same class of gap as the 2026-09-08 "narrowly-logged bug" entry below, but inverted: that one under-scoped the *cause*, this one over-scoped the *effect*.
+
+**Recurrence Risk**: Low for this specific field (deleted, not wired — see DECISION-017, `planning-docs/DECISIONS.md`). General risk (future config-audit bug reports asserting impact without checking for a downstream consumer) not separately tracked — noted here for awareness.
+
+---
+
 ### 2026-09-08 - A Narrowly-Logged Bug (One Crashing Env Var) Turned Out to Be a Systemic One (Nearly All of Them)
 
 **Pattern**: A P2 bug was logged as `.env`'s `REDIS_PERSISTENCE=true` crashing a locally-run (non-Docker) KATO server. Investigating the actual crash mechanism — `Settings.model_config`'s `env_file='.env'` combined with inherited `extra='forbid'` — revealed that pydantic-settings' dotenv loader forwards *every* `.env` key it can't match onto the model, not just the one that happened to be reported first. Since `Settings` only declares 8 top-level fields and `.env` contains dozens of real leaf variable names, nearly every `.env` key crashed it; `REDIS_PERSISTENCE` was simply the alphabetically/positionally first one anyone hit and reported.

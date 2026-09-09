@@ -1,5 +1,5 @@
 # SPRINT_BACKLOG.md - Upcoming Work
-*Last Updated: 2026-09-08 (.env/dotenv-settings crash fix added to Recently Completed; REDIS_PERSISTENCE crash bug removed from Backlog; new dead-KATO_*-env-names P2 bug added)*
+*Last Updated: 2026-09-09 (Configuration audit, wiring, and dead-parameter removal added to Recently Completed; dead-KATO_*-env-names P2 bug corrected and resolved; 5 new backlog items filed: metadata-sidecar-un-batched-write-path P2, 4 P3 doc/cleanup items)*
 
 ## Active Projects
 
@@ -469,18 +469,6 @@ Phase 4 (Symbol Statistics & Fail-Fast Architecture) is 100% complete. The Click
 
 ---
 
-### Bug: Dead `KATO_*` env names via `json_schema_extra={'env': ...}` have no effect (pydantic-v1 idiom, ignored by v2)
-**Priority**: P2 — silent configuration no-op, not a crash
-**Status**: Identified 2026-09-08 (discovered during `.env`/dotenv-settings-crash bug fix)
-**Symptom**: `docker-compose.yml`'s `KATO_BATCH_SIZE=10000` has no effect; the container runs with `batch_size=1000` regardless
-**Root Cause**: `kato/config/settings.py` fields use `json_schema_extra={'env': 'KATO_BATCH_SIZE'}` (and likely other similarly-declared fields) to name an alternate env var — this is a pydantic-v1 idiom. pydantic-settings v2 does not read `json_schema_extra` for env-var resolution at all, so it is silently ignored; the field only ever binds to its v2-derived name (prefix + field name), never to the `KATO_*` name declared this way.
-**Fix Options**:
-1. Replace `json_schema_extra={'env': ...}` with the pydantic-settings v2 mechanism (`Field(validation_alias=...)` or an `AliasChoices`) for each affected field
-2. Audit all `Settings` fields for this pattern (not just `batch_size`) and correct each one
-**Files**: `kato/config/settings.py`, `docker-compose.yml` (env vars that assume the old names work)
-
----
-
 ### Bug: Multi-worker (KATO_WORKERS=4) breaks websocket event delivery and concurrent session modification consistency
 **Priority**: P2 — deterministic test failures (5 tests), real correctness gap under the container's default multi-worker config
 **Status**: Identified 2026-09-08 (characterized during conftest.py FLUSHALL fix verification)
@@ -492,6 +480,48 @@ Phase 4 (Symbol Statistics & Fail-Fast Architecture) is 100% complete. The Click
 2. Move concurrent session-write coordination to a shared store rather than per-worker in-process state
 **Files**: websocket event dispatch code, `kato/sessions/redis_session_manager.py`
 **Related**: Overlaps with the "Multi-Worker Uvicorn + Concurrent Training Safety" initiative queued above — this bug is in-scope for that work.
+
+---
+
+### Bug: Metadata sidecar write path is un-batched (synchronous ClickHouse round trip per learned pattern)
+**Priority**: P2 — real batching win, distinct from the client-side buffering that was deliberately removed
+**Status**: Identified 2026-09-09 (discovered during configuration audit)
+**Symptom**: Every learned pattern pays two blocking ClickHouse round trips on the metadata sidecar path.
+**Root Cause**: `metadata_router.upsert_pattern_metadata` does a read (`get_pattern_metadata_batch`) followed by a **synchronous** insert with `wait_for_async_insert=1` (`kato/storage/clickhouse_writer.py:469`) for every single learned pattern. `write_pattern_metadata_batch` already exists and already batches correctly, but is currently only invoked at finalize, not on the per-learn hot path.
+**Fix Direction**: This needs a batched upsert call shape at the `learnPattern` level (accumulate and flush in batches at learn time, the same way finalize already does) — **not** a config knob. See DECISION-017 (`planning-docs/DECISIONS.md`) for why a `batch_size`-style setting is explicitly the wrong shape for this fix.
+**Files**: `kato/api/endpoints/metadata_router.py` (or equivalent metadata router module), `kato/storage/clickhouse_writer.py`
+
+---
+
+### Tech Debt: `has_pending`/`flush_if_pending()`/`flush_all_pending_writes()` are permanent no-ops at `DEFAULT_BATCH_SIZE=1`
+**Priority**: P3 — dead code, not a bug
+**Status**: Identified 2026-09-09 (discovered during configuration audit)
+**Detail**: With `DEFAULT_BATCH_SIZE=1` (set by commit `f809a84` as a correctness fix — see DECISION-017), every insert flushes immediately, so `has_pending`, `flush_if_pending()`, and `flush_all_pending_writes()` in `clickhouse_writer.py` can never have anything to do. Candidates for removal. `clickhouse_writer.py`'s `__init__` docstring also still says "default: 50" and should be corrected regardless of whether the dead methods are removed.
+**Files**: `kato/storage/clickhouse_writer.py`
+
+---
+
+### Docs: CLAUDE.md lists `PROCESSOR_ID` as required, but nothing in `kato/` reads it
+**Priority**: P3 — documentation drift
+**Status**: Identified 2026-09-09 (discovered during configuration audit)
+**Detail**: `CLAUDE.md`'s "Key Environment Variables" section lists `PROCESSOR_ID` as required. Only `docker-compose.test.yml` sets it; no code under `kato/` reads it. Not corrected as part of the configuration audit (`CLAUDE.md` was intentionally left untouched by that work).
+**Files**: `CLAUDE.md`
+
+---
+
+### Docs: `docs/operations/security-configuration.md` documents JWT env vars no code reads
+**Priority**: P3 — aspirational documentation
+**Status**: Identified 2026-09-09 (discovered during configuration audit)
+**Detail**: `JWT_SECRET_KEY`, `JWT_ALGORITHM`, `JWT_EXPIRE_MINUTES` are documented there; no code reads any of them. The page describes an unimplemented feature as if it were live configuration.
+**Files**: `docs/operations/security-configuration.md`
+
+---
+
+### Docs: `docs/operations/performance-tuning.md` recommends gunicorn worker math that ignores `KATO_WORKERS`
+**Priority**: P3 — stale documentation
+**Status**: Identified 2026-09-09 (discovered during configuration audit)
+**Detail**: The page recommends launching under gunicorn with worker-count math that doesn't account for `KATO_WORKERS` (the actual mechanism now controlling uvicorn worker count, expanded in the Dockerfile CMD). Stale relative to the current deployment model.
+**Files**: `docs/operations/performance-tuning.md`
 
 ---
 
@@ -537,6 +567,27 @@ Phased plan for scaling KATO to production workloads:
 ---
 
 ## Recently Completed
+
+### Configuration Audit: Env Var Wiring, Dead-Parameter Removal, and `/concurrency` 4x Undercount Fix — COMPLETE (2026-09-09)
+**Priority**: P2 — resolved (supersedes and corrects the dead-`KATO_*`-env-names item previously logged here)
+**Archive**: `planning-docs/completed/refactors/2026-09-09-configuration-audit-wiring-dead-parameter-removal.md`
+**Decision**: DECISION-017
+
+Full audit of every `Settings` field and every documented `KATO_*`/env var: which ones actually bind, and which bound values actually have a consumer. 29 files changed, +666/-1950.
+
+**Corrects a prior backlog item**: the P2 "dead `KATO_*` env names" item (originally logged 2026-09-08) overstated impact. `KATO_BATCH_SIZE` was dead on **two independent levels**, not one — `json_schema_extra={'env': ...}` is a pydantic-v1 idiom pydantic-settings v2 ignores (so the name never bound), **and** `settings.performance.batch_size` had **zero consumers anywhere**, so there was never a lost-performance impact from this — nothing ever read the value, bound or not. `KATO_VECTOR_BATCH_SIZE` was different: it bound correctly via a raw `os.getenv()` in `kato/config/vectordb_config.py`, but the attribute it set also had no consumers.
+
+**Key finding (batching)**: KATO already gets batching from ClickHouse's server-side `async_insert` (`clickhouse_writer.py` sets `async_insert=1, wait_for_async_insert=0`), which coalesces writes across all uvicorn workers. Client-side buffering is deliberately disabled (`DEFAULT_BATCH_SIZE=1`); commit `f809a84` dropped it from 50 to 1 as a correctness fix, because a per-worker buffer orphans rows invisible to other workers. Wiring `settings.performance.batch_size` would have **re-introduced** that bug — it was deleted, not wired. Git archaeology: `performance.batch_size` was born dead in `f1c862d` (bulk config scaffold, no consumer ever added); `KATO_BATCH_SIZE=10000` was added to compose by `935faf0`, tuning a value nothing read.
+
+**Bugs fixed**: (1) `/concurrency` under-reported capacity 4x — `kato_fastapi.py`/`monitoring.py` read `UVICORN_WORKERS`/`UVICORN_LIMIT_CONCURRENCY`, which uvicorn never exports; corrected to the real `KATO_WORKERS`/`KATO_LIMIT_CONCURRENCY` (expanded in the Dockerfile CMD) — always reported `workers=1, total_capacity=100`, now reports the true `4`/`400`, verified live. New exported `WORKER_COUNT` constant centralizes this. (2) 5 documented env names that never bound now work via `validation_alias=AliasChoices`: `KATO_USE_TOKEN_MATCHING`, `KATO_FUZZY_TOKEN_THRESHOLD`, `KATO_USE_FAST_MATCHING`, `KATO_USE_INDEXING`, `KATO_CONFIG_FILE`. `SORT` deliberately NOT aliased (dangerously generic name; supported name remains `SORT_SYMBOLS`).
+
+**Newly wired** (previously documented but inert; defaults preserve existing behavior): `LOG_FORMAT`/`LOG_OUTPUT` (JSON logging + stream selection already implemented in `configure_logging()`, just never called — now called from `AppState.__init__`; **behavior change**: logs now default to stdout, previously stderr via `logging.basicConfig`); `CONNECTION_POOL_SIZE` (now sets Redis `max_connections`; default raised 10→200 to match the value already hardcoded in `connection_manager.py`; the compose `CONNECTION_POOL_SIZE=50` entry was deliberately removed — honoring it would have cut the effective pool 200→50); `REQUEST_TIMEOUT` (now sets the ClickHouse send/receive timeout; field default 30 matches the prior hardcode so no default change, but compose's `REQUEST_TIMEOUT=120.0` was kept and now genuinely applies — a deliberate, flagged change); `fuzzy_token_threshold` (now flows into `configuration_service` default configuration, previously reachable only per-session).
+
+**Deleted** (vestigial, no value even if wired): settings fields `performance.batch_size`, `use_optimized`, `vector_batch_size`, `vector_search_limit`, `learning.auto_learn_enabled`, `auto_learn_threshold` (auto-learn is driven solely by `MAX_PATTERN_LENGTH`), `service.service_version`, `database.QDRANT_COLLECTION_PREFIX` (collection names are always `vectors_{processor_id}`), the entire `APIConfig` class plus `Settings.api`/`get_api_config()` (host/port/workers/CORS/docs/max_request_size are all hardcoded in FastAPI/uvicorn CMD); dead env reads `KATO_ARCHITECTURE_MODE` (assigned to an unused local; hybrid is the only architecture), `KATO_STRICT_MODE` (zero readers), `KATO_VECTOR_BATCH_SIZE`/`KATO_VECTOR_SEARCH_LIMIT`/`QDRANT_COLLECTION` reads in `vectordb_config.py`; 4 zero-importer modules deleted entirely (`kato/config/database.py`, `kato/config/api.py`, `kato/config/user_config.py`, `kato/storage/query_batcher.py`); removed from `docker-compose.yml`, `deployment/docker-compose.yml`, the Helm configmap/values.yaml, and 14 documentation files.
+
+Verified: ruff clean on all edited files (net -4 findings, exactly the deleted modules'); settings load and all vectordb `EXAMPLE_CONFIGS` validate; image rebuilt, container restarted; `/concurrency` confirmed reporting 4/400; vector observe+learn+count round trip 200; full suite `./run_tests.sh --no-start --no-stop`: 451 passed, 4 skipped, 4 failed — best result this session, all 4 failures the already-known multi-worker websocket/session issues.
+
+New backlog items filed (discovered, not fixed): P2 metadata sidecar write path un-batched (synchronous per-learn ClickHouse round trip); P3 dead no-op batch-flush methods in `clickhouse_writer.py`; P3 `CLAUDE.md` lists `PROCESSOR_ID` as required though nothing reads it; P3 `docs/operations/security-configuration.md` documents unimplemented JWT vars; P3 `docs/operations/performance-tuning.md` stale gunicorn guidance. See "Backlog (Future Work)" above.
 
 ### Bug Fix: `.env`'s `REDIS_PERSISTENCE` (and Nearly Every Other Key) Crashed KATO Run Outside Docker — COMPLETE (2026-09-08)
 **Priority**: P2 — resolved (root cause turned out far broader than originally logged)

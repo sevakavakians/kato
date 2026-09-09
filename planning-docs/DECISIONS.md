@@ -1,6 +1,38 @@
 # DECISIONS.md - Architectural & Design Decision Log
 *Append-Only Log - Started: 2025-08-29*
-*Last Updated: 2026-09-08*
+*Last Updated: 2026-09-09*
+
+---
+
+## 2026-09-09 - DECISION-017: Delete `performance.batch_size` Rather Than Wire It — ClickHouse Server-Side `async_insert` Is Already the Batching Layer
+**Decision**: `settings.performance.batch_size` (and the `KATO_BATCH_SIZE` env name that was meant to control it) is deleted from KATO, not wired up. Client-side write batching stays permanently disabled (`DEFAULT_BATCH_SIZE=1` in `kato/storage/clickhouse_writer.py`); batching is achieved entirely server-side via ClickHouse's async-insert queue.
+**Status**: COMPLETE (2026-09-09)
+**Confidence**: High
+
+**Context**: A full configuration audit (every `Settings` field and every documented/`KATO_*` env var, checked for both "does it bind" and "does the resulting value have a consumer") found `KATO_BATCH_SIZE` dead on **two independent levels**. Level 1: `kato/config/settings.py` declared it via `json_schema_extra={'env': 'KATO_BATCH_SIZE'}`, a pydantic-v1 idiom that pydantic-settings v2 does not read for env-var resolution at all — the name never bound. Level 2, discovered during this audit and more consequential: `settings.performance.batch_size` had **zero consumers anywhere** in the codebase, so even a correctly-bound value would have done nothing. This corrects the framing of the P2 backlog item originally logged 2026-09-08 (see `planning-docs/SPRINT_BACKLOG.md` "Recently Completed"), which implied a real performance cost ("container runs 1000 instead of 10000"). There was no performance impact — nothing ever read the field.
+
+**Decision Details**:
+1. **Do not wire `batch_size`**: KATO already batches ClickHouse pattern writes — server-side, via `async_insert=1` (`kato/storage/clickhouse_writer.py`), which lets ClickHouse's own queue coalesce inserts across **all** uvicorn workers. A client-side buffer cannot do this: it would live in one worker's process memory, invisible to the others.
+2. **`DEFAULT_BATCH_SIZE=1` is deliberate, not an oversight**: commit `f809a84` dropped the client-side default from 50 to 1 specifically to fix a correctness bug — a per-worker buffer holding un-flushed rows meant other workers' predictions could miss recently-learned patterns until that buffer happened to flush (orphaned rows). Wiring `settings.performance.batch_size` to any value > 1 would silently re-open exactly that bug.
+3. **Deleted, not merely left inert**: leaving a dead-but-present field is worse than removing it — it looks like a working tuning knob and invites a future "helpful" wiring attempt that reintroduces the `f809a84` regression. Removed from `kato/config/settings.py`, `docker-compose.yml`, `deployment/docker-compose.yml`, the Helm configmap/values.yaml, and documentation.
+4. **Git archaeology**: `performance.batch_size` was born already-dead in `f1c862d` (bulk config scaffold — no consumer was ever added, at any point in its history). `KATO_BATCH_SIZE=10000` was added to `docker-compose.yml` by `935faf0`, tuning a value nothing read.
+5. **`KATO_VECTOR_BATCH_SIZE` is a related but distinct case**: it bound correctly (raw `os.getenv()` in `kato/config/vectordb_config.py`, not the broken `json_schema_extra` idiom), but the attribute it set also had zero consumers — also deleted, for the same "no value even if wired" reason, not the pydantic-v1-idiom reason.
+
+**Rationale**:
+- The correct fix for "batching" here is not a config knob at all — it already exists, server-side, and (unlike a client-side buffer) works correctly across all workers by construction
+- A dead field wired to "work" is a worse state than a deleted field: it creates the appearance of a tuning lever with no effect (best case) or, if someone makes it actually apply, a silent multi-worker correctness regression (worst case)
+- Explicitly recording this here so a future contributor who notices `batch_size` is unused does not "helpfully" re-add and wire a batch-size setting
+
+**If real learn-path batching is wanted later**: the actual remaining batching gap is the metadata sidecar write path (`metadata_router.upsert_pattern_metadata` does a synchronous `wait_for_async_insert=1` ClickHouse round trip per learned pattern — `write_pattern_metadata_batch` already exists and is correct, just only invoked at finalize). That needs a batched-call-shape change at the `learnPattern` level, not a config value. Filed as a new P2 backlog item — see `planning-docs/SPRINT_BACKLOG.md`.
+
+**Alternatives Considered**:
+- Wire `KATO_BATCH_SIZE`/`batch_size` correctly via `validation_alias`/`AliasChoices`, matching the fix applied to other dead env names in this same change: rejected specifically for this field — there is no safe non-zero client-side buffer value under the current multi-worker architecture; "fixing the binding" would just deliver the `f809a84` bug through a different door
+- Leave the field declared but undocumented/unused: rejected — same latent risk as wiring it, only deferred
+
+**Related work in this same change** (full detail in the archive): `/concurrency` endpoint fixed from a 4x under-report (`UVICORN_WORKERS`/`UVICORN_LIMIT_CONCURRENCY`, which uvicorn never exports, corrected to `KATO_WORKERS`/`KATO_LIMIT_CONCURRENCY`); 5 documented-but-inert env names aliased via `AliasChoices` (`KATO_USE_TOKEN_MATCHING`, `KATO_FUZZY_TOKEN_THRESHOLD`, `KATO_USE_FAST_MATCHING`, `KATO_USE_INDEXING`, `KATO_CONFIG_FILE`; `SORT` deliberately not aliased — too generic a name, supported name stays `SORT_SYMBOLS`); `LOG_FORMAT`/`LOG_OUTPUT`/`CONNECTION_POOL_SIZE`/`REQUEST_TIMEOUT`/`fuzzy_token_threshold` newly wired; `use_optimized`, `vector_batch_size`, `vector_search_limit`, `auto_learn_enabled`, `auto_learn_threshold`, `service_version`, `QDRANT_COLLECTION_PREFIX`, the entire `APIConfig` class, and 4 zero-importer modules deleted.
+
+**Affected Files**: 29 files, +666/-1950 (see archive for the full file list)
+**Archive**: `planning-docs/completed/refactors/2026-09-09-configuration-audit-wiring-dead-parameter-removal.md`
 
 ---
 

@@ -3,6 +3,30 @@
 
 ---
 
+## 2026-09-09 - Task Completion + Architectural Decision + Knowledge Refinement (Configuration Audit, Wiring, and Dead-Parameter Removal)
+
+**Trigger Type**: Primary — Task Completion (configuration audit: env wiring + dead-parameter removal + 2 bug fixes) + Architectural Decision (DECISION-017: delete `performance.batch_size` rather than wire it) + Knowledge Refinement (corrects the impact framing of the 2026-09-08 "dead `KATO_*` env names" P2 backlog item)
+**Secondary**: 5 new backlog items filed (1 P2, 4 P3)
+
+**Event**: A full audit of every `Settings` field and every documented/`KATO_*` env var (checked for both "does it bind" and "does the bound value have a consumer") resolved the P2 item logged 2026-09-08. The original item understated the problem: `KATO_BATCH_SIZE` was dead on two independent levels (broken binding **and** zero consumers on the field itself), so the originally-implied performance cost never existed. The audit also found KATO already batches ClickHouse writes server-side via `async_insert`, and that client-side batching (`DEFAULT_BATCH_SIZE=1`) is deliberately disabled per commit `f809a84` to avoid a per-worker orphaned-row bug — so `batch_size` was deleted rather than wired, to avoid reintroducing that bug. Two real bugs fixed along the way (`/concurrency` 4x undercount; 5 dead-but-documented env names now bound via `AliasChoices`), 5 params newly wired, and a large set of vestigial config surface deleted (29 files, +666/-1950). Full suite: 451 passed / 4 skipped / 4 failed (best result this session).
+
+**Key Findings**:
+- A backlog item's own "Symptom"/impact framing can itself be wrong, not just its root-cause diagnosis — this one implied a real performance cost from day one that a deeper audit showed never existed, because the value was never consumed regardless of whether the env var bound
+- Correctness history matters when deciding whether to wire a dead parameter: `batch_size` looked like a plausible, purely additive fix (bind the env name, done) — but the surrounding git history (`f809a84`) showed that a *working* client-side batch value above 1 is actively dangerous under the current multi-worker architecture, making deletion the correct fix, not wiring
+- When multiple dead env names are found in one audit, some can be safely aliased forward (5 names via `AliasChoices`, defaults preserved) while others should be deliberately left unaliased (`SORT` — name too generic/collision-prone) or deleted outright (`batch_size`, `vector_batch_size`, etc. — no consumer exists, wiring would add complexity/risk with zero benefit) — the fix is not one-size-fits-all across a batch of similar-looking findings
+- New backlog items surfaced by the audit itself point at the *actual* remaining batching gap (metadata sidecar write path, un-batched at the `learnPattern` level) — distinguishing this from the deleted-not-wired `batch_size` knob was important so the real fix doesn't get mistaken for "just re-enable batch_size"
+
+**Documentation Actions**:
+- Created: `planning-docs/completed/refactors/2026-09-09-configuration-audit-wiring-dead-parameter-removal.md`
+- Updated: `planning-docs/DECISIONS.md` (new DECISION-017)
+- Updated: `planning-docs/SPRINT_BACKLOG.md` (removed the inaccurate P2 item from Backlog, new Recently Completed entry with corrected understanding, 5 new backlog items added)
+- Updated: `planning-docs/SESSION_STATE.md` (Current Task, new Previous Task block, Last Updated)
+- Updated: `planning-docs/project-manager/patterns.md` (new pattern entry: symptom/impact framing can overstate a bug even when the root-cause diagnosis is later found to be incomplete)
+- Updated: `planning-docs/project-manager/maintenance-log.md`
+- Updated: `planning-docs/project-manager/triggers.md` (this entry)
+
+---
+
 ## 2026-09-08 - Task Completion + Architectural Decision (`.env`/dotenv-settings Crash Bug Fixed — Root Cause Broader Than Originally Logged)
 
 **Trigger Type**: Primary — Task Completion (bug fix) + Architectural Decision (DECISION-016: load `.env` via `os.environ` in `kato/__init__.py`, not pydantic-settings `env_file=`)

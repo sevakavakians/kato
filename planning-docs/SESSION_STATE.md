@@ -1,10 +1,23 @@
 # SESSION_STATE.md - Current Development State
-*Last Updated: 2026-09-08 (.env/dotenv-settings crash bug: FIXED — root cause was broader than originally logged; nearly all .env keys crashed or were silently swallowed outside Docker)*
+*Last Updated: 2026-09-09 (Configuration audit, wiring, and dead-parameter removal: COMPLETE — corrects and resolves the dead-KATO_*-env-names P2 item; key finding: batching is already server-side via ClickHouse async_insert, so batch_size was deleted rather than wired)*
 
 ## Current Task
-**No active task — `.env`/dotenv-settings crash fix is COMPLETE. Pick next item from sprint backlog (Multi-Worker Uvicorn + Concurrent Training Safety is next queued).**
+**No active task — Configuration audit/wiring/dead-parameter-removal is COMPLETE. Pick next item from sprint backlog (Multi-Worker Uvicorn + Concurrent Training Safety is next queued; the newly-filed P2 metadata-sidecar-batching item is also relevant to that initiative).**
 
 ## Previous Task (context preserved)
+**Configuration Audit: Env Var Wiring, Dead-Parameter Removal, and `/concurrency` 4x Undercount Fix — COMPLETE (2026-09-09)**
+- Status: COMPLETE — resolves the prior "dead `KATO_*` env names" P2 backlog item (with a corrected, narrower understanding), plus wiring/cleanup/bug fixes beyond that item's original scope
+- Ad-hoc audit (grew out of the 2026-09-08 dead-env-names finding, not from a queued initiative); Multi-Worker Uvicorn initiative below remains next in the sprint backlog
+- Decision: DECISION-017 in `planning-docs/DECISIONS.md`
+- Archive: `planning-docs/completed/refactors/2026-09-09-configuration-audit-wiring-dead-parameter-removal.md`
+- Corrected understanding: `KATO_BATCH_SIZE` was dead on two independent levels, not one — `json_schema_extra={'env': ...}` never bound (pydantic-v1 idiom, ignored by v2), **and** `settings.performance.batch_size` had zero consumers anywhere, so there was never a lost-performance impact as the original item implied. `KATO_VECTOR_BATCH_SIZE` bound correctly via raw `os.getenv()` but its attribute also had no consumers.
+- Key finding: KATO already batches ClickHouse pattern writes server-side via `async_insert=1` (`clickhouse_writer.py`), coalescing across all uvicorn workers. Client-side buffering is deliberately disabled (`DEFAULT_BATCH_SIZE=1`; commit `f809a84` dropped it from 50 to 1 to fix a per-worker orphaned-row correctness bug). Wiring `batch_size` would have re-introduced that bug, so it was deleted instead of wired.
+- Bugs fixed: `/concurrency` under-reported capacity 4x (`UVICORN_WORKERS`/`UVICORN_LIMIT_CONCURRENCY` never exported by uvicorn; corrected to `KATO_WORKERS`/`KATO_LIMIT_CONCURRENCY`, new `WORKER_COUNT` constant); 5 dead env names now bound via `AliasChoices` (`KATO_USE_TOKEN_MATCHING`, `KATO_FUZZY_TOKEN_THRESHOLD`, `KATO_USE_FAST_MATCHING`, `KATO_USE_INDEXING`, `KATO_CONFIG_FILE`; `SORT` deliberately not aliased)
+- Newly wired: `LOG_FORMAT`/`LOG_OUTPUT` (behavior change: logs now default to stdout, was stderr), `CONNECTION_POOL_SIZE` (default 10→200), `REQUEST_TIMEOUT` (compose's 120.0 now genuinely applies), `fuzzy_token_threshold`
+- Deleted: `performance.batch_size`, `use_optimized`, `vector_batch_size`, `vector_search_limit`, `auto_learn_enabled`, `auto_learn_threshold`, `service_version`, `QDRANT_COLLECTION_PREFIX`, entire `APIConfig` class, `KATO_ARCHITECTURE_MODE`/`KATO_STRICT_MODE` dead reads, 4 zero-importer modules (`config/database.py`, `config/api.py`, `config/user_config.py`, `storage/query_batcher.py`); removed from compose files, Helm chart, 14 docs
+- Verification: ruff clean (net -4 findings); settings load + vectordb `EXAMPLE_CONFIGS` validate; image rebuilt/restarted; `/concurrency` confirmed 4/400 live; vector observe+learn+count 200; full suite 451 passed / 4 skipped / 4 failed (best result this session; remaining 4 are the known multi-worker websocket/session issues)
+- New backlog items filed: P2 metadata-sidecar write path un-batched (synchronous per-learn ClickHouse round trip; real batching win, needs batched call shape not a config knob); P3 dead no-op flush methods in `clickhouse_writer.py`; P3 `CLAUDE.md` PROCESSOR_ID drift; P3 aspirational JWT docs; P3 stale gunicorn performance-tuning docs — see `planning-docs/SPRINT_BACKLOG.md`
+
 **`.env`/dotenv-settings Crash Bug Fix — COMPLETE (2026-09-08)**
 - Status: COMPLETE — bug fixed, verified end-to-end
 - Ad-hoc bug fix (originally logged P2 backlog item, not from a queued initiative); Multi-Worker Uvicorn initiative below remains next in the sprint backlog
@@ -190,7 +203,7 @@
 ## Next Immediate Action
 **Resume Multi-Worker Uvicorn + Concurrent Training Safety**
 
-The `.env`/dotenv-settings crash fix is complete. The next queued initiative is multi-worker uvicorn support (see SPRINT_BACKLOG.md for full plan). Known backlog bugs (all P2, non-blocking):
+The configuration audit (env var wiring, dead-parameter removal) is complete. The next queued initiative is multi-worker uvicorn support (see SPRINT_BACKLOG.md for full plan). Known backlog bugs (all P2 unless noted, non-blocking):
 
 1. **Bug: patterns_data async_insert visibility race (Root cause #1)** — P2
    - `knowledge_base.py:~413` `wait_for_async_insert=0` on patterns_data writes; no server-queue drain on the learn/predict hot path
@@ -202,16 +215,18 @@ The `.env`/dotenv-settings crash fix is complete. The next queued initiative is 
    - 5 tests also fail on WebSocket `session.created`/`session.destroyed` event timeouts (5s)
    - Confirmed still reproducing 2026-09-08 during Pattern Count Endpoint verification (fails in isolation even against a freshly flushed Redis)
 
-3. **Bug: Dead `KATO_*` env names via `json_schema_extra={'env': ...}` have no effect** — P2 (discovered 2026-09-08, during `.env`/dotenv-settings crash bug fix)
-   - `json_schema_extra={'env': 'KATO_BATCH_SIZE'}` is a pydantic-v1 idiom; pydantic-settings v2 does not read it for env-var resolution, so it's silently ignored
-   - Symptom: `docker-compose.yml`'s `KATO_BATCH_SIZE=10000` has no effect — container runs with `batch_size=1000` regardless
-   - Fix: replace with the v2 mechanism (`Field(validation_alias=...)` / `AliasChoices`); audit all `Settings` fields for the same pattern, not just `batch_size`
-
-4. **Bug: Multi-worker (`KATO_WORKERS=4`) breaks websocket event delivery and concurrent session modification consistency** — P2 (discovered 2026-09-08, characterized during conftest.py FLUSHALL bug fix verification)
+3. **Bug: Multi-worker (`KATO_WORKERS=4`) breaks websocket event delivery and concurrent session modification consistency** — P2 (discovered 2026-09-08, characterized during conftest.py FLUSHALL bug fix verification)
    - Websocket events are published in-process only and are not fanned out across uvicorn workers — a client connected to one worker misses events published by another
    - `test_concurrent_session_modifications` loses half its concurrent writes (`assert 5 == 10`) — writes split across workers aren't consistently visible to each other
    - Evidence: same websocket tests passed 7/7 against a single-worker instance; fail only under the 4-worker container. Confirmed unrelated to the conftest.py FLUSHALL fix — identical failures reproduce with `KATO_TEST_REDIS_FLUSHALL=1` (old FLUSHALL behavior)
    - Overlaps with the "Multi-Worker Uvicorn + Concurrent Training Safety" initiative — see `planning-docs/SPRINT_BACKLOG.md`
+
+4. **Bug: Metadata sidecar write path is un-batched** — P2 (discovered 2026-09-09, during configuration audit)
+   - `metadata_router.upsert_pattern_metadata` does a synchronous (`wait_for_async_insert=1`) ClickHouse round trip per learned pattern, on top of a preceding read — two blocking round trips per learn
+   - `write_pattern_metadata_batch` already exists and is correct, but is only invoked at finalize, not on the per-learn hot path
+   - Fix needs a batched call shape at the `learnPattern` level, not a config knob — see DECISION-017, `planning-docs/DECISIONS.md`
+
+**Resolved 2026-09-09** (previously item 3 here): dead `KATO_*` env names via `json_schema_extra={'env': ...}` — see "Previous Task" above and `planning-docs/SPRINT_BACKLOG.md` Recently Completed. Corrected understanding: the impact was overstated (`batch_size` had zero consumers regardless of binding); `batch_size` was deleted rather than wired, other dead names were aliased forward.
 
 ## Blockers
 **No active blockers** (backlog bugs above are P2, non-blocking)

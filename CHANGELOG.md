@@ -7,17 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.0.0] - 2026-09-09
+
+Redefines the `anomalies` prediction field (breaking), makes WebSocket events reach every uvicorn worker, and lands the configuration audit: settings that were documented but never bound now work, and dead configuration surface is gone.
+
 ### Added
 - **`worker_pid`** on `/health` responses and on the WebSocket `state.snapshot` event: the uvicorn worker process that served the request / owns the connection. Lets clients and tests reason about cross-worker delivery.
 - **Worker-topology tests** (`tests/tests/integration/test_worker_topology.py`): launch a dedicated `kato:latest` container per `KATO_WORKERS` value (1, 2, 4) and assert the same WebSocket-delivery and `/sessions/count` contracts against each. Clients are provably placed on ≥2 workers before asserting delivery, so the in-process `EventBroadcaster` limitation now fails deterministically instead of by scheduling luck. Replaces the four scheduling-dependent websocket tests and the immediate-consistency assertion in `test_session_cleanup`, which now honours the documented `/sessions/count` cache TTL.
+- **`GET /patterns/count`** endpoint returning `{pattern_count, node_id}` for a node, plus a matching client method. The storage-layer count already existed but had no caller.
+- **`make run`** target to start KATO without Docker (`HOST`/`PORT`/`RELOAD` overridable), and `.env.example` rewritten to list only variables the code actually reads.
+- **`python-dotenv`** declared as a direct dependency (it is imported by `kato/env_loader.py`); `requirements.lock` regenerated, which also restored `xxhash`, previously declared but missing from the lock.
+- **Configuration reference** now documents the live-but-undocumented variables (`MINHASH_HASH_FUNC`, `KATO_USE_BLOOM_FILTER`, `KATO_USE_REDIS_CACHE`, `SESSION_COUNT_CACHE_TTL_SECONDS`, `METRICS_CACHE_TTL_SECONDS`, `KATO_ENV_FILE`, `KATO_SKIP_DOTENV`, `KATO_WORKERS`, `KATO_LIMIT_CONCURRENCY`, the vectordb `KATO_*` family).
 
 ### Changed (BREAKING)
 - **`anomalies` prediction field** is now a flat list of every symbol that deviates from the pattern: missing symbols, then extras, then the observed token of each fuzzy match. It was previously the list of fuzzy-match records.
 - **New `fuzzy_matches` prediction field** carries the `{observed, expected, similarity}` records that `anomalies` used to hold. Consumers reading fuzzy-match details from `anomalies` must switch to `fuzzy_matches`.
+- **Environment names that never bound now do.** `json_schema_extra={'env': ...}` is a pydantic-v1 idiom that pydantic-settings v2 ignores, so `KATO_USE_TOKEN_MATCHING`, `KATO_FUZZY_TOKEN_THRESHOLD`, `KATO_USE_FAST_MATCHING`, `KATO_USE_INDEXING` and `KATO_CONFIG_FILE` were silently inert; both the `KATO_`-prefixed and bare spellings are now accepted. `SORT` is deliberately not aliased — use `SORT_SYMBOLS`.
+- **Previously inert settings now take effect**, with defaults chosen to preserve current behaviour: `LOG_FORMAT`/`LOG_OUTPUT` (structured logging is now actually configured — **logs default to stdout, previously stderr**), `CONNECTION_POOL_SIZE` (Redis connections per worker; default 10 → 200 to match the value that was hardcoded), `REQUEST_TIMEOUT` (ClickHouse send/receive timeout, previously hardcoded 30 s). `fuzzy_token_threshold` now reaches the default configuration, not only per-session config.
+
+### Removed
+- **Four modules nothing imported**: `kato/config/database.py`, `kato/config/api.py`, `kato/config/user_config.py`, `kato/storage/query_batcher.py`.
+- **Vestigial settings fields**: `performance.batch_size`, `use_optimized`, `vector_batch_size`, `vector_search_limit`, `learning.auto_learn_*` (auto-learn is driven solely by `MAX_PATTERN_LENGTH`), `service_version`, `QDRANT_COLLECTION_PREFIX`, and the whole `APIConfig` class. `batch_size` must not be reintroduced: ClickHouse `async_insert` already batches server-side across all workers, and client-side buffering was disabled on purpose because per-worker buffers orphaned rows.
+- **Deployment variables nothing read**, from `docker-compose.yml`, `deployment/docker-compose.yml` and the Helm chart: `KATO_BATCH_SIZE`, `KATO_ARCHITECTURE_MODE`, `KATO_STRICT_MODE`, `QDRANT_COLLECTION_PREFIX`, `AUTO_LEARN_ENABLED`/`AUTO_LEARN_THRESHOLD`, and `CONNECTION_POOL_SIZE=50` (honouring it now would have cut the Redis pool from the long-standing effective 200).
+- Roughly twenty documented-but-dead environment variables removed from the configuration reference, along with two endpoints that never existed (`/admin/log-level`, `/admin/config`).
 
 ### Fixed
 - **WebSocket events lost across uvicorn workers**: `EventBroadcaster` kept its connection list per process, so `session.created` / `session.destroyed` only reached clients whose WebSocket happened to be held by the worker that served the HTTP request. Events are now published to a Redis pub/sub channel (`kato:ws_events`, override with `KATO_WS_EVENTS_CHANNEL`) and each worker delivers what it receives to its own connections — exactly-once per client on any worker count. Falls back to local delivery without `REDIS_URL`.
 - **Repeated symbols under-reported in `missing`/`extras`**: event alignment used a flat membership test, so an earlier occurrence of a symbol masked a later unobserved one (e.g. the second `o` of `world`). Symbols are now consumed as a multiset.
+- **Non-Docker runs crashed at import** with `redis_persistence: Extra inputs are not permitted`: pydantic-settings forwarded every `.env` key onto `Settings`, which forbids extras. `.env` is now loaded into `os.environ` by `kato/env_loader.py` instead.
+- **`/concurrency` always reported `workers=1`, `total_capacity=100`**: it read `UVICORN_WORKERS`/`UVICORN_LIMIT_CONCURRENCY`, which nothing sets; it now reads `KATO_WORKERS`/`KATO_LIMIT_CONCURRENCY` (the `UVICORN_*` spellings remain a fallback).
+- **`./start.sh clean-data` never cleared ClickHouse**: it dropped `default.patterns_data`, but the tables live in the `kato` database, and stderr was suppressed so it reported success anyway. It now truncates the four real `kato.*` tables and reclaims Redis AOF disk.
+- **Test suite wiped live Redis**: the session-scoped conftest fixture ran an unconditional `FLUSHALL` against the shared `kato-redis` container, destroying unrecoverable pattern metadata. Cleanup is now scoped to session/STM keys; `KATO_TEST_REDIS_FLUSHALL=1` opts back in.
+- Documentation referenced a nonexistent `kato.api.main` module in twelve places, including ten runnable commands that could not work as written; all point at `kato.services.kato_fastapi` now.
+
+### Migration from 4.x
+- Read fuzzy-match details from `fuzzy_matches`, not `anomalies`. `anomalies` is now `list[str]`; code that indexed `anomaly['observed']` will break.
+- If you parse KATO logs from stderr, switch to stdout (or set `LOG_OUTPUT=stderr`).
+- Replace `SORT` with `SORT_SYMBOLS`. If you relied on `KATO_USE_TOKEN_MATCHING` et al. and they seemed to do nothing, they now do — check the values you set.
+- If you imported `kato.config.database`, `kato.config.api`, `kato.config.user_config` or `kato.storage.query_batcher`, those modules are gone (nothing in KATO used them).
+- `CONNECTION_POOL_SIZE` now applies per worker; a low value copied from an old compose file will shrink the Redis pool.
 
 ## [4.0.0] - 2026-06-18
 

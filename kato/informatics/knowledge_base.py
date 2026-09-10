@@ -424,6 +424,15 @@ class SuperKnowledgeBase:
                 # Write emotives + metadata via the migration router.
                 # Frequency is owned by the SETNX above and never touched here
                 # (a SET would clobber concurrent INCRs from re-learners).
+                #
+                # No `prev=` here on purpose: upsert_pattern_metadata does its
+                # own read. It looks redundant (a genuinely new pattern has no
+                # metadata row) but `is_new` comes from the Redis SETNX above,
+                # and Redis can be empty while ClickHouse still holds the row -
+                # exactly the state after a Redis loss + rehydrate-from-
+                # ClickHouse. Skipping that read would silently destroy the
+                # retained emotives and precomputed metrics of every rehydrated
+                # pattern on its next learn.
                 self.metadata_router.upsert_pattern_metadata(
                     pattern_name=pattern_object.name,
                     emotives=trimmed_emotives,
@@ -452,7 +461,10 @@ class SuperKnowledgeBase:
 
             # Update/merge emotives and metadata if provided
             if emotives or metadata:
-                existing_meta = self.metadata_router.get_metadata(pattern_object.name)
+                # Full row (including the metric columns we must write back
+                # unchanged). Reused as `prev` below so the upsert does not
+                # re-issue this same SELECT.
+                existing_meta = self.metadata_router.get_metadata_for_merge(pattern_object.name)
 
                 # Process emotives: append to rolling window list
                 updated_emotives = existing_meta.get('emotives', [])
@@ -488,6 +500,7 @@ class SuperKnowledgeBase:
                     pattern_name=pattern_object.name,
                     emotives=updated_emotives,
                     metadata=updated_metadata,
+                    prev=existing_meta,
                 )
                 logger.debug(f"Updated emotives (len={len(updated_emotives)}) and metadata for pattern {pattern_object.name}")
 

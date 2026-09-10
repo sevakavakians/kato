@@ -56,6 +56,19 @@ class MetadataRouter:
         batch = self.get_metadata_batch([pattern_name])
         return batch.get(pattern_name, {'name': pattern_name, 'frequency': 0})
 
+    def get_metadata_for_merge(self, pattern_name: str) -> dict[str, Any]:
+        """Full ClickHouse row, for a read-modify-write of emotives/metadata.
+
+        Differs from get_metadata() in two ways that matter to merge callers:
+        it keeps the precomputed metric columns (entropy, tf_vector, ...) so the
+        caller can hand them straight back to upsert_pattern_metadata() instead
+        of paying for a second identical SELECT, and it skips the Redis
+        frequency lookup, which merge callers do not use.
+
+        Returns {} when the pattern has no metadata row yet.
+        """
+        return self.clickhouse.get_pattern_metadata_batch([pattern_name]).get(pattern_name, {})
+
     def get_metadata_batch(self, pattern_names: list[str]) -> dict[str, dict]:
         """Returns dict[name → {name, frequency, emotives?, metadata?}].
 
@@ -113,14 +126,22 @@ class MetadataRouter:
         pattern_name: str,
         emotives: list[dict] | None,
         metadata: dict | None,
+        prev: dict[str, Any] | None = None,
     ) -> None:
         """Upsert a pattern's emotives + metadata, preserving precomputed metrics.
 
-        ClickHouse needs a full row written, so we first read any existing
-        metric columns to avoid overwriting them with NULL on background merge.
+        patterns_metadata is a ReplacingMergeTree read with argMax(col, version),
+        so a row written with a higher version wins for EVERY column - including
+        the metric columns this path does not own. We therefore have to write the
+        full intended row, which means knowing the current metric values.
+
+        Args:
+            prev: the pattern's existing row, when the caller has already read it
+                (see get_metadata_for_merge). Omit it and we read the row here.
+                Passing it avoids a second identical SELECT on the re-learn path.
         """
-        existing = self.clickhouse.get_pattern_metadata_batch([pattern_name])
-        prev = existing.get(pattern_name, {})
+        if prev is None:
+            prev = self.clickhouse.get_pattern_metadata_batch([pattern_name]).get(pattern_name, {})
         self.clickhouse.write_pattern_metadata(
             name=pattern_name,
             emotives=emotives if emotives is not None else [],

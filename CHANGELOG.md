@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Metadata sidecar re-learn path reads its ClickHouse row once, not twice.** `learnPattern` fetched the pattern's `patterns_metadata` row, discarded its metric columns, and `upsert_pattern_metadata` then re-issued the identical `SELECT` to recover them (plus an unused Redis frequency lookup). New `MetadataRouter.get_metadata_for_merge()` returns the full row and `upsert_pattern_metadata(prev=...)` reuses it. Behaviour is unchanged; the new-pattern path deliberately keeps its own read, because Redis and ClickHouse can disagree after a Redis loss + rehydrate and that read is what preserves rehydrated patterns' emotives and metrics.
+
+### Fixed
+- **Reference Python client (`examples/python-client.py`)**: session-recovery retry never worked — it retried against the dead session's URL and its "skip lifecycle ops" guard matched every session-scoped `POST`; both fixed, with a re-entrancy guard. `get_percept_data()`/`get_cognition_data()` repointed from deprecated node-scoped routes (which return empty payloads) to the session-scoped ones; `get_session_config()` now actually calls its route; 9 missing wrappers added, bringing coverage to 37 of 38 HTTP routes. `examples/README.md`'s client section rewritten to match the real (synchronous, `requests`-based) API.
+
 ## [5.0.0] - 2026-09-09
 
 Redefines the `anomalies` prediction field (breaking), makes WebSocket events reach every uvicorn worker, and lands the configuration audit: settings that were documented but never bound now work, and dead configuration surface is gone.

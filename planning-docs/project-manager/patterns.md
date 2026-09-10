@@ -238,6 +238,28 @@ absolute latency differences across machines.
 
 ---
 
+### 2026-09-10 - Release Wrapper's `set -e` Turned a Harmless Non-Interactive `source` Failure Into an Aborted Release, and a "COMPLETE" Planning-Doc Entry Turned Out to Be Uncommitted Code
+
+**Pattern**: Two related process gaps surfaced releasing KATO v5.0.1, both in the same family as the 2026-09-09 credential incident above (release-wrapper environment assumptions breaking under real conditions):
+1. The first v5.0.1 release attempt aborted immediately: `source ~/.bash_profile` returned non-zero when run from the non-interactive release shell, and the wrapper script used `set -e`, so the whole run exited before anything was bumped or tagged.
+2. Separately, the DECISION-018 metadata-sidecar duplicate-SELECT fix had been logged **COMPLETE** in `SPRINT_BACKLOG.md`/`DECISIONS.md` on 2026-09-09 and even listed in v5.0.0's "What's Bundled" table — but the actual code change was never committed. It sat as uncommitted working-tree WIP (`M kato/informatics/knowledge_base.py`, `M kato/storage/metadata_router.py`) straight through the v5.0.0 release (coincidentally protected by the same `git stash push -u` that was meant to exclude a *different*, still-open piece of sidecar work) and was still sitting there a day later.
+
+**Discovery Trigger**: (1) The release script exiting with no tag/bump applied on the first attempt, traced to the `source` command's non-zero exit under `set -e`. (2) Noticing `git status` still showed the two sidecar files modified against a clean `main`, one day after v5.0.0 was supposedly released with that fix bundled in.
+
+**Assumption → Reality**:
+- Assumed (1): `source ~/.bash_profile` behaves the same in a non-interactive release shell as it does interactively — succeeds silently.
+- Reality (1): a guard clause (or similar) in the profile can make `source` return non-zero in a non-interactive context even though the environment variables it sets are still picked up correctly; under `set -e` that non-zero exit is fatal regardless of whether the sourcing "worked."
+- Assumed (2): marking a task COMPLETE in planning docs (with a decision record and an archive entry) means the corresponding code is committed and will be included in the next release.
+- Reality (2): planning-doc status and git commit status are tracked independently and can silently diverge — a "COMPLETE" fix can still be uncommitted WIP, and nothing in the release process cross-checks the two.
+
+**Resolution Pattern**: (1) Re-ran with `source ~/.bash_profile || true` — safe because the goal was only to refresh environment variables, not to assert the source itself succeeded; the retry completed the release normally. (2) Committed the sidecar fix as `ca8e47a` and shipped it in v5.0.1 (patch bump, since it's behavior-preserving).
+
+**Lesson**: For any release wrapper using `set -e`, audit every `source`d script for non-interactive-shell exit-code behavior — don't assume a script that "works" interactively is `set -e`-safe non-interactively; suppress with `|| true` for setup steps where only the side effect (env vars set) matters, not the exit code. Separately: a "COMPLETE" status in planning docs is a claim about the code, not a substitute for checking it — a `git status`/`git diff` pass against what the docs claim is shipped (done right before or right after a release) would have caught the uncommitted DECISION-018 fix a day earlier, before it was misreported as bundled into v5.0.0.
+
+**Recurrence Risk**: Medium for both. (1) Any future addition to the release wrapper that sources another script non-interactively carries the same risk unless explicitly guarded. (2) This is now the second time in two consecutive releases that an assumption about release-wrapper/environment behavior caused a process gap (see the 2026-09-09 entry above) — worth watching for a third occurrence, at which point a permanent fix (e.g., a `git diff --stat` sanity check baked into the release process, and `|| true` applied proactively to every non-interactive `source` in release tooling) should be treated as due rather than optional. See DECISION-023 and `planning-docs/completed/features/2026-09-10-kato-v5.0.1-release.md` for the full release record.
+
+---
+
 ### 2026-09-09 - Manufacture the Failure Condition Instead of Waiting to Observe It: Flaky-by-Topology Tests Fixed by Owning the Container
 
 **Pattern**: Four websocket event-delivery tests plus `test_session_cleanup` had been intermittently failing for months against the one shared dev container (`KATO_WORKERS=4`), and every unrelated piece of work that day (anomalies/fuzzy_matches, metadata-sidecar, configuration-audit) had to separately re-confirm "yes, those are the known pre-existing failures, not caused by my change." The actual fix wasn't a smarter assertion or a longer timeout — it was making the test launch its own throwaway containers at each worker count and proving, per-connection, that the test client had landed on ≥2 distinct worker PIDs before asserting cross-worker behavior. This turned "sometimes fails, depending on which worker a websocket connection happens to land on" into "fails every single time, with the exact missed worker PIDs named in the assertion."

@@ -1,10 +1,25 @@
 # SESSION_STATE.md - Current Development State
-*Last Updated: 2026-09-10 (reference Python client API-coverage gap closed — examples/python-client.py now wraps 37/38 routes, session-recovery retry path fixed)*
+*Last Updated: 2026-09-10 (KATO v5.0.1 patch release — DECISION-018 metadata-sidecar round-trip fix committed and shipped; reference Python client API-coverage gap closed earlier the same day)*
 
 ## Current Task
-**No active task — reference-client coverage work is COMPLETE. Pick next item from sprint backlog (Multi-Worker Uvicorn + Concurrent Training Safety is next queued — the broadcaster fix released in v5.0.0 removes one of that initiative's known blockers; the `test_concurrent_session_modifications` concurrent-write-loss symptom remains open and unconfirmed).**
+**No active task — the v5.0.1 patch release and reference-client coverage work are both COMPLETE. Pick next item from sprint backlog (Multi-Worker Uvicorn + Concurrent Training Safety is next queued — the broadcaster fix released in v5.0.0 removes one of that initiative's known blockers; the `test_concurrent_session_modifications` concurrent-write-loss symptom remains open and unconfirmed).**
 
 ## Previous Task (context preserved)
+**KATO v5.0.1 Release (PATCH) — COMPLETE (2026-09-10)**
+- Status: RELEASED — `./container-manager.sh patch` (AUTO_MODE). Bump commit `1481e44` "chore: bump version to 5.0.1"; tag `v5.0.1` pushed to origin; `main` at `1481e44`, in sync with `origin/main`
+- Milestone release, not a queued initiative; Multi-Worker Uvicorn initiative below remains next in the sprint backlog
+- Decision: DECISION-023 in `planning-docs/DECISIONS.md`
+- Archive: `planning-docs/completed/features/2026-09-10-kato-v5.0.1-release.md`
+- Commits since v5.0.0: `f100e4a` fix(examples) — reference Python client recovery/coverage fixes, examples only (see "Earlier Task" below); `ca8e47a` perf(metadata) — sidecar re-learn now reads its ClickHouse row once via `get_metadata_for_merge()` + `upsert_pattern_metadata(prev=...)` — this is the DECISION-018 work, documented COMPLETE on 2026-09-09 but left **uncommitted** and NOT included in the v5.0.0 image; now committed and released; `ce7d21c` docs(planning); `8bf906c` docs(changelog) promoting `[Unreleased]` to `[5.0.1] - 2026-09-10`; `1481e44` chore: bump version to 5.0.1
+- GitHub release: https://github.com/sevakavakians/kato/releases/tag/v5.0.1 (assets `kato-deployment-v5.0.1.tar.gz`, `kato-0.1.1.tgz` Helm chart — attached by the tag-triggered workflow)
+- Images: `ghcr.io/sevakavakians/kato:5.0.1`, `:5.0`, `:5`, `:latest` — pushed and verified, all the same digest `sha256:54c13094932b…`
+- Rationale: PATCH — a behavior-preserving round-trip elimination plus example-client bug fixes; no API change (contrast with v5.0.0's major bump for the breaking `anomalies`/`fuzzy_matches` split)
+- Deployment: local `deployment/` compose stack's gitignored `docker-compose.override.yml` pinned to `ghcr.io/sevakavakians/kato:5.0.1`; only the `kato` service was recreated (databases untouched). Verified: API reports 5.0.1, `get_metadata_for_merge` present in the image, `KATO_WORKERS=4` with cross-worker fan-out enabled on all 4, `NO_PROXY` override applied, Redis 23,253 keys before/after (forced `SAVE` first), ClickHouse 4,528 patterns
+- Verification: smoke 28 passed against the deployed 5.0.1 image (`test_emotives_comprehensive`, `test_metadata_comprehensive`, hello-world predictions, websocket events); full suite **475 passed / 4 skipped / 0 failed** (624.50s) — identical pass/fail counts to the pre-release 2026-09-09 baseline (585s); the duration difference is run-to-run variance, not a regression
+- Process note: the first release attempt aborted harmlessly — `source ~/.bash_profile` returns non-zero in a non-interactive shell, and the wrapper used `set -e`, so nothing had been bumped/tagged; re-run with `source ~/.bash_profile || true` succeeded. Recorded alongside the 2026-09-09 stale-credential note — see `planning-docs/project-manager/patterns.md` and `maintenance-log.md`
+- **Resolves**: the `planning-docs/SPRINT_BACKLOG.md` "Optimization: Metadata Sidecar Re-Learn Duplicate SELECT Eliminated" entry's done-but-uncommitted status — that work (DECISION-018) is now committed (`ca8e47a`) and released as part of v5.0.1. The separate structural follow-up ("Metadata sidecar read-modify-write shape") remains open/uncommitted.
+
+## Earlier Task (context preserved)
 **Reference Python Client: Close API-Coverage Gap — COMPLETE (2026-09-10)**
 - Status: COMPLETE — ad-hoc maintenance task, not part of the Multi-Worker Uvicorn initiative (that remains next queued in `SPRINT_BACKLOG.md`)
 - Scope: `examples/python-client.py` (the `KATOClient` reference client) + `examples/README.md`; no `kato/` service code touched
@@ -16,9 +31,8 @@
 - Rewrote the `python-client.py` section of `examples/README.md` (previously wrong in every particular — advertised async/httpx for a sync `requests` client, wrong class name, wrong constructor kwarg, nonexistent method signatures)
 - Verification: coverage re-audited against live `/openapi.json` — 37/38 routes now wrapped (remaining 2 deliberate: a routing smoke-test route, and `WS /ws/events` which `requests` cannot speak — WebSocket support explicitly excluded by the user); recovery path regression-tested live (deleted a session out from under a client, confirmed transparent recovery on next `observe()`); full suite 475 passed / 4 skipped
 - Archive: `planning-docs/completed/features/2026-09-10-python-client-api-coverage.md`
-- Note: working tree also carried unrelated in-progress changes to `kato/informatics/knowledge_base.py` and `kato/storage/metadata_router.py` (concurrent metadata-sidecar work) — not touched by, and not part of, this task; the 475/4 verification run covered the combined tree
+- Note: working tree also carried unrelated in-progress changes to `kato/informatics/knowledge_base.py` and `kato/storage/metadata_router.py` (concurrent metadata-sidecar work) — not touched by, and not part of, this task; the 475/4 verification run covered the combined tree. That WIP is the DECISION-018 sidecar fix, since committed as `ca8e47a` and released in v5.0.1 — see "Previous Task" above.
 
-## Earlier Task (context preserved)
 **KATO v5.0.0 Release (MAJOR) — COMPLETE (2026-09-09)**
 - Status: RELEASED — `./container-manager.sh major` (AUTO_MODE). Bump commit `5c4b282` "chore: bump version to 5.0.0" (`pyproject.toml`, `setup.py`, `kato/__init__.py`, `charts/kato/Chart.yaml` `appVersion`); tag `v5.0.0` pushed to origin; `main` at `5c4b282`, in sync with `origin/main`
 - Milestone release, not a queued initiative; Multi-Worker Uvicorn initiative below remains next in the sprint backlog

@@ -1,6 +1,43 @@
 # DECISIONS.md - Architectural & Design Decision Log
 *Append-Only Log - Started: 2025-08-29*
-*Last Updated: 2026-09-09 (DECISION-022: KATO v5.0.0 released — major bump for the breaking anomalies/fuzzy_matches split, resolving DECISION-019's open version-bump question)*
+*Last Updated: 2026-09-10 (DECISION-023: KATO v5.0.1 released — patch bump shipping the previously-uncommitted DECISION-018 metadata-sidecar fix plus example-client bug fixes)*
+
+---
+
+## 2026-09-10 - DECISION-023: Release KATO v5.0.1 — Patch Bump Shipping the Previously-Uncommitted DECISION-018 Fix
+
+**Decision**: Release accumulated post-5.0.0 work as **v5.0.1**, a patch version bump, via `./container-manager.sh patch "..."` (AUTO_MODE).
+**Status**: COMPLETE and RELEASED — tag `v5.0.1` pushed to origin; GitHub release published; images built, pushed, and verified.
+**Classification**: Release / Process Decision
+**Confidence**: High
+
+### Context
+DECISION-022 (2026-09-09) released v5.0.0 but explicitly excluded the metadata-sidecar structural follow-up's uncommitted working-tree changes, holding them out via `git stash push -u` for the duration of that release. What wasn't previously called out: the *already-documented-as-done* DECISION-018 work (the re-learn duplicate-SELECT elimination, `planning-docs/completed/optimizations/2026-09-09-metadata-sidecar-relearn-duplicate-select-eliminated.md`) was itself part of that same stashed/uncommitted working tree — so despite being logged COMPLETE on 2026-09-09 and bundled into v5.0.0's "What's Bundled" table, it was never actually committed and was **not present in the v5.0.0 image**. This surfaced today as `M kato/informatics/knowledge_base.py` / `M kato/storage/metadata_router.py` still showing modified against a clean `main` one day after the "release." Separately, the reference Python client (`examples/python-client.py`) API-coverage and session-recovery fixes (completed earlier today, see `planning-docs/completed/features/2026-09-10-python-client-api-coverage.md`) had also accumulated uncommitted.
+
+### Rationale
+Per `CLAUDE.md`'s "Container Manager Workflow Protocol" (patch = bug fixes, security patches, performance improvements with no API contract change), both pieces of work qualify as **patch**: the DECISION-018 fix is a behavior-preserving round-trip elimination (2 ClickHouse SELECTs → 1 per re-learn, identical externally-observable result), and the Python-client fixes touch only `examples/`, not `kato/` service code or its API surface. Neither changes any request/response contract, unlike DECISION-019's breaking field split that forced v5.0.0's major bump.
+
+### Release Contents
+- Commits since v5.0.0: `f100e4a` fix(examples) — reference Python client recovery/coverage fixes; `ca8e47a` perf(metadata) — sidecar re-learn duplicate-SELECT elimination (the DECISION-018 work, now actually committed); `ce7d21c` docs(planning); `8bf906c` docs(changelog) promoting `[Unreleased]` → `[5.0.1] - 2026-09-10`; `1481e44` chore: bump version to 5.0.1
+- Bump commit `1481e44` "chore: bump version to 5.0.1"; tag `v5.0.1` pushed to origin; `main` at `1481e44`, in sync with `origin/main`
+- GitHub release: https://github.com/sevakavakians/kato/releases/tag/v5.0.1 (assets `kato-deployment-v5.0.1.tar.gz`, `kato-0.1.1.tgz` Helm chart — attached by the tag-triggered workflow)
+- Images: `ghcr.io/sevakavakians/kato:5.0.1`, `:5.0`, `:5`, `:latest` — verified pushed, all the same digest `sha256:54c13094932b…`
+- Deployment stack (`deployment/` compose project) updated: gitignored `docker-compose.override.yml` pinned to `ghcr.io/sevakavakians/kato:5.0.1`; only the `kato` service recreated (databases untouched). Verified: API reports 5.0.1, `get_metadata_for_merge` present in the running image, `KATO_WORKERS=4` with cross-worker fan-out enabled on all 4, `NO_PROXY` override applied, Redis 23,253 keys before/after (forced `SAVE` first), ClickHouse 4,528 patterns
+- Verification: smoke 28 passed against the deployed image; full suite **475 passed / 4 skipped / 0 failed** (624.50s) — same counts as the 2026-09-09 pre-release baseline (585s), duration difference is run-to-run variance
+
+### Alternatives Considered
+1. **Treat this as a no-op documentation correction** (since the "fix" was already logged COMPLETE) — rejected: the running v5.0.0 container genuinely did not contain the fix; committing and releasing it is a real behavior change to production, not paperwork.
+2. **Bundle with the still-open structural sidecar follow-up (append-only emotives/metadata) to ship "the whole sidecar story" at once** — rejected: that structural work is a larger, separately-scoped change (schema split, backfill) with its own risk profile; shipping the already-verified round-trip fix now, independently, follows the same incremental-release discipline used throughout this project.
+3. **Chosen: patch bump, ship now** — matches the actual scope of change (behavior-preserving optimization + example-only fixes), consistent with semver policy.
+
+### Process Notes (for next release)
+1. **`set -e` + `source ~/.bash_profile` in a non-interactive shell aborts harmlessly before any state changes.** `source`-ing a profile script from a non-interactive shell can return non-zero even on success (e.g., a guard clause in the profile itself); a release wrapper using `set -e` treats that as fatal and exits before bumping/tagging anything. Fix: `source ~/.bash_profile || true` when the goal is only to refresh environment variables, not to assert the source succeeded. Nothing had been bumped or tagged when this happened, so the retry was safe. Recorded alongside the 2026-09-09 stale-credential process note (registry auth) in `planning-docs/project-manager/patterns.md` — both are "release-wrapper environment assumptions broke a non-interactive run" instances.
+2. **A completed-and-documented fix is not necessarily a shipped fix — verify the working tree, not just the planning docs, before or right after a release.** DECISION-018 was marked COMPLETE in `SPRINT_BACKLOG.md`/`DECISIONS.md` on 2026-09-09 and even listed in v5.0.0's "What's Bundled" table, but the actual code change was never committed (it was live uncommitted WIP, coincidentally the same WIP `git stash push -u` was protecting during the v5.0.0 release for a *different*, still-open piece of sidecar work). Planning-doc status and git commit status can silently diverge; a pre-release (or day-after) `git status`/`git diff` check against what the docs claim is shipped would have caught this a day earlier.
+
+### Resolves
+- `planning-docs/SPRINT_BACKLOG.md`'s "Optimization: Metadata Sidecar Re-Learn Duplicate SELECT Eliminated" entry's done-but-uncommitted status.
+
+**Archive**: `planning-docs/completed/features/2026-09-10-kato-v5.0.1-release.md`
 
 ---
 

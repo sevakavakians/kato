@@ -1,5 +1,5 @@
 # SPRINT_BACKLOG.md - Upcoming Work
-*Last Updated: 2026-09-10 (reference Python client API-coverage gap closed — ad-hoc maintenance, does not change the Active Projects queue below)*
+*Last Updated: 2026-09-10 (KATO v5.0.1 patch release — DECISION-018 metadata-sidecar fix committed and released; reference Python client API-coverage gap closed earlier the same day — neither changes the Active Projects queue below)*
 
 ## Active Projects
 
@@ -486,7 +486,7 @@ Phase 4 (Symbol Statistics & Fail-Fast Architecture) is 100% complete. The Click
 **Priority**: P2 — structural remaining work
 **Status**: Re-scoped and partially resolved 2026-09-09. The duplicate-SELECT half of the original item is DONE — see "Recently Completed" below. This entry covers what's left.
 **Framing correction (2026-09-09)**: the item as originally filed (2026-09-09, during the configuration audit) said the fix "needs a batched upsert call shape at the `learnPattern` level." That is **not achievable**: `pattern_processor.learn()` builds exactly one `Pattern` per call and clears STM, and `POST /sessions/{id}/learn` never fans out — there is no batch to form *within* a request. Forming one *across* requests would require a per-worker buffer, which is exactly what commit `f809a84` removed (per-worker buffers orphaned rows across the 4 uvicorn workers — see DECISION-017). The correct framing is: **eliminate round trips, don't group them.** (Nuance: `observe-sequence` with `learn_after_each=True` can issue N+1 `learnPattern` calls in one request, but that loop is strictly sequential — each `learnPattern` mutates Redis stats that the next iteration reads — so grouping those calls isn't safe either.) See DECISION-018 (`planning-docs/DECISIONS.md`) for the full record.
-**What's already fixed**: the re-learn path's duplicate ClickHouse SELECT is eliminated (2 SELECTs → 1) — see `planning-docs/completed/optimizations/2026-09-09-metadata-sidecar-relearn-duplicate-select-eliminated.md`.
+**What's already fixed**: the re-learn path's duplicate ClickHouse SELECT is eliminated (2 SELECTs → 1) — see `planning-docs/completed/optimizations/2026-09-09-metadata-sidecar-relearn-duplicate-select-eliminated.md`. **Released 2026-09-10**: this fix sat uncommitted through v5.0.0 but is now committed (`ca8e47a`) and shipped in **KATO v5.0.1** — see DECISION-023. The structural work below is unaffected and remains open/uncommitted.
 **What's left (open, structural)**: the read-modify-write shape itself. Emotives accumulation and the metadata set-union are read-modify-write against ClickHouse, which is why `upsert_pattern_metadata` must read before it writes at all, and why this path is forced onto blocking `wait_for_async_insert=1` instead of the fire-and-forget `wait_for_async_insert=0` used on `patterns_data`. The real fix: make emotives/metadata **append-only**, applying `persistence` at read time (`groupArray` + tail for emotives; `groupUniqArray` for the metadata set-union) instead of merging on write. That removes the read-modify-write entirely, allows `wait_for_async_insert=0` on this path too, and collapses both the new-pattern and re-learn paths to a single non-blocking insert.
 **Cost**: a schema split of `patterns_metadata` into an append-only emotives/metadata table plus a replace-semantics metrics table (entropy/normalized_entropy/global_normalized_entropy/tf_vector), a backfill of existing rows, and updates to every emotives reader.
 **Design constraint to preserve when this is done**: the seemingly-redundant read on the NEW-pattern branch of `upsert_pattern_metadata` must not be dropped without a replacement safeguard — `is_new` comes from a Redis `SETNX` that can be empty while ClickHouse still holds the row (post Redis-loss-then-rehydrate, which has happened twice in this project). Any append-only redesign still needs a way to avoid destroying a rehydrated pattern's retained emotives/metrics on its next learn. Full detail in the archive linked above.
@@ -662,10 +662,12 @@ Replaced the five known-flaky/failing tests (4 websocket event-delivery tests + 
 
 ---
 
-### Optimization: Metadata Sidecar Re-Learn Duplicate SELECT Eliminated — COMPLETE (2026-09-09)
+### Optimization: Metadata Sidecar Re-Learn Duplicate SELECT Eliminated — COMPLETE (2026-09-09), RELEASED (2026-09-10)
 **Priority**: P2 — partially resolves and corrects the "Metadata sidecar write path is un-batched" item logged earlier the same day
 **Archive**: `planning-docs/completed/optimizations/2026-09-09-metadata-sidecar-relearn-duplicate-select-eliminated.md`
 **Decision**: DECISION-018
+
+**Release status**: this work was code-complete on 2026-09-09 but **left uncommitted** at that time — it was explicitly excluded from KATO v5.0.0 (see that release's archive entry, "Explicitly NOT Part of This Release"). It sat uncommitted in the working tree (visible as `M kato/informatics/knowledge_base.py` / `M kato/storage/metadata_router.py`) until 2026-09-10, when it was committed as `ca8e47a` "perf(metadata) sidecar re-learn reads its ClickHouse row once" and released as part of **KATO v5.0.1** (patch bump — see DECISION-023 and `planning-docs/completed/features/2026-09-10-kato-v5.0.1-release.md`). The structural follow-up described below ("Follow-up: Metadata sidecar read-modify-write shape") remains open and is still unreleased.
 
 **Corrects a same-day backlog item**: the item said the fix "needs a batched upsert call shape at the `learnPattern` level." That's unachievable — `learn()` produces exactly one Pattern per call and never fans out, so there's no batch to form within a request; forming one across requests would need a per-worker buffer, which is exactly what `f809a84` removed to fix a correctness bug. Corrected framing: **eliminate round trips, don't group them**.
 

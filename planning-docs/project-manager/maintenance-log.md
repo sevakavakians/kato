@@ -2917,3 +2917,32 @@ networks:
 
 *Agent execution time: < 5 seconds*
 *Response type: Silent operation (documentation update following task completion)*
+
+## 2026-09-10 11:38 - Milestone: KATO v5.0.1 Patch Release
+
+**Trigger**: Milestone completion — KATO v5.0.1 released today via `./container-manager.sh patch` (AUTO_MODE), bumping from 5.0.0. Notably, this release ships the DECISION-018 metadata-sidecar duplicate-SELECT fix, which had been logged COMPLETE on 2026-09-09 and listed in v5.0.0's "What's Bundled" table but was never actually committed — it remained uncommitted WIP through the v5.0.0 release and is only now genuinely shipped (commit `ca8e47a`). Also bundled: the reference Python client fixes from earlier today (`f100e4a`).
+
+**Event Type**: Milestone completion (release)
+
+**Actions Taken**:
+1. Created `planning-docs/completed/features/2026-09-10-kato-v5.0.1-release.md` — full release archive (mechanics, bump rationale, deployment verification, test verification, process notes)
+2. Added `DECISION-023` to `planning-docs/DECISIONS.md` — patch-bump rationale, release contents, alternatives considered, and the two process notes (non-interactive `source`/`set -e` abort; planning-doc "COMPLETE" vs. actual commit status divergence)
+3. Updated `planning-docs/README.md` — "Current System State" version line (5.0.0 → 5.0.1, with prior-release context preserved) and Test Coverage line (re-verified 475 passed / 4 skipped / 0 failed against the deployed 5.0.1 image, 624.50s; noted as consistent with the 2026-09-09 585s baseline, not a regression)
+4. Updated `planning-docs/SESSION_STATE.md` — header timestamp refreshed; new "Previous Task" entry for the v5.0.1 release inserted (prior python-client-coverage and v5.0.0-release entries both demoted one tier, from "Previous"/"Earlier" to "Earlier"/plain, with the now-redundant duplicate "## Earlier Task" header removed and a cross-reference added noting the previously "unrelated WIP" note was in fact this release's DECISION-018 fix); "Current Task" line updated to reflect both the release and the earlier python-client work as complete
+5. Updated `planning-docs/SPRINT_BACKLOG.md` — header timestamp refreshed; the "Optimization: Metadata Sidecar Re-Learn Duplicate SELECT Eliminated" entry (Recently Completed section) marked with its release status (COMPLETE 2026-09-09, RELEASED 2026-09-10) and a "Release status" note explaining the uncommitted gap; matching cross-reference added to the still-open "Follow-up: Metadata sidecar read-modify-write shape" backlog entry so it's clear the structural work remains separate and still unreleased
+6. Added a new Bug Patterns entry to `planning-docs/project-manager/patterns.md` (2026-09-10) — the `set -e`/non-interactive-`source` release abort and the COMPLETE-but-uncommitted DECISION-018 discovery, cross-referenced against the 2026-09-09 stale-credential entry as the same family of release-process gap (now 2 consecutive releases affected — flagged as worth watching for a 3rd occurrence before treating a permanent fix as due)
+7. No `pending-updates.md` entry — neither issue meets a human-alert threshold on its own (the recurring-blocker pattern is at 2 occurrences, threshold is >3); tracked in `patterns.md` for now
+
+**Key Details**:
+- Full-suite result read from the pytest summary line supplied for this task: `475 passed, 4 skipped, 5 warnings in 624.50s (0:10:24)` — no `FAILED` lines present; identical pass/fail counts to the 2026-09-09 v5.0.0 pre-release run (585s)
+- Images verified: `ghcr.io/sevakavakians/kato:5.0.1`/`:5.0`/`:5`/`:latest`, digest `sha256:54c13094932b…`
+- Deployment stack updated (kato service only, databases untouched); Redis 23,253 keys and ClickHouse 4,528 patterns unchanged across the deploy
+
+**Classification**: Milestone / Release (Process notes: Recurring-Risk, filed for pattern tracking — see `patterns.md`)
+
+**Next Steps**: None — release complete. Multi-Worker Uvicorn + Concurrent Training Safety remains the next queued initiative per `SESSION_STATE.md` / `SPRINT_BACKLOG.md`.
+
+---
+
+*Agent execution time: < 5 seconds*
+*Response type: Silent operation (documentation update following milestone release)*

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`scripts/check_store_parity.py`**: reports per-`kb_id` pattern counts that disagree between Redis (`frequency` keys) and ClickHouse (`patterns_data`); `--purge-prefix PREFIX --execute` removes the residue of mismatched kb_ids with that prefix from both stores.
+- **Opt-in multi-worker throughput and integrity test** (`tests/tests/performance/test_multi_worker_throughput.py`, `KATO_PERF=1`): runs the parallel-training shape against self-launched 1- and 4-worker containers, reports the speedup, and asserts exact pattern counts, exact shared-pattern frequency under contention, Redis/ClickHouse agreement, and a clean clear-all.
+- **Documented limitation — one writer per session.** Overlapping mutating requests on the same `session_id` from different uvicorn workers lose updates (per-worker read-modify-write of the whole session). Stated in the session docs and the API reference; `test_concurrent_session_modifications` is now a strict xfail under `KATO_WORKERS > 1` instead of a skip, so the limitation stays visible.
+
+### Fixed
+- **Overlapping requests for one node deadlocked the uvicorn worker serving them.** `ObservationProcessor.process_observation` held a blocking `multiprocessing.Lock` across its awaits; on a single event loop, the second concurrent request blocked the loop thread waiting for a lock the first request could no longer release. The worker stopped answering everything, `/health` included, and stayed dead. Reproduced deterministically with two clients training one `node_id`; on the default 4-worker deployment it killed workers one by one. Both `multiprocessing` locks are gone; `KatoProcessor` now serializes its observe/learn/predict bridge sections with an await-aware `asyncio.Lock` per processor (requests for different nodes never contend; requests for the same node still run in parallel across workers). This is a stopgap ahead of making the bridge per-request (Phase 1.6). `KatoProcessor.learn` is now a coroutine.
+- **Image HEALTHCHECK always failed.** The Dockerfile probe did `import requests`, which is not installed in the image, so containers started with `docker run` reported unhealthy forever (the compose files probe with `urllib` and were unaffected). The Dockerfile now uses the same `urllib` probe.
+- **Clear-all silently left Redis keys behind for kb_ids containing glob metacharacters.** `RedisWriter` built `SCAN MATCH {kb_id}:*` unescaped; a kb_id such as `name[case]_kato` (pytest parametrize ids reach kb_ids this way) is a character class, matched nothing, and every key survived. All four scan sites now escape the kb_id (`escape_glob`); the test suite's own cleanup helper too.
+- **Clear-all never dropped `patterns_metadata`.** `clear_all_memory` dropped the `patterns_data` partition and Redis keys but left the per-pattern metadata sidecar rows; it now drops that partition as well.
+- **A pattern learned just before clear-all could survive it.** Inserts sit in ClickHouse's server-side `async_insert` queue (~200 ms); `clear_all_memory` dropped the partition without draining the queue first, so the row landed afterwards. The queue is now flushed before the drop.
+
 ## [5.0.1] - 2026-09-10
 
 One fewer ClickHouse round trip per re-learn, and a working reference Python client.

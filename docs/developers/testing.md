@@ -297,6 +297,25 @@ docker volume prune -f  # WARNING: Removes all unused volumes
 
 ## Performance Testing
 
+### Multi-Worker Throughput and Integrity (opt-in)
+
+`tests/tests/performance/test_multi_worker_throughput.py` is skipped unless
+`KATO_PERF=1`. It launches its own `kato:latest` containers at `KATO_WORKERS=1`
+and `4` (via the `KatoTopology` helper from the worker-topology tests) and runs
+the parallel-training shape against each: `KATO_PERF_THREADS` client threads
+(default 8), one session per thread, all on one `node_id`, `KATO_PERF_ROUNDS`
+rounds (default 30) of learn-a-unique-pattern plus learn-a-shared-pattern.
+
+It reports learns/s and the 4-vs-1 speedup, asserts the 4-worker run is
+faster, and — more importantly — asserts integrity under real contention:
+every distinct pattern appears exactly once in ClickHouse, the shared pattern's
+frequency is exactly `threads × rounds` (no lost `INCR`s), Redis and ClickHouse
+agree on the pattern count, and `clear-all` afterwards leaves nothing behind.
+
+```bash
+KATO_PERF=1 python -m pytest tests/tests/performance/test_multi_worker_throughput.py -s
+```
+
 ### Running Performance Tests
 ```bash
 # Run performance test suite

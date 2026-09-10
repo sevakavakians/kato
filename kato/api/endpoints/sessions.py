@@ -466,7 +466,7 @@ async def learn_in_session(session_id: str):
     async with lock:
         # NO PROCESSOR LOCK NEEDED (stateless processor)
         # Learn pattern - stateless call returns (pattern_name, new_stm)
-        pattern_name, new_stm = processor.learn(session_state=session)
+        pattern_name, new_stm = await processor.learn(session_state=session)
 
         # Update session state
         session.stm = new_stm
@@ -702,7 +702,7 @@ async def observe_sequence_in_session(
 
                 # Learn after each if requested
                 if data.learn_after_each and current_state.stm:
-                    pattern_name, new_stm = processor.learn(session_state=current_state)
+                    pattern_name, new_stm = await processor.learn(session_state=current_state)
                     current_state.stm = new_stm
                     auto_learned_patterns.append(pattern_name)
 
@@ -724,7 +724,7 @@ async def observe_sequence_in_session(
             final_learned_pattern = None
             if data.learn_at_end and current_state.stm:
                 try:
-                    final_learned_pattern, new_stm = processor.learn(session_state=current_state)
+                    final_learned_pattern, new_stm = await processor.learn(session_state=current_state)
                     current_state.stm = new_stm
                     auto_learned_patterns.append(final_learned_pattern)
                     logger.info(f"Learned final pattern: {final_learned_pattern}")

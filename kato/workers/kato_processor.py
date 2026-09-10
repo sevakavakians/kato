@@ -2,7 +2,7 @@
 import asyncio
 import logging
 import os
-from multiprocessing import Lock, cpu_count
+from multiprocessing import cpu_count
 
 from kato.config.session_config import SessionConfiguration
 from kato.config.settings import get_settings
@@ -70,7 +70,14 @@ class KatoProcessor:
         self.distributed_stm_manager = None
         self._async_initialization_pending = True
 
-        self.processing_lock = Lock()
+        # Serializes the BRIDGE sections below (session state loaded into the
+        # shared pattern_processor for the duration of one call). Requests for
+        # different nodes use different processors and never contend; requests
+        # for the same node overlap across worker processes but not within one.
+        # Await-aware, so a holder that awaits I/O lets the loop run instead of
+        # freezing it. STOPGAP: replaced by per-request working state in the
+        # Phase 1.6 refactor, after which no lock is needed.
+        self._bridge_lock = asyncio.Lock()
 
         # Initialize extracted modules
         self.memory_manager = MemoryManager(self.pattern_processor, self.vector_processor)
@@ -169,7 +176,7 @@ class KatoProcessor:
         # Note: In stateless architecture, we don't maintain local state
         return
 
-    def learn(
+    async def learn(
         self,
         *,
         session_state: 'SessionState',
@@ -190,24 +197,25 @@ class KatoProcessor:
             - pattern_name: Name of learned pattern (or None if learning failed)
             - new_stm: Updated STM after learning
         """
-        # BRIDGE: Load session STM into pattern processor temporarily
-        self.memory_manager.set_stm_in_pattern_processor(
-            self.pattern_processor,
-            session_state.stm
-        )
+        async with self._bridge_lock:
+            # BRIDGE: Load session STM into pattern processor temporarily
+            self.memory_manager.set_stm_in_pattern_processor(
+                self.pattern_processor,
+                session_state.stm
+            )
 
-        # BRIDGE: Load emotives and metadata accumulators from session state
-        self.pattern_processor.emotives = session_state.emotives_accumulator
-        self.pattern_processor.metadata = session_state.metadata_accumulator
+            # BRIDGE: Load emotives and metadata accumulators from session state
+            self.pattern_processor.emotives = session_state.emotives_accumulator
+            self.pattern_processor.metadata = session_state.metadata_accumulator
 
-        # TODO (Phase 1.7): Update pattern_operations to be stateless
-        # For now, it reads from pattern_processor.STM and mutates it
-        pattern_name = self.pattern_operations.learn_pattern(keep_tail=keep_tail)
+            # TODO (Phase 1.7): Update pattern_operations to be stateless
+            # For now, it reads from pattern_processor.STM and mutates it
+            pattern_name = self.pattern_operations.learn_pattern(keep_tail=keep_tail)
 
-        # Extract new STM after learning
-        new_stm = MemoryManager.get_stm_from_pattern_processor(self.pattern_processor)
+            # Extract new STM after learning
+            new_stm = MemoryManager.get_stm_from_pattern_processor(self.pattern_processor)
 
-        return pattern_name, new_stm
+            return pattern_name, new_stm
 
     async def finalize_training(self) -> dict:
         """
@@ -269,63 +277,64 @@ class KatoProcessor:
                 'instance_id': str
             }
         """
-        # BRIDGE: Load session STM into pattern processor temporarily
-        # (Until observation_processor is made stateless in Phase 1.6)
-        self.memory_manager.set_stm_in_pattern_processor(
-            self.pattern_processor,
-            session_state.stm
-        )
+        async with self._bridge_lock:
+            # BRIDGE: Load session STM into pattern processor temporarily
+            # (Until observation_processor is made stateless in Phase 1.6)
+            self.memory_manager.set_stm_in_pattern_processor(
+                self.pattern_processor,
+                session_state.stm
+            )
 
-        # TODO (Phase 1.6): Update observation_processor to accept session_state
-        # For now, it will mutate memory_manager state (legacy behavior)
-        result = await self.observation_processor.process_observation(observation, config=config)
+            # TODO (Phase 1.6): Update observation_processor to accept session_state
+            # For now, it will mutate memory_manager state (legacy behavior)
+            result = await self.observation_processor.process_observation(observation, config=config)
 
-        # BRIDGE: Extract new state from pattern processor and helpers
-        new_stm = MemoryManager.get_stm_from_pattern_processor(self.pattern_processor)
-        new_time = MemoryManager.increment_time(session_state.time)
+            # BRIDGE: Extract new state from pattern processor and helpers
+            new_stm = MemoryManager.get_stm_from_pattern_processor(self.pattern_processor)
+            new_time = MemoryManager.increment_time(session_state.time)
 
-        # Process emotives using stateless helper
-        new_emotives_acc, new_current_emotives = MemoryManager.process_emotives(
-            session_state.emotives_accumulator,
-            observation.get('emotives', {})
-        )
+            # Process emotives using stateless helper
+            new_emotives_acc, new_current_emotives = MemoryManager.process_emotives(
+                session_state.emotives_accumulator,
+                observation.get('emotives', {})
+            )
 
-        # Process metadata using stateless helper
-        new_metadata_acc = MemoryManager.process_metadata(
-            session_state.metadata_accumulator,
-            observation.get('metadata', {})
-        )
+            # Process metadata using stateless helper
+            new_metadata_acc = MemoryManager.process_metadata(
+                session_state.metadata_accumulator,
+                observation.get('metadata', {})
+            )
 
-        # Build percept data using stateless helper
-        new_percept = MemoryManager.build_percept_data(
-            strings=observation.get('strings', []),
-            vectors=observation.get('vectors', []),
-            emotives=new_current_emotives,
-            path=result.get('path', []),
-            metadata=observation.get('metadata', {})
-        )
+            # Build percept data using stateless helper
+            new_percept = MemoryManager.build_percept_data(
+                strings=observation.get('strings', []),
+                vectors=observation.get('vectors', []),
+                emotives=new_current_emotives,
+                path=result.get('path', []),
+                metadata=observation.get('metadata', {})
+            )
 
-        # Publish to distributed STM if available
-        if self.distributed_stm_manager and observation:
-            try:
-                await self.distributed_stm_manager.observe_distributed(observation)
-            except Exception as e:
-                logger.warning(f"Failed to publish observation to distributed STM: {e}")
+            # Publish to distributed STM if available
+            if self.distributed_stm_manager and observation:
+                try:
+                    await self.distributed_stm_manager.observe_distributed(observation)
+                except Exception as e:
+                    logger.warning(f"Failed to publish observation to distributed STM: {e}")
 
-        # Return new state (no mutation of inputs)
-        return {
-            'status': 'observed',
-            'stm': new_stm,
-            'time': new_time,
-            'emotives_accumulator': new_emotives_acc,
-            'metadata_accumulator': new_metadata_acc,
-            'percept_data': new_percept,
-            'predictions': result.get('predictions', []),
-            'auto_learned_pattern': result.get('auto_learned_pattern'),
-            'unique_id': result.get('unique_id', observation.get('unique_id', '')),
-            'symbols': result.get('symbols', []),
-            'instance_id': self.id
-        }
+            # Return new state (no mutation of inputs)
+            return {
+                'status': 'observed',
+                'stm': new_stm,
+                'time': new_time,
+                'emotives_accumulator': new_emotives_acc,
+                'metadata_accumulator': new_metadata_acc,
+                'percept_data': new_percept,
+                'predictions': result.get('predictions', []),
+                'auto_learned_pattern': result.get('auto_learned_pattern'),
+                'unique_id': result.get('unique_id', observation.get('unique_id', '')),
+                'symbols': result.get('symbols', []),
+                'instance_id': self.id
+            }
 
     async def get_predictions(
         self,
@@ -355,19 +364,20 @@ class KatoProcessor:
             # Retrieve stored predictions from database (no state needed)
             return self.pattern_operations.get_predictions(unique_id)
 
-        # Generate new predictions from current STM
-        # BRIDGE: Load session STM into pattern processor temporarily
-        self.memory_manager.set_stm_in_pattern_processor(
-            self.pattern_processor,
-            session_state.stm
-        )
+        async with self._bridge_lock:
+            # Generate new predictions from current STM
+            # BRIDGE: Load session STM into pattern processor temporarily
+            self.memory_manager.set_stm_in_pattern_processor(
+                self.pattern_processor,
+                session_state.stm
+            )
 
-        # TODO (Phase 1.7): Update pattern_operations to accept session_state
-        # For now, use get_predictions_with_config which reads from pattern_processor.STM
-        return await self.pattern_operations.get_predictions_with_config(
-            stm=session_state.stm,
-            config=config
-        )
+            # TODO (Phase 1.7): Update pattern_operations to accept session_state
+            # For now, use get_predictions_with_config which reads from pattern_processor.STM
+            return await self.pattern_operations.get_predictions_with_config(
+                stm=session_state.stm,
+                config=config
+            )
 
     def get_stm(self):
         """Get the current short-term memory - delegates to memory manager"""

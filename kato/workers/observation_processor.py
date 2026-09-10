@@ -5,7 +5,6 @@ Extracted from KatoProcessor for better modularity.
 """
 
 import logging
-from multiprocessing import Lock
 from typing import Any, Optional
 
 from kato.exceptions import ObservationError, ValidationError
@@ -50,7 +49,6 @@ class ObservationProcessor:
         self.process_predictions = process_predictions
 
         # Processing lock for thread safety
-        self.processing_lock = Lock()
 
         logger.debug("ObservationProcessor initialized")
 
@@ -343,89 +341,91 @@ class ObservationProcessor:
             ObservationError: If observation processing fails
             ValidationError: If input validation fails
         """
-        with self.processing_lock:
-            try:
-                # Validate input
-                self.validate_observation(data)
+        # Concurrency: callers serialize access to the shared pattern_processor
+        # (KatoProcessor._bridge_lock). No blocking lock here: one held across
+        # the awaits below froze the event loop under concurrent requests.
+        try:
+            # Validate input
+            self.validate_observation(data)
 
-                # Extract config values (use provided config or fallback to instance defaults)
-                max_pattern_length = config.max_pattern_length if config and config.max_pattern_length is not None else self.max_pattern_length
-                process_predictions = config.process_predictions if config and config.process_predictions is not None else self.process_predictions
-                stm_mode = config.stm_mode if config and config.stm_mode is not None else getattr(self.pattern_processor, 'stm_mode', 'CLEAR')
-                sort_symbols = config.sort_symbols if config and config.sort_symbols is not None else self.sort_symbols
+            # Extract config values (use provided config or fallback to instance defaults)
+            max_pattern_length = config.max_pattern_length if config and config.max_pattern_length is not None else self.max_pattern_length
+            process_predictions = config.process_predictions if config and config.process_predictions is not None else self.process_predictions
+            stm_mode = config.stm_mode if config and config.stm_mode is not None else getattr(self.pattern_processor, 'stm_mode', 'CLEAR')
+            sort_symbols = config.sort_symbols if config and config.sort_symbols is not None else self.sort_symbols
 
-                unique_id = data['unique_id']
-                string_data = data.get('strings', [])
-                vector_data = data.get('vectors', [])
-                emotives_data = data.get('emotives', {})
-                metadata_data = data.get('metadata', {})
+            unique_id = data['unique_id']
+            string_data = data.get('strings', [])
+            vector_data = data.get('vectors', [])
+            emotives_data = data.get('emotives', {})
+            metadata_data = data.get('metadata', {})
 
-                # Add processing path
-                if 'path' not in data:
-                    data['path'] = []
-                # Get processor info from pattern processor's genome manifest
-                processor_name = getattr(self.pattern_processor, 'name', 'kato')
-                processor_id = getattr(self.pattern_processor, 'id', 'unknown')
-                data['path'] += [f'{processor_name}-{processor_id}-process']
+            # Add processing path
+            if 'path' not in data:
+                data['path'] = []
+            # Get processor info from pattern processor's genome manifest
+            processor_name = getattr(self.pattern_processor, 'name', 'kato')
+            processor_id = getattr(self.pattern_processor, 'id', 'unknown')
+            data['path'] += [f'{processor_name}-{processor_id}-process']
 
-                # NOTE: percept_data, time, emotives, metadata are now handled in KatoProcessor.observe()
-                # This processor only handles symbolic processing and predictions
+            # NOTE: percept_data, time, emotives, metadata are now handled in KatoProcessor.observe()
+            # This processor only handles symbolic processing and predictions
 
-                # Process different data types
-                v_identified = self.process_vectors(vector_data) if vector_data else []
-                symbols = self.process_strings(string_data) if string_data else []
+            # Process different data types
+            v_identified = self.process_vectors(vector_data) if vector_data else []
+            symbols = self.process_strings(string_data) if string_data else []
 
-                if emotives_data:
-                    self.process_emotives(emotives_data)  # Deprecated, just logs
+            if emotives_data:
+                self.process_emotives(emotives_data)  # Deprecated, just logs
 
-                if metadata_data:
-                    self.process_metadata(metadata_data)  # Deprecated, just logs
+            if metadata_data:
+                self.process_metadata(metadata_data)  # Deprecated, just logs
 
-                # Combine all symbols
-                combined_symbols = v_identified + symbols
+            # Combine all symbols
+            combined_symbols = v_identified + symbols
 
-                # Only trigger predictions if we have actual symbolic content
-                predictions = []
-                if vector_data or string_data:
-                    # Only trigger predictions if enabled
-                    self.pattern_processor.trigger_predictions = process_predictions
+            # Only trigger predictions if we have actual symbolic content
+            predictions = []
+            if vector_data or string_data:
+                # Only trigger predictions if enabled
+                self.pattern_processor.trigger_predictions = process_predictions
 
-                    # Add current symbols to STM
-                    self.pattern_processor.setCurrentEvent(combined_symbols)
+                # Add current symbols to STM
+                self.pattern_processor.setCurrentEvent(combined_symbols)
 
-                    # Generate predictions ONLY if enabled
-                    if process_predictions:
-                        predictions = await self.pattern_processor.processEvents(unique_id)
-                        logger.debug(f"Generated {len(predictions)} predictions (process_predictions=True)")
-                    else:
-                        logger.debug("Skipping prediction computation (process_predictions=False)")
-
-                    # Check for auto-learning AFTER adding current event
-                    # Pass config values to check_auto_learning
-                    logger.debug(f"About to check auto-learning with max_pattern_length={max_pattern_length}")
-                    auto_learned_pattern = self.check_auto_learning(
-                        max_pattern_length=max_pattern_length,
-                        stm_mode=stm_mode
-                    )
-                    logger.debug(f"Auto-learning result: {auto_learned_pattern}")
+                # Generate predictions ONLY if enabled
+                if process_predictions:
+                    predictions = await self.pattern_processor.processEvents(unique_id)
+                    logger.debug(f"Generated {len(predictions)} predictions (process_predictions=True)")
                 else:
-                    logger.debug("No data to process, skipping auto-learning check")
-                    auto_learned_pattern = None
+                    logger.debug("Skipping prediction computation (process_predictions=False)")
 
-                return {
-                    'unique_id': unique_id,
-                    'auto_learned_pattern': auto_learned_pattern,
-                    'symbols': combined_symbols,
-                    'predictions': predictions
-                }
-
-            except (ValidationError, ObservationError):
-                # Re-raise known exceptions
-                raise
-            except Exception as e:
-                # Wrap unknown exceptions
-                raise ObservationError(
-                    f"Failed to process observation: {str(e)}",
-                    observation_id=data.get('unique_id'),
-                    observation_data=data
+                # Check for auto-learning AFTER adding current event
+                # Pass config values to check_auto_learning
+                logger.debug(f"About to check auto-learning with max_pattern_length={max_pattern_length}")
+                auto_learned_pattern = self.check_auto_learning(
+                    max_pattern_length=max_pattern_length,
+                    stm_mode=stm_mode
                 )
+                logger.debug(f"Auto-learning result: {auto_learned_pattern}")
+            else:
+                logger.debug("No data to process, skipping auto-learning check")
+                auto_learned_pattern = None
+
+            return {
+                'unique_id': unique_id,
+                'auto_learned_pattern': auto_learned_pattern,
+                'symbols': combined_symbols,
+                'predictions': predictions
+            }
+
+        except (ValidationError, ObservationError):
+            # Re-raise known exceptions
+            raise
+        except Exception as e:
+            # Wrap unknown exceptions
+            raise ObservationError(
+                f"Failed to process observation: {str(e)}",
+                observation_id=data.get('unique_id'),
+                observation_data=data
+            )

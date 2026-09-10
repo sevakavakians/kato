@@ -292,54 +292,70 @@ class PatternProcessor:
             self.metrics_cache_manager = None
             self.cached_calculator = None
 
-    def learn(self) -> Optional[str]:
+    def learn_from(
+        self,
+        stm: list[list[str]],
+        emotives: list[dict[str, float]],
+        metadata: list[dict[str, Any]],
+    ) -> Optional[str]:
         """
-        Convert current short-term memory into a persistent pattern.
+        Convert the given short-term memory into a persistent pattern.
 
-        Creates a hash-named pattern from the data in STM, stores it in ClickHouse/Redis,
-        and distributes it to search workers for future pattern matching.
+        Stateless with respect to STM: the caller owns `stm` and decides what
+        becomes of it afterwards (cleared, rolled, or tail kept). Creates a
+        hash-named pattern, stores it in ClickHouse/Redis, and distributes it to
+        search workers for future pattern matching.
+
+        Args:
+            stm: Events to learn, oldest first.
+            emotives: Rolling-window emotives to store with the pattern (kept as
+                a list - never averaged before storage).
+            metadata: Metadata dicts accumulated for the pattern.
 
         Returns:
-            Pattern name (PTRN|<hash>) if learned successfully, None otherwise.
+            Pattern name (bare hash) if learned, None for patterns shorter than
+            two events (which are not learned).
         """
-        pattern = Pattern(self.STM)  # Create pattern from short-term memory data
-        self.STM.clear()  # Reset short-term memory after learning
+        pattern = Pattern(list(stm))
+        if len(pattern) <= 1:  # Only learn multi-event patterns
+            return None
 
-        if len(pattern) > 1:  # Only learn multi-event patterns
-            # Store pattern with emotives as rolling window list and accumulated metadata
-            x = self.patterns_kb.learnPattern(
-                pattern,
-                emotives=self.emotives,  # Keep as list - do NOT average before storage
-                metadata=accumulate_metadata(self.metadata) if self.metadata else {}
+        x = self.patterns_kb.learnPattern(
+            pattern,
+            emotives=list(emotives),
+            metadata=accumulate_metadata(metadata) if metadata else {}
+        )
+        if x:
+            # Add newly learned pattern to the searcher
+            # Index parameter kept for backward compatibility but ignored by optimized version
+            self.patterns_searcher.assignNewlyLearnedToWorkers(
+                0,  # Index parameter ignored in optimized implementation
+                pattern.name,
+                pattern.flat_data
             )
-
-            if x:
-                # Add newly learned pattern to the searcher
-                # Index parameter kept for backward compatibility but ignored by optimized version
-                self.patterns_searcher.assignNewlyLearnedToWorkers(
-                    0,  # Index parameter ignored in optimized implementation
-                    pattern.name,
-                    pattern.flat_data
+            # Invalidate metrics cache since patterns have changed
+            if self.metrics_cache_manager:
+                asyncio.create_task(
+                    self.metrics_cache_manager.invalidate_pattern_metrics(pattern.name)
                 )
+        # Invalidate symbol cache since symbol stats changed
+        self.query_manager.invalidate_caches()
+        self._global_metadata_cache = None  # Invalidate global metadata cache
+        self.last_learned_pattern_name = pattern.name
+        return pattern.name
 
-                # Invalidate metrics cache since patterns have changed
-                if self.metrics_cache_manager:
-                    asyncio.create_task(
-                        self.metrics_cache_manager.invalidate_pattern_metrics(pattern.name)
-                    )
+    def learn(self) -> Optional[str]:
+        """
+        Learn from the processor's own STM, then clear it (legacy stateful form).
 
-            # Invalidate symbol cache since symbol stats changed
-            self.query_manager.invalidate_caches()
-            self._global_metadata_cache = None  # Invalidate global metadata cache
-
-            self.last_learned_pattern_name = pattern.name
-            del(pattern)
-            self.emotives = []
-            self.metadata = []
-            return self.last_learned_pattern_name
+        Request paths use learn_from() with per-request state; this remains for
+        callers that still drive the processor's instance STM.
+        """
+        name = self.learn_from(self.STM, self.emotives, self.metadata)
+        self.STM.clear()  # Reset short-term memory after learning (even if nothing was learned)
         self.emotives = []
         self.metadata = []
-        return None
+        return name
 
     async def finalize_training(self) -> dict[str, Any]:
         """
@@ -518,16 +534,23 @@ class PatternProcessor:
         )
         return {'name': name, 'frequency': frequency, 'emotives': emotives}
 
-    async def processEvents(self, current_unique_id: str) -> list[dict[str, Any]]:
+    async def predict_from(
+        self,
+        stm: list[list[str]],
+        current_unique_id: str,
+        trigger_predictions: bool = True,
+    ) -> list[dict[str, Any]]:
         """
-        Generate predictions by matching short-term memory against learned patterns.
+        Generate predictions by matching the given short-term memory against learned patterns.
 
-        Flattens the STM (list of events) into a single state vector,
-        then searches for similar patterns in the pattern database.
-        Predictions are cached in Redis for retrieval.
+        Flattens the STM (list of events) into a single state vector, then
+        searches for similar patterns in the pattern database. Predictions are
+        cached in Redis for retrieval by unique_id. Stateless with respect to STM.
 
         Args:
+            stm: Events, oldest first.
             current_unique_id: Unique identifier for this observation.
+            trigger_predictions: False disables prediction generation.
 
         Returns:
             List of prediction dictionaries with pattern matches and metrics.
@@ -536,14 +559,14 @@ class PatternProcessor:
             KATO requires at least 1 string in STM to generate predictions.
         """
         # Flatten short-term memory: [["a","b"],["c"]] -> ["a","b","c"]
-        state = list(chain(*self.STM))
+        state = list(chain(*stm))
 
         # Generate predictions if we have at least 1 string in state
         # Single-symbol predictions use optimized fast path
-        if len(state) >= 1 and self.predict and self.trigger_predictions:
-            predictions = await self.predictPattern(state, stm_events=self.STM)
+        if len(state) >= 1 and self.predict and trigger_predictions:
+            predictions = await self.predictPattern(state, stm_events=list(stm))
 
-            # Cache predictions in memory for quick access
+            # Most recent predictions, for the legacy unique_id-less retrieval path
             self.predictions = predictions
 
             # Store predictions for async retrieval
@@ -556,6 +579,10 @@ class PatternProcessor:
 
         # Return empty predictions if state is too short
         return []
+
+    async def processEvents(self, current_unique_id: str) -> list[dict[str, Any]]:
+        """Predict from the processor's own STM (legacy stateful form of predict_from)."""
+        return await self.predict_from(self.STM, current_unique_id, self.trigger_predictions)
 
     def setCurrentEvent(self, symbols: list[str]) -> None:
         """

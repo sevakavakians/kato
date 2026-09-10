@@ -43,6 +43,38 @@ class PatternOperations:
 
         logger.debug("PatternOperations initialized")
 
+    def learn_pattern_from(
+        self,
+        stm: list[list[str]],
+        emotives: list[dict[str, float]],
+        metadata: list[dict[str, Any]],
+    ) -> str:
+        """
+        Learn a pattern from the given STM (per-request state; no processor STM involved).
+
+        Returns:
+            Pattern name in format "PTRN|<hash>" if a pattern was created, "" if
+            the STM had fewer than two events.
+
+        Raises:
+            LearningError: If pattern learning fails
+        """
+        try:
+            self.vector_processor.learn()
+            name = self.pattern_processor.learn_from(stm, emotives, metadata)
+            if name:
+                logger.info(f"Learned new pattern: PTRN|{name}")
+                return f"PTRN|{name}"
+            logger.debug(f"No pattern learned from {len(stm)} event(s)")
+            return ""
+        except Exception as e:
+            logger.error(f"Failed to learn pattern: {e}")
+            raise LearningError(
+                f"Failed to learn pattern: {str(e)}",
+                stm_state=list(stm),
+                auto_learn=False
+            ) from e
+
     def learn_pattern(self, keep_tail=False, keep_stm_for_rolling=False) -> str:
         """
         Learn a new pattern from current STM.

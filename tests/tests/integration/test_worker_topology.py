@@ -367,3 +367,44 @@ def test_session_count_converges_on_every_worker(topology: KatoTopology):
     after_delete = settled_count()
     assert after_delete == baseline, \
         f"expected count to return to {baseline} after deleting 5, got {after_delete}"
+
+
+# ---------------------------------------------------------------------------
+# Per-request state: sessions on one node never see each other's STM
+# ---------------------------------------------------------------------------
+
+def test_interleaved_sessions_keep_their_own_stm(topology: KatoTopology):
+    """Two sessions on one node, observing concurrently, each end with exactly their own STM.
+
+    On workers=1 every request hits the same worker and the same processor
+    instance, so this is the deterministic same-processor interleaving case
+    that per-request working state must survive (the processor's own STM is
+    never used as request state). On more workers it also covers the
+    cross-worker mix.
+    """
+    import concurrent.futures
+
+    node_id = f"topology_interleave_{uuid.uuid4().hex[:8]}"
+    rounds = 15
+
+    def run(label: str) -> tuple[str, list[list[str]]]:
+        http = requests.Session()
+        resp = http.post(f"{topology.base_url}/sessions", json={"node_id": node_id, "ttl_seconds": 120}, timeout=30)
+        resp.raise_for_status()
+        sid = resp.json()["session_id"]
+        expected = []
+        for i in range(rounds):
+            symbol = f"{label}_{i}"
+            http.post(f"{topology.base_url}/sessions/{sid}/observe",
+                      json={"strings": [symbol], "vectors": [], "emotives": {}}, timeout=30).raise_for_status()
+            expected.append([symbol])
+        stm = http.get(f"{topology.base_url}/sessions/{sid}/stm", timeout=30).json()["stm"]
+        http.delete(f"{topology.base_url}/sessions/{sid}", timeout=30)
+        return stm, expected
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(run, label) for label in ("alpha", "beta")]
+        results = [f.result() for f in futures]
+
+    for stm, expected in results:
+        assert stm == expected, f"session STM was contaminated or lost events:\n got      {stm}\n expected {expected}"

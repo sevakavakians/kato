@@ -39,11 +39,11 @@ KATO (Knowledge Abstraction for Traceable Outcomes) is a deterministic memory an
 See [docs/developers/hybrid-architecture.md](docs/developers/hybrid-architecture.md) for complete details.
 
 ### Stateless Processor Architecture (v3.0+)
-**IMPORTANT**: KATO processors use a **externally stateless architecture** with an internal bridge pattern:
+**IMPORTANT**: KATO processors use a **stateless request pipeline**:
 - **Externally Stateless**: API contract is stateless — session state passed in/out per request
-- **Bridge Pattern Internally**: Session state (STM, emotives, metadata) is temporarily loaded into processor instance variables for the duration of a request, then extracted back to session state. This is marked with `BRIDGE:` comments and `TODO (Phase 1.6/1.7)` for future refactoring.
+- **Per-Request Working State**: `KatoProcessor.observe/learn/get_predictions` hand the session's STM and accumulators to `ObservationProcessor.process_observation`, `PatternOperations.learn_pattern_from` and `PatternProcessor.learn_from`/`predict_from`, which return the updated STM. Nothing about a request is staged in processor instance variables (the former `BRIDGE:` pattern and its lock are gone as of Phase 1.6). The legacy stateful `PatternProcessor.learn()`/`processEvents()`/`STM` remain only as thin delegates for non-request callers.
 - **Config-as-Parameter**: Configuration passed as parameters, not stored in processor state
-- **True Concurrency**: No locks required, unlimited concurrent sessions per node_id (because each request loads/unloads its own state)
+- **True Concurrency**: No locks anywhere in the request path; concurrent sessions on one node_id run on one processor instance and cannot see each other's STM. Concurrent writers to the *same* session are not supported — one writer per session (see docs/users/session-management.md).
 - **Horizontal Scalability**: Processors can be scaled horizontally
 
 **Pattern**:

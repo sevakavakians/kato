@@ -307,6 +307,7 @@ class KatoProcessor:
 - **Commit 4a257d6**: Phase 1.2-1.6 - KatoProcessor stateless
 - **Commit 8e74f94**: Phase 1.7-1.8 - Stateless helpers and endpoints
 - **Commit ed436ab**: Phase 1.9-1.10 - Remove ALL processor locks
+- **2026-09-10**: Phase 1.6 (the remaining `BRIDGE:` sections) - observe/learn/predict take per-request working STM instead of staging it in `pattern_processor.STM`; the blocking `multiprocessing.Lock` that guarded the bridge (and deadlocked workers under overlapping same-node requests) is gone
 
 ### Test Results
 - `docs/maintenance/PHASE4_TEST_FINDINGS.md` - Comprehensive test analysis

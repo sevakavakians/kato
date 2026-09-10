@@ -239,75 +239,74 @@ class ObservationProcessor:
         if metadata_data:
             logger.debug(f"Processed {len(metadata_data)} metadata keys")
 
-    def check_auto_learning(self, max_pattern_length: int, stm_mode: str) -> Optional[str]:
+    def check_auto_learning(
+        self,
+        stm: list[list[str]],
+        emotives: list[dict[str, float]],
+        metadata: list[dict[str, Any]],
+        max_pattern_length: int,
+        stm_mode: str,
+    ) -> tuple[Optional[str], list[list[str]]]:
         """
-        Check if auto-learning should be triggered and perform it if needed.
+        Auto-learn from the given STM if it has reached max_pattern_length.
 
         Supports two modes:
-        - CLEAR mode: Learn pattern and completely clear STM (original behavior)
-        - ROLLING mode: Learn pattern and maintain STM as a rolling window
+        - CLEAR mode: learn the pattern and return an empty STM (original behavior)
+        - ROLLING mode: learn the pattern and return the last N-1 events as the
+          new STM, so the window keeps sliding
+
+        Stateless: operates on the STM it is given and returns the STM to keep.
 
         Args:
+            stm: Current STM (events, oldest first)
+            emotives: Emotives to store with an auto-learned pattern
+            metadata: Metadata to store with an auto-learned pattern
             max_pattern_length: Maximum pattern length for auto-learning (0 = disabled)
             stm_mode: STM mode ('CLEAR' or 'ROLLING')
 
         Returns:
-            Pattern name if auto-learning occurred, None otherwise
+            (pattern name or None, STM after auto-learning)
         """
         logger.debug(f"check_auto_learning: max_pattern_length={max_pattern_length}")
         if max_pattern_length <= 0:
             logger.debug(f"Auto-learning disabled (max_pattern_length={max_pattern_length})")
-            return None
+            return None, stm
 
-        # Use static method to get STM length
-        from kato.workers.memory_manager import MemoryManager
-        stm_state = MemoryManager.get_stm_from_pattern_processor(self.pattern_processor)
-        stm_length = MemoryManager.get_stm_length(stm_state)
+        stm_length = len(stm)
 
         # Normalize invalid modes to CLEAR
         if stm_mode not in ['CLEAR', 'ROLLING']:
             stm_mode = 'CLEAR'
         logger.info(f"check_auto_learning: STM length={stm_length}, max={max_pattern_length}, mode={stm_mode}")
 
-        if stm_length >= max_pattern_length:
-            logger.info(f"Auto-learning triggered: STM length {stm_length} >= "
-                       f"max_pattern_length {max_pattern_length} (mode: {stm_mode})")
+        if stm_length < max_pattern_length:
+            return None, stm
 
-            if stm_length > 1:
-                if stm_mode == 'ROLLING':
-                    # ROLLING mode: Save the last N-1 events before learning
-                    window_size = max_pattern_length - 1
-                    events_to_restore = stm_state[-window_size:] if len(stm_state) > window_size else stm_state[1:]
+        logger.info(f"Auto-learning triggered: STM length {stm_length} >= "
+                    f"max_pattern_length {max_pattern_length} (mode: {stm_mode})")
 
-                    # Learn pattern (this clears STM)
-                    pattern_name = self.pattern_operations.learn_pattern(keep_stm_for_rolling=True)
+        # A single-event STM is "learned" for compatibility: nothing is stored
+        # (patterns need two events) but the STM is cleared, as it always was.
+        pattern_name = self.pattern_operations.learn_pattern_from(stm, emotives, metadata) or None
 
-                    # Restore the rolling window events
-                    if events_to_restore:
-                        self.pattern_processor.setSTM(events_to_restore)
-                        logger.debug(f"Restored rolling window events: {events_to_restore}")
+        if stm_mode == 'ROLLING' and stm_length > 1:
+            # ROLLING mode: keep the last N-1 events as the new window
+            window_size = max_pattern_length - 1
+            new_stm = stm[-window_size:] if len(stm) > window_size else stm[1:]
+            logger.info(f"ROLLING mode: keeping {len(new_stm)} events as the new window")
+            return pattern_name, list(new_stm)
 
-                    if pattern_name:
-                        logger.info(f"Auto-learned pattern in ROLLING mode: {pattern_name}")
-                        return pattern_name
-                else:
-                    # CLEAR mode: Learn pattern and clear STM completely (original behavior)
-                    pattern_name = self.pattern_operations.learn_pattern(keep_tail=False)
+        return pattern_name, []
 
-                    if pattern_name:
-                        logger.info(f"Auto-learned pattern in CLEAR mode: {pattern_name}")
-                        return pattern_name
-
-            elif stm_length == 1:
-                # Only one event: learn it regardless of mode
-                pattern_name = self.pattern_operations.learn_pattern(keep_tail=False)
-                if pattern_name:
-                    logger.info(f"Auto-learned single-event pattern: {pattern_name}")
-                    return pattern_name
-
-        return None
-
-    async def process_observation(self, data: dict[str, Any], config=None) -> dict[str, Any]:
+    async def process_observation(
+        self,
+        data: dict[str, Any],
+        config=None,
+        *,
+        stm: list[list[str]],
+        emotives: Optional[list[dict[str, float]]] = None,
+        metadata: Optional[list[dict[str, Any]]] = None,
+    ) -> dict[str, Any]:
         """
         Process a complete observation including strings, vectors, and emotives.
 
@@ -341,9 +340,13 @@ class ObservationProcessor:
             ObservationError: If observation processing fails
             ValidationError: If input validation fails
         """
-        # Concurrency: callers serialize access to the shared pattern_processor
-        # (KatoProcessor._bridge_lock). No blocking lock here: one held across
-        # the awaits below froze the event loop under concurrent requests.
+        # Per-request state: the STM is the caller's (session) STM; this method
+        # never touches the shared pattern_processor's own STM, so concurrent
+        # requests on one processor cannot see each other's events and no lock
+        # is needed.
+        working_stm: list[list[str]] = [list(event) for event in stm]
+        learn_emotives = list(emotives) if emotives else []
+        learn_metadata = list(metadata) if metadata else []
         try:
             # Validate input
             self.validate_observation(data)
@@ -388,14 +391,15 @@ class ObservationProcessor:
             predictions = []
             if vector_data or string_data:
                 # Only trigger predictions if enabled
-                self.pattern_processor.trigger_predictions = process_predictions
-
                 # Add current symbols to STM
-                self.pattern_processor.setCurrentEvent(combined_symbols)
+                if combined_symbols:
+                    working_stm.append(list(combined_symbols))
 
                 # Generate predictions ONLY if enabled
                 if process_predictions:
-                    predictions = await self.pattern_processor.processEvents(unique_id)
+                    predictions = await self.pattern_processor.predict_from(
+                        working_stm, unique_id, trigger_predictions=process_predictions
+                    )
                     logger.debug(f"Generated {len(predictions)} predictions (process_predictions=True)")
                 else:
                     logger.debug("Skipping prediction computation (process_predictions=False)")
@@ -403,9 +407,12 @@ class ObservationProcessor:
                 # Check for auto-learning AFTER adding current event
                 # Pass config values to check_auto_learning
                 logger.debug(f"About to check auto-learning with max_pattern_length={max_pattern_length}")
-                auto_learned_pattern = self.check_auto_learning(
+                auto_learned_pattern, working_stm = self.check_auto_learning(
+                    working_stm,
+                    learn_emotives,
+                    learn_metadata,
                     max_pattern_length=max_pattern_length,
-                    stm_mode=stm_mode
+                    stm_mode=stm_mode,
                 )
                 logger.debug(f"Auto-learning result: {auto_learned_pattern}")
             else:
@@ -416,7 +423,8 @@ class ObservationProcessor:
                 'unique_id': unique_id,
                 'auto_learned_pattern': auto_learned_pattern,
                 'symbols': combined_symbols,
-                'predictions': predictions
+                'predictions': predictions,
+                'stm': working_stm,
             }
 
         except (ValidationError, ObservationError):

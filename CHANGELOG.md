@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Test suite no longer deletes live sessions on a shared Redis.** The session-scoped cleanup fixture deleted every `kato:session:*` key at the start of each pytest run, so running the suite next to a training notebook — or two suites at once — destroyed their sessions mid-flight. It now removes only sessions (plus node pointers, active-index entries and distributed-STM streams) whose `node_id` carries a test prefix (`test`, `topology_`, `perf_`, `load_test`; override with `KATO_TEST_NODE_PREFIXES`) and never touches `stm:global`. `tests/tests/fixtures/redis_test_cleanup.py`, with a self-test.
+
 ## [5.0.2] - 2026-09-10
 
 Fixes a worker deadlock under concurrent same-node requests that is present in every 5.x image so far, makes the request path lock-free, and makes clear-all actually clean up.

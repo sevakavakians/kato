@@ -11,38 +11,23 @@ import pytest
 import pytest_asyncio
 import redis
 from fixtures.kato_session_client import KatoSessionClient
-
-# Redis key namespaces that hold ephemeral session/STM state. Clearing these
-# gives tests a clean slate; nothing durable lives here.
-#   kato:session:*  - session records, active index, per-node active pointers
-#                     (RedisSessionManager key_prefix, see redis_session_manager.py:47)
-#   stm:events:*    - per-processor distributed STM streams (redis_streams.py:92)
-#   stm:global      - global STM stream (redis_streams.py:93)
-EPHEMERAL_KEY_PATTERNS = ("kato:session:*", "stm:events:*", "stm:global")
-
-# Durable pattern metadata is always namespaced under the kb_id -
-# "<kb_id>:frequency:*", ":symbols:freq", ":symbols:pmf", ":symbol_to_patterns:*",
-# ":affinity:*", ":global:*", ":prediction:*" (see kato/storage/redis_writer.py).
-# None of those can match the patterns above, so a scoped delete cannot touch them.
+from fixtures.redis_test_cleanup import clear_test_session_state, test_node_prefixes
 
 
 @pytest.fixture(scope="session", autouse=True)
 def flush_redis_before_tests():
-    """Clear stale session/STM state from Redis before the test session.
+    """Clear stale test-created session state from Redis before the test session.
 
-    This prevents old session data from previous test runs from
-    interfering with current tests.
+    Deletes only sessions (plus their node pointers, active-index entries and
+    distributed-STM streams) whose node_id carries a test prefix - see
+    fixtures/redis_test_cleanup.py. Sessions belonging to live clients on the
+    same Redis are left untouched, so running the suite next to a training
+    notebook, or two suites at once, no longer destroys their sessions.
 
-    Deliberately scoped: only the ephemeral namespaces in
-    EPHEMERAL_KEY_PATTERNS are deleted. This fixture used to run FLUSHALL,
-    which also destroyed durable pattern metadata (frequencies, symbol stats,
-    affinities, global counters) for every kb_id in the instance - including
-    live non-test data whenever tests point at a shared Redis. Pattern data
-    itself survives in ClickHouse, but those Redis-only metrics are not
-    recoverable (see scripts/rehydrate_redis.py limitations).
-
-    Set KATO_TEST_REDIS_FLUSHALL=1 to opt back into a full FLUSHALL. Only do
-    that against a Redis dedicated to testing.
+    History: this fixture once ran FLUSHALL (destroying durable pattern
+    metadata for every kb_id), then deleted every kato:session:* key
+    (destroying every live session). Set KATO_TEST_REDIS_FLUSHALL=1 to opt
+    back into a full FLUSHALL - only against a Redis dedicated to testing.
     """
     host = os.environ.get("REDIS_HOST", "localhost")
     port = int(os.environ.get("REDIS_PORT", "6379"))
@@ -54,17 +39,10 @@ def flush_redis_before_tests():
             client.flushall()
             print("\n⚠ Redis FLUSHALL (KATO_TEST_REDIS_FLUSHALL=1) - all keys destroyed")
         else:
-            deleted = 0
-            for pattern in EPHEMERAL_KEY_PATTERNS:
-                batch = []
-                for key in client.scan_iter(match=pattern, count=1000):
-                    batch.append(key)
-                    if len(batch) >= 1000:
-                        deleted += client.delete(*batch)
-                        batch = []
-                if batch:
-                    deleted += client.delete(*batch)
-            print(f"\n✓ Cleared {deleted} stale session/STM Redis keys - clean test state ensured")
+            counts = clear_test_session_state(client)
+            print(f"\n✓ Cleared {counts['sessions_deleted']} stale test sessions "
+                  f"(node prefixes {', '.join(test_node_prefixes())}); "
+                  f"left {counts['sessions_kept']} live session(s) untouched")
     except Exception as e:
         # Redis may not be running for some tests, which is okay.
         print(f"\n⚠ Warning: Could not clear Redis session state: {e}")

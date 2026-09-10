@@ -56,7 +56,7 @@ class TestMultiNodeIsolation:
                 fixtures.append(fixture)
 
                 node = NodeScenario(
-                    node_id=f"node_{i}",
+                    node_id=f"test_node_{i}",
                     session_id=None,
                     actions=[
                         {"type": "observe", "data": {"strings": [f"N{i}_A"]}},

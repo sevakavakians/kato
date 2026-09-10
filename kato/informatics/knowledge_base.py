@@ -325,9 +325,16 @@ class SuperKnowledgeBase:
         Deletes all patterns from ClickHouse + Redis for this kb_id.
         """
         try:
-            # Delete from ClickHouse (drop partition)
+            # Inserts go through the server-side async_insert queue and can sit
+            # there for ~200ms. Drain it first, or a pattern learned just before
+            # this call lands in the partition after we drop it.
+            self.clickhouse_writer.flush_async_insert_queue()
+
+            # Delete from ClickHouse (drop partitions): pattern rows and the
+            # per-pattern metadata sidecar both partition by kb_id.
             self.clickhouse_writer.delete_all_patterns()
-            logger.info(f"Dropped ClickHouse partition for kb_id: {self.id}")
+            self.metadata_router.delete_all_pattern_metadata()
+            logger.info(f"Dropped ClickHouse partitions for kb_id: {self.id}")
 
             # Delete from Redis (delete all keys with kb_id prefix)
             deleted_count = self.redis_writer.delete_all_metadata()

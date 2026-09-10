@@ -78,11 +78,13 @@ def clear_redis_for_processor(processor_id: str, redis_host: str = "localhost", 
     try:
         r = redis.Redis(host=redis_host, port=redis_port, decode_responses=True)
 
-        # Key pattern: {processor_id}:*
-        pattern = f"{processor_id}:*"
+        # Key pattern: {processor_id}:* — escaped, because parametrized test
+        # ids put glob metacharacters like "[case]" into processor ids.
+        from kato.storage.redis_writer import escape_glob
+        pattern = f"{escape_glob(processor_id)}:*"
 
         # Find all keys matching the pattern
-        keys = r.keys(pattern)
+        keys = list(r.scan_iter(match=pattern, count=1000))
 
         if keys:
             # Delete all matching keys

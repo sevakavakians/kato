@@ -332,3 +332,28 @@ create_session(node_id=old_node_id)  # Accesses old database
 - [Getting Started Guide](quick-start.md)
 - [Configuration Guide](../operations/configuration.md)
 - [API Reference](api-reference.md)
+
+## Checking Store Consistency
+
+Every learned pattern is recorded in both stores: a `{kb_id}:frequency:{name}`
+key in Redis and a row in ClickHouse `kato.patterns_data`. They should agree
+per `kb_id`. `scripts/check_store_parity.py` compares them:
+
+```bash
+python scripts/check_store_parity.py            # list kb_ids where the counts differ (exit 1 if any)
+python scripts/check_store_parity.py --all      # list every kb_id
+```
+
+Disagreement is almost always leftover data from a `kb_id` that was only
+partially cleaned up (for example from an interrupted test run), not lost
+training. The tool can remove such residue for mismatched kb_ids with a given
+prefix — a dry run by default:
+
+```bash
+python scripts/check_store_parity.py --purge-prefix test_            # show what would be removed
+python scripts/check_store_parity.py --purge-prefix test_ --execute  # remove it from both stores
+```
+
+Only mismatched kb_ids are ever touched; kb_ids whose counts already agree are
+left alone whatever their prefix. Point it at other instances with the
+`CLICKHOUSE_URL` and `REDIS_URL` environment variables.

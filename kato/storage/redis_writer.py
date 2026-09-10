@@ -16,6 +16,20 @@ from typing import Any
 logger = logging.getLogger('kato.storage.redis_writer')
 
 
+_GLOB_SPECIALS = str.maketrans({c: "\\" + c for c in "*?[]\\"})
+
+
+def escape_glob(value: str) -> str:
+    """Escape Redis SCAN/KEYS glob metacharacters in a literal key component.
+
+    kb_ids are derived from caller-supplied node_ids and can contain ``[``, ``]``,
+    ``*``, ``?`` or ``\\`` (pytest parametrize ids, for instance, produce
+    ``name[case]``). Unescaped, ``[abc]`` is a character class, so a pattern built
+    from such a kb_id matches nothing and any cleanup built on it silently no-ops.
+    """
+    return value.translate(_GLOB_SPECIALS)
+
+
 class RedisWriter:
     """Writes pattern metadata to Redis."""
 
@@ -184,7 +198,7 @@ class RedisWriter:
         """
         try:
             # Find all keys for this kb_id
-            pattern = f"{self.kb_id}:*"
+            pattern = f"{escape_glob(self.kb_id)}:*"
             keys = list(self.client.scan_iter(match=pattern, count=1000))
 
             if not keys:
@@ -208,7 +222,7 @@ class RedisWriter:
             Number of patterns (frequency keys) for this kb_id
         """
         try:
-            pattern = f"{self.kb_id}:frequency:*"
+            pattern = f"{escape_glob(self.kb_id)}:frequency:*"
             count = sum(1 for _ in self.client.scan_iter(match=pattern, count=1000))
             return count
 
@@ -496,7 +510,7 @@ class RedisWriter:
         """
         try:
             # Find all prediction keys for this kb_id
-            pattern = f"{self.kb_id}:prediction:*"
+            pattern = f"{escape_glob(self.kb_id)}:prediction:*"
             keys = list(self.client.scan_iter(match=pattern, count=1000))
 
             if not keys:
@@ -683,7 +697,7 @@ class RedisWriter:
             Dictionary mapping symbol name -> {emotive_name: cumulative_sum}.
         """
         try:
-            pattern = f"{self.kb_id}:affinity:*"
+            pattern = f"{escape_glob(self.kb_id)}:affinity:*"
             keys = list(self.client.scan_iter(match=pattern, count=1000))
 
             if not keys:

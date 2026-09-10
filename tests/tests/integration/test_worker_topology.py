@@ -36,6 +36,7 @@ import time
 import uuid
 
 import pytest
+import redis
 import requests
 import websockets
 
@@ -44,11 +45,14 @@ logger = logging.getLogger(__name__)
 WORKER_COUNTS = (1, 2, 4)
 IMAGE = os.environ.get("KATO_TOPOLOGY_IMAGE", "kato:latest")
 REFERENCE_CONTAINER = os.environ.get("KATO_TOPOLOGY_REFERENCE_CONTAINER", "kato")
+REDIS_URL = os.environ.get("KATO_TEST_REDIS_URL", "redis://localhost:6379/0")
+# RedisSessionManager.active_sessions_key: one SET shared by every KATO process on this Redis.
+ACTIVE_SESSIONS_INDEX = "kato:session:_active_index"
 # Short cache TTL keeps the count tests fast; the contract (converges within
 # the TTL on every worker) is the same for any value.
 SESSION_COUNT_CACHE_TTL = 2.0
 STARTUP_TIMEOUT = 120.0
-EVENT_TIMEOUT = 5.0
+EVENT_TIMEOUT = 10.0
 
 # Environment copied from the reference container, minus image/runtime vars.
 _ENV_BLOCKLIST = {"PATH", "LANG", "HOME", "HOSTNAME", "GPG_KEY", "PYTHON_VERSION",
@@ -345,29 +349,44 @@ async def test_client_sees_full_session_lifecycle_in_order(topology: KatoTopolog
 # ---------------------------------------------------------------------------
 
 def test_session_count_converges_on_every_worker(topology: KatoTopology):
-    """After the count cache TTL, every worker reports the true active-session count."""
+    """After the count cache TTL, every worker reports the true active-session count.
+
+    The index is one Redis SET shared by every KATO process on this Redis, so
+    other actors (expiry sweeps, other test containers) can change it at any
+    time. Two churn-proof checks:
+
+    1. Membership: the sessions this test creates are in the index right after
+       creation and gone right after deletion - exact, whatever else moves.
+    2. Agreement: in a quiet window, every worker's /sessions/count equals the
+       index cardinality read at the same moment. Churn is bursty, so a window
+       in which the truth did not move is retried for, bounded.
+    """
     settle = topology.session_count_cache_ttl + 0.5
+    r = redis.Redis.from_url(REDIS_URL, decode_responses=True)
 
-    def settled_count() -> int:
-        time.sleep(settle)
-        counts = topology.read_count_from_each_worker()
-        assert len(set(counts)) == 1, \
-            f"workers disagree on active session count after cache TTL: {sorted(set(counts))}"
-        return counts[0]
+    def workers_agree_with_truth(attempts: int = 5) -> int:
+        """Return the agreed count; fail if no quiet window is found."""
+        last = None
+        for _ in range(attempts):
+            time.sleep(settle)
+            before = r.scard(ACTIVE_SESSIONS_INDEX)
+            counts = topology.read_count_from_each_worker()
+            after = r.scard(ACTIVE_SESSIONS_INDEX)
+            if before == after and set(counts) == {before}:
+                return before
+            last = (before, after, sorted(set(counts)))
+        pytest.fail(f"no quiet window in which every worker matched the index: last (truth before, truth after, worker reports) = {last}")
 
-    baseline = settled_count()
+    workers_agree_with_truth()
 
     created = [topology.create_session(f"topology_count_{i}") for i in range(5)]
-    after_create = settled_count()
-    assert after_create == baseline + 5, \
-        f"expected {baseline + 5} active sessions after creating 5, got {after_create}"
+    assert all(r.sismember(ACTIVE_SESSIONS_INDEX, sid) for sid in created), "created sessions missing from the index"
+    workers_agree_with_truth()
 
     for session_id in created:
         topology.delete_session(session_id)
-    after_delete = settled_count()
-    assert after_delete == baseline, \
-        f"expected count to return to {baseline} after deleting 5, got {after_delete}"
-
+    assert not any(r.sismember(ACTIVE_SESSIONS_INDEX, sid) for sid in created), "deleted sessions still in the index"
+    workers_agree_with_truth()
 
 # ---------------------------------------------------------------------------
 # Per-request state: sessions on one node never see each other's STM

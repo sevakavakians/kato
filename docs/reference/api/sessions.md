@@ -351,6 +351,16 @@ user_bob creates session_3   → STM_3 (isolated)
 All sessions for node_id="app" share LTM patterns.
 ```
 
+### Concurrency
+
+One writer per session. Mutating requests (`observe`, `observe-sequence`,
+`learn`, `clear-stm`, `clear-all`, `config`) on the same `session_id` must not
+overlap. Under multi-worker uvicorn (`KATO_WORKERS` > 1) they are serialized
+only within the worker that happens to receive them; overlapping requests
+served by different workers each read the session, and the later write
+replaces the earlier one. Use one session per concurrent client — sessions on
+the same `node_id` share LTM, so nothing is lost by doing so.
+
 ## Best Practices
 
 ### 1. Choose Appropriate TTL

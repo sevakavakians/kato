@@ -597,22 +597,25 @@ class TestSessionErrorHandling:
         pass  # Implement based on actual limits
 
     @pytest.mark.asyncio
+    @pytest.mark.xfail(
+        int(os.environ.get('KATO_WORKERS', '1')) > 1,
+        strict=True,
+        reason="Documented limitation: one writer per session. Under multi-worker "
+               "uvicorn the observe handler's per-process lock + whole-blob SETEX "
+               "loses concurrent same-session updates (DECISION-024). Strict, so "
+               "the test fails if the limitation ever silently disappears or changes.",
+    )
     async def test_concurrent_session_modifications(self, kato_client):
-        """Test that concurrent modifications to same session are serialized.
+        """Concurrent modifications to the same session are serialized (single worker).
 
-        NOTE: This guarantee only holds under single-worker uvicorn (where the
-        in-process asyncio.Lock serializes same-session writers). In
-        multi-worker deployments, concurrent writes to the *same* session can
-        lose updates because session locks don't span worker processes. The
-        target parallel-training workload avoids this by using one session per
-        training thread, so distributed session locks are out of scope.
+        This guarantee holds only under single-worker uvicorn, where the
+        in-process asyncio.Lock serializes same-session writers. Across worker
+        processes the lock doesn't apply, so concurrent writes to the *same*
+        session lose updates. That is a documented limitation, not a bug being
+        tracked for a fix: clients must use one session per concurrent writer
+        (docs/users/session-management.md, "One writer per session"). Under
+        multi-worker the test is a strict xfail so the limitation stays visible.
         """
-        import os
-        if int(os.environ.get('KATO_WORKERS', '1')) > 1:
-            pytest.skip(
-                "Requires single-worker uvicorn; multi-worker needs distributed "
-                "session locks (deferred — training workload doesn't hit this)."
-            )
 
         session = await kato_client.create_session()
         session_id = session['session_id']

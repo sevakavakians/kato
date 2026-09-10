@@ -52,11 +52,13 @@ How many concurrent sessions / HTTP requests your application issues at once. Ca
 - Separate processes (multiprocessing)
 - Distributed workers across machines
 
-Each concurrent unit must use its own **session** — don't share a `session_id` across threads.
+Each concurrent unit must use its own **session** — never share a `session_id` across threads. Concurrent writes to one session from different server workers lose updates (each worker reads-modifies-writes the whole session; the last write wins). This is a documented limitation — see [One Writer Per Session](session-management.md#one-writer-per-session).
 
 ### Why they don't have to match exactly
 
 Client threads spend most of their time waiting on HTTP responses, not computing. So one server worker can keep several client threads occupied. Slight oversubscription on the client side (e.g., client concurrency = 1.25 × `KATO_WORKERS`) often gives the best throughput because it keeps all server workers busy even when some requests take longer than others.
+
+**Same-node requests within one worker are serialized.** A worker processes requests for a given `node_id` one at a time (its processor for that node holds working state for the duration of a request); requests for *different* nodes interleave freely, and requests for the same node run in parallel *across* workers. So for a single node the achievable parallelism is `KATO_WORKERS`, and there is no benefit to client concurrency far above it.
 
 **Rule of thumb**: Start with `client_concurrency = KATO_WORKERS`. Tune from there based on observed CPU utilization (see [Tuning](#tuning)).
 

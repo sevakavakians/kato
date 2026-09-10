@@ -361,6 +361,23 @@ kato2.observe(["event_b"])
 - ❌ Session configuration
 - ❌ Metadata (until learned into pattern)
 
+### One Writer Per Session
+
+A session must have **one concurrent writer**. Do not send overlapping
+`observe`, `learn`, `clear-stm` or config requests for the same `session_id`
+from multiple threads, processes or machines.
+
+KATO runs several uvicorn worker processes (`KATO_WORKERS`, default 4). Each
+request reads the session, applies the observation, and writes the whole
+session back. Requests for the same session are serialized only *within* one
+worker; two workers handling the same session at once can each read the same
+state and the later write wins — observations are silently lost.
+
+This is a deliberate limitation, not a queue to be added: sessions are the unit
+of concurrency. Give every concurrent thread its own session (they can share a
+`node_id`, and therefore LTM, freely) and the problem does not arise. See
+[Parallel Processing](parallel-processing.md).
+
 ## Session Configuration Management
 
 ### Updating Configuration

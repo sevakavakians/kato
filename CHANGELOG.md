@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.0.2] - 2026-09-10
+
+Fixes a worker deadlock under concurrent same-node requests that is present in every 5.x image so far, makes the request path lock-free, and makes clear-all actually clean up.
+
 ### Added
 - **`scripts/check_store_parity.py`**: reports per-`kb_id` pattern counts that disagree between Redis (`frequency` keys) and ClickHouse (`patterns_data`); `--purge-prefix PREFIX --execute` removes the residue of mismatched kb_ids with that prefix from both stores.
 - **Opt-in multi-worker throughput and integrity test** (`tests/tests/performance/test_multi_worker_throughput.py`, `KATO_PERF=1`): runs the parallel-training shape against self-launched 1- and 4-worker containers, reports the speedup, and asserts exact pattern counts, exact shared-pattern frequency under contention, Redis/ClickHouse agreement, and a clean clear-all.

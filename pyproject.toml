@@ -1,6 +1,6 @@
 [project]
 name = "kato"
-version = "5.0.1"
+version = "5.0.2"
 description = "Knowledge Abstraction for Traceable Outcomes - Deterministic memory and prediction system"
 authors = [{name = "Sevak Avakians", email = "sevakavakians@gmail.com"}]
 readme = "README.md"

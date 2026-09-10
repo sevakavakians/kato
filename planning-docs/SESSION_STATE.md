@@ -1,10 +1,24 @@
 # SESSION_STATE.md - Current Development State
-*Last Updated: 2026-09-09 (KATO v5.0.0 released — major bump for the breaking anomalies/fuzzy_matches split, DECISION-022; resolves the DECISION-019 version-bump question)*
+*Last Updated: 2026-09-10 (reference Python client API-coverage gap closed — examples/python-client.py now wraps 37/38 routes, session-recovery retry path fixed)*
 
 ## Current Task
-**No active task — KATO v5.0.0 is RELEASED. Pick next item from sprint backlog (Multi-Worker Uvicorn + Concurrent Training Safety is next queued — the broadcaster fix released in v5.0.0 removes one of that initiative's known blockers; the `test_concurrent_session_modifications` concurrent-write-loss symptom remains open and unconfirmed).**
+**No active task — reference-client coverage work is COMPLETE. Pick next item from sprint backlog (Multi-Worker Uvicorn + Concurrent Training Safety is next queued — the broadcaster fix released in v5.0.0 removes one of that initiative's known blockers; the `test_concurrent_session_modifications` concurrent-write-loss symptom remains open and unconfirmed).**
 
 ## Previous Task (context preserved)
+**Reference Python Client: Close API-Coverage Gap — COMPLETE (2026-09-10)**
+- Status: COMPLETE — ad-hoc maintenance task, not part of the Multi-Worker Uvicorn initiative (that remains next queued in `SPRINT_BACKLOG.md`)
+- Scope: `examples/python-client.py` (the `KATOClient` reference client) + `examples/README.md`; no `kato/` service code touched
+- Audit finding: only 26 of 39 routes wrapped; 2 wrappers pointed at deprecated, empty-payload endpoints; 1 wrapper (`get_session_config()`) never called its route; session-recovery retry path had never worked
+- Fixed `_request`'s session-recovery retry: (1) it retried against the stale pre-recovery session id baked into the endpoint string — now rewritten to the new session id before retry; (2) the "skip retry for session lifecycle ops" guard (`'/sessions' in endpoint and method in ['POST','DELETE']`) matched every session-scoped POST (observe, learn, clear-stm, config, extend, ...), so recovery only ever fired for GETs — narrowed to exactly `POST /sessions` / `DELETE /sessions/{id}`; added a `_recovering` re-entrancy guard
+- Repointed `get_percept_data()`/`get_cognition_data()` from deprecated node-scoped routes (server returns empty payload) to session-scoped `/sessions/{sid}/percept-data`/`/cognition-data`; legacy versions kept as `get_node_percept_data()`/`get_node_cognition_data()`, marked deprecated
+- Fixed `get_session_config()` to actually call `GET /sessions/{sid}/config` instead of deriving from `get_session_info()`
+- Added 9 missing wrappers (`clear_all()`, `get_active_session_count()`, `get_symbol_affinities()`, `get_symbol_stats()`, `get_symbol_affinity()`, `get_concurrency_stats()`, `get_prometheus_metrics()`, +2 more)
+- Rewrote the `python-client.py` section of `examples/README.md` (previously wrong in every particular — advertised async/httpx for a sync `requests` client, wrong class name, wrong constructor kwarg, nonexistent method signatures)
+- Verification: coverage re-audited against live `/openapi.json` — 37/38 routes now wrapped (remaining 2 deliberate: a routing smoke-test route, and `WS /ws/events` which `requests` cannot speak — WebSocket support explicitly excluded by the user); recovery path regression-tested live (deleted a session out from under a client, confirmed transparent recovery on next `observe()`); full suite 475 passed / 4 skipped
+- Archive: `planning-docs/completed/features/2026-09-10-python-client-api-coverage.md`
+- Note: working tree also carried unrelated in-progress changes to `kato/informatics/knowledge_base.py` and `kato/storage/metadata_router.py` (concurrent metadata-sidecar work) — not touched by, and not part of, this task; the 475/4 verification run covered the combined tree
+
+## Earlier Task (context preserved)
 **KATO v5.0.0 Release (MAJOR) — COMPLETE (2026-09-09)**
 - Status: RELEASED — `./container-manager.sh major` (AUTO_MODE). Bump commit `5c4b282` "chore: bump version to 5.0.0" (`pyproject.toml`, `setup.py`, `kato/__init__.py`, `charts/kato/Chart.yaml` `appVersion`); tag `v5.0.0` pushed to origin; `main` at `5c4b282`, in sync with `origin/main`
 - Milestone release, not a queued initiative; Multi-Worker Uvicorn initiative below remains next in the sprint backlog

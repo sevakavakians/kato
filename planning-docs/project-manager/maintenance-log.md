@@ -2886,3 +2886,34 @@ networks:
 *Agent execution time: < 5 seconds*
 *Response type: Silent operation (documentation update following milestone release)*
 
+
+## 2026-09-10 - Task Completion: Reference Python Client API-Coverage Gap Closed
+
+**Trigger**: Task completion — `examples/python-client.py` (the reference `KATOClient`) audited against the live FastAPI service and found to wrap only 26 of 39 routes; fixed, extended, and re-verified against `/openapi.json`.
+
+**Event Type**: Task completion (bug fix + feature completion, example/client-side only — no `kato/` service code touched)
+
+**Actions Taken**:
+1. Created `planning-docs/completed/features/2026-09-10-python-client-api-coverage.md` — full archive entry (retry-path bug detail, deprecated-endpoint repointing, 9 new wrappers, README rewrite, verification)
+2. Updated `planning-docs/SESSION_STATE.md` — header timestamp refreshed; new "Previous Task" entry prepended (prior v5.0.0-release entry demoted to "Earlier Task"); "Current Task" line updated to reflect this work is done while keeping Multi-Worker Uvicorn as the next queued sprint item
+3. Updated `planning-docs/SPRINT_BACKLOG.md` — header timestamp refreshed; new "Recently Completed" entry prepended above the 2026-09-09 broadcaster-fix entry; no change to "Active Projects" (this was ad-hoc maintenance, not part of the Multi-Worker Uvicorn initiative)
+4. No `DECISIONS.md` entry — no architectural decision involved (bug fixes + wrapper additions on an established client pattern)
+5. No `pending-updates.md` entry — nothing here rises to a human-alert trigger (estimates, recurring blockers, scope creep, etc. all N/A)
+
+**Key Details**:
+- Two independent bugs found and fixed in `_request`'s session-recovery retry: stale session id reused on retry, and an overly broad "skip retry" guard (`'/sessions' in endpoint and method in ['POST','DELETE']`) that excluded nearly every session-scoped POST from ever retrying — recovery had effectively never worked prior to this fix
+- `get_percept_data()`/`get_cognition_data()` were silently returning empty payloads (pointed at deprecated node-scoped routes); repointed to session-scoped equivalents, legacy versions kept but renamed and marked deprecated
+- `get_session_config()` never called its route; now does
+- 9 wrappers added for previously-uncovered routes
+- `examples/README.md`'s client section rewritten — was incorrect in every particular (async/httpx claims for a sync client, wrong class name, wrong constructor kwarg, nonexistent method signatures)
+- Verification: 37/38 routes now wrapped per live `/openapi.json` audit; 2 remaining gaps deliberate (test-only smoke route; `WS /ws/events`, out of scope — `requests` cannot speak WebSocket, excluded by explicit user direction); recovery path regression-tested live; full suite 475 passed / 4 skipped
+- Noted for the record: working tree also carried unrelated concurrent WIP in `kato/informatics/knowledge_base.py` and `kato/storage/metadata_router.py` (metadata-sidecar full-row-write work) — not part of and not touched by this task; the verification run covered the combined tree
+
+**Classification**: Task Completion (routine — no alert triggers hit)
+
+**Next Steps**: None — task complete. Multi-Worker Uvicorn + Concurrent Training Safety remains the next queued initiative per `SESSION_STATE.md` / `SPRINT_BACKLOG.md`.
+
+---
+
+*Agent execution time: < 5 seconds*
+*Response type: Silent operation (documentation update following task completion)*

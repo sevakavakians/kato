@@ -1,5 +1,5 @@
 # SPRINT_BACKLOG.md - Upcoming Work
-*Last Updated: 2026-09-09 (cross-worker WebSocket broadcaster fixed via Redis pub/sub, DECISION-021, committed as `ba3d194`; full-suite expectation updated to 475 passed / 4 skipped / 0 failed with only the metrics flake as known-intermittent)*
+*Last Updated: 2026-09-10 (reference Python client API-coverage gap closed — ad-hoc maintenance, does not change the Active Projects queue below)*
 
 ## Active Projects
 
@@ -599,6 +599,14 @@ Phased plan for scaling KATO to production workloads:
 ---
 
 ## Recently Completed
+
+### Feature Completion: Reference Python Client API-Coverage Gap Closed — COMPLETE (2026-09-10)
+**Priority**: Maintenance — ad-hoc, not part of an active initiative
+**Archive**: `planning-docs/completed/features/2026-09-10-python-client-api-coverage.md`
+
+Audit found `examples/python-client.py`'s `KATOClient` wrapped only 26 of 39 FastAPI routes: 2 wrappers pointed at deprecated, empty-payload node-scoped endpoints (`/percept-data`, `/cognition-data`); `get_session_config()` never called its route at all; and the session-recovery retry path had never worked, due to two independent bugs in `_request` (retry reused the stale pre-recovery session id; the "skip session-lifecycle-op retries" guard matched almost every session-scoped POST, not just create/delete). All four fixed, plus 9 missing wrappers added (`clear_all()`, `get_active_session_count()`, symbol-affinity/stats endpoints, `get_concurrency_stats()`, `get_prometheus_metrics()`, others) and `examples/README.md`'s client section rewritten (it previously described async/httpx usage, the wrong class name, and nonexistent method signatures for what is a synchronous `requests` client).
+
+No `kato/` service code changed — example/client-side only. Verified against live `/openapi.json`: 37/38 routes now wrapped (2 deliberate exclusions: a test-only smoke route, and `WS /ws/events`, which `requests` cannot speak — WebSocket support out of scope by explicit user direction). Recovery path regression-tested live by deleting a session out from under a client and confirming transparent recovery. Full suite: 475 passed / 4 skipped.
 
 ### Bug Fix: Cross-Worker WebSocket Broadcaster via Redis Pub/Sub — COMPLETE (2026-09-09)
 **Priority**: P2 → RESOLVED — closes the DECISION-020 open follow-up

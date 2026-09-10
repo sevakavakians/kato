@@ -1,57 +1,9 @@
 # SPRINT_BACKLOG.md - Upcoming Work
-*Last Updated: 2026-09-10 (KATO v5.0.1 patch release — DECISION-018 metadata-sidecar fix committed and released; reference Python client API-coverage gap closed earlier the same day — neither changes the Active Projects queue below)*
+*Last Updated: 2026-09-10 (Multi-Worker Uvicorn + Concurrent Training Safety initiative COMPLETE — Phase 1.6 lock-free refactor committed `b155cb5`, DECISION-026 recorded, moved to Recently Completed)*
 
 ## Active Projects
 
-### Multi-Worker Uvicorn + Concurrent Training Safety
-**Priority**: High - Performance / Correctness
-**Status**: ACTIVE - Implementation in progress
-**Plan File**: `/Users/sevakavakians/.claude/plans/ultrathink-enable-multi-worker-recursive-marble.md`
-**Target Workload**: `kato-notebooks/kato-lm/training.ipynb` — 5 threads × 4 hierarchy layers, parallel wikitext training
-
-#### Background
-KATO runs `--workers 1` today; 20 concurrent HTTP calls (5 threads × 4 layers) serialize on one Python interpreter. The machine has 12 cores, 11 idle. Two server-side hazards appear when flipping to multi-worker, plus a pre-existing frequency-clobber bug.
-
-Note: **Distributed session locks are NOT needed and NOT in scope.** Training never accesses the same session concurrently — sessions are already STM-isolated, and the knowledge base is already shared per `kb_id`. Any prior references to distributed session locks for this work were based on a rejected approach.
-
-#### Change 1: Multi-worker uvicorn (startup-configurable)
-- `Dockerfile` — shell-form CMD with `${KATO_WORKERS:-4}` default
-- `docker-compose.yml` + `deployment/docker-compose.yml` — add `KATO_WORKERS=${KATO_WORKERS:-4}` to kato env block
-- `deployment/kato-manager.sh` — add `--workers N` / `-w N` flag (pre-parse + export pattern; existing command structure preserved)
-
-#### Change 2: ClickHouse server-side async_insert
-- `kato/storage/clickhouse_writer.py` — `DEFAULT_BATCH_SIZE=1`; pass `async_insert=1, wait_for_async_insert=1` on every insert
-- Eliminates per-worker client-side buffer that orphans patterns at `finalize_training` time; makes every written pattern immediately queryable by all workers
-
-#### Change 3: SETNX gate on new-pattern creation
-- `kato/informatics/knowledge_base.py` — atomic `SET freq_key 1 NX` as the new-pattern claim in `learnPattern`; only the SETNX winner calls `write_pattern` and passes `is_new_pattern=True`
-- `kato/storage/redis_writer.py` — `write_metadata(frequency: Optional[int] = None)`; skip the frequency `SET` when `None`
-- Closes three races: duplicate `patterns_data` rows, double-incremented `total_unique_patterns`, and pre-existing SET-clobbers-INCR frequency undercount on concurrent re-learn
-
-#### Out of Scope (explicitly deferred)
-- Distributed session locks
-- ~~WebSocket cross-worker broadcast~~ — **RESOLVED 2026-09-09 outside this initiative**, see DECISION-021 (Redis pub/sub fan-out, `kato/websocket/event_broadcaster.py`)
-- `_global_metadata_cache` cross-worker invalidation
-- Emotives/metadata rolling-window RMW races
-- `ReplacingMergeTree` migration
-
-#### Files Touched
-| File | Change |
-|---|---|
-| `Dockerfile` | CMD → shell form, `${KATO_WORKERS:-4}` |
-| `docker-compose.yml` | `KATO_WORKERS` env var |
-| `deployment/docker-compose.yml` | `KATO_WORKERS` env var |
-| `deployment/kato-manager.sh` | `--workers N` / `-w N` flag |
-| `kato/storage/clickhouse_writer.py` | `DEFAULT_BATCH_SIZE=1`, async_insert settings |
-| `kato/informatics/knowledge_base.py` | SETNX gate, drop frequency from write_metadata calls |
-| `kato/storage/redis_writer.py` | `frequency: Optional[int] = None`, skip SET when None |
-
-#### Verification
-1. Build + start with `KATO_WORKERS=5`, confirm 5 PIDs in logs
-2. `./run_tests.sh --no-start --no-stop` — the websocket-delivery blocker is now resolved (see DECISION-021, 2026-09-09: `tests/tests/integration/test_worker_topology.py` passes 15/15 across `KATO_WORKERS` in {1, 2, 4}); expect a clean full-suite run modulo the known-intermittent `test_metrics_collection_after_requests` flake (unrelated, see Backlog below). `test_concurrent_session_modifications`'s concurrent-write-loss symptom remains unconfirmed/open and is in-scope for this initiative's SETNX-gate work (Change 3 below)
-3. ClickHouse duplicate-row check: `SELECT kb_id, name, count() FROM kato.patterns_data GROUP BY kb_id, name HAVING count() > 1`
-4. Redis vs ClickHouse pattern count parity check
-5. Scale test with `MAX_SAMPLES=10000` — expect ~4-5x speedup over single-worker baseline
+*No active initiative-scale projects at this time — see "Recently Completed" below for the just-closed Multi-Worker Uvicorn initiative. Next up is whatever the user picks from the Backlog section below, most notably the release decision flagged in `planning-docs/project-manager/pending-updates.md`.*
 
 ---
 
@@ -469,16 +421,77 @@ Phase 4 (Symbol Statistics & Fail-Fast Architecture) is 100% complete. The Click
 ---
 
 ### Bug: Multi-worker (KATO_WORKERS=4) breaks websocket event delivery and concurrent session modification consistency
-**Priority**: P2 — websocket-delivery half **RESOLVED 2026-09-09**; concurrent-write half still open/unverified
-**Status**: Identified 2026-09-08 (characterized during conftest.py FLUSHALL fix verification); websocket-delivery half confirmed deterministically 2026-09-09 (DECISION-020) then **fixed** the same day (DECISION-021); absorbs the former Root cause #3 websocket-timeout symptom (see that entry above, marked resolved/merged)
+**Priority**: P2 — websocket-delivery half **RESOLVED 2026-09-09**; concurrent-write half **CONFIRMED 2026-09-10, DOCUMENTED AS A LIMITATION (not fixed)** — see DECISION-024
+**Status**: Identified 2026-09-08 (characterized during conftest.py FLUSHALL fix verification); websocket-delivery half confirmed deterministically 2026-09-09 (DECISION-020) then **fixed** the same day (DECISION-021); absorbs the former Root cause #3 websocket-timeout symptom (see that entry above, marked resolved/merged); concurrent-write half's root cause **confirmed** 2026-09-10 and the user decided to document it as a known limitation rather than fix it (DECISION-024) — Phase B of the Multi-Worker Uvicorn initiative tracks the doc/xfail work
 **Symptom (websocket delivery) — RESOLVED 2026-09-09**: `tests/tests/integration/test_worker_topology.py` previously failed 3 tests (`session_created_event_reaches_every_client`, `session_destroyed_event_reaches_every_client`, `client_sees_full_session_lifecycle_in_order`) every run at `KATO_WORKERS=2` and `4`. Fixed via Redis pub/sub fan-out (DECISION-021, `kato/websocket/event_broadcaster.py`, committed as `ba3d194`) — the suite now passes 15/15 across `KATO_WORKERS` in {1, 2, 4}. See `planning-docs/completed/features/2026-09-09-websocket-cross-worker-broadcaster-redis-pubsub.md`.
-**Symptom (concurrent writes) — still open, not re-verified since 2026-09-08**: `test_concurrent_session_modifications` fails against the container running `KATO_WORKERS=4`, losing half its concurrent writes (`assert 5 == 10`). This was never confirmed to share the websocket-delivery root cause and the 2026-09-09 pub/sub fix does **not** address it (it targets `EventBroadcaster`, not session-write coordination). Remains open and unconfirmed.
+**Symptom (concurrent writes) — CONFIRMED 2026-09-10**: `test_concurrent_session_modifications` (`tests/tests/integration/test_session_management.py::TestSessionErrorHandling`) only "passes" today by being skipped — `run_tests.sh` exports the container's `KATO_WORKERS>1`, which the test treats as a skip condition. Run directly against the live 4-worker stack it fails 3/3 runs, losing concurrent writes to the same session. This is a *same-session* hazard only — never confirmed to share the websocket-delivery root cause, and the 2026-09-09 pub/sub fix does not touch it (it targets `EventBroadcaster`, not session-write coordination).
 **Root Cause (websocket delivery) — fixed**: `kato/websocket/event_broadcaster.py`'s `EventBroadcaster` maintained a per-process `active_connections` list — websocket events were published in-process only and not fanned out across uvicorn workers. Fixed by publishing to a Redis pub/sub channel (`kato:ws_events`) that every worker subscribes to at startup; see DECISION-021.
-**Root Cause (concurrent writes) — still unconfirmed**: Concurrent session writes are hypothesized to be lost across workers (no shared coordination), so half of concurrent modifications silently disappear. Not re-verified since 2026-09-08; not addressed by the websocket fix.
-**Evidence**: `test_worker_topology.py` — 6 deterministic failures at `KATO_WORKERS` in {2, 4} before the fix, 0 failures (15/15) after, see `planning-docs/completed/features/2026-09-09-websocket-cross-worker-broadcaster-redis-pubsub.md`. Full suite post-fix: 475 passed / 4 skipped / 0 failed.
-**Fix (concurrent-write half, not yet done)**: Move concurrent session-write coordination to a shared store rather than per-worker in-process state — this is the SETNX-gate work already planned under "Multi-Worker Uvicorn + Concurrent Training Safety" above (Change 3), which should confirm and close this remaining symptom.
-**Files**: `kato/websocket/event_broadcaster.py` (fixed), `kato/services/kato_fastapi.py` (fixed), `kato/sessions/redis_session_manager.py` (concurrent-write half, still open), `tests/tests/integration/test_worker_topology.py`, `tests/tests/unit/test_event_broadcaster.py` (new)
-**Related**: The concurrent-write half overlaps with and is in-scope for the "Multi-Worker Uvicorn + Concurrent Training Safety" initiative queued above.
+**Root Cause (concurrent writes) — CONFIRMED 2026-09-10**: `kato/api/endpoints/sessions.py`'s `observe` handler (~lines 345-411) holds a per-process `asyncio.Lock` around `get_session` → `processor.observe` → `update_session` — the lock only serializes writers *within one worker process*, not across the 4 separate processes. `kato/sessions/redis_session_manager.py`'s `_save_session` (~lines 739-778) `SETEX`es the entire session as one JSON blob with no compare-and-swap, so two worker processes racing on the same session id produce a classic lost update (last `SETEX` wins, silently discarding the other writer's change).
+**Evidence**: `test_worker_topology.py` — 6 deterministic failures at `KATO_WORKERS` in {2, 4} before the websocket fix, 0 failures (15/15) after, see `planning-docs/completed/features/2026-09-09-websocket-cross-worker-broadcaster-redis-pubsub.md`. Full suite post-fix: 475 passed / 4 skipped / 0 failed. `test_concurrent_session_modifications` run directly (not via `run_tests.sh`'s skip path) against the 4-worker stack: fails 3/3.
+**Fix — DECIDED 2026-09-10: do not fix, document as a limitation. DONE, committed `bef2b47`.** No CAS, no distributed locks — consistent with this project's no-locks rule and the actual workload (one session is written by one training thread at a time; concurrent writes to the *same* session id are not a supported usage pattern). See DECISION-024 for full rationale and the rejected CAS/optimistic-locking alternative. Work items (Phase B of the Multi-Worker Uvicorn initiative, all done): one-writer-per-session rule stated in `docs/users/session-management.md`, `docs/users/parallel-processing.md`, `docs/reference/api/sessions.md`; this test's skip converted to a strict `xfail` (verified XFAIL) with the reason, so the limitation is asserted rather than hidden.
+**Correction (2026-09-10)**: this entry previously said the SETNX-gate work (Change 3 of the Multi-Worker Uvicorn initiative) "should confirm and close this remaining symptom" — that was a **misattribution**. The SETNX gate guards *new-pattern* creation in `learnPattern` (`kato/informatics/knowledge_base.py`); it has no bearing on session-state writes. Corrected here and in the Multi-Worker Uvicorn initiative entry above.
+**Files**: `kato/websocket/event_broadcaster.py` (fixed), `kato/services/kato_fastapi.py` (fixed), `kato/api/endpoints/sessions.py` (concurrent-write half, documented not fixed), `kato/sessions/redis_session_manager.py` (concurrent-write half, documented not fixed), `tests/tests/integration/test_worker_topology.py`, `tests/tests/integration/test_session_management.py` (skip → xfail, Phase B), `tests/tests/unit/test_event_broadcaster.py`
+**Related**: The concurrent-write half is tracked under Phase B of the "Multi-Worker Uvicorn + Concurrent Training Safety" initiative queued above; see DECISION-024.
+
+---
+
+### Bug: observe path deadlocks any uvicorn worker on overlapping same-node_id requests
+**Priority**: CRITICAL — was blocking Phase C and closure of the Multi-Worker Uvicorn + Concurrent Training Safety initiative; this was precisely the initiative's target workload (several threads training on one node)
+**Status**: **FULLY FIXED, committed `b155cb5`** (2026-09-10) — DECISION-025 Option A (`9de98c3`) shipped the `asyncio.Lock` stopgap first; DECISION-026 (`b155cb5`, Phase 1.6) then removed the shared per-processor request state the lock was protecting, and deleted `_bridge_lock` entirely. No lock remains in the observe/learn/get_predictions path. The Multi-Worker Uvicorn + Concurrent Training Safety initiative is now COMPLETE — see `planning-docs/completed/features/2026-09-10-phase-1.6-lock-free-refactor.md` and the "Recently Completed" entry below.
+**Symptom**: Any two overlapping observe requests for the same `node_id` permanently hang the worker process handling them; `/health` stops responding because the event loop itself is blocked. Reproduced deterministically twice: 8 threads × one session each on one node → 1-worker container dies after exactly 9 patterns; 4-worker container's driver stalls at 28/161 patterns, after which only 2 of 4 worker pids still answer `/health` (two workers dead).
+**Evidence**: `py-spy` dump of a hung single-worker container shows the event-loop `MainThread` blocked in `multiprocessing/synchronize.py:__enter__`, called from `kato/workers/observation_processor.py:346` (`with self.processing_lock:` — a `multiprocessing.Lock` created at line 53) via `kato/workers/kato_processor.py:281` (`observe`). `process_observation` is `async` and awaits (`pattern_processor.processEvents` → predictions) *while holding* the blocking lock; on a single event loop, request A holds the lock and awaits, request B blocks the thread trying to acquire it, and A can never resume.
+**Root Cause**: lock introduced in `52e9284` (2025-09-08, "Extract KatoProcessor into modular components"); mixing a blocking `multiprocessing.Lock` with `async`/`await` on one event loop is inherently deadlock-prone the moment two requests for the same processor overlap. A second, unused `multiprocessing.Lock` exists at `kato/workers/kato_processor.py:73` (dead code). **Both violate this project's no-locks rule.** Underlying design issue: the "BRIDGE" pattern (session STM loaded into shared `pattern_processor` instance state for the request — `kato_processor.observe` ~272-284, `learn` ~193-208, `get_predictions` ~359) means concurrent requests on the same processor instance would corrupt each other's STM at await points without serialization — and the load happens *before* the lock is taken, so even a correctly scoped lock at the current call site would not protect it. This is the CLAUDE.md "TODO (Phase 1.6/1.7)" bridge follow-up.
+**Why the existing suite never caught it**: tests run sequentially; the only test using threads (`test_multi_user_scenarios`) uses distinct nodes → distinct processor instances → no lock collision.
+**Fix — DECIDED 2026-09-10 (DECISION-025): "Do A as a stopgap now, then B." Both now DONE.** Option A shipped first (committed `9de98c3`): both `multiprocessing.Lock`s replaced with one `asyncio.Lock` per `KatoProcessor` around `observe`/`learn`/`get_predictions` (`learn` converted to `async def`, its 3 callers in `kato/api/endpoints/sessions.py` now `await` it); same-node requests serialized per worker as an interim measure. Option B (DECISION-026, Phase 1.6, committed `b155cb5`) then threaded per-request working STM/emotives/metadata through `observation_processor` and `pattern_processor` instead of mutating shared instance state, and **deleted `_bridge_lock` entirely** — there is no shared per-request state left to protect, so same-node requests are no longer serialized at all.
+**Verification (Option A stopgap)**: deadlock reproduction (8 threads × one session, 20 rounds) completed 161/161 patterns on both 1- and 4-worker topologies (previously died at 9 / stalled at 28/161); Phase C perf test (`KATO_PERF=1`) passed on both topologies; full suite 479 passed / 4 skipped / 1 xfailed / 0 failed (648s).
+**Verification (Option B, lock-free, final)**: worker-topology suite 18/18 including a new same-processor interleaving test; perf/integrity test (`KATO_PERF=1`) PASSED with 1.83× speedup (4 workers vs. 1) and all integrity assertions holding with no lock in the path; full suite 482 passed / 4 skipped / 1 xfailed / 0 failed (651s); store parity 0 mismatches. See `planning-docs/completed/features/2026-09-10-phase-1.6-lock-free-refactor.md`.
+**Related pre-existing defect, fixed alongside the Option A commit**: `Dockerfile` `HEALTHCHECK` ran `python -c "import requests; ..."`, but `requests` is not in the image, so `docker run` containers always reported unhealthy — switched to `urllib`, matching what compose-based deployments already used.
+**Files**: `kato/workers/observation_processor.py`, `kato/workers/kato_processor.py`, `kato/workers/pattern_processor.py`, `kato/workers/pattern_operations.py`, `kato/api/endpoints/sessions.py`, `tests/tests/performance/test_multi_worker_throughput.py`, `tests/tests/integration/test_worker_topology.py`, `Dockerfile` (HEALTHCHECK fix, Option A commit)
+**Related**: Was blocking Phase C of the "Multi-Worker Uvicorn + Concurrent Training Safety" initiative, now COMPLETE — see "Recently Completed" below; DECISION-025 and DECISION-026 (`planning-docs/DECISIONS.md`).
+
+---
+
+### Follow-up: Auto-learned patterns don't carry session emotives/metadata
+**Priority**: P3 — pre-existing behavior, not a regression; decide whether to change
+**Status**: Identified 2026-09-10 during the Phase 1.6 lock-free refactor (DECISION-026); documented in code, not fixed
+**Detail**: When auto-learn triggers from inside `observe` (`MAX_PATTERN_LENGTH`-driven), the resulting pattern is learned without the session's emotives or metadata. This is not new — the old BRIDGE pattern that Phase 1.6 replaced only ever loaded STM onto the shared `pattern_processor` for the observe path; emotives/metadata were never loaded there either, so auto-learn never had them available. Phase 1.6 preserved this behavior exactly and made it explicit in code (`kato/workers/observation_processor.py`'s `check_auto_learning`) rather than leaving it an implicit side effect of what happened to get bridged. An explicit `learn()` call (not auto-triggered) does carry emotives/metadata correctly — this only affects the auto-learn path.
+**Decision needed**: whether auto-learn should thread emotives/metadata through the same way explicit learn does (would change stored-pattern content for anyone relying on current auto-learn behavior) or remain STM-only (current, unchanged behavior).
+**Files**: `kato/workers/observation_processor.py` (`check_auto_learning`), `kato/workers/kato_processor.py` (`observe`)
+**Related**: DECISION-026, `planning-docs/completed/features/2026-09-10-phase-1.6-lock-free-refactor.md`
+
+---
+
+### Follow-up: `vector_processor.deferred_vectors_for_learning` is per-processor state spanning requests on the legacy VI indexer path
+**Priority**: P3 — pre-existing; only matters if that path is used concurrently
+**Status**: Identified 2026-09-10 during the Phase 1.6 lock-free refactor (DECISION-026); out of scope for that change, not fixed
+**Detail**: Phase 1.6 threaded per-request working STM/emotives/metadata through `observation_processor`/`pattern_operations`/`pattern_processor` for the observe/learn/predict paths, but did not touch `vector_processor.py`'s `deferred_vectors_for_learning`, which remains a `pattern_processor`-instance-level list accumulated across requests on the legacy VI (vector-indexer) code path. If that path is ever exercised concurrently for the same `node_id` (it is not part of the workload this initiative targeted), it would have the same class of cross-request state-sharing hazard Phase 1.6 just eliminated for STM/emotives/metadata.
+**Fix Options**:
+1. Leave as-is until/unless the legacy VI indexer path is confirmed to need concurrent-safe behavior (current recommendation — no known caller exercises it concurrently today)
+2. Extend the Phase 1.6 per-request pattern to `deferred_vectors_for_learning` if that changes
+**Files**: `kato/workers/vector_processor.py`
+**Related**: DECISION-026, `planning-docs/completed/features/2026-09-10-phase-1.6-lock-free-refactor.md`
+
+---
+
+### Bug: `scan_iter` glob-unescaped `kb_id` silently no-ops Redis cleanup for bracketed ids + `clear_all_memory` never clears `patterns_metadata`
+**Priority**: P2 — test-residue/observability, not a multi-worker or data-loss bug; discovered during the Multi-Worker Uvicorn initiative's parity verification
+**Status**: **FIXED, committed `7aad817`** (2026-09-10, Multi-Worker Uvicorn initiative Phase A) — `escape_glob()` applied at all 4 `scan_iter(match=...)` sites plus `tests/tests/fixtures/cleanup_utils.py`; new `tests/tests/integration/test_store_cleanup.py` (4 tests, passing); the 88 affected `test_*` kb_ids purged; parity re-run confirms 0 mismatches.
+**Symptom**: Redis vs ClickHouse parity check found 88 of 261 `kb_id`s mismatched, all `test_*`-prefixed parametrized test ids of the form `test_threshold_filters_by_similarity[...]` — 11 orphaned Redis keys survive per affected kb after test teardown calls cleanup.
+**Root Cause**: `kato/storage/redis_writer.py`'s `delete_all_metadata()` (~lines 175-190) builds `scan_iter(match=f"{kb_id}:*")`. Redis `SCAN MATCH` uses glob syntax, and a `kb_id` containing `[...]` (pytest's parametrize id format) is interpreted as a glob character class, not literal brackets — the pattern matches nothing and cleanup silently no-ops. Same unescaped construct appeared at `redis_writer.py` (~212, ~500, ~687). Separately, `kato/informatics/knowledge_base.py`'s `clear_all_memory()` (~line 321) called `clickhouse_writer.delete_all_patterns()` and `redis_writer.delete_all_metadata()` but never called `metadata_router.delete_all_pattern_metadata()` — a `patterns_metadata` row leak on every clear-all, independent of the glob bug.
+**Fix (DONE, committed `7aad817`, Phase A of Multi-Worker Uvicorn initiative)**: `escape_glob()` (escapes `[`, `]`, `*`, `?`) applied at every `scan_iter(match=...)` call site listed above; the missing `metadata_router.delete_all_pattern_metadata()` call added to `clear_all_memory()`; unit/integration tests added (bracketed-`kb_id` cleanup, learn-then-clear leaves nothing behind); the 88 affected `test_*` kb_ids' orphaned Redis keys and leaked `patterns_metadata` rows purged (production kb_ids untouched — none contain brackets); parity re-run — 0 mismatches.
+**Files**: `kato/storage/redis_writer.py`, `kato/informatics/knowledge_base.py`, `tests/tests/fixtures/cleanup_utils.py`, `tests/tests/integration/test_store_cleanup.py` (new), `scripts/check_store_parity.py` (new)
+**Related**: Found during, and tracked under, the "Multi-Worker Uvicorn + Concurrent Training Safety" initiative's Phase A (data-integrity fixes) above.
+
+---
+
+### Bug: `clear_all_memory` drops the ClickHouse partition before the async-insert queue flushes, leaving orphaned rows
+**Priority**: P2 — test-residue/observability, not a multi-worker or data-loss bug; discovered during the Multi-Worker Uvicorn initiative's parity verification
+**Status**: **FIXED, committed `7aad817`** (2026-09-10, Multi-Worker Uvicorn initiative Phase A) — `clear_all_memory()` now flushes the async-insert queue before `DROP PARTITION`; covered by the same new `tests/tests/integration/test_store_cleanup.py`; the 4 affected `test_*` kb_ids purged; parity re-run confirms 0 mismatches.
+**Symptom**: 4 of the 88 parity-mismatched `kb_id`s (`test_learn_endpoint` and similar) showed one `patterns_data` row surviving teardown's `DROP PARTITION` with no matching Redis metadata — Redis was fully cleaned, ClickHouse was not.
+**Root Cause**: `learn()`'s ClickHouse write uses `wait_for_async_insert=0`, buffered server-side for ~200ms (ClickHouse's own `async_insert` queue, per Change 2 of the Multi-Worker Uvicorn initiative). `clear_all_memory()` did not call `flush_async_insert_queue()` before issuing `DROP PARTITION` — unlike `finalize_training`, which does. When a learn's async-insert row landed in the queue after the drop already ran, the row survived in a partition the drop didn't see yet, orphaning it.
+**Fix (DONE, committed `7aad817`, Phase A of Multi-Worker Uvicorn initiative)**: `clear_all_memory()` now calls `flush_async_insert_queue()` before `DROP PARTITION`, same as `finalize_training`; integration test added (learn immediately followed by clear-all leaves 0 rows for that kb); the 4 affected `test_*` kb_ids' orphaned rows purged; parity re-run — 0 mismatches.
+**Files**: `kato/informatics/knowledge_base.py` (`clear_all_memory`), `kato/storage/clickhouse_writer.py` (`flush_async_insert_queue`)
+**Related**: Found during, and tracked under, the "Multi-Worker Uvicorn + Concurrent Training Safety" initiative's Phase A (data-integrity fixes) above.
 
 ---
 
@@ -599,6 +612,22 @@ Phased plan for scaling KATO to production workloads:
 ---
 
 ## Recently Completed
+
+### Initiative: Multi-Worker Uvicorn + Concurrent Training Safety — COMPLETE (2026-09-10)
+**Priority**: High - Performance / Correctness
+**Archive**: `planning-docs/completed/features/2026-09-10-phase-1.6-lock-free-refactor.md` (Phase 1.6 closeout); `planning-docs/completed/features/2026-09-10-store-cleanup-glob-escape-and-parity-tool.md` (Phase A); `planning-docs/completed/features/2026-09-10-session-write-limitation-documented-xfail.md` (Phase B)
+**Decisions**: DECISION-024 (concurrent-session-write limitation), DECISION-025 (deadlock stopgap sequencing), DECISION-026 (Phase 1.6 lock-free refactor, initiative close)
+**Target workload**: `kato-notebooks/kato-lm/training.ipynb` — 5 threads × 4 hierarchy layers, parallel wikitext training
+
+All planned phases done: **Changes 1-3** (multi-worker uvicorn CMD, ClickHouse server-side `async_insert`, SETNX new-pattern gate — `f809a84`, 2026-04-23); **Phase A** (glob-escape fix + `clear_all_memory` async-flush ordering + store-parity tool — `7aad817`); **Phase B** (same-session concurrent-write documented as a limitation, strict `xfail` — `bef2b47`, DECISION-024); **Phase C** (throughput/integrity test that exposed, then — via the two-step fix below — resolved, the observe-path deadlock — `9de98c3` then `b155cb5`); **Phase 1.6/D** (lock-free per-request working state replacing the `_bridge_lock` stopgap, planning docs closed out — `b155cb5`, DECISION-026).
+
+**Headline result**: the observe path's blocking `multiprocessing.Lock`-across-`await` deadlock (discovered while verifying Phase C, exactly the initiative's target concurrency shape) is fixed for good — first with an `asyncio.Lock` stopgap (DECISION-025), then by removing the shared per-processor request state that lock was protecting (DECISION-026), so the request path now has no lock at all. Perf/integrity test: 1.83× speedup (4 workers vs. 1) with full pattern-count/frequency/store-parity integrity holding. Full suite: 482 passed / 4 skipped / 1 xfailed / 0 failed — up from a 475/4/0 baseline before this initiative began.
+
+**Deferred as optional**: initiative verification item 5, the `kato-notebooks` `MAX_SAMPLES=10000` scale-run (expected 4-5×), was never run as part of this initiative — the in-repo perf/integrity test stands in and is the accepted verification per the Phase C agreement. Running the notebook at scale remains available as an optional manual follow-up, not a blocker.
+
+**Follow-ups filed, not blocking closure** (see Backlog section above): auto-learned patterns don't carry session emotives/metadata (pre-existing); `vector_processor.deferred_vectors_for_learning` is per-processor state on the legacy VI indexer path (pre-existing); a release (5.0.2 patch or 5.1.0) is warranted since the released v5.0.1 image still has the original deadlock — see `planning-docs/project-manager/pending-updates.md`.
+
+---
 
 ### Feature Completion: Reference Python Client API-Coverage Gap Closed — COMPLETE (2026-09-10)
 **Priority**: Maintenance — ad-hoc, not part of an active initiative

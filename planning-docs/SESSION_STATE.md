@@ -1,10 +1,91 @@
 # SESSION_STATE.md - Current Development State
-*Last Updated: 2026-09-10 (KATO v5.0.1 patch release — DECISION-018 metadata-sidecar round-trip fix committed and shipped; reference Python client API-coverage gap closed earlier the same day)*
+*Last Updated: 2026-09-10 (Multi-Worker Uvicorn + Concurrent Training Safety initiative COMPLETE — Phase 1.6 lock-free refactor committed `b155cb5`; DECISION-026 recorded; initiative moved to Recently Completed in `SPRINT_BACKLOG.md`)*
 
 ## Current Task
-**No active task — the v5.0.1 patch release and reference-client coverage work are both COMPLETE. Pick next item from sprint backlog (Multi-Worker Uvicorn + Concurrent Training Safety is next queued — the broadcaster fix released in v5.0.0 removes one of that initiative's known blockers; the `test_concurrent_session_modifications` concurrent-write-loss symptom remains open and unconfirmed).**
+**None — the Multi-Worker Uvicorn + Concurrent Training Safety initiative closed out 2026-09-10 (see "Previous Task" below for the full record). Next action is whichever item the user picks from `planning-docs/SPRINT_BACKLOG.md`'s Backlog section; most notably, `planning-docs/project-manager/pending-updates.md` flags that a release (5.0.2 patch or 5.1.0) is warranted since the released v5.0.1 image still has the observe-path deadlock that only the unreleased local build (now including Phase 1.6) has fixed — version-bump choice left to the user.**
 
-## Previous Task (context preserved)
+## Previous Task
+**Multi-Worker Uvicorn + Concurrent Training Safety — COMPLETE (2026-09-10)**
+
+### Closing Update: Phase 1.6 Shipped (DECISION-026), Initiative Closed
+Phase 1.6 (DECISION-025 Option B — the lock-free per-request working-state refactor) is done, committed as `b155cb5` "refactor(workers): per-request working state through observe/learn/predict (Phase 1.6)". The `_bridge_lock` stopgap from `9de98c3` is removed entirely — `observation_processor.process_observation`/`check_auto_learning` and `pattern_processor.learn_from`/`predict_from` (plus `pattern_operations.learn_pattern_from`) now take the session's STM/emotives/metadata as explicit arguments and return the updated STM, instead of staging it into shared `pattern_processor` instance state for the duration of a request. The legacy stateful `learn()`/`processEvents()` remain as thin delegates over the processor's own STM for non-request callers. New `tests/tests/integration/test_worker_topology.py::test_interleaved_sessions_keep_their_own_stm` (parametrized `KATO_WORKERS` in {1, 2, 4}; the `workers=1` case is the deterministic same-processor interleaving test — the exact scenario the old bridge/lock existed to protect). One pre-existing quirk preserved and now documented in code rather than left implicit: auto-learned patterns are stored without the session's emotives/metadata (the old bridge only ever loaded STM on the observe path) — flagged as a possible follow-up, not fixed here. `CLAUDE.md`'s "Stateless Processor Architecture" section rewritten to describe per-request working state instead of the bridge pattern; ADR-001 got a history line; `CHANGELOG.md` updated.
+
+**Verification**: worker-topology suite 18/18 (including the new interleaving test across all three worker counts); perf/integrity test (`KATO_PERF=1`, 8 threads × 10 rounds) PASSED with 1.83× speedup (4 workers vs. 1), exact pattern counts, exact shared-pattern frequency, Redis/ClickHouse agreement, every worker still alive, clean clear-all; full suite 482 passed / 4 skipped / 1 xfailed / 0 failed (651s), up from the 475/4/0 baseline before this initiative began; store-parity tool 0 mismatched kb_ids.
+
+**Initiative status: COMPLETE.** All phases done — Phase A (cleanup fixes + parity tool, `7aad817`), Phase B (limitation documented + strict xfail, `bef2b47`), Phase C (perf/integrity test; deadlock found and fixed via the A stopgap then the B refactor, `9de98c3` → `b155cb5`), Phase D (planning docs, this update). Verification list items 1-4 done; item 5 (the `kato-notebooks` `MAX_SAMPLES=10000` notebook scale run) remains an optional manual follow-up, with the in-repo perf/integrity test standing in as the accepted verification.
+
+**New follow-ups filed** (not blocking closure, see `SPRINT_BACKLOG.md` Backlog): (1) auto-learned patterns don't carry session emotives/metadata — pre-existing, decide whether to change; (2) `vector_processor.deferred_vectors_for_learning` is per-processor state spanning requests on the legacy VI indexer path — pre-existing, only matters if that path is used concurrently; (3) a release is warranted — see `pending-updates.md`.
+
+**Archive**: `planning-docs/completed/features/2026-09-10-phase-1.6-lock-free-refactor.md`. **Decision**: DECISION-026 in `planning-docs/DECISIONS.md`.
+
+### Earlier Same-Day Progress (context preserved below)
+The subsections immediately below describe the initiative's state earlier on 2026-09-10, before Phase 1.6 landed — kept for historical continuity within this same day's work.
+
+### Decision Made and Shipped (2026-09-10): DECISION-025 — "Do A as a stopgap now, then B"
+The observe-path deadlock blocker (below) is **resolved**. User decision: ship Option A (one `asyncio.Lock` per `KatoProcessor` around the `observe`/`learn`/`get_predictions` bridge sections; both `multiprocessing.Lock`s deleted) immediately as a stopgap, then make Option B (the Phase 1.6 lock-free refactor) the immediate follow-on task. Rationale: A is ~30 lines and fixes a production-breaking deadlock today; B is the roadmap-consistent fix (no locks) but needs its own dedicated pass. Full rationale, alternatives, and work items: DECISION-025 in `planning-docs/DECISIONS.md`. This resolves the `planning-docs/project-manager/pending-updates.md` blocker entry (moved to Resolved Issues).
+
+### Completed and Committed (main, not yet pushed)
+- **`7aad817`** fix(storage): make clear-all leave nothing behind; add a store parity tool — **Phase A**. `escape_glob()` at all 4 `RedisWriter` scan sites + tests cleanup helper; `clear_all_memory` flushes the async-insert queue before `DROP PARTITION` and also drops the `patterns_metadata` partition; `scripts/check_store_parity.py` (report; `--purge-prefix`/`--execute`); `tests/tests/integration/test_store_cleanup.py` (4 tests incl. bracketed kb_id); `docs/users/database-persistence.md` "Checking Store Consistency". The 88 `test_*` residue kb_ids were purged (user-approved); parity is 0 mismatched; a full-suite run creates no new residue.
+- **`bef2b47`** docs(sessions): one writer per session; strict xfail — **Phase B**. Docs in `docs/users/session-management.md` ("One Writer Per Session"), `docs/users/parallel-processing.md`, `docs/reference/api/sessions.md` ("Concurrency"); `test_concurrent_session_modifications` is a strict `xfail` under `KATO_WORKERS>1` (verified XFAIL).
+- **`9de98c3`** fix(workers): stop deadlocking a worker on overlapping same-node requests — **the stopgap (DECISION-025 Option A)**: `kato/workers/kato_processor.py` (`_bridge_lock = asyncio.Lock()`; `learn` is now `async def` and its 3 callers in `kato/api/endpoints/sessions.py` await it; `observe`/`learn`/`get_predictions` bridge sections wrapped), `kato/workers/observation_processor.py` (`multiprocessing.Lock` and the `with` block removed), `Dockerfile` `HEALTHCHECK` fixed (`urllib` instead of the uninstalled `requests`), `tests/tests/performance/test_multi_worker_throughput.py` (Phase C, opt-in `KATO_PERF=1`; per-request timeouts; asserts speedup>1, exact pattern counts, exact shared-pattern frequency = threads×rounds, Redis/ClickHouse agreement, every worker still answering `/health`, clean clear-all), `docs/developers/testing.md` section, `docs/users/parallel-processing.md` note that same-node requests serialize within a worker, `CHANGELOG.md` `[Unreleased]` entries for all of the above.
+
+### Verification
+- **Deadlock reproduction** (8 threads × one session each on one node, 20 rounds): before the fix, 1-worker died at 9 patterns and 4-worker stalled at 28/161 with 2 of 4 workers dead; after the fix, both complete 161/161 patterns, shared-pattern frequency exactly 160, all workers answering; 4 workers 1.9× faster than 1 on that run (58.6s vs 31.2s).
+- **Perf test** (`KATO_PERF=1`, 8 threads × 10 rounds): PASSED on both topologies; speedup 1.15× measured while the full suite ran concurrently (noisy); all integrity assertions held.
+- **Full suite** on the fixed image (deployment stack currently running the local `kato:latest` build, override temporarily pointed at it): 479 passed / 4 skipped / 1 xfailed / 0 failed (648s). Previous baseline 475/4/0 — the +4 are the new store-cleanup tests; the xfail is the documented limitation (DECISION-024).
+- Initiative verification list status: 1 done, 2 done (clean), 3 done (0 duplicate groups), 4 done (parity 0), 5 partially — the notebook `MAX_SAMPLES=10000` run remains manual; the in-repo perf test stands in.
+
+### Still Open / Next
+- **Phase 1.6 refactor (Option B) is the active task**: thread a per-request working STM/emotives/metadata through `observation_processor.process_observation`/`check_auto_learning`, `pattern_operations.learn_pattern`, and `pattern_processor` (`setCurrentEvent`/`processEvents`/`learn`/`maintain_rolling_window` read `self.STM` in 11 places; `predictions`/`trigger_predictions`/`last_learned_pattern_name` are instance state; `vector_processor.deferred_vectors_for_learning` is per-processor state spanning requests on the legacy VI indexer path — note as a Phase 1.6 item); remove `_bridge_lock` afterwards.
+- Deployment stack is running the unreleased local build (which has the deadlock fix) rather than 5.0.1 (which has the deadlock); a release (5.0.2 or 5.1.0) should follow Phase 1.6, or sooner if the deadlock fix needs to ship ahead of it.
+
+### Superseded Status (context preserved, no longer current)
+The subsections immediately below (Status Correction, Verification Results, Decisions Made, Agreed Plan, Blocker) describe the state as of earlier on 2026-09-10, before Phases A/B/C-stopgap were committed and DECISION-025 was made. Kept for historical continuity within this same day's work.
+
+### Status Correction (2026-09-10)
+The backlog entry was stale: it said "ACTIVE - Implementation in progress" and pointed at a plan file, `/Users/sevakavakians/.claude/plans/ultrathink-enable-multi-worker-recursive-marble.md`, that **no longer exists**. In fact Changes 1, 2, and 3 (multi-worker CMD + `KATO_WORKERS` + `kato-manager --workers`; ClickHouse `async_insert` + `DEFAULT_BATCH_SIZE=1` + `flush_async_insert_queue` at finalize; SETNX new-pattern gate + frequency ownership moved to SETNX/INCR) **all shipped already**, in commit `f809a84` (2026-04-23). The dead plan-file reference has been removed from the backlog. What actually remained was the initiative's Verification list, run today.
+
+### Verification Results (2026-09-10)
+1. **N workers start** — confirmed by `tests/tests/integration/test_worker_topology.py` at `KATO_WORKERS` in {1, 2, 4}.
+2. **Full suite** — 475 passed / 4 skipped / 0 failed on the deployed 5.0.1 image. BUT `test_concurrent_session_modifications` (`tests/tests/integration/test_session_management.py::TestSessionErrorHandling`) only "passes" by being skipped when `run_tests.sh` exports the container's `KATO_WORKERS>1`; run directly against the 4-worker stack it fails 3/3. **Root cause confirmed**: `kato/api/endpoints/sessions.py`'s `observe` handler (~lines 345-411) holds a per-process `asyncio.Lock` around `get_session` → `processor.observe` → `update_session`, and `redis_session_manager._save_session` (~lines 739-778) `SETEX`es the whole session as one JSON blob — a lost update when two worker processes hold the same session. The old backlog text attributing the fix to the SETNX-gate work (Change 3) was a **misattribution** — that gate guards new-pattern creation in `learnPattern`, not session state — now corrected in `SPRINT_BACKLOG.md`.
+3. **ClickHouse duplicate-row check** — 0 duplicate `(kb_id, name)` groups. Clean.
+4. **Redis vs ClickHouse parity** — 88 of 261 `kb_id`s mismatch (all `test_*` residue), from two distinct cleanup bugs, NOT multi-worker write loss: (a) `redis_writer.py`'s `delete_all_metadata()` and similar `scan_iter(match=f"{kb_id}:*")` calls don't glob-escape `kb_id`, so pytest's `[...]`-bracketed parametrize ids are read as glob character classes and cleanup silently no-ops; `clear_all_memory()` also never calls `metadata_router.delete_all_pattern_metadata()`, leaking `patterns_metadata` rows on every clear-all. (b) `clear_all_memory()` doesn't call `flush_async_insert_queue()` before `DROP PARTITION` (unlike `finalize_training`, which does), so a learn's ~200ms-buffered async-insert row can land after the drop and survive. Both logged as new Bug entries in `SPRINT_BACKLOG.md`.
+5. **Scale test** (`MAX_SAMPLES=10000` notebook, expect 4-5x) — not done; external notebook workload, deferred to Phase C's in-repo stand-in.
+
+### Decisions Made (2026-09-10)
+- **Same-session cross-worker write loss: document as a limitation, do not fix.** No CAS, no distributed locks — consistent with this project's no-locks rule and the actual workload (one session, one writer at a time). See DECISION-024 in `DECISIONS.md` for full rationale and the rejected CAS/optimistic-locking alternative.
+- **Test residue: yes, clean it up.** Delete the 88 `test_*`-prefixed kb_ids' orphaned Redis keys / ClickHouse rows once the two cleanup bugs (Phase A) are fixed, then re-run parity expecting 0 mismatches. Production kb_ids are untouched (none contain brackets).
+
+### Agreed Plan (record as the active task, in order)
+- **Phase A — Data-integrity fixes** (DONE, uncommitted): `escape_glob()` applied at all 4 `scan_iter(match=...)` sites in `kato/storage/redis_writer.py` plus `tests/tests/fixtures/cleanup_utils.py`; `clear_all_memory()` (`kato/informatics/knowledge_base.py`) now flushes the async-insert queue before `DROP PARTITION` and also clears `patterns_metadata`; new `tests/tests/integration/test_store_cleanup.py` (4 tests, passing; one parametrized with a bracketed id); new `scripts/check_store_parity.py` ops tool (report + `--purge-prefix`/`--execute`); the 88 `test_*` residue kb_ids purged (user-approved) — parity now 0 mismatched; re-running the residue-producing suite creates no new residue. Docs updated: `docs/users/database-persistence.md` ("Checking Store Consistency"), `docs/developers/testing.md` (perf-test section); `CHANGELOG.md` `[Unreleased]` entries added. Nothing committed yet.
+- **Phase B — Limitation documentation + correction** (DONE, uncommitted): `test_concurrent_session_modifications` converted to strict `xfail` under `KATO_WORKERS>1` (verified XFAIL); one-writer-per-session rule documented in `docs/users/session-management.md`, `docs/users/parallel-processing.md`, `docs/reference/api/sessions.md`.
+- **Phase C — Throughput verification** (BLOCKED — see Blocker below): new `tests/tests/performance/test_multi_worker_throughput.py` written (opt-in `KATO_PERF=1`; self-launched 1- and 4-worker containers; asserts speedup + integrity + clean clear-all). **Running it is what exposed the deadlock blocker** — the test itself cannot be verified passing until the blocker is fixed, because its target workload (several threads on one node) is exactly what triggers the deadlock.
+- **Phase D — Planning docs**: Changes 1-3 marked shipped in `f809a84` (done, 2026-09-10 earlier update); closing the initiative is now gated on the blocker's resolution, not just Phases A-C landing.
+
+### Blocker (2026-09-10, severe, confirmed): observe path deadlocks any uvicorn worker on overlapping same-node_id requests
+**Discovered by**: running the new Phase C perf test (`tests/tests/performance/test_multi_worker_throughput.py`) against the initiative's actual target workload (several threads training on one node) — the first real concurrent-same-node_id load this initiative has thrown at the server.
+
+**Evidence**: `py-spy` dump of a hung single-worker container shows the event-loop `MainThread` blocked in `multiprocessing/synchronize.py:__enter__`, called from `kato/workers/observation_processor.py:346` (`with self.processing_lock:` — a `multiprocessing.Lock` created at line 53) via `kato/workers/kato_processor.py:281` (`observe`). `process_observation` is `async` and awaits (`pattern_processor.processEvents` → predictions) *while holding* the blocking lock; on a single event loop, request A holds the lock and awaits, request B blocks the thread trying to acquire it, and A can never resume → permanent deadlock. `/health` stops answering (the event loop itself is blocked).
+
+**Reproduced deterministically** (twice): 8 threads × one session each, one node → 1-worker container dies after exactly 9 patterns. 4-worker container: driver stalls at 28/161 patterns; afterwards only 2 of 4 worker pids still answer `/health` (two workers dead). This is precisely the target parallel-training workload (several threads on one node), so **the initiative cannot be verified or closed until this is fixed.**
+
+**Origin**: lock introduced in `52e9284` (2025-09-08, "Extract KatoProcessor into modular components"). A second, unused `multiprocessing.Lock` exists at `kato/workers/kato_processor.py:73` (dead code). **Both violate this project's no-locks rule** (CLAUDE.md: "remember to not create locks for this project").
+
+**Underlying design issue**: the "BRIDGE" pattern (session STM loaded into shared `pattern_processor` instance state for the duration of a request — `kato_processor.observe` ~lines 272-284, `learn` ~193-208, `get_predictions` ~359) means concurrent requests on the same processor instance would corrupt each other's STM at await points without serialization — and the load happens *before* the lock is taken, so even a correctly scoped lock at the current call site would not protect it. This is the CLAUDE.md "TODO (Phase 1.6/1.7)" bridge follow-up, now shown to be load-bearing for correctness, not just a stylistic TODO.
+
+**Why the existing suite never caught it**: tests run sequentially; the only test using threads (`test_multi_user_scenarios`) uses distinct nodes → distinct processor instances → no lock collision.
+
+**Related pre-existing defect found alongside this** (being fixed alongside, not blocking): `Dockerfile` `HEALTHCHECK` runs `python -c "import requests; ..."`, but `requests` is not in the image, so `docker run` containers always report unhealthy; compose-based deployments use `urllib` and are unaffected.
+
+**Decision pending (asked of the user)** — two options to unblock Phase C and close the initiative:
+- **Option A**: replace both `multiprocessing.Lock`s with one `asyncio.Lock` per `KatoProcessor` around `observe`/`learn`/`get_predictions` (~30 lines). Deadlock fixed; same-node requests serialize per worker (still parallel across workers). Keeps a lock — a smaller violation of the no-locks rule than what exists today, but still a lock.
+- **Option B (recommended)**: Phase 1.6 refactor — pass per-request working STM/emotives/metadata through `observation_processor` and `pattern_processor` instead of mutating shared instance state (`setCurrentEvent`/`processEvents`/`learn`/`check_auto_learning`/`maintain_rolling_window` read `self.STM` in ~11 places). Delete both locks (~150-250 lines across 3 files). Lock-free; consistent with the no-locks rule; validated by the full suite plus the new Phase C perf/integrity test.
+
+**Next immediate action**: awaiting the user's choice of Option A vs Option B (see `planning-docs/project-manager/pending-updates.md` for the human-alert entry); Phase C stays blocked until then. Phase A/B source changes remain uncommitted in the working tree — leave them alone until the blocker's fix is also ready to land together.
+
+**Full details**: `planning-docs/SPRINT_BACKLOG.md` (Active Projects → "Multi-Worker Uvicorn + Concurrent Training Safety" → new Bug entry for this deadlock); `planning-docs/DECISIONS.md` (DECISION-024, prior scope decision); `planning-docs/project-manager/pending-updates.md` (human-alert entry, decision pending).
+
+## Earlier Task (context preserved)
 **KATO v5.0.1 Release (PATCH) — COMPLETE (2026-09-10)**
 - Status: RELEASED — `./container-manager.sh patch` (AUTO_MODE). Bump commit `1481e44` "chore: bump version to 5.0.1"; tag `v5.0.1` pushed to origin; `main` at `1481e44`, in sync with `origin/main`
 - Milestone release, not a queued initiative; Multi-Worker Uvicorn initiative below remains next in the sprint backlog
@@ -19,7 +100,6 @@
 - Process note: the first release attempt aborted harmlessly — `source ~/.bash_profile` returns non-zero in a non-interactive shell, and the wrapper used `set -e`, so nothing had been bumped/tagged; re-run with `source ~/.bash_profile || true` succeeded. Recorded alongside the 2026-09-09 stale-credential note — see `planning-docs/project-manager/patterns.md` and `maintenance-log.md`
 - **Resolves**: the `planning-docs/SPRINT_BACKLOG.md` "Optimization: Metadata Sidecar Re-Learn Duplicate SELECT Eliminated" entry's done-but-uncommitted status — that work (DECISION-018) is now committed (`ca8e47a`) and released as part of v5.0.1. The separate structural follow-up ("Metadata sidecar read-modify-write shape") remains open/uncommitted.
 
-## Earlier Task (context preserved)
 **Reference Python Client: Close API-Coverage Gap — COMPLETE (2026-09-10)**
 - Status: COMPLETE — ad-hoc maintenance task, not part of the Multi-Worker Uvicorn initiative (that remains next queued in `SPRINT_BACKLOG.md`)
 - Scope: `examples/python-client.py` (the `KATOClient` reference client) + `examples/README.md`; no `kato/` service code touched
@@ -300,7 +380,9 @@
 - `kato/workers/pattern_operations.py` - Update to stateless
 
 ## Next Immediate Action
-**Resume Multi-Worker Uvicorn + Concurrent Training Safety**
+**SUPERSEDED (2026-09-10) — see "Current Task" at the top of this file for the live status.** Current next action: Phase 1.6 lock-free refactor (DECISION-025 Option B) for the Multi-Worker Uvicorn + Concurrent Training Safety initiative. The historical content below is kept for continuity.
+
+~~**Resume Multi-Worker Uvicorn + Concurrent Training Safety**~~
 
 The configuration audit (env var wiring, dead-parameter removal) is complete. The next queued initiative is multi-worker uvicorn support (see SPRINT_BACKLOG.md for full plan). Known backlog bugs (all P2 unless noted, non-blocking):
 
@@ -323,7 +405,9 @@ The configuration audit (env var wiring, dead-parameter removal) is complete. Th
 **Resolved 2026-09-09** (previously item 3 here): dead `KATO_*` env names via `json_schema_extra={'env': ...}` — see "Previous Task" above and `planning-docs/SPRINT_BACKLOG.md` Recently Completed. Corrected understanding: the impact was overstated (`batch_size` had zero consumers regardless of binding); `batch_size` was deleted rather than wired, other dead names were aliased forward.
 
 ## Blockers
-**No active blockers** (backlog bugs above are P2, non-blocking)
+**1 active blocker (severe, confirmed) — 2026-09-10**: observe path deadlocks any uvicorn worker on overlapping same-node_id requests (BRIDGE-pattern lock introduced in `52e9284`, holds a blocking `multiprocessing.Lock` across an `await`). Blocks Phase C and closure of the "Multi-Worker Uvicorn + Concurrent Training Safety" initiative. Decision pending: Option A (asyncio.Lock, keeps a lock) vs Option B (Phase 1.6 stateless-STM refactor, no-locks-rule compliant, recommended). See "Current Task" above and `planning-docs/project-manager/pending-updates.md`.
+
+Other backlog bugs (Phase A/B related, P2) remain non-blocking.
 
 ## Context
 **Current Initiative**: Stateless Processor Refactor (Critical Priority)

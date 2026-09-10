@@ -5,6 +5,38 @@
 
 ## Testing Strategy Patterns
 
+### 2026-09-10 - A Perf/Integrity Test That Finally Exercises the Real Target Workload Can Surface Latent Architectural Defects Sequential Suites Structurally Cannot Catch
+
+**Pattern**: A sequential test suite — even a large, passing one (475 passed / 4 skipped / 0 failed) — cannot detect bugs that only manifest when two requests concurrently hit the *same* shared instance (here, one `KatoProcessor` per `node_id`). The one test using threads in this suite (`test_multi_user_scenarios`) used distinct nodes, so it never collided on a processor instance. It took a purpose-built perf test reusing the initiative's own target workload (several threads training on one node) to expose a deadlock that had been latent in the codebase since `52e9284` (2025-09-08) — roughly six months of runtime with no test ever exercising the failure condition.
+
+**Discovery Trigger**: The "Multi-Worker Uvicorn + Concurrent Training Safety" initiative's Phase C throughput-verification test (`tests/tests/performance/test_multi_worker_throughput.py`) was written specifically to reproduce the notebook's real parallel-training shape (several threads, one node) as an in-repo stand-in. Running it for the first time immediately deadlocked the server — a blocking `multiprocessing.Lock` held across an `async`/`await` boundary in the observe path.
+
+**Assumption → Reality**:
+- Assumed: a 475/4/0 full-suite result plus deterministic multi-worker topology tests (websocket delivery, session-count convergence) meant the multi-worker story was essentially sound, modulo the already-known and already-decided same-session write-loss limitation (DECISION-024).
+- Reality: none of the existing tests — including the topology suite built specifically for multi-worker correctness — exercised concurrent requests *within a single node_id*, which is exactly the shape production training workloads use. A green suite says nothing about concurrency shapes it never drives.
+
+**Resolution Pattern**: When an initiative's stated target workload has a specific concurrency shape (here: N threads, 1 node), write the throughput/integrity test to reproduce that *exact* shape as early as possible, not as a final verification step — it can surface defects that no amount of additional unit/integration coverage in unrelated shapes would ever catch. Treat "the suite is green" and "the target workload has actually been exercised" as two separate claims.
+
+**Recurrence Risk**: Medium — any initiative whose target concurrency shape isn't already covered by an existing deterministic test (the way `test_worker_topology.py` covers cross-worker delivery) should get a same-shape stress/perf test written and run *before* declaring the initiative verified, not after.
+
+---
+
+### 2026-09-10 - A Two-Option Human-Alert Can Come Back as "Both, Staged" Rather Than a Single Pick
+
+**Pattern**: The deadlock blocker above was framed to the user as a binary choice — Option A (fast asyncio.Lock stopgap, still a lock) vs. Option B (Phase 1.6 lock-free refactor, larger scope, recommended). The user's actual answer was neither pick alone: "Do A as a stopgap now, then B" — sequencing both rather than selecting one. The framing correctly surfaced the tradeoff (speed vs. architectural correctness) but implicitly presented it as either/or.
+
+**Discovery Trigger**: The decision came back from the user as an explicit two-step instruction rather than a single-letter answer to the `pending-updates.md` entry's "Suggested Action" list.
+
+**Assumption → Reality**:
+- Assumed: a "choose A or B" framing would produce a single chosen path, with the other option either dropped or deferred indefinitely to a future backlog item.
+- Reality: for a production-breaking bug with a known-larger proper fix, the user preferred to unblock immediately with the smaller fix *and* commit to the larger fix as the very next task — not a someday item, not an either/or.
+
+**Resolution Pattern**: When a human-alert presents a fast/narrow fix against a slower/architecturally-correct one for something already broken in a way that blocks other work, consider explicitly offering "do the narrow fix now as a stopgap, then the correct fix next" as a third option alongside the binary choice — it may better match what a high-intensity, ship-fast-then-do-it-right workflow actually wants. DECISION-025 records this as an explicit stopgap with the follow-on named as the *active* next task (not just a backlog line item), which is the documentation shape this kind of staged decision needs — a plain "Option A chosen" would have understated the intent to still do B.
+
+**Recurrence Risk**: Medium — this project has already made a similar staged call once (see the multi-phase Multi-Worker Uvicorn initiative itself); future critical/blocking bugs with a fast-vs-correct tradeoff should probably be pre-framed with a staged option from the start rather than presenting a strict binary.
+
+---
+
 ### 2026-09-09 - A Deterministic Bug-Reproduction Test Pays Off Twice: Confirmation, Then Free Fix Verification
 
 **Pattern**: When a test suite is built specifically to manufacture the exact runtime condition needed to reproduce a bug on demand (rather than hoping to observe it intermittently), the investment pays off a second time, for free, when the fix lands — the same tests, unmodified, flip from deterministic failure to deterministic pass and constitute the fix's verification.

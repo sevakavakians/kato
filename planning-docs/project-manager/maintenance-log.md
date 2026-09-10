@@ -3,6 +3,72 @@
 
 ---
 
+## 2026-09-10 - Task Completion + Architectural Decision: Deadlock Blocker Resolved (DECISION-025), Phases A/B/C-Stopgap Committed, Phase 1.6 Now Active
+
+**Trigger**: Task completion (3 commits landed: Phase A `7aad817`, Phase B `bef2b47`, Phase C deadlock stopgap `9de98c3`) + architectural decision (user chose "Do A as a stopgap now, then B" for the observe-path deadlock blocker) — resolves the Critical human-alert item raised in the previous entry below.
+
+**Event Type**: Task Completion + Architectural Decision + Blocker Resolved + pending-updates.md resolution (compound event)
+
+**Actions Taken**:
+1. `planning-docs/DECISIONS.md` — added `DECISION-025` ("Observe-Path Deadlock — Ship Option A (asyncio.Lock Stopgap) Now, Option B (Phase 1.6) Next"): context, rationale (A is small and fixes a production-breaking deadlock today; B is the roadmap-consistent no-locks fix but larger scope; A is explicitly a stopgap, not the destination), what shipped, verification, 3 alternatives considered, Phase 1.6 work items, cross-references. Header timestamp refreshed.
+2. `planning-docs/project-manager/pending-updates.md` — moved the "Observe Path Deadlock: Fix Approach Decision Needed" Critical entry from Current Issues to Resolved Issues, with resolution text pointing to DECISION-025 and verification numbers. Current Issues is now empty.
+3. `planning-docs/SPRINT_BACKLOG.md` — header timestamp refreshed; Multi-Worker Uvicorn initiative status changed from "ACTIVE, BLOCKED" to "ACTIVE" (Phase 1.6 now the active task); Phase A/B/C-stopgap all marked DONE/committed with commit hashes; new Phase 1.6 entry added to the Agreed Plan; the "observe path deadlocks..." Bug entry marked FIXED (stopgap, `9de98c3`) with verification numbers; the two Phase A cleanup-bug entries updated from "FIXED, uncommitted" to "FIXED, committed `7aad817`"; the session-write-limitation Bug entry's Phase B fix marked DONE/committed `bef2b47`.
+4. `planning-docs/SESSION_STATE.md` — header timestamp refreshed; "Current Task" rewritten to lead with Phase 1.6 as the active task, DECISION-025 summary, the 3 commits with full detail, verification results, and next steps; the prior same-day Status Correction/Verification/Decisions/Blocker subsections marked explicitly superseded (kept for historical continuity) rather than deleted; the older "Next Immediate Action" section (further down, pointing at the pre-Phase-A backlog list) marked superseded with a pointer back to the top.
+5. Created 3 completed-work archive entries: `planning-docs/completed/features/2026-09-10-store-cleanup-glob-escape-and-parity-tool.md` (Phase A), `planning-docs/completed/features/2026-09-10-session-write-limitation-documented-xfail.md` (Phase B), `planning-docs/completed/bugs/2026-09-10-observe-deadlock-fixed-asyncio-lock-stopgap.md` (Phase C stopgap).
+6. Logging this activation event in `planning-docs/project-manager/triggers.md` and a pattern entry in `planning-docs/project-manager/patterns.md`.
+
+**Key Details**:
+- User's exact decision: "Do A as a stopgap now, then B." Option A = one `asyncio.Lock` per `KatoProcessor` around the `observe`/`learn`/`get_predictions` bridge sections, both `multiprocessing.Lock`s deleted (~30 lines, shipped). Option B = the Phase 1.6 refactor threading per-request working STM/emotives/metadata through instead of mutating shared instance state, then deleting the lock entirely (not started; now the active task).
+- Deadlock reproduction (8 threads × one session, 20 rounds): before the fix, 1-worker died at 9 patterns and 4-worker stalled at 28/161 with 2 dead workers; after, both complete 161/161 patterns, frequency exactly 160, all workers healthy.
+- Full suite: 479 passed / 4 skipped / 1 xfailed / 0 failed (648s) — +4 vs. the 475/4/0 baseline are the new Phase A store-cleanup tests; the 1 xfail is the DECISION-024 documented session-write limitation.
+- All 3 commits are on `main` locally but **not yet pushed** to `origin`.
+- Deployment stack is currently running the unreleased local build (has the deadlock fix), not the released v5.0.1 (which still has the deadlock) — a release should follow Phase 1.6, or sooner if needed.
+
+**Documents Updated**: `planning-docs/DECISIONS.md`, `planning-docs/project-manager/pending-updates.md`, `planning-docs/SPRINT_BACKLOG.md`, `planning-docs/SESSION_STATE.md`, `planning-docs/completed/features/2026-09-10-store-cleanup-glob-escape-and-parity-tool.md` (new), `planning-docs/completed/features/2026-09-10-session-write-limitation-documented-xfail.md` (new), `planning-docs/completed/bugs/2026-09-10-observe-deadlock-fixed-asyncio-lock-stopgap.md` (new), `planning-docs/project-manager/triggers.md`, `planning-docs/project-manager/patterns.md`
+
+**Human Alert Status**: The prior Critical item in `pending-updates.md` is now Resolved. No new alerts raised.
+
+**Not touched (per instructions)**: `kato/` source, `tests/`, `docs/`, `CHANGELOG.md` — this was a planning-only documentation update; all code/test/doc changes described here were already committed by the user before this update ran.
+
+**Agent Response Time**: Immediate
+**Action Result**: All planning docs updated silently; one Critical alert resolved; no source/test/doc files touched
+
+---
+
+*Agent execution time: < 5 seconds*
+*Response type: Silent operation (documentation update following task completion + architectural decision)*
+
+---
+
+## 2026-09-10 - Blocker Encountered: Observe Path Deadlock Under Same-Node_id Concurrency (Multi-Worker Uvicorn Initiative)
+
+**Trigger**: Blocker event — new, severe, confirmed. Discovered while running the initiative's new Phase C perf test against its actual target workload (several threads on one node); Phases A and B are done and uncommitted, but this defect blocks the initiative's closure.
+
+**Event Type**: Blocker identified (Primary trigger)
+
+**Actions Taken**:
+1. Updated `planning-docs/SESSION_STATE.md` — header timestamp refreshed; Phase A/B marked DONE (uncommitted) with implementation detail; Phase C marked BLOCKED; new "Blocker" subsection under Current Task with full root cause, evidence, and both fix options (asyncio.Lock vs Phase 1.6 stateless-STM refactor); "Blockers" section rewritten from "No active blockers" to the new severe blocker
+2. Updated `planning-docs/SPRINT_BACKLOG.md` — header timestamp refreshed; Multi-Worker Uvicorn initiative status changed to ACTIVE, BLOCKED; Phase A/B backlog bug entries marked FIXED/uncommitted; Phase C marked BLOCKED; new CRITICAL-priority Bug entry ("observe path deadlocks any uvicorn worker on overlapping same-node_id requests") inserted with root cause, evidence, decision options, and related pre-existing HEALTHCHECK defect
+3. Updated `planning-docs/project-manager/pending-updates.md` — new Critical-priority Current Issues entry: fix-approach decision needed (Option A: asyncio.Lock, fast, still a lock; Option B: Phase 1.6 stateless-STM refactor, recommended, no-locks-rule compliant, larger scope)
+4. Updated `planning-docs/project-manager/patterns.md` — new pattern entry: sequential test suites cannot catch same-processor concurrency bugs; a throughput/integrity perf test that finally exercises the real target workload can surface latent architectural defects that unit/integration suites structurally cannot
+5. Logging this activation event in `planning-docs/project-manager/triggers.md`
+
+**Documents Updated**: `planning-docs/SESSION_STATE.md`, `planning-docs/SPRINT_BACKLOG.md`, `planning-docs/project-manager/pending-updates.md`, `planning-docs/project-manager/patterns.md`, `planning-docs/project-manager/triggers.md`
+
+**Human Alert Status**: New Critical item raised in `pending-updates.md` — fix-approach decision needed (Option A vs Option B) before Phase C and the initiative can close.
+
+**Not touched (per instructions)**: `kato/` source, `tests/`, `docs/`, `CHANGELOG.md` — the in-progress Phase A/B/C source changes in the working tree were left exactly as found.
+
+**Agent Response Time**: Immediate
+**Action Result**: All planning docs updated silently; one new human alert raised; no source/test/doc files touched
+
+---
+
+*Agent execution time: < 5 seconds*
+*Response type: Silent operation (planning documentation update) + one human alert raised*
+
+---
+
 ## 2026-09-09 - Task Completion: Cross-Worker WebSocket Broadcaster Fixed via Redis Pub/Sub (Closes DECISION-020 Follow-Up) + Architectural Decision + Pending-Update Resolved
 
 **Trigger**: Task completion (`kato/websocket/event_broadcaster.py` fixed to fan events out across uvicorn workers via Redis pub/sub; committed as `ba3d194`, which also carries the previously-uncommitted worker-topology-tests/`worker_pid` work recorded as DECISION-020) + architectural decision (Redis pub/sub chosen over per-worker sticky routing and Redis Streams) + resolution of a previously-flagged human-review item
@@ -2946,3 +3012,60 @@ networks:
 
 *Agent execution time: < 5 seconds*
 *Response type: Silent operation (documentation update following milestone release)*
+
+## 2026-09-10 - Planning Update: Multi-Worker Uvicorn Initiative Picked Up, Status Corrected, Verification Run, Two Decisions Recorded
+
+**Trigger**: Planning-stage event — user picked up the "Multi-Worker Uvicorn + Concurrent Training Safety" backlog item, ran its outstanding Verification list, found the backlog entry stale (status/plan-file/misattribution), confirmed a root cause, made two scope decisions, and agreed a 4-phase plan to close the initiative.
+
+**Event Type**: Task Status Change + Blocker Confirmed + Architectural Decision + Knowledge Refinement (compound event)
+
+**Actions Taken**:
+1. `planning-docs/SESSION_STATE.md` — header timestamp refreshed; "Current Task" replaced with the Multi-Worker Uvicorn initiative: status correction (Changes 1-3 already shipped in `f809a84`, dead plan-file reference removed), full Verification Results (5 items), both decisions, the agreed Phase A-D plan, and next immediate action. Prior "Previous Task" (v5.0.1 release) and earlier entries left intact below it.
+2. `planning-docs/SPRINT_BACKLOG.md` — header timestamp refreshed; rewrote the "Multi-Worker Uvicorn + Concurrent Training Safety" Active Projects entry in place: removed the dead plan-file reference, marked Changes 1-3 as shipped in `f809a84` with a scope-correction note on Change 3, replaced the old single-shot Verification checklist with the 2026-09-10 re-run's actual findings, and added the Phase A-D plan. Rewrote the "Bug: Multi-worker (KATO_WORKERS=4) breaks websocket event delivery and concurrent session modification consistency" Backlog entry to mark the concurrent-write half CONFIRMED and DOCUMENTED-NOT-FIXED (cross-referencing DECISION-024) and to correct the line-~479 SETNX-gate misattribution explicitly. Added two new Backlog Bug entries (glob-unescaped `kb_id` in `scan_iter` + missing `patterns_metadata` clear on `clear_all_memory`; `clear_all_memory` racing the async-insert queue before `DROP PARTITION`), both marked in-progress under this initiative's Phase A.
+3. `planning-docs/DECISIONS.md` — added `DECISION-024` ("Same-Session Cross-Worker Write Loss — Document as a Limitation, Do Not Fix"): context, rationale (workload mismatch, project-wide no-locks constraint, silent-vs-documented tradeoff), 4 alternatives considered (CAS/optimistic locking, distributed lock, sticky routing, chosen option), work items, and cross-references. Header timestamp refreshed.
+
+**Key Details**:
+- Changes 1-3 of the initiative were already shipped in commit `f809a84` (2026-04-23) — the backlog had been left saying "ACTIVE - Implementation in progress" pointing at a plan file that no longer exists (`/Users/sevakavakians/.claude/plans/ultrathink-enable-multi-worker-recursive-marble.md`). Only the Verification list remained outstanding.
+- Root cause of `test_concurrent_session_modifications`'s failure confirmed by code inspection: `kato/api/endpoints/sessions.py` `observe` handler's per-process `asyncio.Lock` (~345-411) plus `redis_session_manager._save_session`'s blob `SETEX` with no CAS (~739-778) — a cross-process lost update. Previously misattributed in the backlog to the SETNX new-pattern gate (Change 3); corrected.
+- Parity check found 88/261 mismatched kb_ids, all test residue from two newly-identified, previously-unknown cleanup bugs (glob-escaping and async-insert/DROP-PARTITION ordering) — NOT multi-worker write loss. Logged as new Backlog bugs, not fixed yet (Phase A, in progress).
+- User decisions: (1) document the same-session cross-worker write loss as a limitation rather than fix it — no CAS, no distributed locks, consistent with the project's no-locks rule; (2) delete the 88 test-residue kb_ids' orphaned data once the cleanup bugs are fixed, then re-verify parity expects 0 mismatches.
+- No `pending-updates.md` entry — this is a normal in-progress initiative with a clear owner and plan, not a stalled/at-risk item meeting a human-alert threshold.
+
+**Classification**: Task Status Change / Architectural Decision / Knowledge Refinement (compound)
+
+**Next Steps**: Phase A implementation (glob-escaping fix + `clear_all_memory` async-flush and `patterns_metadata` clear) — code work, not a planning-docs task; project-manager will be triggered again on Phase A completion.
+
+---
+
+*Agent execution time: < 5 seconds*
+*Response type: Silent operation (documentation update following planning-stage event)*
+
+## 2026-09-10 - Milestone: Multi-Worker Uvicorn + Concurrent Training Safety Initiative COMPLETE (Phase 1.6 Lock-Free Refactor Shipped)
+
+**Trigger**: Task completion + milestone completion (compound) — Phase 1.6 (the lock-free per-request working-state refactor, DECISION-025 Option B) committed as `b155cb5`, closing the "Multi-Worker Uvicorn + Concurrent Training Safety" initiative that has been active since 2026-04-20 (queued), resumed and driven to closure across 2026-09-10.
+
+**Event Type**: Task Completion / Milestone Completion
+
+**Actions Taken**:
+1. `planning-docs/DECISIONS.md` — added `DECISION-026` ("Phase 1.6 Shipped — Per-Request Working State Replaces the Bridge Lock, Closing the Multi-Worker Uvicorn Initiative"): context, what shipped, the preserved-but-documented auto-learn emotives/metadata quirk, verification, rationale, 3 alternatives considered, work items closed, 3 new follow-ups filed, and cross-references. Header timestamp refreshed.
+2. Created `planning-docs/completed/features/2026-09-10-phase-1.6-lock-free-refactor.md` — full archive entry: what changed in each of the 4 touched files, the new interleaving test, the preserved quirk, verification results, initiative-closure statement (all 4 phases + Phase D done), and the 3 follow-ups.
+3. `planning-docs/SPRINT_BACKLOG.md` — header timestamp refreshed. Removed the "Multi-Worker Uvicorn + Concurrent Training Safety" entry from Active Projects (replaced with a note that no initiative-scale project is currently active) and added a full closing summary of it under Recently Completed. Updated the "Bug: observe path deadlocks..." Backlog entry to reflect the FULL fix (not just the stopgap) across its Status/Fix/Verification/Files/Related lines. Added two new Backlog "Follow-up" entries: auto-learned patterns not carrying session emotives/metadata, and `vector_processor.deferred_vectors_for_learning` being per-processor state on the legacy VI indexer path.
+4. `planning-docs/SESSION_STATE.md` — header timestamp refreshed. "Current Task" set to none, pointing at the Backlog and at the pending release decision. The former "Current Task" (Phase 1.6 active) content demoted to a new "Previous Task" section with a closing update prepended (what shipped, verification, initiative-COMPLETE statement, new follow-ups, archive/decision links) and the earlier same-day content kept below for continuity. The prior "Previous Task (context preserved)" (v5.0.1 release) and "Earlier Task (context preserved)" (python-client work) sections both demoted one tier — the v5.0.1 section is now "Earlier Task," and the now-redundant duplicate "Earlier Task" header on the python-client section was removed (content folds into the same section), matching the cascading convention established during the 2026-09-10 v5.0.1-release update.
+5. `planning-docs/README.md` — "Current System State": added a "Release gap" note to the Version line (main has the deadlock fix + Phase 1.6, no published image does); Test Coverage line updated to 482 passed / 4 skipped / 1 xfailed / 0 failed (verified against the unreleased local build, 651s, store-parity 0 mismatches), replacing the stale 475/4/0 v5.0.1-image figure; Performance line updated to note the request path now runs with no locks and the 1.83× speedup measurement; Last Major Update rewritten to lead with the initiative's closure (previously led with the 2026-09-09 WebSocket fix, now noted as "preceded same-day (earlier) by").
+6. `planning-docs/project-manager/pending-updates.md` — added a new Current Issue: a release (5.0.2 patch or 5.1.0) is warranted because every published image still has the observe-path deadlock; version-bump choice explicitly left to the user, consistent with how DECISION-019/DECISION-022's bump question was handled.
+
+**Key Details**:
+- Commit `b155cb5` "refactor(workers): per-request working state through observe/learn/predict (Phase 1.6)" — `kato/workers/pattern_processor.py` (new `learn_from`/`predict_from`), `kato/workers/pattern_operations.py` (new `learn_pattern_from`), `kato/workers/observation_processor.py` (`process_observation`/`check_auto_learning` now take/return explicit STM), `kato/workers/kato_processor.py` (`_bridge_lock` removed entirely), `tests/tests/integration/test_worker_topology.py` (new same-processor interleaving test), `CLAUDE.md`/ADR-001/`CHANGELOG.md` docs.
+- Verification: worker-topology suite 18/18; perf/integrity test 1.83× speedup (4 workers vs. 1) with full integrity; full suite 482 passed / 4 skipped / 1 xfailed / 0 failed (651s), up from the 475/4/0 pre-initiative baseline; store parity 0 mismatches.
+- One pre-existing behavior explicitly preserved and now documented in code rather than left implicit: auto-learned patterns don't carry session emotives/metadata (the old bridge never loaded them for the observe path either) — filed as a decide-later follow-up, not treated as a bug to fix in this change.
+- This closes the initiative in full: Phase A (`7aad817`), Phase B (`bef2b47`), Phase C (`9de98c3` stopgap → `b155cb5` final), Phase D (this planning-docs update). Verification list item 5 (external `kato-notebooks` `MAX_SAMPLES=10000` scale run) remains an optional manual step, with the in-repo perf/integrity test as the accepted stand-in — this was the agreed Phase C substitution, not a gap.
+- Human-alert-worthy item filed (not previously present): the release gap. Meets the bar because every currently published image has a production-severity bug (worker-hanging deadlock) that main has already fixed twice over (stopgap, then properly) — left as an explicit open item rather than the agent unilaterally choosing a version bump.
+
+**Classification**: Task Completion / Milestone Completion (initiative closure)
+
+**Next Steps**: None mandated — the initiative is closed. The next action is user-driven: either the release decision flagged in `pending-updates.md`, or picking any other item from `SPRINT_BACKLOG.md`'s Backlog section (including the two new Phase-1.6-discovered follow-ups). project-manager will be triggered again on whatever the user picks up next.
+
+---
+
+*Agent execution time: < 5 seconds*
+*Response type: Silent operation (documentation update following task/milestone completion)*

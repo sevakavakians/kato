@@ -3,6 +3,46 @@
 
 ---
 
+## 2026-09-10 - Task Completion + Architectural Decision (Deadlock Blocker Resolved via DECISION-025)
+
+**Trigger Type**: Primary — Task Completion (3 commits: Phase A `7aad817`, Phase B `bef2b47`, Phase C deadlock stopgap `9de98c3`) + Architectural Decision (DECISION-025: ship the asyncio.Lock stopgap now, Phase 1.6 lock-free refactor next)
+**Secondary**: Resolution of the Critical human-alert item raised by the previous trigger entry below (`pending-updates.md` "Observe Path Deadlock: Fix Approach Decision Needed")
+
+**Event**: User decided "Do A as a stopgap now, then B" for the observe-path deadlock discovered while verifying Phase C. Option A (one `asyncio.Lock` per `KatoProcessor` around the `observe`/`learn`/`get_predictions` bridge sections, both `multiprocessing.Lock`s deleted) shipped same-day as `9de98c3`. Deadlock reproduction now completes 161/161 patterns on both 1- and 4-worker topologies (previously died at 9 / stalled at 28/161); full suite 479 passed / 4 skipped / 1 xfailed / 0 failed. Option B (Phase 1.6, lock-free per-request working state) is now the active task, not yet started.
+
+**Key Findings**:
+- This closes the loop the prior blocker-trigger entry opened: a sequential-test-suite blind spot (same-processor concurrency) surfaced a latent deadlock that had existed since `52e9284` (2025-09-08); the fix-approach decision the agent deliberately left to the user (rather than deciding unilaterally) came back as "both, in sequence" rather than an either/or pick — worth noting for future two-option human-alert framings: users may want a staged answer, not a single choice.
+- All 3 commits (Phase A, B, and the stopgap) are on `main` locally but not yet pushed to `origin` — a detail worth surfacing if a push/release is requested next.
+- Deployment stack is running the unreleased local build (has the fix) rather than the released v5.0.1 (still has the deadlock) — flagged as a release consideration for after Phase 1.6, not urgent since the running deployment is already safe.
+
+**Documentation Actions**:
+- Updated: `planning-docs/DECISIONS.md` (new DECISION-025), `planning-docs/project-manager/pending-updates.md` (Critical item moved to Resolved), `planning-docs/SPRINT_BACKLOG.md` (initiative status, 3 Bug entries, Agreed Plan), `planning-docs/SESSION_STATE.md` (Current Task rewritten), `planning-docs/project-manager/maintenance-log.md`, `planning-docs/project-manager/patterns.md`
+- Created: 3 completed-work archive entries under `planning-docs/completed/features/` and `planning-docs/completed/bugs/`
+- Source/tests/docs/CHANGELOG not touched by this update — all described code changes were already committed by the user beforehand
+
+**Agent Response Time**: Immediate
+**Action Result**: Blocker resolution fully documented with decision, commits, and verification; Phase 1.6 established as the new active task; one Critical human alert resolved
+
+---
+
+## 2026-09-10 - Blocker Encountered (Observe Path Deadlock Under Same-Node_id Concurrency)
+
+**Trigger Type**: Primary — Blocker Event (new, severe, confirmed)
+**Event**: While running the new Phase C perf test for the "Multi-Worker Uvicorn + Concurrent Training Safety" initiative — the first time this initiative exercised its actual target workload (several threads training on one node) — the `observe` path was found to deadlock any uvicorn worker receiving two overlapping requests for the same `node_id`. `kato/workers/observation_processor.py:346` holds a blocking `multiprocessing.Lock` (created at line 53) across an `async`/`await` boundary in `kato/workers/kato_processor.py:281`; the event loop itself blocks, taking `/health` down with it. Reproduced deterministically twice (1-worker container dies after exactly 9 patterns; 4-worker container stalls at 28/161, two of four worker pids die). Root design issue traced to the "BRIDGE" pattern loading shared session state into processor instance variables before the lock is taken. Both the active lock (from `52e9284`) and an unused second lock violate the project's no-locks rule.
+
+**Key Findings**:
+- Phases A and B of the initiative are fully implemented and uncommitted; Phase C (throughput verification), designed to prove the point of the whole initiative, is what surfaced a defect severe enough to block the initiative's own closure — sequential test suites structurally cannot catch same-processor concurrency bugs, so this had been latent since `52e9284` (2025-09-08) without detection.
+- A fix requires a genuine architectural decision, not just a bug patch: a narrower lock (fast, still violates the no-locks rule) vs. the Phase 1.6 stateless-STM refactor this project's CLAUDE.md has flagged as a TODO since the bridge pattern was introduced (slower, resolves the TODO permanently, no-locks-rule compliant). Left to the user rather than decided unilaterally.
+
+**Documentation Actions**:
+- Updated: `planning-docs/SESSION_STATE.md` (Current Task blocker subsection + Blockers section), `planning-docs/SPRINT_BACKLOG.md` (Active Projects status + new CRITICAL Bug entry + Phase A/B marked DONE), `planning-docs/project-manager/pending-updates.md` (new Critical human-alert entry, decision pending), `planning-docs/project-manager/patterns.md`, `planning-docs/project-manager/maintenance-log.md`
+- Source/tests/docs/CHANGELOG deliberately left untouched — in-progress Phase A/B/C source changes are not part of this update
+
+**Agent Response Time**: Immediate
+**Action Result**: Blocker fully documented with root cause, evidence, and both fix options; Phase C and the initiative's closure marked blocked pending the user's decision; no destructive or source-code actions taken
+
+---
+
 ## 2026-09-09 - Task Completion + Architectural Decision (Cross-Worker WebSocket Broadcaster Fixed via Redis Pub/Sub)
 
 **Trigger Type**: Primary — Task Completion (`kato/websocket/event_broadcaster.py` now fans events out across uvicorn workers via Redis pub/sub; committed as `ba3d194`) + Architectural Decision (DECISION-021: Redis pub/sub chosen over per-worker sticky routing and Redis Streams)

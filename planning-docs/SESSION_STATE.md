@@ -1,8 +1,8 @@
 # SESSION_STATE.md - Current Development State
-*Last Updated: 2026-09-10 (KATO v5.0.2 released — DECISION-027; release-gap pending-update resolved; post-release topology-test fragility found and fixed, `61e16cd`)*
+*Last Updated: 2026-09-10 (post-v5.0.2 bug fix: conftest session-cleanup scoping, `e951148` — see "Recently Completed" in `SPRINT_BACKLOG.md`)*
 
 ## Current Task
-**None — KATO v5.0.2 was released 2026-09-10 (see "Previous Task" below for the full record), closing the release gap the Multi-Worker Uvicorn + Concurrent Training Safety initiative left open. Next action is whichever item the user picks from `planning-docs/SPRINT_BACKLOG.md`'s Backlog section — most notably the two Phase-1.6-discovered follow-ups (auto-learn emotives/metadata gap; `deferred_vectors_for_learning` per-processor state).**
+**None — most recent work was a same-day post-v5.0.2 bug fix (`e951148`): `tests/tests/conftest.py`'s session-scoped autouse fixture was deleting every `kato:session:*` Redis key at the start of each pytest run, so any concurrent pytest run, container recreate, or live client lost its sessions mid-flight; new `tests/tests/fixtures/redis_test_cleanup.py` now deletes only test-prefixed sessions. Verified: 53 passed (session/error-handling/redis-session suites + new self-test) + 7 passed (`test_multi_user_scenarios`). Next action is whichever item the user picks from `planning-docs/SPRINT_BACKLOG.md`'s Backlog section — most notably the two Phase-1.6-discovered follow-ups (auto-learn emotives/metadata gap; `deferred_vectors_for_learning` per-processor state).**
 
 ## Previous Task
 **KATO v5.0.2 Release — COMPLETE (2026-09-10)**

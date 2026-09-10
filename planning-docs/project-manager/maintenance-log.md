@@ -3100,3 +3100,34 @@ networks:
 
 *Agent execution time: < 5 seconds*
 *Response type: Silent operation (documentation update following milestone/task completion)*
+
+---
+
+## 2026-09-10 - Task Completion: conftest Session-Cleanup Scoping Fix (Live/Concurrent Sessions No Longer Deleted by Test Runs)
+
+**Trigger**: Task completion — bug found and fixed same day, post-v5.0.2. The user ran the full suite while a deployment container recreate and a topology-suite re-run were also in progress on the same stack; that run showed 4 failures (1 connection-refused during the recreate, 3 "sessions vanished mid-test"). Root-caused to `tests/tests/conftest.py`'s session-scoped autouse fixture deleting every `kato:session:*` Redis key at the start of each pytest invocation — any concurrent pytest run, container recreate, or live client (e.g., a training notebook) sharing that Redis loses its sessions. A clean rerun on a quiet stack passed 482/4/1xfail/0, confirming interference rather than a regression.
+
+**Event Type**: Task Completion (bug fix, committed and pushed)
+
+**Actions Taken**:
+1. `planning-docs/SPRINT_BACKLOG.md` — added a new "Recently Completed" entry ("Bug Fix: conftest Session-Scoped FLUSHALL-Adjacent Cleanup Deleted Live/Concurrent Sessions") at the top of that section, ahead of the Multi-Worker Uvicorn initiative entry; header timestamp refreshed.
+2. `planning-docs/SESSION_STATE.md` — header timestamp refreshed; "Current Task" rewritten to summarize this fix and point to the Backlog for what's next.
+3. `planning-docs/project-manager/patterns.md` — added two entries: a Testing Strategy Patterns entry ("Session-Scoped Test Cleanup That Flushes Shared State Interferes With Any Concurrent User of That State") documenting the root cause and the "delete only test-prefixed sessions" resolution, plus a new Operational Gotchas entry for ClickHouse's HTTP interface treating GET as read-only (verified fact, not previously recorded).
+
+**Key Details**:
+- Root cause: session-scoped autouse fixture in `tests/tests/conftest.py` deleted every `kato:session:*` key unconditionally on each pytest invocation.
+- Fix: new `tests/tests/fixtures/redis_test_cleanup.py` — `clear_test_session_state()` deletes only sessions whose `node_id` starts with a test prefix (`test`, `topology_`, `perf_`, `load_test`; overridable via `KATO_TEST_NODE_PREFIXES`), plus each session's node pointer, active-session-index entry, and `stm:events` stream; `stm:global` and other nodes' state untouched. `node` deliberately excluded as a prefix (production nodes are `node0`..`node3`). `conftest.py` rewired to the new helper; `KATO_TEST_REDIS_FLUSHALL=1` still opts into a full flush. New self-test `tests/tests/unit/test_redis_test_cleanup.py`; `test_multi_user_scenarios` renamed its nodes `node_{i}` → `test_node_{i}` to qualify for cleanup.
+- Committed and pushed as `e951148`. `CHANGELOG.md` `[Unreleased]` "Fixed" entry added.
+- Verification: self-test + session/error-handling/redis-session suites 53 passed (only non-pass was the documented same-session `xfail`, expected when running pytest directly without `run_tests.sh`'s `KATO_WORKERS` export); `test_multi_user_scenarios` file 7 passed.
+- No new DECISION entry filed — this is a test-infrastructure bug fix, not an architectural decision; judged not to warrant one.
+- Operational rule recorded: never overlap two pytest runs, or a pytest run and a container recreate, on one stack — a run's cleanup and the shared active-session index make them interfere regardless of this fix.
+- Also recorded (verified fact, not previously logged): ClickHouse's HTTP interface treats GET requests as read-only (only POST executes mutating statements) — logged as an Operational Gotcha in `patterns.md`.
+
+**Classification**: Task Completion (bug fix)
+
+**Next Steps**: None mandated. Next action is user-driven: pick an item from `SPRINT_BACKLOG.md`'s Backlog section. project-manager will be triggered again on whatever the user picks up next.
+
+---
+
+*Agent execution time: < 5 seconds*
+*Response type: Silent operation (documentation update following task completion)*

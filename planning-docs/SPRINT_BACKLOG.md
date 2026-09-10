@@ -1,5 +1,5 @@
 # SPRINT_BACKLOG.md - Upcoming Work
-*Last Updated: 2026-09-10 (KATO v5.0.2 released, DECISION-027 — closes the release gap the Multi-Worker Uvicorn + Concurrent Training Safety initiative left open)*
+*Last Updated: 2026-09-10 (post-v5.0.2: conftest session-cleanup scoping fix, `e951148`, fixes test-run-vs-live-session interference)*
 
 ## Active Projects
 
@@ -612,6 +612,20 @@ Phased plan for scaling KATO to production workloads:
 ---
 
 ## Recently Completed
+
+### Bug Fix: conftest Session-Scoped FLUSHALL-Adjacent Cleanup Deleted Live/Concurrent Sessions — COMPLETE (2026-09-10)
+**Priority**: High — test isolation / production-adjacent data safety
+**Commit**: `e951148` (pushed to `origin/main`)
+
+Root cause: `tests/tests/conftest.py`'s session-scoped autouse fixture deleted every `kato:session:*` Redis key at the start of each pytest invocation. Any concurrent run — a second overlapping pytest invocation, a deployment container recreate, or a live client such as a training notebook — lost its sessions mid-flight. Surfaced when the user ran the full suite while a deployment container recreate + topology-suite re-run were also in progress: 4 failures (1 connection-refused during the recreate, 3 "sessions vanished mid-test"); a clean rerun on a quiet stack passed 482/4/1xfail/0, confirming the failures were interference, not a regression.
+
+Fix (user chose "delete only test-created sessions" over the alternative of a full opt-in-only FLUSHALL): new `tests/tests/fixtures/redis_test_cleanup.py` — `clear_test_session_state()` deletes only sessions whose `node_id` starts with a test prefix (`test`, `topology_`, `perf_`, `load_test`; overridable via `KATO_TEST_NODE_PREFIXES`), plus each one's node pointer, active-session-index entry, and `stm:events` stream; `stm:global` and every other node's state is left untouched. `node` was deliberately excluded as a prefix — production nodes are `node0`..`node3` and would otherwise match. `conftest.py` rewired to call this instead of FLUSHALL (`KATO_TEST_REDIS_FLUSHALL=1` still opts back into a full flush for a dedicated test Redis). New self-test `tests/tests/unit/test_redis_test_cleanup.py` plants one live-looking and one test-looking session and asserts only the latter is removed. `test_multi_user_scenarios` renamed its nodes `node_{i}` → `test_node_{i}` so it qualifies for cleanup under the new prefix rule. `CHANGELOG.md` `[Unreleased]` "Fixed" entry added.
+
+**Verification**: self-test + session-management/error-handling/redis-session suites — 53 passed (the only failure was the documented same-session `xfail`, which runs un-xfailed when pytest is invoked directly without `run_tests.sh`'s `KATO_WORKERS` export — expected, not a regression); `test_multi_user_scenarios` file — 7 passed.
+
+**Operational rule (logged in `project-manager/patterns.md`)**: never overlap two pytest runs, or a pytest run and a container recreate, on the same stack — a run's cleanup and the shared active-session index make concurrent runs interfere with each other, independent of this fix.
+
+---
 
 ### Initiative: Multi-Worker Uvicorn + Concurrent Training Safety — COMPLETE (2026-09-10)
 **Priority**: High - Performance / Correctness

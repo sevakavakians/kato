@@ -5,6 +5,22 @@
 
 ## Testing Strategy Patterns
 
+### 2026-09-10 - Session-Scoped Test Cleanup That Flushes Shared State Interferes With Any Concurrent User of That State
+
+**Pattern**: `tests/tests/conftest.py`'s session-scoped autouse fixture deleted every `kato:session:*` Redis key at the start of each pytest invocation. In isolation this is harmless test hygiene. But Redis is shared infrastructure on the dev stack — a second overlapping pytest invocation, a deployment container being recreated mid-run, or a live client (a training notebook) all read/write the same `kato:session:*` keyspace. Running the full suite while a deployment container recreate and a topology-suite re-run were also in progress produced 4 failures: 1 connection-refused (from the container recreate itself) and 3 "sessions vanished mid-test" (the conftest fixture's blanket delete racing the other processes' live sessions). A rerun on a quiet stack passed cleanly (482/4/1xfail/0), confirming the failures were cross-process interference, not a regression.
+
+**Discovery Trigger**: The user ran the full suite manually while another process (a deployment container recreate + topology-suite re-run) was concurrently active on the same Redis-backed stack; the resulting failures didn't reproduce on a subsequent quiet run.
+
+**Assumption → Reality**:
+- Assumed: a broad "clean slate" delete of all session-shaped keys at test-session start is safe because pytest owns the keyspace it's about to populate.
+- Reality: the keyspace is shared with anything else pointed at the same Redis — other concurrent test runs, container lifecycle events, and live non-test clients. A blanket delete is only safe when the test run has exclusive use of that Redis instance, which is not guaranteed on a shared dev stack.
+
+**Resolution Pattern**: Scope cleanup to what the test run itself created, not to the whole shared keyspace. New `tests/tests/fixtures/redis_test_cleanup.py`'s `clear_test_session_state()` deletes only sessions whose `node_id` starts with a recognized test prefix (`test`, `topology_`, `perf_`, `load_test`; overridable via `KATO_TEST_NODE_PREFIXES`), plus that session's node pointer, active-session-index entry, and `stm:events` stream — leaving `stm:global` and every other node's state untouched. `node` was deliberately excluded as a prefix since production nodes are `node0`..`node3` and would otherwise be swept up. A full-flush escape hatch (`KATO_TEST_REDIS_FLUSHALL=1`) remains for anyone running against a dedicated, non-shared test Redis. `test_multi_user_scenarios` was renamed `node_{i}` → `test_node_{i}` so its own nodes qualify for cleanup under the new rule. Committed `e951148`. Verified: new self-test plants one live-looking and one test-looking session and asserts only the latter is removed; 53 passed across session/error-handling/redis-session suites plus the self-test; 7 passed in the renamed multi-user file.
+
+**Recurrence Risk**: Medium — this is the second time this project has hit "test cleanup is too broad for shared infrastructure" (see `test_suite_flushes_shared_redis` in the auto-memory index / the 2026-09-08 conftest FLUSHALL fix below, which scoped an earlier unconditional `FLUSHALL` down to ephemeral key patterns). The underlying operational rule is unchanged and still not enforced automatically: **never overlap two pytest runs, or a pytest run and a container recreate, on the same stack** — even prefix-scoped cleanup and the shared active-session index can still interfere between two concurrent test runs that both use test-shaped node ids.
+
+---
+
 ### 2026-09-10 - Shared-Redis Global Counters Make Absolute-Delta Assertions Flaky; Assert on Your Own Keys or Truth-at-the-Same-Instant
 
 **Pattern**: `test_session_count_converges_on_every_worker` asserted "global active-session count returns to baseline ± N" after creating and deleting N sessions of its own. This held in isolation but failed intermittently (4 failures, then 1 on rerun) immediately after the v5.0.2 deployment container restart, because the active-session index (Redis `SET kato:session:_active_index`) is a single shared counter/index across *every* KATO process on the stack — not just the test's own sessions. The deployment container's own expiry sweep removed other, unrelated short-TTL perf-run sessions during the exact window the test was polling, so the "before/after delta" the test computed included churn the test had no way to control or know about.
@@ -451,6 +467,18 @@ absolute latency differences across machines.
 **Lesson**: When fixing persistence failures in async FastAPI services, audit all sync wrapper methods for bare `run_until_complete()` calls. FastAPI's async context means an event loop is always running — direct `run_until_complete()` will always raise `RuntimeError` from async request handlers.
 
 **Recurrence Risk**: Medium — this pattern can recur any time a new sync convenience wrapper is added to an async-native class without using the safe `_run_async_in_sync()` helper.
+
+---
+
+## Operational Gotchas
+
+### 2026-09-10 - ClickHouse's HTTP Interface Treats GET as Read-Only by Design
+
+**Fact (verified)**: ClickHouse's HTTP interface (port 8123, used by `kato/storage/clickhouse_writer.py` and the ops/debugging scripts in this repo) only executes mutating statements (`INSERT`, `ALTER`, `DROP`, `TRUNCATE`, etc.) when the request is sent as an HTTP `POST`. A mutating query sent as a `GET` is rejected/no-op'd by ClickHouse itself — this is a deliberate ClickHouse server safety property, not a KATO bug. Ad-hoc debugging via `curl` (or any quick HTTP client) against ClickHouse must use `-X POST` (or an equivalent) for anything beyond a `SELECT`, or the request will silently fail to do what it looks like it's doing.
+
+**Discovery Trigger**: Encountered while doing ad-hoc ClickHouse debugging/verification work in this project.
+
+**Recurrence Risk**: Low, but worth keeping documented — anyone reaching for a quick `curl http://localhost:8123/?query=...` to run a mutating statement by hand (rather than through `clickhouse_writer.py`, which already does this correctly) will hit this if they default to GET.
 
 ---
 

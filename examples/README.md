@@ -20,28 +20,53 @@ Verify services are available:
 **Purpose**: Complete Python client library for KATO API
 
 **Features**:
-- Session management (create, configure, extend, delete)
+- Synchronous, built on `requests` (no async/await)
+- Transparent session management: one client == one session, created for you
+- Session recovery: auto-recreates and replays STM if the session expires
 - Observation processing (text, vectors, emotives, metadata)
 - Pattern learning and prediction retrieval
-- Error handling and retry logic
-- Async/await support with httpx
+- Node-scoped pattern and symbol introspection
+- Monitoring, metrics and health endpoints
+- Retry with exponential backoff on 502/503/504
+
+Not covered: the WebSocket event stream (`ws://<host>/ws/events`). `requests`
+cannot speak WebSocket - use `websockets` or `websocket-client` for that.
 
 **Usage**:
 ```python
-from kato_client import KatoClient
+# The file name is hyphenated, so load it by path rather than importing it.
+import importlib.util
 
-# Initialize client
-client = KatoClient(base_url="http://localhost:8000", processor_id="demo")
+spec = importlib.util.spec_from_file_location("kato_client", "examples/python-client.py")
+kato_client = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(kato_client)
 
-# Create session
-session = await client.create_session()
-
-# Observe sequences
-await client.observe(session_id, [["hello", "world"]])
-
-# Get predictions
-predictions = await client.get_predictions(session_id)
+# node_id is required; the session is created automatically
+with kato_client.KATOClient(base_url="http://localhost:8000", node_id="demo") as client:
+    client.observe(strings=["hello", "world"])
+    client.learn()
+    predictions = client.get_predictions()
+# leaving the `with` block deletes the session
 ```
+
+**Method groups**:
+
+| Group | Methods |
+|---|---|
+| Session | `get_session_info`, `get_session_config`, `update_session_config`, `extend_session`, `check_session_exists`, `get_active_session_count`, `close` |
+| Observation & learning | `observe`, `observe_sequence`, `get_stm`, `learn`, `finalize_training`, `get_predictions`, `clear_stm`, `clear_all` |
+| Session data | `get_percept_data`, `get_cognition_data` |
+| Patterns | `get_pattern`, `get_pattern_count` |
+| Symbols | `get_symbol_affinities`, `get_symbol_stats`, `get_symbol_affinity` |
+| Monitoring | `get_concurrency_stats`, `get_cache_stats`, `invalidate_cache`, `get_distributed_stm_stats`, `get_metrics`, `get_metric_history`, `get_stats`, `get_connection_pools_status`, `get_prometheus_metrics` |
+| Health | `health_check`, `get_status`, `get_root_info` |
+
+`clear_all()` is destructive and node-scoped: it wipes learned patterns shared
+by every session on the same `node_id`, not just this client's STM.
+
+`get_node_percept_data()` / `get_node_cognition_data()` wrap the deprecated
+node-scoped routes, which the server answers with an empty payload. Use
+`get_percept_data()` / `get_cognition_data()` instead.
 
 **Run Example**:
 ```bash

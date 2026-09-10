@@ -45,10 +45,9 @@ Author: KATO Team
 Version: 3.6.0 - Added get_pattern_count() for node-scoped learned-pattern counts
 """
 
-import json
 import time
 from typing import Any, Dict, List, Optional, Union
-from urllib.parse import urljoin
+from urllib.parse import quote, urljoin
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -112,23 +111,21 @@ class KATOClient:
         ✅ CORRECT:
             node0 = KATOClient(node_id="node0")
             node1 = KATOClient(node_id="node1")
-            node0.get_gene("recall_threshold")  # Always uses node0
-            node1.get_gene("recall_threshold")  # Always uses node1
+            node0.get_pattern_count()  # Always uses node0
+            node1.get_pattern_count()  # Always uses node1
 
         ❌ REMOVED (no longer supported):
-            client.get_gene("recall_threshold", node_id="other_node")
+            client.get_pattern_count(node_id="other_node")
 
     Configuration Updates (v3.3.0+):
         **IMPORTANT**: Use update_session_config() for runtime configuration changes.
 
-        ✅ CORRECT:
             client.update_session_config({'recall_threshold': 0.1})
 
-        ❌ DEPRECATED:
-            client.update_genes({'recall_threshold': 0.1})  # Won't affect your session!
-
-        The update_genes() method only updates processor defaults and does NOT
-        affect active sessions. It's deprecated in KATO v2.1.0+.
+    Not Covered By This Client:
+        The WebSocket event stream (ws://<host>/ws/events) is not wrapped here.
+        This client is built on `requests`, which cannot speak WebSocket; use
+        `websockets` or `websocket-client` directly if you need event streaming.
 
     Resilience:
         The client is designed for long-running tasks and handles:
@@ -261,6 +258,10 @@ class KATOClient:
         # Store config for session recreation
         self._session_config = config
 
+        # Guards against re-entering session recovery from the replay
+        # observes inside _recreate_session_with_state_recovery()
+        self._recovering = False
+
         # Auto-create session (bypass retry logic for initial creation)
         self._session_id = None
         self._create_session()
@@ -315,8 +316,12 @@ class KATOClient:
         old_session_id = self._session_id
         self._create_session()
 
-        # Restore STM if we retrieved it
+        # Restore STM if we retrieved it.
+        # self.observe() routes through _request, which can itself trigger
+        # recovery on a 404 - set the re-entrancy flag so a failing replay
+        # cannot recurse back into this method.
         if cached_stm:
+            self._recovering = True
             try:
                 # Replay observations to restore STM state
                 for event in cached_stm:
@@ -324,6 +329,8 @@ class KATOClient:
             except Exception:
                 # STM restoration failed, continue with empty STM
                 pass
+            finally:
+                self._recovering = False
 
     def _request(
         self,
@@ -356,8 +363,6 @@ class KATOClient:
         Raises:
             requests.HTTPError: On HTTP error responses after all retry attempts
         """
-        url = urljoin(self.base_url, endpoint.lstrip('/'))
-
         kwargs.setdefault('timeout', self.timeout)
         if data is not None:
             kwargs['json'] = data
@@ -366,6 +371,12 @@ class KATOClient:
 
         # Retry loop with session recreation
         for attempt in range(self.max_session_recreate_attempts):
+            # Callers build `endpoint` by interpolating self._session_id, so the
+            # id baked into it goes stale the moment a session is recreated.
+            # Capture the current id each attempt so the retry below can rewrite it.
+            session_id_at_request = self._session_id
+            url = urljoin(self.base_url, endpoint.lstrip('/'))
+
             try:
                 response = self._http_session.request(method, url, **kwargs)
                 response.raise_for_status()
@@ -373,9 +384,22 @@ class KATOClient:
 
             except requests.HTTPError as e:
                 # Check if this is a 404 error (session not found)
-                if e.response.status_code == 404 and self.auto_recreate_session:
-                    # Don't retry session creation/deletion endpoints
-                    if '/sessions' in endpoint and method in ['POST', 'DELETE']:
+                if (e.response.status_code == 404 and self.auto_recreate_session
+                        and not self._recovering):
+                    # Don't retry session lifecycle operations - recreating a
+                    # session to retry its own creation or deletion is nonsense.
+                    # Match only those two shapes: POST /sessions and
+                    # DELETE /sessions/{id}. A broader check would also swallow
+                    # every session-scoped POST (observe, learn, clear-stm, ...),
+                    # which is exactly what recovery exists for.
+                    path_parts = endpoint.split('?')[0].strip('/').split('/')
+                    is_session_create = (method == 'POST' and path_parts == ['sessions'])
+                    is_session_delete = (
+                        method == 'DELETE'
+                        and len(path_parts) == 2
+                        and path_parts[0] == 'sessions'
+                    )
+                    if is_session_create or is_session_delete:
                         raise
 
                     # Don't retry on last attempt
@@ -385,16 +409,22 @@ class KATOClient:
                     # Recreate session and retry
                     try:
                         self._recreate_session_with_state_recovery()
-                        # Update URL with new session_id if endpoint contains session reference
-                        if self._session_id and '{session_id}' not in endpoint:
-                            # Replace old session_id in URL
-                            url = urljoin(self.base_url, endpoint.lstrip('/'))
-                        # Exponential backoff before retry
-                        time.sleep(0.5 * (2 ** attempt))
-                        continue  # Retry the request
                     except Exception:
                         # Session recreation failed, re-raise original error
                         raise e
+
+                    # Point the endpoint at the new session. Session ids are
+                    # UUIDs, so this substring swap cannot collide with any
+                    # other part of the path.
+                    if (session_id_at_request and self._session_id
+                            and session_id_at_request in endpoint):
+                        endpoint = endpoint.replace(
+                            session_id_at_request, self._session_id
+                        )
+
+                    # Exponential backoff before retry
+                    time.sleep(0.5 * (2 ** attempt))
+                    continue  # Retry the request
                 else:
                     # Not a 404 or auto-recreate disabled, re-raise
                     raise
@@ -448,10 +478,10 @@ class KATOClient:
 
     def get_session_config(self) -> Dict[str, Any]:
         """
-        Get the current session configuration.
+        Get the effective configuration for this client's session.
 
-        This is the ACTUAL configuration being used for this session's operations.
-        Use this instead of get_gene() to check your session's config.
+        This is the ACTUAL configuration being used for this session's
+        operations: session overrides merged over the system defaults.
 
         Returns:
             Dictionary of session configuration parameters
@@ -460,14 +490,9 @@ class KATOClient:
             >>> config = client.get_session_config()
             >>> print(config['recall_threshold'])
             0.6  # The value you set when creating the client
-
-            >>> # Compare to get_gene (WRONG - returns processor default):
-            >>> gene = client.get_gene('recall_threshold')
-            >>> print(gene['value'])
-            0.1  # This is NOT what your session is using!
         """
-        info = self.get_session_info()
-        return info.get('session_config', {})
+        result = self._request('GET', f'/sessions/{self._session_id}/config')
+        return result.get('config', {})
 
     def extend_session(self, ttl_seconds: int = 3600) -> Dict[str, Any]:
         """
@@ -507,6 +532,23 @@ class KATOClient:
             ...     print("Session is still active")
         """
         return self._request('GET', f'/sessions/{self._session_id}/exists')
+
+    def get_active_session_count(self) -> Dict[str, Any]:
+        """
+        Get the number of active sessions on the server.
+
+        Server-wide, not scoped to this client's node_id. The server caches
+        this value briefly, so it may lag session creation/deletion by a
+        few seconds.
+
+        Returns:
+            Result with active_session_count
+
+        Example:
+            >>> client.get_active_session_count()['active_session_count']
+            3
+        """
+        return self._request('GET', '/sessions/count')
 
     def close(self) -> None:
         """
@@ -607,6 +649,25 @@ class KATOClient:
             'cleared'
         """
         return self._request('POST', f'/sessions/{self._session_id}/clear-stm')
+
+    def clear_all(self) -> Dict[str, Any]:
+        """
+        Clear ALL memory: this session's STM *and* the node's learned patterns.
+
+        .. warning::
+            This is destructive and node-scoped, not session-scoped. Long-term
+            memory is shared by every session using the same node_id, so this
+            wipes learned patterns for all of them - not just this client.
+            Use clear_stm() if you only want to reset the current sequence.
+
+        Returns:
+            Status response with 'scope': 'all'
+
+        Example:
+            >>> client.clear_all()
+            {'status': 'cleared', 'session_id': '...', 'scope': 'all'}
+        """
+        return self._request('POST', f'/sessions/{self._session_id}/clear-all')
 
     def finalize_training(self) -> Dict[str, Any]:
         """
@@ -775,7 +836,7 @@ class KATOClient:
 
     def get_percept_data(self) -> Dict[str, Any]:
         """
-        Get current percept data from this client's node.
+        Get current percept data for this client's session.
 
         Returns:
             Percept data
@@ -784,12 +845,11 @@ class KATOClient:
             >>> result = client.get_percept_data()
             >>> print(result['percept_data'])
         """
-        params = {'node_id': self.node_id}
-        return self._request('GET', '/percept-data', params=params)
+        return self._request('GET', f'/sessions/{self._session_id}/percept-data')
 
     def get_cognition_data(self) -> Dict[str, Any]:
         """
-        Get current cognition data from this client's node.
+        Get current cognition data for this client's session.
 
         Returns:
             Cognition data
@@ -798,12 +858,113 @@ class KATOClient:
             >>> result = client.get_cognition_data()
             >>> print(result['cognition_data'])
         """
+        return self._request('GET', f'/sessions/{self._session_id}/cognition-data')
+
+    def get_node_percept_data(self) -> Dict[str, Any]:
+        """
+        Get percept data from the node-scoped endpoint.
+
+        .. deprecated::
+            The server marks GET /percept-data deprecated under the v3.0+
+            stateless architecture and always returns an EMPTY payload plus a
+            deprecation warning. Use get_percept_data() for real data. This
+            method exists only to exercise the legacy route.
+
+        Returns:
+            Empty percept data and a deprecation warning
+        """
+        params = {'node_id': self.node_id}
+        return self._request('GET', '/percept-data', params=params)
+
+    def get_node_cognition_data(self) -> Dict[str, Any]:
+        """
+        Get cognition data from the node-scoped endpoint.
+
+        .. deprecated::
+            The server marks GET /cognition-data deprecated under the v3.0+
+            stateless architecture and always returns an EMPTY stub plus a
+            deprecation warning. Use get_cognition_data() for real data. This
+            method exists only to exercise the legacy route.
+
+        Returns:
+            Empty cognition data and a deprecation warning
+        """
         params = {'node_id': self.node_id}
         return self._request('GET', '/cognition-data', params=params)
 
     # ========================================================================
+    # Symbols
+    # ========================================================================
+
+    def get_symbol_affinities(self) -> Dict[str, Any]:
+        """
+        Get cumulative emotive affinity for every symbol in this node's KB.
+
+        Affinity is a running sum of averaged emotive values, accumulated each
+        time a pattern containing the symbol is learned with emotives.
+
+        Returns:
+            Result with affinities (symbol -> affinity) and node_id
+
+        Example:
+            >>> client.get_symbol_affinities()['affinities']
+            {'A': {'joy': 0.8}, 'B': {'joy': 0.4}}
+        """
+        params = {'node_id': self.node_id}
+        return self._request('GET', '/symbols/affinity', params=params)
+
+    def get_symbol_stats(self) -> Dict[str, Any]:
+        """
+        Get frequency and pattern member frequency (PMF) for every symbol
+        in this node's knowledge base.
+
+        Returns:
+            Result with symbols (symbol -> stats) and node_id
+
+        Example:
+            >>> client.get_symbol_stats()['symbols']['A']
+            {'frequency': 3, 'pattern_member_frequency': 2}
+        """
+        params = {'node_id': self.node_id}
+        return self._request('GET', '/symbols/stats', params=params)
+
+    def get_symbol_affinity(self, symbol: str) -> Dict[str, Any]:
+        """
+        Get cumulative emotive affinity for a single symbol.
+
+        Args:
+            symbol: Symbol name. Safe to pass symbols containing '|'
+                (e.g. 'VCTR|abc123') - the value is URL-encoded for you.
+
+        Returns:
+            Result with symbol, affinity and node_id
+
+        Example:
+            >>> client.get_symbol_affinity('A')['affinity']
+            {'joy': 0.8}
+        """
+        params = {'node_id': self.node_id}
+        return self._request(
+            'GET', f'/symbols/{quote(symbol, safe="")}/affinity', params=params
+        )
+
+    # ========================================================================
     # Monitoring and Metrics
     # ========================================================================
+
+    def get_concurrency_stats(self) -> Dict[str, Any]:
+        """
+        Get request concurrency metrics for the service.
+
+        Server-wide, not scoped to this client's node or session.
+
+        Returns:
+            Concurrency metrics
+
+        Example:
+            >>> stats = client.get_concurrency_stats()
+        """
+        return self._request('GET', '/concurrency')
 
     def get_cache_stats(self) -> Dict[str, Any]:
         """
@@ -906,6 +1067,27 @@ class KATOClient:
             >>> print(status['health'])
         """
         return self._request('GET', '/connection-pools')
+
+    def get_prometheus_metrics(self) -> str:
+        """
+        Get metrics in Prometheus text exposition format.
+
+        Unlike every other method here this returns a raw string, not a dict,
+        because the endpoint serves text/plain rather than JSON. The route is
+        registered with include_in_schema=False, so it does not appear in
+        /docs or openapi.json.
+
+        Returns:
+            Prometheus exposition text
+
+        Example:
+            >>> print(client.get_prometheus_metrics()[:80])
+            # HELP kato_requests_total ...
+        """
+        url = urljoin(self.base_url, 'metrics-prom')
+        response = self._http_session.get(url, timeout=self.timeout)
+        response.raise_for_status()
+        return response.text
 
     # ========================================================================
     # Health and Status

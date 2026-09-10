@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.0.1] - 2026-09-10
+
+One fewer ClickHouse round trip per re-learn, and a working reference Python client.
+
 ### Changed
 - **Metadata sidecar re-learn path reads its ClickHouse row once, not twice.** `learnPattern` fetched the pattern's `patterns_metadata` row, discarded its metric columns, and `upsert_pattern_metadata` then re-issued the identical `SELECT` to recover them (plus an unused Redis frequency lookup). New `MetadataRouter.get_metadata_for_merge()` returns the full row and `upsert_pattern_metadata(prev=...)` reuses it. Behaviour is unchanged; the new-pattern path deliberately keeps its own read, because Redis and ClickHouse can disagree after a Redis loss + rehydrate and that read is what preserves rehydrated patterns' emotives and metrics.
 

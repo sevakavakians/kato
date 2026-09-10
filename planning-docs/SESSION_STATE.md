@@ -1,10 +1,32 @@
 # SESSION_STATE.md - Current Development State
-*Last Updated: 2026-09-10 (Multi-Worker Uvicorn + Concurrent Training Safety initiative COMPLETE — Phase 1.6 lock-free refactor committed `b155cb5`; DECISION-026 recorded; initiative moved to Recently Completed in `SPRINT_BACKLOG.md`)*
+*Last Updated: 2026-09-10 (KATO v5.0.2 released — DECISION-027; release-gap pending-update resolved; post-release topology-test fragility found and fixed, `61e16cd`)*
 
 ## Current Task
-**None — the Multi-Worker Uvicorn + Concurrent Training Safety initiative closed out 2026-09-10 (see "Previous Task" below for the full record). Next action is whichever item the user picks from `planning-docs/SPRINT_BACKLOG.md`'s Backlog section; most notably, `planning-docs/project-manager/pending-updates.md` flags that a release (5.0.2 patch or 5.1.0) is warranted since the released v5.0.1 image still has the observe-path deadlock that only the unreleased local build (now including Phase 1.6) has fixed — version-bump choice left to the user.**
+**None — KATO v5.0.2 was released 2026-09-10 (see "Previous Task" below for the full record), closing the release gap the Multi-Worker Uvicorn + Concurrent Training Safety initiative left open. Next action is whichever item the user picks from `planning-docs/SPRINT_BACKLOG.md`'s Backlog section — most notably the two Phase-1.6-discovered follow-ups (auto-learn emotives/metadata gap; `deferred_vectors_for_learning` per-processor state).**
 
 ## Previous Task
+**KATO v5.0.2 Release — COMPLETE (2026-09-10)**
+
+### Release Summary
+Released via `./container-manager.sh patch` (AUTO_MODE), bumping 5.0.1 → 5.0.2. Ships the Multi-Worker Uvicorn + Concurrent Training Safety initiative's fixes (DECISION-024/025/026) to a published image for the first time: the observe-path deadlock fix (stopgap `9de98c3`, then the Phase 1.6 lock-free refactor `b155cb5`), clear-all residue fixes + `escape_glob` (`7aad817`), a store-parity tool, the container `HEALTHCHECK` fix, one-writer-per-session docs + strict xfail (`bef2b47`), and the perf/integrity test. PATCH bump — no API change (`KatoProcessor.learn` becoming a coroutine is internal).
+
+**Commits**: five initiative commits (`7aad817`, `bef2b47`, `9de98c3`, `b155cb5`, `a2c7182`) pushed to `origin/main` before the release; `b9f94bb` docs(changelog) promoting `[Unreleased]` → `[5.0.2] - 2026-09-10`; `b76d955` chore: bump version to 5.0.2; then `61e16cd` test(topology): make the session-count check churn-proof (post-release hardening, see below). `main` at `61e16cd` (not yet pushed — will be pushed together with this planning-docs commit).
+
+**Release artifacts**: Tag `v5.0.2` pushed; GitHub release https://github.com/sevakavakians/kato/releases/tag/v5.0.2 (`kato-deployment-v5.0.2.tar.gz` + Helm chart `kato-0.1.1.tgz`); images `ghcr.io/sevakavakians/kato:5.0.2`/`:5.0`/`:5`/`:latest`, all digest `sha256:6c46ff688321…`.
+
+**Deployment**: gitignored `deployment/docker-compose.override.yml` re-pinned from the dev `kato:latest` build to `ghcr.io/sevakavakians/kato:5.0.2`; only the `kato` service recreated (Redis `SAVE` first; `DBSIZE` 30,346 → 30,356 during the swap from concurrent test sessions; ClickHouse 6,047 patterns). Verified in the registry image: `learn_from` present, zero `multiprocessing` locks, `escape_glob` present, `KATO_WORKERS=4` with fan-out on all 4, container healthcheck reports healthy.
+
+**Verification**: worker-topology suite 18/18 against the deployed image; full suite 482 passed / 4 skipped / 1 xfailed / 0 failed (675.08s), no `FAILED` lines; store-parity tool 0 mismatched `kb_id`s.
+
+**Post-release finding + fix (`61e16cd`)**: right after the deployment container restart, the topology suite showed 4 failures, then 1 on rerun (`test_session_count_converges_on_every_worker`). Root cause was test fragility, not a product bug: the active-session index (Redis `SET kato:session:_active_index`) is shared by every KATO process on the stack, and the deployment container's expiry sweep removed other short-TTL perf-run sessions during the test window, so "global count == baseline ± 5" only held on a quiet Redis. Fixed by asserting membership of the test's own session ids (exact regardless of churn) and, in a quiet window found by bounded retry, that every worker's `/sessions/count` equals the index cardinality read at the same instant; event-delivery timeout raised 5s → 10s. Topology suite 18/18 afterwards. Logged as a generalized testing pattern in `project-manager/patterns.md` (shared-Redis global counters make absolute-delta assertions flaky; assert on your own keys or truth-at-the-same-instant).
+
+**This resolves** the `pending-updates.md` "Release Needed" item (moved to Resolved) and the release-gap note in `README.md`'s Version line.
+
+**Archive**: `planning-docs/completed/features/2026-09-10-kato-v5.0.2-release.md`. **Decision**: DECISION-027 in `planning-docs/DECISIONS.md`.
+
+### Earlier Same-Day Progress (context preserved below)
+The subsections immediately below describe the Multi-Worker Uvicorn + Concurrent Training Safety initiative's closure earlier on 2026-09-10, before the v5.0.2 release — kept for historical continuity within this same day's work.
+
 **Multi-Worker Uvicorn + Concurrent Training Safety — COMPLETE (2026-09-10)**
 
 ### Closing Update: Phase 1.6 Shipped (DECISION-026), Initiative Closed

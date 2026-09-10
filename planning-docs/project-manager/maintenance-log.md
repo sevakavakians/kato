@@ -3069,3 +3069,34 @@ networks:
 
 *Agent execution time: < 5 seconds*
 *Response type: Silent operation (documentation update following task/milestone completion)*
+
+## 2026-09-10 - Milestone: KATO v5.0.2 Released (Closes the Release Gap Left Open by DECISION-026)
+
+**Trigger**: Milestone completion — KATO v5.0.2 released via `./container-manager.sh patch` (AUTO_MODE), shipping the Multi-Worker Uvicorn + Concurrent Training Safety initiative's fixes (deadlock stopgap + Phase 1.6 lock-free refactor, clear-all residue fixes, store-parity tool, HEALTHCHECK fix, one-writer-per-session docs + strict xfail, perf/integrity test) to a published image for the first time. Plus a same-day post-release finding: a topology test's global-counter assertion proved fragile against the deployment container's own expiry sweep, fixed via `61e16cd`.
+
+**Event Type**: Milestone Completion / Task Completion (compound)
+
+**Actions Taken**:
+1. `planning-docs/DECISIONS.md` — added `DECISION-027` ("Release KATO v5.0.2 — Patch Bump Closing the Release Gap Left by DECISION-026"): context, rationale, release contents/mechanics, bump rationale, deployment and test verification, the post-release topology-test-fragility finding and fix, 3 alternatives considered, resolves line, cross-references. Header timestamp refreshed.
+2. Created `planning-docs/completed/features/2026-09-10-kato-v5.0.2-release.md` — full archive entry mirroring the v5.0.1 archive's structure: release mechanics, bump rationale, what's bundled table, deployment verification, test verification, the post-release finding/fix section, explicitly-not-included follow-ups, decision reference.
+3. `planning-docs/README.md` — "Current System State": Version line rewritten for 5.0.2 (tag, GitHub release, images/digest, bundled contents, DECISION-027 reference, post-release note), demoting the prior 5.0.1/5.0.0 releases one tier each; Test Coverage line updated to the 482/4/1/0 (675.08s) figure verified against the deployed registry image, replacing the prior "unreleased local build" framing, plus the topology-test-fragility finding; Last Major Update rewritten to lead with the v5.0.2 release, with the initiative's closure demoted to "preceded same-day by."
+4. `planning-docs/SESSION_STATE.md` — header timestamp refreshed. "Current Task" set to none, pointing at the Backlog's two Phase-1.6-discovered follow-ups. The former "Current Task" (initiative closure) content demoted to a new "Previous Task" section with the release closing summary prepended (commits, artifacts, deployment, verification, post-release finding/fix, resolves line, archive/decision links); earlier same-day content preserved below under "Earlier Same-Day Progress."
+5. `planning-docs/project-manager/pending-updates.md` — moved the "Release Needed" Current Issue to Resolved Issues with a resolution summary (release details, verification, post-release fragility note); Current Issues section now empty.
+6. `planning-docs/project-manager/patterns.md` — added a new Testing Strategy Patterns entry ("Shared-Redis Global Counters Make Absolute-Delta Assertions Flaky; Assert on Your Own Keys or Truth-at-the-Same-Instant") documenting the topology-test fragility, its root cause, the resolution pattern (own-id membership / same-instant cross-checks over before/after deltas on shared state), and recurrence risk.
+
+**Key Details**:
+- Five initiative commits (`7aad817`, `bef2b47`, `9de98c3`, `b155cb5`, `a2c7182`) were already on `origin/main` before the release; release commits `b9f94bb` (changelog) and `b76d955` (version bump) tagged as `v5.0.2`; post-release test-hardening commit `61e16cd` follows on `main` (not yet pushed to `origin/main` — will go up with this planning-docs commit).
+- Images `ghcr.io/sevakavakians/kato:5.0.2`/`:5.0`/`:5`/`:latest`, digest `sha256:6c46ff688321…`. GitHub release: https://github.com/sevakavakians/kato/releases/tag/v5.0.2.
+- Deployment verified: `learn_from` present, zero `multiprocessing` locks, `escape_glob` present, `KATO_WORKERS=4` fan-out on all 4, healthcheck reports healthy; store parity 0 mismatched `kb_id`s.
+- Full suite against the deployed image: 482 passed / 4 skipped / 1 xfailed / 0 failed (675.08s), no `FAILED` lines.
+- Post-release finding was root-caused to test fragility (shared Redis active-session index racing the deployment container's own expiry sweep), not a product regression — fixed by asserting own-session-id membership and same-instant cross-worker count equality instead of a before/after delta on the shared global count.
+- No new human-alert items filed — the release gap that was the sole open `pending-updates.md` item is now resolved, and the post-release finding was resolved same-day without needing escalation.
+
+**Classification**: Task Completion / Milestone Completion (release)
+
+**Next Steps**: None mandated — the release is complete and the pending release-gap item is resolved. Next action is user-driven: pick an item from `SPRINT_BACKLOG.md`'s Backlog section, most notably the two Phase-1.6-discovered follow-ups (auto-learn emotives/metadata gap; `deferred_vectors_for_learning` per-processor state). project-manager will be triggered again on whatever the user picks up next.
+
+---
+
+*Agent execution time: < 5 seconds*
+*Response type: Silent operation (documentation update following milestone/task completion)*

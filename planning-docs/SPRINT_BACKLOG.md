@@ -1,5 +1,5 @@
 # SPRINT_BACKLOG.md - Upcoming Work
-*Last Updated: 2026-09-10 (Multi-Worker Uvicorn + Concurrent Training Safety initiative COMPLETE — Phase 1.6 lock-free refactor committed `b155cb5`, DECISION-026 recorded, moved to Recently Completed)*
+*Last Updated: 2026-09-10 (KATO v5.0.2 released, DECISION-027 — closes the release gap the Multi-Worker Uvicorn + Concurrent Training Safety initiative left open)*
 
 ## Active Projects
 
@@ -625,7 +625,7 @@ All planned phases done: **Changes 1-3** (multi-worker uvicorn CMD, ClickHouse s
 
 **Deferred as optional**: initiative verification item 5, the `kato-notebooks` `MAX_SAMPLES=10000` scale-run (expected 4-5×), was never run as part of this initiative — the in-repo perf/integrity test stands in and is the accepted verification per the Phase C agreement. Running the notebook at scale remains available as an optional manual follow-up, not a blocker.
 
-**Follow-ups filed, not blocking closure** (see Backlog section above): auto-learned patterns don't carry session emotives/metadata (pre-existing); `vector_processor.deferred_vectors_for_learning` is per-processor state on the legacy VI indexer path (pre-existing); a release (5.0.2 patch or 5.1.0) is warranted since the released v5.0.1 image still has the original deadlock — see `planning-docs/project-manager/pending-updates.md`.
+**Follow-ups filed, not blocking closure** (see Backlog section above): auto-learned patterns don't carry session emotives/metadata (pre-existing); `vector_processor.deferred_vectors_for_learning` is per-processor state on the legacy VI indexer path (pre-existing). The third follow-up — a release was warranted since the released v5.0.1 image still had the original deadlock — is now **resolved**: KATO v5.0.2 (patch bump) was released 2026-09-10, see DECISION-027 and `planning-docs/completed/features/2026-09-10-kato-v5.0.2-release.md`.
 
 ---
 

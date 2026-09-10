@@ -1,6 +1,72 @@
 # DECISIONS.md - Architectural & Design Decision Log
 *Append-Only Log - Started: 2025-08-29*
-*Last Updated: 2026-09-10 (DECISION-026: Phase 1.6 lock-free refactor shipped — `_bridge_lock` removed, closing the Multi-Worker Uvicorn + Concurrent Training Safety initiative)*
+*Last Updated: 2026-09-10 (DECISION-027: Release KATO v5.0.2 — patch bump shipping the deadlock fix + Phase 1.6 refactor to every published image; resolves the release-gap item from DECISION-026)*
+
+---
+
+## 2026-09-10 - DECISION-027: Release KATO v5.0.2 — Patch Bump Closing the Release Gap Left by DECISION-026
+
+**Decision**: Release the Multi-Worker Uvicorn + Concurrent Training Safety initiative's work (DECISION-024/025/026) as **v5.0.2**, a patch version bump, via `./container-manager.sh patch` (AUTO_MODE).
+**Status**: COMPLETE and RELEASED — tag `v5.0.2` pushed to origin; GitHub release published; images built, pushed, and verified. `main` at `61e16cd` (not yet pushed to `origin/main` as of this writing — it will be pushed together with this planning-docs commit).
+**Classification**: Release / Process Decision
+**Confidence**: High
+
+### Context
+DECISION-026 closed the Multi-Worker Uvicorn + Concurrent Training Safety initiative on `main` but explicitly left a release gap open (filed in `planning-docs/project-manager/pending-updates.md`): every published image up to and including v5.0.1 still has the observe-path deadlock (any two overlapping observe requests for the same `node_id` permanently hangs a uvicorn worker), fixed on `main` only via the DECISION-025 stopgap and then properly via the DECISION-026 Phase 1.6 refactor. The version-bump choice (patch 5.0.2 vs. minor 5.1.0) was deliberately left to the user rather than decided unilaterally, consistent with how DECISION-019/DECISION-022's and DECISION-023's bump questions were handled. The user chose patch.
+
+### Rationale
+Per `CLAUDE.md`'s "Container Manager Workflow Protocol," patch = bug fixes, security patches, performance improvements with no API contract change. Both the deadlock fix (DECISION-025) and the Phase 1.6 refactor that replaced it (DECISION-026) are internal, behavior-preserving changes: no request/response contract changed. The one code-shape change worth noting — `KatoProcessor.learn` became a coroutine — is internal to the processor, not an API change. This mirrors DECISION-023's reasoning (v5.0.1) more than DECISION-022's (v5.0.0's major bump was forced by an actual breaking field split).
+
+### Release Contents
+- **Commits since v5.0.1** (five initiative commits, pushed to `origin/main` before the release): `7aad817` fix(storage): make clear-all leave nothing behind; add a store parity tool (Phase A); `bef2b47` docs(sessions): one writer per session; assert the limitation with a strict xfail (Phase B); `9de98c3` fix(workers): stop deadlocking a worker on overlapping same-node requests (Phase C stopgap, DECISION-025); `b155cb5` refactor(workers): per-request working state through observe/learn/predict (Phase 1.6, DECISION-026); `a2c7182` docs(planning): close the Multi-Worker Uvicorn initiative (DECISION-024..026)
+- **Release commits**: `b9f94bb` docs(changelog): promote `[Unreleased]` → `[5.0.2] - 2026-09-10`; `b76d955` chore: bump version to 5.0.2
+- **Post-release commit**: `61e16cd` test(topology): make the session-count check churn-proof — see "Post-Release Finding" below
+- **Tag**: `v5.0.2` pushed to `origin`
+- **GitHub release**: https://github.com/sevakavakians/kato/releases/tag/v5.0.2 (assets `kato-deployment-v5.0.2.tar.gz`, `kato-0.1.1.tgz` Helm chart)
+- **Container images**: `ghcr.io/sevakavakians/kato:5.0.2`, `:5.0`, `:5`, `:latest` — pushed and verified, all resolving to the same digest `sha256:6c46ff688321…`
+
+### What's Bundled
+| Item | Summary |
+|---|---|
+| Worker deadlock fix | Stopgap (`asyncio.Lock`, DECISION-025) then Phase 1.6 lock-free request path (DECISION-026) — the production-severity bug in every prior published image |
+| Clear-all residue fixes + `escape_glob` | Phase A (`7aad817`) — glob-escaped Redis `scan_iter` calls, `patterns_metadata` partition cleared on clear-all, async-insert queue flushed before `DROP PARTITION` |
+| Store parity tool | `scripts/check_store_parity.py` — Redis/ClickHouse `kb_id` parity report and purge |
+| HEALTHCHECK fix | `Dockerfile` `HEALTHCHECK` uses `urllib` instead of the uninstalled `requests`; container now reports healthy |
+| One-writer-per-session docs + strict xfail | Phase B (`bef2b47`) — documents the same-session cross-worker write-loss limitation (DECISION-024); `test_concurrent_session_modifications` asserted as strict `xfail` |
+| Perf/integrity test | `tests/tests/performance/test_multi_worker_throughput.py`, opt-in `KATO_PERF=1` — 1.83× speedup at 4 workers with full integrity |
+
+### Bump Rationale
+**PATCH** — no API contract change; `KatoProcessor.learn` becoming a coroutine is an internal signature change, not an API-surface change. Contrast with v5.0.0's **major** bump (DECISION-022, forced by DECISION-019's breaking `anomalies`/`fuzzy_matches` split).
+
+### Deployment Verification
+- Gitignored `deployment/docker-compose.override.yml` re-pinned from the dev `kato:latest` build to `ghcr.io/sevakavakians/kato:5.0.2`; only the `kato` service recreated (Redis `SAVE` forced first)
+- Redis: `DBSIZE` 30,346 → 30,356 during the swap (delta from concurrent test sessions, not data loss); ClickHouse: 6,047 patterns, unchanged
+- Verified in the registry image: `learn_from` present (confirms Phase 1.6 shipped), zero `multiprocessing.Lock`s, `escape_glob` present, `KATO_WORKERS=4` with fan-out on all 4, container healthcheck reports healthy
+- Store parity tool: 0 mismatched `kb_id`s after the deployment run
+
+### Test Verification
+- Worker-topology suite: 18/18 against the deployed 5.0.2 image
+- Full suite: **482 passed / 4 skipped / 1 xfailed / 0 failed** (675.08s) — no `FAILED ` lines; same pass/fail shape as the pre-release local-build verification, now confirmed against the actual registry image
+- Parity tool: 0 mismatched `kb_id`s
+
+### Post-Release Finding: Topology Test Fragility, Not a Product Bug (commit `61e16cd`)
+Immediately after the deployment container restart, the topology suite showed 4 failures, then 1 on rerun (`test_session_count_converges_on_every_worker`: "expected count to return to 6 after deleting 5, got 1"). **Root cause**: the active-session index (Redis `SET kato:session:_active_index`) is shared by every KATO process on the stack, and the deployment container's own expiry sweep removed other short-TTL perf-run sessions during the test's window — so the test's "global count == baseline ± 5" assertion only ever held on a quiet Redis. This is test fragility, not a regression in the release. **Fix**: the test now (a) asserts membership of its own session ids in the index — exact regardless of unrelated churn — and (b) in a quiet window found by bounded retry, asserts every worker's `/sessions/count` equals the index cardinality read at the same instant (truth-at-the-same-instant, not a before/after delta); event-delivery timeout raised 5s → 10s after one timeout was observed during the container's CPU-heavy startup. Topology suite 18/18 afterwards. See `patterns.md` for the generalized testing-pattern note.
+
+### Alternatives Considered
+1. **Minor bump (5.1.0)**, framing this as "multi-worker concurrency now safe and lock-free" given the deadlock's severity — considered and offered in `pending-updates.md`; the user chose patch instead, consistent with "no API change" being the deciding factor in this project's semver policy rather than severity alone.
+2. **Bundle the post-release topology-test fix into the same release commit** — rejected: the release (`b76d955`/`b9f94bb`) was already tagged and pushed by the time the fragility was found; the fix is a test-only change with no product-code impact, so it was committed separately (`61e16cd`) rather than re-tagging.
+3. **Chosen: patch bump, ship now, fix the test-fragility finding as a follow-up commit** — matches actual scope of change and keeps the release/verification split honest.
+
+### Resolves
+- `planning-docs/project-manager/pending-updates.md`'s "Release Needed: Main Has the Deadlock Fix + Phase 1.6 Refactor, But No Released Image Does" entry — moved to Resolved.
+
+**Archive**: `planning-docs/completed/features/2026-09-10-kato-v5.0.2-release.md`
+
+### Related
+- DECISION-026 (same day) — closed the initiative on `main` and filed the release-gap follow-up this decision resolves.
+- DECISION-025, DECISION-024 (same day) — the deadlock stopgap and the concurrent-session-write limitation this release ships fixes/docs for.
+- DECISION-023 (2026-09-10, earlier release) — the v5.0.1 patch-bump precedent this release's rationale mirrors.
+- `planning-docs/project-manager/patterns.md` — new testing-pattern entry on shared-Redis global-counter test fragility.
 
 ---
 

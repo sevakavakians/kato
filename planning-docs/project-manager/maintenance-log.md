@@ -3,6 +3,63 @@
 
 ---
 
+## 2026-09-11 - Task Completion: Event-Aware Alignment Refinement Fix (DECISION-029) — COMPLETE
+
+**Trigger**: Task Completion — `refine_alignment_by_events()` implemented, tested, verified, and committed on `main` as `34910a70` "fix(predictions): attribute repeated symbols to the event their neighbours matched", closing out the work planned and recorded IN PROGRESS earlier today (see the entry immediately below).
+
+**Actions Taken**:
+1. `planning-docs/DECISIONS.md` — DECISION-029 status changed IN PROGRESS → **COMPLETE**; Implementation section rewritten past-tense with the actual delivered file list; Verification Plan section replaced with actual Verification results (23 + 61 + 148 passed; full suite 552/4/1/0, 700.9s, +24 vs. 528 baseline); added the deployment/release note (dev build has the fix, v5.0.2 doesn't, v5.0.3 pending); added an Archive pointer. Header timestamp refreshed.
+2. `planning-docs/SPRINT_BACKLOG.md` — the "Bug: Repeated-symbol event misattribution in prediction segmentation" entry's Status changed IN PROGRESS → **FIXED, committed `34910a70`**; Fix-approach paragraph reworded past-tense; added a Verification line (test counts, atlas republish, deployment/release note). Header timestamp and Active Projects summary line refreshed to point at the completed fix instead of the in-progress one.
+3. `planning-docs/SESSION_STATE.md` — header timestamp refreshed. "Current Task" replaced with **None** (next action is user-driven, pick from `SPRINT_BACKLOG.md` Backlog), explicitly calling out the two carried-forward human decisions (v5.0.3 release; `_predict_single_symbol_fast` first-token semantics). The former IN PROGRESS "Current Task" content was rewritten past-tense and demoted to "Previous Task" (commit, delivered summary, verification, archive link); the old "Previous Task" (multi-symbol test suite + `e0ee17d`) was demoted one level further to "Earlier Task (context preserved)".
+4. New archive entry: `planning-docs/completed/features/2026-09-11-event-aware-alignment-refinement.md` — full write-up: background (the residual flat-alignment ambiguity DECISION-028 left open), the two real bugs found (`#26`, `#32`) plus the four coincidentally-right outcomes, the fix (event-mate + tightness rules, Φ termination argument), tests, docs, atlas republish, by-design behaviours list, verification, deployment/release status, related decisions.
+5. `planning-docs/project-manager/pending-updates.md` — the "Release Needed: v5.0.2 Lacks the Prediction Segmentation Fix" entry updated to name both now-unreleased fixes (`e0ee17d` and `34910a70`) and both archive files; the single-symbol fast-path decision entry left as-is (still open, unaffected by this fix).
+
+**Key Details**:
+- Commit `34910a70` on `main`: `kato/representations/prediction.py` (+151/-lines: `refine_alignment_by_events()` + call sites), new `tests/tests/unit/test_alignment_refinement.py` (132 lines, 23 tests), `tests/tests/unit/test_multi_symbol_event_predictions.py` (+49/-lines), `docs/reference/prediction-object.md` (+3/-1), `CHANGELOG.md` (+1) — 5 files changed, 317 insertions(+), 19 deletions(-).
+- Verification: `test_alignment_refinement.py` 23 passed; refinement+multi-symbol+hello-world suites 61 passed; prediction-neighbourhood suite 148 passed; full suite 552 passed / 4 skipped / 1 xfailed / 0 failed (700.9s) — up from the 528 baseline (+24 = 23 new pure tests + 1 new mirror case).
+- Atlas artifact regenerated and republished to the same URL (no new artifact created): https://claude.ai/code/artifact/8f775ef3-10ee-4db2-8326-fe94ed1413eb.
+- Two items remain open and unresolved by this task, both explicitly carried into `SESSION_STATE.md`'s Current Task and left Open in `pending-updates.md`: whether to cut a v5.0.3 patch release (now bundling two fixes, not one), and whether `_predict_single_symbol_fast`'s first-token-only matching should change.
+
+**Classification**: Task Completion (bug fix, addendum to a same-day architectural decision)
+
+**Next Steps**: None mandated. Next action is user-driven: pick an item from `SPRINT_BACKLOG.md`'s Backlog section, most notably the two pending decisions above. project-manager will be triggered again on whatever the user picks up next.
+
+---
+
+*Agent execution time: < 5 seconds*
+*Response type: Silent operation (documentation update following task completion)*
+
+---
+
+## 2026-09-11 - Planning Stage: Event-Aware Alignment Refinement Fix (DECISION-029, follow-up to DECISION-028) — IN PROGRESS
+
+**Trigger**: Planning-stage event — a plan was approved and implementation is starting in the working tree (`kato/representations/prediction.py`, new `tests/tests/unit/test_alignment_refinement.py`, updates to `tests/tests/unit/test_multi_symbol_event_predictions.py`, `docs/reference/prediction-object.md`, `CHANGELOG.md`) right now, in parallel with this planning-docs update. Full plan: `/Users/sevakavakians/.claude/plans/in-the-y-dropped-luminous-dragon.md`.
+
+**Event Type**: Planning Stage (plan approved, implementation underway) — per user's global instruction to call project-manager after every planning stage, ahead of the eventual phase-completion call.
+
+**Context**: while implementing DECISION-028 (position-based segmentation, `e0ee17d`), the user found a real misattribution bug in the "'y' dropped from event 1" test — the matcher aligns the flattened symbol sequence and can't see event boundaries, so difflib's longest-run tie-break can attribute a missing/extra symbol to the wrong event. An independent audit of all 34 atlas test outcomes found 2 outcomes actually wrong (`#26`, `#32`), 4 right only by coincidence (`#25`, `#28`, `#29`, `#31`), and a list of by-design behaviours to stop re-reporting as bugs. Approved fix: `refine_alignment_by_events()` — an event-mate rule plus a tightness rule, with a lexicographic potential function guaranteeing termination (greedy, not a DP — rejected because Φ is pairwise, not an additive LCS objective).
+
+**Actions Taken** (planning-docs only — source/tests/docs are being edited directly by the implementation work, not by this agent):
+1. `planning-docs/SESSION_STATE.md` — "Current Task" set to IN PROGRESS for this fix (plan reference, background, approved approach, explicit note that source/tests/docs are being edited outside `planning-docs/` and are not yet reflected as changed here); former "Current Task" (the `e0ee17d` work) demoted to "Previous Task" with a note that its "residual ambiguity, not a bug" characterization is superseded by this audit; former "Previous Task" (conftest cleanup) folded into "Earlier Task"; header timestamp refreshed.
+2. `planning-docs/SPRINT_BACKLOG.md` — added a new Backlog entry ("Bug: Repeated-symbol event misattribution in prediction segmentation (lone-symbol tightness)"), Priority P1, Status IN PROGRESS, with the two concrete wrong outcomes (`#26`, `#32`), the fix approach, files touched, a reference to DECISION-029, and the full by-design list (split/merged events, out-of-order symbol in past+extras, missing/extras differing index bases, never-observed vs. partially-observed middle events, single-symbol fast-path restriction as a separate pending decision, difflib-vs-LCS similarity). Header timestamp refreshed.
+3. `planning-docs/DECISIONS.md` — added `DECISION-029` ("Event-Aware Alignment Refinement (Event-Mate + Tightness Rules) — Addendum to DECISION-028"): full Decision/Status/Classification/Confidence/Context/Rationale/Rejected-Alternative/By-Design-list/Implementation/Verification-Plan/Impact/Resolves/Related-Decisions structure matching DECISION-028's format; Status IN PROGRESS; links back to the plan file; cross-references DECISION-028 and DECISION-019. Header timestamp refreshed. (Chose a new numbered decision over an inline addendum to DECISION-028 itself, consistent with this file's append-only convention and DECISION-028's own precedent of cross-referencing related decisions rather than editing past entries.)
+
+**Key Details**:
+- Nothing has been committed yet; this is a planning-stage (pre-implementation-completion) update, not a task-completion update.
+- Release status unchanged: v5.0.3 remains pending on the user, now covering both `e0ee17d` (DECISION-028) and this fix (DECISION-029) once complete.
+- No new human-alert items filed — the two pending-updates.md items from the DECISION-028 entry (fast-path first-token semantics; v5.0.3 release timing) remain open and unchanged by this planning-stage event.
+
+**Classification**: Planning Stage (plan documented ahead of implementation)
+
+**Next Steps**: Implementation continues per the plan (source edits, new unit tests, service-test updates, docs, atlas regeneration), then verification, then project-manager will be triggered again on phase/task completion to update `planning-docs/completed/`, mark the Backlog entry and DECISION-029 COMPLETE, and record verification results.
+
+---
+
+*Agent execution time: < 5 seconds*
+*Response type: Silent operation (planning-docs update following planning-stage trigger)*
+
+---
+
 ## 2026-09-11 - Task Completion: Multi-Symbol Event Prediction Test Suite + Position-Based Segmentation Fix (DECISION-028)
 
 **Trigger**: Task completion — user requested variations on the hello-world prediction test (multi-symbol-per-event patterns, varying sizes; full/partial/mixed-with-missing-or-extra observations, comprehensive edge cases). Building that coverage exposed two real prediction defects, fixed in the same commit `e0ee17d` "fix(predictions): segment by matched positions; event-structured fast path".

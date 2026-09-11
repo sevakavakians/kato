@@ -1,6 +1,75 @@
 # DECISIONS.md - Architectural & Design Decision Log
 *Append-Only Log - Started: 2025-08-29*
-*Last Updated: 2026-09-11 (DECISION-028: Position-based prediction segmentation replaces the symbol-identity heuristic; event-structured single-symbol fast path)*
+*Last Updated: 2026-09-11 (DECISION-029: Event-aware alignment refinement — event-mate + tightness rules, addendum to DECISION-028 — COMPLETE, committed `34910a70`)*
+
+---
+
+## 2026-09-11 - DECISION-029: Event-Aware Alignment Refinement (Event-Mate + Tightness Rules) — Addendum to DECISION-028
+
+**Decision**: Add a refinement pass, `refine_alignment_by_events()` (`kato/representations/prediction.py`), invoked at the top of `segment_by_alignment()` (shared by the main prediction path and the single-symbol fast path), that re-attributes repeated/lone symbols to the event their neighbours' matches actually support, before `present`/`missing`/`extras` are derived from the (now-refined) matched positions.
+**Status**: **COMPLETE** — committed `34910a70` "fix(predictions): attribute repeated symbols to the event their neighbours matched" (2026-09-11). Full plan (as implemented): `/Users/sevakavakians/.claude/plans/in-the-y-dropped-luminous-dragon.md`.
+**Classification**: Bug Fix / Architectural Decision (refines DECISION-028's segmentation algorithm; no API field shape change)
+**Confidence**: High
+
+### Context
+DECISION-028 (2026-09-11, commit `e0ee17d`) made segmentation position-based, deriving `past`/`present`/`future`/`missing`/`extras` from the matcher's matched pattern/state indices instead of a flat-slice symbol-identity heuristic. While implementing that fix, the user spotted a residual case it doesn't handle: the matcher still aligns the **flattened** symbol sequence and has no notion of event boundaries, so when a symbol recurs across events, difflib's longest-run tie-break can still land the match on the wrong occurrence.
+
+Concrete example: pattern `[['x','y'],['y','z'],['x'],['w','y','z']]`, observed `[['x','y'],['z'],['x'],['w','y','z']]` (event 1's `'y'` omitted). The flat state `x y z x w y z` admits two 7-match alignments; difflib keeps the longest run and leaves position 1 (event 0's `'y'`) unmatched, reporting `missing=[['y'],[],[],[]]`. Event structure says observed event 0 *is* pattern event 0, and `['z']` is pattern event 1 minus `'y'` — the correct answer is `missing=[[],['y'],[],[]]`. DECISION-028's original test encoded the flat tie-break as the contract; it isn't.
+
+**Independent audit of all 34 outcomes** in `tests/tests/unit/test_multi_symbol_event_predictions.py` (byte-for-byte reproduction against the actual matcher output) found:
+- **Wrong, fixed by this decision**: `#26` (above) and `#32` — `test_single_symbol_that_starts_the_pattern_with_repeats`: observed `[['x']]` against the REPEATS pattern recorded `present=[['x','y']]`, `missing=[['y']]`, `confidence=0.5`, but `['x']` exactly equals pattern event 2, so the correct result is `present=[['x']]`, `missing=[[]]`, `anomalies=[]`, `confidence=1.0` (a lone symbol with no event-mates; difflib anchors it at the earliest position instead of the tightest one).
+- **Right by coincidence, now made principled**: `#25` (drop-event0-y — identical flat input to `#26`), `#28` (middle two events), `#29` (first event only), `#31` (lone `'y'`×3).
+- **Right and forced** (no ambiguity existed): everything else, including `#27`, `#2`, `#20`.
+- Internal invariants held in all 34 cases regardless: `len(missing)==len(present)`, `len(extras)==len(observed)`, matches+missing = present symbols, matches+extras = observed symbols, `anomalies == flatten(missing)+flatten(extras)`, `past+present+future == pattern`.
+
+### Rationale
+The matcher's flat alignment is locally correct (right match count, right total missing/extra count) but event-*attribution* of repeated/lone symbols needs one more pass that looks at event boundaries, which the matcher itself cannot see. Two rules suffice and compose safely:
+- **Event-mate rule** (both pattern side and observed/state side, mirrored): if a pattern (or observed) event other than the one currently credited has strictly more of its symbols already matched to the same observed (or pattern) event — i.e. the symbol's neighbours already agree on a different event — move the match there instead.
+- **Tightness rule**: for a lone symbol with no event-mates on the side being moved (no neighbour evidence either way), move it to whichever unmatched same-symbol position strictly reduces the total `missing` count.
+
+A **lexicographic potential function Φ** (same-event neighbour agreement, then −missing count) strictly increases on every move — only the moved pair's terms change, and a tightness move is only permitted when it cannot lower Φ (i.e., only when there are no mates to disagree with) — so the pass is provably terminating and cannot oscillate. Worst case O(n²), with an O(n) short-circuit (skip entirely if no unmatched position shares a symbol with a matched one on either side) that skips almost every actual case.
+
+### Rejected Alternative: Event-Level Dynamic Programming
+An event-level DP (choosing event attributions to jointly optimize) was considered and rejected: **Φ is pairwise, not an additive LCS objective** — it rewards local neighbour agreement, not a global sum decomposable across independent event choices. A DP formulation would also have to allow many-to-one alignment in both directions (to tolerate the by-design split/merged-event behavior below) and reproduce the *exact* flat LCS match count the existing matcher already computes upstream (in `extract_prediction_info`/`pattern_search.py`, before this pass ever runs) — otherwise `similarity`/`evidence` (computed from the flat LCS, untouched by this pass) would diverge from `missing`/`extras` (which this pass does touch). The greedy event-mate + tightness approach is simpler, cheaper, and preserves that invariant by construction, since it only ever relabels *which* already-matched position gets credit — it never changes the match count.
+
+### By-Design Behaviours (recorded so they are not re-reported as bugs)
+The same 34-outcome audit surfaced several behaviours that look surprising but are correct given flat-sequence matching, and are explicitly **not** in scope for this or any future fix along the same lines:
+- Split events (one pattern event observed as two) or merged events (two pattern events observed as one) still count as full matches — flat matching tolerates re-segmentation across event boundaries by design.
+- An out-of-order symbol can legitimately appear in both `past` and `extras` simultaneously.
+- `missing` is indexed by present-events while `extras` is indexed by observed-events — these can differ in length; that is expected, not a bug.
+- A never-observed middle pattern event can look identical to a partially-observed one in some representations — expected.
+- `_predict_single_symbol_fast`'s first-token-only matching restriction (flagged as a "Deferred Question" under DECISION-028) remains a **separate, still-open decision for the user** — explicitly NOT part of this fix.
+- difflib's matched blocks are not LCS-optimal even though `similarity` is computed from a true LCS (pre-existing; `matches` can undercount) — unaffected by this work.
+
+### Implementation (COMPLETE — committed `34910a70`, 2026-09-11)
+- `kato/representations/prediction.py` — `refine_alignment_by_events(pattern_events, stm_events, pattern_positions, state_positions) -> (pattern_positions, state_positions)` implemented exactly per plan, called at the top of `segment_by_alignment()`; docstrings carry the rules and the termination argument.
+- New `tests/tests/unit/test_alignment_refinement.py` (23 pure-function tests) — short-circuit, idempotence, the same-length/strictly-monotone/same-symbol-sequence invariant, Φ non-decreasing, the three dropped-`'y'` variants, lone-symbol tightness (two shapes), the observed-side mirror, unchanged-repeats/ragged shapes, empty alignment.
+- `tests/tests/unit/test_multi_symbol_event_predictions.py` — `test_repeated_symbol_dropped_once` expectations now keyed by which event the `'y'` was dropped from (`0` → `[['y'],[],[],[]]`, `1` → `[[],['y'],[],[]]`); `test_single_symbol_that_starts_the_pattern_with_repeats` updated to the exact-event expectation (`present=[['x']]`, `confidence=1.0`); a new observed-side mirror case added (pattern `[['a'],['b','c']]`, observed `[['a','b'],['b','c']]` → refined `extras=[['b'],[]]`).
+- `docs/reference/prediction-object.md` — replaces the old "unmatched occurrence is the earlier one" sentence with the event-mate/tightness rules; adds a "Known limitations" section.
+- `CHANGELOG.md` — `[Unreleased]` Fixed bullet added under the DECISION-028 position-based-segmentation entry.
+- Atlas artifact regenerated and republished to the same URL (https://claude.ai/code/artifact/8f775ef3-10ee-4db2-8326-fe94ed1413eb): "'y' dropped from event 1" now marks event 1; lone `'x'` shows `present=[['x']]`.
+
+### Verification (DONE)
+1. `pytest tests/tests/unit/test_alignment_refinement.py` — 23 passed (pure function, no server).
+2. `tests/tests/unit/test_multi_symbol_event_predictions.py tests/tests/unit/test_hello_world_character_predictions.py` — 61 passed: the two `'y'`-dropped variants pass with distinct expectations; `#32` passes with the exact-event expectation; the new mirror case passes; everything else unchanged.
+3. Prediction-neighbourhood suite — 148 passed. Full suite `./run_tests.sh --no-start --no-stop` — **552 passed / 4 skipped / 1 xfailed / 0 failed** (700.9s), +24 vs. the 528 baseline (23 new pure-function tests + 1 new mirror case).
+4. Atlas regenerated and re-published; confirmed "'y' dropped from event 1" marks event 1 and "lone 'x'" shows `present=[['x']]`.
+
+**Deployment note**: the local `deployment/` stack runs the dev `kato:latest` build with this fix. Released **v5.0.2 lacks both this fix and `e0ee17d`**; a **v5.0.3** patch release remains pending on the user, as does the separate `_predict_single_symbol_fast` first-token-only matching decision — both tracked in `planning-docs/project-manager/pending-updates.md`.
+
+**Archive**: `planning-docs/completed/features/2026-09-11-event-aware-alignment-refinement.md`.
+
+### Impact
+- **Positive**: closes the last known event-attribution gap in prediction segmentation for repeated/lone symbols; converts 4 previously-coincidental outcomes into principled ones; documents a by-design list that should prevent re-litigating already-settled behaviours.
+- **Neutral**: no external API field shape change; `matches`/`similarity`/`evidence`/`snr`/`fragmentation` are untouched by design — only `missing`/`extras`/`anomalies` and, for a relocated lone symbol, `present` bounds/`confidence` can change.
+- **Risk**: Low — greedy pass is provably terminating (lexicographic potential argument), short-circuits to a no-op for the overwhelming majority of predictions (no repeated/lone symbols in contention), and is covered by new pure-function unit tests plus updated service-level tests before merge.
+
+**Resolves**: outcomes `#26` and `#32` of the 34-outcome atlas audit (real bugs); reclassifies `#25`, `#28`, `#29`, `#31` from "right by coincidence" to "right and principled."
+
+**Related Decisions**:
+- DECISION-028 (2026-09-11) — the position-based segmentation this decision extends; this addendum fixes the residual flat-alignment tie-break ambiguity DECISION-028's own "Residual Ambiguity" section flagged as "documented, not a bug" (now shown to sometimes be a bug).
+- DECISION-019 (2026-09-09) — the `anomalies`/`fuzzy_matches` split and multiset fix for `missing`/`extras`; this decision goes one step further than both DECISION-019 and DECISION-028 by fixing which *event* a repeated/lone symbol is attributed to, not just multiset counting or flat-position derivation.
+- Release: **5.0.3 remains pending** on the user's decision — this fix plus the still-unreleased DECISION-028/`e0ee17d`. See `planning-docs/project-manager/pending-updates.md`.
 
 ---
 

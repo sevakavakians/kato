@@ -1,9 +1,9 @@
 # SPRINT_BACKLOG.md - Upcoming Work
-*Last Updated: 2026-09-11 (multi-symbol event prediction test suite + position-based segmentation fix, `e0ee17d` — see "Recently Completed" below)*
+*Last Updated: 2026-09-11 (event-aware alignment refinement fix — COMPLETE, committed `34910a70`, follow-up to DECISION-028 — see Backlog entry below)*
 
 ## Active Projects
 
-*No active initiative-scale projects at this time — see "Recently Completed" below for the just-completed prediction segmentation fix. Next up is whatever the user picks from the Backlog section below, most notably the two release decisions flagged in `planning-docs/project-manager/pending-updates.md` (v5.0.3 patch release; fast-path single-symbol matching semantics).*
+*No active initiative-scale projects at this time — see the Backlog entry below ("Repeated-symbol event misattribution...") for the just-completed event-aware alignment refinement fix (`34910a70`). Next up is whatever the user picks from the Backlog section below, most notably the two decisions flagged in `planning-docs/project-manager/pending-updates.md` (v5.0.3 patch release; fast-path single-symbol matching semantics).*
 
 ---
 
@@ -432,6 +432,28 @@ Phase 4 (Symbol Statistics & Fail-Fast Architecture) is 100% complete. The Click
 **Fix (DONE, committed `e0ee17d`)**: `_predict_single_symbol_fast` now calls the same `segment_by_alignment()` used by the general path, returning event-structured fields consistently. Deliberate current behavior (not changed by this fix, filed as a separate deferred question — see `planning-docs/project-manager/pending-updates.md`): the fast path only considers patterns whose first token matches the observed symbol, so a lone mid-pattern symbol still yields no prediction.
 **Files**: `kato/workers/pattern_processor.py`, `tests/tests/unit/test_multi_symbol_event_predictions.py` (new)
 **Related**: DECISION-028 (`planning-docs/DECISIONS.md`).
+
+---
+
+### Bug: Repeated-symbol event misattribution in prediction segmentation (lone-symbol tightness)
+**Priority**: P1 — correctness bug in core prediction fields (`missing`/`extras`/`present`); found via an independent audit of all 34 outcomes in the `test_multi_symbol_event_predictions.py` atlas after DECISION-028 landed
+**Status**: **FIXED, committed `34910a70`** (2026-09-11) "fix(predictions): attribute repeated symbols to the event their neighbours matched" — see DECISION-029 and `planning-docs/completed/features/2026-09-11-event-aware-alignment-refinement.md`. Plan: `/Users/sevakavakians/.claude/plans/in-the-y-dropped-luminous-dragon.md`.
+**Symptom**: DECISION-028's position-based segmentation fixed the old symbol-identity heuristic, but the matcher still aligns the *flattened* symbol sequence and can't see event boundaries, so difflib's longest-run tie-break can still attribute a missing/extra symbol to the wrong event. Two of the 34 atlas outcomes are actually wrong:
+- **`#26`** `test_repeated_symbol_dropped_once[drop-event1-y]` — pattern `[['x','y'],['y','z'],['x'],['w','y','z']]`, observed `[['x','y'],['z'],['x'],['w','y','z']]` (event 1's `'y'` dropped). Recorded `missing=[['y'],[],[],[]]` (event 0), should be `[[],['y'],[],[]]` (event 1).
+- **`#32`** `test_single_symbol_that_starts_the_pattern_with_repeats` — observed `[['x']]` against the REPEATS pattern should exact-match pattern event `['x']` (`present=[['x']]`, `missing=[[]]`, `confidence=1.0`), not partially match `['x','y']` (`present=[['x','y']]`, `missing=[['y']]`, `confidence=0.5`).
+Four more outcomes (`#25`, `#28`, `#29`, `#31`) were right, but only by coincidence — the same underlying ambiguity happened not to produce a wrong answer for those specific inputs.
+**Fix (DONE, committed `34910a70`)**: new `refine_alignment_by_events()` in `kato/representations/prediction.py`, called at the top of `segment_by_alignment()` (shared by the main prediction path and the single-symbol fast path). Applies an **event-mate rule** (pattern side and observed/state side — re-attribute a repeated symbol to whichever event its neighbours' matches agree on) plus a **tightness rule** (a lone symbol with no event-mates moves to whichever occurrence minimizes total `missing`). A lexicographic potential function (Φ) guarantees termination; greedy rather than an event-level DP (see DECISION-029 for why). Match count, matches, and `similarity` are unchanged by design — only `missing`/`extras`/`anomalies` and, when a lone symbol relocates, `present` bounds/`confidence` can change.
+**Files**: `kato/representations/prediction.py` (new function + call site), new `tests/tests/unit/test_alignment_refinement.py` (23 pure-function unit tests), `tests/tests/unit/test_multi_symbol_event_predictions.py` (updated expectations for the two `'y'`-dropped variants and `#32`, plus a new observed-side mirror case), `docs/reference/prediction-object.md`, `CHANGELOG.md`.
+**Verification**: refinement + multi-symbol + hello-world suites 61 passed; prediction-neighbourhood suite 148 passed; full suite 552 passed / 4 skipped / 1 xfailed / 0 failed (700.9s), +24 vs. the 528 baseline. Atlas artifact regenerated and republished (same URL). Deployment stack runs the local `kato:latest` dev build with this fix; released v5.0.2 lacks it (and `e0ee17d`) — v5.0.3 remains pending on the user, as does the fast-path first-token decision (see `pending-updates.md`).
+**Related**: Follows up on DECISION-028 (`planning-docs/DECISIONS.md`); see DECISION-029 for the full addendum, including the by-design list below and the rejected event-level-DP alternative.
+
+**By-design behaviours surfaced by the same audit — do NOT re-report these as bugs**:
+- Split/merged events counting as full matches under flat matching (flat matching tolerates re-segmentation across event boundaries).
+- An out-of-order symbol can legitimately appear in both `past` and `extras` simultaneously.
+- `missing` is indexed by present-events while `extras` is indexed by observed-events — different lengths between the two is expected, not a bug.
+- A never-observed middle pattern event looks identical to a partially-observed one in some representations — expected, not a data-loss bug.
+- The single-symbol fast path's first-token-only matching restriction (`_predict_single_symbol_fast`, DECISION-028's "Deferred Question") remains a **separate pending decision** for the user — NOT part of this fix.
+- difflib's matched blocks are not LCS-optimal even though `similarity` is computed from a true LCS — pre-existing, `matches` can undercount; not introduced or fixed by this work.
 
 ---
 

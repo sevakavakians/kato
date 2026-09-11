@@ -15,10 +15,10 @@ Track issues and updates that require human intervention or review.
 
 ## Current Issues
 
-## 2026-09-11 - Release Needed: v5.0.2 Lacks the Prediction Segmentation Fix
-**Issue**: `e0ee17d` (2026-09-11) fixed a real correctness bug — prediction segmentation misattributed events (phantom `missing` symbols) when a symbol recurs across events, plus made the single-symbol fast path return event-structured fields — see DECISION-028 and `planning-docs/completed/features/2026-09-11-multi-symbol-event-prediction-tests-and-segmentation-fix.md`. The currently released **v5.0.2** image does not include this fix; the deployment stack is running an unreleased local `kato:latest` dev build with it.
-**Impact**: Anyone pulling `ghcr.io/sevakavakians/kato:5.0.2`/`:5.0`/`:5`/`:latest` gets a build that can report incorrect `missing` symbols for predictions involving patterns with repeated symbols across events — a real-but-narrow correctness bug in the current published image.
-**Suggested Action**: Release a **v5.0.3** patch (bug fix, no API contract change — field names/shapes unchanged, only internal derivation) via `./container-manager.sh patch`, following the same process as v5.0.1/v5.0.2 (DECISION-023/DECISION-027).
+## 2026-09-11 - Release Needed: v5.0.2 Lacks the Prediction Segmentation Fix (now two fixes)
+**Issue**: `e0ee17d` (2026-09-11, DECISION-028) fixed a real correctness bug — prediction segmentation misattributed events (phantom `missing` symbols) when a symbol recurs across events, plus made the single-symbol fast path return event-structured fields. `34910a70` (2026-09-11, DECISION-029) fixed a second, related bug the first fix's own audit surfaced — the flat matcher's difflib tie-break could still attribute a missing/extra symbol to the wrong event, or mismatch a lone symbol against the wrong occurrence — see `planning-docs/completed/features/2026-09-11-multi-symbol-event-prediction-tests-and-segmentation-fix.md` and `planning-docs/completed/features/2026-09-11-event-aware-alignment-refinement.md`. The currently released **v5.0.2** image includes neither fix; the deployment stack is running an unreleased local `kato:latest` dev build with both.
+**Impact**: Anyone pulling `ghcr.io/sevakavakians/kato:5.0.2`/`:5.0`/`:5`/`:latest` gets a build that can report incorrect `missing`/`extras`/`present` for predictions involving patterns with repeated symbols across events — a real-but-narrow correctness bug in the current published image.
+**Suggested Action**: Release a **v5.0.3** patch (bug fix, no API contract change — field names/shapes unchanged, only internal derivation) via `./container-manager.sh patch`, following the same process as v5.0.1/v5.0.2 (DECISION-023/DECISION-027), bundling both `e0ee17d` and `34910a70`.
 **Priority**: Medium — real bug, but narrow trigger condition (repeated symbols across events); not a deadlock/data-loss class issue like the v5.0.2 release gap.
 **Status**: Open
 

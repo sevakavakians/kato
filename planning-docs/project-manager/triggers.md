@@ -3,6 +3,48 @@
 
 ---
 
+## 2026-09-11 - Task Completion: Event-Aware Alignment Refinement Fix (DECISION-029) COMPLETE
+
+**Trigger Type**: Primary — Task Completion (implementation of the plan approved and logged as the "Planning Stage" entry immediately below now committed on `main` as `34910a70`)
+
+**Event**: `refine_alignment_by_events()` implemented in `kato/representations/prediction.py` exactly per the approved plan, with 23 new pure-function tests, updated multi-symbol-event test expectations, updated docs, and a republished atlas artifact. Full suite 552 passed / 4 skipped / 1 xfailed / 0 failed (700.9s).
+
+**Documents Updated**:
+- `planning-docs/DECISIONS.md` (DECISION-029 → COMPLETE)
+- `planning-docs/SPRINT_BACKLOG.md` (P1 bug entry → FIXED)
+- `planning-docs/SESSION_STATE.md` (Current Task → None; two pending decisions called out)
+- `planning-docs/completed/features/2026-09-11-event-aware-alignment-refinement.md` (new archive entry)
+- `planning-docs/project-manager/pending-updates.md` (release-needed entry updated to cover both unreleased fixes)
+- `planning-docs/project-manager/maintenance-log.md`
+
+**Agent Response Time**: Immediate
+**Action Result**: All planning docs updated; two items remain in `pending-updates.md` as human-alert Open entries (v5.0.3 release decision; fast-path first-token semantics decision) — both pre-existing, neither newly caused by this task.
+
+---
+
+## 2026-09-11 - Planning Stage: Event-Aware Alignment Refinement Fix (DECISION-029, follow-up to DECISION-028)
+
+**Trigger Type**: Planning Stage — plan approved, implementation starting in the working tree (per the user's global instruction: call project-manager after every planning stage, then again after phase completion)
+**Secondary**: Follow-up to DECISION-028 (2026-09-11, position-based prediction segmentation, `e0ee17d`) — an independent audit of all 34 atlas test outcomes found 2 real remaining bugs (`#26`, `#32`) and 4 right-by-coincidence outcomes (`#25`, `#28`, `#29`, `#31`)
+
+**Event**: User approved a plan (`/Users/sevakavakians/.claude/plans/in-the-y-dropped-luminous-dragon.md`) to fix event misattribution of repeated/lone symbols in prediction segmentation via a new `refine_alignment_by_events()` (event-mate rule + tightness rule, greedy with a lexicographic-potential termination argument — an event-level DP was considered and rejected because Φ is pairwise, not an additive LCS objective). Implementation is underway directly in `kato/`, `tests/`, and `docs/` in parallel with this planning-docs update; nothing committed yet.
+
+**Key Findings**:
+- The residual ambiguity DECISION-028 had flagged as "documented, not a bug" turns out to sometimes actually be a bug — worth noting for future similar calls: a flagged ambiguity should get an explicit outcome-by-outcome audit before being accepted as by-design, since "coincidentally right" and "actually wrong" can look identical from a single example.
+- The audit also produced a clean by-design list (split/merged events, out-of-order past+extras, missing/extras index-base mismatch, never-observed-vs-partially-observed middle events, single-symbol fast-path restriction, difflib-vs-true-LCS similarity) now recorded in `SPRINT_BACKLOG.md` and `DECISIONS.md` specifically so these don't get re-discovered and re-reported as bugs in a future audit.
+- Release (v5.0.3) continues to be deferred until this fix lands alongside `e0ee17d` — consistent with the pattern from DECISION-028/DECISION-027 of batching related fixes into one patch release rather than releasing piecemeal.
+
+**Documents Updated**:
+- `planning-docs/SESSION_STATE.md`
+- `planning-docs/SPRINT_BACKLOG.md`
+- `planning-docs/DECISIONS.md` (DECISION-029)
+- `planning-docs/project-manager/maintenance-log.md`
+
+**Agent Response Time**: Immediate
+**Action Result**: All planning docs updated; no human alerts required (existing pending-updates.md items unchanged); implementation continues outside this agent's scope
+
+---
+
 ## 2026-09-10 - Task Completion + Architectural Decision (Deadlock Blocker Resolved via DECISION-025)
 
 **Trigger Type**: Primary — Task Completion (3 commits: Phase A `7aad817`, Phase B `bef2b47`, Phase C deadlock stopgap `9de98c3`) + Architectural Decision (DECISION-025: ship the asyncio.Lock stopgap now, Phase 1.6 lock-free refactor next)

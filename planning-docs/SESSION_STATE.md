@@ -1,26 +1,45 @@
 # SESSION_STATE.md - Current Development State
-*Last Updated: 2026-09-11 (multi-symbol event prediction test suite + position-based segmentation fix, `e0ee17d` — see "Recently Completed" in `SPRINT_BACKLOG.md`)*
+*Last Updated: 2026-09-11 (event-aware alignment refinement fix — COMPLETE, committed `34910a70`; see "Current Task" and "Previous Task" below)*
 
 ## Current Task
-**None — most recent work (2026-09-11) was a requested test-coverage expansion that surfaced and fixed two prediction defects, committed as `e0ee17d` "fix(predictions): segment by matched positions; event-structured fast path".**
+**None.** No active task in progress. Next action is user-driven: pick an item from `planning-docs/SPRINT_BACKLOG.md`'s Backlog section.
+
+**Two pending human decisions carried forward** (see `planning-docs/project-manager/pending-updates.md` for full detail):
+1. **v5.0.3 release** — released v5.0.2 lacks both `e0ee17d` (DECISION-028, position-based segmentation) and `34910a70` (DECISION-029, event-aware alignment refinement, below). The deployment stack runs the local `kato:latest` dev build with both fixes. Decide whether/when to cut a patch release via `./container-manager.sh patch`.
+2. **`_predict_single_symbol_fast` first-token-only matching semantics** — the fast path only matches patterns whose first token equals the observed symbol, so a symbol that appears only mid-pattern yields no prediction via that path. Decide whether to extend it (general-path fallback or a symbol-position index, trading some speed) or keep current behavior (now pinned by tests).
+
+## Previous Task
+**Event-Aware Alignment Refinement (Event-Mate + Tightness Rules) — COMPLETE (2026-09-11)**
+
+**Commit**: `34910a70` "fix(predictions): attribute repeated symbols to the event their neighbours matched". **Decision**: DECISION-029 in `planning-docs/DECISIONS.md` (extends DECISION-028).
+
+**Background**: while implementing DECISION-028 (2026-09-11, position-based segmentation, commit `e0ee17d`), the user found a real misattribution bug in the "'y' dropped from event 1" test — the flat/positional matcher can't see event boundaries, so difflib's longest-run tie-break sometimes attributes a missing/extra symbol to the wrong event. An independent audit of all 34 atlas test outcomes found 2 outcomes actually wrong (`#26`: repeated-symbol dropped from event 1, attributed to event 0 instead; `#32`: lone `'x'` on the REPEATS pattern should exact-match pattern event `['x']`, not partially match `['x','y']`) and 4 right only by coincidence (`#25`, `#28`, `#29`, `#31`).
+
+**Delivered**: new `refine_alignment_by_events()` in `kato/representations/prediction.py`, invoked at the top of `segment_by_alignment()` (shared by the main prediction path and the single-symbol fast path). Applies an event-mate rule (pattern side and observed/state side) plus a tightness rule for lone symbols with no event-mates, using a lexicographic potential function to guarantee termination — greedy, not a DP (an event-level DP was rejected: Φ is pairwise, not an additive LCS objective, and a DP would have to reproduce the flat LCS count exactly or similarity/evidence would diverge from missing/extras). Match count, matches, and similarity are unchanged by design — only missing/extras/anomalies and (when a lone symbol relocates) present bounds/confidence can change. New `tests/tests/unit/test_alignment_refinement.py` (23 pure-function tests: the three dropped-`'y'` variants, lone-symbol tightness (two shapes), observed-side mirror, unchanged repeats/ragged shapes, invariants + idempotence, short-circuit, empty alignment). `tests/tests/unit/test_multi_symbol_event_predictions.py` updated: the two dropped-`'y'` variants now expect different `missing`; lone `'x'` expects `present=[['x']]` with `confidence=1.0`; new observed-side mirror case (pattern `[['a'],['b','c']]`, observed `[['a','b'],['b','c']]` → `extras=[['b'],[]]`). `docs/reference/prediction-object.md` updated (rule under `missing` + Known limitations); `CHANGELOG.md` `[Unreleased]` Fixed entry. Atlas artifact regenerated and republished (same URL https://claude.ai/code/artifact/8f775ef3-10ee-4db2-8326-fe94ed1413eb) — "'y' dropped from event 1" now marks event 1; lone `'x'` shows `present=[['x']]`.
+
+**Verification**: refinement + multi-symbol + hello-world suites 61 passed; prediction-neighbourhood suite 148 passed; full suite **552 passed / 4 skipped / 1 xfailed / 0 failed** (700.9s), +24 vs. the 528 baseline (23 pure tests + 1 mirror case).
+
+**Deployment**: the local `deployment/` stack runs the dev `kato:latest` build with this fix. Released 5.0.2 lacks it (and `e0ee17d`) — v5.0.3 remains pending on the user, as is the fast-path first-token decision (both called out under "Current Task" above).
+
+**Archive**: `planning-docs/completed/features/2026-09-11-event-aware-alignment-refinement.md`.
+
+## Earlier Task (context preserved)
+**Multi-Symbol Event Prediction Test Suite + Position-Based Segmentation Fix — COMPLETE (2026-09-11)**
 
 **Request**: variations on the hello-world prediction test — learned patterns with multiple symbols per event, varying sizes; observed states full/partial (first half, second half, middle)/mixed with missing or extra symbols; comprehensive edge-case coverage.
 
-**Delivered**: new `tests/tests/unit/test_multi_symbol_event_predictions.py` (34 tests, two patterns — RAGGED: varying event widths; REPEATS: recurring symbols — covering full/half/middle/single-event/mid-event-start-end observations, dropped/added symbols, split/merged/reordered/duplicate events, fast-path single-symbol cases, near-twin disambiguation). Exploration exposed two real bugs, fixed in the same commit: (1) the past/present/future/missing/extras segmentation used flat slice lengths plus a symbol-identity heuristic that misattributed events when a symbol recurs across events (phantom `missing` symbols) — replaced with position-based `segment_by_alignment()` built from the matched pattern/state indices `extract_prediction_info` now returns (11th tuple element; fuzzy path unaffected, keeps legacy accounting); (2) the single-symbol fast path (`_predict_single_symbol_fast`) returned flat non-event-structured fields — now uses the same segmentation function. A residual ambiguity (flattened-sequence matching ties on which occurrence of a repeated symbol is "the" unmatched one) is documented, not a bug. `docs/reference/prediction-object.md` and `CHANGELOG.md` updated.
+**Delivered**: new `tests/tests/unit/test_multi_symbol_event_predictions.py` (34 tests, two patterns — RAGGED: varying event widths; REPEATS: recurring symbols — covering full/half/middle/single-event/mid-event-start-end observations, dropped/added symbols, split/merged/reordered/duplicate events, fast-path single-symbol cases, near-twin disambiguation). Exploration exposed two real bugs, fixed in the same commit `e0ee17d` "fix(predictions): segment by matched positions; event-structured fast path": (1) the past/present/future/missing/extras segmentation used flat slice lengths plus a symbol-identity heuristic that misattributed events when a symbol recurs across events (phantom `missing` symbols) — replaced with position-based `segment_by_alignment()` built from the matched pattern/state indices `extract_prediction_info` now returns (11th tuple element; fuzzy path unaffected, keeps legacy accounting); (2) the single-symbol fast path (`_predict_single_symbol_fast`) returned flat non-event-structured fields — now uses the same segmentation function. A residual ambiguity (flattened-sequence matching ties on which occurrence of a repeated symbol is "the" unmatched one) was documented at the time as not a bug — **superseded**: the independent 34-outcome audit that kicked off the Current Task above found that ambiguity actually manifests as 2 real misattribution bugs (`#26`, `#32`), now being fixed. `docs/reference/prediction-object.md` and `CHANGELOG.md` updated.
 
 **Verification**: full suite 528 passed / 4 skipped / 1 xfailed / 0 failed (699s), +46 vs. the 482 baseline.
 
-**Two items need a human decision** (see `planning-docs/project-manager/pending-updates.md`): (1) whether `_predict_single_symbol_fast`'s first-token-only matching semantics should change (would need the general path or a symbol index, at some performance cost) — this fix only pinned the current behavior with a test; (2) a **v5.0.3 patch release** is warranted since v5.0.2 does not include this fix and the deployment stack is currently running an unreleased local `kato:latest` dev build.
+**One item still needs a human decision** (see `planning-docs/project-manager/pending-updates.md`): whether `_predict_single_symbol_fast`'s first-token-only matching semantics should change (would need the general path or a symbol index, at some performance cost) — this fix only pinned the current behavior with a test. (The other former pending item, whether a v5.0.3 patch release is warranted, is being carried forward into the Current Task above rather than decided separately, since this event-aware refinement fix should ship in the same release as `e0ee17d`.)
 
 **Archive**: `planning-docs/completed/features/2026-09-11-multi-symbol-event-prediction-tests-and-segmentation-fix.md`. **Decision**: DECISION-028 in `planning-docs/DECISIONS.md`.
 
-**Next action**: user decides on the two pending-updates.md items above, or picks another item from `planning-docs/SPRINT_BACKLOG.md`'s Backlog section (e.g. the two Phase-1.6-discovered follow-ups: auto-learn emotives/metadata gap; `deferred_vectors_for_learning` per-processor state).
-
-## Previous Task
+## Earlier Task (context preserved)
 **Post-v5.0.2 Bug Fix: conftest Session-Cleanup Scoping — COMPLETE (2026-09-10)**
 `tests/tests/conftest.py`'s session-scoped autouse fixture was deleting every `kato:session:*` Redis key at the start of each pytest run, so any concurrent pytest run, container recreate, or live client lost its sessions mid-flight; new `tests/tests/fixtures/redis_test_cleanup.py` (`e951148`) now deletes only test-prefixed sessions. Verified: 53 passed (session/error-handling/redis-session suites + new self-test) + 7 passed (`test_multi_user_scenarios`).
 
-## Earlier Task (context preserved)
 **KATO v5.0.2 Release — COMPLETE (2026-09-10)**
 
 ### Release Summary

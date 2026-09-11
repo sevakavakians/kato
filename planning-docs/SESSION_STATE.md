@@ -1,10 +1,26 @@
 # SESSION_STATE.md - Current Development State
-*Last Updated: 2026-09-10 (post-v5.0.2 bug fix: conftest session-cleanup scoping, `e951148` — see "Recently Completed" in `SPRINT_BACKLOG.md`)*
+*Last Updated: 2026-09-11 (multi-symbol event prediction test suite + position-based segmentation fix, `e0ee17d` — see "Recently Completed" in `SPRINT_BACKLOG.md`)*
 
 ## Current Task
-**None — most recent work was a same-day post-v5.0.2 bug fix (`e951148`): `tests/tests/conftest.py`'s session-scoped autouse fixture was deleting every `kato:session:*` Redis key at the start of each pytest run, so any concurrent pytest run, container recreate, or live client lost its sessions mid-flight; new `tests/tests/fixtures/redis_test_cleanup.py` now deletes only test-prefixed sessions. Verified: 53 passed (session/error-handling/redis-session suites + new self-test) + 7 passed (`test_multi_user_scenarios`). Next action is whichever item the user picks from `planning-docs/SPRINT_BACKLOG.md`'s Backlog section — most notably the two Phase-1.6-discovered follow-ups (auto-learn emotives/metadata gap; `deferred_vectors_for_learning` per-processor state).**
+**None — most recent work (2026-09-11) was a requested test-coverage expansion that surfaced and fixed two prediction defects, committed as `e0ee17d` "fix(predictions): segment by matched positions; event-structured fast path".**
+
+**Request**: variations on the hello-world prediction test — learned patterns with multiple symbols per event, varying sizes; observed states full/partial (first half, second half, middle)/mixed with missing or extra symbols; comprehensive edge-case coverage.
+
+**Delivered**: new `tests/tests/unit/test_multi_symbol_event_predictions.py` (34 tests, two patterns — RAGGED: varying event widths; REPEATS: recurring symbols — covering full/half/middle/single-event/mid-event-start-end observations, dropped/added symbols, split/merged/reordered/duplicate events, fast-path single-symbol cases, near-twin disambiguation). Exploration exposed two real bugs, fixed in the same commit: (1) the past/present/future/missing/extras segmentation used flat slice lengths plus a symbol-identity heuristic that misattributed events when a symbol recurs across events (phantom `missing` symbols) — replaced with position-based `segment_by_alignment()` built from the matched pattern/state indices `extract_prediction_info` now returns (11th tuple element; fuzzy path unaffected, keeps legacy accounting); (2) the single-symbol fast path (`_predict_single_symbol_fast`) returned flat non-event-structured fields — now uses the same segmentation function. A residual ambiguity (flattened-sequence matching ties on which occurrence of a repeated symbol is "the" unmatched one) is documented, not a bug. `docs/reference/prediction-object.md` and `CHANGELOG.md` updated.
+
+**Verification**: full suite 528 passed / 4 skipped / 1 xfailed / 0 failed (699s), +46 vs. the 482 baseline.
+
+**Two items need a human decision** (see `planning-docs/project-manager/pending-updates.md`): (1) whether `_predict_single_symbol_fast`'s first-token-only matching semantics should change (would need the general path or a symbol index, at some performance cost) — this fix only pinned the current behavior with a test; (2) a **v5.0.3 patch release** is warranted since v5.0.2 does not include this fix and the deployment stack is currently running an unreleased local `kato:latest` dev build.
+
+**Archive**: `planning-docs/completed/features/2026-09-11-multi-symbol-event-prediction-tests-and-segmentation-fix.md`. **Decision**: DECISION-028 in `planning-docs/DECISIONS.md`.
+
+**Next action**: user decides on the two pending-updates.md items above, or picks another item from `planning-docs/SPRINT_BACKLOG.md`'s Backlog section (e.g. the two Phase-1.6-discovered follow-ups: auto-learn emotives/metadata gap; `deferred_vectors_for_learning` per-processor state).
 
 ## Previous Task
+**Post-v5.0.2 Bug Fix: conftest Session-Cleanup Scoping — COMPLETE (2026-09-10)**
+`tests/tests/conftest.py`'s session-scoped autouse fixture was deleting every `kato:session:*` Redis key at the start of each pytest run, so any concurrent pytest run, container recreate, or live client lost its sessions mid-flight; new `tests/tests/fixtures/redis_test_cleanup.py` (`e951148`) now deletes only test-prefixed sessions. Verified: 53 passed (session/error-handling/redis-session suites + new self-test) + 7 passed (`test_multi_user_scenarios`).
+
+## Earlier Task (context preserved)
 **KATO v5.0.2 Release — COMPLETE (2026-09-10)**
 
 ### Release Summary

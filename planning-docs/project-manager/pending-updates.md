@@ -15,7 +15,19 @@ Track issues and updates that require human intervention or review.
 
 ## Current Issues
 
-*No open issues at this time.*
+## 2026-09-11 - Release Needed: v5.0.2 Lacks the Prediction Segmentation Fix
+**Issue**: `e0ee17d` (2026-09-11) fixed a real correctness bug — prediction segmentation misattributed events (phantom `missing` symbols) when a symbol recurs across events, plus made the single-symbol fast path return event-structured fields — see DECISION-028 and `planning-docs/completed/features/2026-09-11-multi-symbol-event-prediction-tests-and-segmentation-fix.md`. The currently released **v5.0.2** image does not include this fix; the deployment stack is running an unreleased local `kato:latest` dev build with it.
+**Impact**: Anyone pulling `ghcr.io/sevakavakians/kato:5.0.2`/`:5.0`/`:5`/`:latest` gets a build that can report incorrect `missing` symbols for predictions involving patterns with repeated symbols across events — a real-but-narrow correctness bug in the current published image.
+**Suggested Action**: Release a **v5.0.3** patch (bug fix, no API contract change — field names/shapes unchanged, only internal derivation) via `./container-manager.sh patch`, following the same process as v5.0.1/v5.0.2 (DECISION-023/DECISION-027).
+**Priority**: Medium — real bug, but narrow trigger condition (repeated symbols across events); not a deadlock/data-loss class issue like the v5.0.2 release gap.
+**Status**: Open
+
+## 2026-09-11 - Decision Needed: Should the Single-Symbol Fast Path Match Any Position, Not Just the First Token?
+**Issue**: `_predict_single_symbol_fast` (`kato/workers/pattern_processor.py`) only considers candidate patterns whose **first token** equals the observed symbol — a deliberate design choice (per its docstring) that uses the ClickHouse `first_token` column for speed. As a result, observing a single symbol that appears only mid-pattern (not as the first token of any learned pattern) yields **no prediction**, even though that same symbol as part of a two-symbol observation would match normally via the general path. This is pinned as current behavior by a new test (`tests/tests/unit/test_multi_symbol_event_predictions.py`) added in `e0ee17d` (2026-09-11, DECISION-028) — the fix that commit shipped only made the fast path's *output shape* consistent (event-structured fields), not its matching scope.
+**Impact**: Users relying on single-symbol observations to surface mid-pattern predictions will silently get nothing from the fast path today. This is existing, not new, behavior — the recent work only made it more visible/documented.
+**Suggested Action**: Decide whether to (a) keep current behavior (fast, but misses mid-pattern single-symbol matches) or (b) extend single-symbol matching to any position — would require either falling back to the general (slower) path for single-symbol observations or building a symbol-position index, trading some of the fast path's speed advantage for completeness.
+**Priority**: Low-Medium — correctness-adjacent (arguably a documented limitation, not a bug) but affects real prediction completeness for single-symbol queries.
+**Status**: Open
 
 ---
 

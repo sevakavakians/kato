@@ -1,6 +1,61 @@
 # DECISIONS.md - Architectural & Design Decision Log
 *Append-Only Log - Started: 2025-08-29*
-*Last Updated: 2026-09-10 (DECISION-027: Release KATO v5.0.2 — patch bump shipping the deadlock fix + Phase 1.6 refactor to every published image; resolves the release-gap item from DECISION-026)*
+*Last Updated: 2026-09-11 (DECISION-028: Position-based prediction segmentation replaces the symbol-identity heuristic; event-structured single-symbol fast path)*
+
+---
+
+## 2026-09-11 - DECISION-028: Position-Based Segmentation Replaces the Symbol-Identity Heuristic
+
+**Decision**: `Prediction`'s past/present/future/missing/extras segmentation is now derived from the matched pattern and STM **positions** returned by the matcher, not from flat slice lengths plus a symbol-identity repair heuristic. `extract_prediction_info` (`kato/searches/pattern_search.py`) gained an 11th tuple element carrying the matched pattern and state indices (the fuzzy path returns `None` and keeps the previous symbol-based accounting); a new `segment_by_alignment()` (`kato/representations/prediction.py`) builds all six segmentation fields from those positions. The single-symbol fast path (`kato/workers/pattern_processor.py::_predict_single_symbol_fast`) now calls the same function instead of hand-building flat fields.
+**Status**: COMPLETE — committed `e0ee17d` "fix(predictions): segment by matched positions; event-structured fast path"
+**Classification**: Bug Fix / Architectural Decision (internal segmentation algorithm change, no API field shape change)
+**Confidence**: High
+
+### Context
+While building comprehensive tests for multi-symbol-per-event predictions (`tests/tests/unit/test_multi_symbol_event_predictions.py`, 34 tests), two related defects surfaced in how `Prediction` reconstructs event-structured `past`/`present`/`future`/`missing`/`extras` from the matcher's flat match:
+1. **Segmentation heuristic picked the wrong event with repeated symbols.** The old code derived past/present/future from the flat lengths of the matcher's slices, then applied a heuristic ("if the first matched symbol is in the last past event, move that event into present") to repair matches that start mid-event. When a symbol recurs across events, the heuristic cannot distinguish *which* occurrence matched: observing `[['y','z'],['x']]` against pattern `[['x','y'],['y','z'],['x'],['w','y','z']]` pulled event 0 into `present` and reported `'y'` and `'x'` as missing that were never actually expected — phantom missing symbols.
+2. **The single-symbol fast path built flat fields by hand**, returning e.g. `{'present': ['a']}` instead of the event-structured lists every other prediction path returns, an inconsistency `test_multi_symbol_event_predictions.py` would otherwise have had to special-case around.
+
+### Rationale
+The matcher already knows exactly which pattern and STM positions matched — deriving segmentation from those positions directly is correct by construction and needs no heuristic:
+- `present` spans the events of the first and last **matched position** in the pattern.
+- `missing` is the unmatched positions within each `present` event.
+- `extras` is the unmatched positions within each STM event.
+- `past`/`future` are simply the pattern events before/after the matched span.
+
+This eliminates the symbol-identity heuristic entirely rather than patching it for the repeated-symbol case, and it made the fast path's event-structuring free (same function, no special-casing). Per-event `missing` is now positional rather than multiset-consumption-based, so it cannot misattribute an unmatched occurrence of a repeated symbol to the wrong event.
+
+### Implementation
+- `kato/searches/pattern_search.py`: `extract_prediction_info` returns an 11th tuple element (matched pattern/state indices); all tuple builders/unpackers updated. The fuzzy-matching path returns `None` for this element and falls back to the previous symbol-based accounting (fuzzy matches don't have a clean 1:1 position correspondence).
+- `kato/representations/prediction.py`: new `segment_by_alignment()` builds all six fields from positions when available; falls back to the legacy path when `None` (fuzzy matches).
+- `kato/workers/pattern_processor.py::_predict_single_symbol_fast`: now calls `segment_by_alignment()` instead of hand-building flat past/present/future/missing/extras.
+- `tests/tests/unit/test_affinity_weighted_matching.py`: unpacking adjusted to `result[:10]` for the new tuple shape.
+- New test file `tests/tests/unit/test_multi_symbol_event_predictions.py` (34 tests): two patterns — RAGGED (events of 3/1/2/4/1/2 symbols) and REPEATS (symbols recurring across events) — exercised as full pattern, first/second half, middle third, single wide event, dropped/added symbols, mixed missing+extras across events, unexpected whole event between matches, first-and-last-only gap, one symbol from each of two events, event split across observations, two events merged into one observation, out-of-order events, duplicate symbol within an event, nothing-in-common, repeats full, repeated-symbol-dropped (parametrized per event; documents the flat-alignment tie rule below), dropped-from-last-event, middle-two-events, single-first/last-event, mid-event start/end, single-first-symbol fast path (both patterns), single-mid-pattern-symbol → no prediction (pins the fast path's first-token filter, see "Deferred Question" below), exact-match-outranks-near-twin, shared-prefix-predicts-both-futures.
+
+### Residual Ambiguity (documented, not a bug)
+Matching still runs on the **flattened** symbol sequence, not per-event. When a pattern has two equal occurrences of a repeated symbol and dropping either one from the observation yields the identical flat sequence, the matcher keeps the longest contiguous run, and the *earlier* occurrence is reported as the one that went unmatched — this is a property of the underlying matcher, unaffected by this fix, and is now pinned by a parametrized test and documented in `docs/reference/prediction-object.md`.
+
+### Deferred Question (filed for human decision, see `pending-updates.md`)
+`_predict_single_symbol_fast` only considers patterns whose **first token** matches the observed symbol (a deliberate design choice per its docstring, using the ClickHouse `first_token` column for speed) — so a single symbol observed mid-pattern yields no prediction even though the same symbol as part of a two-symbol observation would match. This fix pins that existing behavior with a test rather than changing it; whether single-symbol predictions should instead match any position (trading some of the fast path's speed advantage) is left to the user.
+
+### Verification
+Full suite on the dev build: 528 passed / 4 skipped / 1 xfailed / 0 failed (699s) — +46 versus the prior 482 baseline (34 new prediction tests + 12 cleanup self-tests from the previous, unrelated commit). All prediction-neighborhood suites green: fields, misaligned, predictions, edge cases, comprehensive, metrics_v3, fuzzy, character-level, rapidfuzz, recall threshold, affinity, symbol affinity, predictive-info e2e.
+
+### Alternatives Considered
+1. **Patch the symbol-identity heuristic to handle repeats** (e.g., track which occurrence index matched) — rejected: still a heuristic reconstructing what the matcher already knows positionally; adds complexity without removing the underlying fragility class.
+2. **Leave the fast path's flat fields as a documented special case** — rejected: inconsistent with every other prediction path, and would have forced the new test suite to special-case fast-path assertions rather than uniformly asserting all six fields.
+3. **Also change the deferred single-symbol first-token-only matching behavior in this same commit** — rejected: that's a distinct performance/behavior trade-off decision (see "Deferred Question" above), not a bug this fix needs to resolve; pinning current behavior with a test keeps the two concerns separable.
+
+### Impact
+- **Positive**: eliminates a class of phantom-missing-symbol bugs for any pattern with repeated symbols across events; fast path now returns API-consistent event-structured fields.
+- **Neutral**: no external API field shape change — `past`/`present`/`future`/`missing`/`extras` remain the same field names and event-structured shape; only their internal derivation changed.
+- **Risk**: Low — verified against a 34-test suite specifically targeting the previously-mishandled cases, plus the full existing prediction-neighborhood suite with zero regressions.
+
+**Resolves**: the phantom-missing-symbol segmentation bug and the flat-field fast-path inconsistency found while building `tests/tests/unit/test_multi_symbol_event_predictions.py`.
+
+**Related Decisions**:
+- DECISION-019 (2026-09-09) — the `anomalies`/`fuzzy_matches` split and the repeated-symbol multiset fix for `missing`/`extras`; this decision goes further by fixing *event attribution* (which event a repeated symbol belongs to), not just multiset counting.
+- DECISION-027 (2026-09-10) — the v5.0.2 release; this fix is **not yet released** (see `pending-updates.md`, a v5.0.3 patch release is warranted).
 
 ---
 

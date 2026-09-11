@@ -3,6 +3,39 @@
 
 ---
 
+## 2026-09-11 - Task Completion: Multi-Symbol Event Prediction Test Suite + Position-Based Segmentation Fix (DECISION-028)
+
+**Trigger**: Task completion — user requested variations on the hello-world prediction test (multi-symbol-per-event patterns, varying sizes; full/partial/mixed-with-missing-or-extra observations, comprehensive edge cases). Building that coverage exposed two real prediction defects, fixed in the same commit `e0ee17d` "fix(predictions): segment by matched positions; event-structured fast path".
+
+**Event Type**: Task Completion + Architectural Decision (compound) + 2 new human-alert items filed
+
+**Actions Taken**:
+1. `planning-docs/DECISIONS.md` — added `DECISION-028` ("Position-Based Segmentation Replaces the Symbol-Identity Heuristic"): context (two defects found while building the test suite), rationale, implementation (`extract_prediction_info`'s new 11th tuple element, `segment_by_alignment()`, fast-path consistency), residual ambiguity, deferred question, verification, 3 alternatives considered, impact, resolves line, cross-references to DECISION-019 and DECISION-027. Header timestamp refreshed.
+2. Created `planning-docs/completed/features/2026-09-11-multi-symbol-event-prediction-tests-and-segmentation-fix.md` — full archive entry: request, delivered test coverage, both bug fixes with root cause/fix detail, residual ambiguity, deferred question, docs touched, verification, files changed, state/follow-ups, related decisions.
+3. `planning-docs/SPRINT_BACKLOG.md` — header timestamp refreshed; Active Projects note updated to reflect this as the just-completed work and point at the two new pending-updates.md items; new "Recently Completed" entry at the top of that section; two new Backlog Bug entries added and immediately marked FIXED (segmentation heuristic misattribution — P1; single-symbol fast path flat fields — P2), each with symptom/root cause/fix/files/related, following this file's established pattern for same-day identified-and-fixed bugs.
+4. `planning-docs/SESSION_STATE.md` — header timestamp refreshed; "Current Task" rewritten with the full request/delivered/verification/pending-decisions summary and archive/decision links; former "Current Task" (conftest cleanup fix) demoted to "Previous Task"; former "Previous Task" (v5.0.2 release) demoted to "Earlier Task."
+5. `planning-docs/project-manager/pending-updates.md` — added two new Current Issues: (a) "Release Needed: v5.0.2 Lacks the Prediction Segmentation Fix" (Medium priority, suggests a v5.0.3 patch release); (b) "Decision Needed: Should the Single-Symbol Fast Path Match Any Position, Not Just the First Token?" (Low-Medium priority, describes the trade-off between current speed and match completeness).
+
+**Key Details**:
+- Bug 1 (P1, segmentation): flat-length + symbol-identity heuristic misattributed events with repeated symbols, producing phantom `missing` symbols. Fixed via position-based `segment_by_alignment()` fed by an 11th tuple element from `extract_prediction_info` (fuzzy path unaffected, `None` fallback to legacy accounting).
+- Bug 2 (P2, fast path): `_predict_single_symbol_fast` returned flat non-event-structured fields; now uses the same `segment_by_alignment()`.
+- Residual ambiguity (not a bug, documented): flattened-sequence matching ties on which occurrence of a repeated symbol is "the" unmatched one when dropping either yields the same observation.
+- Deferred, not fixed: fast path's first-token-only matching scope — filed as a human decision, not changed by this commit.
+- New test file `tests/tests/unit/test_multi_symbol_event_predictions.py`: 34 tests, two patterns (RAGGED, REPEATS).
+- Verification: full suite 528 passed / 4 skipped / 1 xfailed / 0 failed (699s), +46 vs. the 482 baseline.
+- Not yet released: deployment stack runs an unreleased local `kato:latest` dev build; v5.0.2 lacks this fix.
+
+**Classification**: Task Completion / Architectural Decision (bug fix + test coverage)
+
+**Next Steps**: None mandated by this agent. Two items now await the user's decision (`pending-updates.md`): the v5.0.3 release call, and the fast-path single-symbol matching-scope question. Absent those, next action is user-driven from `SPRINT_BACKLOG.md`'s Backlog section. project-manager will be triggered again on whatever the user picks up next.
+
+---
+
+*Agent execution time: < 5 seconds*
+*Response type: Silent operation (documentation update following task completion)*
+
+---
+
 ## 2026-09-10 - Task Completion + Architectural Decision: Deadlock Blocker Resolved (DECISION-025), Phases A/B/C-Stopgap Committed, Phase 1.6 Now Active
 
 **Trigger**: Task completion (3 commits landed: Phase A `7aad817`, Phase B `bef2b47`, Phase C deadlock stopgap `9de98c3`) + architectural decision (user chose "Do A as a stopgap now, then B" for the observe-path deadlock blocker) — resolves the Critical human-alert item raised in the previous entry below.

@@ -1,9 +1,9 @@
 # SPRINT_BACKLOG.md - Upcoming Work
-*Last Updated: 2026-09-10 (post-v5.0.2: conftest session-cleanup scoping fix, `e951148`, fixes test-run-vs-live-session interference)*
+*Last Updated: 2026-09-11 (multi-symbol event prediction test suite + position-based segmentation fix, `e0ee17d` — see "Recently Completed" below)*
 
 ## Active Projects
 
-*No active initiative-scale projects at this time — see "Recently Completed" below for the just-closed Multi-Worker Uvicorn initiative. Next up is whatever the user picks from the Backlog section below, most notably the release decision flagged in `planning-docs/project-manager/pending-updates.md`.*
+*No active initiative-scale projects at this time — see "Recently Completed" below for the just-completed prediction segmentation fix. Next up is whatever the user picks from the Backlog section below, most notably the two release decisions flagged in `planning-docs/project-manager/pending-updates.md` (v5.0.3 patch release; fast-path single-symbol matching semantics).*
 
 ---
 
@@ -302,6 +302,22 @@ Phase 4 (Symbol Statistics & Fail-Fast Architecture) is 100% complete. The Click
 
 ## Recently Completed
 
+### Multi-Symbol Event Prediction Test Suite + Position-Based Segmentation Fix ✅ COMPLETE
+**Priority**: Feature (test coverage) + Bug Fix
+**Status**: FULLY COMPLETED (2026-09-11)
+**Files Modified**: `kato/representations/prediction.py`, `kato/searches/pattern_search.py`, `kato/workers/pattern_processor.py`, `tests/tests/unit/test_multi_symbol_event_predictions.py` (new), `tests/tests/unit/test_affinity_weighted_matching.py`, `docs/reference/prediction-object.md`, `CHANGELOG.md`
+
+**Summary**: Requested variations on the hello-world prediction test — multi-symbol-per-event patterns of varying sizes, observed full/partial/mixed-with-missing-or-extra — exposed two prediction defects, fixed in the same commit (`e0ee17d`): (1) the old past/present/future segmentation used flat slice lengths plus a symbol-identity heuristic that misattributed events when a symbol recurs across events (phantom `missing` symbols); replaced with position-based `segment_by_alignment()` built from the matched pattern/state indices `extract_prediction_info` now returns as an 11th tuple element. (2) The single-symbol fast path hand-built flat fields instead of event-structured ones; now uses the same segmentation function.
+- New `tests/tests/unit/test_multi_symbol_event_predictions.py`: 34 tests over two patterns (RAGGED: varying event widths; REPEATS: recurring symbols) — full/half/middle/single-event/mid-event-start-end observations, dropped/added symbols, split/merged/reordered/duplicate events, fast-path single-symbol cases, near-twin pattern disambiguation.
+- Residual ambiguity documented (not a bug): flattened-sequence matching means dropping either of two equal repeated-symbol occurrences yields the same observation; matcher keeps the longest contiguous run, earlier occurrence reported unmatched.
+- Deferred to human decision: fast path's first-token-only matching semantics (filed in `pending-updates.md`).
+- Verification: full suite 528 passed / 4 skipped / 1 xfailed / 0 failed (699s), +46 vs. 482 baseline.
+- **Not yet released**: v5.0.2 lacks this fix; a v5.0.3 patch release is warranted (filed in `pending-updates.md`).
+
+**Archive**: `planning-docs/completed/features/2026-09-11-multi-symbol-event-prediction-tests-and-segmentation-fix.md`. **Decision**: DECISION-028 in `planning-docs/DECISIONS.md`.
+
+---
+
 ### Symbol Affinity ✅ COMPLETE
 **Priority**: Feature
 **Status**: FULLY COMPLETED (2026-03-27)
@@ -396,6 +412,28 @@ Phase 4 (Symbol Statistics & Fail-Fast Architecture) is 100% complete. The Click
 ---
 
 ## Backlog (Future Work)
+
+### Bug: Prediction segmentation heuristic misattributes events when a symbol recurs across events
+**Priority**: P1 — correctness bug in a core prediction field (`missing`); found while building comprehensive multi-symbol-event prediction tests
+**Status**: **FIXED, committed `e0ee17d`** (2026-09-11) — see DECISION-028 and `planning-docs/completed/features/2026-09-11-multi-symbol-event-prediction-tests-and-segmentation-fix.md`
+**Symptom**: Observing `[['y','z'],['x']]` against learned pattern `[['x','y'],['y','z'],['x'],['w','y','z']]` pulled event 0 into `present` and reported `'y'` and `'x'` as `missing` that were never actually expected — phantom missing symbols.
+**Root Cause**: `kato/representations/prediction.py` derived past/present/future from the flat lengths of the matcher's slices, then applied a symbol-identity heuristic ("if the first matched symbol is in the last past event, move that event into present") to repair matches that start mid-event. With a symbol that recurs across events, the heuristic cannot tell *which* occurrence matched, so it grabs the wrong event. Per-event `missing` was likewise attributed by multiset consumption, which cannot tell which occurrence of a repeated symbol went unmatched.
+**Fix (DONE, committed `e0ee17d`)**: `extract_prediction_info` (`kato/searches/pattern_search.py`) now returns the matched pattern and state indices as an 11th tuple element (fuzzy-matching path returns `None`, keeping the previous symbol-based accounting). New `segment_by_alignment()` (`kato/representations/prediction.py`) builds `present`/`missing`/`extras`/`past`/`future` directly from those positions — no heuristic; mid-event starts and ends fall out naturally. `tests/tests/unit/test_affinity_weighted_matching.py` unpacking adjusted (`result[:10]`). Covered by 34 new tests in `tests/tests/unit/test_multi_symbol_event_predictions.py`.
+**Files**: `kato/representations/prediction.py`, `kato/searches/pattern_search.py`, `tests/tests/unit/test_affinity_weighted_matching.py`, `tests/tests/unit/test_multi_symbol_event_predictions.py` (new)
+**Related**: DECISION-028 (`planning-docs/DECISIONS.md`); builds on DECISION-019's earlier `anomalies`/`fuzzy_matches` split and multiset fix.
+
+---
+
+### Bug: Single-symbol fast path returned flat, non-event-structured prediction fields
+**Priority**: P2 — API inconsistency (not a data-loss bug); found alongside the segmentation heuristic bug above
+**Status**: **FIXED, committed `e0ee17d`** (2026-09-11) — see DECISION-028 and `planning-docs/completed/features/2026-09-11-multi-symbol-event-prediction-tests-and-segmentation-fix.md`
+**Symptom**: `kato/workers/pattern_processor.py::_predict_single_symbol_fast` hand-built flat `past`/`present`/`future`/`missing`/`extras` (e.g. `{'present': ['a']}`) instead of the event-structured lists every other prediction path returns.
+**Root Cause**: The fast path was written as a standalone shortcut before the general segmentation logic existed in its current form, and was never updated to match.
+**Fix (DONE, committed `e0ee17d`)**: `_predict_single_symbol_fast` now calls the same `segment_by_alignment()` used by the general path, returning event-structured fields consistently. Deliberate current behavior (not changed by this fix, filed as a separate deferred question — see `planning-docs/project-manager/pending-updates.md`): the fast path only considers patterns whose first token matches the observed symbol, so a lone mid-pattern symbol still yields no prediction.
+**Files**: `kato/workers/pattern_processor.py`, `tests/tests/unit/test_multi_symbol_event_predictions.py` (new)
+**Related**: DECISION-028 (`planning-docs/DECISIONS.md`).
+
+---
 
 ### Bug: patterns_data async_insert visibility race (Root cause #1)
 **Priority**: P2 — flaky test, real correctness risk under load

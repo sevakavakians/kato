@@ -133,7 +133,9 @@ def _process_batch_worker(state, batch_patterns_data, recall_threshold, use_toke
                 if info:
                     batch_results.append((
                         pattern_id, pattern_seq, info[1], info[2], info[3], info[4], info[5],
-                        info[6], info[7], info[8]
+                        info[6], info[7], info[8],
+                        info[9] if len(info) > 9 else None,  # weighted_similarity
+                        info[10] if len(info) > 10 else None,  # alignment
                     ))
     elif choices:
         # Fallback without RapidFuzz
@@ -146,7 +148,9 @@ def _process_batch_worker(state, batch_patterns_data, recall_threshold, use_toke
                 if similarity >= recall_threshold_safe:
                     batch_results.append((
                         pattern_id, pattern_seq, info[1], info[2], info[3], info[4], info[5],
-                        similarity, info[7] if len(info) > 7 else 0, info[8] if len(info) > 8 else []
+                        similarity, info[7] if len(info) > 7 else 0, info[8] if len(info) > 8 else [],
+                        info[9] if len(info) > 9 else None,  # weighted_similarity
+                        info[10] if len(info) > 10 else None,  # alignment
                     ))
 
     return batch_results
@@ -332,6 +336,10 @@ class InformationExtractor:
                                 'similarity': best_similarity
                             })
 
+            # Fuzzy-matched tokens have no exact positions, so no alignment is
+            # emitted; Prediction falls back to symbol-based segmentation.
+            alignment = None
+
             # Build a simple matcher for temporal region extraction
             # Use pattern positions of matched tokens
             matcher = difflib.SequenceMatcher()
@@ -347,9 +355,13 @@ class InformationExtractor:
             matcher.set_seq2(state)
             matching_blocks = matcher.get_matching_blocks()
 
+            pattern_positions, state_positions = [], []
             for block in matching_blocks[:-1]:  # Skip terminator
                 (i, j, n) = tuple(block)
                 matching_intersection += state[j:j+n]
+                pattern_positions.extend(range(i, i + n))
+                state_positions.extend(range(j, j + n))
+            alignment = (pattern_positions, state_positions)
 
             num_actual_blocks = len(matching_blocks) - 1
 
@@ -420,7 +432,7 @@ class InformationExtractor:
 
         return (pattern, matching_intersection, past, present,
                 missing, extras, similarity, number_of_blocks, anomalies,
-                weighted_similarity)
+                weighted_similarity, alignment)
 
 
 class PatternSearcher:
@@ -853,6 +865,7 @@ class PatternSearcher:
                 pattern_hash, pattern, matching_intersection, past, present, missing, extras, similarity, number_of_blocks, anomalies = result[:10]
                 # Extract weighted_similarity if present (11th element = index 10)
                 weighted_similarity = result[10] if len(result) > 10 else None
+                alignment = result[11] if len(result) > 11 else None
 
                 # Fetch pattern data from hybrid architecture cache
                 if self.filter_executor is None:
@@ -871,7 +884,8 @@ class PatternSearcher:
                         number_of_blocks,
                         fuzzy_matches=anomalies,
                         stm_events=stm_events,
-                        weighted_similarity=weighted_similarity
+                        weighted_similarity=weighted_similarity,
+                        alignment=alignment,
                     )
                     active_list.append(pred)
 
@@ -1319,7 +1333,8 @@ class PatternSearcher:
                             pattern_id, pattern_seq, info[1],  # matching_intersection
                             info[2], info[3], info[4], info[5],  # past, present, missing, extras
                             info[6], info[7], info[8],  # similarity, number_of_blocks, anomalies
-                            info[9]  # weighted_similarity
+                            info[9],  # weighted_similarity
+                            info[10] if len(info) > 10 else None,  # alignment
                         ))
 
         return batch_results
@@ -1358,7 +1373,8 @@ class PatternSearcher:
                             pattern_id, pattern_seq, info[1],  # matching_intersection
                             info[2], info[3], info[4], info[5],  # past, present, missing, extras
                             similarity, info[7] if len(info) > 7 else 0, info[8] if len(info) > 8 else [],  # similarity, number_of_blocks, anomalies
-                            info[9] if len(info) > 9 else None  # weighted_similarity
+                            info[9] if len(info) > 9 else None,  # weighted_similarity
+                            info[10] if len(info) > 10 else None,  # alignment
                         ))
 
         return batch_results
@@ -1461,6 +1477,7 @@ class PatternSearcher:
                 pattern_hash, pattern, matching_intersection, past, present, missing, extras, similarity, number_of_blocks, anomalies = result[:10]
                 # Extract weighted_similarity if present (11th element = index 10)
                 weighted_similarity = result[10] if len(result) > 10 else None
+                alignment = result[11] if len(result) > 11 else None
 
                 # Hybrid architecture: pattern data already in filter_executor cache from pipeline
                 pattern_dict = self.filter_executor.patterns_cache.get(pattern_hash, {})
@@ -1497,7 +1514,8 @@ class PatternSearcher:
                         number_of_blocks,
                         fuzzy_matches=anomalies,
                         stm_events=stm_events,
-                        weighted_similarity=weighted_similarity
+                        weighted_similarity=weighted_similarity,
+                        alignment=alignment,
                     )
                     predictions.append(pred)
 

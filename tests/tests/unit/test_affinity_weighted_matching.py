@@ -72,7 +72,7 @@ class TestWeightedSimilarity:
 
         assert result is not None
         (pat, matching, past, present, missing, extras,
-         similarity, n_blocks, anomalies, weighted_similarity) = result
+         similarity, n_blocks, anomalies, weighted_similarity) = result[:10]
 
         # Unweighted: 2*2/(4+3) = 4/7 ≈ 0.571
         assert abs(similarity - 4/7) < 0.01
@@ -106,7 +106,7 @@ class TestWeightedSimilarity:
             pattern, state, cutoff=0.0, weights=weights)
 
         assert result is not None
-        (*_, similarity, _, _, weighted_similarity) = result
+        (*_, similarity, _, _, weighted_similarity) = result[:10]
 
         # Unweighted: 2*1/(2+2) = 0.5
         assert abs(similarity - 0.5) < 0.01
@@ -131,7 +131,7 @@ class TestWeightedSimilarity:
             pattern, state, cutoff=0.0)
 
         assert result is not None
-        (*_, weighted_similarity) = result
+        (*_, weighted_similarity) = result[:10]
         assert weighted_similarity is None
 
     def test_empty_weights_returns_none(self):
@@ -144,7 +144,7 @@ class TestWeightedSimilarity:
             pattern, state, cutoff=0.0, weights={})
 
         assert result is not None
-        (*_, weighted_similarity) = result
+        (*_, weighted_similarity) = result[:10]
         assert weighted_similarity is None
 
     def test_equal_weights_match_unweighted(self):
@@ -160,7 +160,7 @@ class TestWeightedSimilarity:
             pattern, state, cutoff=0.0, weights=weights)
 
         assert result is not None
-        (*_, similarity, _, _, weighted_similarity) = result
+        (*_, similarity, _, _, weighted_similarity) = result[:10]
 
         assert weighted_similarity is not None
         assert abs(weighted_similarity - similarity) < 0.01, \
@@ -186,7 +186,7 @@ class TestWeightedSimilarity:
             pattern, state, cutoff=0.0, weights=weights)
 
         assert result is not None
-        (*_, similarity, _, _, weighted_similarity) = result
+        (*_, similarity, _, _, weighted_similarity) = result[:10]
 
         # Unweighted: 2*2/(6+7) = 4/13 ≈ 0.308
         assert abs(similarity - 4/13) < 0.02, f"Unweighted should be ~0.308, got {similarity:.3f}"

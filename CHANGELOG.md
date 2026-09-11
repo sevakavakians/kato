@@ -7,7 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Multi-symbol-event prediction tests** (`tests/tests/unit/test_multi_symbol_event_predictions.py`, 34 tests): patterns with 1–4 symbols per event and repeated symbols across events, observed as the full pattern, halves, middle, single events, mid-event starts/ends, dropped/added symbols, unexpected whole events, split/merged/reordered events, duplicates, gaps, single symbols (fast path), and two near-identical patterns — each asserting `past`/`present`/`future`/`missing`/`extras`/`anomalies` in full.
+
 ### Fixed
+- **Prediction segmentation now follows the matcher's positions, not symbol identity.** `present`'s boundaries and per-event `missing`/`extras` were re-derived from flat lengths plus a "first matched symbol" heuristic, which misplaced the boundary and misattributed `missing` when a symbol recurs across events (observing `[['y','z'],['x']]` on `[['x','y'],['y','z'],['x'],…]` pulled event 0 into `present` and reported two phantom missing symbols). The exact-match path now passes its matched pattern/state indices through, and `Prediction` segments from them; the fuzzy path keeps the previous symbol-based accounting.
+- **Single-symbol predictions were flat.** The fast path hand-built `past`/`present`/`future`/`missing`/`extras` as flat symbol lists (`present: ['a']`); it now uses the same event-structured segmentation as every other prediction (`present: [['a','b','c']]`, `missing: [['b','c']]`).
 - **Test suite no longer deletes live sessions on a shared Redis.** The session-scoped cleanup fixture deleted every `kato:session:*` key at the start of each pytest run, so running the suite next to a training notebook — or two suites at once — destroyed their sessions mid-flight. It now removes only sessions (plus node pointers, active-index entries and distributed-STM streams) whose `node_id` carries a test prefix (`test`, `topology_`, `perf_`, `load_test`; override with `KATO_TEST_NODE_PREFIXES`) and never touches `stm:global`. `tests/tests/fixtures/redis_test_cleanup.py`, with a self-test.
 
 ## [5.0.2] - 2026-09-10

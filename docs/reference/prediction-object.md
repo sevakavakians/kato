@@ -36,12 +36,15 @@ A Prediction Object is generated when KATO's pattern recognition engine identifi
 **Critical**: The present field contains complete events; missing lists the symbols from those events that weren't in the observation.  
 **Example 1**: If pattern has `[["a", "b"], ["c", "d"]]` and observing `["a", "c"]`, present would be `[["a", "b"], ["c", "d"]]` (complete events) and missing would be `[["b"], ["d"]]`.  
 **Example 2**: If pattern has `[["hello", "world"], ["foo", "bar"]]` and observing `["hello", "foo"]`, present would be `[["hello", "world"], ["foo", "bar"]]` and missing would be `[["world"], ["bar"]]`.
+**Repeated symbols**: attribution follows the matcher's alignment of positions, not symbol identity, so a pattern symbol that occurs several times is only "missing" at the occurrence that went unmatched. Matching runs on the flattened sequence: when dropping either of two equal occurrences would give the same observed symbols (pattern `[["x","y"],["y","z"],…]`, observed `x y z …`), the matcher keeps the longest contiguous run and the unmatched occurrence is the earlier one.
 
 ### 6. **extras** (array[array[string]], event-aligned)
 **Description**: Symbols observed in the current context that are not part of the expected pattern.  
 **Purpose**: Identifies unexpected elements that don't fit the predicted pattern.  
 **Structure**: List of lists, where each sub-list corresponds to an STM event and contains observed symbols from that event not expected in the pattern's present events.  
 **Example**: If observing `[["a", "x"], ["b"], ["y"]]` against pattern `[["a"], ["b"]]`, extras would be `[["x"], [], ["y"]]`.
+
+**Segmentation**: `past`/`present`/`future` boundaries come from the matched *positions* (the first and last matched symbol's events), so a match that starts or ends inside an event includes that whole event in `present` with its unmatched symbols in `missing`. Single-symbol observations go through the fast path (patterns whose first token is the symbol) and are segmented the same way.
 
 ### 7. **past** (repeated ListValue)
 **Description**: Pattern of events from the learned pattern that occur BEFORE any observed matches.  

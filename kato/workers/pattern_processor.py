@@ -18,6 +18,7 @@ from kato.informatics.metrics import (
 )
 from kato.informatics.predictive_information import calculate_ensemble_predictive_information
 from kato.representations.pattern import Pattern
+from kato.representations.prediction import segment_by_alignment
 from kato.searches.pattern_search import PatternSearcher
 from kato.storage.aggregation_pipelines import OptimizedQueryManager
 from kato.storage.metrics_cache import CachedMetricsCalculator, get_metrics_cache_manager
@@ -820,7 +821,17 @@ class PatternProcessor:
                         continue
 
                     (pattern, matching_intersection, past, present, missing, extras,
-                     similarity, number_of_blocks, anomalies, weighted_similarity) = prediction_info
+                     similarity, number_of_blocks, anomalies, weighted_similarity,
+                     alignment) = prediction_info[:11]
+
+                    # Same event-structured segmentation as the main path (Prediction),
+                    # instead of the flat symbol slices extract_prediction_info returns.
+                    if alignment is not None and stm_events:
+                        past, present, future, missing, extras = segment_by_alignment(
+                            pattern_dict['pattern_data'], stm_events, *alignment)
+                    else:
+                        _present_flat = list(chain(*present)) if present and isinstance(present[0], list) else list(present)
+                        future = pattern[len(past) + len(_present_flat):] if len(past) + len(_present_flat) < len(pattern) else []
 
                     metadata = _metadata_batch.get(pattern_dict['name'], {'name': pattern_dict['name'], 'frequency': 1})
                     frequency = metadata.get('frequency', 1)
@@ -846,7 +857,7 @@ class PatternProcessor:
                     confidence = len(matching_intersection) / total_present_symbols if total_present_symbols > 0 else 0.0
 
                     total_matches = len(matching_intersection)
-                    total_extras = len(extras)
+                    total_extras = sum(len(e) for e in extras) if extras and isinstance(extras[0], list) else len(extras)
                     snr = total_matches / (total_matches + total_extras) if (total_matches + total_extras) > 0 else 0.0
 
                     fragmentation = number_of_blocks - 1
@@ -859,7 +870,7 @@ class PatternProcessor:
                         w_matched = sum(_weights.get(t, 0.0) for t in matching_intersection)
                         w_pattern = sum(_weights.get(t, 0.0) for t in pattern)
                         w_present = sum(_weights.get(t, 0.0) for t in present_flat)
-                        w_extras = sum(_weights.get(t, 0.0) for t in extras)
+                        w_extras = sum(_weights.get(t, 0.0) for t in (chain(*extras) if extras and isinstance(extras[0], list) else extras))
 
                         weighted_evidence = (w_matched / w_pattern) if w_pattern > 0 else 0.0
                         weighted_confidence = (w_matched / w_present) if w_present > 0 else 0.0
@@ -883,7 +894,7 @@ class PatternProcessor:
                         'missing': missing,
                         'present': present,
                         'past': past,
-                        'future': pattern[len(past) + len(present_flat):] if len(past) + len(present_flat) < len(pattern) else [],
+                        'future': future,
                         'extras': extras,
                         'similarity': similarity,
                         'evidence': evidence,
@@ -893,7 +904,9 @@ class PatternProcessor:
                         # Fast path runs with fuzzy matching off, so the only
                         # deviations are missing/extras symbols.
                         'fuzzy_matches': anomalies,
-                        'anomalies': list(missing) + list(extras) + [fm['observed'] for fm in anomalies],
+                        'anomalies': (list(chain(*missing)) if missing and isinstance(missing[0], list) else list(missing))
+                                     + (list(chain(*extras)) if extras and isinstance(extras[0], list) else list(extras))
+                                     + [fm['observed'] for fm in anomalies],
                         'weighted_similarity': weighted_similarity,
                         'weighted_evidence': weighted_evidence,
                         'weighted_confidence': weighted_confidence,

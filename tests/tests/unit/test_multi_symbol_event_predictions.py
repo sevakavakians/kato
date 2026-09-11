@@ -233,23 +233,26 @@ def test_repeats_full_pattern(kato_fixture):
     assert pred['matches'] == ['x', 'y', 'y', 'z', 'x', 'w', 'y', 'z']
 
 
-@pytest.mark.parametrize("dropped_from_event", [0, 1], ids=["drop-event0-y", "drop-event1-y"])
-def test_repeated_symbol_dropped_once(kato_fixture, dropped_from_event):
-    """Dropping one 'y' of three: exactly one 'y' is missing, attributed by the flat alignment.
+@pytest.mark.parametrize("dropped_from_event,expected_missing", [
+    (0, [['y'], [], [], []]),
+    (1, [[], ['y'], [], []]),
+], ids=["drop-event0-y", "drop-event1-y"])
+def test_repeated_symbol_dropped_once(kato_fixture, dropped_from_event, expected_missing):
+    """Dropping one 'y' of three is reported against the event it was dropped from.
 
-    Matching runs on the flattened sequence, so dropping the 'y' of event 0 or
-    of event 1 yields the same observed symbols (x y z x w y z) and the same
-    prediction. The matcher keeps the longest contiguous run (y z x w y z ->
-    pattern events 1..3), so the unmatched 'y' is always the earlier one - the
-    one in event 0 - whichever event the observation actually omitted it from.
-    Total accounting is exact either way: 7 matches, one missing 'y'.
+    Both observations flatten to the same symbols (x y z x w y z), so the
+    matcher alone cannot tell them apart; segmentation refines the alignment
+    with event structure: the observed 'y' sits in the same event as an 'x'
+    (drop from event 1) or a 'z' (drop from event 0), and is attributed to the
+    pattern event where that neighbour matched. Total accounting is exact either
+    way: 7 matches, one missing 'y'.
     """
     _learn(kato_fixture, REPEATS)
     observed = [list(e) for e in REPEATS]
     observed[dropped_from_event].remove('y')
     pred = _top(kato_fixture, observed)
     _assert_segmentation(pred, past=[], present=REPEATS, future=[],
-                         missing=[['y'], [], [], []], extras=_no_gaps(4), anomalies=['y'])
+                         missing=expected_missing, extras=_no_gaps(4), anomalies=['y'])
     assert pred['matches'] == ['x', 'y', 'z', 'x', 'w', 'y', 'z']
 
 
@@ -328,10 +331,28 @@ def test_single_symbol_that_starts_the_pattern(kato_fixture):
 
 
 def test_single_symbol_that_starts_the_pattern_with_repeats(kato_fixture):
+    """A lone 'x' is an exact match for pattern event ['x'], so present is that event, nothing missing.
+
+    The fast path finds the pattern because 'x' is also its first token; the
+    alignment then prefers the occurrence that leaves the fewest symbols
+    missing over the 'x' of ['x','y'].
+    """
     _learn(kato_fixture, REPEATS)
-    _assert_segmentation(_top(kato_fixture, [['x']]),
-                         past=[], present=[REPEATS[0]], future=REPEATS[1:],
-                         missing=[['y']], extras=[[]], anomalies=['y'])
+    pred = _top(kato_fixture, [['x']])
+    _assert_segmentation(pred, past=REPEATS[:2], present=[REPEATS[2]], future=[REPEATS[3]],
+                         missing=[[]], extras=[[]], anomalies=[])
+    assert pred['confidence'] == 1.0
+
+
+MIRROR = [['a'], ['b', 'c']]
+
+
+def test_repeated_observed_symbol_extra_attributed_to_its_event(kato_fixture):
+    """Observing [['a','b'],['b','c']] for [['a'],['b','c']]: the extra 'b' is the one beside 'a'."""
+    _learn(kato_fixture, MIRROR)
+    _assert_segmentation(_top(kato_fixture, [['a', 'b'], ['b', 'c']]),
+                         past=[], present=MIRROR, future=[],
+                         missing=[[], []], extras=[['b'], []], anomalies=['b'])
 
 
 @pytest.mark.parametrize("symbol", ['d', 'g', 'k', 'm'])

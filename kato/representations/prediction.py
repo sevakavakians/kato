@@ -27,21 +27,164 @@ def _offsets(events):
     return out
 
 
+def _flat_event_index(events):
+    """Event index for every flat position."""
+    return [i for i, event in enumerate(events) for _ in event]
+
+
+def refine_alignment_by_events(pattern_events, stm_events, pattern_positions, state_positions, max_passes=None):
+    """
+    Re-attribute matched positions of repeated symbols using event structure.
+
+    The matcher aligns the *flattened* pattern and STM, so when a symbol recurs
+    it cannot tell which occurrence an observation refers to; difflib's
+    longest-run tie-break then decides, blind to event boundaries. This pass
+    moves individual matches between occurrences of the same symbol without
+    changing how many symbols matched, which symbols matched, or the order of
+    the alignment - so `matches`, `similarity`, `evidence` and `snr` are
+    untouched; only which event carries a `missing`/`extras` entry (and, for a
+    lone symbol, where `present` starts) can change.
+
+    Rules, applied until none fires:
+    - Event-mate (pattern side): a matched symbol prefers the pattern event
+      where the other symbols of its observed event matched. If some other
+      pattern event has strictly more of those mates and holds an unmatched
+      occurrence of the same symbol, move there.
+    - Event-mate (observed side): the mirror, re-attributing an extra when an
+      observed symbol recurs.
+    - Tightness: a symbol with no event evidence (it is alone in its observed
+      event) prefers the occurrence that leaves the fewest symbols missing,
+      i.e. the tightest `present` span - a lone observed ['x'] matches an exact
+      pattern event ['x'] rather than the 'x' of ['x','y'].
+    Every move must keep both position sequences strictly increasing against
+    the neighbouring pairs.
+
+    Termination: each event-mate move strictly raises the number of pair-pairs
+    that share both a pattern event and an observed event; a tightness move
+    (allowed only for pairs with no observed-event mates) leaves that number
+    unchanged and strictly lowers the missing count. The lexicographic
+    potential is bounded, so the loop ends; a pass cap is kept as a backstop.
+
+    Known limits: difflib's blocks are not always a maximum common subsequence,
+    and this pass never adds matches; two equal-cost alignments with no event
+    evidence and equal tightness keep difflib's choice.
+    """
+    pairs = list(zip(pattern_positions, state_positions))
+    if not pairs:
+        return list(pattern_positions), list(state_positions)
+
+    pattern_events = [list(e) for e in pattern_events]
+    stm_events = [list(e) for e in stm_events]
+    p_flat = [sym for e in pattern_events for sym in e]
+    s_flat = [sym for e in stm_events for sym in e]
+    p_event = _flat_event_index(pattern_events)
+    s_event = _flat_event_index(stm_events)
+    p_offsets = _offsets(pattern_events)
+    s_offsets = _offsets(stm_events)
+    matched_p = {q for q, _ in pairs}
+    matched_s = {j for _, j in pairs}
+
+    # Nothing to re-attribute unless an unmatched occurrence of a matched symbol exists.
+    matched_syms_p = {p_flat[q] for q in matched_p}
+    matched_syms_s = {s_flat[j] for j in matched_s}
+    ambiguous_p = any(p_flat[i] in matched_syms_p for i in range(len(p_flat)) if i not in matched_p)
+    ambiguous_s = any(s_flat[i] in matched_syms_s for i in range(len(s_flat)) if i not in matched_s)
+    if not ambiguous_p and not ambiguous_s:
+        return list(pattern_positions), list(state_positions)
+
+    def missing_count(matched):
+        first, last = p_event[min(matched)], p_event[max(matched)]
+        return sum(len(pattern_events[e]) for e in range(first, last + 1)) - len(pairs)
+
+    def unmatched_in_event(events_flat_index, offsets, events, matched, event_index, symbol, lo, hi):
+        start = offsets[event_index]
+        for pos in range(start, start + len(events[event_index])):
+            if pos not in matched and events_flat_index[pos] == symbol and lo < pos < hi:
+                return pos
+        return None
+
+    cap = max_passes if max_passes is not None else len(pairs) * len(pairs) + 2
+    for _ in range(cap):
+        moved = False
+        for k, (q, j) in enumerate(pairs):
+            symbol = p_flat[q]
+            prev_q, prev_j = pairs[k - 1] if k > 0 else (-1, -1)
+            next_q, next_j = pairs[k + 1] if k + 1 < len(pairs) else (len(p_flat), len(s_flat))
+
+            # Event-mate rule, pattern side.
+            observed_event = s_event[j]
+            mates = Counter(p_event[q2] for k2, (q2, j2) in enumerate(pairs) if k2 != k and s_event[j2] == observed_event)
+            if mates:
+                best = max(mates.values())
+                winners = [e for e, n in mates.items() if n == best]
+                if len(winners) == 1 and best > mates[p_event[q]]:
+                    p = unmatched_in_event(p_flat, p_offsets, pattern_events, matched_p, winners[0], symbol, prev_q, next_q)
+                    if p is not None:
+                        matched_p.discard(q)
+                        matched_p.add(p)
+                        pairs[k] = (p, j)
+                        moved = True
+                        break
+            else:
+                # Tightness rule: no event evidence, prefer the occurrence with the tightest present.
+                current = missing_count(matched_p)
+                best_pos, best_missing = None, current
+                for e in range(len(pattern_events)):
+                    if e == p_event[q]:
+                        continue
+                    p = unmatched_in_event(p_flat, p_offsets, pattern_events, matched_p, e, symbol, prev_q, next_q)
+                    if p is None:
+                        continue
+                    candidate = (matched_p - {q}) | {p}
+                    m = missing_count(candidate)
+                    if m < best_missing:
+                        best_pos, best_missing = p, m
+                if best_pos is not None:
+                    matched_p.discard(q)
+                    matched_p.add(best_pos)
+                    pairs[k] = (best_pos, j)
+                    moved = True
+                    break
+
+            # Event-mate rule, observed side (re-attributes an extra).
+            pattern_event = p_event[q]
+            smates = Counter(s_event[j2] for k2, (q2, j2) in enumerate(pairs) if k2 != k and p_event[q2] == pattern_event)
+            if smates:
+                best = max(smates.values())
+                winners = [f for f, n in smates.items() if n == best]
+                if len(winners) == 1 and best > smates[s_event[j]]:
+                    j_new = unmatched_in_event(s_flat, s_offsets, stm_events, matched_s, winners[0], symbol, prev_j, next_j)
+                    if j_new is not None:
+                        matched_s.discard(j)
+                        matched_s.add(j_new)
+                        pairs[k] = (q, j_new)
+                        moved = True
+                        break
+        if not moved:
+            break
+
+    return [q for q, _ in pairs], [j for _, j in pairs]
+
+
+
 def segment_by_alignment(pattern_events, stm_events, pattern_positions, state_positions):
     """
     Temporal segmentation from matched positions rather than symbol identity.
 
     pattern_positions / state_positions are the flat indices (into the
     flattened pattern and the flattened STM) that the matcher paired up.
-    Working from positions makes repeated symbols unambiguous: the occurrence
-    that matched is the one that matched, so `present` starts at the event of
-    the first matched position, `missing` lists the unmatched positions of each
-    present event, and `extras` lists the unmatched positions of each STM event.
+    Positions are first refined event-wise (refine_alignment_by_events) so a
+    repeated symbol is attributed to the event its observed neighbours point at.
+    Then `present` starts at the event of the first matched position, `missing`
+    lists the unmatched positions of each present event, and `extras` lists the
+    unmatched positions of each STM event.
 
     Returns (past, present, future, missing, extras), all event-structured.
     """
     pattern_events = [list(e) for e in pattern_events]
     stm_events = [list(e) for e in stm_events]
+    pattern_positions, state_positions = refine_alignment_by_events(
+        pattern_events, stm_events, pattern_positions, state_positions)
     matched_pattern = set(pattern_positions)
     matched_state = set(state_positions)
     p_offsets = _offsets(pattern_events)

@@ -1,6 +1,66 @@
 # DECISIONS.md - Architectural & Design Decision Log
 *Append-Only Log - Started: 2025-08-29*
-*Last Updated: 2026-09-16 (DECISION-030: Remediation Pass 1 — high-value, low-risk fixes from a comprehensive tech-debt/security/performance review — COMPLETE, uncommitted on branch `chore/remediation-pass-1`)*
+*Last Updated: 2026-09-16 (DECISION-031: prediction ranking made deterministic + per-request ProcessPoolExecutor removed as a pessimisation; Remediation Pass 1's branch committed/merged and its remaining open items resolved — see the correction note under DECISION-030 for the protected-mode reversal)*
+
+---
+
+## 2026-09-16 - DECISION-031: Deterministic Prediction Ranking + Per-Request ProcessPoolExecutor Removed
+
+**Decision**: Rank predictions with a new pure function `rank_predictions(predictions, metric, limit)` (`kato/representations/prediction.py`) that orders on `(metric, name)` — pattern names are unique, so this is a total order that cannot be influenced by arrival/iteration order. Applied at all three ranking sites: the final ranking in `predictPattern`, the top-K prune ahead of the metrics loop, and the single-symbol fast path. Separately, disable the per-request `ProcessPoolExecutor` by default (new tunable `PROCESS_POOL_CANDIDATE_THRESHOLD`, default `0` = off) rather than deleting it, since the user's stated position is that such knobs should stay configurable per application.
+**Status**: **COMPLETE**, committed as `7bae726` "perf: make prediction ranking deterministic and stop the per-request process pool" (merged to `main`). Full detail: `planning-docs/completed/features/2026-09-16-remediation-pass-1-followup-and-determinism-fix.md`.
+**Classification**: Bug Fix (determinism) + Performance
+**Confidence**: High — both changes independently measured before/after; the ranking fix is proven by a dedicated pure-function test suite that fails when the tie-breaker is reverted.
+
+### Context
+The user asked whether the default full-corpus prediction scan (`filter_pipeline=[]`) could be made faster while keeping output deterministic. Investigating that, *before any optimisation was attempted*, surfaced that the output was **not deterministic** to begin with — a correctness bug, not a performance one, and one that directly contradicts `CLAUDE.md`'s stated guarantee: "Deterministic: Same inputs → same outputs (always)."
+
+Predictions were ranked on the configured metric alone; ties were broken by whatever order candidates happened to arrive in, and that order is not stable run-to-run. Candidates come out of a `set` (Python randomizes string hashing per process by default, so each uvicorn worker iterates a `set` of pattern names in a different order), and batch results are gathered via `asyncio.as_completed()`, which returns whichever batch finishes first. `heapq.nlargest` keeps the first of equal keys and `sorted` is stable, so the *tie order* — not just which predictions tie — depended on arrival order, and once `max_predictions` truncated the ranked list, a different tie order produced a different **set** of predictions, not just a different order of the same set.
+
+**Measured against the running service**: 40 identical requests over a corpus of 10 mutually-tied patterns with `max_predictions=3` returned **7 distinct orderings and 5 distinct result sets**.
+
+### Rationale
+- **Fix the correctness bug before touching performance.** A faster non-deterministic scan is strictly worse than a correct one — determinism is a documented, load-bearing guarantee elsewhere in the system (pattern hashing, matching, everything else in KATO). Once the tie-break was fixed, the process-pool question could be measured honestly (see below), because ranking no longer constrained execution strategy (parallel batch completion order used to leak into which predictions won ties).
+- **Total order via `(metric, name)`**: metric alone is not sufficient (ties exist by construction whenever multiple patterns score identically); appending the pattern name — globally unique — makes the order a true total order regardless of how many patterns tie, with no dependency on set iteration order, worker process, or async completion timing.
+- **ProcessPoolExecutor removal**: the premise (bypass the GIL for the matching loop) does not survive contact with the implementation. A fresh pool is constructed and torn down on *every request* — up to four interpreters spun up plus pickling each batch across the process boundary — and RapidFuzz (used for the actual matching) already releases the GIL during its C extension calls, so the existing `ThreadPoolExecutor` path already got real parallelism without any of the process-pool overhead. Measured at 6000 patterns / 6000 candidates (old default engaged the pool above 500 candidates): **process pool 3378 ms median vs. thread-pool-only 1231 ms median** — 2.7x slower with the pool "on." Prediction payloads were byte-identical between the two runs, confirming this is a pure overhead removal, not a behavior change.
+- **Kept as a tunable, not deleted**: the user's stated position on this project is that performance-affecting knobs (like `filter_pipeline`) should stay available as opt-in configuration rather than be removed outright, even when the default is "off." `PROCESS_POOL_CANDIDATE_THRESHOLD` (default `0`) preserves that.
+
+### Testing note — generalized as a pattern (see `patterns.md`)
+The first guard written for this fix was an integration test using the standard `kato_fixture`, and it **passed against a deliberately reverted (buggy) build** — i.e., it was worthless as a regression guard. Cause: `tests/tests/fixtures/kato_fixtures.py` uses a single `requests.Session()`, and HTTP keep-alive pins every request in a test to one uvicorn worker — where a single process's `set` iteration order is stable across calls, hiding the cross-worker nondeterminism entirely. That integration test was deleted and replaced with a pure-function unit suite, `tests/tests/unit/test_prediction_ranking.py` (7 tests), which shuffles input order directly rather than depending on server-side nondeterminism to manifest — confirmed to fail with the tie-breaker reverted.
+
+### Implementation
+- `kato/representations/prediction.py`: new `rank_predictions(predictions, metric, limit)`.
+- All three ranking call sites updated: `predictPattern`'s final ranking, the top-K prune ahead of the metrics loop (this one matters independently — ties here previously decided which candidates even received metrics computed at all), and the single-symbol fast path (ClickHouse gives no row-order guarantee absent an `ORDER BY`, so this path was equally exposed).
+- `kato/config/settings.py` (or equivalent): new `PROCESS_POOL_CANDIDATE_THRESHOLD` setting, default `0`; documented in `docs/reference/configuration-vars.md`.
+- New `tests/tests/unit/test_prediction_ranking.py` (7 tests, pure function, shuffled-input based). Old, worthless integration-level guard deleted.
+
+### Verification
+- **Determinism**: 40 identical requests, post-fix — **1 ordering, 1 result set** (previously 7 orderings / 5 result sets over the same 40 requests).
+- **Performance**: process pool disabled by default — 1231 ms median vs. 3378 ms median with it engaged, at 6000/6000 patterns/candidates; payloads byte-identical.
+- **Full suite**: 603 passed / 3 skipped / 1 xfailed / 0 failed (681.79s), up from 591 (+12: 7 new ranking tests, 5 new metadata-chunking tests — see "Related" below). ruff and bandit clean.
+
+### Alternatives Considered
+1. **Leave ranking as-is, only address the process-pool performance question** — rejected outright once the determinism bug was found; shipping a "faster but still nondeterministic" scan would have been strictly worse than the status quo given KATO's stated determinism guarantee.
+2. **Delete `ProcessPoolExecutor` support entirely** rather than defaulting it off — rejected per the user's standing preference to keep performance-affecting knobs configurable rather than remove them outright.
+3. **Break ties by insertion/arrival order deliberately (documented as "first-come" semantics)** — rejected: still nondeterministic across worker processes and async completion timing; provides no actual guarantee, just an undocumented one masquerading as a rule.
+
+### Impact
+- **Positive**: closes a real violation of KATO's own stated determinism guarantee — affects any deployment with tied prediction scores and `max_predictions` truncation (not a rare edge case at scale, since exact ties are common with default/similar-length patterns). Prediction latency drops ~2.7x at 6000/6000 scale by removing pessimistic pool overhead that was never providing the parallelism benefit it was added for.
+- **Neutral**: `filter_pipeline` default remains `[]`, unchanged by this work — the user has confirmed this stays a deliberate, user-facing configurable choice, not a default to change (see the cost-breakdown analysis below, which found the full-corpus scan itself is not the bottleneck).
+- **Risk**: Low — ranking fix is a pure function with a dedicated shuffle-based test suite proven to fail on revert; process-pool change is a default flip on an already-present, already-tested code path, kept reachable via the new threshold.
+
+### Related finding: metadata-lookup chunking bug, introduced during Remediation Pass 1, found and fixed the same day
+While profiling the ranking/pool work at 6000-pattern scale, ClickHouse began rejecting metadata lookups over `max_query_size` (262144 bytes; ~6000 quoted SHA1 names at ~42 bytes each). Root cause: Remediation Pass 1 (DECISION-030) hoisted `get_metadata_batch()` above the `asyncio.gather` batch split — a genuine win, since it removed N serialized ClickHouse+Redis round trips — but that put the *entire* result set into a single ClickHouse `IN` list. **The failure was silent to the caller**: `ClickHouseWriter` logged and returned `{}` on the oversized query, so every prediction silently fell back to `frequency=1` and default metrics rather than erroring. It was found by reading container logs during this performance profiling, not by the test suite (the suite's corpora are well below the size threshold). Fixed by chunking the lookup at 500 (`METADATA_CHUNK_SIZE`, matching the existing convention in `FilterPipelineExecutor._execute_chunked_query`), guarded by new `tests/tests/unit/test_metadata_batch_chunking.py` (5 tests), confirmed to fail with chunking removed.
+
+Also fixed alongside: `shutdown_event` called `OptimizedConnectionManager.get_instance()`, a method that does not exist — the resulting `AttributeError` was swallowed by the surrounding `except`, so database connections were never actually closed on service shutdown.
+
+### Related finding: cost breakdown redirects future performance work away from the full-corpus scan
+Measured at 6000 patterns / 6000 candidates on the default `filter_pipeline=[]` path (~1271 ms total, post-fix): ClickHouse full-corpus `SELECT` ~12 ms (1%); result parse + `patterns_cache` build ~80 ms (6%); pattern metadata lookup (12 chunks of 500) ~430 ms (35%); matching + metrics + ranking ~700 ms (57%). Scan scaling measured separately: 5.7 ms at 500 patterns, 9.7 ms at 2000, 11.8 ms at 6000 (50 KB → 604 KB transferred) — sub-linear, not the bottleneck. **Record this for future performance work: the full-corpus scan is not worth optimising.** The next real opportunity, not yet implemented: metadata is currently fetched for every matched pattern even though only `max_predictions` survive ranking — pruning before the metadata lookup is only safe once it's confirmed the top-K prune metrics (`_pre_potential`: evidence, confidence, snr, fragmentation) don't themselves need metadata. Separately (unrelated to prediction latency): ingestion measured as O(N²) with `process_predictions` on by default, since every observe runs a full-corpus prediction — building a corpus collapsed to ~8 patterns/min across 8 concurrent writers at ~700 patterns; with `process_predictions: false` on the loading session it was ~428 patterns/min per worker. Worth documenting for anyone bulk-loading.
+
+**Resolves**: closes the "Related Decisions" implication left open at DECISION-030's "Deferred" list item "per-request `ProcessPoolExecutor`" — that item is now **done**, not merely re-assessed.
+
+**Related Decisions**:
+- DECISION-030 (2026-09-16, same day) — Remediation Pass 1, whose deferred/re-assess list named the `ProcessPoolExecutor` item this decision closes, and whose metadata-batch hoist (a genuine win) had the chunking gap this decision's investigation surfaced and fixed.
+- `planning-docs/project-manager/patterns.md` — new Testing Strategy Patterns entry: cross-worker behaviour cannot be tested through the shared `kato_fixture` because HTTP keep-alive pins it to one worker; test such invariants as pure functions instead.
 
 ---
 
@@ -43,13 +103,22 @@ Default `filter_pipeline` still `[]` (the exact-safe `LengthFilter`-from-`recall
 - **Neutral**: no prediction-output-affecting change — the default `filter_pipeline` and matching semantics are untouched by design (exact-safe scope).
 - **Risk**: Low for what shipped — each fix independently tested, several verified live against the running stack. **Process risk is the open item**: nothing here is committed, so none of it is protected by version control yet; see "Status" below.
 
-### Status — four items need the user's decision before this pass can close
-1. **Commit and merge `chore/remediation-pass-1`** — not yet decided.
-2. **Regenerate `requirements.lock`** (`pip-compile`) after the `aioredis` removal — not run.
-3. **Clean up the 4,464 pre-existing orphan Redis prediction keys** — deliberately not run; needs explicit go-ahead given this project's prior Redis-data-loss incident (see `redis_persistence_data_loss_2026_04_13.md`, project memory).
-4. **Full stack recreate** to pick up the `docker-compose.yml`/`config/redis.conf` binding changes — only the `kato` service was recreated during verification.
+### Status — RESOLVED 2026-09-16 (same day). All four items below closed; see the correction note further down for one claim in this decision that did not hold up and was reverted.
+1. **Commit and merge `chore/remediation-pass-1`** — **DONE.** Committed as `df9a76a` "fix: repair dead error handling, SQL parameterization, and data-loss bugs (Remediation Pass 1)", merged to `main` via no-ff merge `7233155`.
+2. **Regenerate `requirements.lock`** (`pip-compile`) after the `aioredis` removal — **DONE, but NOT via a full `pip-compile` regeneration.** A full regeneration was run in a `python:3.10` container and produced a diff that bumped nearly every pin (`clickhouse-connect` 0.9.2→1.8.0, `redis` 6.4→8.1, `pytest` 8→9, `pydantic`, `qdrant-client` 1.15→1.19, `uvicorn` 0.37→0.53) — that result was **rejected** as far outside the scope of a dependency-list edit. Instead, only the `aioredis` entry and its two `# via` back-references were removed surgically from `requirements.lock`, leaving every other pin byte-identical. Verified the image builds and `aioredis` is absent. **A full dependency upgrade remains an explicitly open item — see `pending-updates.md`.**
+3. **Clean up the 4,464 pre-existing orphan Redis prediction keys** — **DONE.** All 4,464 `*:prediction:*` keys with no TTL were deleted with `UNLINK`, after verifying every one of the 4,464 matched the expected `<kb_id>:prediction:obs-<hex>` shape (i.e., nothing outside the known leak pattern was touched). The 549 keys written *after* the TTL fix landed were deliberately left alone — they carry a correct TTL and will expire on their own. Redis `DBSIZE` 44057 → 39593. Verified afterward: zero surviving prediction keys without a TTL.
+4. **Full stack recreate** to pick up the `docker-compose.yml`/`config/redis.conf` binding changes — **DONE.** Data integrity verified before/after: Redis `DBSIZE` 39593 unchanged, ClickHouse 8824 patterns / 19513 metadata rows / 301 distinct `kb_id`s unchanged, all 84 Qdrant collections recovered, end-to-end observe/learn/predict returns the expected future. A `redis-cli SAVE` was taken before the recreate. Also applied to `deployment/docker-compose.yml` (the compose project the running stack actually uses) — this decision's original text only recorded the root `docker-compose.yml` binding change, which alone had no effect on the live deployment; see correction below.
 
-See `planning-docs/project-manager/pending-updates.md` for the corresponding human-alert entries.
+Full detail: `planning-docs/completed/features/2026-09-16-remediation-pass-1-followup-and-determinism-fix.md`. See `planning-docs/project-manager/pending-updates.md` (Resolved Issues) for the corresponding closed human-alert entries, and for the new items this closure surfaced.
+
+### Correction (2026-09-16) — the `protected-mode no` verification in "Security" above was invalid; the change has been reverted
+This decision's "Security" section states that `protected-mode no` was removed from `config/redis.conf` "after verifying empirically that with an explicit `bind` directive, container-to-container access still works." **That verification proved nothing, and the change has been reverted** (commit `8deab2c`).
+
+The original test was invalid because `redis:7-alpine` (Redis 7.4.8) already compiles in `protected-mode no` as its own image default — deleting the line from `redis.conf` therefore left protected mode off regardless, and the "container-to-container access still works" observation was true whether or not the removed line had any effect. It was never actually tested with protected mode *on*.
+
+When protected mode is genuinely enabled (`protected-mode yes`) with an explicit `bind` directive and no password configured, Redis refuses cross-container connections outright: `DENIED Redis is running in protected mode because protected mode is enabled ... connections are only accepted from the loopback interface` — the `bind` directive does **not** exempt a connection from this check; only a configured password does. This was confirmed by actually testing with `protected-mode yes` set.
+
+**Resolution**: `protected-mode no` is restored in `config/redis.conf`, and now set **explicitly** (rather than left to rely on the redis:7-alpine image default, since upstream Redis itself ships `yes`). Committed as `8deab2c` "fix(redis): keep protected-mode off, and say why". What actually protects this Redis instance today is (1) the host-published port bound to `127.0.0.1` (item 4 above) and (2) nothing else — no `REDIS_PASSWORD` is currently configured. **Setting `REDIS_PASSWORD` is the recommended next step**, after which `protected-mode` could be safely turned back on. Tracked as a new open item in `pending-updates.md`.
 
 **Resolves**: N/A (new findings, not a prior open item) — but closes the `pickle.loads` finding recorded in `docs/maintenance/security-review-baseline.md:22`.
 

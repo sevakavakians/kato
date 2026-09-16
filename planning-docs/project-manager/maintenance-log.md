@@ -3,6 +3,33 @@
 
 ---
 
+## 2026-09-16 - Task Completion: Remediation Pass 1 Follow-On (Branch Closed Out + DECISION-031 Determinism Fix) — COMPLETE
+
+**Trigger**: Task Completion — Remediation Pass 1's four previously-open items (commit/merge, `requirements.lock`, orphan Redis key cleanup, full stack recreate) all resolved; one claim in DECISION-030 (the `protected-mode no` verification) found invalid and reverted; and, discovered while investigating a separate performance question, a real prediction-ranking nondeterminism bug found and fixed (new DECISION-031), plus a ProcessPoolExecutor performance pessimisation removed and two incidental bugs (metadata-chunking silent failure, dead `shutdown_event` call) fixed along the way.
+
+**Actions Taken**:
+1. `planning-docs/DECISIONS.md` — new DECISION-031 entry added (Context/Rationale/Implementation/Verification/Impact/Related, plus the metadata-chunking and cost-breakdown findings folded in as "Related finding" subsections). DECISION-030 updated: its "Status" section rewritten from "four items need the user's decision" to "RESOLVED", each of the four items marked done with detail; a new "Correction" subsection added directly under it, documenting that the `protected-mode no` verification was invalid and has been reverted. Header timestamp refreshed.
+2. `planning-docs/SESSION_STATE.md` — header timestamp refreshed; "Current Task" rewritten (the six carried-forward decisions reduced/replaced: four resolved, two new items added — full dependency upgrade, `REDIS_PASSWORD`, dashboard hardening — alongside the two still-open items from before, v5.0.3 release and the fast-path decision, plus the still-open `sort_symbols` bug). The former "Previous Task" (Remediation Pass 1, uncommitted) demoted to "Earlier Task (context preserved)" with inline corrections (branch now committed/merged; protected-mode claim corrected; ProcessPool/orphan-key deferred-list items marked done). New "Previous Task" entry written for this session's combined work (both parts).
+3. `planning-docs/SPRINT_BACKLOG.md` — header timestamp refreshed; new "Recently Completed" entry added at the top of that section covering both parts of this session's work; the "Follow-up: Remediation Pass 1 — Deferred Items (Re-assess List)" entry updated to strike through the `ProcessPoolExecutor` and orphan-Redis-key items as done, with a note that the `filter_pipeline` item's performance rationale has weakened (scan confirmed not to be the bottleneck); two new Backlog entries added (metadata-prefetch-before-lookup opportunity; O(N²) ingestion documentation note).
+4. `planning-docs/project-manager/patterns.md` — new Testing Strategy Patterns entry: cross-worker/cross-process nondeterminism cannot be tested through the shared `kato_fixture` (HTTP keep-alive pins every request in a test to one worker), so such invariants need a pure-function test instead — with the concrete before/after (a worthless integration guard that passed against a reverted buggy build, replaced with a shuffled-input pure-function suite).
+5. `planning-docs/project-manager/pending-updates.md` — four Remediation Pass 1 items moved from Current Issues to Resolved Issues with resolution detail; three new Current Issues filed (full dependency upgrade; set `REDIS_PASSWORD` then re-enable protected-mode; harden the dashboard); the existing v5.0.3-release item updated in place to reflect the now-larger unreleased gap (rewritten, not duplicated) and re-prioritized Medium→Medium-High; the fast-path single-symbol decision item carried forward unchanged.
+6. New archive entry: `planning-docs/completed/features/2026-09-16-remediation-pass-1-followup-and-determinism-fix.md` — full write-up of both parts: the four Remediation Pass 1 closures, the protected-mode correction, the ranking-determinism bug/fix with live measurements, the ProcessPool removal with before/after timing, the metadata-chunking bug, the dead shutdown-connection-close bug, the cost breakdown, and the remaining open items.
+
+**Key Details**:
+- Commits: `df9a76a` (Remediation Pass 1), `7233155` (merge), `8deab2c` (protected-mode revert), `7bae726` (DECISION-031).
+- Determinism bug measured: 40 identical requests, 7 distinct orderings / 5 distinct result sets before the fix; 1 ordering / 1 result set after.
+- ProcessPool removal measured: 3378ms → 1231ms median at 6000/6000 scale, byte-identical payloads.
+- Full suite: 603 passed / 3 skipped / 1 xfailed / 0 failed (681.79s), up from 591 (+12: 7 ranking tests, 5 metadata-chunking tests). ruff and bandit clean.
+- Orphan Redis keys: 4,464 deleted via `UNLINK` after shape verification; `DBSIZE` 44057 → 39593.
+- Full stack recreate: Redis/ClickHouse/Qdrant data integrity verified unchanged before/after.
+- `requirements.lock`: only `aioredis` removed surgically; a full `pip-compile` regeneration was attempted, rejected as out of scope, and is now a separate tracked item.
+
+**Classification**: Task Completion (process closure + bug fix + performance + security correction)
+
+**Next Steps**: None mandated. Next action is user-driven: pick an item from `SPRINT_BACKLOG.md`'s Backlog section, or decide on one of the six pending items in `SESSION_STATE.md`'s "Current Task". project-manager will be triggered again on whatever the user picks up next.
+
+---
+
 ## 2026-09-11 - Task Completion: Event-Aware Alignment Refinement Fix (DECISION-029) — COMPLETE
 
 **Trigger**: Task Completion — `refine_alignment_by_events()` implemented, tested, verified, and committed on `main` as `34910a70` "fix(predictions): attribute repeated symbols to the event their neighbours matched", closing out the work planned and recorded IN PROGRESS earlier today (see the entry immediately below).

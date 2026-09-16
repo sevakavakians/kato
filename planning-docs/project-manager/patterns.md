@@ -5,6 +5,22 @@
 
 ## Testing Strategy Patterns
 
+### 2026-09-16 - Cross-Worker Nondeterminism Cannot Be Tested Through a Shared-Session HTTP Fixture; Test the Invariant as a Pure Function Instead
+
+**Pattern**: A guard test for a prediction-ranking determinism fix was first written as an integration test using the standard `kato_fixture`, and it **passed against a deliberately reverted (buggy) build** — meaning it provided zero actual protection despite looking like a real regression test. Cause: `tests/tests/fixtures/kato_fixtures.py` constructs a single `requests.Session()` shared across a test's requests; HTTP keep-alive on that session pins every request to the same TCP connection, and a uvicorn/FastAPI worker process handles all requests received on a given connection — so the "cross-worker" nondeterminism (each process's `set` iterates pattern names in a different, per-process-randomized order) never had a chance to manifest, because the test only ever talked to one worker.
+
+**Discovery Trigger**: The bug being guarded against — prediction ranking ties broken by unstable `set`/`asyncio.as_completed()` arrival order — was independently confirmed live (40 identical requests, 7 distinct orderings) before the guard test was written. When the first integration-test version of the guard was run against a manually-reverted build, it passed, which should have failed given the confirmed live bug — that contradiction is what surfaced the fixture's keep-alive pinning as the cause.
+
+**Assumption → Reality**:
+- Assumed: an integration test hitting the real HTTP API through the standard test fixture exercises the same code path (and the same multi-worker nondeterminism) that a real client hitting the deployed service would.
+- Reality: the standard fixture's connection reuse silently collapses "the deployed service, potentially many workers" down to "one worker, deterministically," for the whole duration of any test using it — which is exactly the condition under which the bug being tested for does NOT manifest.
+
+**Resolution Pattern**: When a bug's manifestation depends on cross-process/cross-worker variation (randomized `set`/dict iteration order per interpreter, `asyncio.as_completed()` timing, or anything else where two different worker processes can legitimately disagree), do not rely on an HTTP integration test through a connection-reusing fixture to exercise that variation — it structurally cannot, regardless of how many requests the test sends. Instead, extract the invariant into a pure function (here: `rank_predictions(predictions, metric, limit)`, tested directly with shuffled input orderings standing in for "whatever order a `set` or `as_completed()` might produce") and test that function's contract in isolation. The old, worthless integration-level guard was deleted rather than kept alongside the new one, to avoid a false sense of double coverage.
+
+**Recurrence Risk**: Medium — any future bug involving multi-worker/multi-process nondeterminism (session/state races, cache incoherence across workers, anything keyed on `KATO_WORKERS>1`) is at risk of the same false-negative if a guard test is written against the shared-session HTTP fixture rather than as a targeted pure-function or fixture-level test that actually varies the condition being guarded against. When in doubt, ask "would this test still exercise both code paths if every request in the test landed on the exact same worker process?" — if the answer is no, the fixture is the wrong tool.
+
+---
+
 ### 2026-09-10 - Session-Scoped Test Cleanup That Flushes Shared State Interferes With Any Concurrent User of That State
 
 **Pattern**: `tests/tests/conftest.py`'s session-scoped autouse fixture deleted every `kato:session:*` Redis key at the start of each pytest invocation. In isolation this is harmless test hygiene. But Redis is shared infrastructure on the dev stack — a second overlapping pytest invocation, a deployment container being recreated mid-run, or a live client (a training notebook) all read/write the same `kato:session:*` keyspace. Running the full suite while a deployment container recreate and a topology-suite re-run were also in progress produced 4 failures: 1 connection-refused (from the container recreate itself) and 3 "sessions vanished mid-test" (the conftest fixture's blanket delete racing the other processes' live sessions). A rerun on a quiet stack passed cleanly (482/4/1xfail/0), confirming the failures were cross-process interference, not a regression.

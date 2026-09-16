@@ -1,9 +1,9 @@
 # SPRINT_BACKLOG.md - Upcoming Work
-*Last Updated: 2026-09-16 (Remediation Pass 1 — high-value, low-risk fixes from a comprehensive tech-debt/security/performance review — COMPLETE but UNCOMMITTED on branch `chore/remediation-pass-1`; see "Recently Completed" and the new Backlog entries below)*
+*Last Updated: 2026-09-16 (Remediation Pass 1 branch committed and merged to `main`; its four remaining open items resolved; DECISION-031 closed the deterministic-prediction-ranking bug and removed the ProcessPoolExecutor pessimisation — see "Recently Completed" and the updated Backlog entries below)*
 
 ## Active Projects
 
-*No active initiative-scale projects at this time. Remediation Pass 1 (see "Recently Completed" below) is done but sits uncommitted on branch `chore/remediation-pass-1` — pending the user's decision on whether/when to commit and merge (see `planning-docs/project-manager/pending-updates.md`). Next up is whatever the user picks from the Backlog section below, most notably: committing/merging the remediation branch, the re-assess list it deferred, and the two older decisions still open (v5.0.3 patch release; fast-path single-symbol matching semantics).*
+*No active initiative-scale projects at this time. Remediation Pass 1 is fully closed (committed `df9a76a`, merged `7233155`; all four of its open items resolved — see "Recently Completed" below and `planning-docs/project-manager/pending-updates.md`). DECISION-031 (same day) additionally fixed a real prediction-ranking nondeterminism bug and removed a per-request `ProcessPoolExecutor` pessimisation. Next up is whatever the user picks from the Backlog section below — most notably: the still-open v5.0.3 patch release, the fast-path single-symbol matching decision, the `sort_symbols` bug, the remaining re-assess list, a full dependency upgrade, and setting `REDIS_PASSWORD`.*
 
 ---
 
@@ -302,6 +302,21 @@ Phase 4 (Symbol Statistics & Fail-Fast Architecture) is 100% complete. The Click
 
 ## Recently Completed
 
+### Remediation Pass 1 Follow-On: Branch Committed/Merged, Open Items Resolved, Deterministic Prediction Ranking + ProcessPool Removal ✅ COMPLETE
+**Priority**: High — closed all four Remediation Pass 1 loose ends, plus a real correctness bug (nondeterministic predictions) found while investigating a performance question
+**Status**: FULLY COMPLETED (2026-09-16)
+**Files Modified**: `kato/representations/prediction.py`, `kato/storage/clickhouse_writer.py`, `kato/services/kato_fastapi.py` (shutdown fix), `config/redis.conf`, `docker-compose.yml`, `deployment/docker-compose.yml`, `requirements.lock`, `docs/reference/configuration-vars.md`, `tests/tests/unit/test_prediction_ranking.py` (new), `tests/tests/unit/test_metadata_batch_chunking.py` (new)
+
+**Summary**: Two threads of work landed the same day. (1) **Remediation Pass 1 (DECISION-030) closed out**: `chore/remediation-pass-1` committed as `df9a76a`, merged to `main` via `7233155`; 4,464 orphan Redis prediction keys (no TTL) deleted with `UNLINK` after shape verification (Redis `DBSIZE` 44057→39593); full stack recreated with data integrity verified before/after (Redis, ClickHouse, Qdrant all unchanged); `requirements.lock` had only the `aioredis` entry surgically removed (a full `pip-compile` regeneration was attempted, bumped nearly every pin, and was rejected as out of scope — flagged as a separate open item). A prior claim in DECISION-030 — that removing `protected-mode no` from `config/redis.conf` was verified safe — was found **invalid** (`redis:7-alpine` ships `no` as its own default, so the original test proved nothing) and **reverted**, committed `8deab2c`; loopback port bindings additionally applied to `deployment/docker-compose.yml` (the compose project actually running), which DECISION-030 had missed. (2) **DECISION-031**: investigating whether the full-corpus prediction scan could be sped up surfaced that ranking was **not deterministic** — 40 identical requests over 10 tied patterns returned 7 distinct orderings / 5 distinct result sets. Fixed with a new `rank_predictions()` ordering on `(metric, name)` (total order, since names are unique) at all three ranking sites. With determinism no longer constraining execution strategy, the per-request `ProcessPoolExecutor` was measured honestly and found to be a pessimisation (3378ms vs 1231ms median at 6000/6000 scale) — now off by default via `PROCESS_POOL_CANDIDATE_THRESHOLD=0`, kept as a tunable rather than deleted. Along the way, a metadata-lookup chunking bug (introduced by Remediation Pass 1's own metadata-batch hoist) was found and fixed — an oversized ClickHouse `IN` list was silently failing and falling back to default metrics above ~6000 patterns — plus a dead `shutdown_event` call to a nonexistent method that silently skipped closing DB connections on shutdown.
+
+**Testing lesson recorded**: the first ranking-determinism guard used the standard `kato_fixture` and passed against a deliberately-reverted buggy build — worthless as a regression test, because the fixture's shared `requests.Session()` pins every request to one uvicorn worker via HTTP keep-alive, hiding the cross-worker nondeterminism. Replaced with a pure-function unit suite that shuffles input order directly. See `planning-docs/project-manager/patterns.md`.
+
+**Verification**: full suite 603 passed / 3 skipped / 1 xfailed / 0 failed (681.79s), up from 591 (+12: 7 ranking tests, 5 metadata-chunking tests). ruff and bandit clean. Benchmark corpora cleared afterward with zero residue in ClickHouse/Redis.
+
+**Archive**: `planning-docs/completed/features/2026-09-16-remediation-pass-1-followup-and-determinism-fix.md`. **Decisions**: DECISION-030 (`planning-docs/DECISIONS.md`, correction note added), DECISION-031 (new).
+
+---
+
 ### Multi-Symbol Event Prediction Test Suite + Position-Based Segmentation Fix ✅ COMPLETE
 **Priority**: Feature (test coverage) + Bug Fix
 **Status**: FULLY COMPLETED (2026-09-11)
@@ -426,20 +441,39 @@ Phase 4 (Symbol Statistics & Fail-Fast Architecture) is 100% complete. The Click
 
 ### Follow-up: Remediation Pass 1 — Deferred Items (Re-assess List)
 **Priority**: P2 — mix of performance/correctness/observability items, deliberately scoped out of Remediation Pass 1; re-assess and prioritize individually
-**Status**: Identified 2026-09-16 during the comprehensive tech-debt/security/performance review that produced Remediation Pass 1 — see DECISION-030 and `planning-docs/completed/features/2026-09-16-remediation-pass-1.md` for full context on why each was deferred
+**Status**: Identified 2026-09-16 during the comprehensive tech-debt/security/performance review that produced Remediation Pass 1 — see DECISION-030 and `planning-docs/completed/features/2026-09-16-remediation-pass-1.md` for full context on why each was deferred. **Updated 2026-09-16 (same day, follow-on work)**: the `ProcessPoolExecutor` item below is now DONE — see DECISION-031 and `planning-docs/completed/features/2026-09-16-remediation-pass-1-followup-and-determinism-fix.md`. Everything else in this list is still open.
 **Items**:
-- **Default `filter_pipeline` is still `[]`** — every prediction scans the node's whole corpus; all of `kato/filters/` is unreachable by default. Exact-safe route identified: derive `LengthFilter` bounds from `recall_threshold` (`T·L/(2−T) ≤ P ≤ L·(2−T)/T`), pending confirmation the bound holds for `weighted_similarity`. Deferred because it's correctness-adjacent (could change which patterns a prediction returns) and needs its own dedicated verification pass — out of scope for the "exact-safe only" scoping of Pass 1.
+- **Default `filter_pipeline` is still `[]`** — every prediction scans the node's whole corpus; all of `kato/filters/` is unreachable by default. Exact-safe route identified: derive `LengthFilter` bounds from `recall_threshold` (`T·L/(2−T) ≤ P ≤ L·(2−T)/T`), pending confirmation the bound holds for `weighted_similarity`. Deferred because it's correctness-adjacent (could change which patterns a prediction returns) and needs its own dedicated verification pass — out of scope for the "exact-safe only" scoping of Pass 1. **Measured 2026-09-16 (DECISION-031 investigation)**: the full-corpus scan itself is NOT the bottleneck at realistic scale (~12ms of ~1271ms total at 6000 patterns, sub-linear scaling) — this item should be re-prioritized on correctness/filtering-value grounds, not performance grounds.
 - **Per-request `PatternSearcher` construction swapped onto the shared processor** — a real cross-request config race for concurrent predicts on one node.
 - **Synchronous redis/clickhouse clients blocking the event loop** — the actual throughput ceiling; a structural fix (async clients throughout).
-- **Per-request `ProcessPoolExecutor`** — construction overhead on every request.
+- ~~**Per-request `ProcessPoolExecutor`** — construction overhead on every request.~~ **DONE 2026-09-16** — measured as an active pessimisation (3378ms vs 1231ms median at 6000/6000 scale, byte-identical output) and disabled by default via `PROCESS_POOL_CANDIDATE_THRESHOLD=0`, kept as an opt-in tunable. See DECISION-031.
 - **`conditional_probability_cached` md5-hashing the whole symbol table per prediction.**
 - **The unreachable legacy stateful cluster** (~400 lines, zero callers) — candidate for deletion, not attempted this pass.
 - **25 `pytest.skip("KATO services not available")` calls** that make a green full-suite run potentially misleading if services silently aren't available.
 - **Unbounded request payloads** — no size limit enforced on API request bodies.
 - **Authentication and tenant binding** — `node_id` comes from a client header with no verification and IS the tenant boundary. Explicitly deferred per the user's trusted-network deployment scoping decision for Pass 1 (DECISION-030); this is the largest and riskiest item on this list.
-- **4,464 orphan Redis prediction keys** (TTL `-1`, from the now-fixed unbounded-leak bug in `RedisWriter.write_prediction`) — cleanup script not written/run; needs the user's go-ahead given this project's prior Redis-data-loss incident (`redis_persistence_data_loss_2026_04_13.md`, project memory). Also tracked in `planning-docs/project-manager/pending-updates.md`.
+- ~~**4,464 orphan Redis prediction keys**~~ **DONE 2026-09-16** — deleted with `UNLINK` after shape verification (Redis `DBSIZE` 44057→39593); the 549 keys written after the TTL fix were deliberately left (they expire on their own). See `planning-docs/completed/features/2026-09-16-remediation-pass-1-followup-and-determinism-fix.md`.
 **Files**: spans `kato/filters/`, `kato/searches/pattern_search.py`, `kato/storage/`, `kato/api/`, plus the legacy stateful cluster (see archive for exact locations per item)
-**Related**: DECISION-030 (`planning-docs/DECISIONS.md`); `planning-docs/completed/features/2026-09-16-remediation-pass-1.md`.
+**Related**: DECISION-030, DECISION-031 (`planning-docs/DECISIONS.md`); `planning-docs/completed/features/2026-09-16-remediation-pass-1.md`, `planning-docs/completed/features/2026-09-16-remediation-pass-1-followup-and-determinism-fix.md`.
+
+---
+
+### New Opportunity: Prune Before Metadata Lookup, Not After
+**Priority**: P2 — performance; identified via the DECISION-031 cost breakdown, NOT yet implemented
+**Status**: Identified 2026-09-16 during DECISION-031's cost-breakdown measurement (see `planning-docs/completed/features/2026-09-16-remediation-pass-1-followup-and-determinism-fix.md`)
+**Detail**: At 6000 patterns/candidates, pattern-metadata lookup is ~35% of total prediction time (~430ms of ~1271ms), because metadata is fetched for every matched pattern even though only `max_predictions` survive ranking. Pruning candidates to top-K *before* the metadata lookup (rather than after, as today) would proportionally cut this cost. **Not safe to do blindly**: needs confirmation first that the top-K prune metrics (`_pre_potential`: evidence, confidence, snr, fragmentation) don't themselves require metadata — if they do, pruning before the lookup would starve the prune step of its own inputs.
+**Files**: `kato/searches/pattern_search.py` (prune/prediction pipeline), `kato/storage/clickhouse_writer.py` (`get_metadata_batch`)
+**Related**: DECISION-031 (`planning-docs/DECISIONS.md`); cost breakdown in the archive above.
+
+---
+
+### New Finding: Ingestion Is O(N²) When `process_predictions` Is Left On (Default) for Bulk Loading
+**Priority**: P2 — performance/documentation; identified during DECISION-031 benchmarking, NOT a code defect (working as designed, just an easy footgun for bulk loaders)
+**Status**: Identified 2026-09-16 during DECISION-031's benchmarking (see `planning-docs/completed/features/2026-09-16-remediation-pass-1-followup-and-determinism-fix.md`)
+**Detail**: Every `observe` call runs a full-corpus prediction by default (`process_predictions: true`), so bulk-loading a large corpus is quadratic in the number of patterns already learned. Measured: building a corpus collapsed to ~8 patterns/min across 8 concurrent writers by the time ~700 patterns had accumulated. With `process_predictions: false` set on the loading session, throughput was ~428 patterns/min per worker — no quadratic collapse observed.
+**Suggested Action**: Not a bug to fix — document this prominently for anyone bulk-loading a corpus (e.g. `docs/users/session-management.md` or a new bulk-loading guide): set `process_predictions: false` on the session used for loading.
+**Files**: `docs/users/session-management.md` or equivalent; no code change anticipated
+**Related**: DECISION-031 (`planning-docs/DECISIONS.md`).
 
 ---
 

@@ -3,6 +3,26 @@
 
 ---
 
+## 2026-09-16 - Task Completion: Remediation Pass 1 Follow-On + DECISION-031 Determinism Fix COMPLETE
+
+**Trigger Type**: Primary — Task Completion (Remediation Pass 1's branch committed/merged and its four open items resolved; a new correctness bug — nondeterministic prediction ranking — found and fixed the same day, recorded as DECISION-031, alongside a ProcessPoolExecutor performance fix and two incidental bug fixes)
+
+**Event**: Branch `chore/remediation-pass-1` committed (`df9a76a`) and merged to `main` (`7233155`); 4,464 orphan Redis keys cleaned up; full stack recreated with integrity verified; `requirements.lock` cleaned of `aioredis` surgically (full regen rejected, filed separately); a prior `protected-mode no` verification found invalid and reverted (`8deab2c`); prediction ranking made deterministic and the per-request `ProcessPoolExecutor` disabled by default (`7bae726`). Full suite 603 passed / 3 skipped / 1 xfailed / 0 failed (681.79s), up from 591.
+
+**Documents Updated**:
+- `planning-docs/DECISIONS.md` (new DECISION-031; DECISION-030 Status section rewritten to RESOLVED with a new Correction subsection)
+- `planning-docs/SESSION_STATE.md` (Current Task rewritten; Previous/Earlier Task restructured)
+- `planning-docs/SPRINT_BACKLOG.md` (new Recently Completed entry; deferred re-assess list updated; two new Backlog entries)
+- `planning-docs/project-manager/patterns.md` (new Testing Strategy Patterns entry: cross-worker nondeterminism vs. the shared HTTP fixture)
+- `planning-docs/project-manager/pending-updates.md` (four items resolved; three new items filed; one existing item updated in place)
+- `planning-docs/completed/features/2026-09-16-remediation-pass-1-followup-and-determinism-fix.md` (new archive entry)
+- `planning-docs/project-manager/maintenance-log.md`
+
+**Agent Response Time**: Immediate
+**Action Result**: All docs updated; no human alerts required beyond the items already filed in `pending-updates.md` (routine — same as every prior cycle, not a new-severity alert)
+
+---
+
 ## 2026-09-11 - Task Completion: Event-Aware Alignment Refinement Fix (DECISION-029) COMPLETE
 
 **Trigger Type**: Primary — Task Completion (implementation of the plan approved and logged as the "Planning Stage" entry immediately below now committed on `main` as `34910a70`)

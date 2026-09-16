@@ -353,10 +353,13 @@ async def shutdown_event():
             logger.error(f"Error closing session manager: {e}")
 
     # Close all database connections LAST
-    from kato.storage.connection_manager import OptimizedConnectionManager
+    # get_connection_manager(), not OptimizedConnectionManager.get_instance():
+    # there is no such classmethod, so this step raised AttributeError on every
+    # shutdown and the except below swallowed it -- connections were never
+    # actually closed.
+    from kato.storage.connection_manager import get_connection_manager
     try:
-        conn_mgr = OptimizedConnectionManager.get_instance()
-        conn_mgr.close_all_connections()
+        get_connection_manager().close_all_connections()
         logger.info("All database connections closed")
     except Exception as e:
         logger.error(f"Error closing connections: {e}")

@@ -105,6 +105,7 @@ Auto-learning is driven solely by `MAX_PATTERN_LENGTH`. Any value greater than
 | `CONNECTION_POOL_SIZE` | integer | `200` | Max Redis connections **per worker** |
 | `REQUEST_TIMEOUT` | float | `30.0` | ClickHouse send/receive timeout in seconds. Does **not** affect Qdrant or Redis, which have their own timeouts |
 | `MINHASH_HASH_FUNC` | string | `sha1` | MinHash hash function: `sha1` or `xxhash` (faster). Changing this requires reindexing existing patterns |
+| `PROCESS_POOL_CANDIDATE_THRESHOLD` | integer | `0` (off) | Candidate count above which prediction matching fans out to a `ProcessPoolExecutor` instead of a `ThreadPoolExecutor`. Off by default: measured at 6000 candidates, the process pool was **3378 ms** vs **1231 ms** for the thread pool, for byte-identical output — a fresh pool is built per request and RapidFuzz already releases the GIL. Set a positive candidate count to re-enable for workloads with heavier per-candidate work |
 
 There is no user-facing batch-size knob. ClickHouse batching is handled
 server-side via `async_insert` (`async_insert=1`, `wait_for_async_insert=0`);

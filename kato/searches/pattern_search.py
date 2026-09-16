@@ -80,9 +80,30 @@ def _lcs_ratio_scorer(s1: list, s2: list, **kwargs) -> float:
         return matcher.ratio() * 100.0
 
 
-# Threshold for switching from ThreadPoolExecutor to ProcessPoolExecutor
-# ProcessPool has higher startup/serialization cost but bypasses the GIL
-PROCESS_POOL_CANDIDATE_THRESHOLD = 500
+# Candidate count above which matching is fanned out to a ProcessPoolExecutor
+# instead of a ThreadPoolExecutor. Disabled by default (0), because measurement
+# says the process pool is a pessimisation, not an optimisation:
+#
+#   6000 patterns, 6000 candidates, identical corpus and configuration --
+#     ProcessPool engaged (old default of 500):  3378 ms median
+#     ProcessPool disabled (ThreadPool only):    1231 ms median
+#   Prediction payloads were byte-identical between the two runs.
+#
+# The premise was that a process pool bypasses the GIL for the matching loop,
+# but a fresh pool is built and torn down on every request -- up to four
+# interpreters started, plus pickling each batch of pattern data across the
+# boundary -- and RapidFuzz already releases the GIL, so the thread pool was
+# getting real parallelism anyway.
+#
+# Kept as a tunable rather than deleted: set PROCESS_POOL_CANDIDATE_THRESHOLD to
+# a positive candidate count to re-enable it for a workload where the per-
+# candidate work is heavy enough to repay the setup cost. 0 disables it.
+PROCESS_POOL_CANDIDATE_THRESHOLD = int(environ.get('PROCESS_POOL_CANDIDATE_THRESHOLD', '0'))
+
+# Pattern names per metadata lookup. They are expanded into the statement text
+# as an IN list (~42 bytes each quoted), and ClickHouse rejects a statement over
+# max_query_size (262144 bytes by default).
+METADATA_CHUNK_SIZE = 500
 
 
 def _process_batch_worker(state, batch_patterns_data, recall_threshold, use_token_matching, fuzzy_token_threshold):
@@ -1162,7 +1183,10 @@ class PatternSearcher:
 
         # Choose executor: ProcessPool for large candidate sets (bypasses GIL),
         # ThreadPool for smaller sets (lower overhead)
-        use_process_pool = len(candidates) > PROCESS_POOL_CANDIDATE_THRESHOLD
+        use_process_pool = (
+            PROCESS_POOL_CANDIDATE_THRESHOLD > 0
+            and len(candidates) > PROCESS_POOL_CANDIDATE_THRESHOLD
+        )
         fuzzy_token_threshold = getattr(self.session_config, 'fuzzy_token_threshold', 0.0) if self.session_config else 0.0
 
         all_results = []
@@ -1449,18 +1473,32 @@ class PatternSearcher:
         return self._metadata_router
 
     def _load_metadata_batch(self, pattern_hashes: list[str]) -> dict[str, Any]:
-        """Load metadata for every pattern hash in one round-trip.
+        """Load metadata for every pattern hash, in as few round-trips as possible.
 
         Metadata reads come from ClickHouse (frequency merged from Redis) via
         the MetadataRouter facade. Returns an empty dict when the router is
         unavailable or there is nothing to look up.
+
+        Chunked because the names go into an ``IN`` list that is expanded into
+        the statement text, and ClickHouse rejects anything over max_query_size
+        (262144 bytes by default) with "Max query size exceeded". Each SHA1 name
+        costs ~42 bytes quoted, so a whole-corpus lookup blows the limit at
+        roughly 6000 patterns -- and the resulting failure is silent from the
+        caller's point of view: metadata comes back empty and every prediction
+        falls back to frequency=1 and default metrics. Same 500-per-chunk
+        convention as FilterPipelineExecutor._execute_chunked_query.
         """
         if not pattern_hashes:
             return {}
         metadata_router = self._get_metadata_router()
         if not metadata_router:
             return {}
-        return metadata_router.get_metadata_batch(pattern_hashes)
+
+        metadata: dict[str, Any] = {}
+        for start in range(0, len(pattern_hashes), METADATA_CHUNK_SIZE):
+            chunk = pattern_hashes[start:start + METADATA_CHUNK_SIZE]
+            metadata.update(metadata_router.get_metadata_batch(chunk))
+        return metadata
 
     async def _build_predictions_batch(
         self,

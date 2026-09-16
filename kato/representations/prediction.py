@@ -1,5 +1,41 @@
+import heapq
 from collections import Counter
 from itertools import chain
+
+
+def rank_predictions(predictions, metric, limit):
+    """Return the `limit` highest-ranked predictions, best first.
+
+    Ranks on ``(predictions[metric], predictions['name'])`` rather than the
+    metric alone. The tie-breaker is load-bearing, not cosmetic: the order
+    predictions arrive in is NOT stable across requests. Candidates come out of
+    a ``set`` -- and string hashing is randomised per process, so each uvicorn
+    worker iterates them in a different order -- and batch results are gathered
+    with ``concurrent.futures.as_completed``. Because ``heapq.nlargest`` keeps
+    the first of equal keys and ``sorted`` is stable, ranking on the metric
+    alone let arrival order decide which of several equally-ranked predictions
+    came first, and once `limit` truncated the list, which ones were returned at
+    all. That breaks KATO's central guarantee that the same inputs produce the
+    same outputs.
+
+    Pattern names are unique, so ``(metric, name)`` is a total order and the
+    result cannot depend on the order `predictions` is supplied in.
+
+    Args:
+        predictions: Iterable of prediction dicts; each needs `metric` and 'name'.
+        metric: Name of the ranking field (KATO's ``rank_sort_algo``).
+        limit: Maximum number of predictions to return.
+
+    Returns:
+        List of at most `limit` predictions, highest-ranked first.
+
+    Raises:
+        KeyError: If a prediction lacks `metric` or 'name'.
+    """
+    def key(prediction):
+        return (prediction[metric], prediction['name'])
+
+    return sorted(heapq.nlargest(limit, predictions, key=key), key=key, reverse=True)
 
 
 def _flatten(symbols):

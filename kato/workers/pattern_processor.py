@@ -1,11 +1,9 @@
 import asyncio
-import heapq
 import itertools
 import logging
 from collections import Counter, deque
 from itertools import chain
 from math import log, log2
-from operator import itemgetter
 from os import environ
 from typing import Any, Optional
 
@@ -20,7 +18,7 @@ from kato.informatics.metrics import (
 )
 from kato.informatics.predictive_information import calculate_ensemble_predictive_information
 from kato.representations.pattern import Pattern
-from kato.representations.prediction import segment_by_alignment
+from kato.representations.prediction import rank_predictions, segment_by_alignment
 from kato.searches.pattern_search import PatternSearcher
 from kato.storage.aggregation_pipelines import OptimizedQueryManager
 from kato.storage.connection_manager import OptimizedConnectionManager
@@ -976,10 +974,9 @@ class PatternProcessor:
                 )
 
             # Sort by potential
-            predictions.sort(key=lambda x: x['potential'], reverse=True)
-
-            # Limit to max_predictions
-            predictions = predictions[:self.max_predictions]
+            # Tie-break on name so the truncation below is stable; ClickHouse
+            # gives no row-order guarantee without an ORDER BY.
+            predictions = rank_predictions(predictions, 'potential', self.max_predictions)
 
             logger.debug(f"Returning {len(predictions)} predictions for single-symbol '{symbol}'")
             return predictions
@@ -1100,7 +1097,12 @@ class PatternProcessor:
                     (p['evidence'] + p['confidence']) * p['snr']
                     + (0.0 if frag == -1 else 1.0 / (frag + 1))
                 )
-            causal_patterns = heapq.nlargest(max_for_metrics, causal_patterns, key=itemgetter('_pre_potential'))
+            # Same total order as the final ranking: ties here decide which
+            # candidates even reach the metrics loop, so settling them by
+            # arrival order would make the final result non-deterministic too.
+            causal_patterns = rank_predictions(
+                causal_patterns, '_pre_potential', max_for_metrics
+            )
             logger.debug(f"Top-K pruning: kept {len(causal_patterns)} of {original_count} candidates for metrics loop")
 
         try:
@@ -1369,11 +1371,12 @@ class PatternProcessor:
                 p['potential'] = float(potentials[i])
 
             try:
-                # Sort predictions using configurable ranking algorithm (default: 'potential')
-                active_causal_patterns = sorted(
-                    list(heapq.nlargest(self.max_predictions, causal_patterns, key=itemgetter(self.rank_sort_algo))),
-                    reverse=True,
-                    key=itemgetter(self.rank_sort_algo)
+                # Rank using the configurable algorithm (default: 'potential').
+                # rank_predictions tie-breaks on the pattern name, which is what
+                # makes repeated identical requests return the same predictions
+                # in the same order -- see its docstring.
+                active_causal_patterns = rank_predictions(
+                    causal_patterns, self.rank_sort_algo, self.max_predictions
                 )
             except KeyError:
                 raise ValueError(f"Invalid rank_sort_algo '{self.rank_sort_algo}': metric not found in predictions. Available metrics: {list(causal_patterns[0].keys()) if causal_patterns else 'none'}")

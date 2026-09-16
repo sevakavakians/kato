@@ -1,0 +1,64 @@
+# Build context exclusions.
+#
+# The Dockerfile copies only requirements.lock and kato/, but without this file
+# the whole repository is still sent to the daemon as build context, and COPY
+# kato/ sweeps in whatever the builder happens to have on disk. That shipped 164
+# stale .pyc files into the v5.1.0 image -- bytecode from the builder's own
+# Python, which the image's interpreter can never use -- plus empty directories
+# left behind by deleted modules, which then resolve as namespace packages.
+
+# Python bytecode and caches (the reason this file exists)
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+venv/
+.venv/
+ENV/
+env/
+**/venv/
+
+# Version control and CI
+.git/
+.github/
+.gitignore
+.pre-commit-config.yaml
+
+# Everything outside the build inputs
+tests/
+benchmarks/
+docs/
+planning-docs/
+examples/
+charts/
+deployment/
+archive/
+logs/
+scripts/
+assets/
+config/
+
+# Local environment and editor state
+.env
+.env.*
+!.env.example
+.vscode/
+.idea/
+.DS_Store
+*.swp
+
+# Build and release artifacts
+build/
+dist/
+*.egg-info/
+*.tar.gz
+
+# Docs and metadata not needed to build the image
+*.md
+!README.md

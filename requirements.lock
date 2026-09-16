@@ -4,8 +4,6 @@
 #
 #    pip-compile --output-file=requirements.lock requirements.txt
 #
-aioredis==2.0.1
-    # via -r requirements.txt
 annotated-types==0.7.0
     # via pydantic
 anyio==3.7.1
@@ -14,9 +12,7 @@ anyio==3.7.1
     #   starlette
     #   watchfiles
 async-timeout==5.0.1
-    # via
-    #   aioredis
-    #   redis
+    # via redis
 backports-asyncio-runner==1.2.0
     # via pytest-asyncio
 certifi==2025.8.3
@@ -123,7 +119,6 @@ tomli==2.2.1
     # via pytest
 typing-extensions==4.15.0
     # via
-    #   aioredis
     #   exceptiongroup
     #   fastapi
     #   grpcio

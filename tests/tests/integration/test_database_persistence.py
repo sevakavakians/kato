@@ -767,10 +767,10 @@ def test_emotive_persistence_with_rolling_window(kato_fixture):
     # New:      [{'happiness': 0.2}, {'happiness': 0.3}]
     # Result:   [{'happiness': 0.8}, {'happiness': 0.7}, {'happiness': 0.2}, {'happiness': 0.3}]
     assert len(pattern2['emotives']) == 4, f"Should have 4 emotive dicts after re-learning, got {len(pattern2['emotives'])}"
-    assert pattern2['emotives'][0] == {'happiness': 0.8}, f"Expected first emotive from session 1"
-    assert pattern2['emotives'][1] == {'happiness': 0.7}, f"Expected second emotive from session 1"
-    assert pattern2['emotives'][2] == {'happiness': 0.2}, f"Expected first emotive from session 2"
-    assert pattern2['emotives'][3] == {'happiness': 0.3}, f"Expected second emotive from session 2"
+    assert pattern2['emotives'][0] == {'happiness': 0.8}, "Expected first emotive from session 1"
+    assert pattern2['emotives'][1] == {'happiness': 0.7}, "Expected second emotive from session 1"
+    assert pattern2['emotives'][2] == {'happiness': 0.2}, "Expected first emotive from session 2"
+    assert pattern2['emotives'][3] == {'happiness': 0.3}, "Expected second emotive from session 2"
 
     # Get predictions and check emotives exist in predictions too
     preds = get_predictions_for_session(

@@ -6,11 +6,11 @@ ClickHouse + Redis architecture.
 """
 
 from kato.filters.base import PatternFilter
-from kato.filters.executor import FilterPipelineExecutor
-from kato.filters.length_filter import LengthFilter
-from kato.filters.jaccard_filter import JaccardFilter
-from kato.filters.minhash_filter import MinHashFilter
 from kato.filters.bloom_filter_stage import BloomFilterStage
+from kato.filters.executor import FilterPipelineExecutor
+from kato.filters.jaccard_filter import JaccardFilter
+from kato.filters.length_filter import LengthFilter
+from kato.filters.minhash_filter import MinHashFilter
 from kato.filters.rapidfuzz_filter import RapidFuzzFilter
 
 # Register filters

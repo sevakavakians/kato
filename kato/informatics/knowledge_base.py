@@ -24,7 +24,7 @@ class KnowledgeBase(dict):
         return len(list(self.keys()))
 
     def __repr__(self):
-        return "{{KB| objects: {}}}".format(len(list(self.keys())))
+        return f"{{KB| objects: {len(list(self.keys()))}}}"
 
     def learnObject(self, object, utility=None, affinity=None):
         if object.name in list(self.keys()):
@@ -62,8 +62,8 @@ class SuperKnowledgeBase:
         logger.info(f" Attaching knowledgebase for {self.id} using ClickHouse + Redis ...")
         try:
             # Get ClickHouse and Redis clients (REQUIRED)
-            from kato.storage.connection_manager import get_clickhouse_client, get_redis_client
             from kato.storage.clickhouse_writer import ClickHouseWriter
+            from kato.storage.connection_manager import get_clickhouse_client, get_redis_client
             from kato.storage.metadata_router import MetadataRouter
             from kato.storage.redis_writer import RedisWriter
 
@@ -347,10 +347,10 @@ class SuperKnowledgeBase:
         return
 
     def __repr__(self):
-        return "{{Patterns: {}, information: {}, entropy: {}}}".format(self.patterns_kb.count_documents({}), self.total_information, self.entropy)
+        return f"{{Patterns: {self.patterns_kb.count_documents({})}, information: {self.total_information}, entropy: {self.entropy}}}"
 
     def __pkb_repr__(self):
-        return "{{KB| objects: {} }}".format(self.patterns_kb.count_documents({}))
+        return f"{{KB| objects: {self.patterns_kb.count_documents({})} }}"
 
     def __vkb_repr__(self):
         return "{KB| vectors: 0 }"  # Vectors now handled by modern vector store

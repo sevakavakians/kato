@@ -6,106 +6,10 @@ These tests connect to the running Redis instance (not mocked) to verify
 actual session persistence behavior.
 """
 
-from datetime import datetime, timedelta, timezone
 
 import pytest
 
 from kato.sessions.redis_session_manager import RedisSessionManager
-from kato.sessions.redis_session_store import RedisSessionStore
-from kato.sessions.session_manager import SessionState
-
-
-@pytest.mark.asyncio
-class TestRedisSessionStore:
-    """Test Redis session store functionality"""
-
-    async def test_redis_store_creation(self):
-        """Test creating Redis session store"""
-        store = RedisSessionStore(
-            redis_url="redis://localhost:6379",
-            key_prefix="test:session:",
-            serialization="json"
-        )
-
-        assert store.redis_url == "redis://localhost:6379"
-        assert store.key_prefix == "test:session:"
-        assert store.serialization == "json"
-        assert not store._connected
-
-    async def test_session_key_generation(self):
-        """Test Redis key generation"""
-        store = RedisSessionStore(key_prefix="test:")
-
-        key = store._get_session_key("session-123")
-        assert key == "test:session-123"
-
-    async def test_session_serialization_json(self):
-        """Test JSON serialization of sessions"""
-        store = RedisSessionStore(serialization="json")
-
-        # Create test session with all required fields
-        now = datetime.now(timezone.utc)
-        from kato.config.session_config import SessionConfiguration
-        session = SessionState(
-            session_id="test-session",
-            node_id="test-node",
-            created_at=now,
-            last_accessed=now,
-            expires_at=now + timedelta(hours=1),
-            stm=[["hello", "world"]],
-            emotives_accumulator=[],
-            time=0,
-            metadata={"test": True},
-            access_count=0,
-            max_stm_size=100,
-            max_emotives_size=100,
-            session_config=SessionConfiguration()
-        )
-
-        # Serialize and deserialize
-        serialized = store._serialize_session(session)
-        assert isinstance(serialized, bytes)
-
-        deserialized = store._deserialize_session(serialized)
-
-        # Check that data survived round trip
-        assert deserialized.session_id == session.session_id
-        assert deserialized.node_id == session.node_id
-        assert deserialized.stm == session.stm
-        assert deserialized.metadata == session.metadata
-
-        # Datetime fields should be preserved
-        assert abs((deserialized.created_at - session.created_at).total_seconds()) < 1
-
-    async def test_session_serialization_pickle(self):
-        """Test Pickle serialization of sessions"""
-        store = RedisSessionStore(serialization="pickle")
-
-        # Create test session with complex data
-        now = datetime.now(timezone.utc)
-        session = SessionState(
-            session_id="test-session",
-            node_id="test-node",
-            created_at=now,
-            last_accessed=now,
-            expires_at=now + timedelta(hours=1),
-            stm=[["hello", "world"], ["foo", "bar"]],
-            emotives_accumulator=[{"joy": 0.8, "surprise": 0.2}],
-            metadata={"complex": {"nested": True}, "list": [1, 2, 3]}
-        )
-
-        # Serialize and deserialize
-        serialized = store._serialize_session(session)
-        assert isinstance(serialized, bytes)
-
-        deserialized = store._deserialize_session(serialized)
-
-        # Check that complex data survived
-        assert deserialized.session_id == session.session_id
-        assert deserialized.stm == session.stm
-        assert deserialized.emotives_accumulator == session.emotives_accumulator
-        assert deserialized.metadata == session.metadata
-        assert deserialized.created_at == session.created_at
 
 
 @pytest.mark.asyncio

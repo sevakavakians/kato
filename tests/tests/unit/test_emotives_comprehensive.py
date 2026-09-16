@@ -10,7 +10,6 @@ These tests validate:
 
 Tests are designed to FAIL if emotives don't behave as specified.
 """
-import pytest
 
 
 def test_emotives_single_key_storage(kato_fixture):

@@ -5,10 +5,10 @@ Uses Locality-Sensitive Hashing to find patterns with high Jaccard similarity
 without computing exact pairwise comparisons.
 """
 
-from typing import Optional, Set, Dict, Any
 import logging
+from typing import Any, Dict, Optional, Set
 
-from datasketch import MinHash, MinHashLSH
+from datasketch import MinHash
 
 from kato.filters.base import PatternFilter
 from kato.storage.clickhouse_writer import _MINHASH_HASHFUNC
@@ -123,18 +123,21 @@ class MinHashFilter(PatternFilter):
         Returns:
             SQL query string for LSH band matching
         """
-        # Convert LSH bands to ClickHouse array literal
-        # Note: ClickHouse uses UInt64 for band hashes, handle negative hash values
-        bands_str = ", ".join(str(abs(band)) for band in self.stm_lsh_bands)
-        bands_array = f"[{bands_str}]"
-
-        query = f"""
+        query = """
         SELECT name, pattern_data, length, minhash_sig
         FROM patterns_data
-        WHERE hasAny(lsh_bands, {bands_array})
+        WHERE hasAny(lsh_bands, %(lsh_bands)s)
         """
 
         return query
+
+    def get_query_parameters(self) -> Dict[str, Any]:
+        """Bind values for :meth:`get_db_query`.
+
+        ClickHouse uses UInt64 for band hashes, hence abs() on Python's signed
+        hash values.
+        """
+        return {'lsh_bands': [abs(int(band)) for band in self.stm_lsh_bands]}
 
     def filter_python(self, candidates: Set[str], patterns_cache: Dict[str, Any]) -> Set[str]:
         """

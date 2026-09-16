@@ -8,7 +8,6 @@ These tests verify that metadata:
 4. Handles large metadata sets
 5. Works correctly with kb_id truncation
 """
-import pytest
 
 
 def test_metadata_stored_in_clickhouse_not_redis(kato_fixture):

@@ -13,7 +13,7 @@ ARCHITECTURE: After v3.0 stateless refactor
 """
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from kato.exceptions import MemoryOperationError
 from kato.informatics.metrics import average_emotives

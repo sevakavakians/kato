@@ -389,8 +389,11 @@ class DistributedSTMManager:
                 stats["stream_length"] = stream_info.get("length", 0)
                 stats["consumer_groups"] = stream_info.get("groups", 0)
 
-            except Exception:
-                pass
+            except Exception as e:
+                # Stats are best-effort: a missing stream or a Redis hiccup
+                # must not fail the caller, but it should not vanish either.
+                logger.debug("Could not read stream info for %s: %s",
+                             self.stm_stream_key, e)
 
         return stats
 

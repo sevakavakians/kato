@@ -93,5 +93,8 @@ benchmarks/results/*.csv
 *.prof
 *.nvprof
 *.qdrep
-*.nvvptests/tests/unit/test_debug_predictions.py
-tests/tests/unit/test_storage_validation.py
+*.nvvp
+
+# Test-run summaries and one-off benchmark output (generated, not source)
+logs/test-runs/
+benchmark_results.json

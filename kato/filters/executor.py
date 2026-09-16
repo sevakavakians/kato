@@ -5,9 +5,10 @@ Manages sequential execution of filters with metrics collection and
 optimization of database queries.
 """
 
-import time
 import logging
-from typing import Set, Dict, List, Any, Optional
+import time
+from itertools import chain
+from typing import Any, Dict, List, Optional, Set
 
 from kato.filters.base import PatternFilter
 
@@ -78,38 +79,15 @@ class FilterPipelineExecutor:
         Returns:
             Set of all pattern names in the knowledge base
         """
-        query = f"""
+        query = """
             SELECT name, pattern_data, length
             FROM patterns_data
-            WHERE kb_id = '{self.kb_id}'
+            WHERE kb_id = %(kb_id)s
         """
 
         try:
-            result = self.clickhouse.query(query)
-
-            # Extract pattern names and cache pattern data
-            all_patterns = set()
-            for row in result.result_rows:
-                name = row[0]
-                pattern_data = row[1] if len(row) > 1 else None
-                length = row[2] if len(row) > 2 else 0
-
-                all_patterns.add(name)
-
-                # Cache pattern data for matching
-                if name not in self.patterns_cache:
-                    self.patterns_cache[name] = {}
-
-                if pattern_data:
-                    from itertools import chain
-                    # Store original event-structured for Prediction class
-                    self.patterns_cache[name]['pattern_data'] = pattern_data
-                    # Store flattened version for similarity matching
-                    self.patterns_cache[name]['pattern_data_flat'] = list(chain(*pattern_data))
-
-                # Cache length for evidence calculation
-                self.patterns_cache[name]['length'] = length
-
+            result = self.clickhouse.query(query, parameters={'kb_id': self.kb_id})
+            all_patterns = self._cache_result_rows(result)
             logger.info(f"Retrieved {len(all_patterns)} patterns from database (no filtering)")
             return all_patterns
 
@@ -303,8 +281,21 @@ class FilterPipelineExecutor:
             )
             return existing_candidates if existing_candidates else set()
 
-        # CRITICAL: Add kb_id filter FIRST for partition pruning
-        kb_id_where = f"kb_id = '{self.kb_id}'"
+        # CRITICAL: Add kb_id filter FIRST for partition pruning.
+        # Everything is bound server-side -- nothing derived from user input
+        # (STM tokens, session thresholds, kb_id, candidate names) is ever
+        # interpolated into statement text.
+        parameters: Dict[str, Any] = {'kb_id': self.kb_id}
+        filter_params = filter_instance.get_query_parameters()
+        for reserved in ('kb_id', 'candidate_names'):
+            if reserved in filter_params:
+                raise ValueError(
+                    f"Filter {filter_instance.get_filter_name()} may not bind "
+                    f"reserved parameter {reserved!r}"
+                )
+        parameters.update(filter_params)
+
+        kb_id_where = "kb_id = %(kb_id)s"
 
         if "WHERE" not in query:
             # No WHERE clause yet, add kb_id filter
@@ -325,70 +316,76 @@ class FilterPipelineExecutor:
             CHUNK_SIZE = 500
             if len(candidate_list) > CHUNK_SIZE:
                 return self._execute_chunked_query(
-                    query, kb_id_where, candidate_list, CHUNK_SIZE
+                    query, kb_id_where, candidate_list, CHUNK_SIZE, parameters
                 )
 
-            candidate_str = ", ".join(f"'{c}'" for c in candidate_list)
+            candidates_where = "name IN %(candidate_names)s"
+            parameters['candidate_names'] = tuple(candidate_list)
 
             # Inject WHERE clause into query (kb_id already added above)
             if "WHERE" in query:
                 # Already has WHERE (kb_id), add AND condition for candidates
-                query = query.replace("WHERE", f"WHERE name IN ({candidate_str}) AND", 1)
-                # This creates: WHERE name IN (...) AND kb_id = '...' AND <filter conditions>
+                query = query.replace("WHERE", f"WHERE {candidates_where} AND", 1)
+                # This creates: WHERE name IN (...) AND kb_id = ... AND <filter conditions>
                 # Move kb_id to beginning for partition pruning efficiency
-                query = query.replace(f"WHERE name IN ({candidate_str}) AND {kb_id_where}",
-                                     f"WHERE {kb_id_where} AND name IN ({candidate_str})")
+                query = query.replace(f"WHERE {candidates_where} AND {kb_id_where}",
+                                     f"WHERE {kb_id_where} AND {candidates_where}")
             else:
                 # This shouldn't happen since we added kb_id above, but handle it
                 query = query.replace(
                     "FROM patterns_data",
-                    f"FROM patterns_data WHERE {kb_id_where} AND name IN ({candidate_str})"
+                    f"FROM patterns_data WHERE {kb_id_where} AND {candidates_where}"
                 )
 
         # Execute query
         try:
-            result = self.clickhouse.query(query)
-
-            # Extract candidate names and cache ALL columns for Python-side filters
-            new_candidates = set()
-            column_names = result.column_names if hasattr(result, 'column_names') else []
-
-            for row in result.result_rows:
-                # First column is always 'name'
-                name = row[0]
-                new_candidates.add(name)
-
-                # Cache ALL columns as dict for Python-side filters
-                if name not in self.patterns_cache:
-                    self.patterns_cache[name] = {}
-
-                # Map column names to values
-                for i, col_name in enumerate(column_names):
-                    if i == 0:
-                        continue  # Skip 'name' column (already used as key)
-
-                    value = row[i] if i < len(row) else None
-
-                    # Special handling for pattern_data: store both event-structured and flattened versions
-                    if col_name == 'pattern_data' and value:
-                        from itertools import chain
-                        # Store original event-structured for Prediction class
-                        self.patterns_cache[name]['pattern_data'] = value
-                        # Store flattened version for similarity matching
-                        self.patterns_cache[name]['pattern_data_flat'] = list(chain(*value))
-                    else:
-                        self.patterns_cache[name][col_name] = value
-
-            return new_candidates
+            result = self.clickhouse.query(query, parameters=parameters)
+            return self._cache_result_rows(result)
 
         except Exception as e:
             logger.error(f"Database query failed: {e}")
+            # Safe to log: the query is now a parameterised template, so it
+            # carries placeholders rather than user-supplied values.
             logger.error(f"Query was: {query}")
             # Return existing candidates on error to allow pipeline to continue
             return existing_candidates if existing_candidates else set()
 
+    def _cache_result_rows(self, result) -> Set[str]:
+        """Populate ``patterns_cache`` from a query result and return the names.
+
+        The first column is always ``name``; every other column is cached under
+        its own name, with ``pattern_data`` additionally stored flattened for
+        similarity matching. Shared by the unfiltered, filtered and chunked
+        query paths, which previously carried three copies of this loop.
+        """
+        names: Set[str] = set()
+        column_names = result.column_names if hasattr(result, 'column_names') else []
+
+        for row in result.result_rows:
+            name = row[0]
+            names.add(name)
+
+            entry = self.patterns_cache.setdefault(name, {})
+
+            for i, col_name in enumerate(column_names):
+                if i == 0:
+                    continue  # Skip 'name' column (already used as key)
+
+                value = row[i] if i < len(row) else None
+
+                # pattern_data is kept both event-structured (for Prediction)
+                # and flattened (for similarity matching)
+                if col_name == 'pattern_data' and value:
+                    entry['pattern_data'] = value
+                    entry['pattern_data_flat'] = list(chain(*value))
+                else:
+                    entry[col_name] = value
+
+        return names
+
     def _execute_chunked_query(self, base_query: str, kb_id_where: str,
-                               candidate_list: List[str], chunk_size: int) -> Set[str]:
+                               candidate_list: List[str], chunk_size: int,
+                               parameters: Dict[str, Any]) -> Set[str]:
         """Execute a query with large candidate sets by chunking the IN clause.
 
         Avoids ClickHouse max_query_size overflow when candidate count exceeds
@@ -396,58 +393,37 @@ class FilterPipelineExecutor:
 
         Args:
             base_query: The filter query with WHERE clause already containing kb_id
-            kb_id_where: The kb_id WHERE clause string
+            kb_id_where: The kb_id WHERE clause fragment (a bind placeholder)
             candidate_list: Full list of candidate pattern names
             chunk_size: Maximum candidates per IN clause
+            parameters: Bind parameters for the query (kb_id plus any the
+                filter contributed); each chunk adds its own candidate names.
 
         Returns:
             Set of candidate names passing the filter across all chunks
         """
-        from itertools import chain as itertools_chain
         all_candidates = set()
+
+        candidates_where = "name IN %(candidate_names)s"
+        if "WHERE" in base_query:
+            chunk_query = base_query.replace("WHERE", f"WHERE {candidates_where} AND", 1)
+            chunk_query = chunk_query.replace(
+                f"WHERE {candidates_where} AND {kb_id_where}",
+                f"WHERE {kb_id_where} AND {candidates_where}"
+            )
+        else:
+            chunk_query = base_query.replace(
+                "FROM patterns_data",
+                f"FROM patterns_data WHERE {kb_id_where} AND {candidates_where}"
+            )
 
         for i in range(0, len(candidate_list), chunk_size):
             chunk = candidate_list[i:i + chunk_size]
-            candidate_str = ", ".join(f"'{c}'" for c in chunk)
-
-            chunk_query = base_query
-            if "WHERE" in chunk_query:
-                chunk_query = chunk_query.replace(
-                    "WHERE",
-                    f"WHERE name IN ({candidate_str}) AND", 1
-                )
-                chunk_query = chunk_query.replace(
-                    f"WHERE name IN ({candidate_str}) AND {kb_id_where}",
-                    f"WHERE {kb_id_where} AND name IN ({candidate_str})"
-                )
-            else:
-                chunk_query = chunk_query.replace(
-                    "FROM patterns_data",
-                    f"FROM patterns_data WHERE {kb_id_where} AND name IN ({candidate_str})"
-                )
+            chunk_params = dict(parameters, candidate_names=tuple(chunk))
 
             try:
-                result = self.clickhouse.query(chunk_query)
-                column_names = result.column_names if hasattr(result, 'column_names') else []
-
-                for row in result.result_rows:
-                    name = row[0]
-                    all_candidates.add(name)
-
-                    if name not in self.patterns_cache:
-                        self.patterns_cache[name] = {}
-
-                    for j, col_name in enumerate(column_names):
-                        if j == 0:
-                            continue
-                        value = row[j] if j < len(row) else None
-                        if col_name == 'pattern_data' and value:
-                            from itertools import chain
-                            self.patterns_cache[name]['pattern_data'] = value
-                            self.patterns_cache[name]['pattern_data_flat'] = list(chain(*value))
-                        else:
-                            self.patterns_cache[name][col_name] = value
-
+                result = self.clickhouse.query(chunk_query, parameters=chunk_params)
+                all_candidates |= self._cache_result_rows(result)
             except Exception as e:
                 logger.error(f"Chunked query failed (chunk {i//chunk_size + 1}): {e}")
 

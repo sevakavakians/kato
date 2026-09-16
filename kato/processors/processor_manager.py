@@ -9,7 +9,9 @@ that survives across sessions.
 """
 
 import asyncio
+import contextlib
 import logging
+import re
 from collections import OrderedDict
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
@@ -17,10 +19,22 @@ from typing import Any, Optional
 from kato.config.configuration_service import get_configuration_service
 from kato.config.session_config import SessionConfiguration
 from kato.config.settings import get_settings
+from kato.storage.identifiers import validate_kb_id
 from kato.workers.kato_processor import KatoProcessor
-import contextlib
 
 logger = logging.getLogger('kato.processors.manager')
+
+# Allowlist for building database-safe ids: every character outside
+# [A-Za-z0-9_] becomes '_'. This replaces a 14-character blacklist that did not
+# cover the single quote, tab or newline -- all three of which could previously
+# survive into ClickHouse statement text via kb_id. Compiled once at import;
+# one re.sub is also cheaper than the 14-step replace() chain it replaces.
+_UNSAFE_ID_CHARS = re.compile(r'[^A-Za-z0-9_]')
+
+
+def _sanitize_id_component(value: str) -> str:
+    """Map a raw id component onto [A-Za-z0-9_]."""
+    return _UNSAFE_ID_CHARS.sub('_', value)
 
 
 class ProcessorManager:
@@ -73,15 +87,12 @@ class ProcessorManager:
         Returns:
             Processor ID in format "{node_id}_{base_processor_id}"
         """
-        # Clean node_id to be database-safe
-        # Most databases don't allow: / \ . " $ * < > : | ? in names
-        # Also replace hyphens with underscores for consistency
-        safe_node_id = node_id
-        for char in ['/', '\\', '.', '"', '$', '*', '<', '>', ':', '|', '?', '-', ' ']:
-            safe_node_id = safe_node_id.replace(char, '_')
+        # Clean node_id to be database-safe. Allowlist, not blacklist: anything
+        # outside [A-Za-z0-9_] becomes '_'.
+        safe_node_id = _sanitize_id_component(node_id)
 
         # Clean base_processor_id too
-        safe_base_id = self.base_processor_id.replace('-', '_')
+        safe_base_id = _sanitize_id_component(self.base_processor_id)
 
         # Database name limit is typically 64 characters but we use 60 for absolute safety
         # Calculate the final name and ensure it fits
@@ -104,7 +115,11 @@ class ProcessorManager:
             final_name = f"{safe_node_id}_{safe_base_id}"
             logger.info(f"Truncated node_id for database: orig={node_id}, final={final_name}, len={len(final_name)}")
 
-        return f"{safe_node_id}_{safe_base_id}"
+        # Belt and braces: this value is inlined into DROP PARTITION / ALTER
+        # DELETE statement text downstream, where it cannot be bound as a
+        # parameter. If sanitisation ever regresses, fail here rather than
+        # emitting the statement.
+        return validate_kb_id(f"{safe_node_id}_{safe_base_id}")
 
     async def get_processor(self, node_id: str, session_config: Optional[SessionConfiguration] = None) -> KatoProcessor:
         """
@@ -187,8 +202,15 @@ class ProcessorManager:
         try:
             processor = evicted_info['processor']
 
-            # Clean up Qdrant collection
-            if hasattr(processor, 'vector_processor') and \
+            # Clean up Qdrant collection (ONLY for test processors).
+            # vectors_{processor_id} is persistent tenant storage, not a cache:
+            # evicting a processor from the in-memory LRU must not destroy the
+            # node's vectors. This delete used to be unconditional, so any node
+            # pushed out of the LRU permanently lost its embeddings. The TTL
+            # path (cleanup_expired_processors) never deleted Qdrant either,
+            # which is the behaviour this now matches.
+            if evicted_id.startswith('test_') and \
+               hasattr(processor, 'vector_processor') and \
                hasattr(processor.vector_processor, 'vector_indexer'):
                 try:
                     processor.vector_processor.vector_indexer.delete_collection()

@@ -9,7 +9,7 @@ session-based endpoints under /sessions/{session_id}/.
 
 import asyncio
 import logging
-from typing import Any, Optional
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Path, Query, Request
 

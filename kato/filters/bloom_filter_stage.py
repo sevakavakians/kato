@@ -5,8 +5,8 @@ Uses probabilistic Bloom filter to quickly eliminate patterns that cannot
 possibly match observed tokens.
 """
 
-from typing import Optional, Set, Dict, Any
 import logging
+from typing import Any, Dict, Optional, Set
 
 from kato.filters.base import PatternFilter
 

@@ -5,8 +5,8 @@ Uses RapidFuzz library for fast string/token similarity calculation,
 providing 5-10x speedup over traditional difflib matching.
 """
 
-from typing import Optional, Set, Dict, Any
 import logging
+from typing import Any, Dict, Optional, Set
 
 from kato.filters.base import PatternFilter
 
@@ -14,8 +14,9 @@ logger = logging.getLogger(__name__)
 
 # Import RapidFuzz (optional - graceful degradation)
 try:
-    from rapidfuzz import fuzz, process
-    from rapidfuzz.distance import LCSseq
+    # Imported to probe availability; the names are re-imported where used.
+    from rapidfuzz import fuzz, process  # noqa: F401
+    from rapidfuzz.distance import LCSseq  # noqa: F401
     RAPIDFUZZ_AVAILABLE = True
 except ImportError:
     RAPIDFUZZ_AVAILABLE = False

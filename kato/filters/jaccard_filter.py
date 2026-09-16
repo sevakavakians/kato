@@ -5,8 +5,8 @@ Filters patterns by token set overlap using ClickHouse's array functions
 for efficient Jaccard similarity calculation.
 """
 
-from typing import Optional, Set, Dict, Any
 import logging
+from typing import Any, Dict, Optional, Set
 
 from kato.filters.base import PatternFilter
 
@@ -46,9 +46,11 @@ class JaccardFilter(PatternFilter):
         """
         super().__init__(config, state)
 
-        # Get configuration with defaults
-        self.threshold = getattr(config, 'jaccard_threshold', None) or 0.3
-        self.min_overlap = getattr(config, 'jaccard_min_overlap', None) or 2
+        # Get configuration with defaults. Coerce: these come from session
+        # config, so a non-numeric value must fail here rather than travel any
+        # further towards the query.
+        self.threshold = float(getattr(config, 'jaccard_threshold', None) or 0.3)
+        self.min_overlap = int(getattr(config, 'jaccard_min_overlap', None) or 2)
 
         logger.debug(
             f"JaccardFilter initialized: STM tokens={len(self.stm_tokens)}, "
@@ -66,24 +68,31 @@ class JaccardFilter(PatternFilter):
         Returns:
             SQL query string filtering by Jaccard similarity
         """
-        # Convert STM tokens to ClickHouse array literal
-        stm_tokens_str = ", ".join(f"'{token}'" for token in self.stm_token_list)
-        stm_array = f"[{stm_tokens_str}]"
-
-        query = f"""
+        # STM tokens and thresholds are bound server-side, never interpolated:
+        # tokens come straight from user observations and the thresholds from
+        # session config. See get_query_parameters().
+        query = """
         SELECT name, pattern_data, length
         FROM patterns_data
         WHERE (
             -- Calculate intersection size
-            length(arrayIntersect(token_set, {stm_array})) >= {self.min_overlap}
+            length(arrayIntersect(token_set, %(stm_tokens)s)) >= %(min_overlap)s
             AND
             -- Calculate Jaccard similarity
-            length(arrayIntersect(token_set, {stm_array})) * 1.0 /
-            length(arrayDistinct(arrayConcat(token_set, {stm_array}))) >= {self.threshold}
+            length(arrayIntersect(token_set, %(stm_tokens)s)) * 1.0 /
+            length(arrayDistinct(arrayConcat(token_set, %(stm_tokens)s))) >= %(threshold)s
         )
         """
 
         return query
+
+    def get_query_parameters(self) -> Dict[str, Any]:
+        """Bind values for :meth:`get_db_query`."""
+        return {
+            'stm_tokens': list(self.stm_token_list),
+            'min_overlap': self.min_overlap,
+            'threshold': self.threshold,
+        }
 
     def filter_python(self, candidates: Set[str], patterns_cache: Dict[str, Any]) -> Set[str]:
         """

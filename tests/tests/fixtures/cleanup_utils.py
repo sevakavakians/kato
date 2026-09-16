@@ -3,8 +3,6 @@ Database cleanup utilities for test isolation.
 Provides functions to completely clear all databases for a specific processor_id.
 """
 
-import os
-from typing import Optional
 
 import redis
 from qdrant_client import QdrantClient

@@ -15,7 +15,7 @@ import sys
 import time
 from typing import Optional
 
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from kato import __version__
@@ -24,17 +24,23 @@ from kato.api.schemas.root import RootResponse
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 # Import modular API endpoints
-from kato.api.endpoints import health_router, kato_ops_router, monitoring_router, sessions_router, websocket_events_router
+from kato.api.endpoints import (
+    health_router,
+    kato_ops_router,
+    monitoring_router,
+    sessions_router,
+    websocket_events_router,
+)
 from kato.config.configuration_service import get_configuration_service
+from kato.config.logging_config import configure_logging, generate_trace_id, trace_context
 from kato.config.settings import get_settings
 from kato.exceptions.handlers import setup_error_handlers
 from kato.monitoring.metrics import get_metrics_collector
 from kato.processors.processor_manager import ProcessorManager
 from kato.sessions.redis_session_manager import get_redis_session_manager
 from kato.sessions.session_manager import get_session_manager
-from kato.sessions.session_middleware_simple import SessionMiddleware
+from kato.sessions.session_middleware import SessionMiddleware
 from kato.websocket import get_event_broadcaster
-from kato.config.logging_config import configure_logging, generate_trace_id, trace_context
 
 # Standard logger configuration
 logger = logging.getLogger('kato.fastapi')
@@ -49,11 +55,22 @@ app = FastAPI(
     version=__version__
 )
 
+# Register error handlers HERE, at import time. Starlette snapshots
+# app.exception_handlers when it builds the middleware stack on the first
+# __call__ (the lifespan scope), so anything registered from a startup hook is
+# silently dropped. This used to live in startup_event(), which meant none of
+# kato/exceptions/handlers.py ever ran.
+setup_error_handlers(app)
+
 # Add CORS middleware
+# allow_credentials must stay False while allow_origins is "*": Starlette
+# reflects the caller's Origin back when credentials are enabled, which makes
+# every origin a trusted origin for credentialed requests. KATO has no cookie
+# or browser-session auth, so nothing needs credentials here.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -63,12 +80,13 @@ app.add_middleware(SessionMiddleware, auto_create=False)
 
 # Concurrency monitoring
 import asyncio
-from contextvars import ContextVar
 
-# Track concurrent requests per worker
-_concurrent_requests = ContextVar('concurrent_requests', default=0)
+# Track concurrent requests per worker.
+# No lock: this is a single-threaded event loop and there is no await between
+# reading and writing _concurrent_count, so the increment cannot interleave.
+# A lock here would be acquired twice on every request for nothing, and the
+# project rule is no locks in the request path.
 _concurrent_count = 0
-_concurrent_lock = asyncio.Lock()
 _max_concurrent_seen = 0
 
 # Configuration from the uvicorn CMD in Dockerfile, which expands
@@ -90,34 +108,33 @@ async def concurrency_monitor_middleware(request: Request, call_next):
     """
     global _concurrent_count, _max_concurrent_seen
 
-    async with _concurrent_lock:
-        _concurrent_count += 1
-        current_count = _concurrent_count
+    _concurrent_count += 1
+    current_count = _concurrent_count
 
-        # Track maximum concurrent requests seen
-        if current_count > _max_concurrent_seen:
-            _max_concurrent_seen = current_count
-            if current_count >= CONCURRENCY_CRITICAL_THRESHOLD:
-                logger.error(
-                    f"🚨 CRITICAL: Concurrent requests ({current_count}) >= {CONCURRENCY_CRITICAL_THRESHOLD} "
-                    f"({CONCURRENCY_CRITICAL_THRESHOLD}/{CONCURRENCY_LIMIT} = 95% of limit). "
-                    f"Requests may be dropped! Consider increasing --limit-concurrency or --workers."
-                )
-            elif current_count >= CONCURRENCY_WARNING_THRESHOLD:
-                logger.warning(
-                    f"⚠️  WARNING: High concurrent requests: {current_count}/{CONCURRENCY_LIMIT} "
-                    f"({int(current_count/CONCURRENCY_LIMIT*100)}%). "
-                    f"Approaching uvicorn --limit-concurrency limit."
-                )
+    # Track maximum concurrent requests seen
+    if current_count > _max_concurrent_seen:
+        _max_concurrent_seen = current_count
+        if current_count >= CONCURRENCY_CRITICAL_THRESHOLD:
+            logger.error(
+                "🚨 CRITICAL: Concurrent requests (%d) >= %d (%d/%d = 95%% of limit). "
+                "Requests may be dropped! Consider increasing --limit-concurrency or --workers.",
+                current_count, CONCURRENCY_CRITICAL_THRESHOLD,
+                CONCURRENCY_CRITICAL_THRESHOLD, CONCURRENCY_LIMIT,
+            )
+        elif current_count >= CONCURRENCY_WARNING_THRESHOLD:
+            logger.warning(
+                "⚠️  WARNING: High concurrent requests: %d/%d (%d%%). "
+                "Approaching uvicorn --limit-concurrency limit.",
+                current_count, CONCURRENCY_LIMIT,
+                int(current_count / CONCURRENCY_LIMIT * 100),
+            )
 
     try:
         # Process request
         response = await call_next(request)
         return response
     finally:
-        # Decrement counter
-        async with _concurrent_lock:
-            _concurrent_count -= 1
+        _concurrent_count -= 1
 
 # Add metrics collection middleware
 @app.middleware("http")
@@ -248,8 +265,8 @@ async def startup_event():
     logger.info(f"Limit Max Requests: {os.getenv('UVICORN_LIMIT_MAX_REQUESTS', 'Not set (default: unlimited)')}")
     logger.info(f"Timeout Keep-Alive: {os.getenv('UVICORN_TIMEOUT_KEEP_ALIVE', 'Not set (default: 5s)')}")
     logger.info(f"Backlog: {os.getenv('UVICORN_BACKLOG', 'Not set (default: 2048)')}")
-    logger.info(f"")
-    logger.info(f"CAPACITY ESTIMATES (per worker):")
+    logger.info("")
+    logger.info("CAPACITY ESTIMATES (per worker):")
     logger.info(f"  → Safe concurrent: {CONCURRENCY_WARNING_THRESHOLD} requests")
     logger.info(f"  → Total with {WORKER_COUNT} workers: {CONCURRENCY_WARNING_THRESHOLD * WORKER_COUNT} concurrent")
     logger.info("=" * 80)
@@ -280,9 +297,6 @@ async def startup_event():
 
     # Start concurrency monitoring task
     asyncio.create_task(_concurrency_reporter())
-
-    # Setup error handlers
-    setup_error_handlers(app)
 
     logger.info("KATO FastAPI service started successfully")
 
@@ -356,20 +370,18 @@ async def shutdown_event():
 
 def get_node_id_from_request(request: Request) -> str:
     """Generate a node ID from request for automatic session management."""
-    logger.debug(f"get_node_id_from_request: headers = {dict(request.headers)}")
-
     # Check for test isolation header first
     test_id = request.headers.get("x-test-id")
     if test_id:
         # If test_id already starts with "test_", don't add another prefix
         result = test_id if test_id.startswith("test_") else f"test_{test_id}"
-        logger.debug(f"Using test ID: {result}")
+        logger.debug("Using test ID: %s", result)
         return result
 
     # Check for explicit node ID header
     node_id_header = request.headers.get("x-node-id")
     if node_id_header:
-        logger.debug(f"Using x-node-id: {node_id_header}")
+        logger.debug("Using x-node-id: %s", node_id_header)
         return node_id_header
 
     logger.debug("Using default_node")
@@ -424,4 +436,6 @@ async def root():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # nosec B104 - binding all interfaces is required inside a container; the
+    # published port is what controls host exposure (see docker-compose.yml).
+    uvicorn.run(app, host="0.0.0.0", port=8000)  # nosec B104

@@ -1,9 +1,9 @@
 # SPRINT_BACKLOG.md - Upcoming Work
-*Last Updated: 2026-09-11 (event-aware alignment refinement fix — COMPLETE, committed `34910a70`, follow-up to DECISION-028 — see Backlog entry below)*
+*Last Updated: 2026-09-16 (Remediation Pass 1 — high-value, low-risk fixes from a comprehensive tech-debt/security/performance review — COMPLETE but UNCOMMITTED on branch `chore/remediation-pass-1`; see "Recently Completed" and the new Backlog entries below)*
 
 ## Active Projects
 
-*No active initiative-scale projects at this time — see the Backlog entry below ("Repeated-symbol event misattribution...") for the just-completed event-aware alignment refinement fix (`34910a70`). Next up is whatever the user picks from the Backlog section below, most notably the two decisions flagged in `planning-docs/project-manager/pending-updates.md` (v5.0.3 patch release; fast-path single-symbol matching semantics).*
+*No active initiative-scale projects at this time. Remediation Pass 1 (see "Recently Completed" below) is done but sits uncommitted on branch `chore/remediation-pass-1` — pending the user's decision on whether/when to commit and merge (see `planning-docs/project-manager/pending-updates.md`). Next up is whatever the user picks from the Backlog section below, most notably: committing/merging the remediation branch, the re-assess list it deferred, and the two older decisions still open (v5.0.3 patch release; fast-path single-symbol matching semantics).*
 
 ---
 
@@ -413,6 +413,36 @@ Phase 4 (Symbol Statistics & Fail-Fast Architecture) is 100% complete. The Click
 
 ## Backlog (Future Work)
 
+### Bug: Session-level `sort_symbols` has no effect
+**Priority**: P2 — silent per-session config override failure; found during Remediation Pass 1 (2026-09-16)
+**Status**: Identified 2026-09-16, NOT fixed — see DECISION-030 and `planning-docs/completed/features/2026-09-16-remediation-pass-1.md`
+**Symptom**: A session's `sort_symbols`/`use_token_matching` config override has no effect on how that session's observations are sorted, for any session after the first one created on a given node.
+**Root Cause**: `kato/workers/observation_processor.py` resolves the session's `sort_symbols` from config at ~line 358, but nothing reads that resolved value. The actual sorting (~lines 181/210) uses `self.sort_symbols`, the `KatoProcessor`'s construction-time default. Since a processor is per-node and shared across all sessions on that node, only the node's original default sort behavior is ever applied — a later session's override is silently ignored.
+**Fix**: not done — changing this would change pattern hashes for any session currently relying on the (buggy) shared default, so it needs its own dedicated fix + migration consideration, not a drive-by patch. Marked in code with `# noqa: F841` and an explanatory comment so it stays visible.
+**Files**: `kato/workers/observation_processor.py`
+**Related**: DECISION-030 (`planning-docs/DECISIONS.md`); found while fixing an unrelated set of bugs in the same pass.
+
+---
+
+### Follow-up: Remediation Pass 1 — Deferred Items (Re-assess List)
+**Priority**: P2 — mix of performance/correctness/observability items, deliberately scoped out of Remediation Pass 1; re-assess and prioritize individually
+**Status**: Identified 2026-09-16 during the comprehensive tech-debt/security/performance review that produced Remediation Pass 1 — see DECISION-030 and `planning-docs/completed/features/2026-09-16-remediation-pass-1.md` for full context on why each was deferred
+**Items**:
+- **Default `filter_pipeline` is still `[]`** — every prediction scans the node's whole corpus; all of `kato/filters/` is unreachable by default. Exact-safe route identified: derive `LengthFilter` bounds from `recall_threshold` (`T·L/(2−T) ≤ P ≤ L·(2−T)/T`), pending confirmation the bound holds for `weighted_similarity`. Deferred because it's correctness-adjacent (could change which patterns a prediction returns) and needs its own dedicated verification pass — out of scope for the "exact-safe only" scoping of Pass 1.
+- **Per-request `PatternSearcher` construction swapped onto the shared processor** — a real cross-request config race for concurrent predicts on one node.
+- **Synchronous redis/clickhouse clients blocking the event loop** — the actual throughput ceiling; a structural fix (async clients throughout).
+- **Per-request `ProcessPoolExecutor`** — construction overhead on every request.
+- **`conditional_probability_cached` md5-hashing the whole symbol table per prediction.**
+- **The unreachable legacy stateful cluster** (~400 lines, zero callers) — candidate for deletion, not attempted this pass.
+- **25 `pytest.skip("KATO services not available")` calls** that make a green full-suite run potentially misleading if services silently aren't available.
+- **Unbounded request payloads** — no size limit enforced on API request bodies.
+- **Authentication and tenant binding** — `node_id` comes from a client header with no verification and IS the tenant boundary. Explicitly deferred per the user's trusted-network deployment scoping decision for Pass 1 (DECISION-030); this is the largest and riskiest item on this list.
+- **4,464 orphan Redis prediction keys** (TTL `-1`, from the now-fixed unbounded-leak bug in `RedisWriter.write_prediction`) — cleanup script not written/run; needs the user's go-ahead given this project's prior Redis-data-loss incident (`redis_persistence_data_loss_2026_04_13.md`, project memory). Also tracked in `planning-docs/project-manager/pending-updates.md`.
+**Files**: spans `kato/filters/`, `kato/searches/pattern_search.py`, `kato/storage/`, `kato/api/`, plus the legacy stateful cluster (see archive for exact locations per item)
+**Related**: DECISION-030 (`planning-docs/DECISIONS.md`); `planning-docs/completed/features/2026-09-16-remediation-pass-1.md`.
+
+---
+
 ### Bug: Prediction segmentation heuristic misattributes events when a symbol recurs across events
 **Priority**: P1 — correctness bug in a core prediction field (`missing`); found while building comprehensive multi-symbol-event prediction tests
 **Status**: **FIXED, committed `e0ee17d`** (2026-09-11) — see DECISION-028 and `planning-docs/completed/features/2026-09-11-multi-symbol-event-prediction-tests-and-segmentation-fix.md`
@@ -672,6 +702,34 @@ Phased plan for scaling KATO to production workloads:
 ---
 
 ## Recently Completed
+
+### Remediation Pass 1: High-Value, Low-Risk Fixes — COMPLETE but UNCOMMITTED (2026-09-16)
+**Priority**: High — several production-severity bugs (dead error handling, guaranteed `TypeError` on validation, live-tenant data deletion on eviction, unbounded Redis leak) plus a real SQL-injection surface
+**Branch**: `chore/remediation-pass-1` — **not committed, not merged to `main`**
+**Decision**: DECISION-030 (`planning-docs/DECISIONS.md`)
+**Archive**: `planning-docs/completed/features/2026-09-16-remediation-pass-1.md`
+
+Triggered by a comprehensive tech-debt/security/performance review of v5.0.2 (base commit `bf14579`). User-scoped to: trusted-network deployment (auth deferred), exact-safe filters only (default `filter_pipeline` untouched), quick performance wins only (structural work deferred), delete `kato/gpu/`.
+
+**7 live bugs fixed**: dead error-handler registration (registered at startup-hook time, after Starlette had already frozen its middleware stack — moved to module scope); 12 `ValidationError` raise sites that were actually always raising `TypeError`; LRU processor eviction unconditionally deleting a live tenant's vector collection (now `test_`-prefix gated); unbounded `RedisWriter.write_prediction` leak (4,464 orphan keys found; now uses `setex` with session TTL); dead `KatoProcessor.get_stm()` calling a nonexistent method (deleted); `delete_pattern` reporting success after a swallowed storage failure (now propagates); `POST /sessions/{id}/config` bypassing all validation (now routed through `SessionConfiguration.update()`).
+
+**Security**: SQL parameterization at 4 ClickHouse call sites (was string interpolation); new `kato/storage/identifiers.py` allowlist for the few statements that can't bind parameters; `ProcessorManager` id-sanitization blacklist replaced with an allowlist; CORS `allow_credentials=False`; backing stores bound to `127.0.0.1`; Redis `protected-mode` re-enabled.
+
+**Performance** (prediction output unchanged): removed a needless per-request lock, hoisted a batched metadata fetch above a gather, fixed a missing `kb_id` predicate undercounting patterns, O(n²)→O(n) symbol counting, removed hot-path debug logging.
+
+**Dead code**: ~10,100 lines removed, including the entire `kato/gpu/` subsystem (zero importers, targeted the removed MongoDB layer) and `kato/sessions/redis_session_store.py` (closes a `pickle.loads` finding from `docs/maintenance/security-review-baseline.md`).
+
+**CI**: new `.github/workflows/ci.yml` (ruff + bandit + unit tests) — there was previously no Python CI at all. ruff: 282 errors in `kato/` → passing.
+
+**New bug found, not fixed**: session-level `sort_symbols` has no effect (see new Backlog entry above).
+
+**Deferred**: see the "Follow-up: Remediation Pass 1 — Deferred Items (Re-assess List)" Backlog entry above.
+
+**Verification**: full suite 588 passed / 3 skipped / 1 xfailed / 0 failed (689.83s), up from 552 baseline; ruff and bandit clean; several fixes verified live against the rebuilt deployment container.
+
+**Still needs the user's decision** (see `planning-docs/project-manager/pending-updates.md`): (1) whether/when to commit and merge this branch; (2) `requirements.lock` regeneration (`aioredis` was dropped from `requirements.txt`); (3) cleanup of the 4,464 pre-existing orphan Redis prediction keys; (4) a full stack recreate to pick up the `docker-compose.yml`/`config/redis.conf` binding changes (only the `kato` service was recreated so far).
+
+---
 
 ### Bug Fix: conftest Session-Scoped FLUSHALL-Adjacent Cleanup Deleted Live/Concurrent Sessions — COMPLETE (2026-09-10)
 **Priority**: High — test isolation / production-adjacent data safety

@@ -11,8 +11,6 @@ Previous test coverage for multi-pattern scenarios was limited to 6 tests.
 import os
 import sys
 
-import pytest
-
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from fixtures.kato_fixtures import kato_fixture as kato_fixture

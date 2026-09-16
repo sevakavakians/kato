@@ -11,7 +11,6 @@ This module provides a centralized, thread-safe connection manager that:
 import logging
 import threading
 import time
-from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
@@ -332,8 +331,8 @@ class OptimizedConnectionManager:
                 compress=True,  # Enable compression for better network performance
             )
 
-            # Test the connection
-            result = self._clickhouse_client.command('SELECT 1')
+            # Test the connection (result deliberately discarded)
+            self._clickhouse_client.command('SELECT 1')
 
             response_time = (time.time() - start_time) * 1000
             self._health_status['clickhouse'] = ConnectionHealth(

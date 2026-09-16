@@ -14,23 +14,22 @@ Usage:
 import asyncio
 import sys
 import time
-from itertools import chain
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from benchmarks.data_generator import BenchmarkDataGenerator
 from benchmarks.profiler import (
     TimingCollector,
     instrument_instance,
     perf_timer,
 )
-from benchmarks.data_generator import BenchmarkDataGenerator
 
 
 def _setup_processor(processor_id: str):
     """Create a PatternProcessor with given kb_id."""
-    from kato.workers.pattern_processor import PatternProcessor
     from kato.config.settings import get_settings
+    from kato.workers.pattern_processor import PatternProcessor
 
     settings = get_settings()
     pp = PatternProcessor(
@@ -76,10 +75,6 @@ def run_prediction_benchmark(tier_size: int, collector: TimingCollector,
     Returns:
         Dict with tier results
     """
-    from kato.storage.clickhouse_writer import ClickHouseWriter
-    from kato.storage.redis_writer import RedisWriter
-    from kato.searches.pattern_search import PatternSearcher, InformationExtractor
-    from kato.filters.executor import FilterPipelineExecutor
 
     processor_id = BenchmarkDataGenerator.make_processor_id(tier_size)
     print(f"\n--- Prediction Path Benchmark: {tier_size:,} patterns (kb_id={processor_id}) ---")
@@ -164,7 +159,7 @@ def run_prediction_benchmark(tier_size: int, collector: TimingCollector,
     if hasattr(searcher, 'filter_executor') and searcher.filter_executor:
         fe = searcher.filter_executor
         if hasattr(fe, 'stage_metrics') and fe.stage_metrics:
-            print(f"\n  Filter pipeline stage metrics (last run):")
+            print("\n  Filter pipeline stage metrics (last run):")
             for sm in fe.stage_metrics:
                 stage_name = sm.get('filter', 'unknown')
                 stage_ms = sm.get('duration_ms', 0)
@@ -218,7 +213,7 @@ def run_all(collector: TimingCollector = None,
 
     # Print per-tier summary
     print(f"\n{'=' * 70}")
-    print(f"  Prediction Latency by Tier")
+    print("  Prediction Latency by Tier")
     print(f"{'=' * 70}")
     print(f"  {'Tier':>10} {'Fast Avg':>12} {'Full Avg':>12} {'Fast Queries':>14} {'Full Queries':>14}")
     print(f"  {'-' * 10} {'-' * 12} {'-' * 12} {'-' * 14} {'-' * 14}")

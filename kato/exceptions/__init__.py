@@ -480,9 +480,14 @@ class ResourceNotFoundError(KatoBaseException):
         )
 
 
-class MemoryError(KatoBaseException):
+class MemoryOperationError(KatoBaseException):
     """
     Raised when memory operations fail (STM/LTM).
+
+    Named MemoryOperationError rather than MemoryError: the latter shadows the
+    Python builtin, so any `except MemoryError` in a module that imported this
+    one would silently catch the wrong class (and miss genuine out-of-memory
+    conditions). Every caller already used this name via an alias.
     """
 
     def __init__(
@@ -515,9 +520,6 @@ class MemoryError(KatoBaseException):
             **kwargs
         )
 
-
-# Alias for consistency with new module naming
-MemoryOperationError = MemoryError
 
 
 class MetricCalculationError(KatoBaseException):
@@ -885,8 +887,13 @@ class ResourceExhaustedError(KatoV2Exception):
         self.max_capacity = max_capacity
 
 
-class TimeoutError(KatoV2Exception):
-    """Raised when operations timeout"""
+class KatoTimeoutError(KatoV2Exception):
+    """Raised when operations timeout.
+
+    Named KatoTimeoutError rather than TimeoutError: the latter shadows the
+    Python builtin (which asyncio and the socket layer raise), so a module
+    importing it could no longer catch real timeouts by that name.
+    """
 
     def __init__(
         self,

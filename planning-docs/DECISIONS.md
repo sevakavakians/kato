@@ -1,6 +1,59 @@
 # DECISIONS.md - Architectural & Design Decision Log
 *Append-Only Log - Started: 2025-08-29*
-*Last Updated: 2026-09-11 (DECISION-029: Event-aware alignment refinement — event-mate + tightness rules, addendum to DECISION-028 — COMPLETE, committed `34910a70`)*
+*Last Updated: 2026-09-16 (DECISION-030: Remediation Pass 1 — high-value, low-risk fixes from a comprehensive tech-debt/security/performance review — COMPLETE, uncommitted on branch `chore/remediation-pass-1`)*
+
+---
+
+## 2026-09-16 - DECISION-030: Remediation Pass 1 — Scope Decision and Fixes (Trusted-Network Deployment, Exact-Safe Filters Only, Quick Wins First)
+
+**Decision**: Following a comprehensive review of the repo (v5.0.2, base commit `bf14579`) for technical debt, security vulnerabilities, and performance, scope the first remediation pass as: (a) fix every live/production-severity bug found, regardless of size; (b) apply security hardening appropriate to a **trusted-network deployment** — explicitly defer authentication/tenant-binding work; (c) apply only **exact-safe** filter/query changes — do **not** touch the default `filter_pipeline` (stays `[]`); (d) take **performance quick-wins only**, deferring structural changes to a re-assess pass; (e) **delete `kato/gpu/`** (dead code, zero importers, targets the removed MongoDB layer).
+**Status**: **COMPLETE, uncommitted** — all work done on branch `chore/remediation-pass-1`, not committed or merged to `main`. Full implementation detail: `planning-docs/completed/features/2026-09-16-remediation-pass-1.md`.
+**Classification**: Architectural Decision (scope) + Bug Fix + Security Hardening + Performance + Dead Code Removal
+**Confidence**: High on the fixes themselves (each independently verified, several live); scope boundaries (trusted-network, exact-safe-only, quick-wins-only) are explicit user choices, not technical necessities — revisit if the deployment model changes.
+
+### Context
+A comprehensive audit surfaced findings across four categories: live/production bugs (several severe — a permanently-dead error-handling layer, a guaranteed-`TypeError` on every validation raise, live-tenant data deletion on LRU eviction, an unbounded Redis leak), SQL injection surface (four sites building ClickHouse queries via string interpolation), performance (a needless lock, a serialized-instead-of-batched metadata fetch, an uncounted `kb_id` in a startup query, O(n²) counting), and ~10,100 lines of dead code including an entire `kato/gpu/` subsystem still wired to the removed MongoDB layer. Rather than attempt everything at once, the user chose to scope this first pass narrowly and re-assess afterward — see the four scope choices in "Decision" above.
+
+### Rationale
+- **Trusted-network deployment**: KATO currently has no authentication anywhere and `node_id` (the tenant boundary) comes from an unverified client header — fixing that is a substantially larger, riskier change than everything else in this pass combined, and the current deployment model is trusted-network. Binding backing stores to `127.0.0.1` and fixing CORS credentials narrows the *unauthenticated* attack surface without pretending to solve authentication.
+- **Exact-safe filters only**: the default `filter_pipeline` being `[]` (full-corpus scan) is a real performance problem, but every non-trivial fix (deriving `LengthFilter` bounds from `recall_threshold`, etc.) risks changing which patterns a prediction returns — a correctness-adjacent decision that deserves its own dedicated pass with its own verification, not folded into a broad remediation sweep. SQL parameterization, by contrast, is "exact-safe": binding user-controlled values as query parameters cannot change which rows a query returns, only how they're transmitted.
+- **Quick wins first, then re-assess**: several of the performance findings (synchronous clients blocking the event loop, per-request `ProcessPoolExecutor`, the per-request `PatternSearcher` race) are structural and would need their own design work; fixing the O(1)-effort items now (removing a needless lock, hoisting a batched call above a gather, fixing an uncounted `kb_id`) captures most of the easy value without opening a second large workstream inside this one.
+- **Delete `kato/gpu/`**: zero importers found anywhere in the codebase, and its encoder targets the MongoDB storage layer removed in v3.0.0 — it cannot have worked since that removal. Deleting dead code that targets a removed dependency is unambiguously safe.
+
+### Implementation (COMPLETE, uncommitted — see archive for full file list)
+Grouped summary (full detail, file-by-file, in `planning-docs/completed/features/2026-09-16-remediation-pass-1.md`):
+- **7 live bugs fixed**: dead error-handler registration (module-scope registration replaces the no-op startup-hook registration); 12 `ValidationError` call sites that were actually raising `TypeError`; LRU eviction unconditionally deleting a live tenant's vector collection (now `test_`-prefix gated); unbounded `write_prediction` Redis leak (now `setex` with session TTL, 4,464 pre-existing orphans found, not cleaned up); a dead `get_stm()` calling a nonexistent method (deleted, zero callers); `delete_pattern` reporting success after a swallowed storage failure (now propagates); `POST /sessions/{id}/config` bypassing all validation via raw `setattr` (now routed through `SessionConfiguration.update()`).
+- **Security**: SQL parameterization at 4 sites (observation token, STM-token array literal, `kb_id`/pattern-name interpolation) via ClickHouse bound parameters; new `kato/storage/identifiers.py` allowlist for the few statements that can't bind parameters (`DROP PARTITION`, `ALTER ... DELETE`); `ProcessorManager._get_processor_id` blacklist replaced with an allowlist (verified against all 266 live `kb_id`s — none orphaned); CORS `allow_credentials=False`; backing stores (Redis/ClickHouse/Qdrant) bound to `127.0.0.1` in `docker-compose.yml`; `protected-mode no` removed from `config/redis.conf`.
+- **Performance**: removed a per-request `asyncio.Lock` in `concurrency_monitor_middleware`; hoisted `get_metadata_batch()` above the `asyncio.gather` batch split; added the missing `kb_id` predicate to the startup pattern-count query; `collections.Counter` replaces an O(n²) `list.count()` loop; removed unconditional hot-path f-string logging.
+- **Dead code removed** (~10,100 lines): `kato/gpu/` + `kato/config/gpu_settings.py` + `tests/tests/gpu/` + `docs/developers/gpu/`; `session_middleware_fixed.py`; `connection_pool_monitor.py`; `kato/auxiliary/`, `kato/scripts/`, `kato/utils/`; `kato/sessions/redis_session_store.py` (closes the `pickle.loads` finding in `docs/maintenance/security-review-baseline.md:22`) — only its dead `TestRedisSessionStore` test class was removed from `test_redis_sessions.py`, which otherwise still covers the live `RedisSessionManager` and was kept. `MemoryError`/`TimeoutError` builtin-shadowing exception names renamed to `MemoryOperationError`/`KatoTimeoutError`.
+- **Hygiene/CI**: corrupted `.gitignore` fixed (`*.nvvp` pattern had merged with the next line); `aioredis` dropped from `requirements.txt` (no importer; `requirements.lock` regeneration still pending); `mongo:4.4` removed from `docker-compose.test.yml`; 5 `F821` errors fixed; new `.github/workflows/ci.yml` (ruff + bandit + unit tests) — **there was previously no Python CI at all**; ruff went from 282 errors in `kato/` to passing, with a labelled LINT BACKLOG ignore list in `pyproject.toml` parking stylistic-only categories.
+- **43 new tests**: `test_error_handlers.py` (7), `test_identifier_validation.py` (23), `test_observation_validation.py` (10), `test_processor_eviction.py` (3) — the error-handler and eviction guards were each proven to fail when their fix is reverted.
+
+### Verification (DONE)
+Full suite: **588 passed, 3 skipped, 1 xfailed, 0 failed (689.83s)**, up from the 552-passed baseline (exact reconciliation: 552 + 40 new − 4 removed = 588; 3 further eviction tests were added after that count was taken). ruff and bandit clean. Live verification against the running deployment stack (`kato` service rebuilt and recreated on the fixed image): HTTPException response shape unchanged, CORS credentials header gone, config validation rejecting out-of-range values, an adversarial `UNION ALL` SQL symbol returning clean empty predictions, prediction-key TTL set correctly (3598s).
+
+### New issue found, NOT fixed
+**Session-level `sort_symbols` has no effect** — `observation_processor.py` resolves it from session config but the actual sort call reads the processor's construction-time default instead, so a per-session override never takes effect for any session after the first on a node. Not fixed here because it would change pattern hashes; marked in code with `# noqa: F841` plus a comment, and filed as a new Bug entry in `planning-docs/SPRINT_BACKLOG.md`.
+
+### Deferred (the re-assess list — see archive for the full list with rationale per item)
+Default `filter_pipeline` still `[]` (the exact-safe `LengthFilter`-from-`recall_threshold` derivation identified but not applied); per-request `PatternSearcher` construction race; synchronous redis/clickhouse clients blocking the event loop; per-request `ProcessPoolExecutor`; `conditional_probability_cached` md5-hashing the whole symbol table; the unreachable legacy stateful cluster; 25 `pytest.skip` calls that could mask a red suite as green; unbounded request payloads; authentication/tenant binding; the 4,464 orphan Redis prediction keys.
+
+### Impact
+- **Positive**: closes a permanently-dead error-handling path and a guaranteed-`TypeError` validation bug that made KATO's error responses meaningless in every deployment running this code to date; closes a live-tenant-data-deletion bug in LRU eviction; closes a real SQL-injection surface; removes ~10,100 lines of dead/unreachable code including an entire subsystem (`kato/gpu/`) that could not have worked since v3.0.0; establishes Python CI for the first time in this repo's history.
+- **Neutral**: no prediction-output-affecting change — the default `filter_pipeline` and matching semantics are untouched by design (exact-safe scope).
+- **Risk**: Low for what shipped — each fix independently tested, several verified live against the running stack. **Process risk is the open item**: nothing here is committed, so none of it is protected by version control yet; see "Status" below.
+
+### Status — four items need the user's decision before this pass can close
+1. **Commit and merge `chore/remediation-pass-1`** — not yet decided.
+2. **Regenerate `requirements.lock`** (`pip-compile`) after the `aioredis` removal — not run.
+3. **Clean up the 4,464 pre-existing orphan Redis prediction keys** — deliberately not run; needs explicit go-ahead given this project's prior Redis-data-loss incident (see `redis_persistence_data_loss_2026_04_13.md`, project memory).
+4. **Full stack recreate** to pick up the `docker-compose.yml`/`config/redis.conf` binding changes — only the `kato` service was recreated during verification.
+
+See `planning-docs/project-manager/pending-updates.md` for the corresponding human-alert entries.
+
+**Resolves**: N/A (new findings, not a prior open item) — but closes the `pickle.loads` finding recorded in `docs/maintenance/security-review-baseline.md:22`.
+
+**Related Decisions**: None directly — this is the first repo-wide remediation pass; earlier decisions (DECISION-017/018, the `DEFAULT_BATCH_SIZE=1` / no-per-worker-buffering rule) were consulted to confirm no conflict with the performance fixes made here.
 
 ---
 

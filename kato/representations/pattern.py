@@ -16,7 +16,7 @@ class Pattern:
     def __init__(self, pattern_data):
         self.pattern_data = list(pattern_data)
         self.length = sum(len(x) for x in self.pattern_data)
-        self.name = sha1(('{}'.format(self.pattern_data)).encode('utf-8'), usedforsecurity=False).hexdigest()
+        self.name = sha1((f'{self.pattern_data}').encode(), usedforsecurity=False).hexdigest()
         return
 
     @functools.cached_property
@@ -25,7 +25,7 @@ class Pattern:
         return list(chain(*self.pattern_data))
 
     def __repr__(self):
-        return """<PTRN|{}>""".format(self.name)
+        return f"""<PTRN|{self.name}>"""
 
     def __len__(self):
         "Number of symbols in the pattern."

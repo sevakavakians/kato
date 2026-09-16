@@ -19,7 +19,6 @@ Usage:
     uninstrument()
 """
 
-import asyncio
 import functools
 import statistics
 import time

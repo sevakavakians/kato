@@ -9,10 +9,8 @@ These tests validate:
 5. Noise discount: low-affinity tokens contribute minimally
 """
 
-import pytest
 
 from kato.searches.pattern_search import InformationExtractor
-
 
 EPSILON = 0.01
 

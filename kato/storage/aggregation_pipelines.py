@@ -7,7 +7,6 @@ used through the duck-typed collection interfaces from knowledge_base.py.
 
 import logging
 from typing import Any, Optional
-
 from typing import Any as Collection  # Was pymongo.Collection; now duck-typed interface from knowledge_base.py
 
 logger = logging.getLogger(__name__)

@@ -19,6 +19,8 @@ from typing import Any
 
 from datasketch import MinHash
 
+from kato.storage.identifiers import validate_kb_id, validate_pattern_name
+
 # Optional xxhash for faster MinHash computation (~3-5x speedup)
 try:
     import xxhash
@@ -315,8 +317,11 @@ class ClickHouseWriter:
             Exception: If partition drop fails
         """
         try:
-            # Drop partition by kb_id (specify database name)
-            self.client.command(f"ALTER TABLE kato.patterns_data DROP PARTITION '{self.kb_id}'")
+            # Drop partition by kb_id (specify database name).
+            # DROP PARTITION does not accept bound parameters, so the kb_id is
+            # allowlist-validated before it is inlined into statement text.
+            safe_kb_id = validate_kb_id(self.kb_id)
+            self.client.command(f"ALTER TABLE kato.patterns_data DROP PARTITION '{safe_kb_id}'")
             logger.info(f"Dropped ClickHouse partition for kb_id: {self.kb_id}")
             return True
 
@@ -337,7 +342,8 @@ class ClickHouseWriter:
         """
         try:
             result = self.client.query(
-                f"SELECT COUNT(*) FROM kato.patterns_data WHERE kb_id = '{self.kb_id}'"
+                "SELECT COUNT(*) FROM kato.patterns_data WHERE kb_id = %(kb_id)s",
+                parameters={'kb_id': self.kb_id},
             )
             count = result.result_rows[0][0] if result.result_rows else 0
             return count
@@ -358,8 +364,9 @@ class ClickHouseWriter:
         """
         try:
             result = self.client.query(
-                f"SELECT COUNT(*) FROM kato.patterns_data "
-                f"WHERE kb_id = '{self.kb_id}' AND name = '{pattern_name}'"
+                "SELECT COUNT(*) FROM kato.patterns_data "
+                "WHERE kb_id = %(kb_id)s AND name = %(name)s",
+                parameters={'kb_id': self.kb_id, 'name': pattern_name},
             )
             count = result.result_rows[0][0] if result.result_rows else 0
             return count > 0
@@ -380,8 +387,9 @@ class ClickHouseWriter:
         """
         try:
             result = self.client.query(
-                f"SELECT pattern_data, length FROM kato.patterns_data "
-                f"WHERE kb_id = '{self.kb_id}' AND name = '{pattern_name}'"
+                "SELECT pattern_data, length FROM kato.patterns_data "
+                "WHERE kb_id = %(kb_id)s AND name = %(name)s",
+                parameters={'kb_id': self.kb_id, 'name': pattern_name},
             )
 
             if not result.result_rows:
@@ -589,9 +597,13 @@ class ClickHouseWriter:
     def delete_pattern_metadata(self, name: str) -> bool:
         """Delete a single pattern's metadata row (async ALTER ... DELETE)."""
         try:
+            # ALTER ... DELETE does not accept bound parameters; validate the
+            # identifiers against a strict allowlist before inlining them.
+            safe_kb_id = validate_kb_id(self.kb_id)
+            safe_name = validate_pattern_name(name)
             self.client.command(
                 f"ALTER TABLE kato.patterns_metadata "
-                f"DELETE WHERE kb_id = '{self.kb_id}' AND name = '{name}'"
+                f"DELETE WHERE kb_id = '{safe_kb_id}' AND name = '{safe_name}'"
             )
             return True
         except Exception as e:
@@ -601,8 +613,10 @@ class ClickHouseWriter:
     def delete_all_pattern_metadata(self) -> bool:
         """Drop the metadata partition for this kb_id (matches delete_all_patterns)."""
         try:
+            # DROP PARTITION does not accept bound parameters.
+            safe_kb_id = validate_kb_id(self.kb_id)
             self.client.command(
-                f"ALTER TABLE kato.patterns_metadata DROP PARTITION '{self.kb_id}'"
+                f"ALTER TABLE kato.patterns_metadata DROP PARTITION '{safe_kb_id}'"
             )
             logger.info(f"Dropped patterns_metadata partition for kb_id: {self.kb_id}")
             return True

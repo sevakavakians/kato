@@ -45,12 +45,12 @@ async def get_concurrency_metrics():
     Useful for monitoring server load and diagnosing 404 errors under heavy load.
     """
     from kato.services.kato_fastapi import (
-        _concurrent_count,
-        _max_concurrent_seen,
+        CONCURRENCY_CRITICAL_THRESHOLD,
         CONCURRENCY_LIMIT,
         CONCURRENCY_WARNING_THRESHOLD,
-        CONCURRENCY_CRITICAL_THRESHOLD,
-        WORKER_COUNT
+        WORKER_COUNT,
+        _concurrent_count,
+        _max_concurrent_seen,
     )
 
     workers = WORKER_COUNT

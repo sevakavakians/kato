@@ -1,6 +1,6 @@
 """Additional session endpoint response models for endpoints without existing schemas."""
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from pydantic import BaseModel
 

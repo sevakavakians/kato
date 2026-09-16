@@ -1,14 +1,43 @@
 # SESSION_STATE.md - Current Development State
-*Last Updated: 2026-09-11 (event-aware alignment refinement fix — COMPLETE, committed `34910a70`; see "Current Task" and "Previous Task" below)*
+*Last Updated: 2026-09-16 (Remediation Pass 1 — high-value, low-risk fixes from a comprehensive tech-debt/security/performance review — COMPLETE but UNCOMMITTED on branch `chore/remediation-pass-1`; see "Current Task" and "Previous Task" below)*
 
 ## Current Task
-**None.** No active task in progress. Next action is user-driven: pick an item from `planning-docs/SPRINT_BACKLOG.md`'s Backlog section.
+**None.** No active task in progress. Next action is user-driven: pick an item from `planning-docs/SPRINT_BACKLOG.md`'s Backlog section, or decide on one of the pending items below.
 
-**Two pending human decisions carried forward** (see `planning-docs/project-manager/pending-updates.md` for full detail):
-1. **v5.0.3 release** — released v5.0.2 lacks both `e0ee17d` (DECISION-028, position-based segmentation) and `34910a70` (DECISION-029, event-aware alignment refinement, below). The deployment stack runs the local `kato:latest` dev build with both fixes. Decide whether/when to cut a patch release via `./container-manager.sh patch`.
-2. **`_predict_single_symbol_fast` first-token-only matching semantics** — the fast path only matches patterns whose first token equals the observed symbol, so a symbol that appears only mid-pattern yields no prediction via that path. Decide whether to extend it (general-path fallback or a symbol-position index, trading some speed) or keep current behavior (now pinned by tests).
+**Six pending human decisions carried forward** (see `planning-docs/project-manager/pending-updates.md` for full detail):
+1. **Commit and merge `chore/remediation-pass-1`** — Remediation Pass 1 (below) is complete and verified but entirely uncommitted. Decide when/how to commit (likely several logical commits) and whether to merge directly or via PR.
+2. **`requirements.lock` regeneration** — `aioredis` was dropped from `requirements.txt` during the remediation pass; the lock file needs `pip-compile` regeneration to match.
+3. **Orphan Redis prediction key cleanup** — the remediation pass fixed the leak in `RedisWriter.write_prediction` going forward, but the 4,464 pre-existing orphan keys (TTL `-1`) it already produced were deliberately left alone, pending approval to clean them up.
+4. **Full stack recreate for `docker-compose.yml`/`redis.conf` binding changes** — the remediation pass bound Redis/ClickHouse/Qdrant to `127.0.0.1` and hardened `redis.conf`, but only the `kato` service was recreated during verification; the store-binding changes aren't live yet.
+5. **v5.0.3 release** — released v5.0.2 lacks both `e0ee17d` (DECISION-028, position-based segmentation) and `34910a70` (DECISION-029, event-aware alignment refinement). The deployment stack runs the local `kato:latest` dev build with both fixes (and now, in the working tree only, the remediation pass fixes too). Decide whether/when to cut a patch release via `./container-manager.sh patch`.
+6. **`_predict_single_symbol_fast` first-token-only matching semantics** — the fast path only matches patterns whose first token equals the observed symbol, so a symbol that appears only mid-pattern yields no prediction via that path. Decide whether to extend it (general-path fallback or a symbol-position index, trading some speed) or keep current behavior (now pinned by tests).
 
 ## Previous Task
+**Remediation Pass 1 — High-Value, Low-Risk Fixes — COMPLETE but UNCOMMITTED (2026-09-16)**
+
+**Branch**: `chore/remediation-pass-1` (not committed, not merged to `main`). **Decision**: DECISION-030 in `planning-docs/DECISIONS.md`.
+
+**Trigger**: a comprehensive review of the repo (v5.0.2, base commit `bf14579`) for technical debt, security vulnerabilities, and performance. User-chosen scope: trusted-network deployment (authentication deferred), exact-safe filters only (default `filter_pipeline` untouched), quick performance wins first with structural work deferred to a re-assess pass, and delete `kato/gpu/`.
+
+**7 live bugs fixed**: (1) KATO's entire structured error-handling layer was dead in production — `setup_error_handlers(app)` was called from inside the `@app.on_event("startup")` hook, after Starlette had already frozen its middleware/exception-handler stack on first `__call__`; every KATO exception escaped as a plain 500. Fixed by registering at module scope (deliberately still leaving `HTTPException`/`RequestValidationError` on FastAPI's defaults so the existing response shape is unchanged). (2) 12 `ValidationError` raise sites across `observation_processor.py`/`pattern_operations.py` passed `field_name` both positionally and as a keyword, so every one actually raised `TypeError` (masked by bug 1). (3) LRU processor eviction (`ProcessorManager._evict_oldest()`) unconditionally deleted a live tenant's vector collection — now `test_`-prefix gated. (4) `RedisWriter.write_prediction` used `set()` with no TTL — an unbounded leak; 4,464 orphan keys found live (~11% of the database). Now `setex` with the session TTL; the pre-existing orphans were deliberately left uncleaned pending approval. (5) `KatoProcessor.get_stm()` called a nonexistent method — deleted (zero callers). (6) `delete_pattern` reported success after silently swallowing a storage failure — now propagates. (7) `POST /sessions/{id}/config` bypassed all validation via a raw `setattr` loop — now routed through `SessionConfiguration.update()`.
+
+**Security**: SQL parameterization at 4 ClickHouse call sites that were building queries via string interpolation (verified live: an adversarial `UNION ALL` symbol now returns clean empty predictions); new `kato/storage/identifiers.py` allowlist for statements that can't bind parameters; `ProcessorManager` id-sanitization blacklist replaced with an allowlist (verified against all 266 live `kb_id`s); CORS `allow_credentials=False`; Redis/ClickHouse/Qdrant bound to `127.0.0.1` in `docker-compose.yml`; `protected-mode no` removed from `config/redis.conf` (not yet live — needs a full stack recreate).
+
+**Performance** (prediction output unchanged): removed a needless per-request `asyncio.Lock`; hoisted a batched metadata fetch above an `asyncio.gather` split; fixed a missing `kb_id` predicate that was counting every tenant's patterns; O(n²)→O(n) symbol counting via `collections.Counter`; removed hot-path debug logging.
+
+**Dead code removed** (~10,100 lines): the entire `kato/gpu/` subsystem (zero importers, targeted the removed MongoDB layer) plus several other zero-importer modules, closing the `pickle.loads` finding in `docs/maintenance/security-review-baseline.md` via `redis_session_store.py`'s deletion.
+
+**CI**: new `.github/workflows/ci.yml` (ruff + bandit + unit tests) — there was previously no Python CI at all. ruff: 282 errors in `kato/` → passing; bandit clean.
+
+**New bug found, NOT fixed**: session-level `sort_symbols` has no effect — `observation_processor.py` resolves it from config but the actual sort call reads the processor's construction-time default instead, so a per-session override never applies after the first session on a node. Not fixed here (would change pattern hashes); filed as a new Bug entry in `SPRINT_BACKLOG.md`.
+
+**Verification**: full suite **588 passed / 3 skipped / 1 xfailed / 0 failed (689.83s)**, up from 552 baseline; ruff and bandit clean; several fixes verified live against the rebuilt deployment container (only the `kato` service was recreated).
+
+**Deferred** (re-assess list, see `SPRINT_BACKLOG.md` Backlog entry): the still-`[]` default `filter_pipeline`; the per-request `PatternSearcher` cross-request race; synchronous redis/clickhouse clients blocking the event loop; per-request `ProcessPoolExecutor`; `conditional_probability_cached` md5-hashing; the unreachable legacy stateful cluster; 25 `pytest.skip` calls; unbounded request payloads; authentication/tenant binding; the 4,464 orphan Redis keys.
+
+**Archive**: `planning-docs/completed/features/2026-09-16-remediation-pass-1.md`. **Decision**: DECISION-030 in `planning-docs/DECISIONS.md`.
+
+## Earlier Task (context preserved)
 **Event-Aware Alignment Refinement (Event-Mate + Tightness Rules) — COMPLETE (2026-09-11)**
 
 **Commit**: `34910a70` "fix(predictions): attribute repeated symbols to the event their neighbours matched". **Decision**: DECISION-029 in `planning-docs/DECISIONS.md` (extends DECISION-028).

@@ -1,1 +1,0 @@
-# KATO Scripts Package

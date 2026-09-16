@@ -44,11 +44,39 @@ ignore = [
     "E501",   # line too long (handled by formatter)
     "B008",   # do not perform function calls in argument defaults (FastAPI uses this pattern)
     "B904",   # raise from (we handle this manually)
+
+    # --- LINT BACKLOG -------------------------------------------------------
+    # These are NOT approved style. They are pre-existing violations that CI
+    # would otherwise fail on, parked here so the gate can be switched on today
+    # and the rest of the ruleset (notably F: undefined names, unused imports
+    # and unused variables) is enforced from now on. Clear a category, then
+    # delete its line. Counts are from the commit that introduced this block.
+    "UP006",  # 78  non-pep585-annotation (typing.Dict -> dict, mechanical)
+    "UP035",  # 22  deprecated-import (same migration as UP006)
+    "N801",   #  3  invalid-class-name       } the camelCase legacy API
+    "N802",   # 29  invalid-function-name    } (setSTM/processEvents/...),
+    "N803",   #  1  invalid-argument-name    } slated for removal with the
+    "N806",   #  6  non-lowercase-variable   } legacy stateful cluster
+    "N818",   #  1  error-suffix-on-exception-name
+    "SIM102", #  1  collapsible-if
+    "SIM105", #  3  suppressible-exception
+    "SIM108", #  4  if-else-block-instead-of-if-exp
+    "SIM118", #  1  in-dict-keys
+    "C414",   #  3  unnecessary-double-cast-or-process
+    "C416",   #  1  unnecessary-comprehension
+    "E402",   #  1  module-import-not-at-top-of-file
+    # ------------------------------------------------------------------------
 ]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]  # Allow unused imports in __init__.py files
 "tests/**/test_*.py" = ["F811"]  # Pytest fixtures appear as redefinitions but are intentional
+
+# Test and benchmark backlog. Production code under kato/ is held to the full
+# ruleset (minus the backlog above); these are parked separately so clearing
+# them does not block enforcement on kato/.
+"tests/**" = ["F841", "B007", "B011", "B017", "E741", "SIM222"]
+"benchmarks/**" = ["F841", "F401", "B007", "E741"]
 
 [tool.bandit]
 exclude_dirs = [

@@ -17,7 +17,6 @@ from typing import Any, Optional
 from kato.informatics import extractor as difflib
 from kato.representations.prediction import Prediction
 
-from ..storage.aggregation_pipelines import OptimizedQueryManager
 from ..storage.pattern_cache import PatternCache, get_cache_manager
 from .bloom_filter import get_pattern_bloom_filter
 
@@ -481,9 +480,9 @@ class PatternSearcher:
         self.recall_threshold = float(recall_threshold_value)
 
         # ClickHouse/Redis hybrid architecture (REQUIRED)
-        self.session_config = kwargs.get("session_config", None)
-        self.clickhouse_client = kwargs.get("clickhouse_client", None)
-        self.redis_client = kwargs.get("redis_client", None)
+        self.session_config = kwargs.get("session_config")
+        self.clickhouse_client = kwargs.get("clickhouse_client")
+        self.redis_client = kwargs.get("redis_client")
         self.filter_executor: Optional[FilterPipelineExecutor] = None
         self._metadata_router = None  # lazily built on first prediction batch
 
@@ -1394,6 +1393,15 @@ class PatternSearcher:
         if not results:
             return []
 
+        # Load ALL pattern metadata in one round-trip, before the batch split.
+        # get_metadata_batch() is a synchronous ClickHouse SELECT + Redis MGET,
+        # so calling it inside each gathered task did not overlap anything: the
+        # batches simply serialised N ClickHouse queries and N Redis MGETs where
+        # one of each suffices.
+        metadata_batch = self._load_metadata_batch(
+            [result[0] for result in results if len(result) >= 9]
+        )
+
         # Split results into batches for async processing
         batch_size = max(1, len(results) // max_workers)
         result_batches = [results[i:i + batch_size] for i in range(0, len(results), batch_size)]
@@ -1401,7 +1409,9 @@ class PatternSearcher:
         # Process batches concurrently
         tasks = []
         for batch in result_batches:
-            task = asyncio.create_task(self._build_predictions_batch(batch, stm_events))
+            task = asyncio.create_task(
+                self._build_predictions_batch(batch, stm_events, metadata_batch)
+            )
             tasks.append(task)
 
         # Gather all predictions
@@ -1438,15 +1448,35 @@ class PatternSearcher:
         )
         return self._metadata_router
 
-    async def _build_predictions_batch(self, batch: list, stm_events: Optional[list[list[str]]] = None) -> list[dict[str, Any]]:
+    def _load_metadata_batch(self, pattern_hashes: list[str]) -> dict[str, Any]:
+        """Load metadata for every pattern hash in one round-trip.
+
+        Metadata reads come from ClickHouse (frequency merged from Redis) via
+        the MetadataRouter facade. Returns an empty dict when the router is
+        unavailable or there is nothing to look up.
+        """
+        if not pattern_hashes:
+            return {}
+        metadata_router = self._get_metadata_router()
+        if not metadata_router:
+            return {}
+        return metadata_router.get_metadata_batch(pattern_hashes)
+
+    async def _build_predictions_batch(
+        self,
+        batch: list,
+        stm_events: Optional[list[list[str]]] = None,
+        metadata_batch: Optional[dict[str, Any]] = None,
+    ) -> list[dict[str, Any]]:
         """
         Build predictions for a batch of results.
-
-        Uses batched Redis metadata loading to reduce round-trips.
 
         Args:
             batch: Batch of match results
             stm_events: Original event-structured STM for calculating event-aligned missing/extras
+            metadata_batch: Pattern metadata preloaded by the caller for the
+                whole result set. When omitted, this batch loads its own (used
+                by callers outside the fan-out path).
 
         Returns:
             List of prediction dictionaries for this batch
@@ -1456,21 +1486,13 @@ class PatternSearcher:
         if not batch:
             return predictions
 
-        # Metadata reads come from ClickHouse (frequency merged from Redis) via the facade
-        metadata_router = self._get_metadata_router()
-
         if self.filter_executor is None:
             raise RuntimeError("FilterPipelineExecutor not initialized - hybrid architecture required")
 
-        # Pre-load all pattern metadata in a single batch call
-        pattern_hashes = []
-        for result in batch:
-            if len(result) >= 9:
-                pattern_hashes.append(result[0])  # pattern_hash is first element
-
-        metadata_batch = {}
-        if metadata_router and pattern_hashes:
-            metadata_batch = metadata_router.get_metadata_batch(pattern_hashes)
+        if metadata_batch is None:
+            metadata_batch = self._load_metadata_batch(
+                [result[0] for result in batch if len(result) >= 9]
+            )
 
         for result in batch:
             if len(result) >= 9:

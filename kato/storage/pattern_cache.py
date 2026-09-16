@@ -24,9 +24,9 @@ import logging
 import time
 from dataclasses import dataclass
 from typing import Any, Optional
+from typing import Any as Collection  # Was pymongo.Collection; now duck-typed interface from knowledge_base.py
 
 import redis.asyncio as redis
-from typing import Any as Collection  # Was pymongo.Collection; now duck-typed interface from knowledge_base.py
 from redis.asyncio import Redis
 
 logger = logging.getLogger('kato.storage.pattern_cache')

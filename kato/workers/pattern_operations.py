@@ -248,7 +248,7 @@ class PatternOperations:
             # Validate parameters
             if frequency is not None and frequency < 0:
                 raise ValidationError(
-                    "Pattern frequency cannot be negative",
+                    message="Pattern frequency cannot be negative",
                     field_name="frequency",
                     field_value=frequency,
                     validation_rule="Must be >= 0"

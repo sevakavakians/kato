@@ -10,6 +10,8 @@ from os import environ
 from typing import Any, Optional
 
 import numpy as np
+
+from kato.config.session_config import SessionConfiguration
 from kato.informatics.knowledge_base import SuperKnowledgeBase
 from kato.informatics.metrics import (
     accumulate_metadata,
@@ -21,9 +23,9 @@ from kato.representations.pattern import Pattern
 from kato.representations.prediction import segment_by_alignment
 from kato.searches.pattern_search import PatternSearcher
 from kato.storage.aggregation_pipelines import OptimizedQueryManager
-from kato.storage.metrics_cache import CachedMetricsCalculator, get_metrics_cache_manager
 from kato.storage.connection_manager import OptimizedConnectionManager
-from kato.config.session_config import SessionConfiguration
+from kato.storage.identifiers import validate_kb_id, validate_pattern_name
+from kato.storage.metrics_cache import CachedMetricsCalculator, get_metrics_cache_manager
 
 # Standard logger configuration
 logger = logging.getLogger('kato.pattern_processor')
@@ -157,8 +159,11 @@ class PatternProcessor:
 
         # Check pattern data status
         try:
-            pattern_count = clickhouse_client.query("SELECT COUNT(*) FROM kato.patterns_data").result_rows[0][0]
-            logger.info(f"ClickHouse patterns_data table: {pattern_count:,} rows")
+            pattern_count = clickhouse_client.query(
+                "SELECT COUNT(*) FROM kato.patterns_data WHERE kb_id = %(kb_id)s",
+                parameters={'kb_id': self.kb_id},
+            ).result_rows[0][0]
+            logger.info(f"ClickHouse patterns_data for kb_id={self.kb_id}: {pattern_count:,} rows")
 
             if pattern_count == 0:
                 logger.info(
@@ -392,8 +397,9 @@ class PatternProcessor:
             raise RuntimeError("ClickHouse not available for finalize_training")
 
         result = clickhouse_client.query(
-            f"SELECT name, pattern_data FROM kato.patterns_data "
-            f"WHERE kb_id = '{self.superkb.id}'"
+            "SELECT name, pattern_data FROM kato.patterns_data "
+            "WHERE kb_id = %(kb_id)s",
+            parameters={'kb_id': self.superkb.id},
         )
 
         if not result.result_rows:
@@ -490,18 +496,21 @@ class PatternProcessor:
     def delete_pattern(self, name: str) -> str:
         if not self.patterns_searcher.delete_pattern(name):
             raise Exception(f'Unable to find and delete pattern {name} in RAM')
-        # Delete pattern row from ClickHouse patterns_data
-        try:
-            self.superkb.clickhouse_writer.client.command(
-                f"ALTER TABLE kato.patterns_data DELETE WHERE kb_id = '{self.kb_id}' AND name = '{name}'"
-            )
-        except Exception as e:
-            logger.warning(f"Failed to delete pattern {name} from ClickHouse: {e}")
+        # The RAM copy is already gone at this point, so a failure below leaves
+        # the pattern in persistent storage while the caller is told it was
+        # deleted. Let these raise: a partial delete is a data-integrity
+        # problem the caller must see, not a warning to scroll past.
+        #
+        # ALTER ... DELETE cannot bind parameters, so both identifiers are
+        # allowlist-validated before being inlined.
+        safe_kb_id = validate_kb_id(self.kb_id)
+        safe_name = validate_pattern_name(name)
+        self.superkb.clickhouse_writer.client.command(
+            f"ALTER TABLE kato.patterns_data DELETE "
+            f"WHERE kb_id = '{safe_kb_id}' AND name = '{safe_name}'"
+        )
         # Frequency lives in Redis only — delete it directly.
-        try:
-            self.superkb.redis_writer.client.delete(f"{self.kb_id}:frequency:{name}")
-        except Exception as e:
-            logger.warning(f"Failed to delete frequency for pattern {name}: {e}")
+        self.superkb.redis_writer.client.delete(f"{self.kb_id}:frequency:{name}")
         # Delete emotives/metadata/metric data from both stores via the router.
         self.superkb.metadata_router.delete_pattern_metadata(name)
         # Invalidate symbol cache since pattern data changed
@@ -750,13 +759,14 @@ class PatternProcessor:
                 logger.warning("ClickHouse not available, falling back to regular prediction path")
                 return await self.predictPattern([symbol], stm_events=stm_events)
 
-            query = f"""
+            result = clickhouse_client.query(
+                """
                 SELECT name, pattern_data, length
                 FROM kato.patterns_data
-                WHERE kb_id = '{self.superkb.id}' AND first_token = '{symbol}'
-            """
-
-            result = clickhouse_client.query(query)
+                WHERE kb_id = %(kb_id)s AND first_token = %(first_token)s
+                """,
+                parameters={'kb_id': self.superkb.id, 'first_token': symbol},
+            )
 
             if not result.result_rows:
                 logger.debug(f"No patterns found starting with symbol '{symbol}'")
@@ -915,8 +925,8 @@ class PatternProcessor:
                 return batch_results
 
             # Parallel processing for large candidate sets, sequential for small
-            import multiprocessing
             import concurrent.futures
+            import multiprocessing
             SINGLE_SYMBOL_PARALLEL_THRESHOLD = 100
 
             if len(candidate_patterns) > SINGLE_SYMBOL_PARALLEL_THRESHOLD:
@@ -1102,7 +1112,6 @@ class PatternProcessor:
             if self._global_metadata_cache is None:
                 self._global_metadata_cache = self.superkb.redis_writer.get_global_metadata()
             global_metadata = self._global_metadata_cache
-            total_symbols_in_patterns_frequencies = global_metadata.get('total_symbols_in_patterns_frequencies', 0)
             total_pattern_frequencies = global_metadata.get('total_pattern_frequencies', 0)
             total_unique_patterns = global_metadata.get('total_unique_patterns', 1)  # Use 1 to avoid div by zero
 
@@ -1280,13 +1289,15 @@ class PatternProcessor:
                         pattern_symbols = [s for event in prediction['present'] for s in event]
                     else:
                         pattern_symbols = []  # precomp exists but total_unique_patterns == 0
-                    unique_symbols = set(pattern_symbols)
+                    # Counter, not repeated list.count(): counting each unique
+                    # symbol by rescanning the list is O(n^2) in pattern length.
+                    symbol_counts = Counter(pattern_symbols)
                     pattern_length = len(pattern_symbols)
 
                     if pattern_length > 0 and total_unique_patterns > 0:
                         tfidf_scores = []
-                        for symbol in unique_symbols:
-                            tf = pattern_symbols.count(symbol) / pattern_length
+                        for symbol, symbol_count in symbol_counts.items():
+                            tf = symbol_count / pattern_length
                             if symbol in symbol_probability_cache:
                                 patterns_with_symbol = int(symbol_probability_cache[symbol] * total_unique_patterns)
                                 if patterns_with_symbol == 0:
@@ -1364,7 +1375,7 @@ class PatternProcessor:
                     reverse=True,
                     key=itemgetter(self.rank_sort_algo)
                 )
-            except KeyError as e:
+            except KeyError:
                 raise ValueError(f"Invalid rank_sort_algo '{self.rank_sort_algo}': metric not found in predictions. Available metrics: {list(causal_patterns[0].keys()) if causal_patterns else 'none'}")
             except Exception as e:
                 raise Exception(f"\nException in PatternProcessor.predictPattern (async): Error in sorting predictions! {self.kb_id}: {e}")

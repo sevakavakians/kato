@@ -1,29 +1,29 @@
 """
-Session Middleware for FastAPI
+Simple Session Middleware for FastAPI
 
 This middleware handles session management for all requests,
 enabling multi-user support with complete isolation.
 """
 
 import logging
-from typing import Optional
+from typing import Callable, Optional
 
-from fastapi import HTTPException, Request
+from fastapi import Request, Response
 from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 
-from .session_manager import SessionState, get_session_manager
+from .session_manager import SessionState
 
 logger = logging.getLogger('kato.sessions.middleware')
 
 
-class SessionMiddleware:
+class SessionMiddleware(BaseHTTPMiddleware):
     """
     FastAPI middleware for session management.
 
     Handles:
     - Session extraction from headers
     - Session validation
-    - Automatic session creation for v2 endpoints
     - Session attachment to request state
     """
 
@@ -35,68 +35,63 @@ class SessionMiddleware:
             app: FastAPI application
             auto_create: Automatically create sessions for requests without one
         """
-        self.app = app
+        super().__init__(app)
         self.auto_create = auto_create
-        self.session_manager = get_session_manager()
+        # Don't initialize session_manager here - let it be configured by the app
+        self.session_manager = None
 
-    async def __call__(self, scope, receive, send):
-        """ASGI3 middleware interface"""
-        if scope["type"] != "http":
-            await self.app(scope, receive, send)
-            return
-
-        # For HTTP requests, we need to handle them specially
-        # But for now, just pass through to the app
-        await self.app(scope, receive, send)
-        return
-
-    async def process_request_old(self, request: Request, call_next):
+    async def dispatch(self, request: Request, call_next: Callable) -> Response:
         """Process request with session management"""
 
-        # Extract session ID from header or cookie
-        session_id = self._extract_session_id(request)
+        # Get session manager from app state if not set
+        if self.session_manager is None:
+            # Access the app state through the app instance
+            from kato.services.kato_fastapi import app_state
+            self.session_manager = app_state.session_manager
 
-        # Handle v2 endpoints that require sessions
-        if request.url.path.startswith('/v2/') and request.url.path != '/v2/sessions' and not session_id:
-            if self.auto_create and request.method in ['POST', 'PUT']:
-                # Auto-create session for v2 endpoints
-                session = await self.session_manager.create_session()
-                session_id = session.session_id
-                logger.info(f"Auto-created session {session_id} for {request.url.path}")
-            else:
-                    # Session required but not provided
-                    return JSONResponse(
-                        status_code=400,
-                        content={
-                            "error": {
-                                "code": "SESSION_REQUIRED",
-                                "message": "Session ID required for v2 endpoints. Create a session first or provide X-Session-ID header."
+        path = str(request.url.path)
+        session_id = None
+
+        # For session-specific endpoints, extract session ID from path
+        # BUT exclude GET /sessions/{session_id} which is for session info retrieval
+        if path.startswith('/sessions/') and path != '/sessions':
+            parts = path.split('/')
+            if len(parts) >= 3 and parts[2]:
+                session_id = parts[2]
+
+                # Skip validation for GET session info endpoint and exists check endpoint - let the endpoint handle it
+                if (len(parts) == 3 and request.method == 'GET') or \
+                   (len(parts) == 4 and parts[3] == 'exists' and request.method == 'GET'):
+                    session_id = None  # Don't validate, let endpoint handle it
+                else:
+                    # Validate the session exists for session-scoped operations
+                    session = await self.session_manager.get_session(session_id)
+                    if not session:
+                        return JSONResponse(
+                            status_code=404,
+                            content={
+                                "error": {
+                                    "code": "SESSION_NOT_FOUND",
+                                    "message": f"Session {session_id} not found or expired",
+                                    "session_id": session_id
+                                }
                             }
-                        }
-                    )
+                        )
 
-        # Validate and attach session if provided
-        if session_id:
-            session = await self.session_manager.get_session(session_id)
-
-            if not session and request.url.path.startswith('/v2/'):
-                # Session not found or expired
-                return JSONResponse(
-                    status_code=404,
-                    content={
-                        "error": {
-                            "code": "SESSION_NOT_FOUND",
-                            "message": f"Session {session_id} not found or expired",
-                            "session_id": session_id
-                        }
-                    }
-                )
-
-            # Attach session to request state
-            if session:
-                request.state.session = session
-                request.state.session_id = session_id
-                request.state.session_lock = await self.session_manager.get_session_lock(session_id)
+                # Attach session to request state (only if session_id is set)
+                if session_id:
+                    request.state.session = session
+                    request.state.session_id = session_id
+                    request.state.session_lock = await self.session_manager.get_session_lock(session_id)
+        else:
+            # For other endpoints, check for session ID in headers
+            session_id = self._extract_session_id(request)
+            if session_id:
+                session = await self.session_manager.get_session(session_id)
+                if session:
+                    request.state.session = session
+                    request.state.session_id = session_id
+                    request.state.session_lock = await self.session_manager.get_session_lock(session_id)
 
         # Process request
         response = await call_next(request)
@@ -108,6 +103,7 @@ class SessionMiddleware:
         # Update session if it was modified
         if hasattr(request.state, 'session') and hasattr(request.state, 'session_modified') and request.state.session_modified:
             await self.session_manager.update_session(request.state.session)
+            logger.debug(f"Updated modified session {session_id}")
 
         return response
 
@@ -115,10 +111,9 @@ class SessionMiddleware:
         """
         Extract session ID from request.
 
-        Checks in order:
+        Checks:
         1. X-Session-ID header
         2. session_id cookie
-        3. session_id query parameter
 
         Args:
             request: FastAPI request
@@ -126,7 +121,7 @@ class SessionMiddleware:
         Returns:
             Session ID if found, None otherwise
         """
-        # Check header first (preferred)
+        # Check header
         session_id = request.headers.get('X-Session-ID')
         if session_id:
             return session_id
@@ -136,76 +131,41 @@ class SessionMiddleware:
         if session_id:
             return session_id
 
-        # Check query parameter (least preferred)
-        session_id = request.query_params.get('session_id')
-        if session_id:
-            return session_id
-
         return None
 
 
+# Dependency injection helpers for route handlers
 async def get_session(request: Request) -> SessionState:
     """
-    FastAPI dependency to get session from request.
+    Get the current session from request state.
 
-    Args:
-        request: FastAPI request
-
-    Returns:
-        SessionState from request
-
-    Raises:
-        HTTPException: If session not found in request
+    Raises HTTPException if no session.
     """
     if not hasattr(request.state, 'session'):
+        from fastapi import HTTPException
         raise HTTPException(
             status_code=400,
-            detail="Session required for this endpoint"
+            detail="No session found. Create a session first or provide X-Session-ID header."
         )
-
     return request.state.session
 
 
-async def get_session_id(request: Request) -> str:
-    """
-    FastAPI dependency to get session ID from request.
-
-    Args:
-        request: FastAPI request
-
-    Returns:
-        Session ID from request
-
-    Raises:
-        HTTPException: If session ID not found in request
-    """
-    if not hasattr(request.state, 'session_id'):
-        raise HTTPException(
-            status_code=400,
-            detail="Session ID required for this endpoint"
-        )
-
-    return request.state.session_id
-
-
 async def get_optional_session(request: Request) -> Optional[SessionState]:
-    """
-    FastAPI dependency to get optional session from request.
-
-    Args:
-        request: FastAPI request
-
-    Returns:
-        SessionState if present, None otherwise
-    """
+    """Get the current session from request state, or None if not present."""
     return getattr(request.state, 'session', None)
 
 
-def mark_session_modified(request: Request):
-    """
-    Mark session as modified so it will be saved.
+async def get_session_id(request: Request) -> str:
+    """Get the current session ID from request state."""
+    if not hasattr(request.state, 'session_id'):
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=400,
+            detail="No session ID found"
+        )
+    return request.state.session_id
 
-    Args:
-        request: FastAPI request
-    """
+
+def mark_session_modified(request: Request):
+    """Mark the session as modified so it will be saved."""
     request.state.session_modified = True

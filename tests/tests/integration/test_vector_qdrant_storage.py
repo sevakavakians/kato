@@ -12,13 +12,11 @@ import random
 import sys
 import uuid
 
-import numpy as np
 import requests
 
 # Add path for fixtures
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from fixtures.kato_fixtures import kato_fixture
 
 
 def test_vector_id_deterministic():

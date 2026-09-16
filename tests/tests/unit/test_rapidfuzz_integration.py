@@ -12,11 +12,10 @@ tests run against a Docker-hosted KATO service. Performance benchmarking
 is done in benchmarks/compare_matchers.py.
 """
 
-import pytest
 
 # Try to import RapidFuzz to check availability
 try:
-    import rapidfuzz
+    import rapidfuzz  # noqa: F401  (imported to probe availability)
     RAPIDFUZZ_INSTALLED = True
 except ImportError:
     RAPIDFUZZ_INSTALLED = False

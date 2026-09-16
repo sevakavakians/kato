@@ -1,0 +1,92 @@
+name: CI
+
+# Python lint, security and unit tests. Until this existed the only workflow in
+# the repo was helm.yaml, so ruff/bandit/pytest never ran anywhere automatically
+# and .pre-commit-config.yaml was only as good as each clone's local hooks.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint and security
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # Match the runtime image (Dockerfile: python:3.10-slim)
+          python-version: '3.10'
+
+      - name: Install lint tooling
+        run: pip install --disable-pip-version-check ruff==0.13.3 'bandit[toml]==1.8.6'
+
+      - name: ruff
+        # The ruleset and its documented backlog live in pyproject.toml.
+        run: ruff check kato/ tests/ benchmarks/
+
+      - name: bandit
+        run: bandit -r kato/ -c pyproject.toml
+
+  unit-tests:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      qdrant:
+        image: qdrant/qdrant:v1.15.1
+        ports: ['6333:6333']
+      clickhouse:
+        image: clickhouse/clickhouse-server:24.8
+        ports: ['8123:8123', '9000:9000']
+        options: >-
+          --health-cmd "wget -qO- http://localhost:8123/ping || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      REDIS_URL: redis://localhost:6379
+      QDRANT_HOST: localhost
+      QDRANT_PORT: '6333'
+      CLICKHOUSE_HOST: localhost
+      CLICKHOUSE_PORT: '8123'
+      SERVICE_NAME: kato
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: pip install --disable-pip-version-check -r requirements.lock
+
+      - name: Initialise ClickHouse schema
+        run: |
+          set -eu
+          for _ in $(seq 1 30); do
+            if curl -sf http://localhost:8123/ping >/dev/null; then break; fi
+            sleep 2
+          done
+          curl -sf --data-binary @config/clickhouse/init.sql http://localhost:8123/
+
+      - name: Import check
+        # Cheap guard against a deleted module still being imported somewhere:
+        # a runtime-only ImportError would otherwise surface in production.
+        run: python -c "import kato.services.kato_fastapi"
+
+      - name: Unit tests
+        run: python -m pytest tests/tests/unit/ -q

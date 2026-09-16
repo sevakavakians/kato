@@ -145,7 +145,7 @@ Storage Layer (Hybrid Architecture)
 ### Storage & Search
 - `kato/storage/clickhouse_writer.py` - ClickHouse pattern storage
 - `kato/storage/redis_writer.py` - Redis metadata storage
-- `kato/storage/qdrant_manager.py` - Vector operations
+- `kato/storage/qdrant_store.py` - Vector operations
 - `kato/searches/pattern_search.py` - Pattern matching with filter pipeline
 - `kato/sessions/redis_session_manager.py` - Session management
 

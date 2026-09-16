@@ -8,6 +8,7 @@ Provides persistent session storage using Redis, enabling:
 """
 
 import asyncio
+import contextlib
 import json
 import logging
 import uuid
@@ -20,11 +21,10 @@ import redis.asyncio as redis
 import kato.sessions.session_manager as session_manager_module
 from kato.config.session_config import SessionConfiguration
 
-from .session_manager import SessionState
-import contextlib
-
 # Import event broadcaster for WebSocket notifications
 from kato.websocket import get_event_broadcaster
+
+from .session_manager import SessionState
 
 logger = logging.getLogger('kato.sessions.redis')
 

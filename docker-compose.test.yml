@@ -1,21 +1,4 @@
 services:
-  # MongoDB shared by all KATO instances
-  mongodb:
-    image: mongo:4.4
-    container_name: kato-mongodb
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongo-data:/data/db
-    networks:
-      - kato-network
-    restart: unless-stopped
-    healthcheck:
-      test: echo 'db.runCommand("ping").ok' | mongo localhost:27017/test --quiet
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   # Qdrant vector database (required for vector operations)
   qdrant:
     image: qdrant/qdrant:latest
@@ -56,7 +39,6 @@ services:
     environment:
       - PROCESSOR_ID=test
       - PROCESSOR_NAME=Test
-      - MONGO_BASE_URL=mongodb://mongodb:27017
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
       - REDIS_URL=redis://redis:6379
@@ -70,8 +52,6 @@ services:
     networks:
       - kato-network
     depends_on:
-      mongodb:
-        condition: service_healthy
       redis:
         condition: service_healthy
     restart: unless-stopped
@@ -83,7 +63,6 @@ services:
       start_period: 30s
 
 volumes:
-  mongo-data:
   qdrant-data:
   redis-data:
 

@@ -9,6 +9,7 @@ sequences without any data collision.
 """
 
 import asyncio
+import contextlib
 import logging
 import time
 import uuid
@@ -17,7 +18,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from kato.config.session_config import SessionConfiguration
-import contextlib
 
 logger = logging.getLogger('kato.sessions.manager')
 

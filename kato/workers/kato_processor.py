@@ -1,8 +1,8 @@
 # cimport cython
-import asyncio
 import logging
 import os
 from multiprocessing import cpu_count
+from typing import TYPE_CHECKING
 
 from kato.config.session_config import SessionConfiguration
 from kato.config.settings import get_settings
@@ -11,6 +11,9 @@ from kato.workers.observation_processor import ObservationProcessor
 from kato.workers.pattern_operations import PatternOperations
 from kato.workers.pattern_processor import PatternProcessor
 from kato.workers.vector_processor import VectorProcessor
+
+if TYPE_CHECKING:
+    from kato.sessions.session_manager import SessionState
 
 logger = logging.getLogger('kato.workers.kato-processor')
 # Logger level will be set when first instance is created
@@ -352,13 +355,6 @@ class KatoProcessor:
             stm=session_state.stm,
             config=config
         )
-
-    def get_stm(self):
-        """Get the current short-term memory - delegates to memory manager"""
-        logger.debug(f'get_stm called in {self.name}-{self.id}')
-        stm_data = self.memory_manager.get_stm_state()
-        logger.debug(f"get_stm returning: {stm_data}")
-        return stm_data
 
     def get_percept_data(self, session_state: 'SessionState' = None):
         """

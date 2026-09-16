@@ -8,11 +8,12 @@ import logging
 import sys
 import time
 import uuid
+from collections.abc import Generator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import datetime, timezone
 from logging import LogRecord
-from typing import Any, Generator, Optional, Union
+from typing import Any, Optional, Union
 
 # Context variable for storing trace ID across async boundaries
 trace_id_var: ContextVar[Optional[str]] = ContextVar('trace_id', default=None)

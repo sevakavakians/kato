@@ -413,7 +413,7 @@ class SequenceMatcher:
             Tagged lines from the sequence.
         """
         for i in range(lo, hi):
-            yield '{} {}'.format(tag, x[i])
+            yield f'{tag} {x[i]}'
 
     def _plain_replace(self, a: Sequence[Any], alo: int, ahi: int,
                        b: Sequence[Any], blo: int, bhi: int) -> Generator[str, None, None]:

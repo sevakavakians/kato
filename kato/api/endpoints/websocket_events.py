@@ -5,7 +5,6 @@ Provides real-time event streaming for KATO Dashboard and other clients.
 Implements the WebSocket event specification from KATO_WEBSOCKET_REQUIREMENTS.md.
 """
 
-import asyncio
 import logging
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -75,5 +74,6 @@ async def websocket_events_endpoint(websocket: WebSocket):
         broadcaster.disconnect(websocket)
         try:
             await websocket.close()
-        except Exception:
-            pass
+        except Exception as close_error:
+            # Already in the error path; the socket is very likely gone.
+            logger.debug("Failed to close errored WebSocket: %s", close_error)

@@ -36,7 +36,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from benchmarks.profiler import (
     TimingCollector,
     compute_bottleneck_ranking,
-    compute_scaling_analysis,
 )
 
 
@@ -178,7 +177,7 @@ def generate_report(collectors: dict[str, TimingCollector],
 def print_bottleneck_summary(report: dict) -> None:
     """Print a concise bottleneck summary to console."""
     print(f"\n{'=' * 70}")
-    print(f"  BOTTLENECK SUMMARY")
+    print("  BOTTLENECK SUMMARY")
     print(f"{'=' * 70}")
 
     for section, title in [
@@ -200,7 +199,7 @@ def print_bottleneck_summary(report: dict) -> None:
         comp = io_compute.get("compute_total_ms", 0)
         total = io + comp
         if total > 0:
-            print(f"\n  I/O vs Computation:")
+            print("\n  I/O vs Computation:")
             print(f"    Database I/O: {io:>10.0f}ms ({io/total*100:.1f}%)")
             print(f"    Computation:  {comp:>10.0f}ms ({comp/total*100:.1f}%)")
 

@@ -4,9 +4,9 @@ Base class for pattern filtering stages.
 Provides abstract interface that all filters must implement.
 """
 
-from abc import ABC, abstractmethod
-from typing import Optional, Set, List, Dict, Any
 import logging
+from abc import ABC, abstractmethod
+from typing import Any, Dict, List, Optional, Set
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +59,20 @@ class PatternFilter(ABC):
             Filtered set of pattern names
         """
         pass
+
+    def get_query_parameters(self) -> Dict[str, Any]:
+        """
+        Return server-side bind parameters for :meth:`get_db_query`.
+
+        Filters whose SQL embeds anything derived from user input (STM tokens,
+        session-supplied thresholds) MUST use ``%(name)s`` placeholders in
+        ``get_db_query()`` and return the values here, so clickhouse-connect
+        binds them instead of the values landing in statement text.
+
+        Returns:
+            Mapping of placeholder name to value; empty when the query needs none.
+        """
+        return {}
 
     def is_database_filter(self) -> bool:
         """Check if this filter runs on database side."""

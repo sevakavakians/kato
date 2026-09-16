@@ -65,7 +65,7 @@ class ObservationProcessor:
         # Check for required unique_id
         if 'unique_id' not in data or data['unique_id'] == '':
             raise ValidationError(
-                "Observation must include a non-empty unique_id",
+                message="Observation must include a non-empty unique_id",
                 field_name="unique_id",
                 field_value=data.get('unique_id'),
                 validation_rule="Required non-empty string"
@@ -75,7 +75,7 @@ class ObservationProcessor:
         if 'strings' in data and data['strings'] is not None:
             if not isinstance(data['strings'], list):
                 raise ValidationError(
-                    "Strings must be a list",
+                    message="Strings must be a list",
                     field_name="strings",
                     field_value=type(data['strings']).__name__,
                     validation_rule="Must be list type"
@@ -83,7 +83,7 @@ class ObservationProcessor:
             for i, s in enumerate(data['strings']):
                 if not isinstance(s, str):
                     raise ValidationError(
-                        f"String at index {i} must be a string",
+                        message=f"String at index {i} must be a string",
                         field_name=f"strings[{i}]",
                         field_value=type(s).__name__,
                         validation_rule="Must be string type"
@@ -93,7 +93,7 @@ class ObservationProcessor:
         if 'vectors' in data and data['vectors'] is not None:
             if not isinstance(data['vectors'], list):
                 raise ValidationError(
-                    "Vectors must be a list",
+                    message="Vectors must be a list",
                     field_name="vectors",
                     field_value=type(data['vectors']).__name__,
                     validation_rule="Must be list type"
@@ -101,14 +101,14 @@ class ObservationProcessor:
             for i, vector in enumerate(data['vectors']):
                 if not isinstance(vector, list):
                     raise ValidationError(
-                        f"Vector at index {i} must be a list",
+                        message=f"Vector at index {i} must be a list",
                         field_name=f"vectors[{i}]",
                         field_value=type(vector).__name__,
                         validation_rule="Must be list type"
                     )
                 if not all(isinstance(v, (int, float)) for v in vector):
                     raise ValidationError(
-                        f"Vector at index {i} must contain only numbers",
+                        message=f"Vector at index {i} must contain only numbers",
                         field_name=f"vectors[{i}]",
                         validation_rule="Must contain int or float values"
                     )
@@ -117,7 +117,7 @@ class ObservationProcessor:
         if 'emotives' in data and data['emotives'] is not None:
             if not isinstance(data['emotives'], dict):
                 raise ValidationError(
-                    "Emotives must be a dictionary",
+                    message="Emotives must be a dictionary",
                     field_name="emotives",
                     field_value=type(data['emotives']).__name__,
                     validation_rule="Must be dict type"
@@ -125,14 +125,14 @@ class ObservationProcessor:
             for key, value in data['emotives'].items():
                 if not isinstance(key, str):
                     raise ValidationError(
-                        "Emotive key must be a string",
+                        message="Emotive key must be a string",
                         field_name=f"emotives[{key}]",
                         field_value=type(key).__name__,
                         validation_rule="Key must be string type"
                     )
                 if not isinstance(value, (int, float)):
                     raise ValidationError(
-                        f"Emotive value for '{key}' must be a number",
+                        message=f"Emotive value for '{key}' must be a number",
                         field_name=f"emotives[{key}]",
                         field_value=type(value).__name__,
                         validation_rule="Value must be int or float"
@@ -142,7 +142,7 @@ class ObservationProcessor:
         if 'metadata' in data and data['metadata'] is not None:
             if not isinstance(data['metadata'], dict):
                 raise ValidationError(
-                    "Metadata must be a dictionary",
+                    message="Metadata must be a dictionary",
                     field_name="metadata",
                     field_value=type(data['metadata']).__name__,
                     validation_rule="Must be dict type"
@@ -150,7 +150,7 @@ class ObservationProcessor:
             for key in data['metadata'].keys():
                 if not isinstance(key, str):
                     raise ValidationError(
-                        "Metadata key must be a string",
+                        message="Metadata key must be a string",
                         field_name=f"metadata[{key}]",
                         field_value=type(key).__name__,
                         validation_rule="Key must be string type"
@@ -355,7 +355,13 @@ class ObservationProcessor:
             max_pattern_length = config.max_pattern_length if config and config.max_pattern_length is not None else self.max_pattern_length
             process_predictions = config.process_predictions if config and config.process_predictions is not None else self.process_predictions
             stm_mode = config.stm_mode if config and config.stm_mode is not None else getattr(self.pattern_processor, 'stm_mode', 'CLEAR')
-            sort_symbols = config.sort_symbols if config and config.sort_symbols is not None else self.sort_symbols
+            # KNOWN BUG (not fixed here -- changes pattern hashes, so it needs
+            # its own change): this resolves the session's sort_symbols but
+            # nothing reads it. The actual sorting at lines ~181/~210 uses
+            # self.sort_symbols, the processor's construction-time default, so a
+            # per-session sort_symbols / use_token_matching override does not
+            # take effect for sessions after the first on a given node.
+            sort_symbols = config.sort_symbols if config and config.sort_symbols is not None else self.sort_symbols  # noqa: F841
 
             unique_id = data['unique_id']
             string_data = data.get('strings', [])

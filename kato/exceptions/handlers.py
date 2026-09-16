@@ -21,6 +21,7 @@ from kato.exceptions import (
     ConfigurationError,
     DatabaseConnectionError,
     DataConsistencyError,
+    KatoTimeoutError,
     KatoV2Exception,
     RateLimitExceededError,
     ResourceExhaustedError,
@@ -28,7 +29,6 @@ from kato.exceptions import (
     SessionLimitExceededError,
     SessionNotFoundError,
     StorageError,
-    TimeoutError,
     ValidationError,
 )
 
@@ -103,7 +103,7 @@ async def kato_v2_exception_handler(request: Request, exc: KatoV2Exception) -> J
         ValidationError: status.HTTP_422_UNPROCESSABLE_ENTITY,
         ConfigurationError: status.HTTP_500_INTERNAL_SERVER_ERROR,
         ResourceExhaustedError: status.HTTP_507_INSUFFICIENT_STORAGE,
-        TimeoutError: status.HTTP_504_GATEWAY_TIMEOUT,
+        KatoTimeoutError: status.HTTP_504_GATEWAY_TIMEOUT,
     }
 
     # Get appropriate status code
@@ -324,7 +324,7 @@ def get_recovery_suggestions(exc: KatoV2Exception) -> dict[str, Any]:
             "retry_delay_seconds": 30.0
         }
 
-    elif isinstance(exc, TimeoutError):
+    elif isinstance(exc, KatoTimeoutError):
         return {
             "actions": [
                 "Retry with increased timeout",
@@ -338,27 +338,40 @@ def get_recovery_suggestions(exc: KatoV2Exception) -> dict[str, Any]:
     return {}
 
 
-def setup_error_handlers(app):
+def setup_error_handlers(app, include_http_handlers: bool = False):
     """
-    Setup all error handlers for a FastAPI application.
+    Setup error handlers for a FastAPI application.
+
+    MUST be called at import time, immediately after the FastAPI app is
+    constructed -- NOT from a startup/lifespan hook. Starlette builds its
+    middleware stack on the first ``__call__`` (which is the lifespan scope)
+    and ``build_middleware_stack()`` copies ``app.exception_handlers`` into a
+    fresh dict. Handlers registered after that point are silently ignored, so
+    a registration inside ``@app.on_event("startup")`` is a no-op.
 
     Args:
         app: FastAPI application instance
+        include_http_handlers: When True, also take over ``HTTPException`` and
+            ``RequestValidationError`` so *every* error response uses the
+            structured ``{"error": {...}}`` envelope. Defaults to False: route
+            handlers raise ``HTTPException`` all over the codebase and existing
+            clients depend on FastAPI's flat ``{"detail": ...}`` shape for
+            those. Turning this on is an API-visible change.
     """
-    # KATO v2.0 custom exceptions
+    # KATO custom exceptions -> mapped status codes + structured body
     app.add_exception_handler(KatoV2Exception, kato_v2_exception_handler)
 
-    # FastAPI validation errors
-    app.add_exception_handler(RequestValidationError, validation_exception_handler)
-
-    # Standard HTTP exceptions
-    app.add_exception_handler(HTTPException, http_exception_handler)
-    app.add_exception_handler(StarletteHTTPException, http_exception_handler)
-
-    # Catch-all for unexpected exceptions
+    # Catch-all: structured 500 without leaking a traceback to the client
     app.add_exception_handler(Exception, generic_exception_handler)
 
-    logger.info("Error handlers configured for KATO v2.0")
+    if include_http_handlers:
+        app.add_exception_handler(RequestValidationError, validation_exception_handler)
+        app.add_exception_handler(HTTPException, http_exception_handler)
+        app.add_exception_handler(StarletteHTTPException, http_exception_handler)
+
+    logger.info(
+        "Error handlers configured (http_handlers=%s)", include_http_handlers
+    )
 
 
 # Context managers for error handling

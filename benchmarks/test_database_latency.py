@@ -12,8 +12,6 @@ Usage:
 """
 
 import sys
-import time
-from itertools import chain
 from pathlib import Path
 
 # Add project root to path
@@ -96,6 +94,7 @@ def benchmark_clickhouse_inserts(collector: TimingCollector,
     print("\n--- ClickHouse INSERT Batch Scaling ---")
 
     from datetime import datetime
+
     from datasketch import MinHash
 
     def make_row(i):
@@ -210,12 +209,13 @@ def benchmark_computation(collector: TimingCollector, iterations: int = 50) -> N
     print("\n--- Computation Baselines ---")
 
     from datasketch import MinHash
+
     from kato.representations.pattern import Pattern
 
     # MinHash computation at varying token counts
     for token_count in [10, 50, 200, 1_000]:
         label = f"compute.minhash_{token_count}"
-        tokens = [f"tok_{i}".encode('utf8') for i in range(token_count)]
+        tokens = [f"tok_{i}".encode() for i in range(token_count)]
 
         for _ in range(iterations):
             with perf_timer(label, collector):

@@ -15,10 +15,8 @@ Usage:
 import random
 import uuid
 from itertools import chain
-from typing import Any
 
 from kato.representations.pattern import Pattern
-
 
 # Scale tier presets
 SCALE_TIERS = {

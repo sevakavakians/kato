@@ -13,6 +13,8 @@ import json
 import logging
 from typing import Any
 
+from kato.config.settings import get_settings
+
 logger = logging.getLogger('kato.storage.redis_writer')
 
 
@@ -46,6 +48,9 @@ class RedisWriter:
 
         if not self.client:
             raise RuntimeError("Redis client is required but was None")
+
+        # TTL for per-observation prediction keys (see write_prediction).
+        self.prediction_ttl_seconds = get_settings().session.session_ttl
 
         logger.debug(f"RedisWriter initialized for kb_id: {kb_id}")
 
@@ -135,7 +140,7 @@ class RedisWriter:
             }
         except Exception as e:
             logger.error(f"Failed to batch get frequencies for {len(pattern_names)} patterns: {e}")
-            return {name: 0 for name in pattern_names}
+            return dict.fromkeys(pattern_names, 0)
 
     def batch_update_symbol_stats(self, symbol_counts: dict[str, int],
                                    pattern_name: str,
@@ -453,6 +458,11 @@ class RedisWriter:
         """
         Store predictions in Redis for later retrieval.
 
+        Written with a TTL: one key is produced per observation and nothing
+        reaps them, so an un-expiring write leaks a key per observe forever.
+        The TTL matches the session lifetime, which bounds how long a caller
+        could plausibly come back for the result.
+
         Args:
             unique_id: Unique identifier for this prediction state
             predictions: List of prediction dictionaries
@@ -465,7 +475,9 @@ class RedisWriter:
         """
         try:
             prediction_key = f"{self.kb_id}:prediction:{unique_id}"
-            self.client.set(prediction_key, json.dumps(predictions))
+            self.client.setex(
+                prediction_key, self.prediction_ttl_seconds, json.dumps(predictions)
+            )
             logger.debug(f"Wrote predictions for unique_id {unique_id} to Redis (kb_id={self.kb_id})")
             return True
 

@@ -6,6 +6,7 @@ Supports Prometheus-format metrics and custom metrics tracking.
 """
 
 import asyncio
+import contextlib
 import logging
 import threading
 import time
@@ -15,7 +16,6 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 import psutil
-import contextlib
 
 logger = logging.getLogger('kato.monitoring.metrics')
 

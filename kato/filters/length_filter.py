@@ -5,8 +5,8 @@ Filters patterns by total token count relative to STM length using
 ClickHouse's precomputed length field.
 """
 
-from typing import Optional, Set, Dict, Any
 import logging
+from typing import Any, Dict, Optional, Set
 
 from kato.filters.base import PatternFilter
 
@@ -42,8 +42,8 @@ class LengthFilter(PatternFilter):
         super().__init__(config, state)
 
         # Get configuration with defaults
-        self.min_ratio = getattr(config, 'length_min_ratio', None) or 0.5
-        self.max_ratio = getattr(config, 'length_max_ratio', None) or 2.0
+        self.min_ratio = float(getattr(config, 'length_min_ratio', None) or 0.5)
+        self.max_ratio = float(getattr(config, 'length_max_ratio', None) or 2.0)
 
         # Calculate length bounds
         self.min_length = max(1, int(self.stm_length * self.min_ratio))
@@ -62,13 +62,17 @@ class LengthFilter(PatternFilter):
         Returns:
             SQL query string filtering by length bounds
         """
-        query = f"""
+        query = """
         SELECT name, pattern_data, length
         FROM patterns_data
-        WHERE length BETWEEN {self.min_length} AND {self.max_length}
+        WHERE length BETWEEN %(min_length)s AND %(max_length)s
         """
 
         return query
+
+    def get_query_parameters(self) -> Dict[str, Any]:
+        """Bind values for :meth:`get_db_query`."""
+        return {'min_length': self.min_length, 'max_length': self.max_length}
 
     def filter_python(self, candidates: Set[str], patterns_cache: Dict[str, Any]) -> Set[str]:
         """

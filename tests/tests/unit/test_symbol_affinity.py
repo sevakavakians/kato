@@ -8,9 +8,7 @@ These tests validate:
 4. No affinity when no emotives provided
 5. Affinity accumulation on pattern re-learning
 """
-import json
 
-import pytest
 import redis
 
 

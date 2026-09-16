@@ -66,8 +66,8 @@ async def create_session(request: CreateSessionRequest):
     without any data collision.
     """
     logger.debug(f"create_session endpoint called with node_id: {request.node_id}")
-    from kato.services.kato_fastapi import app_state
     from kato.config.configuration_service import get_configuration_service
+    from kato.services.kato_fastapi import app_state
 
     logger.info(f"Creating session with manager id: {id(app_state.session_manager)}")
     logger.debug(f"Calling session_manager.create_session for node: {request.node_id}")
@@ -174,8 +174,8 @@ async def check_session_exists(session_id: str):
 @router.get("/{session_id}", response_model=SessionResponse)
 async def get_session_info(session_id: str):
     """Get information about a session"""
-    from kato.services.kato_fastapi import app_state
     from kato.config.configuration_service import get_configuration_service
+    from kato.services.kato_fastapi import app_state
 
     logger.info(f"Getting session info for: {session_id}")
     session = await app_state.session_manager.get_session(session_id)
@@ -223,8 +223,8 @@ async def get_session_config(session_id: str):
     Returns all configurable parameters with their effective values
     (session overrides or system defaults).
     """
-    from kato.services.kato_fastapi import app_state
     from kato.config.configuration_service import get_configuration_service
+    from kato.services.kato_fastapi import app_state
 
     session = await app_state.session_manager.get_session(session_id)
 
@@ -249,11 +249,10 @@ async def get_session_config(session_id: str):
 @router.post("/{session_id}/config", response_model=SessionConfigUpdateResponse)
 async def update_session_config(session_id: str, request_data: dict[str, Any]):
     """Update session configuration parameters"""
-    from kato.services.kato_fastapi import app_state
     from kato.config.configuration_service import get_configuration_service
+    from kato.services.kato_fastapi import app_state
 
-    logger.error(f"!!! DEBUG: update_session_config called for {session_id} with: {request_data}")
-    logger.info(f"Updating config for session {session_id} with data: {request_data}")
+    logger.debug("Updating config for session %s with data: %s", session_id, request_data)
 
     session = await app_state.session_manager.get_session(session_id)
 
@@ -292,13 +291,23 @@ async def update_session_config(session_id: str, request_data: dict[str, Any]):
                 f"Using user-specified values, but this may cause incorrect matching behavior."
             )
 
-    # Update the session's config - using SessionConfiguration's update method
-    for key, value in config.items():
-        if hasattr(session.session_config, key):
-            setattr(session.session_config, key, value)
-            logger.info(f"Updated session config {key} = {value}")
-        else:
-            logger.warning(f"Session config does not have attribute {key}")
+    # Update through SessionConfiguration.update(), which validates every field
+    # and rolls back atomically on failure. The previous setattr loop bypassed
+    # validate() entirely, so out-of-range filter parameters (jaccard_threshold,
+    # length ratios, minhash bands...) reached the query layer unchecked, and
+    # identity fields like node_id could be overwritten. validate_configuration_update()
+    # above only covers a subset of the settings.
+    if not session.session_config.update(config):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "Configuration validation failed",
+                "message": (
+                    "One or more configuration values are outside their permitted "
+                    "range. See server logs for the offending field."
+                ),
+            },
+        )
 
     # Save the updated session to Redis
     logger.info("Saving updated session to Redis")
@@ -398,7 +407,7 @@ async def observe_in_session(
             raise
 
         # Update session with new state returned by processor
-        logger.debug(f"Updating session with new state from processor")
+        logger.debug("Updating session with new state from processor")
         session.stm = result['stm']
         session.emotives_accumulator = result['emotives_accumulator']
         session.metadata_accumulator = result['metadata_accumulator']

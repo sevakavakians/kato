@@ -22,12 +22,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from benchmarks.data_generator import BenchmarkDataGenerator
 from benchmarks.profiler import (
     TimingCollector,
     instrument_instance,
     perf_timer,
 )
-from benchmarks.data_generator import BenchmarkDataGenerator
 
 
 def run_learning_benchmark(tier_size: int, collector: TimingCollector,
@@ -46,11 +46,8 @@ def run_learning_benchmark(tier_size: int, collector: TimingCollector,
     Returns:
         Dict with tier results and processor_id for cleanup
     """
-    from kato.workers.pattern_processor import PatternProcessor
-    from kato.storage.clickhouse_writer import ClickHouseWriter
-    from kato.storage.redis_writer import RedisWriter
-    from kato.representations.pattern import Pattern
     from kato.config.settings import get_settings
+    from kato.workers.pattern_processor import PatternProcessor
 
     processor_id = BenchmarkDataGenerator.make_processor_id(tier_size)
     print(f"\n--- Learning Path Benchmark: {tier_size:,} patterns (kb_id={processor_id}) ---")
@@ -78,25 +75,25 @@ def run_learning_benchmark(tier_size: int, collector: TimingCollector,
     # Instrument ClickHouseWriter instance
     ch_writer = pp.superkb.clickhouse_writer
     uninstrument_fns.append(instrument_instance(ch_writer, {
-        '_prepare_row': f'learn.ch.prepare_row',
-        'flush': f'learn.ch.flush',
-        'write_pattern': f'learn.ch.write_pattern',
+        '_prepare_row': 'learn.ch.prepare_row',
+        'flush': 'learn.ch.flush',
+        'write_pattern': 'learn.ch.write_pattern',
     }, collector))
 
     # Instrument RedisWriter instance
     redis_writer = pp.superkb.redis_writer
     uninstrument_fns.append(instrument_instance(redis_writer, {
-        'write_metadata': f'learn.redis.write_metadata',
-        'get_frequency': f'learn.redis.get_frequency',
-        'increment_frequency': f'learn.redis.incr_frequency',
-        'get_metadata': f'learn.redis.get_metadata_single',
-        'batch_update_symbol_stats': f'learn.redis.batch_symbol_stats',
+        'write_metadata': 'learn.redis.write_metadata',
+        'get_frequency': 'learn.redis.get_frequency',
+        'increment_frequency': 'learn.redis.incr_frequency',
+        'get_metadata': 'learn.redis.get_metadata_single',
+        'batch_update_symbol_stats': 'learn.redis.batch_symbol_stats',
     }, collector))
 
     # Instrument PatternSearcher
     searcher = pp.patterns_searcher
     uninstrument_fns.append(instrument_instance(searcher, {
-        'assignNewlyLearnedToWorkers': f'learn.searcher.assign',
+        'assignNewlyLearnedToWorkers': 'learn.searcher.assign',
     }, collector))
 
     # Ensure patterns_kb is accessible (learn() references self.patterns_kb)
@@ -172,7 +169,7 @@ def run_all(collector: TimingCollector = None,
 
     # Print per-tier throughput
     print(f"\n{'=' * 70}")
-    print(f"  Learning Throughput by Tier")
+    print("  Learning Throughput by Tier")
     print(f"{'=' * 70}")
     print(f"  {'Tier':>10} {'Total (ms)':>12} {'Rate (p/s)':>12} {'Verified':>10}")
     print(f"  {'-' * 10} {'-' * 12} {'-' * 12} {'-' * 10}")

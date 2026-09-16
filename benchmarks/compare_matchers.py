@@ -31,8 +31,8 @@ from pymongo import MongoClient
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from kato.searches.pattern_search import PatternSearcher
 from kato.representations.pattern import Pattern
+from kato.searches.pattern_search import PatternSearcher
 
 
 class MatcherComparison:
@@ -57,6 +57,7 @@ class MatcherComparison:
     def _get_system_info(self) -> Dict[str, Any]:
         """Collect system information."""
         import platform
+
         import psutil
 
         # Check RapidFuzz availability
@@ -357,7 +358,7 @@ class MatcherComparison:
             json.dump(self.results, f, indent=2)
 
         print(f"\n{'='*60}")
-        print(f"✅ Comparisons complete!")
+        print("✅ Comparisons complete!")
         print(f"Results saved to: {output_file}")
         print(f"End time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         print(f"{'='*60}")

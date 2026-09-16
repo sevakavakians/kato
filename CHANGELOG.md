@@ -7,14 +7,87 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.1.0] - 2026-09-16
+
+Fixes a set of live defects found by a repo-wide review, makes prediction output
+deterministic, removes a large amount of dead code, and adds the project's first
+Python CI. Prediction payloads and error responses both change observably —
+see "Upgrade notes" before deploying.
+
+### Upgrade notes
+
+- **`node_id` sanitisation changed, and it determines where data lives.** The
+  derived `kb_id` (the ClickHouse partition, Redis namespace and Qdrant
+  collection name) is now built from an allowlist: every character outside
+  `[A-Za-z0-9_]` becomes `_`. The previous rule replaced a fixed list of 14
+  characters, so a `node_id` containing anything else — `!`, `@`, `#`, `+`, `~`,
+  `(`, `)`, or a single quote — kept it verbatim and now maps to a *different*
+  `kb_id`, leaving that node's existing patterns and vectors unreachable. Node
+  ids made only of letters, digits, `_`, and the previously-replaced characters
+  are unaffected and map exactly as before. Check with:
+  `SELECT DISTINCT kb_id FROM kato.patterns_data WHERE NOT match(kb_id, '^[A-Za-z0-9_]{1,60}$')`
+  — if that returns nothing, nothing moves.
+- **KATO exceptions now produce their intended HTTP status and body.** They
+  previously escaped as a plain-text `500 Internal Server Error` because the
+  handlers were never registered (see Fixed). A client that treated any 500 as
+  retryable will now see `404`, `410`, `422`, `429`, `503` or `504` with a
+  structured `{"error": {...}}` body instead. Responses raised as
+  `HTTPException` by route handlers are unchanged — still flat
+  `{"detail": "..."}`.
+- **Tied predictions now come back in a defined order**, which may differ from
+  whichever order a given worker happened to produce before.
+- **Backing-store ports are now published on `127.0.0.1` only**
+  (Redis 6379, ClickHouse 8123/9000, Qdrant 6333, in both `docker-compose.yml`
+  and `deployment/docker-compose.yml`). Container-to-container traffic and
+  host-local tooling are unaffected; access from other machines is not.
+
 ### Added
 - **Multi-symbol-event prediction tests** (`tests/tests/unit/test_multi_symbol_event_predictions.py`, 34 tests): patterns with 1–4 symbols per event and repeated symbols across events, observed as the full pattern, halves, middle, single events, mid-event starts/ends, dropped/added symbols, unexpected whole events, split/merged/reordered events, duplicates, gaps, single symbols (fast path), and two near-identical patterns — each asserting `past`/`present`/`future`/`missing`/`extras`/`anomalies` in full.
+- **Python CI** (`.github/workflows/ci.yml`): `ruff`, `bandit`, and the unit suite on every push and pull request. The repository previously had no Python CI at all — only the Helm chart workflow — and `.pre-commit-config.yaml` was never installed in practice, so `ruff check kato/` had accumulated 282 unreported errors. It now passes; the remaining stylistic categories are parked in a labelled backlog in `pyproject.toml` so the correctness rules (unused imports and variables, undefined names) are enforced from here on.
+- **`PROCESS_POOL_CANDIDATE_THRESHOLD`** (default `0`, disabled): candidate count above which prediction matching fans out to a `ProcessPoolExecutor` instead of a `ThreadPoolExecutor`. See Changed for why it is off.
+- **`kato/storage/identifiers.py`**: allowlist validation (`validate_kb_id`, `validate_pattern_name`) for the identifiers that must be inlined into statement text because ClickHouse accepts no bound parameters in `ALTER TABLE ... DROP PARTITION` or in an `ALTER TABLE ... DELETE` predicate.
+- **`rank_predictions()`** in `kato/representations/prediction.py`: the single, deterministic ranking used by every prediction ranking, pruning and truncation site.
+- **`PatternFilter.get_query_parameters()`**: filters now supply bind values for their SQL instead of formatting them into it.
+- **New tests** (55): error-handler registration and status mapping, identifier validation, observation validation, processor eviction, prediction ranking determinism, and metadata-batch chunking.
+
+### Changed
+- **Prediction ranking tie-breaks on the pattern name.** Ranking used the configured metric alone, so ties were settled by the order candidates happened to arrive in — which is not stable, because candidates come out of a `set` (string hashing is randomised per process, so each uvicorn worker iterates differently) and batch results are gathered with `as_completed()`. Ranking is now on `(metric, name)`, a total order since names are unique. Only tied predictions are affected; their order, and which of them survive `max_predictions`, are now fixed rather than arbitrary.
+- **The per-request `ProcessPoolExecutor` is off by default.** It engaged above 500 candidates and built a fresh pool — up to four interpreters, plus pickling each batch across the boundary — on *every* request. Measured at 6000 patterns / 6000 candidates: **3378 ms** with it engaged versus **1231 ms** on the thread pool alone, for byte-identical prediction payloads. RapidFuzz already releases the GIL, so the thread pool had real parallelism regardless. Re-enable for heavier per-candidate workloads with `PROCESS_POOL_CANDIDATE_THRESHOLD`.
+- **`POST /sessions/{id}/config` now validates every field.** It wrote attributes directly and never called `SessionConfiguration.validate()`, so out-of-range filter parameters (`jaccard_threshold`, length ratios, MinHash bands) were accepted and reached the query layer, and identity fields such as `node_id` could be overwritten. Updates now go through `SessionConfiguration.update()`, which validates and rolls back atomically; a rejected update returns `400` where it previously returned `200`.
+- **CORS `allow_credentials` is now `false`.** With `allow_origins=["*"]` Starlette reflects the caller's `Origin` when credentials are enabled, which makes every origin trusted for credentialed requests. KATO has no cookie or browser-session auth, so nothing needed it.
+- **Redis prediction keys are written with a TTL** (the session TTL) instead of never expiring. One key was produced per observation and nothing reaped them.
+- **`kato.exceptions.MemoryError` → `MemoryOperationError`, `TimeoutError` → `KatoTimeoutError`.** Both shadowed Python builtins: `handlers.py` imported the KATO `TimeoutError`, shadowing the builtin for that whole module, while `websocket/event_broadcaster.py` raises the builtin one. `MemoryOperationError` was already the name every caller used via an alias.
+- **`config/redis.conf` sets `protected-mode no` explicitly.** It cannot be enabled while no password is configured — with `protected-mode yes` and no password, Redis refuses every non-loopback connection, and a `bind` directive does not exempt it. Setting it explicitly rather than inheriting the base image's default (`redis:7-alpine` ships `no`, upstream Redis ships `yes`) keeps behaviour independent of the image. Set `REDIS_PASSWORD` to add authentication, after which protected mode can be turned back on.
 
 ### Fixed
+- **KATO's structured error handling never ran.** `setup_error_handlers(app)` was called from inside `@app.on_event("startup")`. Starlette builds its middleware stack on the first `__call__` — the lifespan scope — and `build_middleware_stack()` copies `app.exception_handlers` into a fresh dict, so handlers registered afterwards are discarded silently. Every KATO exception therefore escaped as a plain-text `500 Internal Server Error`, and the whole of `kato/exceptions/handlers.py` — status mapping, recovery suggestions, and the traceback-suppressing catch-all — was dead. Registration moved to module scope, scoped to `KatoV2Exception` and the `Exception` catch-all so `HTTPException` responses keep their existing flat `{"detail": ...}` shape.
+- **Every `ValidationError` raise site raised `TypeError` instead.** All 12 sites in `observation_processor.py` and `pattern_operations.py` passed the message positionally *and* `field_name=` as a keyword; `field_name` is the first positional parameter, so each one raised `TypeError: got multiple values for argument 'field_name'`. Masked by the dead handlers, since everything became a 500 either way.
+- **LRU processor eviction permanently deleted a live node's vectors.** `ProcessorManager._evict_oldest()` called `delete_collection()` unconditionally, but `vectors_{processor_id}` is persistent per-node storage, not a cache — so any node pushed out of the 100-entry LRU lost its embeddings for good. Now gated on a `test_` prefix, matching the pattern-database branch beside it and the TTL-expiry path, neither of which ever did this.
+- **Pattern metadata was silently lost above roughly 6000 patterns.** The names go into an `IN` list expanded into the statement text, and ClickHouse rejects anything over `max_query_size` (262144 bytes). `ClickHouseWriter` logged the rejection and returned `{}`, so every prediction quietly fell back to `frequency=1` and default metrics. Lookups are now chunked at 500.
+- **`delete_pattern` reported success after a failed delete.** It removed the in-memory copy, then swallowed ClickHouse and Redis failures with a warning, leaving the pattern in persistent storage while the caller was told it was gone. Failures now propagate.
+- **`KatoProcessor.get_stm()` called a method that does not exist** (`MemoryManager.get_stm_state()`), so any call raised `AttributeError`. It had no callers and has been removed.
+- **Database connections were never closed on shutdown.** `shutdown_event` called `OptimizedConnectionManager.get_instance()`, which is not a method on that class; the resulting `AttributeError` was swallowed by the surrounding `except`.
+- **Predictions are no longer re-ranked by chance.** See Changed — 40 identical requests over 10 tied patterns with `max_predictions=3` previously returned 7 distinct orderings and 5 distinct result sets.
+- **Startup counted every tenant's patterns.** The `SELECT COUNT(*) FROM kato.patterns_data` run when a processor is first created had no `kb_id` predicate.
+- **`.gitignore` was corrupt.** `*.nvvp` had lost its trailing newline and merged with the following line into a single nonsense pattern, so neither it nor the path after it was ignored.
 - **Prediction segmentation now follows the matcher's positions, not symbol identity.** `present`'s boundaries and per-event `missing`/`extras` were re-derived from flat lengths plus a "first matched symbol" heuristic, which misplaced the boundary and misattributed `missing` when a symbol recurs across events (observing `[['y','z'],['x']]` on `[['x','y'],['y','z'],['x'],…]` pulled event 0 into `present` and reported two phantom missing symbols). The exact-match path now passes its matched pattern/state indices through, and `Prediction` segments from them; the fuzzy path keeps the previous symbol-based accounting.
 - **Repeated symbols are attributed to the right event.** The flat matcher cannot tell which occurrence of a recurring symbol an observation refers to (dropping the `y` from event 1 of `[[x,y],[y,z],[x],[w,y,z]]` flattens to the same state as dropping it from event 0), and difflib's longest-run tie-break reported the earlier occurrence missing regardless. Segmentation now refines the alignment with event structure: a matched symbol goes to the pattern event where its observed neighbours matched, and a symbol observed alone prefers the occurrence leaving the fewest symbols missing (a lone `[x]` now matches the exact event `[x]`, not the `x` of `[x,y]`). Match count and `similarity` are unchanged.
 - **Single-symbol predictions were flat.** The fast path hand-built `past`/`present`/`future`/`missing`/`extras` as flat symbol lists (`present: ['a']`); it now uses the same event-structured segmentation as every other prediction (`present: [['a','b','c']]`, `missing: [['b','c']]`).
 - **Test suite no longer deletes live sessions on a shared Redis.** The session-scoped cleanup fixture deleted every `kato:session:*` key at the start of each pytest run, so running the suite next to a training notebook — or two suites at once — destroyed their sessions mid-flight. It now removes only sessions (plus node pointers, active-index entries and distributed-STM streams) whose `node_id` carries a test prefix (`test`, `topology_`, `perf_`, `load_test`; override with `KATO_TEST_NODE_PREFIXES`) and never touches `stm:global`. `tests/tests/fixtures/redis_test_cleanup.py`, with a self-test.
+
+### Removed
+- **`kato/gpu/`** and its supporting `kato/config/gpu_settings.py`, `tests/tests/gpu/` and `docs/developers/gpu/` (~1,300 lines). Nothing outside `kato/gpu/` imported it, its 34 tests were skipped in every environment, and its encoder was still written against the MongoDB layer removed in v3.0.
+- **Dead modules with no importers**: `kato/sessions/session_middleware.py` (a pass-through that still carried a `process_request_old` method), `kato/sessions/session_middleware_fixed.py`, `kato/storage/connection_pool_monitor.py` (the `/connection-pools` endpoint does not use it), and the empty packages `kato/auxiliary/`, `kato/scripts/`, `kato/utils/`. The live middleware, `session_middleware_simple.py`, is renamed to `session_middleware.py`.
+- **`kato/sessions/redis_session_store.py`**, which had no importer in `kato/` and defaulted to `pickle` for session serialisation. This closes the `pickle.loads` finding recorded in `docs/maintenance/security-review-baseline.md`.
+- **`aioredis`** from `requirements.txt` — nothing imported it (everything uses `redis.asyncio`) and the project is archived. Every other pin in `requirements.lock` is unchanged.
+- **MongoDB remnants** from `docker-compose.test.yml`: the `mongo:4.4` service, its volume and healthcheck, and the `MONGO_BASE_URL` variable that nothing read.
+
+### Security
+- **User input no longer reaches ClickHouse as SQL text.** An observation token was interpolated into `WHERE first_token = '{symbol}'`, and STM tokens were concatenated into an array literal in the Jaccard filter; `kb_id` and pattern names were interpolated across `clickhouse_writer.py` and the filter executor. All of these now bind server-side. The two statement types that cannot bind parameters (`DROP PARTITION`, `ALTER ... DELETE`) validate their identifiers against a strict allowlist first.
+- **`node_id` sanitisation is an allowlist, not a blacklist.** The previous 14-character blacklist did not include the single quote, tab or newline, any of which could survive into statement text via `kb_id`. See "Upgrade notes".
+- **`GET /pattern/{pattern_id}` validates its path parameter** as a SHA1 digest before it reaches a query.
+- **Backing stores are no longer published on every host interface.** Redis, ClickHouse and Qdrant all run without authentication by default, so their published ports are now bound to `127.0.0.1`.
+- **CORS no longer allows credentialed requests from arbitrary origins** (see Changed).
 
 ## [5.0.2] - 2026-09-10
 

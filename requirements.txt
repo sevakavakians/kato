@@ -1,10 +1,17 @@
 # Core dependencies
 numpy>=1.24.0
-qdrant-client>=1.7.0
+# Held at 1.15.x: qdrant-client 1.17 removed QdrantClient.search(), which
+# kato/storage/qdrant_store.py calls. On 1.17 that call raises AttributeError,
+# the surrounding except swallows it, and nearest-neighbour search silently
+# returns nothing — multimodal predictions lose their VCTR matches without any
+# error. Migrating to query_points() is the prerequisite for moving past 1.15;
+# tracked as a follow-up. qdrant-client carries no security advisories, so this
+# pin costs nothing on that front.
+qdrant-client>=1.7.0,<1.16
 clickhouse-connect>=0.7.0  # Official ClickHouse Python client
 pydantic>=2.0.0
 pydantic-settings>=2.0.0
-python-dotenv>=1.0.0  # .env loading for non-Docker runs (kato/env_loader.py)
+python-dotenv>=1.2.2  # .env loading for non-Docker runs (kato/env_loader.py)
 redis>=5.0.0
 psutil>=5.9.0
 
@@ -14,11 +21,23 @@ datasketch>=1.6.0  # MinHash and LSH for approximate similarity
 xxhash>=3.0.0  # Optional: faster MinHash hashing (set MINHASH_HASH_FUNC=xxhash to enable)
 
 # FastAPI and web server
-fastapi>=0.118.0,<0.119.0
+# fastapi is uncapped within 0.x: the previous <0.119.0 cap came from an
+# unrelated routing investigation, not a known incompatibility, and it held
+# starlette below the versions that fix its advisories.
+fastapi>=0.141.1,<1.0.0
 uvicorn[standard]>=0.30.0
-python-multipart>=0.0.6
+python-multipart>=0.0.31
 websockets>=12.0
 
-# Optional: Development and testing
-pytest>=7.0.0
-pytest-asyncio>=0.21.0
+# Security floors for transitive dependencies.
+# These are not imported directly by KATO; they are pinned up to the first
+# version that carries a published fix, so `pip-audit -r requirements.lock`
+# stays clean. Remove an entry only when the dependency that pulls it in
+# requires a newer version anyway.
+starlette>=1.3.1         # via fastapi
+urllib3>=2.7.0           # via clickhouse-connect, qdrant-client
+h2>=4.4.1                # via httpx[http2] (qdrant-client)
+idna>=3.15               # via anyio, httpx
+protobuf>=6.33.5,<7      # via qdrant-client; 6.x fix line
+click>=8.3.3             # via uvicorn
+pygments>=2.20.0         # via pytest tooling

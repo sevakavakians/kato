@@ -39,7 +39,12 @@ services:
 
   # Qdrant vector database
   qdrant:
-    image: qdrant/qdrant:latest
+    # Pinned so it cannot drift again: it was :latest, which moved to 1.17
+    # while qdrant-client stayed on 1.15. The client logs a compatibility
+    # warning about that minor gap but works correctly against this server
+    # (verified); closing the gap needs the query_points() migration first,
+    # because 1.17 removed the search() API KATO uses.
+    image: qdrant/qdrant:v1.17.1
     container_name: kato-qdrant
     # NOTE: QDRANT__SERVICE__API_KEY is intentionally NOT set here.
     # An empty value causes Qdrant to reject ALL requests (401).

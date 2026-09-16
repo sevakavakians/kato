@@ -762,8 +762,15 @@ class VectorSearchEngine:
         """Optimize the vector index for better performance"""
         return await self.store.optimize_collection(self.collection_name)
 
-    async def clear_cache(self):
-        """Clear the search cache"""
+    def clear_cache(self):
+        """Clear the search cache.
+
+        Synchronous on purpose: the body does no I/O, and as a coroutine it was
+        a footgun — its only caller, the sync ``clearPatternsFromRAM`` below,
+        called it without awaiting, so the cache was never actually cleared and
+        Python emitted "coroutine 'clear_cache' was never awaited" on every
+        clear-all. Stale vectors then survived the clear.
+        """
         if self._cache:
             self._cache.clear()
             logger.info("Cleared search cache")

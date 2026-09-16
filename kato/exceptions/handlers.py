@@ -10,6 +10,13 @@ import time
 from typing import Any, Union
 
 from fastapi import HTTPException, Request, status
+
+# Starlette 1.6 renamed HTTP_422_UNPROCESSABLE_ENTITY to
+# HTTP_422_UNPROCESSABLE_CONTENT (matching the RFC) and deprecated the old
+# spelling. Resolve once here so the module works either side of that change.
+HTTP_422_UNPROCESSABLE = getattr(
+    status, "HTTP_422_UNPROCESSABLE_CONTENT", None
+) or status.HTTP_422_UNPROCESSABLE_ENTITY
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -100,7 +107,7 @@ async def kato_v2_exception_handler(request: Request, exc: KatoV2Exception) -> J
         StorageError: status.HTTP_503_SERVICE_UNAVAILABLE,
         CircuitBreakerOpenError: status.HTTP_503_SERVICE_UNAVAILABLE,
         RateLimitExceededError: status.HTTP_429_TOO_MANY_REQUESTS,
-        ValidationError: status.HTTP_422_UNPROCESSABLE_ENTITY,
+        ValidationError: HTTP_422_UNPROCESSABLE,
         ConfigurationError: status.HTTP_500_INTERNAL_SERVER_ERROR,
         ResourceExhaustedError: status.HTTP_507_INSUFFICIENT_STORAGE,
         KatoTimeoutError: status.HTTP_504_GATEWAY_TIMEOUT,
@@ -166,7 +173,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     return create_error_response(
         error_code="VALIDATION_ERROR",
         message="Request validation failed",
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=HTTP_422_UNPROCESSABLE,
         details={"validation_errors": validation_details}
     )
 

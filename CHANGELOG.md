@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- **Dependency upgrade clearing 23 published advisories across 10 packages.** `pip-audit` against the v5.1.0 lock reported vulnerabilities in `starlette` (6), `python-multipart` (6), `urllib3` (4), `click`, `h2`, `idna`, `protobuf`, `pygments`, `pytest` and `python-dotenv`; it now reports none. The upgrade was deliberately narrow — only packages with advisories moved, plus what their resolution required. `clickhouse-connect`, `redis`, `datasketch`, `numpy`, `scipy`, `uvicorn`, `websockets`, `pydantic` and `rapidfuzz` are all unchanged, `datasketch` especially so: its MinHash output is persisted in `lsh_bands`/`minhash_sig`, and changing it would invalidate every stored signature.
+- **`fastapi` 0.118.3 → 0.141.1 and `starlette` 0.48.0 → 1.6.0.** The previous `fastapi<0.119.0` cap dated from an unrelated routing investigation rather than a known incompatibility, and it held `starlette` below every version that fixes its advisories. Verified on the new pair: `on_event` handlers still run, import-time exception handlers still fire, and `HTTPException` responses keep their flat `{"detail": ...}` shape.
+- **Test dependencies no longer ship in the runtime image.** `pytest` and `pytest-asyncio` were declared in `requirements.txt`, so they were installed into every published image — which is why a `pytest` advisory appeared in the audit at all. They are declared in `tests/requirements.txt`, where they belong.
+- **The Qdrant server image is pinned** (`qdrant/qdrant:v1.17.1`), so it cannot drift again. It was `:latest` and had moved to 1.17 while `qdrant-client` stayed at 1.15, which the client warns about on every startup. `qdrant-client` is deliberately held at `<1.16` rather than raised to close that gap: **1.17 removed `QdrantClient.search()`**, which `kato/storage/qdrant_store.py` calls, and `QdrantStore.search` catches the resulting `AttributeError` — so on 1.17 nearest-neighbour lookup returns nothing, multimodal observations stop resolving to their `VCTR|` symbols, and predictions silently lose matches. Verified: the 1.15 client returns correct results against the 1.17.1 server despite the warning. Moving past 1.15 requires migrating to `query_points()` first.
+
+### Fixed
+- **The vector search cache was never cleared.** `VectorSearchEngine.clear_cache` was a coroutine, but its only caller — the synchronous `clearPatternsFromRAM` — called it without awaiting, so the body never ran and Python emitted "coroutine 'clear_cache' was never awaited" on every clear-all while stale vectors survived. It does no I/O, so it is now an ordinary function.
+- **`HTTP_422_UNPROCESSABLE_ENTITY`** is resolved through a compatibility shim; Starlette 1.6 renamed it to `HTTP_422_UNPROCESSABLE_CONTENT` and deprecated the old spelling.
+
+### Added
+- **`pip-audit` runs in CI** against `requirements.lock`, so a new advisory fails the build rather than waiting for someone to look.
+- **`tests/tests/unit/test_qdrant_client_api.py`**: asserts the Qdrant client still exposes the methods and `search()` keyword arguments `qdrant_store.py` depends on. The 1.17 removal above degraded silently and was only caught by a vector test that happened to rely on nearest-neighbour recall; this fails immediately and explains why.
+
 ## [5.1.0] - 2026-09-16
 
 Fixes a set of live defects found by a repo-wide review, makes prediction output

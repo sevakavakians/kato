@@ -4,8 +4,11 @@ services:
     image: clickhouse/clickhouse-server:latest
     container_name: kato-clickhouse
     ports:
-      - "8123:8123"  # HTTP interface
-      - "9000:9000"  # Native client interface
+      # Loopback only: these stores have no authentication by default, so
+      # publishing them on every interface exposes all tenant data to the LAN.
+      # Inter-container traffic uses kato-network service names, not these.
+      - "127.0.0.1:8123:8123"  # HTTP interface
+      - "127.0.0.1:9000:9000"  # Native client interface
     volumes:
       - clickhouse-data:/var/lib/clickhouse
       - clickhouse-logs:/var/log/clickhouse-server
@@ -44,7 +47,7 @@ services:
     # environment:
     #   - QDRANT__SERVICE__API_KEY=${QDRANT_API_KEY}
     ports:
-      - "6333:6333"
+      - "127.0.0.1:6333:6333"
     volumes:
       - qdrant-data:/qdrant/storage
     networks:
@@ -67,7 +70,7 @@ services:
       --aof-use-rdb-preamble yes --auto-aof-rewrite-percentage 100
       --auto-aof-rewrite-min-size 64mb}'
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis-data:/data
       - ../config/redis.conf:/etc/redis/redis.conf:ro

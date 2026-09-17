@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.1.1] - 2026-09-17
+
+A security-driven dependency upgrade clearing every advisory against the pinned
+runtime set, plus the two defects that upgrade surfaced. No API changes.
+
 ### Security
 - **Dependency upgrade clearing 23 published advisories across 10 packages.** `pip-audit` against the v5.1.0 lock reported vulnerabilities in `starlette` (6), `python-multipart` (6), `urllib3` (4), `click`, `h2`, `idna`, `protobuf`, `pygments`, `pytest` and `python-dotenv`; it now reports none. The upgrade was deliberately narrow — only packages with advisories moved, plus what their resolution required. `clickhouse-connect`, `redis`, `datasketch`, `numpy`, `scipy`, `uvicorn`, `websockets`, `pydantic` and `rapidfuzz` are all unchanged, `datasketch` especially so: its MinHash output is persisted in `lsh_bands`/`minhash_sig`, and changing it would invalidate every stored signature.
 - **`fastapi` 0.118.3 → 0.141.1 and `starlette` 0.48.0 → 1.6.0.** The previous `fastapi<0.119.0` cap dated from an unrelated routing investigation rather than a known incompatibility, and it held `starlette` below every version that fixes its advisories. Verified on the new pair: `on_event` handlers still run, import-time exception handlers still fire, and `HTTPException` responses keep their flat `{"detail": ...}` shape.

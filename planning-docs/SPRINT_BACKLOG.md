@@ -1,9 +1,9 @@
 # SPRINT_BACKLOG.md - Upcoming Work
-*Last Updated: 2026-09-17 (Deprecation-warnings cleanup + 3 resource-teardown bug fixes COMPLETE and verified, but NOT YET committed — see "Recently Completed" below and `planning-docs/project-manager/pending-updates.md` for the commit decision. Note: v5.1.1/v5.1.2 were released and a benchmark script committed the same day via work this file has no record of — see the pending-updates.md documentation-gap entry.)*
+*Last Updated: 2026-09-17 (Deprecation-warnings cleanup + 3 resource-teardown bug fixes COMPLETE, verified, and now COMMITTED as `66fa692` — see "Recently Completed" below. Note: v5.1.1/v5.1.2 were released and a benchmark script committed the same day via work this file has no record of — see the pending-updates.md documentation-gap entry. Note: a concurrent Claude Code session is separately making performance changes on this same branch, tracked by that session, not documented here.)*
 
 ## Active Projects
 
-*No active initiative-scale projects at this time. Deprecation-warnings cleanup + resource-teardown fixes are done and verified but sit uncommitted (see "Recently Completed" below and `planning-docs/project-manager/pending-updates.md`). Remediation Pass 1 (2026-09-16) is fully closed. Next up is whatever the user picks from the Backlog section below — most notably: committing the uncommitted teardown fixes, the still-open v5.0.3+ patch release, the fast-path single-symbol matching decision, the `sort_symbols` bug, the remaining re-assess list, a full dependency upgrade, and setting `REDIS_PASSWORD`.*
+*No active initiative-scale projects at this time. Deprecation-warnings cleanup + resource-teardown fixes are done, verified, and committed (`66fa692`; see "Recently Completed" below). Remediation Pass 1 (2026-09-16) is fully closed. Next up is whatever the user picks from the Backlog section below — most notably: the still-open v5.0.3+ patch release, the fast-path single-symbol matching decision, the `sort_symbols` bug, the remaining re-assess list, a full dependency upgrade, and setting `REDIS_PASSWORD`.*
 
 ---
 
@@ -302,9 +302,9 @@ Phase 4 (Symbol Statistics & Fail-Fast Architecture) is 100% complete. The Click
 
 ## Recently Completed
 
-### Deprecation Warnings Cleanup + Resource-Teardown Bug Fixes ✅ COMPLETE (NOT YET COMMITTED)
+### Deprecation Warnings Cleanup + Resource-Teardown Bug Fixes ✅ COMPLETE (COMMITTED)
 **Priority**: Maintenance (deprecation cleanup) + Bug Fix (3 latent resource-teardown defects)
-**Status**: Implementation COMPLETE and verified (2026-09-17); **uncommitted** — see `planning-docs/project-manager/pending-updates.md` for the commit decision
+**Status**: Implementation COMPLETE, verified, and COMMITTED as `66fa692` "fix: clear post-upgrade deprecation warnings and three teardown leaks" (2026-09-17, 18 files/+437/-49) — commit decision resolved, see `planning-docs/project-manager/pending-updates.md`. Committed directly on `perf/prediction-path-scaling` (no branch/merge); three files owned by a concurrent performance-work session (`kato/informatics/metrics.py`, `kato/workers/pattern_processor.py`, untracked `scripts/check_prediction_parity.py`) were deliberately excluded.
 **Files Modified**: `kato/services/kato_fastapi.py`, `kato/sessions/redis_session_manager.py`, `kato/storage/pattern_cache.py`, `kato/storage/redis_streams.py`, `kato/storage/metrics_cache.py`, `kato/exceptions/handlers.py`, `requirements.txt`, `requirements.lock`, `tests/requirements.txt`, `tests/tests/unit/test_error_handlers.py`, `CHANGELOG.md`
 
 **Summary**: Cleared `DeprecationWarning`s left behind by the 5.1.1/5.1.2 dependency upgrade — `@app.on_event` migrated to a `lifespan` context manager (`setup_error_handlers(app)` deliberately kept at module scope, same Starlette middleware-snapshot reason as DECISION-030), redis async `close()`→`aclose()` at 3 call sites (sync client untouched), `httpx2` added to test requirements, `anyio` floor raised to `>=4.10,<4.15` (locked 3.7.1→4.14.2). While rewriting shutdown, found and fixed 3 latent bugs: the session manager was never actually shut down (guard checked for a `close()` method neither implementation defines), the concurrency reporter's task handle was discarded and never cancelled, and `MetricsCacheManager` had no teardown path at all for its Redis client.

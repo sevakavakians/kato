@@ -1,16 +1,18 @@
 # SESSION_STATE.md - Current Development State
-*Last Updated: 2026-09-17 (Deprecation-warnings cleanup + 3 resource-teardown bug fixes COMPLETE and verified, but NOT YET COMMITTED — see "Current Task" below. Note: KATO was released as v5.1.1 and v5.1.2 on 2026-09-17 per `CHANGELOG.md`/`kato/__init__.py`, and a benchmark script was committed (`adc066d`) — none of that work is documented in this file; see the new pending-updates.md documentation-gap entry.)*
+*Last Updated: 2026-09-17 (Deprecation-warnings cleanup + 3 resource-teardown bug fixes COMPLETE, VERIFIED, and now COMMITTED — see "Current Task" below. Note: KATO was released as v5.1.1 and v5.1.2 on 2026-09-17 per `CHANGELOG.md`/`kato/__init__.py`, and a benchmark script was committed (`adc066d`) — none of that work is documented in this file; see the pending-updates.md documentation-gap entry.)*
 
 ## Current Task
-**Deprecation Warnings Cleanup + Resource-Teardown Bug Fixes — IMPLEMENTATION COMPLETE, VERIFIED, NOT YET COMMITTED (2026-09-17)**
+**Deprecation Warnings Cleanup + Resource-Teardown Bug Fixes — IMPLEMENTATION COMPLETE, VERIFIED, COMMITTED (2026-09-17)**
 
-Sits as uncommitted working-tree changes. Current local branch is `perf/prediction-path-scaling`, which points at the same commit as `main` (`adc066d`) — no divergent commit history, so this is effectively uncommitted work on top of `main`.
+**Commit**: `66fa692` "fix: clear post-upgrade deprecation warnings and three teardown leaks" — 18 files, 437 insertions, 49 deletions (the 11 code/dependency/test files below plus all 7 planning-docs files written for this task). Branch: `perf/prediction-path-scaling` (unchanged; no branch was created or switched for this commit).
 
 **What**: Cleared `DeprecationWarning`s left behind by the 5.1.1/5.1.2 dependency upgrade (`@app.on_event` → `lifespan` in `kato/services/kato_fastapi.py`; redis async `close()` → `aclose()` in 3 files; `httpx2` added and `anyio` floor raised to `>=4.10,<4.15` with the lock regenerated in place), plus fixed 3 latent resource-teardown bugs found in the same code being rewritten: (1) the session manager was **never actually shut down** — the shutdown guard checked for a `close()` method neither session manager class has ever defined (both define `shutdown()`); (2) the concurrency reporter's `asyncio.create_task()` handle was discarded, so the task was never tracked or cancelled; (3) `MetricsCacheManager` opened a Redis client with no teardown path at all — added `close()` + `close_metrics_cache_manager()`.
 
 **Verification**: clean under `python -W error::DeprecationWarning`, both locally and in the rebuilt Docker image; real ASGI lifespan protocol driven in-process, confirming the shutdown log now contains lines (`RedisSessionManager shutdown complete`, `Session manager shut down`) that never appeared before this fix. `tests/tests/unit/` 431 passed/1 failed; `tests/tests/integration/`+`tests/tests/api/` 177 passed/1 failed/1 skipped — **both failures independently confirmed pre-existing** (reproduced identically on a clean `git stash` of `HEAD`; the Docker service under test runs the published 5.1.2 image and exhibits the same two). `ruff check` clean; CI install order simulated fresh, `anyio` resolves to 4.14.2, `pip check` clean.
 
-**Open decision for the user**: commit this work? (Directly, or via a dedicated branch + merge, consistent with how Remediation Pass 1 was handled — see the new pending-updates.md entry.)
+**Commit decision resolved**: committed directly (no dedicated branch/merge) as `66fa692`. See `pending-updates.md` (entry now Resolved).
+
+**Concurrent work note**: a separate, concurrent Claude Code session is actively making performance changes in this same working tree (branch `perf/prediction-path-scaling`) as of this commit — `kato/informatics/metrics.py`, `kato/workers/pattern_processor.py`, and the untracked `scripts/check_prediction_parity.py` were deliberately excluded from `66fa692` and remain uncommitted, tracked by that other session. Noted here only so a future reader isn't confused by the branch name not matching this commit's contents — that work is not documented by this agent.
 
 **Full detail**: `planning-docs/completed/features/2026-09-17-deprecation-warnings-and-teardown-fixes.md`.
 

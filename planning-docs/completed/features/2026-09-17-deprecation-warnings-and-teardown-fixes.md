@@ -1,7 +1,7 @@
 # Deprecation Warnings Cleanup + Resource-Teardown Bug Fixes
 
 **Completed**: 2026-09-17
-**Status**: Implementation COMPLETE and verified. **NOT YET COMMITTED** — sits as uncommitted working-tree changes on local branch `perf/prediction-path-scaling`, which currently points at the same commit as `main` (`adc066d`, no divergent history) — effectively uncommitted changes on top of `main`.
+**Status**: Implementation COMPLETE, verified, and **COMMITTED** as `66fa692` "fix: clear post-upgrade deprecation warnings and three teardown leaks" (18 files, 437 insertions, 49 deletions — the 11 code/dependency/test files below plus all 7 planning-docs files for this task). Branch `perf/prediction-path-scaling` unchanged; no branch was created or switched.
 **Type**: Bug Fix (3 latent resource-teardown defects) + Maintenance (deprecation-warning cleanup following the 5.1.1/5.1.2 dependency upgrade)
 **Time**: Not tracked against an estimate (ad-hoc follow-up work, not a backlog item)
 
@@ -64,9 +64,11 @@ starlette's `TestClient` prefers `httpx2` and warns on the `httpx` fallback; `ht
 3. `tests/tests/integration/test_session_management.py::test_concurrent_session_modifications` asserts behavior that `CLAUDE.md` documents as unsupported (single-writer-per-session) — the test, not the code, is likely the thing that needs to change (e.g. to an `xfail`, matching the treatment `test_concurrent_session_modifications` under multi-worker topology already got per DECISION-024/DECISION-030).
 4. Drop the `anyio<4.15` cap once starlette moves to `anyio.from_thread.BlockingPortal` (tracked upstream; re-check on the next starlette bump).
 
-## Open Question for the User
+## Commit
 
-This work is complete and verified but **not committed**. It sits as uncommitted changes in the working tree while the current local branch (`perf/prediction-path-scaling`) points at the same commit as `main` — no divergent commit history exists yet, so this is effectively "uncommitted changes on top of `main`." A commit/branch decision is needed: commit directly, or via a dedicated branch and merge. See `planning-docs/project-manager/pending-updates.md`.
+This work is complete, verified, and now committed as `66fa692` "fix: clear post-upgrade deprecation warnings and three teardown leaks" — committed directly (no dedicated branch/merge). The commit decision item in `planning-docs/project-manager/pending-updates.md` is resolved.
+
+**Note**: a separate, concurrent Claude Code session was actively making performance changes in this same working tree at the time of this commit. `kato/informatics/metrics.py`, `kato/workers/pattern_processor.py`, and the untracked `scripts/check_prediction_parity.py` were deliberately excluded from `66fa692` and remain uncommitted, tracked separately by that session — not documented here.
 
 ## Related
 

@@ -841,3 +841,21 @@
 
 **Agent Response Time**: Immediate
 **Action Result**: Archived with PENDING VERIFICATION status; verification required before closing
+
+---
+
+## 2026-09-17 - Task Status Change: Deprecation-Warnings + Teardown Fixes Committed as `66fa692`
+
+**Trigger Type**: Primary — Task Status Change (uncommitted implementation → committed)
+
+**Event**: The Deprecation Warnings Cleanup + Resource-Teardown Bug Fixes work (previously logged 2026-09-17 above as COMPLETE but NOT yet committed) was committed as `66fa692` "fix: clear post-upgrade deprecation warnings and three teardown leaks" (18 files, +437/-49) on branch `perf/prediction-path-scaling`. No branch created or switched. Three files belonging to a concurrent performance-work session in the same working tree were deliberately excluded from the commit and remain untouched/undocumented by this agent.
+
+**Documents Updated**:
+- `planning-docs/SESSION_STATE.md` (Current Task flipped to COMMITTED; concurrent-session note added)
+- `planning-docs/SPRINT_BACKLOG.md` (header + Active Projects + Recently Completed entry flipped to COMMITTED)
+- `planning-docs/completed/features/2026-09-17-deprecation-warnings-and-teardown-fixes.md` (Status + "Open Question" section resolved)
+- `planning-docs/project-manager/pending-updates.md` (commit-decision entry marked Resolved)
+- `planning-docs/project-manager/maintenance-log.md` (this action logged)
+
+**Agent Response Time**: Immediate
+**Action Result**: All docs updated to reflect the commit; one previously-open pending-updates.md item resolved; no new human alert generated. The v5.1.1/v5.1.2 documentation-gap item remains open, untouched by this update.

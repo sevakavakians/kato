@@ -5,6 +5,18 @@
 
 ## Testing Strategy Patterns
 
+### 2026-09-17 - Proving a Negative Against a Deprecated Lifecycle Hook Requires Rewriting the Guard Against Its Replacement, Not Just Updating Call Sites
+
+**Pattern**: `test_late_registration_is_ignored` existed to prove a negative — that registering an error handler after the app has already dispatched once is silently ignored (the root cause the Remediation Pass 1 dead-error-handling bug fix, DECISION-030, depends on staying true). Migrating `kato/services/kato_fastapi.py` from `@app.on_event` to a `lifespan` context manager meant the mechanism the test needed to drive (Starlette snapshotting `app.exception_handlers` on first dispatch) is now reached through a different code path. The test was rewritten to drive the real `lifespan` context manager directly rather than just swapping `on_event` references for `lifespan` references inside the existing test scaffolding — the assertions themselves (a handler registered late gets no effect) were unchanged, only the mechanism used to reach "already dispatched once" changed.
+
+**Discovery Trigger**: Routine deprecation-warning cleanup; the test needed updating anyway since it referenced `on_event` directly.
+
+**Resolution Pattern**: When a test proves a negative that depends on framework lifecycle mechanics (here: Starlette's middleware-stack snapshot timing), and the lifecycle API changes, don't just search-and-replace the deprecated API name in the test — re-derive what actually has to happen (app dispatched once, snapshot taken) and drive that through the new mechanism directly. A negative-proof test that still imports the deprecated API can end up either not compiling, or worse, silently not exercising the real path anymore.
+
+**Recurrence Risk**: Low-Medium — will recur for any other test coupled to a framework lifecycle hook (`on_event`, deprecated middleware ordering guarantees, etc.) whenever that framework's API surface changes.
+
+---
+
 ### 2026-09-16 - Cross-Worker Nondeterminism Cannot Be Tested Through a Shared-Session HTTP Fixture; Test the Invariant as a Pure Function Instead
 
 **Pattern**: A guard test for a prediction-ranking determinism fix was first written as an integration test using the standard `kato_fixture`, and it **passed against a deliberately reverted (buggy) build** — meaning it provided zero actual protection despite looking like a real regression test. Cause: `tests/tests/fixtures/kato_fixtures.py` constructs a single `requests.Session()` shared across a test's requests; HTTP keep-alive on that session pins every request to the same TCP connection, and a uvicorn/FastAPI worker process handles all requests received on a given connection — so the "cross-worker" nondeterminism (each process's `set` iterates pattern names in a different, per-process-randomized order) never had a chance to manifest, because the test only ever talked to one worker.
@@ -299,6 +311,22 @@ absolute latency differences across machines.
 ---
 
 ## Bug Patterns
+
+### 2026-09-17 - A Duck-Typed `hasattr(obj, 'close')` Teardown Guard Silently Never Fired Because Neither Real Implementation Defines `close()`
+
+**Pattern**: `kato_fastapi.py`'s shutdown sequence guarded session-manager teardown with `hasattr(session_manager, 'close')`, presumably written defensively so shutdown wouldn't crash if the manager didn't support cleanup. Neither concrete implementation (`RedisSessionManager`, the in-memory `SessionManager`) has ever defined `close()` — both define `shutdown()`. The guard was therefore always `False`, and teardown silently did nothing, every single time the process shut down — leaking the Redis connection pool and the session cleanup task on every restart, with no error, warning, or log line to indicate anything was wrong.
+
+**Discovery Trigger**: Rewriting `@app.on_event` shutdown into a `lifespan` context manager for an unrelated deprecation-warning cleanup pass required reading the shutdown sequence closely enough to notice the guarded method name didn't match either class's actual API.
+
+**Assumption → Reality**:
+- Assumed: the `hasattr(...)` guard was a reasonable defensive check that degraded gracefully if a manager type didn't support explicit cleanup.
+- Reality: it was checking for a method name that plain never existed on any implementation ever passed to it — not a graceful degradation, a permanent no-op silently masquerading as one.
+
+**Resolution Pattern**: Call `shutdown()` (the method that actually exists) directly instead of guarding on `hasattr` for a method name that was never verified against the real implementations. Also switched from reading the manager via its lazy property to reading the private `_session_manager` attribute directly, so the shutdown path itself cannot *construct* a manager the process never used just by touching it during teardown. Verified the fix by driving the real ASGI lifespan protocol end-to-end and confirming the shutdown log now contains lines (`RedisSessionManager shutdown complete`, `Session manager shut down`) that had never appeared before, on any prior run.
+
+**Recurrence Risk**: Medium — any `hasattr(obj, 'method_name')` duck-typing guard is only as good as someone having verified `method_name` actually exists on every real type that flows through it; it will pass code review looking "defensive" while doing nothing at all. Worth grepping for other `hasattr(..., '...')` teardown/cleanup guards in the codebase as a follow-up audit, since this exact shape (a guard that silently never fires) leaves no trace in logs or test failures — it was only found by reading the code, not by any test or runtime signal.
+
+---
 
 ### 2026-09-09 - Two Independent Stale-Credential Failures Blocked a Release, and the Release Script's Operation Order Made the Failure Mode Worse Than a Clean Abort
 

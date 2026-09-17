@@ -3,6 +3,25 @@
 
 ---
 
+## 2026-09-17 - Task Completion: Deprecation Warnings Cleanup + 3 Resource-Teardown Bug Fixes (COMPLETE, NOT Yet Committed)
+
+**Trigger Type**: Primary — Task Completion (implementation complete and verified; commit is an open human decision, not yet made)
+
+**Event**: `@app.on_event`→`lifespan` migration in `kato/services/kato_fastapi.py`; redis async `close()`→`aclose()` at 3 call sites; `httpx2` added and `anyio` floor raised to `>=4.10,<4.15` (lock regenerated in place); 3 latent resource-teardown bugs found and fixed alongside (session manager never shut down, concurrency reporter task unmanaged, `MetricsCacheManager` Redis client leak). Verified clean under `python -W error::DeprecationWarning` locally and in Docker; real ASGI lifespan protocol driven in-process confirming previously-absent shutdown-log lines; local suite 431+177 passed with 2 pre-existing failures independently confirmed unrelated; ruff clean. Sits uncommitted on local branch `perf/prediction-path-scaling` (no divergent history from `main`).
+
+**Documents Updated**:
+- `planning-docs/completed/features/2026-09-17-deprecation-warnings-and-teardown-fixes.md` (new archive entry)
+- `planning-docs/SESSION_STATE.md` (Current Task rewritten; prior content demoted to Previous/Earlier Task)
+- `planning-docs/SPRINT_BACKLOG.md` (new Recently Completed entry; new Backlog entry for 4 deferred hardening items)
+- `planning-docs/project-manager/pending-updates.md` (new commit-decision entry; new documentation-gap entry for undocumented v5.1.1/v5.1.2 releases + a benchmark commit)
+- `planning-docs/project-manager/patterns.md` (new Testing Strategy Patterns entry; new Bug Patterns entry on the silently-inert `hasattr(obj, 'close')` teardown guard)
+- `planning-docs/project-manager/maintenance-log.md`
+
+**Agent Response Time**: Immediate
+**Action Result**: All docs updated. Two items surfaced for human review in `pending-updates.md`: (1) whether/how to commit this work, (2) a documentation-continuity gap — v5.1.1/v5.1.2 were released and a benchmark script committed the same day via work this agent has no record of, and was deliberately not reconstructed.
+
+---
+
 ## 2026-09-16 - Task Completion: Remediation Pass 1 Follow-On + DECISION-031 Determinism Fix COMPLETE
 
 **Trigger Type**: Primary — Task Completion (Remediation Pass 1's branch committed/merged and its four open items resolved; a new correctness bug — nondeterministic prediction ranking — found and fixed the same day, recorded as DECISION-031, alongside a ProcessPoolExecutor performance fix and two incidental bug fixes)

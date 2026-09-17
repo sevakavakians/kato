@@ -451,10 +451,14 @@ class PatternProcessor:
                         normalized_entropy_val -= p * log(p, total_symbols)
 
             # Global normalized entropy: Σ expectation(symbol_prob, total_symbols)
-            # Uses global symbol probabilities from the corpus
+            # Uses global symbol probabilities from the corpus.
+            # sorted(), not raw set order: float addition is not associative and
+            # set iteration order for strings depends on the process hash seed,
+            # so this returned a value that changed every time the container
+            # restarted. See the note on the same sum in metrics.py.
             global_normalized_entropy_val = 0.0
             if total_symbols > 1:
-                for symbol in set(pattern_symbols):
+                for symbol in sorted(set(pattern_symbols)):
                     prob = symbol_probability_cache.get(symbol, 0)
                     if prob > 0:
                         global_normalized_entropy_val -= prob * log(prob, total_symbols)
@@ -1114,6 +1118,18 @@ class PatternProcessor:
             )
             logger.debug(f"Top-K pruning: kept {len(causal_patterns)} of {original_count} candidates for metrics loop")
 
+        # Now that the list is cut to its final size, fetch the pattern metadata.
+        # The searcher builds predictions with placeholder frequency/emotives
+        # precisely so this can happen here: fetching before the prune meant a
+        # ClickHouse+Redis lookup for every pattern that matched -- the whole
+        # node under the default empty filter_pipeline -- to populate two fields
+        # on a list about to be cut to max_predictions * 3. That cost scaled with
+        # the corpus; this does not. Everything that reads frequency or emotives
+        # (total_ensemble_pattern_frequencies, patternProbability,
+        # itfdf_similarity, average_emotives, the Bayesian priors) runs below
+        # this line.
+        self.patterns_searcher.attach_pattern_metadata(causal_patterns)
+
         try:
             # Pre-calculate symbol probability cache using optimized aggregation pipeline
             symbol_probability_cache = {}
@@ -1274,10 +1290,13 @@ class PatternProcessor:
                                 if count > 0:
                                     p = count / pattern_length
                                     normalized_entropy_val -= p * log(p, total_symbols)
-                        # Global normalized entropy (using symbol probabilities)
+                        # Global normalized entropy (using symbol probabilities).
+                        # sorted() for the same reason as the copy in
+                        # finalize_training above: summing over raw set order
+                        # made this value depend on the process hash seed.
                         global_normalized_entropy_val = 0.0
                         if total_symbols > 1:
-                            for symbol in set(pattern_symbols):
+                            for symbol in sorted(set(pattern_symbols)):
                                 prob = symbol_probability_cache.get(symbol, 0)
                                 if prob > 0:
                                     global_normalized_entropy_val -= prob * log(prob, total_symbols)

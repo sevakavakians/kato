@@ -76,6 +76,19 @@ CORPUS = [
     ([["solo"]], 1, {"calm": 0.9}, {"kind": "solo"}),
 ]
 
+# A block of patterns that all match one probe, so a low max_predictions makes
+# the top-K prune actually fire. Without this the corpus is far below
+# max_predictions * 3 and the pruned path -- where metadata is attached only to
+# the survivors -- is never exercised, so a gate built on the corpus above would
+# pass while testing nothing.
+CROWD_SIZE = 14
+CROWD = [
+    ([["crowd", "head"], [f"tail{i:02d}"]], 1 + (i % 4),
+     {"joy": round(0.1 * (i % 7), 3)}, {"kind": "crowd", "i": str(i)})
+    for i in range(CROWD_SIZE)
+]
+CORPUS = CORPUS + CROWD
+
 # Observations to probe with. Each is a list of events.
 PROBES = [
     [["alpha", "beta"], ["gamma"], ["delta", "epsilon", "zeta"]],   # exact, full
@@ -92,6 +105,14 @@ PROBES = [
     [["alpha", "beta", "UNEXPECTED"], ["gamma"]],                   # extras
     [["solo"]],                                                     # single symbol fast path
     [["nothing", "matches", "here"]],                               # no match
+]
+
+# Probes run with a low max_predictions so max_predictions * 3 falls below the
+# number of matching patterns and the top-K prune fires.
+PRUNED_PROBES = [
+    ([["crowd", "head"]], 2),          # 14 candidates -> prune to 6 -> return 2
+    ([["crowd", "head"], ["tail03"]], 3),
+    ([["crowd", "head"]], 1),
 ]
 
 
@@ -129,22 +150,27 @@ def build_corpus():
     return learned
 
 
+def _run_probe(probe, max_predictions=None):
+    config = {"max_predictions": max_predictions} if max_predictions else {}
+    session = new_session(config)
+    for event in probe:
+        call("POST", f"/sessions/{session}/observe", {"strings": sorted(event)})
+    predictions = call("GET", f"/sessions/{session}/predictions")
+    call("DELETE", f"/sessions/{session}")
+    return {
+        "probe": probe,
+        "max_predictions": max_predictions,
+        # order is part of the contract, so it is NOT sorted here
+        "predictions": predictions["predictions"],
+        "future_potentials": predictions.get("future_potentials"),
+        "count": predictions["count"],
+    }
+
+
 def capture():
     """Return the full prediction payload for every probe, in order."""
-    snapshot = []
-    for probe in PROBES:
-        session = new_session()
-        for event in probe:
-            call("POST", f"/sessions/{session}/observe", {"strings": sorted(event)})
-        predictions = call("GET", f"/sessions/{session}/predictions")
-        call("DELETE", f"/sessions/{session}")
-        snapshot.append({
-            "probe": probe,
-            # order is part of the contract, so it is NOT sorted here
-            "predictions": predictions["predictions"],
-            "future_potentials": predictions.get("future_potentials"),
-            "count": predictions["count"],
-        })
+    snapshot = [_run_probe(probe) for probe in PROBES]
+    snapshot += [_run_probe(probe, mp) for probe, mp in PRUNED_PROBES]
     return snapshot
 
 
@@ -167,6 +193,20 @@ def self_check(snapshot):
             "metadata would be invisible")
     if not any(e["count"] for e in snapshot):
         problems.append("no probe produced any prediction at all")
+
+    # The pruned probes must actually have pruned, or the path where metadata is
+    # attached to survivors only is untested.
+    pruned = [e for e in snapshot if e.get("max_predictions")]
+    if not pruned:
+        problems.append("no pruned probes ran")
+    elif not all(e["count"] == e["max_predictions"] for e in pruned):
+        problems.append(
+            "a pruned probe returned fewer predictions than max_predictions, so "
+            "the corpus no longer forces the top-K prune to fire")
+    elif not any(p.get("emotives") for e in pruned for p in e["predictions"]):
+        problems.append(
+            "pruned probes returned no emotives — metadata attachment after the "
+            "prune would be untested")
     return problems, sorted(f for f in freqs if f is not None), emotive_sets
 
 
@@ -225,14 +265,22 @@ def main():
     snapshot = capture()
 
     problems, freqs, emotive_count = self_check(snapshot)
-    print(f"  {len(PROBES)} probes, "
+    print(f"  {len(PROBES)} probes + {len(PRUNED_PROBES)} pruned probes, "
           f"{sum(e['count'] for e in snapshot)} predictions total")
     print(f"  frequencies seen: {freqs}; predictions carrying emotives: {emotive_count}")
     if problems:
-        print("\nCORPUS IS NOT A VALID GATE:")
+        # In --capture mode this means the baseline would not be able to detect
+        # a regression. In --compare mode it usually means the change under test
+        # IS the regression -- a change that stops metadata reaching predictions
+        # removes the very signal the corpus was built to carry.
+        if args.compare:
+            print("\nFAILED — the corpus no longer carries the signals a gate needs.")
+            print("On a comparison run this usually means the change under test removed them:")
+        else:
+            print("\nCORPUS IS NOT A VALID GATE:")
         for problem in problems:
             print(f"  - {problem}")
-        return 2
+        return 1 if args.compare else 2
 
     if not args.keep and not args.reuse:
         session = new_session()

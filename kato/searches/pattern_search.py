@@ -1417,14 +1417,19 @@ class PatternSearcher:
         if not results:
             return []
 
-        # Load ALL pattern metadata in one round-trip, before the batch split.
-        # get_metadata_batch() is a synchronous ClickHouse SELECT + Redis MGET,
-        # so calling it inside each gathered task did not overlap anything: the
-        # batches simply serialised N ClickHouse queries and N Redis MGETs where
-        # one of each suffices.
-        metadata_batch = self._load_metadata_batch(
-            [result[0] for result in results if len(result) >= 9]
-        )
+        # No metadata is loaded here. Predictions are built with placeholder
+        # frequency/emotives and PatternProcessor.predictPattern fills them in
+        # after it prunes to max_predictions * 3.
+        #
+        # Loading it here meant one ClickHouse+Redis lookup per matched pattern
+        # -- every pattern in the node when the default empty filter_pipeline is
+        # in use -- to serve a list that is then cut to a fixed 300. At 6000
+        # matches that was 12 chunked queries and roughly a third of the request;
+        # the cost grew with the corpus while the number of rows actually used
+        # never did. Nothing the prune reads comes from metadata: evidence,
+        # confidence, snr and fragmentation are all computed in
+        # Prediction.__init__ from matcher output and the patterns_data columns
+        # already cached by the filter pipeline. See attach_pattern_metadata.
 
         # Split results into batches for async processing
         batch_size = max(1, len(results) // max_workers)
@@ -1434,7 +1439,7 @@ class PatternSearcher:
         tasks = []
         for batch in result_batches:
             task = asyncio.create_task(
-                self._build_predictions_batch(batch, stm_events, metadata_batch)
+                self._build_predictions_batch(batch, stm_events)
             )
             tasks.append(task)
 
@@ -1472,6 +1477,43 @@ class PatternSearcher:
         )
         return self._metadata_router
 
+    def attach_pattern_metadata(self, predictions: list[dict[str, Any]]) -> None:
+        """Fill in frequency and emotives on the given predictions, in place.
+
+        Called by PatternProcessor.predictPattern after pruning, so the lookup
+        covers only the predictions that survive rather than every pattern that
+        matched. Those two fields are all a prediction takes from
+        patterns_metadata, and nothing computed before the prune reads them.
+
+        Predictions with no metadata row keep the defaults set when they were
+        built (frequency 1, no emotives).
+        """
+        if not predictions:
+            return
+
+        metadata_batch = self._load_metadata_batch([p['name'] for p in predictions])
+        if not metadata_batch:
+            return
+
+        for prediction in predictions:
+            metadata = metadata_batch.get(prediction['name'])
+            if not metadata:
+                continue
+
+            # Floor frequency at 1: a pattern present in ClickHouse with
+            # frequency 0 in Redis means Redis metadata was lost, not that the
+            # pattern was unlearned.
+            frequency = metadata.get('frequency', 1)
+            if frequency == 0:
+                logger.warning(
+                    "Pattern %s found in ClickHouse but has frequency=0 in Redis "
+                    "— possible Redis data loss. Defaulting to 1.", prediction['name']
+                )
+                frequency = 1
+
+            prediction['frequency'] = frequency
+            prediction['emotives'] = metadata.get('emotives', {})
+
     def _load_metadata_batch(self, pattern_hashes: list[str]) -> dict[str, Any]:
         """Load metadata for every pattern hash, in as few round-trips as possible.
 
@@ -1504,17 +1546,16 @@ class PatternSearcher:
         self,
         batch: list,
         stm_events: Optional[list[list[str]]] = None,
-        metadata_batch: Optional[dict[str, Any]] = None,
     ) -> list[dict[str, Any]]:
         """
-        Build predictions for a batch of results.
+        Build predictions for a batch of results, without pattern metadata.
+
+        frequency and emotives are left at their defaults; PatternProcessor
+        fills them in after pruning. See attach_pattern_metadata.
 
         Args:
             batch: Batch of match results
             stm_events: Original event-structured STM for calculating event-aligned missing/extras
-            metadata_batch: Pattern metadata preloaded by the caller for the
-                whole result set. When omitted, this batch loads its own (used
-                by callers outside the fan-out path).
 
         Returns:
             List of prediction dictionaries for this batch
@@ -1527,11 +1568,6 @@ class PatternSearcher:
         if self.filter_executor is None:
             raise RuntimeError("FilterPipelineExecutor not initialized - hybrid architecture required")
 
-        if metadata_batch is None:
-            metadata_batch = self._load_metadata_batch(
-                [result[0] for result in batch if len(result) >= 9]
-            )
-
         for result in batch:
             if len(result) >= 9:
                 pattern_hash, pattern, matching_intersection, past, present, missing, extras, similarity, number_of_blocks, anomalies = result[:10]
@@ -1542,26 +1578,19 @@ class PatternSearcher:
                 # Hybrid architecture: pattern data already in filter_executor cache from pipeline
                 pattern_dict = self.filter_executor.patterns_cache.get(pattern_hash, {})
                 if pattern_dict:
-                    # Use pre-loaded metadata from batch call
-                    metadata = metadata_batch.get(pattern_hash, {'name': pattern_hash, 'frequency': 1})
-
-                    # Reconstruct pattern_data dict for Prediction object
-                    # Floor frequency at 1: if pattern exists in ClickHouse but has
-                    # frequency=0 in Redis, Redis metadata was lost — not unlearned
-                    raw_freq = metadata.get('frequency', 1)
-                    if raw_freq == 0:
-                        logger.warning(
-                            f"Pattern {pattern_hash} found in ClickHouse but has frequency=0 "
-                            f"in Redis — possible Redis data loss. Defaulting to 1."
-                        )
-                        raw_freq = 1
+                    # frequency and emotives are placeholders here; they are the
+                    # only two fields a prediction takes from patterns_metadata,
+                    # nothing computed before the prune reads them, and
+                    # attach_pattern_metadata fills them in for the survivors.
+                    # These defaults are the ones this code already used when a
+                    # pattern had no metadata row, so a pattern that genuinely
+                    # has none is unaffected.
                     pattern_data = {
                         'name': pattern_hash,
                         'pattern_data': pattern_dict.get('pattern_data', []),
                         'length': pattern_dict.get('length', 0),
-                        'frequency': raw_freq,
-                        'emotives': metadata.get('emotives', {}),
-                        'metadata': metadata.get('metadata', {})
+                        'frequency': 1,
+                        'emotives': {},
                     }
 
                     pred = Prediction(

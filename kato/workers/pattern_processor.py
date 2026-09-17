@@ -1128,7 +1128,9 @@ class PatternProcessor:
         # (total_ensemble_pattern_frequencies, patternProbability,
         # itfdf_similarity, average_emotives, the Bayesian priors) runs below
         # this line.
-        self.patterns_searcher.attach_pattern_metadata(causal_patterns)
+        # Also returns the precomputed entropy/tf metrics from the same rows,
+        # so the second read of patterns_metadata below is no longer needed.
+        precomputed_metrics = self.patterns_searcher.attach_pattern_metadata(causal_patterns)
 
         try:
             # Pre-calculate symbol probability cache using optimized aggregation pipeline
@@ -1181,12 +1183,13 @@ class PatternProcessor:
             if total_ensemble_pattern_frequencies == 0:
                 logger.warning(f" {self.name} [ PatternProcessor predictPattern (async) ] total_ensemble_pattern_frequencies is 0")
 
-            # Batch-load pre-computed pattern-intrinsic metrics via the migration router
-            # (entropy, normalized_entropy, global_normalized_entropy, tf_vector)
-            prediction_names = [p.get('name', '') for p in causal_patterns]
-            precomputed_metrics = self.superkb.metadata_router.get_precomputed_metrics_batch(prediction_names)
+            # Pre-computed pattern-intrinsic metrics (entropy, normalized_entropy,
+            # global_normalized_entropy, tf_vector) came back with the metadata
+            # attached above. They live in the same patterns_metadata rows and
+            # the same query already selected them, so reading them here a second
+            # time was a duplicate round trip for information already in hand.
             precomputed_hit = len(precomputed_metrics)
-            precomputed_miss = len(prediction_names) - precomputed_hit
+            precomputed_miss = len(causal_patterns) - precomputed_hit
             if precomputed_hit > 0:
                 logger.debug(f"Pre-computed metrics: {precomputed_hit} hits, {precomputed_miss} misses")
 

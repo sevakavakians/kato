@@ -1477,7 +1477,7 @@ class PatternSearcher:
         )
         return self._metadata_router
 
-    def attach_pattern_metadata(self, predictions: list[dict[str, Any]]) -> None:
+    def attach_pattern_metadata(self, predictions: list[dict[str, Any]]) -> dict[str, Any]:
         """Fill in frequency and emotives on the given predictions, in place.
 
         Called by PatternProcessor.predictPattern after pruning, so the lookup
@@ -1487,14 +1487,20 @@ class PatternSearcher:
 
         Predictions with no metadata row keep the defaults set when they were
         built (frequency 1, no emotives).
+
+        Returns the precomputed entropy/tf metrics from the same rows, so the
+        caller does not have to read patterns_metadata a second time for them.
+        Only patterns whose entropy is populated appear in it; callers treat
+        absence as "compute at runtime".
         """
         if not predictions:
-            return
+            return {}
 
         metadata_batch = self._load_metadata_batch([p['name'] for p in predictions])
         if not metadata_batch:
-            return
+            return {}
 
+        precomputed: dict[str, Any] = {}
         for prediction in predictions:
             metadata = metadata_batch.get(prediction['name'])
             if not metadata:
@@ -1513,6 +1519,18 @@ class PatternSearcher:
 
             prediction['frequency'] = frequency
             prediction['emotives'] = metadata.get('emotives', {})
+
+            if metadata.get('entropy') is not None:
+                entry = {
+                    'entropy': metadata['entropy'],
+                    'normalized_entropy': metadata.get('normalized_entropy', 0.0),
+                    'global_normalized_entropy': metadata.get('global_normalized_entropy', 0.0),
+                }
+                if metadata.get('tf_vector'):
+                    entry['tf_vector'] = metadata['tf_vector']
+                precomputed[prediction['name']] = entry
+
+        return precomputed
 
     def _load_metadata_batch(self, pattern_hashes: list[str]) -> dict[str, Any]:
         """Load metadata for every pattern hash, in as few round-trips as possible.

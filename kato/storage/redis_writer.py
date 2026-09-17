@@ -11,6 +11,7 @@ All keys are namespaced by kb_id for complete isolation.
 
 import json
 import logging
+import time
 from typing import Any
 
 from kato.config.settings import get_settings
@@ -51,6 +52,21 @@ class RedisWriter:
 
         # TTL for per-observation prediction keys (see write_prediction).
         self.prediction_ttl_seconds = get_settings().session.session_ttl
+
+        # Stamp rewritten whenever this node's symbol statistics or global
+        # counters change. Readers cache those figures per process and compare
+        # this value before reusing the cache; see get_global_metadata.
+        #
+        # It holds a nanosecond timestamp rather than an incrementing counter so
+        # that clear-all can delete it like every other key for this kb_id (the
+        # store must leave nothing behind -- see
+        # test_redis_writer_cleanup_handles_glob_metacharacters). A counter
+        # would restart at 1 after a wipe, and a process still holding a cache
+        # stamped with a low number could then see a matching value and reuse a
+        # cache describing data that no longer exists. A timestamp never repeats,
+        # so a stale stamp can never match. Only inequality matters here, so
+        # clock skew between workers costs at most one extra reload.
+        self.stats_version_key = f"{kb_id}:stats:version"
 
         logger.debug(f"RedisWriter initialized for kb_id: {kb_id}")
 
@@ -183,6 +199,10 @@ class RedisWriter:
                 # (not unique count, since pattern already exists)
                 pass
 
+            # Announce the change to every other process. Rides along in this
+            # pipeline, so it costs no extra round trip.
+            pipe.set(self.stats_version_key, time.time_ns())
+
             pipe.execute()
             logger.debug(f"Batch updated symbol stats: {len(symbol_counts)} symbols, "
                         f"is_new={is_new_pattern}, total_symbols={total_symbol_count}")
@@ -210,7 +230,10 @@ class RedisWriter:
                 logger.debug(f"No Redis keys found for kb_id: {self.kb_id}")
                 return 0
 
-            # Delete all keys
+            # Everything goes, the stats stamp included -- the store must leave
+            # nothing behind. A reader holding a cache stamped from before the
+            # wipe reads a missing key as 0, which cannot equal the nanosecond
+            # timestamp it cached, so it reloads.
             deleted = self.client.delete(*keys)
             logger.info(f"Deleted {deleted} Redis keys for kb_id: {self.kb_id}")
             return deleted
@@ -239,23 +262,31 @@ class RedisWriter:
         """
         Get global metadata totals for this kb_id.
 
+        Also returns `stats_version`, the counter bumped by every write that
+        changes these figures or the symbol table. Callers pass it to
+        OptimizedQueryManager.get_all_symbols_optimized so a process can tell
+        that another process changed the data underneath it. It is fetched in
+        the same MGET, so it costs nothing extra.
+
         Returns:
-            Dictionary with total_symbols_in_patterns_frequencies, total_pattern_frequencies, and total_unique_patterns
+            Dictionary with total_symbols_in_patterns_frequencies,
+            total_pattern_frequencies, total_unique_patterns and stats_version
         """
         try:
-            # Batch all 3 GETs into a single mget call
+            # Batch all GETs into a single mget call
             symbols_key = f"{self.kb_id}:global:total_symbols_in_patterns_frequencies"
             patterns_key = f"{self.kb_id}:global:total_pattern_frequencies"
             unique_patterns_key = f"{self.kb_id}:global:total_unique_patterns"
 
-            symbols_total, patterns_total, unique_patterns_total = self.client.mget(
-                symbols_key, patterns_key, unique_patterns_key
+            symbols_total, patterns_total, unique_patterns_total, stats_version = self.client.mget(
+                symbols_key, patterns_key, unique_patterns_key, self.stats_version_key
             )
 
             return {
                 'total_symbols_in_patterns_frequencies': int(symbols_total) if symbols_total else 0,
                 'total_pattern_frequencies': int(patterns_total) if patterns_total else 0,
-                'total_unique_patterns': int(unique_patterns_total) if unique_patterns_total else 0
+                'total_unique_patterns': int(unique_patterns_total) if unique_patterns_total else 0,
+                'stats_version': int(stats_version) if stats_version else 0,
             }
 
         except Exception as e:
@@ -263,7 +294,8 @@ class RedisWriter:
             return {
                 'total_symbols_in_patterns_frequencies': 0,
                 'total_pattern_frequencies': 0,
-                'total_unique_patterns': 0
+                'total_unique_patterns': 0,
+                'stats_version': 0,
             }
 
     def increment_global_symbol_count(self, count: int) -> int:

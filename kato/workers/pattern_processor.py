@@ -213,7 +213,6 @@ class PatternProcessor:
         self.target_class_candidates = []
         self.future_potentials = []  # Store aggregated future potentials for API
         # Prediction-level caches (invalidated on learn())
-        self._global_metadata_cache = None  # Caches get_global_metadata() result
         logger.info(f"PatternProcessor {self.name} started!")
         return
 
@@ -260,7 +259,6 @@ class PatternProcessor:
         self.superkb.symbols_observation_count = 0
         # Invalidate caches since all data was cleared
         self.query_manager.invalidate_caches()
-        self._global_metadata_cache = None
         self.initiateDefaults()
         return
 
@@ -344,7 +342,6 @@ class PatternProcessor:
                 )
         # Invalidate symbol cache since symbol stats changed
         self.query_manager.invalidate_caches()
-        self._global_metadata_cache = None  # Invalidate global metadata cache
         self.last_learned_pattern_name = pattern.name
         return pattern.name
 
@@ -1122,16 +1119,22 @@ class PatternProcessor:
             symbol_probability_cache = {}
             total_ensemble_pattern_frequencies = 0
 
-            # Load global metadata from Redis (cached across prediction calls, invalidated on learn)
-            if self._global_metadata_cache is None:
-                self._global_metadata_cache = self.superkb.redis_writer.get_global_metadata()
-            global_metadata = self._global_metadata_cache
+            # Read the global counters fresh on every prediction, rather than
+            # memoising them per process. They are three small integers in one
+            # MGET, and caching them was a source of cross-worker divergence:
+            # the cache was dropped only when THIS process learned, so a worker
+            # that missed the learn served stale totals indefinitely. The same
+            # MGET also returns stats_version, which tells the (genuinely
+            # expensive) symbol table whether another process changed the data.
+            global_metadata = self.superkb.redis_writer.get_global_metadata()
             total_pattern_frequencies = global_metadata.get('total_pattern_frequencies', 0)
             total_unique_patterns = global_metadata.get('total_unique_patterns', 1)  # Use 1 to avoid div by zero
+            stats_version = global_metadata.get('stats_version', 0)
 
-            # Load all symbols using optimized aggregation pipeline (internally cached by QueryManager)
+            # Load all symbols (cached by QueryManager, validated against the
+            # version above so a write from another worker invalidates it too).
             symbol_cache = self.query_manager.get_all_symbols_optimized(
-                self.superkb.symbols_kb
+                self.superkb.symbols_kb, stats_version=stats_version
             )
             total_symbols = len(symbol_cache)
             logger.debug(f"Loaded {total_symbols} symbols using optimized aggregation pipeline (async)")

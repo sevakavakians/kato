@@ -183,12 +183,18 @@ def global_normalized_entropy(state: list[str], symbol_probabilities: dict[str, 
 
     Example:
         >>> global_normalized_entropy(['a', 'b', 'a'], {'a': 0.5, 'b': 0.3, 'c': 0.2}, 3)
-        0.3918295834173894
+        0.6442358590725441
     """
+    # sorted(), not set iteration order: floating-point addition is not
+    # associative, so summing the same terms in a different order can differ in
+    # the last bit. Set iteration order is not part of the contract, which made
+    # this metric return 0.6586558556598887 or ...888 for identical input across
+    # runs. Sorting fixes the order, so the value is reproducible. The set is one
+    # pattern's symbols, so the sort is negligible.
     symbols: set[str] = set(state)
     return sum(
         [expectation(symbol_probabilities.get(symbol, 0), total_symbols) for
-         symbol in symbols])
+         symbol in sorted(symbols)])
 
 
 def normalized_entropy(state: list[str], total_symbols: int) -> float:

@@ -1021,9 +1021,21 @@ class PatternProcessor:
         # Flush any pending ClickHouse writes so recently learned patterns are visible
         self.superkb.clickhouse_writer.flush_if_pending()
 
-        # FAST PATH: Single-symbol predictions using Redis index
+        # FAST PATH: Single-symbol predictions using Redis index.
+        #
+        # future_potentials is reset here, not inside the fast path, because the
+        # fast path returns before every other assignment to it (the clear on the
+        # no-candidates branch below, and the real assignment after the ensemble
+        # predictive-information pass). Without this reset the attribute still
+        # held the previous request's value, and since a processor is shared by
+        # every session on a node, the endpoint returned ANOTHER SESSION's
+        # future_potentials — observed live as a single-symbol query answering
+        # with 0 predictions but 2 future_potentials belonging to a different
+        # session. The fast path computes no ensemble predictive information, so
+        # an empty list is the honest answer for it.
         if len(state) == 1:
-            logger.info(f"Using single-symbol fast path for state={state}")
+            logger.info("Using single-symbol fast path for state=%s", state)
+            self.future_potentials = []
             return await self._predict_single_symbol_fast(state[0], stm_events=stm_events)
 
         try:

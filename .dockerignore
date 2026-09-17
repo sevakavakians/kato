@@ -7,22 +7,24 @@
 # Python, which the image's interpreter can never use -- plus empty directories
 # left behind by deleted modules, which then resolve as namespace packages.
 
-# Python bytecode and caches (the reason this file exists)
-__pycache__/
-*.py[cod]
-*$py.class
-.pytest_cache/
-.ruff_cache/
-.mypy_cache/
-.coverage
-htmlcov/
+# Python bytecode and caches (the reason this file exists).
+# NOTE: .dockerignore is NOT gitignore. Patterns match the whole path from the
+# context root with Go filepath.Match semantics, so a bare `__pycache__` only
+# matches one at the top level -- nested ones need the `**/` prefix.
+**/__pycache__
+**/*.py[cod]
+**/*$py.class
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+**/.coverage
+htmlcov
 
 # Virtual environments
-venv/
-.venv/
-ENV/
-env/
-**/venv/
+**/venv
+**/.venv
+ENV
+env
 
 # Version control and CI
 .git/
@@ -48,16 +50,16 @@ config/
 .env
 .env.*
 !.env.example
-.vscode/
-.idea/
-.DS_Store
-*.swp
+**/.vscode
+**/.idea
+**/.DS_Store
+**/*.swp
 
 # Build and release artifacts
-build/
-dist/
-*.egg-info/
-*.tar.gz
+build
+dist
+**/*.egg-info
+**/*.tar.gz
 
 # Docs and metadata not needed to build the image
 *.md

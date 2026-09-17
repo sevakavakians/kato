@@ -6,9 +6,65 @@ This directory contains performance benchmarking tools for KATO pattern matching
 
 ## Available Benchmarks
 
-1. **baseline.py** - Baseline performance measurement (pre-optimization)
-2. **compare_matchers.py** - Compare RapidFuzz vs difflib performance (Phase 2)
-3. **gpu_benchmarks.py** - GPU performance measurement (Phase 3 - future)
+1. **test_service_scaling.py** - End-to-end prediction latency over the HTTP API, by corpus size. **Start here when judging a change to the prediction path.**
+2. **bottleneck_runner.py** - In-process timing breakdown of the learn and predict paths
+3. **baseline.py** - Baseline pattern-matching measurement (pre-optimization)
+4. **compare_matchers.py** - Compare RapidFuzz vs difflib performance (Phase 2)
+
+---
+
+## Service Scaling (end to end)
+
+`test_service_scaling.py` measures what a client actually waits for — uvicorn,
+the session layer, the filter pipeline, matching, metrics and ranking — rather
+than driving `PatternProcessor` in-process like the other benchmarks. It is the
+harness that showed the per-request `ProcessPoolExecutor` cost 3378 ms where the
+thread pool cost 1231 ms, for byte-identical output.
+
+```bash
+./start.sh                                    # the service must be running
+
+python -m benchmarks.test_service_scaling                      # default tiers 500/2000/6000
+python -m benchmarks.test_service_scaling --tiers 500,2000     # smaller/faster
+python -m benchmarks.test_service_scaling --keep               # leave the corpus for the next run
+python -m benchmarks.test_service_scaling --rebuild            # clear first
+
+# Compare against a previous run — this is the point of the tool
+python -m benchmarks.test_service_scaling \
+    --baseline benchmarks/results/service_scaling_<id>.json
+```
+
+Each run writes `benchmarks/results/service_scaling_<timestamp>.json` and, by
+default, clears the corpus it built. `--keep` makes a repeat run much faster,
+since the loader only tops the corpus up to the requested tier.
+
+### What it reports, and why those three numbers
+
+| column | what it times |
+|---|---|
+| `scan` | the exact unfiltered `SELECT` that `FilterPipelineExecutor._get_all_patterns` issues, which is the default path because `filter_pipeline` defaults to `[]` |
+| `meta/chunk` | one `patterns_metadata` lookup of `METADATA_CHUNK_SIZE` names — the prediction path issues one per chunk of matched patterns, so multiply, don't read it as a total |
+| `predict` | `GET /sessions/{id}/predictions`, end to end, median of 12 samples after a warm-up |
+
+Splitting them out settles where the time goes. Measured 2026-09-16 at 6000
+patterns with everything matching: scan ~12 ms (1%), metadata ~430 ms across 12
+chunks (35%), matching and metrics the remaining ~57%. **The full-corpus scan is
+not the bottleneck**, which is the assumption this benchmark exists to keep
+honest.
+
+### Reference numbers
+
+Committed baseline: `benchmarks/results/service_scaling_baseline.json` (KATO
+5.1.2, local Docker stack). Hardware varies — compare a run against a run you
+took yourself on the same machine, not against these absolutes.
+
+### Why loading uses `process_predictions: false`
+
+With predictions on (the default), every observe runs a full-corpus prediction,
+so building a corpus is O(N²). At ~700 patterns that had collapsed to roughly 8
+patterns/min across 8 concurrent writers; with predictions off it is ~950/min.
+That is why the older `bottleneck_*` results in this directory stop at 100
+patterns — larger tiers were impractical to build, not uninteresting.
 
 ---
 

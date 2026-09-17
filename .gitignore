@@ -90,6 +90,8 @@ update_container.sh
 # GPU development
 benchmarks/results/*.json
 benchmarks/results/*.csv
+# ...except the committed reference run, which --baseline compares against
+!benchmarks/results/service_scaling_baseline.json
 *.prof
 *.nvprof
 *.qdrep

@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.1.2] - 2026-09-17
+
+Build hygiene only. No code, dependency or behaviour changes from 5.1.1 — the
+sole difference is what the image does **not** contain.
+
+### Fixed
+- **Published images no longer carry the builder's Python bytecode.** The
+  `.dockerignore` added for 5.1.1 was written in gitignore syntax, but
+  `.dockerignore` matches each pattern against the whole path from the context
+  root, so a bare `__pycache__` excluded only a top-level one and every nested
+  cache still shipped. v5.1.1 therefore contained 76 `.pyc` files across 17
+  `__pycache__` directories, and v5.1.0 contained 164. They were inert — the
+  bytecode was `cpython-313` from the builder's virtualenv while the image runs
+  `cpython-310`, so the interpreter could not load them and imports came from
+  source — but they meant an image's contents varied with whoever built it.
+  Nested patterns now carry the required `**/` prefix, verified with caches
+  present on disk rather than absent: `/app/kato` is 1.1M instead of 2.2M, with
+  zero `.pyc`.
+
 ## [5.1.1] - 2026-09-17
 
 A security-driven dependency upgrade clearing every advisory against the pinned

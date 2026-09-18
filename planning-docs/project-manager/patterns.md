@@ -514,7 +514,37 @@ absolute latency differences across machines.
 
 ---
 
+## Process Verification Patterns
+
+### 2026-09-18 - Three Instances of the Same Failure Mode: "A Verification That Could Not Have Failed"
+
+**Pattern**: Across the work that shipped in KATO v5.2.0 (DECISION-032), three separate verification steps were written in a way that could not have detected the bug they were meant to catch — each looked like a real check, passed, and gave false confidence.
+
+1. **The `.dockerignore` fix (5.1.1) was "verified" against zero `__pycache__` directories on disk** — a check with nothing present to catch, so it necessarily passed regardless of whether the fix worked. It didn't: 76 stale `.pyc` files still shipped in the 5.1.1 image. Fixed for real in 5.1.2 and re-verified only once real cache directories (17 of them) were confirmed present on disk *during* the check. Related fact: `.dockerignore` uses Go `filepath.Match` semantics, not gitignore syntax — nested-path patterns need an explicit `**/` prefix, a natural place for this kind of pattern-syntax mistake to hide.
+2. **The prediction-parity gate (`scripts/check_prediction_parity.py`) initially did not exercise the pruned path it existed to guard** — its corpus produced only 17 predictions against a `max_predictions` threshold of 300, so the top-K prune never actually engaged during the "parity" check. A gate that never exercises the changed code path can't fail on a regression in that path. Fixed by adding a deliberately crowded corpus plus `PRUNED_PROBES` with a low `max_predictions`, and by making the script self-check and refuse to report success unless those signals (frequency > 1, non-empty emotives, prune actually engaged) are present.
+3. **A chunking unit test asserted against `METADATA_QUERY_CHUNK`** — the very constant the change under test was supposed to correctly apply — so the test passed even with chunking disabled entirely, because it was only checking internal consistency with itself, not an independent invariant. Rewritten to bound expectations against `CLICKHOUSE_MAX_QUERY_SIZE` (262144) / `BYTES_PER_NAME` (44) instead — a ceiling that exists independently of the code being tested.
+
+**Discovery Trigger**: Noticing, while reviewing this session's own verification work, that each of these three checks would have printed the same "passed" result whether or not the underlying fix was real — either because there was nothing to catch, the path under test was never reached, or the assertion was circular.
+
+**Resolution Pattern**: Before trusting any "verified"/"confirmed fixed" claim, ask two questions of the check itself: (1) does its input actually reach the changed code path (not just call the function, but exercise the specific branch/condition that changed)? (2) is its pass/fail condition defined independently of the value being changed, or does it just restate the same constant/expectation back at itself? A check that fails either question is not evidence, even if it's green.
+
+**Lesson**: "Verified" is not a fact about a claim — it's a fact about a check, and a check can be worthless while still reporting success. This generalizes DECISION-031's earlier testing lesson (a shared `requests.Session()` hid cross-worker nondeterminism by accident) — that was a check with a *blind spot*; these three are checks with *no possible failure mode at all*, a stronger and more dangerous version of the same problem. When writing a regression guard, deliberately try to make it fail first (revert the fix, or use an empty/synthetic setup that lacks the triggering condition) before trusting a pass against the real fix.
+
+**Recurrence Risk**: Medium — any new verification step written quickly under time pressure is at risk of one of these three specific shapes (empty-input check, path-not-exercised check, circular-constant check). Worth a standing habit: when writing a new automated check, spend one extra step confirming it can print "FAIL" under the exact bug it exists to catch.
+
+---
+
 ## Operational Gotchas
+
+### 2026-09-18 - `pip-compile` Must Regenerate `requirements.lock` In Place; `qdrant-client` Held Below 1.16
+
+**Fact (verified)**: `pip-compile --output-file=requirements.lock requirements.txt` must be run so it regenerates the **existing** lock file in place. Pointing it at a fresh/empty output file gives it no prior pins to honor, so it re-resolves and bumps every dependency at once rather than only the ones actually affected by the `requirements.txt` change — this is the same class of "full accidental upgrade" outcome flagged as an open item after Remediation Pass 1 (nearly every pin moved when a full regen was attempted in a clean container).
+
+**Fact (verified)**: `qdrant-client` is deliberately held at `<1.16` in this project's dependency pins. Version 1.17 removed `QdrantClient.search()` entirely, and the resulting failure was swallowed rather than raised — silently degrading vector search rather than breaking loudly. Confirmed still respected in the v5.2.0 fresh-pull image verification (`qdrant-client` 1.15.1).
+
+**Recurrence Risk**: Low for the pin itself (documented and checked at each release verification), but the `pip-compile` in-place requirement is easy to forget for anyone regenerating the lock file by hand rather than through the project's standard flow — worth restating any time `requirements.lock` is touched.
+
+---
 
 ### 2026-09-10 - ClickHouse's HTTP Interface Treats GET as Read-Only by Design
 

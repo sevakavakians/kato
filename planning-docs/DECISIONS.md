@@ -1,6 +1,104 @@
 # DECISIONS.md - Architectural & Design Decision Log
 *Append-Only Log - Started: 2025-08-29*
-*Last Updated: 2026-09-16 (DECISION-031: prediction ranking made deterministic + per-request ProcessPoolExecutor removed as a pessimisation; Remediation Pass 1's branch committed/merged and its remaining open items resolved — see the correction note under DECISION-030 for the protected-mode reversal)*
+*Last Updated: 2026-09-18 (DECISION-033: KATO v5.2.0 released, MINOR bump; DECISION-032: pattern metadata now fetched after top-K pruning, plus a cross-worker statistics divergence fix and several determinism/leak/security fixes underneath it)*
+
+---
+
+## 2026-09-18 - DECISION-033: KATO v5.2.0 Release (MINOR Version Bump)
+
+**Decision**: Release KATO v5.2.0 — bump chosen as **MINOR** per `docs/maintenance/releasing.md`'s classification that performance improvements warrant a MINOR bump (no breaking API change; internal pipeline restructuring only).
+**Status**: **COMPLETE and DEPLOYED.** Branch `perf/prediction-path-scaling` merged to `main` (`c67b2b6`); version bump (`0034344`); changelog (`f7a78af`); tag `v5.2.0` pushed; 0 unpushed commits. GitHub release live: https://github.com/sevakavakians/kato/releases/tag/v5.2.0. Full detail: `planning-docs/completed/features/2026-09-18-kato-v5.2.0-release.md`.
+**Classification**: Release / Milestone (minor version bump)
+**Confidence**: High — pre-release gates clean, full suite green, fresh-pull image verification confirms the published artifact matches source, post-deployment end-to-end cycle verified with zero data loss.
+
+### Context
+DECISION-032 (this same day) completed a body of performance and correctness work — metadata fetched after top-K pruning, a cross-worker statistics divergence fix, several determinism/leak/query-chunking fixes, and security hardening — sitting on `perf/prediction-path-scaling`, the same branch flagged as carrying uncommitted concurrent work back in the 2026-09-17 deprecation-warnings pass (see `planning-docs/completed/features/2026-09-17-deprecation-warnings-and-teardown-fixes.md`). This release closes that branch out entirely.
+
+### Bump Rationale
+**MINOR.** `docs/maintenance/releasing.md` classifies "Performance improvements" as MINOR (new capability/behavior improvement, backward-compatible). None of this release's changes alter the API contract — `attach_pattern_metadata` is an internal pipeline restructuring, the `stats_version` mechanism is invisible to API consumers, and the security/determinism fixes correct behavior without changing any documented interface. Contrast with v5.0.0's MAJOR bump (DECISION-022, a genuine breaking field split) and v5.0.1/v5.0.2/5.1.x's PATCH bumps (bug fixes with no capability change) — this release's scope (a structural performance win, not just a bug fix) is what tips it to MINOR rather than PATCH.
+
+### Release Mechanics
+- **Merge**: `perf/prediction-path-scaling` → `main`, commit `c67b2b6`
+- **Version bump**: `0034344`
+- **Changelog**: `f7a78af`
+- **Tag**: `v5.2.0`, pushed; 0 unpushed commits
+- **GitHub release**: https://github.com/sevakavakians/kato/releases/tag/v5.2.0 — assets `kato-deployment-v5.2.0.tar.gz`, `kato-0.1.1.tgz` (Helm chart)
+- **Container images**: `ghcr.io/sevakavakians/kato:5.2.0`/`:5.2`/`:5`/`:latest`, all resolving to digest `sha256:cafeb01bf051` (distinct from 5.1.2's `sha256:490112239e2e` — confirms a real rebuild, not a re-tag)
+
+### Pre-Release Gates
+- ruff, bandit, pip-audit: all clean
+- Full test suite: **625 passed / 3 skipped / 1 xfailed / 0 failed**
+
+### Fresh-Pull Image Verification
+Pulled the published image fresh and confirmed: version `5.2.0`; `fastapi` 0.141.1; `starlette` 1.6.0; `qdrant-client` 1.15.1 (still under the pinned `<1.16` ceiling — see `project-manager/patterns.md`'s qdrant-client note); 35 OpenAPI paths; error handlers live; `attach_pattern_metadata` present; metadata chunk size 500; **0 `.pyc` files shipped** — the image-hygiene regression first found in 5.1.1 and fixed in 5.1.2 stays fixed (a dedicated re-check, since a previous "fix verification" for this exact class of issue proved nothing the first time around — see `project-manager/patterns.md`).
+
+### Post-Release Deployment
+`deployment/docker-compose.override.yml` (gitignored, local-only) re-pinned from the local `kato:latest` dev build to `ghcr.io/sevakavakians/kato:5.2.0`. Redis `SAVE` taken before recreate; `DBSIZE` 63769 before and after — zero data loss. End-to-end observe/learn/predict cycle verified against the released image: pattern learned, 1 prediction returned, `present=[['alpha'],['beta']]`, `future=[['gamma']]`, frequency and emotives populated (confirming DECISION-032's metadata-after-prune path works correctly against the real deployed artifact, not just in tests).
+
+### What's Bundled
+| Item | Summary | Reference |
+|---|---|---|
+| Metadata fetched after top-K pruning | O(matched) → O(bounded) metadata-fetch cost | DECISION-032 |
+| Cross-worker statistics divergence fix | `stats_version`-gated symbol cache, replaces stale unconditional `_global_metadata_cache` | DECISION-032 |
+| Determinism fixes | Ordered float sums over sets at 2 sites; total ordering re-confirmed at 3 ranking call sites | DECISION-032 (extends DECISION-031) |
+| Session leak fix | Single-symbol fast path resets `future_potentials` before returning | DECISION-032 |
+| Unchunked-query fix | `METADATA_QUERY_CHUNK` chunking moved inside `get_pattern_metadata_batch`, covers all callers | DECISION-032 (extends DECISION-031) |
+| Security/robustness | SQL parameterization, identifier allowlist, error handlers at module scope, `CORS allow_credentials=False`, redundant lock removed | DECISION-032 |
+| New tooling | `scripts/check_prediction_parity.py`, `benchmarks/test_service_scaling.py`, 8 new unit test files | DECISION-032 |
+
+### Explicitly Not Part of This Release
+The candidate-set-bounding question (default `filter_pipeline=[]` still pulling every pattern in the node into Python per request, O(N) time/memory) is deliberately **not** addressed here — the user asked to discuss it separately after this release, with measurements, before deciding an approach. This is now the top open item — see `pending-updates.md`. Also not part of this release: Phase 1c Step B (skip building `Prediction` objects for pruned candidates), Phase 2 (`conditional_probability_cached` removal), Phase 3 (benchmark match-rate axis + peak-memory reporting), and the longer-term list (query_points migration, PatternSearcher caching, sync-client event-loop blocking, the inaccurate GIL-release comment on the RapidFuzz thread pool, `REDIS_PASSWORD`, dashboard hardening, `sort_symbols` bug, 25 `pytest.skip` calls, unbounded payloads, authentication) — all carried forward in `SPRINT_BACKLOG.md`.
+
+### Decision Reference
+**Resolves**: `pending-updates.md`'s "Release Needed: v5.0.2 Lacks the Prediction Segmentation Fix (now expanded)" entry (moved to Resolved — v5.2.0 ships everything that entry was tracking, plus DECISION-032's work).
+**Related Files**: `kato/searches/pattern_search.py`, `kato/storage/redis_writer.py`, `kato/storage/aggregation_pipelines.py`, `kato/storage/clickhouse_writer.py`, `kato/storage/identifiers.py`, `kato/workers/pattern_processor.py`, `kato/informatics/metrics.py`, `kato/services/kato_fastapi.py`, `scripts/check_prediction_parity.py`, `benchmarks/test_service_scaling.py`, `deployment/docker-compose.override.yml` (gitignored), `pyproject.toml`, `kato/__init__.py`, `CHANGELOG.md`
+
+---
+
+## 2026-09-18 - DECISION-032: Pattern Metadata Fetched After Top-K Pruning (Phase 1a) + Cross-Worker Statistics Divergence Fixed
+
+**Decision**: Restructure the prediction pipeline so pattern metadata (frequency, emotives) is fetched **after** the top-K prune, not before. New `PatternSearcher.attach_pattern_metadata(predictions)` (`kato/searches/pattern_search.py`) attaches metadata and precomputed metrics onto already-pruned `Prediction` objects; `_build_predictions_batch` now constructs `Prediction` objects with metadata placeholders instead of fetching metadata for every matched pattern up front. Separately, fixed a cross-worker statistics divergence: global metadata is now read fresh per request, gated by a new `stats_version` (nanosecond timestamp, Redis key `"{kb_id}:stats:version"`) that invalidates the per-process symbol cache (`get_all_symbols_optimized(collection, stats_version=...)`); the stale `_global_metadata_cache` was removed entirely.
+**Status**: COMPLETE, shipped in **v5.2.0**. Full detail: `planning-docs/completed/optimizations/2026-09-18-metadata-after-prune-and-cross-worker-determinism.md`.
+**Classification**: Performance (algorithmic complexity) + Bug Fix (cross-worker correctness)
+**Confidence**: High — both changes independently measured/reproduced before and after; full suite green (625 passed / 3 skipped / 1 xfailed / 0 failed).
+
+### Context
+DECISION-031's cost breakdown (2026-09-16) found pattern-metadata lookup was ~35% of total prediction time (~430ms of ~1271ms at 6000 patterns/candidates) because metadata was fetched for *every matched pattern*, even though only `max_predictions` survive ranking — filed as the open "New Opportunity: Prune Before Metadata Lookup, Not After" backlog item, explicitly gated on confirming the top-K prune metrics don't themselves need metadata. That confirmation was done this session (the prune metrics — evidence, confidence, snr, fragmentation — are derivable from the match/segmentation data alone, not from frequency/emotives), clearing the way to implement the reordering.
+
+Separately, while verifying the reordering across multiple uvicorn workers, a worker was found stuck reporting the pre-change symbol-frequency value (0.049) instead of the correct post-write value (0.025) — a **cross-worker statistics divergence**, not related to the prune-ordering change itself but surfaced by testing it under the multi-worker topology this project always tests against.
+
+### Rationale
+- **Fetching metadata after pruning bounds the cost by `max_predictions * PRUNING_FACTOR`** (a constant, 300 by default) instead of by the number of matched candidates, which grows with corpus size and match rate. This converts an O(matched) cost into an O(bounded-constant) one.
+- **Merges two separate reads of the same ClickHouse rows into one** — the previous shape fetched the same underlying rows twice across the scoring and metadata stages; the new shape fetches once, after the set of surviving candidates is already final.
+- **The stale per-process `_global_metadata_cache` was the root cause of the divergence**: each uvicorn worker process cached global symbol statistics independently with no invalidation signal, so a write from one worker was invisible to another worker's cache indefinitely. A per-process cache without a shared invalidation mechanism is exactly the failure mode this project's "no locks, but also no silent staleness" architecture must avoid. `stats_version` gives each worker a cheap, correct way to know its cache is stale (one Redis read to compare versions) without requiring the cache to be shared or locked.
+
+### Implementation
+- `kato/searches/pattern_search.py`: new `PatternSearcher.attach_pattern_metadata(predictions)`; `_build_predictions_batch` builds `Prediction` objects with metadata placeholders pre-prune, attaches real metadata post-prune.
+- `kato/storage/redis_writer.py`: `stats_version` key `"{kb_id}:stats:version"`, written as a nanosecond timestamp on every mutating metadata write.
+- `kato/storage/aggregation_pipelines.py`: `get_all_symbols_optimized(collection, stats_version=...)` — cache keyed/gated by the version, removing the old unconditional `_global_metadata_cache`.
+- Alongside (same effort, same commit history): three unordered float sums over `set`s made order-stable (`sorted(set(...))` in `kato/workers/pattern_processor.py`, `symbol in sorted(symbols)` in `kato/informatics/metrics.py`) — removes nondeterminism from float non-associativity combined with per-process string-hash randomization; `rank_predictions()` (DECISION-031) now provides a total ordering at three call sites, reconfirmed still holding after this restructuring. Single-symbol fast path (`pattern_processor.py`) now resets `self.future_potentials` before returning, closing a session-state leak. `METADATA_QUERY_CHUNK = 500` chunking (DECISION-031) moved inside `get_pattern_metadata_batch` in `kato/storage/clickhouse_writer.py` so it covers *all* callers, not just the one that originally needed it — the previous placement let a large `max_predictions` overflow ClickHouse's `max_query_size` (262144 bytes) with the exception swallowed, silently degrading every prediction above the threshold.
+- Security/robustness in the same effort: ClickHouse queries parameterized; new `kato/storage/identifiers.py` (`KB_ID_RE`, `PATTERN_NAME_RE`) validating identifiers before `DROP PARTITION`/`ALTER DELETE`; error handlers moved to module scope in `kato/services/kato_fastapi.py` (were dead code inside `on_event("startup")` — Starlette snapshots its middleware stack on first `__call__`, the same class of bug DECISION-030 already fixed once elsewhere); CORS `allow_credentials=False`; a redundant `asyncio.Lock` acquired twice per request removed.
+
+### Verification
+- Fresh-pull image verification: `attach_pattern_metadata` present, metadata chunk size 500, 35 OpenAPI paths, error handlers live.
+- Cross-worker divergence: reproduced pre-fix (stuck worker at 0.049 vs. correct 0.025), confirmed fixed post-fix.
+- New tests: `test_error_handlers.py` (7), `test_identifier_validation.py` (23), `test_observation_validation.py` (10), `test_processor_eviction.py` (3), `test_prediction_ranking.py` (7), `test_metadata_batch_chunking.py` (5), `test_stats_version.py` (6), `test_metadata_query_chunking.py` (6), `test_qdrant_client_api.py`.
+- New tooling: `scripts/check_prediction_parity.py` (byte-for-byte parity gate, pinned to one worker via keep-alive, corpus guaranteed to have `frequency > 1` and non-empty emotives, `PRUNED_PROBES` with a low `max_predictions` to exercise the pruned path specifically); `benchmarks/test_service_scaling.py` (HTTP-level scaling benchmark, `--baseline`/`--keep`/`--rebuild`).
+- Full suite: **625 passed / 3 skipped / 1 xfailed / 0 failed**. ruff, bandit, pip-audit all clean pre-release.
+
+### Alternatives Considered
+1. **Skip building `Prediction` objects entirely for candidates that will be pruned** (build them only for survivors) — more aggressive, deferred as **Phase 1c Step B** (see `SPRINT_BACKLOG.md`): order-sensitive, since `snr` uses pre-segmentation `extras` while `confidence` uses post-segmentation `present`, so a cheap early-exit path must reproduce that exact ordering or diverge from the parity gate. Not attempted this session.
+2. **Push filtering into ClickHouse via `recall_threshold`** (bound the candidate set before it ever reaches Python) — this addresses a different, larger problem (the still-`[]` default `filter_pipeline` pulling the *entire* corpus into Python before any pruning happens at all) and was deliberately left for the separate candidate-set-bounding discussion the user asked to have after this work landed (see `pending-updates.md`).
+
+### Impact
+- **Positive**: prediction latency's metadata-lookup component now scales with `max_predictions`, not corpus size or match rate — the single biggest lever available without touching the candidate-set-bounding question. Cross-worker statistics are now correct without any lock.
+- **Neutral**: the default `filter_pipeline=[]` full-corpus-scan behavior is unchanged by this work — that is the subject of the next discussion, not this one.
+- **Risk**: Low — verified via a dedicated byte-for-byte parity gate (`scripts/check_prediction_parity.py`) built specifically to exercise the pruned path (an earlier version of that gate did not — see the Process Lessons note in `project-manager/patterns.md`), plus a fresh-pull image verification against the published artifact.
+
+### Related Decisions
+- DECISION-031 (2026-09-16) — the cost-breakdown measurement and the "not yet implemented" opportunity this decision closes; also the `rank_predictions`/`METADATA_QUERY_CHUNK` groundwork this decision builds on and completes.
+- DECISION-033 (2026-09-18, same day) — the v5.2.0 release this work shipped in.
+- `planning-docs/project-manager/patterns.md` — new Process Lessons entries: a verification that measures zero of something can't prove a fix works; a parity gate that never exercises the code path it's meant to gate.
 
 ---
 

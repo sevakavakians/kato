@@ -3302,5 +3302,37 @@ networks:
 
 ---
 
-*Agent execution time: < 5 minutes*
-*Response type: Silent operation (factual status update); no human alert generated*
+## 2026-09-18 - Milestone: KATO v5.2.0 Released (Metadata Fetched After Top-K Pruning + Cross-Worker Determinism Fixes)
+
+**Trigger**: Milestone Completion / Task Completion — KATO v5.2.0 released and deployed. This closes out the `perf/prediction-path-scaling` branch flagged since 2026-09-17 as carrying concurrent, uncommitted work not documented by this agent at the time.
+
+**What shipped** (verified facts supplied for this documentation pass, all dated 2026-09-18):
+- Branch `perf/prediction-path-scaling` merged to `main` (`c67b2b6`); version bump `0034344`; changelog `f7a78af`; tag `v5.2.0` pushed; 0 unpushed commits.
+- Images `ghcr.io/sevakavakians/kato:5.2.0`/`:5.2`/`:5`/`:latest`, digest `sha256:cafeb01bf051` (distinct from 5.1.2's `sha256:490112239e2e`).
+- GitHub release live: https://github.com/sevakavakians/kato/releases/tag/v5.2.0.
+- MINOR bump, per `docs/maintenance/releasing.md` ("Performance improvements" = MINOR).
+- Pre-release gates clean (ruff, bandit, pip-audit); full suite 625 passed / 3 skipped / 1 xfailed / 0 failed.
+- Fresh-pull image verification and post-release deployment (Redis `DBSIZE` 63769 unchanged; end-to-end observe/learn/predict cycle verified) both confirmed clean.
+- Technical work: Phase 1a (metadata fetched after top-K pruning — `PatternSearcher.attach_pattern_metadata`), a cross-worker statistics divergence fix (`stats_version`), 3 determinism fixes, 1 session-leak fix, 1 unchunked-query fix (extends DECISION-031), and security hardening (SQL parameterization, identifier allowlist, module-scope error handlers, CORS, redundant-lock removal). New tooling: `scripts/check_prediction_parity.py`, `benchmarks/test_service_scaling.py`, 8 new unit test files.
+- Three process lessons recorded (each a "verification that could not have failed"): the `.dockerignore` zero-cache-dir non-verification; the parity gate that didn't exercise the pruned path; the chunking test that asserted against its own constant under test.
+
+**Actions Taken**:
+1. `planning-docs/DECISIONS.md` — added DECISION-032 (the technical work: metadata-after-prune + cross-worker fix) and DECISION-033 (the release itself, MINOR bump rationale), both dated 2026-09-18, inserted at the top (this log's newest-first convention). Header "Last Updated" line updated.
+2. `planning-docs/completed/optimizations/2026-09-18-metadata-after-prune-and-cross-worker-determinism.md` — new archive doc for the technical work, including the three process lessons.
+3. `planning-docs/completed/features/2026-09-18-kato-v5.2.0-release.md` — new archive doc for the release itself, following the established `kato-v5.0.2-release.md` template (release mechanics, bump rationale, pre-release gates, fresh-pull verification, what's bundled, post-release deployment, explicitly-not-part-of-this-release).
+4. `planning-docs/SESSION_STATE.md` — new "Current Task" section at the top recording the release as COMPLETE/DEPLOYED and naming the candidate-set-bounding discussion as the next task; the previous "Current Task" (deprecation-warnings, 2026-09-17) renamed "Previous Task (context preserved)" and the section after it renamed "Earlier Task (context preserved)" to keep headers unambiguous; top "Last Updated" line updated.
+5. `planning-docs/SPRINT_BACKLOG.md` — header/Active Projects updated; new "Recently Completed" entry for the release at the top; the "New Opportunity: Prune Before Metadata Lookup, Not After" backlog item marked DONE; five new Backlog entries added (candidate-set-bounding discussion, Phase 1c Step B, Phase 2 `conditional_probability_cached` removal, Phase 3 benchmark axis, a longer-term follow-ups list).
+6. `planning-docs/README.md` — "Current System State" Version/Status/Test Coverage lines rewritten to describe v5.2.0 as current (was stale at v5.0.2, predating even the undocumented 5.1.1/5.1.2 releases).
+7. `planning-docs/project-manager/pending-updates.md` — new "Discussion Needed: Candidate-Set Bounding Strategy" entry (Open, high priority, user-requested); the long-open "Release Needed: v5.0.2 Lacks the Prediction Segmentation Fix (now expanded)" entry marked Resolved (v5.2.0 ships everything it was tracking).
+8. This entry and a matching `triggers.md` entry.
+
+**Explicitly not done in this pass**: the standing "Documentation Gap: v5.1.1/v5.1.2 Releases... Undocumented" `pending-updates.md` entry was left open/untouched — this pass documents v5.2.0's own release and technical work from verified facts supplied for it, not a historical reconstruction of 5.1.1/5.1.2's rationale (no first-hand record of that work exists in this agent's context). The other five open `pending-updates.md` items (full dependency upgrade, `REDIS_PASSWORD`, dashboard hardening, single-symbol fast-path semantics, `sort_symbols` bug) remain open, untouched.
+
+**Classification**: Milestone Completion + Task Completion (release) + Architectural Decision (DECISION-032/033) — surfaced as a new pending-updates.md item (candidate-set bounding, user-requested, not a silent operation) plus otherwise-silent documentation updates.
+
+**Next Steps**: Candidate-set-bounding discussion with the user (see `pending-updates.md` and `SPRINT_BACKLOG.md`). All other deferred items carried forward as before.
+
+---
+
+*Agent execution time: < 10 minutes*
+*Response type: Milestone documentation (release) + new human-facing item surfaced (candidate-set-bounding discussion)*

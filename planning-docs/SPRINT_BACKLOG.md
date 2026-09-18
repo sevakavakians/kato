@@ -1,9 +1,9 @@
 # SPRINT_BACKLOG.md - Upcoming Work
-*Last Updated: 2026-09-17 (Deprecation-warnings cleanup + 3 resource-teardown bug fixes COMPLETE, verified, and now COMMITTED as `66fa692` — see "Recently Completed" below. Note: v5.1.1/v5.1.2 were released and a benchmark script committed the same day via work this file has no record of — see the pending-updates.md documentation-gap entry. Note: a concurrent Claude Code session is separately making performance changes on this same branch, tracked by that session, not documented here.)*
+*Last Updated: 2026-09-18 (KATO v5.2.0 RELEASED — metadata fetched after top-K pruning, cross-worker statistics divergence fixed, plus determinism/leak/security fixes; see "Recently Completed" below. The `perf/prediction-path-scaling` branch this file previously flagged as carrying concurrent uncommitted work is now fully merged and released. Next up: the user-requested candidate-set-bounding discussion — see `project-manager/pending-updates.md`.)*
 
 ## Active Projects
 
-*No active initiative-scale projects at this time. Deprecation-warnings cleanup + resource-teardown fixes are done, verified, and committed (`66fa692`; see "Recently Completed" below). Remediation Pass 1 (2026-09-16) is fully closed. Next up is whatever the user picks from the Backlog section below — most notably: the still-open v5.0.3+ patch release, the fast-path single-symbol matching decision, the `sort_symbols` bug, the remaining re-assess list, a full dependency upgrade, and setting `REDIS_PASSWORD`.*
+*No active initiative-scale projects at this time. KATO v5.2.0 is released and deployed (see "Recently Completed" below). **Top priority next**: the user asked to discuss candidate-set bounding (default `filter_pipeline=[]` pulls every pattern in the node into Python per request, O(N) time/memory) before deciding an approach — see `project-manager/pending-updates.md` for the framing and options to present. Everything else below is secondary to that discussion: Phase 1c Step B, Phase 2 (`conditional_probability_cached` removal), Phase 3 (benchmark match-rate axis), the still-open dependency upgrade, `REDIS_PASSWORD`, dashboard hardening, the fast-path single-symbol matching decision, and the `sort_symbols` bug.*
 
 ---
 
@@ -302,6 +302,23 @@ Phase 4 (Symbol Statistics & Fail-Fast Architecture) is 100% complete. The Click
 
 ## Recently Completed
 
+### KATO v5.2.0 Release — Metadata Fetched After Top-K Pruning + Cross-Worker Determinism Fixes ✅ COMPLETE (RELEASED, DEPLOYED)
+**Priority**: High — performance (Phase 1a) + correctness (cross-worker statistics, determinism, session leak, unchunked query) + security hardening
+**Status**: RELEASED and DEPLOYED (2026-09-18). Branch `perf/prediction-path-scaling` merged to `main` (`c67b2b6`); version bump `0034344`; changelog `f7a78af`; tag `v5.2.0` pushed. MINOR bump per `docs/maintenance/releasing.md`. GitHub release: https://github.com/sevakavakians/kato/releases/tag/v5.2.0. Images `ghcr.io/sevakavakians/kato:5.2.0`/`:5.2`/`:5`/`:latest`, digest `sha256:cafeb01bf051`.
+**Files Modified**: `kato/searches/pattern_search.py`, `kato/storage/redis_writer.py`, `kato/storage/aggregation_pipelines.py`, `kato/storage/clickhouse_writer.py`, `kato/storage/identifiers.py` (new), `kato/workers/pattern_processor.py`, `kato/informatics/metrics.py`, `kato/services/kato_fastapi.py`, `scripts/check_prediction_parity.py` (new), `benchmarks/test_service_scaling.py` (new), plus 8 new unit test files.
+
+**Summary**: Closes out the `perf/prediction-path-scaling` branch flagged as carrying concurrent, uncommitted work since the 2026-09-17 deprecation-warnings pass. **Phase 1a**: pattern metadata (frequency, emotives) is now fetched *after* the top-K prune instead of before — new `PatternSearcher.attach_pattern_metadata(predictions)` attaches metadata onto already-pruned `Prediction` objects, converting an O(matched-candidates) cost into O(`max_predictions * PRUNING_FACTOR`) (a constant, 300 by default). Closes the "Prune Before Metadata Lookup, Not After" opportunity below. **Cross-worker statistics divergence fixed**: a new `stats_version` (Redis key `"{kb_id}:stats:version"`) gates the per-process symbol cache, replacing the stale unconditional `_global_metadata_cache` that let one worker's writes stay invisible to another worker indefinitely (reproduced: a worker stuck at 0.049 vs. the correct 0.025). **Determinism**: 3 unordered float sums over sets made order-stable; `rank_predictions()`'s total ordering re-confirmed at 3 sites. **Session leak**: single-symbol fast path now resets `future_potentials`. **Unchunked-query fix**: `METADATA_QUERY_CHUNK` chunking moved inside `get_pattern_metadata_batch` to cover all callers (a second call site could still overflow ClickHouse's `max_query_size` and silently degrade). **Security**: SQL parameterization, new `kato/storage/identifiers.py` allowlist, error handlers moved to module scope (were dead code inside `on_event("startup")`), `CORS allow_credentials=False`, a redundant per-request lock removed.
+
+**Process lessons** (three instances of "a verification that could not have failed" — see `project-manager/patterns.md`): the `.dockerignore` fix was verified with zero cache dirs present (proved nothing; fixed for real in 5.1.2, re-verified with 17 caches present); the parity gate initially didn't exercise the pruned path (fixed with `PRUNED_PROBES`); a chunking unit test asserted against the very constant under test (rewritten to bound against an independent ceiling).
+
+**Verification**: pre-release gates (ruff, bandit, pip-audit) all clean; full suite 625 passed / 3 skipped / 1 xfailed / 0 failed. Fresh-pull image verification confirmed the published artifact matches source (including 0 `.pyc` files shipped). Post-release: Redis `DBSIZE` 63769 unchanged across the deployment swap; end-to-end observe/learn/predict cycle verified against the released image.
+
+**Archive**: `planning-docs/completed/features/2026-09-18-kato-v5.2.0-release.md` (release) and `planning-docs/completed/optimizations/2026-09-18-metadata-after-prune-and-cross-worker-determinism.md` (technical work). **Decisions**: DECISION-032, DECISION-033 in `planning-docs/DECISIONS.md`.
+
+**Next task**: candidate-set-bounding discussion with the user — see `project-manager/pending-updates.md` and the "New Opportunity"/"Discussion Needed" entries below.
+
+---
+
 ### Deprecation Warnings Cleanup + Resource-Teardown Bug Fixes ✅ COMPLETE (COMMITTED)
 **Priority**: Maintenance (deprecation cleanup) + Bug Fix (3 latent resource-teardown defects)
 **Status**: Implementation COMPLETE, verified, and COMMITTED as `66fa692` "fix: clear post-upgrade deprecation warnings and three teardown leaks" (2026-09-17, 18 files/+437/-49) — commit decision resolved, see `planning-docs/project-manager/pending-updates.md`. Committed directly on `perf/prediction-path-scaling` (no branch/merge); three files owned by a concurrent performance-work session (`kato/informatics/metrics.py`, `kato/workers/pattern_processor.py`, untracked `scripts/check_prediction_parity.py`) were deliberately excluded.
@@ -485,11 +502,69 @@ Phase 4 (Symbol Statistics & Fail-Fast Architecture) is 100% complete. The Click
 ---
 
 ### New Opportunity: Prune Before Metadata Lookup, Not After
-**Priority**: P2 — performance; identified via the DECISION-031 cost breakdown, NOT yet implemented
-**Status**: Identified 2026-09-16 during DECISION-031's cost-breakdown measurement (see `planning-docs/completed/features/2026-09-16-remediation-pass-1-followup-and-determinism-fix.md`)
-**Detail**: At 6000 patterns/candidates, pattern-metadata lookup is ~35% of total prediction time (~430ms of ~1271ms), because metadata is fetched for every matched pattern even though only `max_predictions` survive ranking. Pruning candidates to top-K *before* the metadata lookup (rather than after, as today) would proportionally cut this cost. **Not safe to do blindly**: needs confirmation first that the top-K prune metrics (`_pre_potential`: evidence, confidence, snr, fragmentation) don't themselves require metadata — if they do, pruning before the lookup would starve the prune step of its own inputs.
-**Files**: `kato/searches/pattern_search.py` (prune/prediction pipeline), `kato/storage/clickhouse_writer.py` (`get_metadata_batch`)
-**Related**: DECISION-031 (`planning-docs/DECISIONS.md`); cost breakdown in the archive above.
+**Priority**: P2 — performance; identified via the DECISION-031 cost breakdown
+**Status**: **DONE 2026-09-18** — confirmed the top-K prune metrics (`_pre_potential`: evidence, confidence, snr, fragmentation) don't themselves require metadata, then implemented as Phase 1a. New `PatternSearcher.attach_pattern_metadata(predictions)` fetches metadata only for candidates that survive the prune. See DECISION-032 and `planning-docs/completed/optimizations/2026-09-18-metadata-after-prune-and-cross-worker-determinism.md`.
+**Detail (as originally filed)**: At 6000 patterns/candidates, pattern-metadata lookup was ~35% of total prediction time (~430ms of ~1271ms), because metadata was fetched for every matched pattern even though only `max_predictions` survive ranking.
+**Files**: `kato/searches/pattern_search.py`, `kato/storage/clickhouse_writer.py`
+**Related**: DECISION-031, DECISION-032 (`planning-docs/DECISIONS.md`).
+
+---
+
+### Discussion Needed: Candidate-Set Bounding Strategy (USER-REQUESTED — highest priority next)
+**Priority**: P1 — the user explicitly asked to discuss this after v5.2.0 shipped, before deciding an approach
+**Status**: Open, deferred by the user's own request (2026-09-18): *"Let's discuss this after the other changes. I want to learn more about it from you before making a decision."* See `planning-docs/project-manager/pending-updates.md` for the full framing.
+**Detail**: The default path still pulls **every pattern in the node** into Python per request — `filter_pipeline` defaults to `[]`, and the executor takes the `_get_all_patterns` branch with no `LIMIT`. This is O(N) time and memory, unbounded by `max_predictions`. Options to write up with measurements before the user decides:
+1. Push the `recall_threshold` cutoff into ClickHouse (expressible on the stored length/token_set columns) — bounds the candidate set at the source.
+2. Stream candidates in bounded chunks — caps peak memory without changing the eventual candidate set.
+3. Reopen the recall-safe length filter derived from `recall_threshold` (the exact-safe bound identified in the Remediation Pass 1 re-assess list: `T·L/(2−T) ≤ P ≤ L·(2−T)/T`) — pending confirmation the bound holds for `weighted_similarity`.
+**Context**: target corpus scale is 100k–1M+ patterns and growing; the user's stated goal is "not hurting yet — pre-empting growth," not fixing an active production problem. Phase 1a (metadata-after-prune, DECISION-032) already bounded the metadata-fetch cost; this item is about the candidate set itself, upstream of that fix.
+**Files**: `kato/searches/pattern_search.py`, `kato/filters/`, `kato/storage/clickhouse_writer.py`
+**Related**: DECISION-032 (`planning-docs/DECISIONS.md`); the "Default `filter_pipeline` is still `[]`" item further below in this file (Remediation Pass 1 re-assess list).
+
+---
+
+### Follow-up: Skip Building Prediction Objects for Pruned Candidates (Phase 1c Step B)
+**Priority**: P2 — performance, further reduces the cost Phase 1a already bounded
+**Status**: Open, deferred 2026-09-18 (not attempted this session) — see DECISION-032
+**Detail**: Currently every candidate that survives initial scoring gets a full `Prediction` object built, even ones that will be pruned before metadata attachment. Skipping object construction for to-be-pruned candidates would cut cost further, but is **order-sensitive**: `snr` uses pre-segmentation `extras` while `confidence` uses post-segmentation `present`, so a cheap early-exit path must reproduce that exact ordering or its output will diverge from `scripts/check_prediction_parity.py`. Gated on that parity test passing unchanged.
+**Files**: `kato/searches/pattern_search.py`, `kato/representations/prediction.py`
+**Related**: DECISION-032 (`planning-docs/DECISIONS.md`).
+
+---
+
+### Follow-up: Remove `conditional_probability_cached` (Phase 2)
+**Priority**: P2 — performance; up to 600 sequential Redis round trips per request to cache ~0.41ms of arithmetic
+**Status**: Open, deferred 2026-09-18 — measured key construction alone at 142ms (V=400) and 2261ms (V=6000)
+**Detail**: `conditional_probability_cached` md5-hashes the whole symbol table per prediction and round-trips to Redis to cache a result cheaper to just recompute. Already flagged in the Remediation Pass 1 re-assess list below; recorded here as "Phase 2" in this session's numbered follow-on sequence.
+**Files**: wherever `conditional_probability_cached` is defined (see the Remediation Pass 1 re-assess item below for exact location)
+**Related**: DECISION-030, DECISION-032 (`planning-docs/DECISIONS.md`).
+
+---
+
+### Follow-up: Benchmark Match-Rate Axis + Peak-Memory Reporting (Phase 3)
+**Priority**: P3 — observability; makes the scaling curve visible rather than a single adversarial point
+**Status**: Open, deferred 2026-09-18
+**Detail**: `benchmarks/test_service_scaling.py` (new this session) currently benchmarks scale but not match rate, and doesn't report peak memory. Add a `--match-rate` axis and peak-memory reporting so the full scaling curve — not just one adversarial point — is visible, especially relevant to the candidate-set-bounding discussion above.
+**Files**: `benchmarks/test_service_scaling.py`
+**Related**: DECISION-032 (`planning-docs/DECISIONS.md`).
+
+---
+
+### Longer-Term Follow-ups (identified 2026-09-18, not yet scheduled)
+**Priority**: P3 unless noted — mostly gated on the candidate-set-bounding decision above
+**Status**: Open
+**Items**:
+- **`query_points()` migration** — currently blocked on `qdrant-client` staying `<1.16` (1.17 removed `QdrantClient.search()`; see `project-manager/patterns.md`).
+- **Caching `PatternSearcher` between requests** — currently constructed per request; at 100k–1M patterns this trades per-request allocation for persistent residency, so it depends on the candidate-set-bounding decision above (caching a bounded searcher is a different tradeoff than caching one that holds the whole corpus).
+- **Synchronous ClickHouse/Redis clients blocking the event loop** (~450ms measured) — `asyncio.to_thread` is unsafe here because `clickhouse_connect`'s `Client` is not thread-safe and is shared process-wide.
+- **Inaccurate code comment**: the `_lcs_ratio_scorer` thread-pool code claims RapidFuzz releases the GIL for this path — measured false; the thread pool gives almost no real parallelism there. Comment needs correcting (and the parallelism strategy re-examined).
+- **`REDIS_PASSWORD`** — see the dedicated "Action Needed" item in `project-manager/pending-updates.md`.
+- **Dashboard hardening** (default `admin`/`changeme` credentials, read-write Docker socket, port 3001 public) — see `project-manager/pending-updates.md`.
+- **`sort_symbols` session-override bug** — see the dedicated Bug entry below.
+- **25 `pytest.skip` calls** — a green full-suite run may be misleading if services silently aren't available.
+- **Unbounded request payloads** — no size limit enforced on API request bodies.
+- **Authentication** — deferred; deployment is trusted-network-only (DECISION-030 scoping decision).
+**Related**: DECISION-032 (`planning-docs/DECISIONS.md`); `planning-docs/completed/optimizations/2026-09-18-metadata-after-prune-and-cross-worker-determinism.md`.
 
 ---
 

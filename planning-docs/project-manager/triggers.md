@@ -859,3 +859,26 @@
 
 **Agent Response Time**: Immediate
 **Action Result**: All docs updated to reflect the commit; one previously-open pending-updates.md item resolved; no new human alert generated. The v5.1.1/v5.1.2 documentation-gap item remains open, untouched by this update.
+
+---
+
+## 2026-09-18 - Milestone Completion: KATO v5.2.0 Released and Deployed
+
+**Trigger Type**: Primary — Milestone Completion (release) + Architectural Decision (Phase 1a metadata-after-prune redesign, cross-worker statistics fix)
+
+**Event**: Branch `perf/prediction-path-scaling` merged to `main` (`c67b2b6`), version-bumped (`0034344`), changelogged (`f7a78af`), and released as **v5.2.0** (MINOR bump, tag pushed, GitHub release live, images published to `ghcr.io/sevakavakians/kato`). Ships pattern metadata fetched after top-K pruning, a cross-worker statistics divergence fix, three determinism fixes, a session-leak fix, an unchunked-query fix, and security hardening. Pre-release gates clean; full suite 625 passed / 3 skipped / 1 xfailed / 0 failed. Fresh-pull image verification and post-release deployment (zero data loss, verified end-to-end cycle) both confirmed clean.
+
+**Documents Updated**:
+- `planning-docs/DECISIONS.md` (DECISION-032, DECISION-033 added)
+- `planning-docs/completed/optimizations/2026-09-18-metadata-after-prune-and-cross-worker-determinism.md` (new)
+- `planning-docs/completed/features/2026-09-18-kato-v5.2.0-release.md` (new)
+- `planning-docs/SESSION_STATE.md` (new Current Task; header chain renamed one level down)
+- `planning-docs/SPRINT_BACKLOG.md` (new Recently Completed entry; one backlog item marked DONE; five new Backlog entries)
+- `planning-docs/README.md` (Current System State rewritten for v5.2.0)
+- `planning-docs/project-manager/pending-updates.md` (new "Discussion Needed: Candidate-Set Bounding Strategy" entry; long-open "Release Needed" entry resolved)
+- `planning-docs/project-manager/maintenance-log.md` (this action logged)
+
+**Human Alert Generated**: Yes — `pending-updates.md`'s new "Discussion Needed: Candidate-Set Bounding Strategy" entry, since the user explicitly asked to have this discussion before deciding an approach (not a silent operation; this is the intended next conversation, surfaced so it isn't lost).
+
+**Agent Response Time**: Immediate
+**Action Result**: Planning docs now reflect v5.2.0 as the current released/deployed version across `README.md`, `SESSION_STATE.md`, `SPRINT_BACKLOG.md`, and `DECISIONS.md`. One long-open pending-updates.md item resolved. The candidate-set-bounding discussion is now the clearly-flagged next task. The standing v5.1.1/v5.1.2 documentation-gap item remains open and untouched (out of scope for this pass — no first-hand record of that earlier work exists in this agent's context).

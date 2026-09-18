@@ -21,6 +21,12 @@ from datasketch import MinHash
 
 from kato.storage.identifiers import validate_kb_id, validate_pattern_name
 
+# Pattern names per metadata query. They are expanded into the statement text as
+# an IN list (~42 bytes each quoted) and ClickHouse rejects a statement over
+# max_query_size, so every read chunks at this size regardless of what a caller
+# asks for.
+METADATA_QUERY_CHUNK = 500
+
 # Optional xxhash for faster MinHash computation (~3-5x speedup)
 try:
     import xxhash
@@ -541,6 +547,22 @@ class ClickHouseWriter:
         """
         if not names:
             return {}
+
+        # Chunk here, at the point the IN list is built, rather than leaving it
+        # to callers. The names are expanded into the statement text, and
+        # ClickHouse rejects anything over max_query_size (262144 bytes) -- at
+        # ~42 bytes per quoted SHA1 that is roughly 6000 names. The failure is
+        # silent from a caller's point of view: the except below logs and returns
+        # {}, so predictions quietly fall back to frequency=1 and runtime
+        # entropy. Two call sites were passing unbounded lists.
+        if len(names) > METADATA_QUERY_CHUNK:
+            merged: dict[str, dict] = {}
+            for start in range(0, len(names), METADATA_QUERY_CHUNK):
+                merged.update(
+                    self.get_pattern_metadata_batch(names[start:start + METADATA_QUERY_CHUNK])
+                )
+            return merged
+
         try:
             result = self.client.query(
                 """

@@ -595,9 +595,12 @@ class CacheManager:
             return False
 
     async def cleanup(self):
-        """Cleanup cache resources."""
+        """Cleanup cache resources.
+
+        aclose(), not close(): redis-py deprecated the async close() in 5.0.1.
+        """
         if self.redis_client:
-            await self.redis_client.close()
+            await self.redis_client.aclose()
             logger.info("CacheManager cleanup completed")
 
     def is_initialized(self) -> bool:

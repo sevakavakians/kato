@@ -7,12 +7,15 @@ Each user maintains their own STM without any data collision.
 Refactored to use modular endpoint structure for better maintainability.
 """
 
+import asyncio
+import contextlib
 import logging
 import os
 
 # Import v2 components
 import sys
 import time
+from contextlib import asynccontextmanager
 from typing import Optional
 
 from fastapi import FastAPI, Request
@@ -49,17 +52,51 @@ logger = logging.getLogger('kato.fastapi')
 # FastAPI Application Setup
 # ============================================================================
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """ASGI lifespan for the KATO service (replaces the deprecated @app.on_event).
+
+    Defined up here because `lifespan` is a FastAPI() constructor argument, so the
+    name has to be bound before the app is built. The body only references
+    _startup/_shutdown, which are defined further down next to AppState: those are
+    looked up as module globals at call time, which is when uvicorn opens the
+    lifespan scope -- long after this module has finished importing.
+
+    Do NOT register exception handlers from in here. Starlette builds its middleware
+    stack in __call__, which happens *before* the lifespan scope is dispatched, and
+    build_middleware_stack() snapshots app.exception_handlers into a fresh dict -- a
+    registration made here is exactly as dead as the old startup-hook one was.
+    setup_error_handlers(app) stays at module scope below.
+
+    Note also that now that lifespan= is passed, any @app.on_event on this app is a
+    silent no-op: FastAPI only consumes on_startup/on_shutdown via its default
+    lifespan. New startup/shutdown work goes in _startup/_shutdown.
+    """
+    # Deliberately outside the try: if startup fails, shutdown must NOT run. That
+    # matches the old _DefaultLifespan behaviour, where uvicorn reports
+    # lifespan.startup.failed and never calls the shutdown handlers.
+    await _startup()
+    try:
+        # Bare yield, not `yield {}`: FastAPI's _merge_lifespan_context only yields
+        # None when every context does, and yielding a mapping would start
+        # populating scope["state"] -- a behaviour change we do not want here.
+        yield
+    finally:
+        await _shutdown()
+
+
 app = FastAPI(
     title="KATO API",
     description="Knowledge Abstraction for Traceable Outcomes with Multi-User Support",
-    version=__version__
+    version=__version__,
+    lifespan=lifespan
 )
 
 # Register error handlers HERE, at import time. Starlette snapshots
 # app.exception_handlers when it builds the middleware stack on the first
-# __call__ (the lifespan scope), so anything registered from a startup hook is
-# silently dropped. This used to live in startup_event(), which meant none of
-# kato/exceptions/handlers.py ever ran.
+# __call__ (the lifespan scope), so anything registered from a startup/lifespan
+# hook is silently dropped. This used to live in startup_event(), which meant
+# none of kato/exceptions/handlers.py ever ran.
 setup_error_handlers(app)
 
 # Add CORS middleware
@@ -79,8 +116,6 @@ app.add_middleware(
 app.add_middleware(SessionMiddleware, auto_create=False)
 
 # Concurrency monitoring
-import asyncio
-
 # Track concurrent requests per worker.
 # No lock: this is a single-threaded event loop and there is no await between
 # reading and writing _concurrent_count, so the increment cannot interleave.
@@ -88,6 +123,11 @@ import asyncio
 # project rule is no locks in the request path.
 _concurrent_count = 0
 _max_concurrent_seen = 0
+
+# Handle for the periodic reporter task, kept so _shutdown() can cancel it: an
+# un-referenced task can be garbage-collected mid-flight, and without an explicit
+# cancel it is torn down abruptly when the event loop closes.
+_concurrency_reporter_task: Optional[asyncio.Task] = None
 
 # Configuration from the uvicorn CMD in Dockerfile, which expands
 # ${KATO_WORKERS} and ${KATO_LIMIT_CONCURRENCY}. Those are the names actually
@@ -249,9 +289,8 @@ class AppState:
 app_state = AppState()
 
 
-@app.on_event("startup")
-async def startup_event():
-    """Initialize application on startup"""
+async def _startup() -> None:
+    """Initialize application on startup (driven by lifespan() above)."""
     logger.info("Starting KATO FastAPI service...")
 
     # Log uvicorn configuration for debugging concurrency issues
@@ -295,8 +334,12 @@ async def startup_event():
     app_state.metrics_collector = metrics_collector
     await metrics_collector.start_collection()
 
-    # Start concurrency monitoring task
-    asyncio.create_task(_concurrency_reporter())
+    # Start concurrency monitoring task. The handle is kept so _shutdown() can
+    # cancel it deterministically.
+    global _concurrency_reporter_task
+    _concurrency_reporter_task = asyncio.create_task(
+        _concurrency_reporter(), name="kato-concurrency-reporter"
+    )
 
     logger.info("KATO FastAPI service started successfully")
 
@@ -317,10 +360,27 @@ async def _concurrency_reporter():
             last_reported = _max_concurrent_seen
 
 
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Cleanup on shutdown"""
+async def _shutdown() -> None:
+    """Cleanup on shutdown (driven by lifespan() above).
+
+    Every step keeps its own try/except and falls through on failure: a broken
+    processor manager must not strand the Redis connection behind it. Do not
+    consolidate these into one try block.
+    """
     logger.info("Shutting down KATO FastAPI service...")
+
+    # Stop the concurrency reporter first: it is pure logging, holds no resources,
+    # and should not fire into a half-torn-down service.
+    global _concurrency_reporter_task
+    reporter_task, _concurrency_reporter_task = _concurrency_reporter_task, None
+    if reporter_task is not None:
+        try:
+            reporter_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await reporter_task
+            logger.info("Concurrency reporter stopped")
+        except Exception as e:
+            logger.error(f"Error stopping concurrency reporter: {e}")
 
     # Shutdown processor manager (flushes pending writes + closes processors)
     if hasattr(app_state, 'processor_manager') and app_state.processor_manager:
@@ -344,13 +404,28 @@ async def shutdown_event():
     except Exception as e:
         logger.error(f"Error stopping event broadcaster: {e}")
 
-    # Close session manager
-    if hasattr(app_state.session_manager, 'close'):
+    # Shut down the session manager.
+    # shutdown(), not close(): neither RedisSessionManager nor the in-memory
+    # SessionManager has ever defined close(), so the old hasattr(..., 'close')
+    # guard was always False and this step silently did nothing -- the Redis pool
+    # and the session cleanup task leaked on every restart. Reading the private
+    # _session_manager (same package) rather than the lazy property also stops
+    # teardown from *constructing* a session manager this process never used.
+    session_manager = app_state._session_manager
+    if session_manager is not None:
         try:
-            await app_state.session_manager.close()
-            logger.info("Session manager closed")
+            await session_manager.shutdown()
+            logger.info("Session manager shut down")
         except Exception as e:
-            logger.error(f"Error closing session manager: {e}")
+            logger.error(f"Error shutting down session manager: {e}")
+
+    # Close the metrics cache's Redis client, if one was ever created. Local
+    # import, like get_connection_manager below: this is teardown-only.
+    from kato.storage.metrics_cache import close_metrics_cache_manager
+    try:
+        await close_metrics_cache_manager()
+    except Exception as e:
+        logger.error(f"Error closing metrics cache manager: {e}")
 
     # Close all database connections LAST
     # get_connection_manager(), not OptimizedConnectionManager.get_instance():

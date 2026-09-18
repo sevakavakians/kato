@@ -1,9 +1,9 @@
 # SPRINT_BACKLOG.md - Upcoming Work
-*Last Updated: 2026-09-16 (Remediation Pass 1 branch committed and merged to `main`; its four remaining open items resolved; DECISION-031 closed the deterministic-prediction-ranking bug and removed the ProcessPoolExecutor pessimisation — see "Recently Completed" and the updated Backlog entries below)*
+*Last Updated: 2026-09-17 (Deprecation-warnings cleanup + 3 resource-teardown bug fixes COMPLETE, verified, and now COMMITTED as `66fa692` — see "Recently Completed" below. Note: v5.1.1/v5.1.2 were released and a benchmark script committed the same day via work this file has no record of — see the pending-updates.md documentation-gap entry. Note: a concurrent Claude Code session is separately making performance changes on this same branch, tracked by that session, not documented here.)*
 
 ## Active Projects
 
-*No active initiative-scale projects at this time. Remediation Pass 1 is fully closed (committed `df9a76a`, merged `7233155`; all four of its open items resolved — see "Recently Completed" below and `planning-docs/project-manager/pending-updates.md`). DECISION-031 (same day) additionally fixed a real prediction-ranking nondeterminism bug and removed a per-request `ProcessPoolExecutor` pessimisation. Next up is whatever the user picks from the Backlog section below — most notably: the still-open v5.0.3 patch release, the fast-path single-symbol matching decision, the `sort_symbols` bug, the remaining re-assess list, a full dependency upgrade, and setting `REDIS_PASSWORD`.*
+*No active initiative-scale projects at this time. Deprecation-warnings cleanup + resource-teardown fixes are done, verified, and committed (`66fa692`; see "Recently Completed" below). Remediation Pass 1 (2026-09-16) is fully closed. Next up is whatever the user picks from the Backlog section below — most notably: the still-open v5.0.3+ patch release, the fast-path single-symbol matching decision, the `sort_symbols` bug, the remaining re-assess list, a full dependency upgrade, and setting `REDIS_PASSWORD`.*
 
 ---
 
@@ -302,6 +302,19 @@ Phase 4 (Symbol Statistics & Fail-Fast Architecture) is 100% complete. The Click
 
 ## Recently Completed
 
+### Deprecation Warnings Cleanup + Resource-Teardown Bug Fixes ✅ COMPLETE (COMMITTED)
+**Priority**: Maintenance (deprecation cleanup) + Bug Fix (3 latent resource-teardown defects)
+**Status**: Implementation COMPLETE, verified, and COMMITTED as `66fa692` "fix: clear post-upgrade deprecation warnings and three teardown leaks" (2026-09-17, 18 files/+437/-49) — commit decision resolved, see `planning-docs/project-manager/pending-updates.md`. Committed directly on `perf/prediction-path-scaling` (no branch/merge); three files owned by a concurrent performance-work session (`kato/informatics/metrics.py`, `kato/workers/pattern_processor.py`, untracked `scripts/check_prediction_parity.py`) were deliberately excluded.
+**Files Modified**: `kato/services/kato_fastapi.py`, `kato/sessions/redis_session_manager.py`, `kato/storage/pattern_cache.py`, `kato/storage/redis_streams.py`, `kato/storage/metrics_cache.py`, `kato/exceptions/handlers.py`, `requirements.txt`, `requirements.lock`, `tests/requirements.txt`, `tests/tests/unit/test_error_handlers.py`, `CHANGELOG.md`
+
+**Summary**: Cleared `DeprecationWarning`s left behind by the 5.1.1/5.1.2 dependency upgrade — `@app.on_event` migrated to a `lifespan` context manager (`setup_error_handlers(app)` deliberately kept at module scope, same Starlette middleware-snapshot reason as DECISION-030), redis async `close()`→`aclose()` at 3 call sites (sync client untouched), `httpx2` added to test requirements, `anyio` floor raised to `>=4.10,<4.15` (locked 3.7.1→4.14.2). While rewriting shutdown, found and fixed 3 latent bugs: the session manager was never actually shut down (guard checked for a `close()` method neither implementation defines), the concurrency reporter's task handle was discarded and never cancelled, and `MetricsCacheManager` had no teardown path at all for its Redis client.
+
+**Verification**: clean under `python -W error::DeprecationWarning` locally and in the rebuilt Docker image; real ASGI lifespan protocol driven in-process, confirming shutdown-log lines that never appeared before the fix; local suite 431+177 passed with 2 pre-existing failures independently confirmed unrelated (reproduced against a clean `git stash` of `HEAD` and against the published 5.1.2 image); ruff clean; CI install order simulated fresh.
+
+**Archive**: `planning-docs/completed/features/2026-09-17-deprecation-warnings-and-teardown-fixes.md`.
+
+---
+
 ### Remediation Pass 1 Follow-On: Branch Committed/Merged, Open Items Resolved, Deterministic Prediction Ranking + ProcessPool Removal ✅ COMPLETE
 **Priority**: High — closed all four Remediation Pass 1 loose ends, plus a real correctness bug (nondeterministic predictions) found while investigating a performance question
 **Status**: FULLY COMPLETED (2026-09-16)
@@ -427,6 +440,19 @@ Phase 4 (Symbol Statistics & Fail-Fast Architecture) is 100% complete. The Click
 ---
 
 ## Backlog (Future Work)
+
+### Follow-up: Deprecation-Warnings Cleanup — Deferred Hardening Items
+**Priority**: P3 — minor hardening / consolidation, none currently causing observed problems
+**Status**: Identified 2026-09-17 during the deprecation-warnings + resource-teardown fix pass — see `planning-docs/completed/features/2026-09-17-deprecation-warnings-and-teardown-fixes.md`
+**Items**:
+- **`SessionManager.shutdown()` doesn't reset `_cleanup_task` to `None`** after cancelling it, while `get_or_create_session` only restarts the cleanup loop `if not self._cleanup_task`. Inert today (one `lifespan` per process), but a one-line hardening.
+- **Two competing pytest configs**: `pyproject.toml`'s `[tool.pytest.ini_options]` carries `--disable-warnings`; `tests/pytest.ini` does not and wins for the normal `./run_tests.sh` invocation — which is why the deprecation warnings this pass fixed became visible at all. Worth consolidating to one config.
+- **`tests/tests/integration/test_session_management.py::test_concurrent_session_modifications`** asserts behavior `CLAUDE.md`/`docs/users/session-management.md` document as unsupported (single-writer-per-session) — the test, not the code, is likely wrong; consider converting to `xfail` the same way `test_concurrent_session_modifications` under multi-worker topology already was (DECISION-024/DECISION-030).
+- **Drop the `anyio<4.15` cap** once starlette moves off the deprecated `anyio.abc.BlockingPortal` alias to `anyio.from_thread.BlockingPortal` (upstream-gated; re-check on the next starlette bump).
+**Files**: `kato/sessions/redis_session_manager.py` (or wherever `SessionManager` lives), `pyproject.toml`, `tests/pytest.ini`, `tests/tests/integration/test_session_management.py`, `requirements.txt`
+**Related**: `planning-docs/completed/features/2026-09-17-deprecation-warnings-and-teardown-fixes.md`.
+
+---
 
 ### Bug: Session-level `sort_symbols` has no effect
 **Priority**: P2 — silent per-session config override failure; found during Remediation Pass 1 (2026-09-16)

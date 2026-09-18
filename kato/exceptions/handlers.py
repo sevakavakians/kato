@@ -354,7 +354,7 @@ def setup_error_handlers(app, include_http_handlers: bool = False):
     middleware stack on the first ``__call__`` (which is the lifespan scope)
     and ``build_middleware_stack()`` copies ``app.exception_handlers`` into a
     fresh dict. Handlers registered after that point are silently ignored, so
-    a registration inside ``@app.on_event("startup")`` is a no-op.
+    a registration inside the ``lifespan`` context manager is a no-op.
 
     Args:
         app: FastAPI application instance

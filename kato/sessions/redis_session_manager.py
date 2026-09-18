@@ -729,9 +729,10 @@ class RedisSessionManager(session_manager_module.SessionManager):
             with contextlib.suppress(asyncio.CancelledError):
                 await self._cleanup_task
 
-        # Close Redis connection
+        # Close Redis connection. aclose(), not close(): redis-py deprecated the
+        # async close() in 5.0.1.
         if self.redis_client:
-            await self.redis_client.close()
+            await self.redis_client.aclose()
             self._connected = False
 
         logger.info("RedisSessionManager shutdown complete")

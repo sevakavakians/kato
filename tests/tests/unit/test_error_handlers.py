@@ -1,8 +1,8 @@
 """Guards for KATO's structured error handling.
 
-Background: ``setup_error_handlers(app)`` used to be called from inside
-``@app.on_event("startup")``. Starlette builds its middleware stack on the
-first ``__call__`` -- which is the lifespan scope -- and
+Background: ``setup_error_handlers(app)`` used to be called from a startup
+hook. Starlette builds its middleware stack on the first ``__call__`` -- which
+is the lifespan scope -- and
 ``build_middleware_stack()`` copies ``app.exception_handlers`` into a fresh
 dict. Anything registered after that point is silently ignored, so every
 handler in ``kato/exceptions/handlers.py`` was dead in production and KATO
@@ -11,6 +11,8 @@ exceptions escaped as plain ``500 Internal Server Error``.
 These tests pin both halves of the fix: that registration happens at import
 time, and that the handlers behave as intended once registered.
 """
+
+from contextlib import asynccontextmanager
 
 import pytest
 from fastapi import FastAPI, HTTPException
@@ -23,9 +25,9 @@ from kato.exceptions.handlers import setup_error_handlers
 def test_handlers_are_registered_at_import_time():
     """The real app must carry its handlers before any startup hook runs.
 
-    This is the regression guard: move ``setup_error_handlers(app)`` back into
-    ``startup_event()`` and this fails, because at import time the app's
-    handler map would not yet contain them.
+    This is the regression guard: move ``setup_error_handlers(app)`` into
+    ``_startup()`` (or the ``lifespan`` context manager) and this fails, because
+    at import time the app's handler map would not yet contain them.
     """
     from kato.services.kato_fastapi import app
 
@@ -71,25 +73,31 @@ def _app_with_handlers() -> FastAPI:
 def test_late_registration_is_ignored():
     """Document the failure mode the fix exists for.
 
-    Registering from a startup hook must NOT work -- if a future Starlette
+    Registering from the lifespan context manager must NOT work: Starlette
+    builds its middleware stack in ``__call__`` *before* it dispatches the
+    lifespan scope, so ``build_middleware_stack()`` has already snapshotted an
+    empty handler map by the time the lifespan body runs. If a future Starlette
     makes it work, this test tells us the guard above is no longer load-bearing.
     """
-    app = FastAPI()
+    @asynccontextmanager
+    async def register_handlers_late(app: FastAPI):
+        setup_error_handlers(app)
+        yield
+
+    # lifespan= is a constructor argument, so the app is built first and the
+    # route registered after; routes resolve at request time, so that is fine.
+    app = FastAPI(lifespan=register_handlers_late)
 
     @app.get("/boom")
     async def boom():
         raise KatoV2Exception("late", error_code="LATE")
-
-    @app.on_event("startup")
-    async def _late():
-        setup_error_handlers(app)
 
     with TestClient(app, raise_server_exceptions=False) as client:
         response = client.get("/boom")
 
     assert response.status_code == 500
     assert "error" not in response.text, (
-        "Handlers registered during startup unexpectedly fired; revisit "
+        "Handlers registered from the lifespan unexpectedly fired; revisit "
         "test_handlers_are_registered_at_import_time."
     )
 

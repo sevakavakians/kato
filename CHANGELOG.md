@@ -7,6 +7,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Clears the deprecation warnings left behind by the 5.1.1 dependency upgrade, plus
+three resource-teardown defects found in the code that migration rewrites.
+
+### Changed
+- **Migrated from `@app.on_event` to a `lifespan` context manager.** FastAPI
+  deprecated `on_event`, and it emitted a `DeprecationWarning` on every import of
+  `kato/services/kato_fastapi.py`. `startup_event`/`shutdown_event` are now
+  `_startup()`/`_shutdown()`, driven by a `lifespan` context manager passed to
+  `FastAPI(...)`. Startup and shutdown step order is unchanged, and shutdown keeps
+  its per-step try/except-and-continue behaviour. `setup_error_handlers(app)`
+  deliberately **stays at module scope** — Starlette builds its middleware stack
+  before dispatching the lifespan scope and snapshots `app.exception_handlers`, so
+  registering from the lifespan would be as dead as the old startup hook was.
+  Note that `@app.on_event` on this app is now a silent no-op; new startup and
+  shutdown work belongs in `_startup`/`_shutdown`.
+- **`redis` async `close()` → `aclose()`** in `RedisSessionManager.shutdown()`,
+  `CacheManager.cleanup()` and `DistributedSTMManager.close()`. redis-py deprecated
+  the async `close()` in 5.0.1; the floor in `requirements.txt` is raised to match,
+  and `tests/requirements.txt` (which sat below the runtime floor at `>=4.5.0`) is
+  aligned. The **sync** client in `connection_manager.py` is untouched — `close()`
+  is not deprecated there.
+- **`httpx2` added to `tests/requirements.txt`.** starlette 1.6's test client
+  prefers `httpx2` and warns on the `httpx` fallback. `httpx` stays: `qdrant-client`
+  depends on it, as does `tests/tests/fixtures/kato_session_client.py`.
+- **`anyio` floor raised to `>=4.10,<4.15`** (locked 3.7.1 → 4.14.2). The floor is
+  what `httpx2` requires; the 3.7.1 pin was stale rather than deliberate, since
+  nothing under `kato/` imports anyio and `httpcore[asyncio]` already wanted `>=4.0`.
+  The **cap is measured, not cautionary**: anyio 4.15.0 deprecated the
+  `anyio.abc.BlockingPortal` alias that `starlette/testclient.py` still imports, so
+  `>=4.15` merely trades the old httpx warning for a new one that cannot be fixed
+  from here. Drop the cap once starlette moves to `anyio.from_thread.BlockingPortal`.
+  Only `anyio` moved in the lock (`sniffio` drops out, being an anyio 3 dependency).
+
+### Fixed
+- **The session manager was never shut down.** Shutdown guarded on
+  `hasattr(session_manager, 'close')`, but neither `RedisSessionManager` nor the
+  in-memory `SessionManager` has ever defined `close()` — both define `shutdown()`.
+  The branch was therefore always false and silently did nothing, leaking the Redis
+  connection pool and the session cleanup task on every restart. Shutdown now calls
+  `shutdown()`, and reads the private `_session_manager` rather than the lazy
+  property so teardown cannot *construct* a session manager the process never used.
+  Verified by driving the real ASGI lifespan protocol: the shutdown sequence now
+  logs `RedisSessionManager shutdown complete`, which it never did before.
+- **The concurrency reporter task was unmanaged.** `asyncio.create_task(...)`
+  discarded the handle, so the task could be garbage-collected mid-flight and was
+  never cancelled — it was torn down abruptly when the loop closed. The handle is
+  kept and cancelled first during shutdown, before anything holding resources.
+- **`MetricsCacheManager` leaked its Redis client.** It opened a `redis.asyncio`
+  client in `initialize()` and had no teardown path at all. It now has `close()`,
+  plus a `close_metrics_cache_manager()` companion that drops the singleton so a
+  later `get_metrics_cache_manager()` re-initializes cleanly; shutdown calls it,
+  guarded so it does not construct the manager during teardown.
+
 ## [5.1.2] - 2026-09-17
 
 Build hygiene only. No code, dependency or behaviour changes from 5.1.1 — the

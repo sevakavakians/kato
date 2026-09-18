@@ -289,6 +289,19 @@ class MetricsCacheManager:
 
         return stats
 
+    async def close(self) -> None:
+        """Close the async Redis client.
+
+        Safe to call when the manager was never initialized, and safe to call
+        twice. aclose(), not close(): redis-py deprecated the async close() in
+        5.0.1.
+        """
+        if self.redis:
+            try:
+                await self.redis.aclose()
+            finally:
+                self.redis = None
+
 
 class CachedMetricsCalculator:
     """
@@ -441,6 +454,22 @@ async def get_metrics_cache_manager() -> Optional[MetricsCacheManager]:
             logger.error("Failed to initialize global metrics cache manager")
 
     return _metrics_cache_manager
+
+
+async def close_metrics_cache_manager() -> None:
+    """Close and drop the global metrics cache manager, if one was created.
+
+    The manager opens a redis.asyncio client in initialize() and previously had
+    no teardown path at all, so its connection pool leaked for the life of the
+    process. Resetting the singleton to None lets a later
+    get_metrics_cache_manager() re-initialize cleanly.
+    """
+    global _metrics_cache_manager
+
+    manager, _metrics_cache_manager = _metrics_cache_manager, None
+    if manager is not None:
+        await manager.close()
+        logger.info("Metrics cache manager closed")
 
 
 def create_cached_calculator() -> Optional[CachedMetricsCalculator]:

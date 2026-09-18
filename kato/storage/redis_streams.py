@@ -398,9 +398,12 @@ class DistributedSTMManager:
         return stats
 
     async def close(self):
-        """Close Redis connection and cleanup."""
+        """Close Redis connection and cleanup.
+
+        aclose(), not close(): redis-py deprecated the async close() in 5.0.1.
+        """
         if self.redis:
-            await self.redis.close()
+            await self.redis.aclose()
 
 
 # Global distributed STM manager instance

@@ -69,13 +69,22 @@ class MetadataRouter:
         """
         return self.clickhouse.get_pattern_metadata_batch([pattern_name]).get(pattern_name, {})
 
+    # Columns carried through from the ClickHouse row in addition to
+    # emotives/metadata. They cost nothing extra -- the query already selects
+    # them -- and letting callers read them here saves a second identical query
+    # against patterns_metadata just to fetch the precomputed metrics.
+    _PRECOMPUTED_COLUMNS = (
+        'entropy', 'normalized_entropy', 'global_normalized_entropy', 'tf_vector',
+    )
+
     def get_metadata_batch(self, pattern_names: list[str]) -> dict[str, dict]:
-        """Returns dict[name → {name, frequency, emotives?, metadata?}].
+        """Returns dict[name → {name, frequency, emotives?, metadata?, metrics?}].
 
         Metadata comes from ClickHouse; frequency is merged from Redis.
         emotives/metadata keys are present when the ClickHouse row has them and
         absent otherwise (matches the prior RedisWriter.get_metadata_batch
-        contract).
+        contract). The precomputed entropy/tf columns are passed through when
+        present, so a caller needing both does not have to query twice.
         """
         if not pattern_names:
             return {}
@@ -90,6 +99,9 @@ class MetadataRouter:
             if ch_entry is not None:
                 entry['emotives'] = ch_entry.get('emotives', [])
                 entry['metadata'] = ch_entry.get('metadata', {})
+                for column in self._PRECOMPUTED_COLUMNS:
+                    if column in ch_entry:
+                        entry[column] = ch_entry[column]
             out[name] = entry
         return out
 

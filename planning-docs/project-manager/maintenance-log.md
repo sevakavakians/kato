@@ -3248,3 +3248,59 @@ networks:
 
 *Agent execution time: < 5 seconds*
 *Response type: Silent operation (documentation update following task completion)*
+
+---
+
+## 2026-09-17 - Task Completion: Deprecation Warnings Cleanup + 3 Resource-Teardown Bug Fixes (Implementation Complete, NOT Yet Committed)
+
+**Trigger**: Task completion — reported complete and verified, implementation done on top of `main` (current local branch `perf/prediction-path-scaling` points at the same commit as `main`, `adc066d`, no divergent history) but explicitly not yet committed.
+
+**Event Type**: Task Completion (implementation + verification done; commit is a pending human decision)
+
+**Actions Taken**:
+1. New archive file `planning-docs/completed/features/2026-09-17-deprecation-warnings-and-teardown-fixes.md` — full detail on the `@app.on_event`→`lifespan` migration, redis `close()`→`aclose()`, `httpx2`/`anyio` floor changes, the 3 bug fixes, verification performed, and known follow-ups.
+2. `planning-docs/SESSION_STATE.md` — header timestamp refreshed; "Current Task" rewritten to describe this work (complete, verified, uncommitted) and point to the new archive file; prior "Current Task" (none active) and its six pending-decision list demoted to "Previous Task"/"Earlier Task" preserving full prior content. Also flagged a documentation gap: v5.1.1/v5.1.2 were released and a benchmark script committed the same day (2026-09-17) via work this agent has no record of.
+3. `planning-docs/SPRINT_BACKLOG.md` — header timestamp refreshed; new "Recently Completed" entry at the top of that section; new Backlog entry ("Follow-up: Deprecation-Warnings Cleanup — Deferred Hardening Items") covering the 4 known follow-ups (cleanup-task reset, competing pytest configs, the likely-wrong concurrent-session test, the `anyio` cap).
+4. `planning-docs/project-manager/pending-updates.md` — two new entries: a commit/merge decision for this work (Medium priority, modeled on the Remediation Pass 1 precedent), and a documentation-gap alert for the undocumented v5.1.1/v5.1.2 releases + benchmark commit (Medium priority, recommends a dedicated catch-up pass rather than reconstruction by this agent).
+5. `planning-docs/project-manager/patterns.md` — two new entries: a Testing Strategy Patterns entry on rewriting a negative-proof test against a new lifecycle mechanism (`lifespan` replacing `on_event`) rather than just renaming API references, and a Bug Patterns entry on the `hasattr(obj, 'close')` teardown guard that silently never fired because neither real implementation defines `close()` (both define `shutdown()`).
+
+**Key Details**:
+- Not committed: this agent did not commit anything, consistent with "Never edit planning-docs directly" applying only to planning docs — no source files were touched, per the task instruction.
+- No DECISION entry filed: judged a bug-fix + maintenance pass, not an architectural decision distinct enough from the already-recorded DECISION-030 module-scope rationale it explicitly extends.
+- Branch discrepancy noted and resolved by verification: the work was described as being on `main`; actual `git status` showed local branch `perf/prediction-path-scaling`. Verified via `git merge-base main HEAD` that this branch has no divergent commits from `main` (`main` HEAD == this branch's HEAD == `adc066d`), so the description is accurate in effect — recorded precisely in `SESSION_STATE.md` and the archive rather than silently repeating the (technically imprecise) branch name given.
+- Two items outside this task's scope were surfaced by git-history inspection while verifying branch state (v5.1.1/v5.1.2 releases, `adc066d` benchmark commit) and deliberately NOT reconstructed into planning docs — flagged as a documentation-gap pending-updates entry instead, since this agent has no first-hand record of that work.
+
+**Classification**: Task Completion (bug fix + maintenance), commit decision deferred to human.
+
+**Next Steps**: Human decides whether/how to commit this work (see `pending-updates.md`). Separately, a documentation catch-up pass is recommended for the undocumented 5.1.1/5.1.2 releases and the benchmark commit — not performed here.
+
+---
+
+*Agent execution time: < 5 minutes*
+*Response type: Silent operation (documentation update following task completion); two items surfaced for human review per pending-updates.md*
+
+---
+
+## 2026-09-17 - Task Completion: Deprecation-Warnings + Teardown Fixes Now Committed (`66fa692`) — Status Update
+
+**Trigger**: Task completion / status-change event — the previously-documented "IMPLEMENTATION COMPLETE, VERIFIED, NOT YET COMMITTED" work (Deprecation Warnings Cleanup + Resource-Teardown Bug Fixes) has been committed as `66fa692` "fix: clear post-upgrade deprecation warnings and three teardown leaks" (18 files, +437/-49 — the 11 code/dependency/test files plus all 7 planning-docs files from the earlier documentation pass, in the same commit). Branch `perf/prediction-path-scaling` unchanged.
+
+**Event Type**: Task Status Change (uncommitted → committed); resolves a previously-open human decision.
+
+**Actions Taken** (factual status flip only; no source code touched, no git state-changing commands run):
+1. `planning-docs/SESSION_STATE.md` — header timestamp line and "Current Task" section updated from "NOT YET COMMITTED"/uncommitted framing to "COMMITTED", recording commit `66fa692` and its stats. Added a neutral note that a concurrent Claude Code session is separately making performance changes in the same working tree (`kato/informatics/metrics.py`, `kato/workers/pattern_processor.py`, untracked `scripts/check_prediction_parity.py` — all deliberately excluded from `66fa692`), so a future reader isn't confused by the `perf/prediction-path-scaling` branch name not matching this commit's contents. That other session's work is explicitly not documented here.
+2. `planning-docs/SPRINT_BACKLOG.md` — header timestamp and "Active Projects" note updated to drop "uncommitted" framing; the "Recently Completed" entry's heading/Status/Files line updated to "COMMITTED" with commit detail and the concurrent-session exclusion note.
+3. `planning-docs/completed/features/2026-09-17-deprecation-warnings-and-teardown-fixes.md` — Status line and the "Open Question for the User" section (renamed "Commit") updated to reflect the commit and its resolution, plus the concurrent-session exclusion note.
+4. `planning-docs/project-manager/pending-updates.md` — the "Decision Needed: Commit the Deprecation-Warnings + Resource-Teardown Fixes?" entry marked RESOLVED in place (matching this file's existing convention for resolved entries), with commit `66fa692` and the concurrent-session exclusion recorded as the resolution.
+5. This entry and a matching `triggers.md` entry.
+
+**Explicitly out of scope for this update** (per task instructions): the concurrent performance-work session's files/substance were not modified, staged, or documented; no git state-changing command was run; the previously-flagged v5.1.1/v5.1.2 documentation-gap `pending-updates.md` entry was left untouched (still open).
+
+**Classification**: Task Status Change (commit resolution), silent operation — no new human alert generated; one existing alert resolved.
+
+**Next Steps**: None from this update. The v5.1.1/v5.1.2 documentation-gap item and the remaining pending-updates.md items (dashboard hardening, `REDIS_PASSWORD`, v5.0.3+ release decision, fast-path semantics, full dependency upgrade) remain open as before.
+
+---
+
+*Agent execution time: < 5 minutes*
+*Response type: Silent operation (factual status update); no human alert generated*

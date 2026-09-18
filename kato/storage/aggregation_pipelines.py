@@ -241,11 +241,15 @@ class OptimizedQueryManager:
         self.pipelines = AggregationPipelines()
         self._symbol_cache = {}
         self._cache_valid = False
+        # stats version the cached symbol table was built from; see
+        # get_all_symbols_optimized.
+        self._cached_stats_version = None
 
     def invalidate_caches(self):
         """Invalidate internal caches when data changes."""
         self._symbol_cache = {}
         self._cache_valid = False
+        self._cached_stats_version = None
 
     def get_patterns_optimized(self, limit: Optional[int] = None) -> dict[str, list[str]]:
         """
@@ -270,25 +274,51 @@ class OptimizedQueryManager:
             logger.error(f"Aggregation pipeline failed: {e}")
             raise
 
-    def get_all_symbols_optimized(self, collection: Collection) -> dict[str, dict[str, Any]]:
+    def get_all_symbols_optimized(self, collection: Collection,
+                                  stats_version: Optional[int] = None) -> dict[str, dict[str, Any]]:
         """
-        Get all symbols with caching.
+        Get all symbols, cached per process and validated against `stats_version`.
 
-        Returns cached symbols if available. Cache is invalidated when
-        patterns are learned (via invalidate_caches()).
+        Loading the table costs two HGETALLs over the node's whole vocabulary, so
+        it is memoised. Local invalidation (invalidate_caches(), called when this
+        process learns) is not sufficient on its own: KATO runs several uvicorn
+        worker processes against one Redis, each with its own cache, and a worker
+        that did not serve the learn never learns that the data moved. It then
+        keeps answering from stale symbol statistics, so every metric derived
+        from them -- confluence, normalized_entropy, global_normalized_entropy,
+        itfdf_similarity -- comes back with a different value depending on which
+        worker took the request. Measured before this check: confluence 0.49 on
+        one worker against 0.20 on another, for the same query on the same data.
+
+        `stats_version` is the counter every writer bumps (see
+        RedisWriter.get_global_metadata, which returns it in the MGET it was
+        already doing). When it differs from the version the cache was built at,
+        the cache is stale no matter which process invalidated what, and is
+        reloaded. Passing None keeps the old local-only behaviour for callers
+        that have no version to hand.
 
         Args:
             collection: Symbol collection to query (used on cache miss)
+            stats_version: Current stats version for this kb_id, if known
 
         Returns: Dict mapping symbol names to symbol documents
         """
-        if self._cache_valid and self._symbol_cache:
-            logger.debug(f"Returning cached symbol table ({len(self._symbol_cache)} symbols)")
+        version_matches = (stats_version is None
+                           or stats_version == self._cached_stats_version)
+        if self._cache_valid and self._symbol_cache and version_matches:
+            logger.debug("Returning cached symbol table (%d symbols, version %s)",
+                         len(self._symbol_cache), self._cached_stats_version)
             return self._symbol_cache
+
+        if not version_matches:
+            logger.debug("Symbol table changed elsewhere (version %s -> %s), reloading",
+                         self._cached_stats_version, stats_version)
 
         self._symbol_cache = self.pipelines.get_all_symbols_optimized(collection)
         self._cache_valid = True
-        logger.debug(f"Loaded and cached {len(self._symbol_cache)} symbols")
+        self._cached_stats_version = stats_version
+        logger.debug("Loaded and cached %d symbols at version %s",
+                     len(self._symbol_cache), stats_version)
         return self._symbol_cache
 
     def get_symbol_frequencies_batch(self, symbols: list[str]) -> dict[str, int]:
@@ -303,6 +333,10 @@ class OptimizedQueryManager:
                 self.superkb.symbols_kb
             )
             self._cache_valid = True
+            # This path has no stats version to stamp the cache with, so mark it
+            # unknown: the next versioned reader must revalidate rather than
+            # trust a stamp this load never checked.
+            self._cached_stats_version = None
 
         result = {}
         for symbol in symbols:

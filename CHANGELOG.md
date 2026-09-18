@@ -7,8 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Clears the deprecation warnings left behind by the 5.1.1 dependency upgrade, plus
-three resource-teardown defects found in the code that migration rewrites.
+## [5.2.0] - 2026-09-18
+
+Makes the prediction path give the same answer twice, and stops it doing work
+that grows with the corpus to produce a fixed-size result. Also clears the
+deprecation warnings left behind by the 5.1.1 dependency upgrade, plus three
+resource-teardown defects found in the code that migration rewrites.
+
+Three ways the same request could return different answers are fixed, one of
+them a session-isolation break. Prediction latency falls by 27% at 6,000
+patterns, and by more as a corpus grows, because a lookup that scaled with the
+number of matching patterns now scales with `max_predictions` instead.
+
+### Upgrade notes
+
+Some prediction values change. All of these are corrections — the previous values
+were not reproducible — but they are observable:
+
+- **Single-symbol predictions return an empty `future_potentials`.** They
+  previously returned whichever list the last multi-symbol prediction on that
+  node had left behind, which belonged to a different session. The fast path
+  computes no ensemble predictive information, so empty is the honest answer.
+- **`confluence`, `normalized_entropy`, `global_normalized_entropy` and
+  `itfdf_similarity` may change on a multi-worker deployment.** They were computed
+  from whatever symbol statistics the answering worker happened to have cached;
+  a worker that had missed a learn returned figures for data that no longer
+  existed (confluence 0.049 where the correct value was 0.025).
+- **`global_normalized_entropy` may move by one unit in the last place.** Three
+  float sums iterated unordered sets, so the result depended on the process hash
+  seed and changed when the container restarted.
+
+Nothing in the HTTP contract changes: no endpoint, request schema or response
+field is added, removed or renamed.
 
 ### Changed
 - **Migrated from `@app.on_event` to a `lifespan` context manager.** FastAPI
@@ -39,6 +69,24 @@ three resource-teardown defects found in the code that migration rewrites.
   `>=4.15` merely trades the old httpx warning for a new one that cannot be fixed
   from here. Drop the cap once starlette moves to `anyio.from_thread.BlockingPortal`.
   Only `anyio` moved in the lock (`sniffio` drops out, being an anyio 3 dependency).
+- **Pattern metadata is fetched after the top-K prune, not before.** The lookup
+  ran for every matching pattern, then the list was cut to `max_predictions * 3`
+  — 300 by default — and only then was the metadata used. Nothing the prune reads
+  comes from metadata, and every consumer of `frequency` or `emotives` runs after
+  it, so the fetch moved. Measured end to end, output unchanged:
+
+  | corpus | before | after | |
+  |---|---|---|---|
+  | 500 | 195.9 ms | 189.7 ms | −3% |
+  | 2,000 | 488.9 ms | 421.9 ms | −14% |
+  | 6,000 | 1288.1 ms | 937.5 ms | −27% |
+
+  The saving grows with the corpus, because an O(matched) term became
+  O(`max_predictions` × 3). At 6,000 matches the lookup went from 12 chunked
+  round trips to one.
+- **`patterns_metadata` is read once per prediction instead of twice.** The second
+  read fetched the precomputed entropy and tf columns that the first query had
+  already selected and discarded.
 
 ### Fixed
 - **The session manager was never shut down.** Shutdown guarded on
@@ -59,6 +107,50 @@ three resource-teardown defects found in the code that migration rewrites.
   plus a `close_metrics_cache_manager()` companion that drops the singleton so a
   later `get_metrics_cache_manager()` re-initializes cleanly; shutdown calls it,
   guarded so it does not construct the manager during teardown.
+- **Single-symbol predictions leaked another session's `future_potentials`.** The
+  field is stored on the `PatternProcessor`, which every session on a node shares,
+  and the endpoint reads it off that instance after the call. The single-symbol
+  fast path returned before both places it is ever assigned, so it left the
+  previous request's value in place. Demonstrated across three sessions on one
+  node: session A produced two entries, and sessions B and C then got A's two
+  entries back verbatim — B while returning no predictions of its own. This breaks
+  the session-isolation guarantee, not only determinism.
+- **uvicorn workers disagreed about the same data.** Each worker memoises the
+  node's symbol table and global counters and dropped them only when *that*
+  process served a learn, so a worker that missed one kept answering from stale
+  figures indefinitely. Every write now stamps a per-node version that readers
+  check before reusing a cache; the stamp travels in an MGET and a pipeline that
+  were already being issued, so it costs no extra round trip. Reproducing it needs
+  three steps in order — cache, miss a learn, answer again — which is why it went
+  unnoticed.
+- **Three float sums depended on the process hash seed.**
+  `global_normalized_entropy` in `metrics.py` and two inlined copies in
+  `pattern_processor.py` summed over raw `set` iteration order, and floating-point
+  addition is not associative. Restarting the container with no code change
+  returned `0.6586558556598887`, `...887`, then `...888`. All three now sum in
+  sorted order.
+- **Pattern metadata reads could fail silently above ~2000 `max_predictions`.**
+  Names are expanded into the statement text and ClickHouse rejects anything over
+  `max_query_size`; the error was caught and `{}` returned, so predictions fell
+  back to `frequency=1` and runtime entropy with nothing surfaced. Two call sites
+  passed unbounded lists. Chunking now lives in the writer, where the constraint
+  applies, so every caller is covered.
+- **`metrics.py`'s `global_normalized_entropy` docstring** gave a result the code
+  had never produced (`0.3918295834173894` against an actual
+  `0.6442358590725441`). Note 5 of that module's 15 doctests still fail and
+  nothing runs them.
+
+### Added
+- **`scripts/check_prediction_parity.py`** — captures the full prediction payload
+  for a fixed corpus and diffs it against a later run, which is how every
+  prediction change in this release was verified. Its corpus is built so patterns
+  carry `frequency > 1` and non-empty emotives, and so a low `max_predictions`
+  forces the top-K prune; it refuses to report success if either signal is
+  missing, because without them a change that dropped metadata entirely would
+  produce identical output and the tool would pass while proving nothing.
+- **Tests** for the cross-worker cache contract (`test_stats_version.py`) and for
+  metadata query chunking (`test_metadata_query_chunking.py`), each confirmed to
+  fail when its fix is reverted.
 
 ## [5.1.2] - 2026-09-17
 

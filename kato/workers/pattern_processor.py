@@ -9,7 +9,11 @@ from typing import Any, Optional
 
 import numpy as np
 
-from kato.config.session_config import SessionConfiguration
+from kato.config.session_config import (
+    DEFAULT_SINGLE_SYMBOL_MATCH_MODE,
+    SINGLE_SYMBOL_MATCH_FIRST_EVENT_CONTAINS,
+    SessionConfiguration,
+)
 from kato.informatics.knowledge_base import SuperKnowledgeBase
 from kato.informatics.metrics import (
     accumulate_metadata,
@@ -492,6 +496,200 @@ class PatternProcessor:
             'time_ms': elapsed_ms
         }
 
+    def filter_retired_predictions(self, predictions: list[dict[str, Any]]):
+        """Remove node-retired patterns without perturbing active-only results."""
+        if not predictions:
+            return predictions
+        names = [
+            prediction.get('name')
+            for prediction in predictions
+            if isinstance(prediction, dict) and prediction.get('name')
+        ]
+        if not names:
+            return predictions
+        retired = self.superkb.redis_writer.get_retired_pattern_ids(names)
+        if not retired:
+            return predictions
+        return [
+            prediction for prediction in predictions
+            if (
+                (prediction.get('name', '')[5:]
+                 if prediction.get('name', '').startswith('PTRN|')
+                 else prediction.get('name'))
+                not in retired
+            )
+        ]
+
+    def _filter_retired_pattern_records(self, records: list[dict[str, Any]]):
+        """Filter pre-prediction records by their ``name`` field."""
+        return self.filter_retired_predictions(records)
+
+    def retire_patterns(self, pattern_names: list[str]) -> dict[str, Any]:
+        """Immediately make a batch of node patterns non-retrievable."""
+        names = list(dict.fromkeys(
+            self.superkb.redis_writer.normalize_pattern_name(name)
+            for name in pattern_names
+        ))
+        result = self.superkb.redis_writer.retire_patterns(names)
+        self.predictions = self.filter_retired_predictions(self.predictions)
+        self.future_potentials = []
+        return {
+            'status': 'completed',
+            'requested': len(names),
+            **result,
+        }
+
+    async def purge_retired_patterns(self, pattern_names: list[str]) -> dict[str, Any]:
+        """Physically purge retired patterns while retaining safe tombstones.
+
+        The Redis cleanup snapshot is persisted before any ClickHouse mutation.
+        A tombstone is compacted to ``purged`` only after durable rows, Redis
+        records, and node-local matchers all prove the ID is absent.
+        """
+        redis_writer = self.superkb.redis_writer
+        clickhouse_writer = self.superkb.clickhouse_writer
+        names = list(dict.fromkeys(
+            redis_writer.normalize_pattern_name(name) for name in pattern_names
+        ))
+        records = redis_writer.get_retirement_records(names)
+        skipped = [name for name in names if name not in records]
+        already_purged = [
+            name for name in names
+            if records.get(name, {}).get('state') == 'purged'
+        ]
+        failed: dict[str, str] = {}
+
+        candidates = [
+            name for name in names
+            if name in records and name not in already_purged
+        ]
+        needs_snapshot = [
+            name for name in candidates
+            if records[name].get('state') == 'retired'
+        ]
+
+        if needs_snapshot:
+            pattern_rows = clickhouse_writer.get_patterns_data_batch(needs_snapshot)
+            metadata = self.superkb.metadata_router.get_metadata_batch(needs_snapshot)
+            for name in needs_snapshot:
+                row = pattern_rows.get(name)
+                meta = metadata.get(name, {'frequency': 0})
+                redis_pattern_exists = redis_writer.pattern_exists(name)
+
+                if row is None and redis_writer.has_pattern_records(name):
+                    failed[name] = (
+                        'Redis pattern records exist without ClickHouse events; '
+                        'exact counter cleanup cannot be proven'
+                    )
+                    continue
+                if row is not None and int(meta.get('frequency', 0)) <= 0:
+                    failed[name] = (
+                        'ClickHouse pattern exists without a valid Redis frequency; '
+                        'exact counter cleanup cannot be proven'
+                    )
+                    continue
+
+                pattern_data = row.get('pattern_data', []) if row else []
+                all_symbols = list(chain(*pattern_data))
+                symbol_counts = dict(Counter(all_symbols))
+                emotives = meta.get('emotives', [])
+                ledger_complete = redis_writer.has_pattern_affinity_ledger(name)
+                if emotives and not ledger_complete:
+                    failed[name] = (
+                        'legacy affinity contribution has no exact per-pattern ledger'
+                    )
+                    continue
+
+                snapshot = {
+                    'had_pattern_record': bool(row is not None or redis_pattern_exists),
+                    'frequency': int(meta.get('frequency', 0)),
+                    'symbol_counts': symbol_counts,
+                    'affinity_contribution': (
+                        redis_writer.get_pattern_affinity_contribution(name)
+                        if ledger_complete else {}
+                    ),
+                }
+                records[name] = redis_writer.prepare_pattern_purge(name, snapshot)
+
+        work_names = [name for name in candidates if name not in failed]
+        if work_names:
+            try:
+                clickhouse_writer.purge_patterns(work_names)
+                for name in work_names:
+                    redis_writer.purge_pattern_records(name)
+
+                prediction_records_updated = (
+                    redis_writer.purge_patterns_from_prediction_records(work_names)
+                )
+                precomputed_metrics_deleted = (
+                    redis_writer.delete_all_precomputed_metrics()
+                    + clickhouse_writer.invalidate_precomputed_metrics()
+                )
+
+                self.query_manager.invalidate_caches()
+                self._global_metadata_cache = None
+                self.predictions = self.filter_retired_predictions(self.predictions)
+                self.future_potentials = []
+
+                if self.patterns_searcher.redis_cache:
+                    await self.patterns_searcher.redis_cache.invalidate_pattern_cache()
+                    await self.patterns_searcher.redis_cache.invalidate_symbol_cache()
+                if self.metrics_cache_manager:
+                    await self.metrics_cache_manager.invalidate_all_metrics()
+
+                indices_clean = self.patterns_searcher.rebuild_after_pattern_purge(
+                    work_names
+                )
+                if not indices_clean:
+                    for name in work_names:
+                        failed.setdefault(
+                            name,
+                            'in-memory index rebuild could not prove pattern absence',
+                        )
+            except Exception as exc:
+                message = str(exc)
+                for name in work_names:
+                    failed.setdefault(name, message)
+                prediction_records_updated = 0
+                precomputed_metrics_deleted = 0
+                indices_clean = False
+        else:
+            prediction_records_updated = 0
+            precomputed_metrics_deleted = 0
+            indices_clean = True
+
+        purged = []
+        if work_names and indices_clean:
+            remaining = clickhouse_writer.get_present_pattern_names(work_names)
+            remaining_lsh = clickhouse_writer.get_present_lsh_pattern_names(work_names)
+            remaining_metadata = clickhouse_writer.get_present_metadata_pattern_names(work_names)
+            for name in work_names:
+                if name in failed:
+                    continue
+                if name in remaining or name in remaining_lsh or name in remaining_metadata:
+                    failed[name] = 'ClickHouse verification still finds the pattern'
+                    continue
+                if not redis_writer.verify_pattern_records_absent(name):
+                    failed[name] = 'Redis verification still finds pattern records'
+                    continue
+                if not self.patterns_searcher.patterns_absent_from_indices([name]):
+                    failed[name] = 'in-memory index verification still finds the pattern'
+                    continue
+                redis_writer.mark_pattern_purged(name)
+                purged.append(name)
+
+        return {
+            'status': 'completed' if not failed else 'partial',
+            'requested': len(names),
+            'purged': purged,
+            'already_purged': already_purged,
+            'skipped_not_retired': skipped,
+            'failed': failed,
+            'prediction_records_updated': prediction_records_updated,
+            'precomputed_metrics_deleted': precomputed_metrics_deleted,
+            'tombstones_retained': True,
+        }
+
     def delete_pattern(self, name: str) -> str:
         if not self.patterns_searcher.delete_pattern(name):
             raise Exception(f'Unable to find and delete pattern {name} in RAM')
@@ -729,7 +927,9 @@ class PatternProcessor:
         Fast path for single-symbol predictions using Redis symbol-to-pattern index.
 
         Bypasses the expensive filter pipeline and directly loads patterns containing
-        the symbol, then filters to patterns starting with the symbol.
+        the symbol.  The default mode preserves historical first-token matching;
+        the session-scoped ``first_event_contains`` mode matches the symbol anywhere
+        in the first event for unordered group nodes.
 
         Args:
             symbol: Single symbol to match
@@ -747,6 +947,16 @@ class PatternProcessor:
         # Flush any pending ClickHouse writes so recently learned patterns are visible
         self.superkb.clickhouse_writer.flush_if_pending()
 
+        active_searcher = getattr(self, 'patterns_searcher', None)
+        session_config = getattr(active_searcher, 'session_config', None)
+        single_symbol_match_mode = (
+            getattr(session_config, 'single_symbol_match_mode', None)
+            or DEFAULT_SINGLE_SYMBOL_MATCH_MODE
+        )
+        first_event_contains = (
+            single_symbol_match_mode == SINGLE_SYMBOL_MATCH_FIRST_EVENT_CONTAINS
+        )
+
         try:
             # Step 1: Query ClickHouse directly for patterns starting with this symbol
             # Uses the first_token column (populated during _prepare_row) instead of
@@ -758,12 +968,15 @@ class PatternProcessor:
                 logger.warning("ClickHouse not available, falling back to regular prediction path")
                 return await self.predictPattern([symbol], stm_events=stm_events)
 
+            query = (
+                "SELECT name, pattern_data, length FROM kato.patterns_data "
+                "WHERE kb_id = %(kb_id)s AND has(pattern_data[1], %(first_token)s)"
+                if first_event_contains
+                else "SELECT name, pattern_data, length FROM kato.patterns_data "
+                     "WHERE kb_id = %(kb_id)s AND first_token = %(first_token)s"
+            )
             result = clickhouse_client.query(
-                """
-                SELECT name, pattern_data, length
-                FROM kato.patterns_data
-                WHERE kb_id = %(kb_id)s AND first_token = %(first_token)s
-                """,
+                query,
                 parameters={'kb_id': self.superkb.id, 'first_token': symbol},
             )
 
@@ -777,7 +990,12 @@ class PatternProcessor:
             candidate_patterns = []
             for row in result.result_rows:
                 pattern_name, pattern_data, length = row
-                if pattern_data and pattern_data[0] and pattern_data[0][0] == symbol:
+                matches_first_event = (
+                    symbol in pattern_data[0]
+                    if first_event_contains and pattern_data and pattern_data[0]
+                    else bool(pattern_data and pattern_data[0] and pattern_data[0][0] == symbol)
+                )
+                if matches_first_event:
                     candidate_patterns.append({
                         'name': pattern_name,
                         'pattern_data': pattern_data,
@@ -785,10 +1003,15 @@ class PatternProcessor:
                     })
 
             if not candidate_patterns:
-                logger.debug(f"No patterns START with symbol '{symbol}' (found patterns containing it)")
+                logger.debug(f"No patterns matched single-symbol mode for '{symbol}'")
                 return []
 
-            logger.debug(f"Found {len(candidate_patterns)} patterns STARTING with symbol '{symbol}'")
+            candidate_patterns = self._filter_retired_pattern_records(candidate_patterns)
+            if not candidate_patterns:
+                logger.debug(f"All patterns starting with '{symbol}' are retired")
+                return []
+
+            logger.debug(f"Found {len(candidate_patterns)} patterns for single-symbol mode '{single_symbol_match_mode}'")
 
             # Step 4: Calculate similarity and metrics for each candidate
             # Use the existing InformationExtractor for consistency
@@ -952,6 +1175,12 @@ class PatternProcessor:
                 logger.debug(f"No predictions passed similarity threshold for symbol '{symbol}'")
                 return []
 
+            # Re-check immediately before ranking so a concurrent retirement
+            # cannot consume a max_predictions slot.
+            predictions = self.filter_retired_predictions(predictions)
+            if not predictions:
+                return []
+
             # Step 5: Calculate metrics using existing infrastructure
             # This is the same as the regular predictPattern path
             # (We'll call the same metric calculation code)
@@ -1049,6 +1278,10 @@ class PatternProcessor:
         except Exception as e:
             raise Exception(f"\nException in PatternProcessor.predictPattern: Error in causalBeliefAsync! {self.kb_id}: {e}")
 
+        # The searcher filters early; this second barrier closes a retirement
+        # race before any top-K pruning or final max_predictions truncation.
+        causal_patterns = self.filter_retired_predictions(causal_patterns)
+
         # Early return if no patterns found
         if not causal_patterns:
             self.future_potentials = []  # Clear stale future_potentials
@@ -1100,6 +1333,10 @@ class PatternProcessor:
         # final potential minus itfdf_similarity which hasn't been computed yet).
         # itfdf_similarity is bounded [0,1], so a 3x safety margin prevents losing
         # high-quality predictions that might reorder after full metrics.
+        causal_patterns = self.filter_retired_predictions(causal_patterns)
+        if not causal_patterns:
+            self.future_potentials = []
+            return []
         PRUNING_FACTOR = 3
         max_for_metrics = self.max_predictions * PRUNING_FACTOR
         if len(causal_patterns) > max_for_metrics:
@@ -1406,6 +1643,13 @@ class PatternProcessor:
             potentials = (evidence_arr + confidence_arr) * snr_arr + itfdf_arr + frag_contrib
             for i, p in enumerate(causal_patterns):
                 p['potential'] = float(potentials[i])
+
+            # Last barrier is deliberately adjacent to max_predictions so a
+            # retired high-ranked result cannot consume an active result's slot.
+            causal_patterns = self.filter_retired_predictions(causal_patterns)
+            if not causal_patterns:
+                self.future_potentials = []
+                return []
 
             try:
                 # Rank using the configurable algorithm (default: 'potential').

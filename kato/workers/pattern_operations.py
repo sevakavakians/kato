@@ -224,6 +224,14 @@ class PatternOperations:
                     pattern_name=name
                 )
 
+    def retire_patterns(self, pattern_ids: list[str]) -> dict[str, Any]:
+        """Tombstone several patterns in this processor's node."""
+        return self.pattern_processor.retire_patterns(pattern_ids)
+
+    async def purge_retired_patterns(self, pattern_ids: list[str]) -> dict[str, Any]:
+        """Physically purge only IDs already tombstoned in this node."""
+        return await self.pattern_processor.purge_retired_patterns(pattern_ids)
+
     def update_pattern(self, name: str, frequency: Optional[int] = None,
                       emotives: Optional[dict[str, list[float]]] = None) -> dict[str, Any]:
         """
@@ -321,13 +329,19 @@ class PatternOperations:
 
         if not unique_id:
             # Return current predictions from memory
-            predictions = self.pattern_processor.predictions
+            predictions = self.pattern_processor.filter_retired_predictions(
+                self.pattern_processor.predictions
+            )
         else:
             # Query database for predictions by unique_id
             pred_results = self.predictions_kb.find({'unique_id': unique_id})
             for pred in pred_results:
                 if '_id' in pred:
                     pred.pop('_id')
+                if isinstance(pred.get('predictions'), list):
+                    pred['predictions'] = self.pattern_processor.filter_retired_predictions(
+                        pred['predictions']
+                    )
                 predictions.append(pred)
 
         return predictions

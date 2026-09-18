@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Session-scoped vector event modes (`neighbors_plus_self` and `self_only`),
+  configurable vector search limits, and opt-in request-local vector scores.
+- Optional first-event membership matching for single-symbol queries.
+- Node-scoped pattern retirement and resumable purge with retained tombstones,
+  metadata-sidecar verification, and exact affinity contribution accounting.
+- Optional distributed STM mirror disablement and guarded repair of incomplete
+  pattern writes, adapted to the ClickHouse metadata facade.
+
+### Changed
+
+- The default vector search limit is now 20 (previously 3); set
+  `vector_search_limit=3` to retain the earlier candidate count.
+- Metric cache invalidation rotates a shared generation token without scanning
+  or deleting the Redis keyspace.
+
+### Fixed
+
+- Pattern inserts wait for ClickHouse acknowledgement before updating metadata
+  and counters. Purge invalidates remaining finalized metrics and cross-worker
+  symbol-statistic caches while preserving active metadata.
+
+See [vector modes and pattern lifecycle](docs/users/vector-modes-pattern-lifecycle.md)
+for configuration, endpoints, and operational constraints.
+
 ## [5.2.0] - 2026-09-18
 
 Makes the prediction path give the same answer twice, and stops it doing work

@@ -1,12 +1,20 @@
 import logging
 from collections import Counter
 from itertools import chain
+from os import environ
 
 from kato.config.settings import get_settings
 from kato.informatics.metrics import average_emotives
 
 logger = logging.getLogger('kato.informatics.knowledge-base')
 # Configure logging lazily
+
+
+def _repair_redis_only_patterns_enabled() -> bool:
+    """Enable one-time ClickHouse reconciliation only in an isolated worker."""
+    return environ.get('KATO_REPAIR_REDIS_ONLY_PATTERNS', '').strip().lower() in {
+        '1', 'true', 'yes', 'on'
+    }
 
 
 class KnowledgeBase(dict):
@@ -357,7 +365,7 @@ class SuperKnowledgeBase:
 
     # learnVector method removed - vectors now handled by modern vector store
 
-    def _update_symbol_affinity(self, emotives, symbol_counts):
+    def _update_symbol_affinity(self, emotives, symbol_counts, pattern_name=None):
         """Update per-symbol affinity by summing averaged emotives into each symbol's running total."""
         if not emotives:
             return
@@ -365,7 +373,8 @@ class SuperKnowledgeBase:
         if averaged:
             self.redis_writer.batch_update_symbol_affinity(
                 symbol_names=list(symbol_counts.keys()),
-                averaged_emotives=averaged
+                averaged_emotives=averaged,
+                pattern_name=pattern_name,
             )
 
     def learnPattern(self, pattern_object, emotives=None, metadata=None):
@@ -395,6 +404,14 @@ class SuperKnowledgeBase:
         try:
             logger.info(f"[HYBRID] learnPattern() called for {pattern_object.name}")
 
+            # Retirement is durable for this hash. Refuse to recreate the same
+            # identity while a replacement workflow is purging it.
+            retired_ids = self.redis_writer.get_retired_pattern_ids([pattern_object.name])
+            if isinstance(retired_ids, set) and pattern_object.name in retired_ids:
+                raise RuntimeError(
+                    f"Cannot learn retired pattern {pattern_object.name}"
+                )
+
             # Track available emotives
             if emotives:
                 # Extract all emotive keys from rolling window list
@@ -417,10 +434,9 @@ class SuperKnowledgeBase:
             if is_new:
                 # Sole winner of the new-pattern race. Persist row + initial metadata.
                 self.clickhouse_writer.write_pattern(pattern_object)
-                # NOTE: write_pattern uses server-side async_insert with
-                # wait_for_async_insert=0, so the patterns_data row may lag the
-                # call by up to async_insert_busy_timeout_ms before it is
-                # queryable. (The metadata sidecar below uses wait=1.)
+                # Complete buffered inserts before any metadata or counter
+                # updates; successful storage must be visible to later readers.
+                self.clickhouse_writer.flush_if_pending()
 
                 # Enforce persistence window for NEW patterns
                 trimmed_emotives = emotives if emotives else []
@@ -446,6 +462,10 @@ class SuperKnowledgeBase:
                     metadata=metadata if metadata else {},
                 )
 
+                # A separate ledger makes later affinity subtraction exact;
+                # it never changes the learned events or pattern hash.
+                self.redis_writer.initialize_pattern_affinity_ledger(pattern_object.name)
+
                 # Update symbol statistics for NEW pattern (increments global
                 # total_unique_patterns etc.) - only the SETNX winner does this.
                 self.redis_writer.batch_update_symbol_stats(
@@ -457,16 +477,89 @@ class SuperKnowledgeBase:
                 logger.debug(f"[HYBRID] Updated global totals: {len(symbol_counts)} unique symbols, {len(all_symbols)} total, +1 pattern, +1 unique")
 
                 # Update per-symbol affinity with averaged emotives
-                self._update_symbol_affinity(emotives, symbol_counts)
+                self._update_symbol_affinity(emotives, symbol_counts, pattern_object.name)
 
                 logger.info(f"[HYBRID] Successfully learned new pattern {pattern_object.name} to ClickHouse + Redis")
                 return True  # New pattern
+
+            # A prior wait_for_async_insert=0 failure could leave the atomic
+            # Redis claim and exact metadata behind without its ClickHouse row.
+            # Recovery is deliberately opt-in so ordinary re-learning behavior
+            # and production performance remain unchanged.
+            if (
+                _repair_redis_only_patterns_enabled()
+                and pattern_object.name not in self.clickhouse_writer.get_present_pattern_names(
+                    [pattern_object.name]
+                )
+            ):
+                existing = self.metadata_router.get_metadata(pattern_object.name)
+                expected_emotives = emotives if emotives else []
+                expected_metadata = metadata if metadata else {}
+                if existing.get('frequency') != 1:
+                    raise RuntimeError(
+                        f"Refusing Redis-only repair for {pattern_object.name}: "
+                        "stored frequency is not the exact single-learn record"
+                    )
+                if 'emotives' not in existing and 'metadata' not in existing:
+                    # A facade read failure must never be mistaken for a new
+                    # claim, and legacy Redis metadata needs explicit migration.
+                    if (
+                        self.clickhouse_writer.get_present_metadata_pattern_names(
+                            [pattern_object.name]
+                        )
+                        or self.redis_writer.client.exists(
+                            f"{self.id}:emotives:{pattern_object.name}",
+                            f"{self.id}:metadata:{pattern_object.name}",
+                        )
+                    ):
+                        raise RuntimeError(
+                            f"Refusing Redis-only repair for {pattern_object.name}: "
+                            "metadata absence cannot be proven"
+                        )
+                    # SETNX survived but none of the post-insert Redis writes did.
+                    # Complete the original new-pattern transaction exactly once.
+                    self.clickhouse_writer.write_pattern(pattern_object)
+                    self.clickhouse_writer.flush_if_pending()
+                    self.metadata_router.upsert_pattern_metadata(
+                        pattern_name=pattern_object.name,
+                        emotives=expected_emotives,
+                        metadata=expected_metadata,
+                    )
+                    self.redis_writer.initialize_pattern_affinity_ledger(pattern_object.name)
+                    self.redis_writer.batch_update_symbol_stats(
+                        symbol_counts=symbol_counts,
+                        pattern_name=pattern_object.name,
+                        is_new_pattern=True,
+                        total_symbol_count=len(all_symbols),
+                    )
+                    self._update_symbol_affinity(emotives, symbol_counts, pattern_object.name)
+                    logger.warning(
+                        f"[HYBRID] Completed claim-only pattern {pattern_object.name} "
+                        "in ClickHouse and Redis"
+                    )
+                    return True
+                if (
+                    existing.get('emotives') != expected_emotives
+                    or existing.get('metadata') != expected_metadata
+                ):
+                    raise RuntimeError(
+                        f"Refusing Redis-only repair for {pattern_object.name}: "
+                        "stored metadata is not the exact single-learn record"
+                    )
+                self.clickhouse_writer.write_pattern(pattern_object)
+                self.clickhouse_writer.flush_if_pending()
+                logger.warning(
+                    f"[HYBRID] Restored Redis-only pattern {pattern_object.name} "
+                    "to ClickHouse without changing Redis counters"
+                )
+                return True
 
             # Pattern already exists - atomic INCR, merge emotives/metadata.
             self.redis_writer.increment_frequency(pattern_object.name)
             logger.debug(f"[HYBRID] Incremented frequency for pattern {pattern_object.name}")
 
             # Update/merge emotives and metadata if provided
+            existing_meta = None
             if emotives or metadata:
                 # Full row (including the metric columns we must write back
                 # unchanged). Reused as `prev` below so the upsert does not
@@ -520,8 +613,15 @@ class SuperKnowledgeBase:
             )
             logger.debug(f"[HYBRID] Updated symbol stats: {len(symbol_counts)} unique symbols, {len(all_symbols)} total")
 
+            # A pre-ledger pattern can safely begin exact accounting only when
+            # it had no prior emotive contribution.
+            if emotives and not self.redis_writer.has_pattern_affinity_ledger(pattern_object.name):
+                prior = existing_meta or self.metadata_router.get_metadata(pattern_object.name)
+                if not prior.get('emotives'):
+                    self.redis_writer.initialize_pattern_affinity_ledger(pattern_object.name)
+
             # Update per-symbol affinity with averaged emotives
-            self._update_symbol_affinity(emotives, symbol_counts)
+            self._update_symbol_affinity(emotives, symbol_counts, pattern_object.name)
 
             return False  # Not a new pattern
 

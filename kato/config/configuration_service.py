@@ -15,7 +15,16 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from kato.config.session_config import SessionConfiguration
+from kato.config.session_config import (
+    DEFAULT_RETURN_VECTOR_SEARCH_RESULTS,
+    DEFAULT_SINGLE_SYMBOL_MATCH_MODE,
+    DEFAULT_VECTOR_EVENT_MODE,
+    DEFAULT_VECTOR_SEARCH_LIMIT,
+    MAX_VECTOR_SEARCH_LIMIT,
+    VALID_SINGLE_SYMBOL_MATCH_MODES,
+    VALID_VECTOR_EVENT_MODES,
+    SessionConfiguration,
+)
 from kato.config.settings import Settings
 
 logger = logging.getLogger('kato.config.configuration_service')
@@ -37,6 +46,10 @@ class ResolvedConfiguration:
 
     # Processing Configuration
     indexer_type: str
+    vector_event_mode: str
+    vector_search_limit: int
+    return_vector_search_results: bool
+    single_symbol_match_mode: str
     max_predictions: int
     sort_symbols: bool
     process_predictions: bool
@@ -89,6 +102,10 @@ class ConfigurationService:
 
             # Processing Configuration
             'indexer_type': self.settings.processing.indexer_type,
+            'single_symbol_match_mode': DEFAULT_SINGLE_SYMBOL_MATCH_MODE,
+            'vector_event_mode': DEFAULT_VECTOR_EVENT_MODE,
+            'vector_search_limit': DEFAULT_VECTOR_SEARCH_LIMIT,
+            'return_vector_search_results': DEFAULT_RETURN_VECTOR_SEARCH_RESULTS,
             'max_predictions': self.settings.processing.max_predictions,
             'sort_symbols': self.settings.processing.sort_symbols,
             'sort': self.settings.processing.sort_symbols,  # Alias for backward compatibility
@@ -157,6 +174,10 @@ class ConfigurationService:
             recall_threshold=merged['recall_threshold'],
             stm_mode=merged['stm_mode'],
             indexer_type=merged['indexer_type'],
+            single_symbol_match_mode=merged['single_symbol_match_mode'],
+            vector_event_mode=merged['vector_event_mode'],
+            vector_search_limit=merged['vector_search_limit'],
+            return_vector_search_results=merged['return_vector_search_results'],
             max_predictions=merged['max_predictions'],
             sort_symbols=merged['sort'],
             process_predictions=merged['process_predictions'],
@@ -218,6 +239,29 @@ class ConfigurationService:
             if not isinstance(value, str) or value not in valid_indexers:
                 errors['indexer_type'] = f'Must be one of: {", ".join(valid_indexers)}'
 
+        if 'single_symbol_match_mode' in updates:
+            value = updates['single_symbol_match_mode']
+            if not isinstance(value, str) or value not in VALID_SINGLE_SYMBOL_MATCH_MODES:
+                errors['single_symbol_match_mode'] = (
+                    f'Must be one of: {", ".join(sorted(VALID_SINGLE_SYMBOL_MATCH_MODES))}'
+                )
+
+        # Validate vector_event_mode
+        if 'vector_event_mode' in updates:
+            value = updates['vector_event_mode']
+            if not isinstance(value, str) or value not in VALID_VECTOR_EVENT_MODES:
+                valid_modes = ', '.join(sorted(VALID_VECTOR_EVENT_MODES))
+                errors['vector_event_mode'] = f'Must be one of: {valid_modes}'
+
+        # Validate vector_search_limit
+        if 'vector_search_limit' in updates:
+            value = updates['vector_search_limit']
+            if (isinstance(value, bool) or not isinstance(value, int) or
+                    not 1 <= value <= MAX_VECTOR_SEARCH_LIMIT):
+                errors['vector_search_limit'] = (
+                    f'Must be an integer between 1 and {MAX_VECTOR_SEARCH_LIMIT}'
+                )
+
         # Normalize and validate stm_mode
         if 'stm_mode' in updates:
             value = updates['stm_mode']
@@ -229,7 +273,12 @@ class ConfigurationService:
                 updates['stm_mode'] = 'CLEAR'
 
         # Validate boolean fields
-        for bool_field in ['sort', 'process_predictions', 'use_token_matching']:
+        for bool_field in [
+            'sort',
+            'process_predictions',
+            'use_token_matching',
+            'return_vector_search_results',
+        ]:
             if bool_field in updates:
                 value = updates[bool_field]
                 if not isinstance(value, bool):

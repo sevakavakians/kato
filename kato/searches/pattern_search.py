@@ -792,6 +792,88 @@ class PatternSearcher:
             # Recreate clean index manager
             self.index_manager = IndexManager()
 
+    def _filter_retired_candidates(self, candidates):
+        """Exclude node tombstones while preserving the no-tombstone path."""
+        if not candidates:
+            return candidates
+        from kato.storage.redis_writer import RedisWriter
+
+        names = list(candidates)
+        retired = RedisWriter(
+            self.kb_id, self.redis_client
+        ).get_retired_pattern_ids(names)
+        if not retired:
+            return candidates
+
+        def is_active(name):
+            clean_name = name[5:] if name.startswith('PTRN|') else name
+            return clean_name not in retired
+
+        if isinstance(candidates, set):
+            return {name for name in candidates if is_active(name)}
+        if isinstance(candidates, tuple):
+            return tuple(name for name in candidates if is_active(name))
+        return [name for name in candidates if is_active(name)]
+
+    def _filter_retired_predictions(self, predictions: list[dict[str, Any]]):
+        """Apply a final tombstone barrier immediately before result sorting."""
+        if not predictions:
+            return predictions
+        names = [
+            prediction.get('name')
+            for prediction in predictions
+            if isinstance(prediction, dict) and prediction.get('name')
+        ]
+        if not names:
+            return predictions
+        from kato.storage.redis_writer import RedisWriter
+
+        retired = RedisWriter(
+            self.kb_id, self.redis_client
+        ).get_retired_pattern_ids(names)
+        if not retired:
+            return predictions
+        return [
+            prediction for prediction in predictions
+            if (
+                (prediction.get('name', '')[5:]
+                 if prediction.get('name', '').startswith('PTRN|')
+                 else prediction.get('name'))
+                not in retired
+            )
+        ]
+
+    def rebuild_after_pattern_purge(self, pattern_names: list[str]) -> bool:
+        """Reset node-local matchers and prove purged IDs are absent from RAM."""
+        old_executor = self.filter_executor
+        if old_executor is not None and hasattr(old_executor, 'patterns_cache'):
+            old_executor.patterns_cache.clear()
+        self.filter_executor = None
+        self.clearPatternsFromRAM()
+        return self.patterns_absent_from_indices(pattern_names)
+
+    def patterns_absent_from_indices(self, pattern_names: list[str]) -> bool:
+        """Check every ID-bearing node-local cache/index after a rebuild."""
+        names = set(pattern_names)
+        if names & set(self.patterns_cache):
+            return False
+        if names & set(self._pattern_strings_cache):
+            return False
+        if self.fast_matcher:
+            if names & set(self.fast_matcher.patterns):
+                return False
+            if names & set(self.fast_matcher.pattern_hashes):
+                return False
+            if names & set(self.fast_matcher.suffix_arrays):
+                return False
+            if self.fast_matcher.ngram_index and names & set(
+                self.fast_matcher.ngram_index.pattern_ngrams
+            ):
+                return False
+        if self.index_manager and names & set(self.index_manager.pattern_data):
+            return False
+        return self.filter_executor is None
+
     def causalBelief(self, state: list[str],
                     target_class_candidates: Optional[list[str]] = None,
                     stm_events: Optional[list[list[str]]] = None) -> list[dict[str, Any]]:
@@ -823,6 +905,8 @@ class PatternSearcher:
             # Use specified target patterns only (no filtering needed)
             logger.info(f"Using {len(target_class_candidates)} target_class_candidates")
             candidates = target_class_candidates
+
+        candidates = self._filter_retired_candidates(candidates)
 
         results = []
 
@@ -935,6 +1019,7 @@ class PatternSearcher:
                 f"were below recall_threshold={self.recall_threshold:.4f} and filtered out"
             )
 
+        filtered_list = self._filter_retired_predictions(filtered_list)
         logger.debug(f"Built {len(active_list)} predictions, {len(filtered_list)} after final threshold filter")
 
         return filtered_list
@@ -1178,6 +1263,8 @@ class PatternSearcher:
         elif candidates is None:
             candidates = target_class_candidates if target_class_candidates else list(self.patterns_cache.keys())
 
+        candidates = self._filter_retired_candidates(candidates)
+
         # Split candidates into batches for parallel processing
         candidate_batches = [candidates[i:i + batch_size] for i in range(0, len(candidates), batch_size)]
 
@@ -1264,6 +1351,8 @@ class PatternSearcher:
             )
 
         logger.debug(f"Final predictions after threshold filter: {len(filtered_list)}")
+
+        filtered_list = self._filter_retired_predictions(filtered_list)
 
         # Sort by potential and return
         try:

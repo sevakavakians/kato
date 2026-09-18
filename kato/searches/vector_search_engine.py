@@ -29,6 +29,7 @@ import time
 from collections import OrderedDict
 from dataclasses import dataclass
 
+from ..config.session_config import DEFAULT_VECTOR_SEARCH_LIMIT
 from ..config.vectordb_config import VectorDBConfig, get_vector_db_config
 from ..representations.vector_object import VectorObject
 from ..storage import VectorBatch, VectorSearchResult, get_vector_store
@@ -890,16 +891,27 @@ class VectorIndexer:
         else:
             logger.info(f"Indexed {len(new_vectors)} vectors to Qdrant")
 
-    def findNearestPoints(self, query_vector: VectorObject) -> list[str]:
-        """Find the 3 nearest vectors to the query"""
+    def findNearestResults(
+        self,
+        query_vector: VectorObject,
+        k: int = DEFAULT_VECTOR_SEARCH_LIMIT,
+    ) -> list[VectorSearchResult]:
+        """Return ordered nearest-vector results without discarding scores."""
         self.initialize()
 
-        # Perform search
-        results = self.engine.search_sync(
+        return self.engine.search_sync(
             query_vector,
-            k=3,
+            k=k,
             include_vectors=False
         )
+
+    def findNearestPoints(
+        self,
+        query_vector: VectorObject,
+        k: int = DEFAULT_VECTOR_SEARCH_LIMIT,
+    ) -> list[str]:
+        """Return nearest vector IDs while preserving the legacy interface."""
+        results = self.findNearestResults(query_vector, k=k)
 
         # Return vector IDs
         return [r.id for r in results]

@@ -22,7 +22,10 @@ from kato.api.schemas import (
     ObservationResult,
     ObservationSequenceRequest,
     ObservationSequenceResult,
+    PatternBatchRequest,
     PredictionsResponse,
+    PurgeRetiredPatternsResponse,
+    RetirePatternsResponse,
     SessionResponse,
     STMResponse,
 )
@@ -414,6 +417,7 @@ async def observe_in_session(
         session.time = result['time']
         session.percept_data = result['percept_data']
         session.predictions = result.get('predictions', [])
+        # Deliberately do not persist result['vector_search']; it is request-local.
 
         # Save updated session (outside processor lock but inside session lock)
         logger.debug(f"Saving session with STM: {session.stm}")
@@ -426,7 +430,8 @@ async def observe_in_session(
         stm_length=len(session.stm),
         time=session.time,
         unique_id=result.get('unique_id', ''),
-        auto_learned_pattern=result.get('auto_learned_pattern')
+        auto_learned_pattern=result.get('auto_learned_pattern'),
+        vector_search=result.get('vector_search'),
     )
 
 
@@ -520,6 +525,66 @@ async def finalize_training(session_id: str):
         session_id=session_id,
         node_id=session.node_id,
         message=f"Computed Shannon entropy and TF vectors for {result['patterns_processed']} patterns in {result['time_ms']}ms"
+    )
+
+
+@router.post(
+    "/{session_id}/patterns/retire",
+    response_model=RetirePatternsResponse,
+)
+async def retire_session_patterns(session_id: str, data: PatternBatchRequest):
+    """Immediately tombstone several patterns in the session's node."""
+    from kato.services.kato_fastapi import app_state
+
+    session = await app_state.session_manager.get_session(session_id)
+    if not session:
+        raise HTTPException(404, detail=f"Session {session_id} not found or expired")
+
+    processor = await app_state.processor_manager.get_processor(
+        session.node_id, session.session_config
+    )
+    lock = await app_state.session_manager.get_session_lock(session_id)
+    async with lock:
+        result = processor.retire_patterns(data.pattern_ids)
+        session.predictions = processor.pattern_processor.filter_retired_predictions(
+            session.predictions
+        )
+        await app_state.session_manager.update_session(session)
+
+    return RetirePatternsResponse(
+        session_id=session_id,
+        node_id=session.node_id,
+        **result,
+    )
+
+
+@router.post(
+    "/{session_id}/patterns/purge-retired",
+    response_model=PurgeRetiredPatternsResponse,
+)
+async def purge_session_retired_patterns(session_id: str, data: PatternBatchRequest):
+    """Physically purge a batch, but only where a node tombstone exists."""
+    from kato.services.kato_fastapi import app_state
+
+    session = await app_state.session_manager.get_session(session_id)
+    if not session:
+        raise HTTPException(404, detail=f"Session {session_id} not found or expired")
+
+    processor = await app_state.processor_manager.get_processor(
+        session.node_id, session.session_config
+    )
+    lock = await app_state.session_manager.get_session_lock(session_id)
+    async with lock:
+        result = await processor.purge_retired_patterns(data.pattern_ids)
+        session.predictions = processor.pattern_processor.filter_retired_predictions(
+            session.predictions
+        )
+        await app_state.session_manager.update_session(session)
+
+    return PurgeRetiredPatternsResponse(
+        session_id=session_id,
+        node_id=session.node_id,
+        **result,
     )
 
 
@@ -867,8 +932,11 @@ async def get_session_cognition_data(session_id: str):
     # Use processor's stateless get_cognition_data method
     cognition_data = processor.get_cognition_data(session)
 
-    # Add predictions and time from session
-    cognition_data['predictions'] = session.predictions
+    # Add predictions and time from session. A session may hold a snapshot
+    # created before a pattern was retired, so apply the same final barrier.
+    cognition_data['predictions'] = processor.pattern_processor.filter_retired_predictions(
+        session.predictions
+    )
     cognition_data['time'] = session.time
 
     return {

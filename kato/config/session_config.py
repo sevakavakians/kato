@@ -13,6 +13,22 @@ from typing import Any, Optional
 
 logger = logging.getLogger('kato.config.session_config')
 
+DEFAULT_VECTOR_EVENT_MODE = 'neighbors_plus_self'
+VECTOR_EVENT_MODE_SELF_ONLY = 'self_only'
+DEFAULT_VECTOR_SEARCH_LIMIT = 20
+MAX_VECTOR_SEARCH_LIMIT = 100
+DEFAULT_RETURN_VECTOR_SEARCH_RESULTS = False
+DEFAULT_SINGLE_SYMBOL_MATCH_MODE = 'first_token'
+SINGLE_SYMBOL_MATCH_FIRST_EVENT_CONTAINS = 'first_event_contains'
+VALID_VECTOR_EVENT_MODES = frozenset({
+    DEFAULT_VECTOR_EVENT_MODE,
+    VECTOR_EVENT_MODE_SELF_ONLY,
+})
+VALID_SINGLE_SYMBOL_MATCH_MODES = frozenset({
+    DEFAULT_SINGLE_SYMBOL_MATCH_MODE,
+    SINGLE_SYMBOL_MATCH_FIRST_EVENT_CONTAINS,
+})
+
 
 @dataclass
 class SessionConfiguration:
@@ -34,7 +50,11 @@ class SessionConfiguration:
 
     # Processing Configuration
     indexer_type: Optional[str] = None  # Vector indexer type (e.g., 'VI')
+    vector_event_mode: Optional[str] = None  # 'neighbors_plus_self' or 'self_only'
+    vector_search_limit: Optional[int] = None  # 1-100 nearest vector candidates
+    return_vector_search_results: Optional[bool] = None  # Include request-local search diagnostics
     max_predictions: Optional[int] = None  # 1-10000 (prediction limit)
+    single_symbol_match_mode: Optional[str] = None  # 'first_token' or 'first_event_contains'
     sort_symbols: Optional[bool] = None  # Whether to sort symbols alphabetically
     process_predictions: Optional[bool] = None  # Whether to process predictions
     use_token_matching: Optional[bool] = None  # Token-level vs character-level matching
@@ -112,6 +132,34 @@ class SessionConfiguration:
                 if self.indexer_type not in valid_indexers:
                     logger.error(f"Invalid indexer_type: {self.indexer_type}")
                     return False
+
+            # Validate vector_event_mode
+            if (self.vector_event_mode is not None and
+                    self.vector_event_mode not in VALID_VECTOR_EVENT_MODES):
+                logger.error(f"Invalid vector_event_mode: {self.vector_event_mode}")
+                return False
+
+            # Validate vector_search_limit
+            if (self.vector_search_limit is not None and
+                    (isinstance(self.vector_search_limit, bool) or
+                     not isinstance(self.vector_search_limit, int) or
+                     not 1 <= self.vector_search_limit <= MAX_VECTOR_SEARCH_LIMIT)):
+                logger.error(f"Invalid vector_search_limit: {self.vector_search_limit}")
+                return False
+
+            # Validate return_vector_search_results
+            if (self.return_vector_search_results is not None and
+                    not isinstance(self.return_vector_search_results, bool)):
+                logger.error(
+                    "Invalid return_vector_search_results: "
+                    f"{self.return_vector_search_results}"
+                )
+                return False
+
+            if (self.single_symbol_match_mode is not None and
+                    self.single_symbol_match_mode not in VALID_SINGLE_SYMBOL_MATCH_MODES):
+                logger.error(f"Invalid single_symbol_match_mode: {self.single_symbol_match_mode}")
+                return False
 
             # Normalize and validate stm_mode
             if self.stm_mode is not None:
@@ -276,7 +324,9 @@ class SessionConfiguration:
         # Filter only valid fields
         valid_fields = {
             'max_pattern_length', 'persistence', 'recall_threshold', 'stm_mode',
-            'indexer_type', 'max_predictions', 'sort_symbols', 'process_predictions',
+            'indexer_type', 'vector_event_mode', 'vector_search_limit',
+            'return_vector_search_results', 'max_predictions', 'single_symbol_match_mode',
+            'sort_symbols', 'process_predictions',
             'use_token_matching', 'fuzzy_token_threshold', 'rank_sort_algo', 'affinity_emotive',
             'session_id', 'node_id', 'version',
             # Filter pipeline fields
@@ -314,7 +364,9 @@ class SessionConfiguration:
 
         config_keys = [
             'max_pattern_length', 'persistence', 'recall_threshold',
-            'indexer_type', 'max_predictions', 'sort_symbols', 'process_predictions',
+            'indexer_type', 'vector_event_mode', 'vector_search_limit',
+            'return_vector_search_results', 'max_predictions', 'single_symbol_match_mode',
+            'sort_symbols', 'process_predictions',
             'use_token_matching', 'fuzzy_token_threshold', 'stm_mode', 'rank_sort_algo', 'affinity_emotive',
             # Filter pipeline configuration
             'filter_pipeline', 'length_min_ratio', 'length_max_ratio',
@@ -347,7 +399,9 @@ class SessionConfiguration:
 
         config_keys = [
             'max_pattern_length', 'persistence', 'recall_threshold',
-            'indexer_type', 'max_predictions', 'sort_symbols', 'process_predictions',
+            'indexer_type', 'vector_event_mode', 'vector_search_limit',
+            'return_vector_search_results', 'max_predictions', 'single_symbol_match_mode',
+            'sort_symbols', 'process_predictions',
             'use_token_matching', 'fuzzy_token_threshold', 'stm_mode', 'rank_sort_algo', 'affinity_emotive',
             # Filter pipeline configuration
             'filter_pipeline', 'length_min_ratio', 'length_max_ratio',

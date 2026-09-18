@@ -278,21 +278,17 @@ class ClickHouseWriter:
 
         count = len(self._write_buffer)
         try:
-            # async_insert=1: server-side batches inserts across all clients
-            #   (multi-worker safe; batches flush at ~1 MiB or busy_timeout
-            #   ~200ms). wait_for_async_insert=0 returns immediately after
-            #   enqueueing to the server-side buffer — visibility lags the
-            #   call by up to busy_timeout but holds no HTTP connection
-            #   hostage. finalize_training calls flush_if_pending (no-op for
-            #   the client buffer) and then queries ClickHouse with a small
-            #   post-training delay, so missing-at-query-time is not a concern.
+            # async_insert=1 keeps server-side batching across clients.
+            # wait_for_async_insert=1 is required because Redis is updated after
+            # this call; acknowledging before ClickHouse commits can otherwise
+            # leave a Redis-only pattern if the async insert is lost.
             self.client.insert(
                 'kato.patterns_data',
                 self._write_buffer,
                 column_names=self._column_names,
                 settings={
                     'async_insert': 1,
-                    'wait_for_async_insert': 0,
+                    'wait_for_async_insert': 1,
                 },
             )
             logger.debug(f"Flushed {count} patterns to ClickHouse (kb_id={self.kb_id})")
@@ -647,3 +643,123 @@ class ClickHouseWriter:
                 return True
             logger.error(f"Failed to drop metadata partition for {self.kb_id}: {e}")
             raise
+    def get_patterns_data_batch(self, pattern_names: list[str]) -> dict[str, dict[str, Any]]:
+        """Retrieve a bounded set of patterns for durable purge snapshots."""
+        names = list(dict.fromkeys(pattern_names))
+        if not names:
+            return {}
+        self.flush_if_pending()
+        result = self.client.query(
+            "SELECT name, pattern_data, length FROM kato.patterns_data "
+            "WHERE kb_id = {kb_id:String} "
+            "AND has({pattern_names:Array(String)}, name)",
+            parameters={'kb_id': self.kb_id, 'pattern_names': names},
+        )
+        return {
+            name: {'name': name, 'pattern_data': pattern_data, 'length': length}
+            for name, pattern_data, length in result.result_rows
+        }
+
+    def get_present_pattern_names(self, pattern_names: list[str]) -> set[str]:
+        """Return which requested pattern rows still exist in ClickHouse."""
+        names = list(dict.fromkeys(pattern_names))
+        if not names:
+            return set()
+        result = self.client.query(
+            "SELECT DISTINCT name FROM kato.patterns_data "
+            "WHERE kb_id = {kb_id:String} "
+            "AND has({pattern_names:Array(String)}, name)",
+            parameters={'kb_id': self.kb_id, 'pattern_names': names},
+        )
+        return {row[0] for row in result.result_rows}
+
+    def get_present_lsh_pattern_names(self, pattern_names: list[str]) -> set[str]:
+        """Return requested IDs still present in the optional LSH table."""
+        names = list(dict.fromkeys(pattern_names))
+        if not names:
+            return set()
+        result = self.client.query(
+            "SELECT DISTINCT pattern_name FROM kato.lsh_buckets "
+            "WHERE kb_id = {kb_id:String} "
+            "AND has({pattern_names:Array(String)}, pattern_name)",
+            parameters={'kb_id': self.kb_id, 'pattern_names': names},
+        )
+        return {row[0] for row in result.result_rows}
+
+    def get_present_metadata_pattern_names(self, pattern_names: list[str]) -> set[str]:
+        """Strict sidecar presence check; query failures must prevent purge success."""
+        names = list(dict.fromkeys(pattern_names))
+        if not names:
+            return set()
+        result = self.client.query(
+            "SELECT DISTINCT name FROM kato.patterns_metadata "
+            "WHERE kb_id = {kb_id:String} "
+            "AND has({pattern_names:Array(String)}, name)",
+            parameters={'kb_id': self.kb_id, 'pattern_names': names},
+        )
+        return {row[0] for row in result.result_rows}
+
+    def invalidate_precomputed_metrics(self) -> int:
+        """Clear finalized metrics on all physical rows, preserving user metadata.
+
+        Updating every version avoids argMax skipping a new NULL and exposing
+        an older finalized value in this ReplacingMergeTree sidecar.
+        """
+        safe_kb_id = validate_kb_id(self.kb_id)
+        query = (
+            "SELECT count() FROM kato.patterns_metadata "
+            "WHERE kb_id = {kb_id:String} AND "
+            "(entropy IS NOT NULL OR normalized_entropy IS NOT NULL OR "
+            "global_normalized_entropy IS NOT NULL OR tf_vector != '{}')"
+        )
+        parameters = {'kb_id': self.kb_id}
+        count = int(self.client.query(query, parameters=parameters).result_rows[0][0])
+        self.client.command(
+            "ALTER TABLE kato.patterns_metadata UPDATE "
+            "entropy = NULL, normalized_entropy = NULL, "
+            "global_normalized_entropy = NULL, tf_vector = '{}' "
+            f"WHERE kb_id = '{safe_kb_id}'",
+            settings={'mutations_sync': 2},
+        )
+        remaining = int(self.client.query(query, parameters=parameters).result_rows[0][0])
+        if remaining:
+            raise RuntimeError("ClickHouse precomputed metric invalidation failed")
+        return count
+
+    def purge_patterns(self, pattern_names: list[str]) -> int:
+        """Synchronously purge node-scoped rows, sidecar metadata and indices.
+
+        Validate identifiers before any mutation because ClickHouse ALTER
+        predicates cannot use the query parameter binding path.
+        """
+        names = list(dict.fromkeys(pattern_names))
+        if not names:
+            return 0
+        safe_kb_id = validate_kb_id(self.kb_id)
+        safe_names = [validate_pattern_name(name) for name in names]
+        names_sql = ', '.join(f"'{name}'" for name in safe_names)
+        self.flush_if_pending()
+        for table, column in (
+            ('patterns_data', 'name'),
+            ('patterns_metadata', 'name'),
+            ('lsh_buckets', 'pattern_name'),
+        ):
+            self.client.command(
+                f"ALTER TABLE kato.{table} DELETE WHERE kb_id = '{safe_kb_id}' "
+                f"AND {column} IN ({names_sql})",
+                settings={'mutations_sync': 2},
+            )
+        self.client.command(
+            f"ALTER TABLE kato.pattern_stats DELETE WHERE kb_id = '{safe_kb_id}'",
+            settings={'mutations_sync': 2},
+        )
+        remaining = self.get_present_pattern_names(names)
+        remaining_lsh = self.get_present_lsh_pattern_names(names)
+        remaining_metadata = self.get_present_metadata_pattern_names(names)
+        if remaining or remaining_lsh or remaining_metadata:
+            raise RuntimeError(
+                "ClickHouse purge verification failed: "
+                f"patterns={sorted(remaining)}, lsh={sorted(remaining_lsh)}, "
+                f"metadata={sorted(remaining_metadata)}"
+            )
+        return len(names)

@@ -15,6 +15,7 @@ import json
 import logging
 import time
 from typing import Any, Optional
+from uuid import uuid4
 
 try:
     import redis.asyncio as redis
@@ -43,14 +44,17 @@ class MetricsCacheManager:
         self.ttl = ttl
         self.redis = None
         self.cache_prefix = "kato:metrics"
-        self.index_key = f"{self.cache_prefix}:_index"
+        # Outside the legacy cache prefix so an older invalidator cannot delete
+        # the generation token while versioned values are still alive.
+        self.generation_key = "kato:metrics_generation:v1"
 
         # Cache hit/miss statistics
         self.stats = {
             "hits": 0,
             "misses": 0,
             "updates": 0,
-            "evictions": 0
+            "evictions": 0,
+            "invalidations": 0
         }
 
         # Metric calculation counters
@@ -117,7 +121,33 @@ class MetricsCacheManager:
 
         return f"{self.cache_prefix}:{metric_type}:{params_hash}"
 
-    async def get_cached_metric(self, metric_type: str, **kwargs) -> Optional[float]:
+    async def get_cache_generation(self) -> Optional[str]:
+        """Get a shared cache version without enumerating Redis keys.
+
+        A random token prevents old TTL entries from becoming reachable again
+        if the generation key is lost. SET NX handles concurrent initialization.
+        Redis failures disable caching for that calculation.
+        """
+        if not self.redis:
+            return None
+        try:
+            generation = await self.redis.get(self.generation_key)
+            if generation is None:
+                await self.redis.set(self.generation_key, uuid4().hex, nx=True)
+                generation = await self.redis.get(self.generation_key)
+            if not generation:
+                return None
+            return generation.decode("ascii") if isinstance(generation, bytes) else str(generation)
+        except Exception as e:
+            logger.warning(f"Failed to read metrics cache generation: {e}")
+            return None
+
+    def _versioned_cache_key(self, generation: str, metric_type: str, **kwargs) -> str:
+        return f"{self._generate_cache_key(metric_type, **kwargs)}:v2:{generation}"
+
+    async def get_cached_metric(
+        self, metric_type: str, *, cache_generation: Optional[str] = None, **kwargs
+    ) -> Optional[float]:
         """
         Retrieve cached metric value.
 
@@ -132,7 +162,10 @@ class MetricsCacheManager:
             return None
 
         try:
-            cache_key = self._generate_cache_key(metric_type, **kwargs)
+            generation = cache_generation or await self.get_cache_generation()
+            if generation is None:
+                return None
+            cache_key = self._versioned_cache_key(generation, metric_type, **kwargs)
             cached_value = await self.redis.get(cache_key)
 
             if cached_value is not None:
@@ -147,7 +180,10 @@ class MetricsCacheManager:
             self.stats["misses"] += 1
             return None
 
-    async def cache_metric(self, metric_type: str, value: float, **kwargs) -> bool:
+    async def cache_metric(
+        self, metric_type: str, value: float, *,
+        cache_generation: Optional[str] = None, **kwargs
+    ) -> bool:
         """
         Cache calculated metric value.
 
@@ -163,14 +199,11 @@ class MetricsCacheManager:
             return False
 
         try:
-            cache_key = self._generate_cache_key(metric_type, **kwargs)
-            # Pipeline the SET and index update so they're a single round-trip.
-            # The index lets invalidation skip a full-keyspace KEYS scan.
-            pipe = self.redis.pipeline(transaction=False)
-            pipe.setex(cache_key, self.ttl, str(value))
-            pipe.sadd(self.index_key, cache_key)
-            pipe.expire(self.index_key, self.ttl * 2)
-            await pipe.execute()
+            generation = cache_generation or await self.get_cache_generation()
+            if generation is None:
+                return False
+            cache_key = self._versioned_cache_key(generation, metric_type, **kwargs)
+            await self.redis.setex(cache_key, self.ttl, str(value))
             self.stats["updates"] += 1
             return True
 
@@ -178,64 +211,38 @@ class MetricsCacheManager:
             logger.warning(f"Failed to cache metric {metric_type}: {e}")
             return False
 
-    async def _invalidate_indexed_keys(self) -> int:
-        """
-        Drop every cache key tracked in the index, then clear the index.
-
-        Uses SMEMBERS + UNLINK pipeline (UNLINK is non-blocking, unlike DEL on
-        large sets). Avoids the O(total-keyspace) cost of a KEYS scan.
-        """
-        cache_keys = await self.redis.smembers(self.index_key)
-        if not cache_keys:
-            return 0
-
-        pipe = self.redis.pipeline(transaction=False)
-        for key in cache_keys:
-            pipe.unlink(key)
-        pipe.unlink(self.index_key)
-        await pipe.execute()
-        return len(cache_keys)
-
     async def invalidate_pattern_metrics(self, pattern_name: str) -> int:
         """
-        Invalidate all cached metrics that depend on a specific pattern.
+        Logically invalidate the metric cache after a pattern changes.
+
+        Preserve the existing global invalidation scope, but rotate one shared
+        token instead of scanning the database after every learned pattern.
+        Old cache values are left to expire through their existing TTL.
 
         Args:
             pattern_name: Name of the pattern that was updated
 
         Returns:
-            Number of keys invalidated
+            1 if the cache generation was rotated, otherwise 0. This is not a
+            count of deleted keys; no keys are enumerated or deleted.
         """
-        if not self.redis:
-            return 0
-
-        try:
-            invalidated = await self._invalidate_indexed_keys()
-            if invalidated:
-                self.stats["evictions"] += invalidated
-                logger.debug(f"Invalidated {invalidated} metric cache entries for pattern {pattern_name}")
-            return invalidated
-
-        except Exception as e:
-            logger.warning(f"Failed to invalidate metrics cache for pattern {pattern_name}: {e}")
-            return 0
+        return await self.invalidate_all_metrics()
 
     async def invalidate_all_metrics(self) -> int:
         """
-        Invalidate all cached metrics (useful when data structure changes).
+        Rotate the shared cache generation in constant work, with no key scan.
 
         Returns:
-            Number of keys invalidated
+            1 if the generation was rotated, otherwise 0 (not a key count).
         """
         if not self.redis:
             return 0
 
         try:
-            invalidated = await self._invalidate_indexed_keys()
-            if invalidated:
-                self.stats["evictions"] += invalidated
-                logger.info(f"Invalidated all {invalidated} metric cache entries")
-            return invalidated
+            if not await self.redis.set(self.generation_key, uuid4().hex):
+                return 0
+            self.stats["invalidations"] += 1
+            return 1
 
         except Exception as e:
             logger.warning(f"Failed to invalidate all metrics cache: {e}")
@@ -332,8 +339,12 @@ class CachedMetricsCalculator:
             "total_symbols": total_symbols
         }
 
-        # Try to get cached value
-        cached_value = await self.cache_manager.get_cached_metric("normalized_entropy", **cache_params)
+        # Pin the generation across lookup, calculation, and publication. An
+        # invalidation during calculation must not populate the new generation.
+        generation = await self.cache_manager.get_cache_generation()
+        cached_value = await self.cache_manager.get_cached_metric(
+            "normalized_entropy", cache_generation=generation, **cache_params
+        ) if generation is not None else None
         if cached_value is not None:
             return cached_value
 
@@ -348,7 +359,10 @@ class CachedMetricsCalculator:
             calculation_time = time.time() - start_time
 
             # Cache the result
-            await self.cache_manager.cache_metric("normalized_entropy", result, **cache_params)
+            if generation is not None:
+                await self.cache_manager.cache_metric(
+                    "normalized_entropy", result, cache_generation=generation, **cache_params
+                )
             self.cache_manager.record_calculation_time("normalized_entropy", calculation_time)
 
             return result
@@ -379,7 +393,10 @@ class CachedMetricsCalculator:
             "total_symbols": total_symbols
         }
 
-        cached_value = await self.cache_manager.get_cached_metric("global_normalized_entropy", **cache_params)
+        generation = await self.cache_manager.get_cache_generation()
+        cached_value = await self.cache_manager.get_cached_metric(
+            "global_normalized_entropy", cache_generation=generation, **cache_params
+        ) if generation is not None else None
         if cached_value is not None:
             return cached_value
 
@@ -391,7 +408,10 @@ class CachedMetricsCalculator:
             result = global_normalized_entropy(state, symbol_probability_cache, total_symbols)
             calculation_time = time.time() - start_time
 
-            await self.cache_manager.cache_metric("global_normalized_entropy", result, **cache_params)
+            if generation is not None:
+                await self.cache_manager.cache_metric(
+                    "global_normalized_entropy", result, cache_generation=generation, **cache_params
+                )
             self.cache_manager.record_calculation_time("global_normalized_entropy", calculation_time)
 
             return result
@@ -419,7 +439,10 @@ class CachedMetricsCalculator:
             ).hexdigest()
         }
 
-        cached_value = await self.cache_manager.get_cached_metric("conditional_probability", **cache_params)
+        generation = await self.cache_manager.get_cache_generation()
+        cached_value = await self.cache_manager.get_cached_metric(
+            "conditional_probability", cache_generation=generation, **cache_params
+        ) if generation is not None else None
         if cached_value is not None:
             return cached_value
 
@@ -431,7 +454,10 @@ class CachedMetricsCalculator:
             result = conditionalProbability(state, symbol_probabilities)
             calculation_time = time.time() - start_time
 
-            await self.cache_manager.cache_metric("conditional_probability", result, **cache_params)
+            if generation is not None:
+                await self.cache_manager.cache_metric(
+                    "conditional_probability", result, cache_generation=generation, **cache_params
+                )
             self.cache_manager.record_calculation_time("conditional_probability", calculation_time)
 
             return result

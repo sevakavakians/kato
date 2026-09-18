@@ -220,6 +220,14 @@ class KatoProcessor:
         """Delete pattern - delegates to pattern operations"""
         return self.pattern_operations.delete_pattern(name)
 
+    def retire_patterns(self, pattern_ids: list[str]) -> dict:
+        """Retire a node-scoped batch without changing learned pattern data."""
+        return self.pattern_operations.retire_patterns(pattern_ids)
+
+    async def purge_retired_patterns(self, pattern_ids: list[str]) -> dict:
+        """Physically purge a node-scoped batch of retired patterns."""
+        return await self.pattern_operations.purge_retired_patterns(pattern_ids)
+
     def update_pattern(self, name, frequency, emotives):
         """Update pattern - delegates to pattern operations"""
         return self.pattern_operations.update_pattern(name, frequency, emotives)
@@ -308,7 +316,7 @@ class KatoProcessor:
                 logger.warning(f"Failed to publish observation to distributed STM: {e}")
 
         # Return new state (no mutation of inputs)
-        return {
+        new_state = {
             'status': 'observed',
             'stm': new_stm,
             'time': new_time,
@@ -321,6 +329,9 @@ class KatoProcessor:
             'symbols': result.get('symbols', []),
             'instance_id': self.id
         }
+        if 'vector_search' in result:
+            new_state['vector_search'] = result['vector_search']
+        return new_state
 
     async def get_predictions(
         self,

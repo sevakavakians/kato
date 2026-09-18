@@ -24,6 +24,10 @@ class ObservationResult(BaseModel):
     time: int = Field(..., description="Session time counter")
     unique_id: Optional[str] = Field(None, description="Unique observation ID")
     auto_learned_pattern: Optional[str] = Field(None, description="Auto-learned pattern name if any")
+    vector_search: Optional[dict[str, Any]] = Field(
+        None,
+        description="Request-local vector search results when explicitly enabled",
+    )
 
 
 class STMResponse(BaseModel):

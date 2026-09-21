@@ -38,6 +38,24 @@ def _truthy(val: Optional[str]) -> bool:
     return (val or "").lower() in {"1", "true", "yes", "on"}
 
 
+def split_statements(sql: str) -> list:
+    """Split a .sql file into individual statements.
+
+    Kept in lockstep with scripts/apply_clickhouse_schema.py (this file is
+    vendored into a ConfigMap, so it cannot import from the repo). Line
+    comments are stripped before splitting rather than after: splitting on ';'
+    alone leaves each statement glued to the comment block above it, so a later
+    `startswith('--')` filter discards the statement along with the comment --
+    which silently reduced init.sql to three unrunnable fragments.
+    """
+    code_lines = []
+    for line in sql.splitlines():
+        code = line.split("--", 1)[0]
+        if code.strip():
+            code_lines.append(code)
+    return [stmt.strip() for stmt in "\n".join(code_lines).split(";") if stmt.strip()]
+
+
 def bootstrap_clickhouse() -> None:
     import clickhouse_connect
 
@@ -67,8 +85,7 @@ def bootstrap_clickhouse() -> None:
         raise SystemExit(f"ClickHouse init SQL not found at {sql_path}")
     log.info("Applying schema from %s", sql_path)
 
-    statements = [s.strip() for s in sql_path.read_text().split(";") if s.strip() and not s.strip().startswith("--")]
-    for stmt in statements:
+    for stmt in split_statements(sql_path.read_text()):
         first_line = stmt.splitlines()[0][:80]
         log.info("  -> %s", first_line)
         client.command(stmt)

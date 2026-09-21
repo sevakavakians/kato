@@ -1,12 +1,16 @@
 -- KATO Pattern Data Storage Schema
 -- ClickHouse table for billion-scale pattern matching
+--
+-- Every table is database-qualified and there is no `USE kato`: the HTTP
+-- interface runs one statement per request with no session carried between
+-- them, so any applier that sends statements individually (scripts/
+-- apply_clickhouse_schema.py, the Helm bootstrap Job) would otherwise create
+-- these tables in `default`.
 
 CREATE DATABASE IF NOT EXISTS kato;
 
-USE kato;
-
 -- Main patterns_data table with node isolation via kb_id partitioning
-CREATE TABLE IF NOT EXISTS patterns_data (
+CREATE TABLE IF NOT EXISTS kato.patterns_data (
     -- Node isolation (MUST be first for partition pruning)
     kb_id String,                         -- Knowledge base / node / processor identifier
 
@@ -37,17 +41,17 @@ ORDER BY (kb_id, length, name)            -- Partition pruning + range queries
 SETTINGS index_granularity = 8192;
 
 -- Secondary indexes for fast filtering
-ALTER TABLE patterns_data
+ALTER TABLE kato.patterns_data
     ADD INDEX IF NOT EXISTS idx_length length TYPE minmax GRANULARITY 4;
 
-ALTER TABLE patterns_data
+ALTER TABLE kato.patterns_data
     ADD INDEX IF NOT EXISTS idx_token_bloom token_set TYPE bloom_filter(0.01) GRANULARITY 4;
 
-ALTER TABLE patterns_data
+ALTER TABLE kato.patterns_data
     ADD INDEX IF NOT EXISTS idx_token_count token_count TYPE minmax GRANULARITY 4;
 
 -- LSH buckets table (optional, for more efficient LSH lookups) with node isolation
-CREATE TABLE IF NOT EXISTS lsh_buckets (
+CREATE TABLE IF NOT EXISTS kato.lsh_buckets (
     kb_id String,                         -- Knowledge base / node identifier (for isolation)
     band_index UInt8,                     -- Band number (0-19)
     band_hash UInt64,                     -- Hash of the band
@@ -57,7 +61,7 @@ PARTITION BY kb_id                        -- Physical isolation per node
 ORDER BY (kb_id, band_hash, pattern_name);
 
 -- Statistics table for monitoring (per kb_id for node-specific metrics)
-CREATE TABLE IF NOT EXISTS pattern_stats (
+CREATE TABLE IF NOT EXISTS kato.pattern_stats (
     kb_id String,                         -- Knowledge base / node identifier
     date Date,
     total_patterns UInt64,
@@ -76,7 +80,7 @@ ORDER BY (kb_id, date);
 -- `version` is a strictly-monotonic time.time_ns() stamp from the writer, so a later write
 -- to the same (kb_id, name) always wins — even within the same wall-clock second. (The prior
 -- DateTime `updated_at` version tied at 1-second resolution and could return a stale row.)
-CREATE TABLE IF NOT EXISTS patterns_metadata (
+CREATE TABLE IF NOT EXISTS kato.patterns_metadata (
     kb_id                     String,                    -- Knowledge base / node identifier
     name                      String,                    -- Pattern SHA1 hash
     emotives                  String  DEFAULT '[]',      -- JSON list of dicts (rolling window)

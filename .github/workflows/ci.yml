@@ -58,6 +58,14 @@ jobs:
       clickhouse:
         image: clickhouse/clickhouse-server:24.8
         ports: ['8123:8123', '9000:9000']
+        # Without this the image logs "neither CLICKHOUSE_USER nor
+        # CLICKHOUSE_PASSWORD is set, disabling network access for user
+        # 'default'" and every request from the runner (which reaches the
+        # service over the mapped port, i.e. not from inside the container)
+        # fails with AUTHENTICATION_FAILED. Test-only credentials-free access;
+        # the compose stack and the chart both go through users.xml/secrets.
+        env:
+          CLICKHOUSE_SKIP_USER_SETUP: '1'
         options: >-
           --health-cmd "wget -qO- http://localhost:8123/ping || exit 1"
           --health-interval 10s
@@ -85,13 +93,12 @@ jobs:
           pip install --disable-pip-version-check -r tests/requirements.txt
 
       - name: Initialise ClickHouse schema
-        run: |
-          set -eu
-          for _ in $(seq 1 30); do
-            if curl -sf http://localhost:8123/ping >/dev/null; then break; fi
-            sleep 2
-          done
-          curl -sf --data-binary @config/clickhouse/init.sql http://localhost:8123/
+        # ClickHouse's HTTP interface runs one statement per request, so the
+        # schema cannot be POSTed as a single file (error 62, "Multi-statements
+        # are not allowed"). The script sends the statements individually,
+        # fails explicitly if the server never becomes ready, and prints the
+        # server's error body instead of a bare curl exit code.
+        run: python scripts/apply_clickhouse_schema.py --wait 60
 
       - name: Import check
         # Cheap guard against a deleted module still being imported somewhere:

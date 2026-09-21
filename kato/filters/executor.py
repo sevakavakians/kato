@@ -8,9 +8,11 @@ optimization of database queries.
 import logging
 import time
 from itertools import chain
+from os import environ
 from typing import Any, Dict, List, Optional, Set
 
 from kato.filters.base import PatternFilter
+from kato.filters.recall_bounds import build_pattern_query, compute_recall_bound
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +35,9 @@ class FilterPipelineExecutor:
                  redis_client: Any,
                  kb_id: str,
                  bloom_filter: Optional[Any] = None,
-                 extractor: Optional[Any] = None):
+                 extractor: Optional[Any] = None,
+                 recall_threshold: Optional[float] = None,
+                 use_token_matching: bool = False):
         """
         Initialize filter pipeline executor.
 
@@ -45,9 +49,26 @@ class FilterPipelineExecutor:
             kb_id: Knowledge base / node / processor identifier (for isolation)
             bloom_filter: Optional Bloom filter instance
             extractor: Optional prediction info extractor (for RapidFuzz)
+            recall_threshold: The RESOLVED threshold the scorer will use. Must
+                come from PatternSearcher, not from ``config`` -- session config
+                fields default to None, and a bound computed from a different
+                threshold than the scorer uses is silent recall loss.
+            use_token_matching: The RESOLVED matching mode, same rule.
+
+        Both bound-related defaults DISABLE the bound, so any construction site
+        that is not updated fails open to the pre-bound behaviour.
         """
         self.config = config
         self.state = state
+        self.recall_threshold = recall_threshold
+        self.use_token_matching = use_token_matching
+
+        # Kill switch. Rollback is this flag plus a restart; when disabled the
+        # query emitted is byte-identical to the pre-bound one.
+        self.recall_bound_enabled = environ.get(
+            'KATO_RECALL_BOUND_ENABLED', 'true').lower() == 'true'
+        self.recall_bound_audit = environ.get(
+            'KATO_RECALL_BOUND_AUDIT', 'false').lower() == 'true'
         self.clickhouse = clickhouse_client
         self.redis = redis_client
         self.kb_id = kb_id  # For ClickHouse partition pruning
@@ -73,27 +94,112 @@ class FilterPipelineExecutor:
 
     def _get_all_patterns(self) -> Set[str]:
         """
-        Query all patterns from database (with kb_id filtering).
-        Used when filter_pipeline is empty to bypass filtering.
+        Query candidate patterns from the database (with kb_id filtering).
+
+        Used when ``filter_pipeline`` is empty -- which is the default, so this
+        is the live path for every prediction.
+
+        This is no longer "no filtering": a recall-safe bound is applied
+        server-side when one can be established (see
+        :mod:`kato.filters.recall_bounds`). The bound only ever removes patterns
+        that provably cannot reach ``recall_threshold``, so the candidate set
+        the scorer sees is unchanged in every way that affects output.
 
         Returns:
-            Set of all pattern names in the knowledge base
+            Set of candidate pattern names in the knowledge base
         """
-        query = """
-            SELECT name, pattern_data, length
-            FROM patterns_data
-            WHERE kb_id = %(kb_id)s
-        """
+        # Computed per call, not per executor: the executor is cached and reused
+        # across requests while ``state`` is reassigned for each one.
+        bound = compute_recall_bound(
+            state=self.state,
+            recall_threshold=self.recall_threshold,
+            use_token_matching=self.use_token_matching,
+            enabled=self.recall_bound_enabled,
+        )
+        query, params = build_pattern_query(bound)
+        params['kb_id'] = self.kb_id
 
+        started = time.time()
         try:
-            result = self.clickhouse.query(query, parameters={'kb_id': self.kb_id})
-            all_patterns = self._cache_result_rows(result)
-            logger.info(f"Retrieved {len(all_patterns)} patterns from database (no filtering)")
-            return all_patterns
-
+            result = self.clickhouse.query(query, parameters=params)
+            candidates = self._cache_result_rows(result)
         except Exception as e:
-            logger.error(f"Failed to query all patterns: {e}")
-            return set()
+            # Fail open. Before the bound, an exception here yielded zero
+            # predictions behind an HTTP 200; the bound must not add a second
+            # route to that state.
+            logger.error("Bounded candidate query failed (%s); retrying unbounded", e)
+            try:
+                unbounded_query, unbounded_params = build_pattern_query(
+                    compute_recall_bound(self.state, None, False, enabled=False)
+                )
+                unbounded_params['kb_id'] = self.kb_id
+                result = self.clickhouse.query(unbounded_query, parameters=unbounded_params)
+                candidates = self._cache_result_rows(result)
+            except Exception as retry_error:
+                logger.error("Unbounded retry also failed: %s", retry_error)
+                return set()
+
+        elapsed_ms = (time.time() - started) * 1000
+        self.stage_metrics.append({
+            "filter": "recall_bound",
+            "candidates_after": len(candidates),
+            "time_ms": round(elapsed_ms, 2),
+            "applied": bound.applied,
+            "reason": bound.reason,
+        })
+        logger.info(
+            "Retrieved %d candidate patterns (recall bound applied=%s, reason=%s, %.1fms)",
+            len(candidates), bound.applied, bound.reason, elapsed_ms
+        )
+
+        if self.recall_bound_audit and bound.applied:
+            self._audit_recall_bound(candidates)
+
+        return candidates
+
+    def _audit_recall_bound(self, candidates: Set[str]) -> None:
+        """Shadow-check the bound against the full corpus, in Python.
+
+        Runs the unbounded query too and verifies that nothing the bound removed
+        would have cleared ``recall_threshold``. Expensive by design -- this is
+        for staging and for a short window after a rollout, not steady state.
+        """
+        try:
+            from kato.searches.pattern_search import _lcs_ratio_scorer
+
+            query, params = build_pattern_query(
+                compute_recall_bound(self.state, None, False, enabled=False)
+            )
+            params['kb_id'] = self.kb_id
+            before = dict(self.patterns_cache)
+            full = self._cache_result_rows(self.clickhouse.query(query, parameters=params))
+
+            dropped = full - candidates
+            violations = []
+            for name in dropped:
+                entry = self.patterns_cache.get(name) or {}
+                flat = entry.get('pattern_data_flat')
+                if not flat:
+                    continue
+                similarity = _lcs_ratio_scorer(self.state, flat) / 100.0
+                if similarity >= self.recall_threshold:
+                    violations.append((name, similarity))
+
+            if violations:
+                logger.error(
+                    "RECALL BOUND VIOLATION: %d pattern(s) dropped by the bound would "
+                    "have scored >= recall_threshold=%s. First 5: %s",
+                    len(violations), self.recall_threshold, violations[:5]
+                )
+            else:
+                logger.info(
+                    "Recall bound audit clean: %d of %d patterns dropped, none reachable",
+                    len(dropped), len(full)
+                )
+            # Do not let the audit's extra rows leak into the request's cache.
+            self.patterns_cache = before
+        except Exception as e:
+            logger.error("Recall bound audit failed (not a bound failure): %s", e)
 
     @classmethod
     def register_filter(cls, name: str, filter_class: type):
@@ -282,9 +388,14 @@ class FilterPipelineExecutor:
             return existing_candidates if existing_candidates else set()
 
         # CRITICAL: Add kb_id filter FIRST for partition pruning.
-        # Everything is bound server-side -- nothing derived from user input
-        # (STM tokens, session thresholds, kb_id, candidate names) is ever
-        # interpolated into statement text.
+        # Everything derived from user input (STM tokens, session thresholds,
+        # kb_id, candidate names) goes through %(name)s placeholders rather than
+        # f-strings. NOTE: clickhouse-connect resolves these CLIENT-side --
+        # finalize_query() is `query % {k: format_query_value(v)}` -- so the
+        # values are escaped (format_query_value handles quotes and backslashes)
+        # but DO land in the statement text, and therefore count against
+        # ClickHouse's max_query_size. Size the payload accordingly; escaping
+        # protects correctness and safety, not the byte budget.
         parameters: Dict[str, Any] = {'kb_id': self.kb_id}
         filter_params = filter_instance.get_query_parameters()
         for reserved in ('kb_id', 'candidate_names'):

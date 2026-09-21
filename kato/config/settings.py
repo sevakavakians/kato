@@ -211,9 +211,13 @@ class LearningConfig(BaseSettings):
     recall_threshold: float = Field(
         0.1,
         json_schema_extra={'env': 'RECALL_THRESHOLD'},
-        ge=0.0,
+        gt=0.0,
         le=1.0,
-        description="Minimum similarity threshold for pattern matching"
+        description=(
+            "Minimum similarity threshold for pattern matching. Must be > 0: a "
+            "threshold of 0 accepts every pattern regardless of similarity, which "
+            "is never a useful setting and defeats candidate bounding."
+        )
     )
     stm_mode: Literal['CLEAR', 'ROLLING'] = Field(
         'CLEAR',

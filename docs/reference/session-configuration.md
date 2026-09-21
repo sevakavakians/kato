@@ -14,7 +14,7 @@ Session configuration allows per-session customization of KATO's behavior. Each 
 |-----------|------|-------|---------|-------------|
 | `max_pattern_length` | integer | 0+ | 0 | Auto-learn when STM reaches this length (0=manual only) |
 | `persistence` | integer | 1-100 | 5 | Emotive rolling window size |
-| `recall_threshold` | float | 0.0-1.0 | 0.1 | Pattern matching sensitivity threshold |
+| `recall_threshold` | float | >0.0-1.0 | 0.1 | Pattern matching sensitivity threshold |
 | `stm_mode` | string | CLEAR\|ROLLING | CLEAR | STM behavior after auto-learning |
 
 ## Processing Configuration

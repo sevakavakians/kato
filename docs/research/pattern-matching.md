@@ -359,7 +359,7 @@ This layer dramatically reduces the search space before detailed matching.
 |----------|---------|-------------|--------|
 | `KATO_USE_FAST_MATCHING` | `true` | Enable fast matching algorithms | ~10x performance improvement |
 | `KATO_USE_INDEXING` | `true` | Enable pattern indexing | Reduces candidates from O(n) to O(log n) |
-| `RECALL_THRESHOLD` | `0.1` | Minimum similarity for matches (0.0-1.0) | Lower = more results, Higher = stricter |
+| `RECALL_THRESHOLD` | `0.1` | Minimum similarity for matches (>0.0-1.0) | Lower = more results, Higher = stricter |
 | `MAX_PREDICTIONS` | `100` | Maximum predictions to return | Limits result set size |
 
 ### Configuration Examples

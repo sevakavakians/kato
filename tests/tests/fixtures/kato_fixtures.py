@@ -518,8 +518,10 @@ class KATOFastAPIFixture:
 
         Updates session configuration with the new threshold.
         """
-        if not 0.0 <= threshold <= 1.0:
-            raise ValueError(f"recall_threshold must be between 0.0 and 1.0, got {threshold}")
+        if not 0.0 < threshold <= 1.0:
+            raise ValueError(
+                f"recall_threshold must be > 0.0 and <= 1.0, got {threshold}"
+            )
 
         # Update session configuration with new threshold
         self._attempted_threshold = threshold

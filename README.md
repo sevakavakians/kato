@@ -359,7 +359,7 @@ KATO is configured through environment variables with Pydantic-based validation.
 
 ```bash
 MAX_PATTERN_LENGTH=0        # Auto-learn after N observations (0=manual)
-RECALL_THRESHOLD=0.1        # Pattern matching threshold (0.0-1.0)
+RECALL_THRESHOLD=0.1        # Pattern matching threshold (>0.0-1.0)
 STM_MODE="CLEAR"            # STM mode after auto-learn (CLEAR/ROLLING)
 MAX_PREDICTIONS=100         # Maximum predictions to return
 SESSION_TTL=3600            # Session time-to-live (seconds)

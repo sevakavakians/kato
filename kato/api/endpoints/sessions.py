@@ -69,6 +69,22 @@ async def create_session(request: CreateSessionRequest):
     from kato.config.configuration_service import get_configuration_service
     from kato.services.kato_fastapi import app_state
 
+    # Validate create-time config through the same validator the config-update
+    # endpoint uses. Without this, an invalid value here would be swallowed by
+    # SessionConfiguration.update() and silently fall back to the default.
+    config_service = get_configuration_service()
+    if request.config:
+        validation_errors = config_service.validate_configuration_update(request.config)
+        if validation_errors:
+            logger.error(f"Session config validation failed: {validation_errors}")
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "Configuration validation failed",
+                    "validation_errors": validation_errors
+                }
+            )
+
     logger.info(f"Creating session with manager id: {id(app_state.session_manager)}")
     logger.debug(f"Calling session_manager.create_session for node: {request.node_id}")
     session = await app_state.session_manager.create_session(
@@ -80,7 +96,6 @@ async def create_session(request: CreateSessionRequest):
     logger.debug(f"Session created: {session.session_id}")
 
     # Get effective config (merges session config with system defaults)
-    config_service = get_configuration_service()
     defaults = config_service.get_default_configuration()
     effective_config = session.session_config.get_effective_config(defaults) if hasattr(session, 'session_config') else {}
 

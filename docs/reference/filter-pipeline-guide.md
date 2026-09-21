@@ -189,7 +189,7 @@ config = SessionConfiguration(
 ```python
 config = SessionConfiguration(
     filter_pipeline=['rapidfuzz'],
-    recall_threshold=0.3,          # Min similarity (0.0-1.0)
+    recall_threshold=0.3,          # Min similarity (>0.0-1.0)
     use_token_matching=True        # Token-level vs character-level
 )
 ```

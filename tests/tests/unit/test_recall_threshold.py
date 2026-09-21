@@ -27,7 +27,7 @@ from fixtures.test_helpers import sort_event_strings
 # --- Parametrized threshold filtering ---
 
 @pytest.mark.parametrize("threshold,expect_match", [
-    (0.0, True),    # No filtering — all matches returned
+    (0.01, True),   # Near-minimum — effectively no filtering
     (0.1, True),    # Default — very permissive
     (0.3, True),    # Moderate — 2/3 match (sim=0.8) passes
     (0.5, True),    # Balanced — 2/3 match (sim=0.8) passes
@@ -84,42 +84,28 @@ def test_threshold_exact_match_passes_any_threshold(kato_fixture):
     assert len(perfect) >= 1, "Should have at least one prediction with similarity=1.0"
 
 
-def test_threshold_unrelated_observation_zero_similarity(kato_fixture):
-    """Test that completely unrelated observations produce zero-similarity predictions at threshold=0.0.
+def test_threshold_unrelated_observation_yields_no_predictions(kato_fixture):
+    """Unrelated observations must produce no predictions at any valid threshold.
 
-    KATO has a special case: threshold=0.0 includes patterns with similarity=0.0
-    (all symbols missing, all observed symbols are extras). This is correct behavior —
-    threshold=0.0 means "return everything."
+    This previously also covered recall_threshold=0.0, where KATO returned
+    zero-similarity predictions (everything missing, everything an extra). That
+    setting is now rejected at the config boundary, so the zero-similarity path
+    is unreachable and only the positive-threshold behaviour remains testable.
     """
     kato_fixture.clear_all_memory()
-    kato_fixture.set_recall_threshold(0.0)  # Most permissive — includes zero-similarity
+    kato_fixture.set_recall_threshold(0.1)
 
     for item in ['known', 'pattern', 'here']:
         kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
     kato_fixture.learn()
 
-    # Observe symbols that don't appear in any pattern
-    kato_fixture.observe({'strings': ['unknown1'], 'vectors': [], 'emotives': {}})
-    kato_fixture.observe({'strings': ['unknown2'], 'vectors': [], 'emotives': {}})
-    predictions = kato_fixture.get_predictions()
-
-    # With threshold=0.0, KATO returns patterns with similarity=0.0 (all missing, all extras)
-    if len(predictions) > 0:
-        for pred in predictions:
-            assert pred.get('similarity', 0) == 0.0, \
-                f"Unrelated observation should have similarity=0.0, got {pred.get('similarity')}"
-            assert pred.get('matches', ['non-empty']) == [], \
-                f"Unrelated observation should have no matches, got {pred.get('matches')}"
-
-    # With threshold > 0, unrelated observations should produce NO predictions
-    kato_fixture.set_recall_threshold(0.1)
     kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': ['unknown3'], 'vectors': [], 'emotives': {}})
     kato_fixture.observe({'strings': ['unknown4'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
 
     assert len(predictions) == 0, \
-        "Unrelated observation with threshold > 0 should produce no predictions"
+        f"Unrelated observation should produce no predictions, got {len(predictions)}"
 
 
 # --- Missing and extra symbols ---
@@ -243,8 +229,12 @@ def test_invalid_threshold_values(kato_fixture):
     with pytest.raises((ValueError, TypeError)):
         kato_fixture.set_recall_threshold(float('nan'))
 
+    # 0.0 accepts every pattern regardless of similarity, which is never a
+    # useful setting and defeats candidate bounding -- it is now rejected.
+    with pytest.raises(ValueError):
+        kato_fixture.set_recall_threshold(0.0)
+
     # Valid boundary values should not raise
-    kato_fixture.set_recall_threshold(0.0)
     kato_fixture.set_recall_threshold(1.0)
 
 

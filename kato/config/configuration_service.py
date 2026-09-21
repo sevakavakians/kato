@@ -190,8 +190,13 @@ class ConfigurationService:
         # Validate recall_threshold
         if 'recall_threshold' in updates:
             value = updates['recall_threshold']
-            if not isinstance(value, (int, float)) or not 0.0 <= value <= 1.0:
-                errors['recall_threshold'] = 'Must be a number between 0.0 and 1.0'
+            if not isinstance(value, (int, float)) or isinstance(value, bool) \
+                    or not 0.0 < value <= 1.0:
+                errors['recall_threshold'] = (
+                    'Must be a number greater than 0.0 and at most 1.0. '
+                    'A threshold of 0 accepts every pattern regardless of '
+                    'similarity and is never a useful setting.'
+                )
 
         # Validate persistence
         if 'persistence' in updates:

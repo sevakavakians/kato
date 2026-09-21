@@ -82,7 +82,9 @@ class SessionConfiguration:
         """
         try:
             # Validate recall_threshold
-            if self.recall_threshold is not None and not 0.0 <= self.recall_threshold <= 1.0:
+            # recall_threshold must be > 0. At 0 every pattern qualifies
+            # (similarity >= 0 always), which is never a useful setting.
+            if self.recall_threshold is not None and not 0.0 < self.recall_threshold <= 1.0:
                 logger.error(f"Invalid recall_threshold: {self.recall_threshold}")
                 return False
 
@@ -300,6 +302,20 @@ class SessionConfiguration:
                 filtered_data['updated_at'] = datetime.fromisoformat(data['updated_at'])
             else:
                 filtered_data['updated_at'] = data['updated_at']
+
+        # Sessions persisted before recall_threshold=0 was rejected can still be
+        # sitting in Redis. Rehydration must not fail on them -- that would break
+        # live sessions across an upgrade -- so drop the value and fall back to
+        # the system default, loudly.
+        if filtered_data.get('recall_threshold') is not None \
+                and not 0.0 < filtered_data['recall_threshold'] <= 1.0:
+            logger.warning(
+                "Session %s was persisted with recall_threshold=%s, which is no "
+                "longer valid; falling back to the system default.",
+                filtered_data.get('session_id', '<unknown>'),
+                filtered_data['recall_threshold'],
+            )
+            filtered_data['recall_threshold'] = None
 
         return cls(**filtered_data)
 

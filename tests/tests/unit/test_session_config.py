@@ -68,7 +68,7 @@ def test_config_validation_valid_values(kato_fixture):
 
     # Test all valid parameter ranges
     valid_configs = [
-        {'recall_threshold': 0.0},  # Min valid
+        {'recall_threshold': 0.001},  # Min practical
         {'recall_threshold': 1.0},  # Max valid
         {'recall_threshold': 0.5},  # Mid-range
         {'max_pattern_length': 0},  # Zero (manual learning only)
@@ -99,6 +99,7 @@ def test_config_validation_invalid_values(kato_fixture):
     # Test invalid parameter ranges (should fail validation)
     invalid_configs = [
         {'recall_threshold': -0.1},  # Below min
+        {'recall_threshold': 0.0},  # Zero accepts every pattern -- never useful
         {'recall_threshold': 1.1},  # Above max
         {'recall_threshold': 'invalid'},  # Wrong type
         {'max_pattern_length': -1},  # Negative (invalid)

@@ -56,7 +56,7 @@ class KatoBaseException(Exception):
 
 ```python
 raise InvalidConfigurationError(
-    "recall_threshold must be between 0.0 and 1.0",
+    "recall_threshold must be > 0.0 and <= 1.0",
     context={"value": 1.5}
 )
 ```

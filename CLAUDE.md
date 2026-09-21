@@ -167,7 +167,7 @@ Storage Layer (Hybrid Architecture)
 - `LOG_LEVEL`: DEBUG, INFO, WARNING, ERROR (default: INFO)
 - `MAX_PATTERN_LENGTH`: Auto-learn trigger (default: 0 = manual)
 - `STM_MODE`: CLEAR or ROLLING (default: CLEAR)
-- `RECALL_THRESHOLD`: 0.0-1.0 (default: 0.1)
+- `RECALL_THRESHOLD`: >0.0-1.0 (default: 0.1)
 - `SESSION_TTL`: Session timeout in seconds (default: 3600)
 - `SESSION_AUTO_EXTEND`: Auto-extend TTL on access (default: true)
 

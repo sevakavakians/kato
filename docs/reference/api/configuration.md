@@ -136,7 +136,7 @@ curl http://localhost:8000/sessions/$SESSION_ID/config
 |-----------|------|-------|---------|-------------|
 | `max_pattern_length` | integer | 0+ | 0 | Auto-learn when STM reaches this length (0=manual) |
 | `persistence` | integer | 1-100 | 5 | Emotive rolling window size |
-| `recall_threshold` | float | 0.0-1.0 | 0.1 | Pattern matching sensitivity |
+| `recall_threshold` | float | >0.0-1.0 | 0.1 | Pattern matching sensitivity |
 | `stm_mode` | string | CLEAR\|ROLLING | CLEAR | STM mode after auto-learning |
 
 ### Processing Configuration
@@ -453,7 +453,7 @@ KATO validates all configuration parameters:
 
 | Parameter | Validation | Error |
 |-----------|------------|-------|
-| `recall_threshold` | 0.0 ≤ x ≤ 1.0 | Invalid recall_threshold |
+| `recall_threshold` | 0.0 < x ≤ 1.0 | Invalid recall_threshold |
 | `persistence` | 1 ≤ x ≤ 100 | Invalid persistence |
 | `max_pattern_length` | x ≥ 0 | Invalid max_pattern_length |
 | `max_predictions` | 1 ≤ x ≤ 10000 | Invalid max_predictions |
@@ -464,7 +464,7 @@ KATO validates all configuration parameters:
 curl -X POST http://localhost:8000/sessions/$SESSION_ID/config \
   -d '{"config": {"recall_threshold": 1.5}}'
 
-# Error: Invalid recall_threshold: 1.5 (must be 0.0-1.0)
+# Error: Invalid recall_threshold: 1.5 (must be >0.0-1.0)
 ```
 
 ---

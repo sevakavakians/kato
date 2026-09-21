@@ -918,7 +918,7 @@ For complete list of environment variables, see [Environment Variables Reference
 
 **Learning**:
 - `MAX_PATTERN_LENGTH`: Auto-learn length (0 = manual)
-- `RECALL_THRESHOLD`: Pattern match threshold (0.0-1.0)
+- `RECALL_THRESHOLD`: Pattern match threshold (>0.0-1.0)
 - `STM_MODE`: CLEAR or ROLLING
 
 **Session**:

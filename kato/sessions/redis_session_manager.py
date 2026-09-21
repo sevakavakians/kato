@@ -20,6 +20,7 @@ import redis.asyncio as redis
 # Import SessionManager as base class only when needed
 import kato.sessions.session_manager as session_manager_module
 from kato.config.session_config import SessionConfiguration
+from kato.exceptions import ValidationError
 
 # Import event broadcaster for WebSocket notifications
 from kato.websocket import get_event_broadcaster
@@ -290,7 +291,19 @@ class RedisSessionManager(session_manager_module.SessionManager):
 
         # Apply config if provided
         if config:
-            session_config.update(config)
+            if not session_config.update(config):
+                # update() rolls back atomically on failure. Silently keeping the
+                # defaults here would hand the caller a session that does not do
+                # what they asked for.
+                raise ValidationError(
+                    field_name="config",
+                    field_value=config,
+                    message=(
+                        "Invalid session configuration; no changes were applied. "
+                        "Check value ranges (e.g. recall_threshold must be > 0.0 "
+                        "and <= 1.0)."
+                    ),
+                )
 
         session = SessionState(
             session_id=session_id,

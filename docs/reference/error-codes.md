@@ -138,7 +138,7 @@ HTTP status codes and error responses in KATO API.
 
 ```json
 {
-  "detail": "Invalid recall_threshold: 1.5 (must be 0.0-1.0)"
+  "detail": "Invalid recall_threshold: 1.5 (must be >0.0-1.0)"
 }
 ```
 

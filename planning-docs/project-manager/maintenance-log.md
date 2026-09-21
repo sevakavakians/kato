@@ -3398,3 +3398,54 @@ networks:
 
 *Agent execution time: < 10 minutes*
 *Response type: Milestone documentation (two releases) + architectural decisions recorded (MAJOR bump rationale, new standing messaging rule) + knowledge refinement (corrected stale merge/release status across 6 files) + process pattern recorded (unverified release-notes claim)*
+
+---
+
+## 2026-09-21 - Task Completion + Blocker Resolved: CI ClickHouse Schema-Init Fix (Three Bugs, Including a Latent Helm Production Defect) — COMPLETE, UNCOMMITTED
+
+**Trigger**: Task Completion (CI schema-init bug fix, complete and verified but not yet committed) + Blocker Resolved (CI's "Unit tests" job had been failing since the CI workflow was added) + Architectural Decision (DECISION-038) + Knowledge Refinement (ClickHouse HTTP interface's one-statement-per-request behavior, and that a suggested `?multiquery=1` fix does not exist).
+
+**What happened**: CI run `35632623893` (2026-09-21) failed "Initialise ClickHouse schema" with a bare curl exit code 22. Root-caused empirically against a real `clickhouse/clickhouse-server:24.8` container rather than guessed from the error code, revealing three stacked bugs: (1) CI POSTed the entire `init.sql` file as one HTTP request, but ClickHouse's HTTP interface executes exactly one statement per request (`Code: 62`) — a GitHub Copilot-suggested `?multiquery=1` fix was tested and confirmed non-viable (`Code: 115 UNKNOWN_SETTING`; `multiquery` is a `clickhouse-client` CLI-only flag). (2) The CI clickhouse service had no configured user, causing `Code: 516 AUTHENTICATION_FAILED`. (3) **Latent production bug**, found only as a side effect of investigating (1): `charts/kato/scripts/bootstrap.py` (the Helm chart's pre-install/pre-upgrade schema-bootstrap hook) split `init.sql` on `;` and dropped every fragment starting with `--`, which — because all 8 statements sit under comment blocks — silently collapsed them to 3 broken statements. The Helm bootstrap Job has never successfully applied this schema in any real deployment of the chart.
+
+**Actions Taken**:
+1. `planning-docs/completed/bugs/2026-09-21-ci-clickhouse-schema-init-multi-bug-fix.md` — new archive entry (full changeset, verification, commit status).
+2. `planning-docs/DECISIONS.md` — new DECISION-038 (Context/Rationale/Duplication Tradeoff/What Changed/Verification/Impact/Open Items/Related), inserted above DECISION-037. Header "Last Updated" line updated.
+3. `planning-docs/SESSION_STATE.md` — new "Current Task" section for this fix (explicitly marked COMPLETE and VERIFIED, UNCOMMITTED); the prior "Current Task" (KATO v6.0.0/v6.0.1 releases) demoted to "Previous Task (context preserved)," content otherwise preserved intact per this file's established convention. Header "Last Updated" line updated.
+4. `planning-docs/SPRINT_BACKLOG.md` — header and "Active Projects" note rewritten to point at this fix as the top-priority next action (commit, then re-bootstrap any existing Helm deployment); new "Recently Completed" entry added above the v6.0.0/v6.0.1 entry, explicitly marked UNCOMMITTED so it isn't mistaken for shipped/deployed work.
+5. `planning-docs/project-manager/pending-updates.md` — new Open, High-priority item: the commit/push decision, plus whether any existing real Helm deployment needs a manual schema re-application, since its bootstrap Job's prior runs never actually created the schema and a future chart upgrade alone would not retroactively fix an already-failed install.
+6. `planning-docs/project-manager/patterns.md` — new Process Verification Patterns entry (an AI-suggested fix, `?multiquery=1`, tested against a real server and disproven rather than trusted on plausibility) and new Operational Gotchas entry (ClickHouse HTTP interface is strictly one-statement-per-request with no relaxing setting; no session state between requests, so schema files must be fully database-qualified).
+7. This entry and a matching `triggers.md` entry.
+
+**Classification**: Task Completion (bug fix, uncommitted) + Blocker Resolved (CI red since workflow inception) + Architectural Decision (DECISION-038, the per-statement-HTTP-apply approach and the shared-but-duplicated comment-aware splitter) + Knowledge Refinement (ClickHouse HTTP multi-statement behavior; the AI-suggested fix disproven) — surfaced as a new `pending-updates.md` High-priority item (commit decision + latent-production-bug follow-up), not a silent operation, because of the discovered Helm defect's real-world impact.
+
+**Next Steps**: Commit and push the fix. Separately, determine whether any existing real (non-CI, non-dev) Helm deployment of this chart is running with a never-actually-initialized schema, and if so, manually re-apply it — see `pending-updates.md`. All prior open items (staging soak for the recall-safe bound, dependency upgrade, `REDIS_PASSWORD`, dashboard hardening, single-symbol fast-path semantics, `sort_symbols` bug, unreachable `r=0` branches, real-corpus selectivity measurement, stale `benchmark_hybrid_architecture.py`) remain open, untouched by this pass.
+
+---
+
+*Agent execution time: < 10 minutes*
+*Response type: Bug-fix documentation (CI infrastructure, uncommitted) + architectural decision recorded (DECISION-038) + knowledge refinement (ClickHouse HTTP one-statement-per-request; disproven AI-suggested fix) + human alert generated (commit decision + latent Helm production-bug follow-up)*
+
+---
+
+## 2026-09-21 - Knowledge Refinement: CI ClickHouse Schema-Init Fix Committed and Pushed (Correcting "UNCOMMITTED" Status Just Recorded)
+
+**Trigger**: Knowledge Refinement — the fix documented as COMPLETE/VERIFIED/UNCOMMITTED in the immediately preceding entry is now committed and pushed; the coordinator supplied the commit hash, branch, and triggered CI run mid-task and asked for the "UNCOMMITTED" flags to be cleared.
+
+**What happened**: Commit `3706e73` "fix(ci): apply the ClickHouse schema one statement per request" landed on `main` (previous HEAD `80901c5`) and was pushed to `origin/main`, containing exactly the 7 source/config/test files from the prior entry. Push triggered CI run `35650420692` (in progress at time of writing; the Helm Chart workflow on the same SHA already passed).
+
+**Actions Taken**:
+1. `planning-docs/DECISIONS.md` — DECISION-038's Status line and "Open Items" #1 updated from UNCOMMITTED to COMMITTED/PUSHED with commit/branch/CI-run detail; Impact's Risk bullet reworded to note CI is re-running against the fix.
+2. `planning-docs/SESSION_STATE.md` — header and "Current Task" title/Commit-status/Next-immediate-action all updated from UNCOMMITTED to COMMITTED and PUSHED.
+3. `planning-docs/SPRINT_BACKLOG.md` — header, Active Projects note, and the "Recently Completed" entry's title/Status/Files-Modified/Next-task all updated to COMMITTED and PUSHED.
+4. `planning-docs/completed/bugs/2026-09-21-ci-clickhouse-schema-init-multi-bug-fix.md` — Status line and "Commit Status" section rewritten from "Not committed" to committed/pushed detail; Related section's pending-updates.md line and CI-run list updated (added run `35650420692`).
+5. `planning-docs/project-manager/pending-updates.md` — the combined "commit + Helm re-bootstrap" item split: title and a new "Resolution (commit/push portion only)" field record the commit; a "Still Open" field and Status line keep the Helm re-bootstrap-of-existing-deployments decision explicitly open and unchanged, per the coordinator's explicit instruction not to touch that part.
+6. This entry and a matching `triggers.md` entry.
+
+**Classification**: Knowledge Refinement (uncommitted → committed/pushed status correction across 5 files) — no new human alert generated; the one pre-existing open item (Helm re-bootstrap decision) is explicitly preserved open and unchanged, as instructed.
+
+**Next Steps**: None from this pass. The Helm re-bootstrap-of-existing-deployments decision in `pending-updates.md` remains the only open item from this body of work.
+
+---
+
+*Agent execution time: < 5 minutes*
+*Response type: Knowledge refinement (commit/push status propagated across DECISIONS.md, SESSION_STATE.md, SPRINT_BACKLOG.md, the completed-bugs archive, and pending-updates.md; one item deliberately left open per explicit instruction)*

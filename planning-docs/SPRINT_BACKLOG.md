@@ -1,9 +1,9 @@
 # SPRINT_BACKLOG.md - Upcoming Work
-*Last Updated: 2026-09-21 (KATO v6.0.0 then v6.0.1 RELEASED and DEPLOYED, same day — the recall-safe candidate bound (DECISION-034) is merged and shipped; v6.0.1 fixes `filter_pipeline` validation and applies a new standing no-deprecation-notes-in-runtime-messages rule. See "Recently Completed" below. Next up: staging soak with `KATO_RECALL_BOUND_AUDIT=true` — see `project-manager/pending-updates.md`.)*
+*Last Updated: 2026-09-21 (CI ClickHouse schema-init fix — three bugs found and fixed, COMPLETE, VERIFIED, COMMITTED and PUSHED (`3706e73` on `origin/main`); includes a latent Helm production bug fix — the bootstrap Job had never actually applied the schema. See "Recently Completed" below. Next up: re-apply schema against any existing Helm deployment (human decision, still open) — see `project-manager/pending-updates.md`.)*
 
 ## Active Projects
 
-*No active initiative-scale projects at this time. The candidate-set-bounding discussion is resolved technically (DECISION-034) and now also resolved operationally — merged and released as KATO v6.0.0, patched same day as v6.0.1 (DECISION-035/036/037). KATO v6.0.1 is the current deployed version. **Top priority next**: ship to staging with `KATO_RECALL_BOUND_AUDIT=true` for 24h before trusting the bound on real corpus shapes no synthetic test anticipated, then turn audit off — see `project-manager/pending-updates.md`. Everything else below is secondary: Phase 1c Step B, Phase 2 (`conditional_probability_cached` removal), Phase 3 (benchmark match-rate axis), the still-open dependency upgrade, `REDIS_PASSWORD`, dashboard hardening, the fast-path single-symbol matching decision, the `sort_symbols` bug, and the recall-bound follow-ups (retire unreachable `r=0` branches, measure selectivity against real data).*
+*No active initiative-scale projects at this time. The candidate-set-bounding discussion is resolved technically (DECISION-034) and now also resolved operationally — merged and released as KATO v6.0.0, patched same day as v6.0.1 (DECISION-035/036/037). KATO v6.0.1 remains the current deployed version; the CI ClickHouse schema-init fix (DECISION-038) is a separate piece of work, now committed and pushed to `main` (`3706e73`) — see "Recently Completed". **Top priority next**: decide whether any existing real Helm deployment of the chart needs a manual schema re-application, since its bootstrap Job has never successfully run and this commit only corrects the chart code going forward — see `project-manager/pending-updates.md`. After that: ship to staging with `KATO_RECALL_BOUND_AUDIT=true` for 24h before trusting the recall bound on real corpus shapes no synthetic test anticipated, then turn audit off. Everything else below is secondary: Phase 1c Step B, Phase 2 (`conditional_probability_cached` removal), Phase 3 (benchmark match-rate axis), the still-open dependency upgrade, `REDIS_PASSWORD`, dashboard hardening, the fast-path single-symbol matching decision, the `sort_symbols` bug, and the recall-bound follow-ups (retire unreachable `r=0` branches, measure selectivity against real data).*
 
 ---
 
@@ -301,6 +301,23 @@ Phase 4 (Symbol Statistics & Fail-Fast Architecture) is 100% complete. The Click
 ---
 
 ## Recently Completed
+
+### CI ClickHouse Schema Init Failure — Three-Bug Fix ✅ COMPLETE, VERIFIED, COMMITTED and PUSHED
+**Priority**: High — CI's "Unit tests" job has been red since the workflow was added; also fixes a latent production bug
+**Status**: **COMPLETE, VERIFIED, COMMITTED and PUSHED.** Committed as `3706e73` "fix(ci): apply the ClickHouse schema one statement per request" on branch `main` (previous HEAD `80901c5`), pushed to `origin/main`. CI run `35650420692` triggered by the push (in progress as of this update; the Helm Chart workflow on the same SHA already passed). See DECISION-038 in `planning-docs/DECISIONS.md`.
+**Files Modified**: `.github/workflows/ci.yml`, `charts/kato/scripts/bootstrap.py`, `charts/kato/scripts/init.sql`, `config/clickhouse/init.sql`, `deployment/config/clickhouse/init.sql`, plus new `scripts/apply_clickhouse_schema.py` and `tests/tests/unit/test_clickhouse_schema_init.py` — all 7 in commit `3706e73`.
+
+**Summary**: Root-caused the CI "Initialise ClickHouse schema" failure (curl code 22, CI run `35632623893`) empirically against a real ClickHouse 24.8 container and found three stacked bugs. **(1)** ClickHouse's HTTP interface only executes one statement per request; CI was sending the whole `init.sql` as one POST (`Code: 62`). GitHub Copilot's suggested `?multiquery=1` fix was tested and confirmed **not** to work — `multiquery` is a `clickhouse-client` CLI flag with no HTTP equivalent. **(2)** the CI clickhouse service had no configured user, so requests failed `Code: 516 AUTHENTICATION_FAILED`; fixed with `CLICKHOUSE_SKIP_USER_SETUP: '1'` (CI-only). **(3)** **latent production bug**: the Helm chart's bootstrap hook (`charts/kato/scripts/bootstrap.py`) split `init.sql` on `;` and dropped every fragment starting with `--` — since every one of the 8 statements sits under a comment block, this silently collapsed them to 3 broken statements. **The Helm bootstrap Job has never successfully applied this schema in any real deployment.**
+
+**Fix**: all three `init.sql` mirrors database-qualified (`USE kato;` removed — a per-statement HTTP applier has no session, so `USE` from one request never reaches the next); new stdlib-only `scripts/apply_clickhouse_schema.py` (explicit `/ping` wait with timeout failure, one-statement-at-a-time POST, surfaces ClickHouse's real error body); `bootstrap.py`'s splitter replaced with a comment-aware `split_statements()`, kept in lockstep with the script above via a shared test (not a shared import — `bootstrap.py` is vendored into a Helm ConfigMap with no repo access); new `tests/tests/unit/test_clickhouse_schema_init.py` (9 tests) pinning statement count, one-table-per-name, full qualification, and mirror-file byte-equality.
+
+**Verification**: both appliers run end-to-end and idempotently against a real ClickHouse 24.8 container — 4 tables in `kato`, 3 data-skipping indexes, 0 tables leaked into `default`. Full local unit suite 488 passed / 0 failed. `ruff check kato/ tests/ benchmarks/` clean.
+
+**Archive**: `planning-docs/completed/bugs/2026-09-21-ci-clickhouse-schema-init-multi-bug-fix.md`. **Decision**: DECISION-038.
+
+**Next task (top priority)**: decide whether any existing real Helm deployment of this chart needs a manual schema re-application, since its bootstrap Job has never actually run successfully and this commit only corrects the chart code for installs/upgrades going forward — see `project-manager/pending-updates.md` (still open, human decision needed).
+
+---
 
 ### KATO v6.0.0 then v6.0.1 Release — Recall-Safe Candidate Bound Shipped + `filter_pipeline` Validation Fix ✅ COMPLETE (RELEASED, DEPLOYED)
 **Priority**: P1 — resolves the user-requested candidate-set-bounding discussion (highest-priority item after v5.2.0) and the post-release validation gap it exposed

@@ -1,6 +1,57 @@
 # DECISIONS.md - Architectural & Design Decision Log
 *Append-Only Log - Started: 2025-08-29*
-*Last Updated: 2026-09-21 (DECISION-037: new standing rule — no deprecation/removal notes in runtime messages, enforced by test. DECISION-036: KATO v6.0.1 patch, fixing `filter_pipeline` validation and applying DECISION-037. DECISION-035: KATO v6.0.0 major release — DECISION-034's recall-safe candidate bound merged and shipped.)*
+*Last Updated: 2026-09-21 (DECISION-038: CI ClickHouse schema-init fix — three bugs, including a latent Helm production bug where the bootstrap Job never actually applied the schema. DECISION-037: new standing rule — no deprecation/removal notes in runtime messages, enforced by test. DECISION-036: KATO v6.0.1 patch, fixing `filter_pipeline` validation and applying DECISION-037. DECISION-035: KATO v6.0.0 major release — DECISION-034's recall-safe candidate bound merged and shipped.)*
+
+---
+
+## 2026-09-21 - DECISION-038: CI ClickHouse Schema-Init Fix — Per-Statement HTTP Apply + Shared Comment-Aware Splitter
+
+**Decision**: Fix the CI "Initialise ClickHouse schema" failure (curl code 22, failing since the CI workflow was added) by applying `init.sql` one statement at a time over ClickHouse's HTTP interface via a new stdlib-only script (`scripts/apply_clickhouse_schema.py`), database-qualifying every table name in the schema (`kato.patterns_data` etc., `USE kato;` removed), and giving the CI ClickHouse service `CLICKHOUSE_SKIP_USER_SETUP: '1'`. While fixing this, replace the Helm chart bootstrap hook's statement splitter (`charts/kato/scripts/bootstrap.py`) with a comment-aware `split_statements()`, because the old splitter turned out to have never correctly applied the schema in any real deployment.
+**Status**: **COMPLETE, VERIFIED, COMMITTED and PUSHED.** Committed as `3706e73` "fix(ci): apply the ClickHouse schema one statement per request" on branch `main` (previous HEAD `80901c5`), pushed to `origin/main`. CI run `35650420692` was triggered by the push (in progress as of this update; the Helm Chart workflow on the same SHA already passed). See `planning-docs/completed/bugs/2026-09-21-ci-clickhouse-schema-init-multi-bug-fix.md` and `project-manager/pending-updates.md` for the still-open Helm re-bootstrap deployment decision (separate from this commit).
+**Classification**: Bug Fix (CI infrastructure) escalated to Architectural Decision by what it uncovered — a production-impacting defect in the Helm bootstrap path, plus a new standing convention (see "Duplication Tradeoff" below).
+**Confidence**: High — all three root causes verified empirically against a real `clickhouse/clickhouse-server:24.8` container, not inferred from documentation or assumed from the error text alone.
+
+### Context
+
+CI run `35632623893` (2026-09-21) failed the "Initialise ClickHouse schema" step with a bare curl exit code 22, which by itself says only "HTTP error," not why. Root-causing it against a real ClickHouse container (rather than guessing from the CI log) surfaced three independent bugs stacked on top of each other:
+
+1. **ClickHouse's HTTP interface executes exactly one statement per request.** CI was POSTing the entire `init.sql` file in one request → `Code: 62 ... Multi-statements are not allowed`. GitHub Copilot's suggested fix, appending `?multiquery=1` to the URL, was **tested against the real server and confirmed not to work**: `Code: 115 ... Setting multiquery is neither a builtin setting nor started with the prefix 'SQL_' (UNKNOWN_SETTING)`. `multiquery` is a `clickhouse-client` CLI flag; there is no HTTP-interface equivalent. This is the specific reason the fix is "split and POST one at a time," not "find the right query parameter."
+2. **The CI ClickHouse service container had no `CLICKHOUSE_USER`/`CLICKHOUSE_PASSWORD` configured**, so the stock image disables network access for the `default` user and every request from the runner fails `Code: 516 AUTHENTICATION_FAILED`. Fixed with `CLICKHOUSE_SKIP_USER_SETUP: '1'` — a test-only affordance; `docker compose` already configures a user via `users.xml` and the Helm chart via secrets, so neither needed a change.
+3. **Latent production bug, found only as a side effect of fixing bug #1**: `charts/kato/scripts/bootstrap.py` — the Helm pre-install/pre-upgrade hook that is supposed to apply this same schema in real deployments — split `init.sql` on `;` and then dropped any fragment starting with `--`. Every one of the 8 statements in `init.sql` sits directly under a comment block, so this filter didn't just strip comments, it silently collapsed 8 statements to 3 (a no-op `USE kato` plus two `ALTER TABLE patterns_data` statements, both of which fail with `UNKNOWN_TABLE` because the `CREATE TABLE` statements were among the discarded 5). **This chart's bootstrap Job has never successfully applied the schema in any deployment that used it.**
+
+### Rationale
+
+- **Fix the actual mechanism, not the symptom.** The obvious "make curl succeed" fixes (a multi-statement flag, retry harder) either don't exist for this interface or would have masked bug #2 and left bug #3 completely undiscovered. Splitting and applying one statement at a time, with the server's real error body surfaced on failure, is the only approach that matches how the HTTP interface actually works.
+- **Database-qualify rather than rely on `USE`.** A per-statement HTTP applier has no session state between requests, so a `USE kato;` statement earlier in the file has zero effect on later statements sent as separate requests. This was previously masked because the whole file was (incorrectly) sent as one request in the one path where it partially worked; splitting the file makes the `USE`-reliance bug reachable, so it had to be fixed at the same time, not separately.
+- **Fixing bug #3 was not optional once found.** Discovering that the Helm bootstrap Job has silently never worked is a correctness issue independent of CI; leaving it while fixing only the CI-visible symptom would have left production deployments of this chart with an empty `kato` database.
+
+### Duplication Tradeoff (shared splitter logic, not a shared import)
+
+`scripts/apply_clickhouse_schema.py`'s statement splitter and `charts/kato/scripts/bootstrap.py`'s `split_statements()` implement the identical comment-aware splitting rule but are **not** a shared import — `bootstrap.py` is vendored into a Helm `ConfigMap` at chart-render time and has no access to the rest of this repository at render or run time. This is a deliberate, scoped duplication, guarded against silent drift by `tests/tests/unit/test_clickhouse_schema_init.py`, which runs both splitters against the canonical `init.sql` and asserts they produce the same 8 statements. Any future change to the splitting rule must be applied to both files, and the test will fail loudly if only one is updated.
+
+### What Changed
+
+See `planning-docs/completed/bugs/2026-09-21-ci-clickhouse-schema-init-multi-bug-fix.md` for the full file-by-file changeset, verification detail, and commit status.
+
+### Verification
+
+Both appliers run end-to-end and idempotently against a real ClickHouse 24.8 container: 4 tables created in `kato`, 3 data-skipping indexes present, 0 tables leaked into `default`. Full local unit suite 488 passed / 0 failed. `ruff check kato/ tests/ benchmarks/` clean. The `?multiquery=1` dead end was verified against the real server rather than assumed from ClickHouse's documentation.
+
+### Impact
+
+- **Positive**: unblocks CI's "Unit tests" job, which has been red since the workflow was added. Fixes a real, previously-undetected production defect (Helm bootstrap never applying schema) before it caused a support incident on an actual deployment. New regression test locks in both the statement count and the "no leaked `USE`-dependent tables" property.
+- **Neutral**: the shared-logic duplication between the CI script and the vendored Helm script is intentional and test-guarded, not an oversight — documented here so a future reader doesn't "fix" it by importing across the ConfigMap boundary, which would break chart rendering.
+- **Risk**: Low on the fix itself (empirically verified against a real server, and CI is now re-running against it). **Operationally open**: any existing Helm deployment of this chart needs its schema re-applied, since the pre-existing bootstrap Job silently no-op'd for every prior install — this fix corrects the chart code going forward but does not retroactively touch an already-failed install. See `project-manager/pending-updates.md`.
+
+### Open Items
+
+1. ~~**Commit and push**~~ — DONE. Committed as `3706e73` on `main` (previous HEAD `80901c5`), pushed to `origin/main`. CI run `35650420692` triggered by the push (in progress at time of writing; Helm Chart workflow on the same SHA already passed).
+2. **Re-run schema bootstrap against any existing Helm deployment** — bug #3 means the schema was never actually applied by any prior chart install/upgrade; this is not just a fix for future deployments. Still open, needs a human decision — see `project-manager/pending-updates.md`.
+
+### Related Decisions
+
+- None directly prior on this specific topic — first decision entry covering the CI workflow's ClickHouse step and the Helm bootstrap hook.
+- `CLAUDE.md`'s "DO NOT BYPASS FUNCTIONALITY TO FIX PROBLEMS" principle — followed here by root-causing to the real mechanism (HTTP one-statement-per-request, comment-aware splitting) rather than working around the symptom (e.g., retrying curl, or silently ignoring the CI failure).
 
 ---
 

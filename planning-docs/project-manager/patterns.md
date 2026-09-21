@@ -574,9 +574,35 @@ absolute latency differences across machines.
 
 **Recurrence Risk**: Medium — release notes are usually written from memory/intent right after finishing work, exactly the moment confidence is highest and the temptation to skip re-verifying a "known" detail is strongest. Any factual, checkable claim in release notes (exact error text, response codes, specific numbers) should get the same "did I actually run this?" discipline as a code change, not be treated as safe because it's "just documentation."
 
+### 2026-09-21 - An AI-Suggested Fix (`?multiquery=1`) Was Tested Against the Real Server Instead of Trusted
+
+**Pattern**: While root-causing the CI "Initialise ClickHouse schema" failure (DECISION-038), GitHub Copilot suggested the fix was to append `?multiquery=1` to the HTTP request URL so ClickHouse would accept the whole `init.sql` file as one multi-statement request. This was **tested against a real `clickhouse/clickhouse-server:24.8` container rather than applied on trust**, and it does not work: `Code: 115 ... Setting multiquery is neither a builtin setting nor started with the prefix 'SQL_' (UNKNOWN_SETTING)`. `multiquery` is a `clickhouse-client` CLI flag with no equivalent on the HTTP interface, which by design only ever executes one statement per request — there is no query parameter that changes this.
+
+**Discovery Trigger**: The suggested fix was applied to a throwaway container and actually exercised before being written into CI, rather than assumed correct because it looked plausible and came from a coding assistant.
+
+**Assumption → Reality**:
+- Assumed (implicitly, by trusting the suggestion): a URL query parameter exists to relax ClickHouse HTTP's one-statement-per-request restriction.
+- Reality: no such parameter exists; `multiquery` only exists as a `clickhouse-client` CLI flag, and the HTTP interface's restriction is a deliberate server property (see the pre-existing 2026-09-10 Operational Gotcha below on GET vs POST for the same interface), not a default that a flag can toggle off.
+
+**Resolution Pattern**: AI-suggested fixes for infrastructure/protocol-level failures (HTTP APIs, database interfaces, CLI tool behavior) get the same "did I actually run this?" treatment as any other unverified claim (see the adjacent release-notes pattern above) — tested against the real system before being adopted, not applied on the assumption that a plausible-sounding parameter name exists. The actual fix here was structural (split the file and POST one statement at a time via a new script), not a one-line flag change.
+
+**Recurrence Risk**: Medium — a suggested one-line fix is exactly the kind of thing that's tempting to apply without testing when time-pressured, especially when it "sounds right" (multi-statement support is a genuinely common feature in other database HTTP APIs, just not this one).
+
 ---
 
 ## Operational Gotchas
+
+### 2026-09-21 - ClickHouse HTTP Interface Is Strictly One Statement Per Request; No Multi-Statement Mode Exists
+
+**Fact (verified)**: ClickHouse's HTTP interface (port 8123) executes **exactly one SQL statement per request**, full stop. Sending a file containing multiple `;`-separated statements in one POST body fails with `Code: 62 ... Multi-statements are not allowed`. There is no server-side setting or query parameter that relaxes this — `?multiquery=1` (the natural-looking guess, and GitHub Copilot's suggestion) fails with `Code: 115 ... Setting multiquery is neither a builtin setting nor started with the prefix 'SQL_' (UNKNOWN_SETTING)`, because `multiquery` is a `clickhouse-client` CLI-only flag with no HTTP equivalent. Any script or CI step applying a multi-statement `.sql` file over HTTP must split it into individual statements and POST them one at a time (see `scripts/apply_clickhouse_schema.py`).
+
+**Fact (verified)**: A per-statement HTTP applier has **no session state between requests** — a `USE <database>;` statement sent as one request has zero effect on a `CREATE TABLE` sent as the next request. Schema files applied this way must fully qualify every table name (`database.table`) rather than relying on a preceding `USE`.
+
+**Discovery Trigger**: Root-causing the CI ClickHouse schema-init failure (DECISION-038) against a real ClickHouse 24.8 container, after the Copilot-suggested `?multiquery=1` fix was tried and failed.
+
+**Recurrence Risk**: Medium — anyone writing a new schema-application or migration script against ClickHouse's HTTP interface (rather than `clickhouse-client`, which does support multi-statement files via its own `--multiquery` flag) will hit this immediately unless they already know it.
+
+---
 
 ### 2026-09-18 - `pip-compile` Must Regenerate `requirements.lock` In Place; `qdrant-client` Held Below 1.16
 

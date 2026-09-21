@@ -3,6 +3,43 @@
 
 ---
 
+## 2026-09-21 - Knowledge Refinement: CI ClickHouse Schema-Init Fix Committed and Pushed (`3706e73`)
+
+**Trigger Type**: Secondary — Knowledge Refinement (a previously-recorded "COMPLETE, UNCOMMITTED" status corrected to "COMMITTED and PUSHED" once the coordinator supplied the commit hash, branch, and triggered CI run number).
+
+**Event**: Commit `3706e73` "fix(ci): apply the ClickHouse schema one statement per request" landed on `main` (previous HEAD `80901c5`) and was pushed to `origin/main`; contains exactly the 7 source/config/test files from the CI schema-init fix (DECISION-038). CI run `35650420692` triggered by the push, in progress at time of writing; the Helm Chart workflow on the same SHA already passed.
+
+**Documents Updated**: `planning-docs/DECISIONS.md` (DECISION-038 Status + Open Items), `planning-docs/SESSION_STATE.md` (header + Current Task), `planning-docs/SPRINT_BACKLOG.md` (header + Active Projects + Recently Completed entry), `planning-docs/completed/bugs/2026-09-21-ci-clickhouse-schema-init-multi-bug-fix.md` (Status + Commit Status section), `planning-docs/project-manager/pending-updates.md` (commit/push portion resolved in place; Helm re-bootstrap decision left open, unchanged, per explicit instruction).
+
+**Human Alert Generated**: No new alert. The one pre-existing open item (whether any live Helm deployment needs a manual schema re-application, since its bootstrap Job never actually applied the schema) remains open in `pending-updates.md`, deliberately untouched.
+
+**Agent Response Time**: Immediate
+**Action Result**: Every file that recorded this fix as uncommitted now correctly shows it as committed and pushed, with the commit hash, branch, and triggered CI run traceable from each. The still-open Helm re-bootstrap decision is unchanged and remains the single follow-up item.
+
+---
+
+## 2026-09-21 - Task Completion + Blocker Resolved + Knowledge Refinement: CI ClickHouse Schema-Init Fix (COMPLETE, NOT Yet Committed)
+
+**Trigger Type**: Primary — Task Completion (bug fix complete and verified; commit is an open human decision, not yet made) + Blocker Resolved (CI "Unit tests" job had been failing since the CI workflow was added) + Architectural Decision (DECISION-038, the shared comment-aware splitter and per-statement HTTP-apply approach) + Knowledge Refinement (ClickHouse HTTP interface is strictly one-statement-per-request; `multiquery` has no HTTP equivalent, disproving an AI-suggested fix)
+
+**Event**: CI run `35632623893` (2026-09-21) failed "Initialise ClickHouse schema" with curl code 22. Root-caused empirically against a real `clickhouse/clickhouse-server:24.8` container: (1) ClickHouse HTTP only executes one statement per request (`Code: 62`); the suggested `?multiquery=1` fix was tested and confirmed non-viable (`Code: 115 UNKNOWN_SETTING`). (2) CI's clickhouse service had no configured user (`Code: 516 AUTHENTICATION_FAILED`), fixed with `CLICKHOUSE_SKIP_USER_SETUP: '1'`. (3) **Latent production bug found via the same root-cause investigation**: the Helm chart's bootstrap hook (`charts/kato/scripts/bootstrap.py`) silently collapsed all 8 `init.sql` statements to 3 broken ones by dropping comment-prefixed fragments — the chart's bootstrap Job has never successfully applied this schema in any real deployment. Fixed with a new stdlib-only per-statement applier (`scripts/apply_clickhouse_schema.py`), database-qualified schema (all 3 `init.sql` mirrors), a shared comment-aware `split_statements()` in the Helm script, and a new 9-test regression file (`tests/tests/unit/test_clickhouse_schema_init.py`). Verified end-to-end and idempotently against a real ClickHouse container (4 tables in `kato`, 0 leaked into `default`); full local unit suite 488 passed; `ruff check kato/ tests/ benchmarks/` clean. All changes are uncommitted in the working tree.
+
+**Documents Updated**:
+- `planning-docs/completed/bugs/2026-09-21-ci-clickhouse-schema-init-multi-bug-fix.md` (new archive entry)
+- `planning-docs/DECISIONS.md` (DECISION-038 added; header updated)
+- `planning-docs/SESSION_STATE.md` (new Current Task; prior v6.0.0/v6.0.1 Current Task demoted to Previous Task; header updated)
+- `planning-docs/SPRINT_BACKLOG.md` (header/Active Projects updated; new Recently Completed entry added above the v6.0.0/v6.0.1 entry)
+- `planning-docs/project-manager/pending-updates.md` (new Open item: commit/push decision + Helm re-bootstrap-of-existing-deployments follow-up)
+- `planning-docs/project-manager/patterns.md` (new Process Verification Patterns entry — an AI-suggested fix tested and disproven rather than trusted; new Operational Gotchas entry — ClickHouse HTTP interface facts)
+- `planning-docs/project-manager/maintenance-log.md` (this action logged)
+
+**Human Alert Generated**: Yes — new Open item in `pending-updates.md` (High priority): commit/push decision, plus whether any existing real Helm deployment needs a manual schema re-application since its bootstrap Job's prior runs never actually worked.
+
+**Agent Response Time**: Immediate
+**Action Result**: Planning docs now reflect the CI fix as the current task, correctly flagged as complete-but-uncommitted (same convention as prior "complete but uncommitted/unmerged" entries — Remediation Pass 1, the 2026-09-17 deprecation-warnings pass, the recall-safe candidate bound). The latent Helm production bug is recorded prominently in three places (DECISIONS.md, SESSION_STATE.md, pending-updates.md) so it cannot be missed on the next planning-docs read. The disproven `?multiquery=1` suggestion is logged as a knowledge-refinement/process pattern for future reference.
+
+---
+
 ## 2026-09-17 - Task Completion: Deprecation Warnings Cleanup + 3 Resource-Teardown Bug Fixes (COMPLETE, NOT Yet Committed)
 
 **Trigger Type**: Primary — Task Completion (implementation complete and verified; commit is an open human decision, not yet made)

@@ -3449,3 +3449,28 @@ networks:
 
 *Agent execution time: < 5 minutes*
 *Response type: Knowledge refinement (commit/push status propagated across DECISIONS.md, SESSION_STATE.md, SPRINT_BACKLOG.md, the completed-bugs archive, and pending-updates.md; one item deliberately left open per explicit instruction)*
+
+---
+
+## 2026-09-21 - Knowledge Refinement: No Live Helm Deployments Exist — Last Open Item on the CI Schema-Init Fix Closed
+
+**Trigger**: Knowledge Refinement — the user confirmed no live Helm deployments of this chart exist as of 2026-09-21, closing the one item left open from the CI ClickHouse schema-init fix (DECISION-038). Also recorded: the planning-docs commit from the previous pass (`723fc3c`) and the in-progress CI run's per-step results (Lint/schema-init/Import check green; unit tests still running).
+
+**What happened**: The coordinator relayed the user's confirmation that no live Helm deployments of this chart exist. This means the latent bootstrap defect (bug #3 of DECISION-038 — the Helm pre-install/pre-upgrade hook silently collapsing 8 schema statements to 3 broken ones) never actually affected a real deployment; there is nothing to remediate. The resolution is recorded carefully as "no deployments existed," not "the old bootstrap worked" — the defect was real and would have struck the first real deployment had one existed before the fix.
+
+**Actions Taken**:
+1. `planning-docs/project-manager/pending-updates.md` — the item retitled from "...— COMMIT/PUSH PORTION RESOLVED" to "...— RESOLVED"; a new "Resolution (Helm re-bootstrap portion)" field added; Status changed to RESOLVED with a Resolved date.
+2. `planning-docs/DECISIONS.md` — DECISION-038 Status line updated to FULLY RESOLVED with the `723fc3c` planning-docs commit and per-step CI results added; Impact's Risk bullet updated (no operational risk remains); Open Item #2 struck through as CLOSED with the "closed because nothing to remediate, not because the old logic worked" distinction preserved.
+3. `planning-docs/SESSION_STATE.md` — header and Current Task title updated to FULLY RESOLVED; "Next immediate action" rewritten from an open decision to "none remaining," with the same distinction preserved and the `723fc3c`/CI-run detail added.
+4. `planning-docs/SPRINT_BACKLOG.md` — header, Active Projects note, Recently Completed entry's title/Status, and "Next task" line all updated to FULLY RESOLVED / no action needed.
+5. `planning-docs/completed/bugs/2026-09-21-ci-clickhouse-schema-init-multi-bug-fix.md` — Status line and Type line updated; new "Helm deployment impact — fully resolved" paragraph added under Commit Status; Related section's pending-updates.md line updated to RESOLVED.
+6. This entry and a matching `triggers.md` entry.
+
+**Classification**: Knowledge Refinement (deployment-impact status corrected from "open human decision" to "resolved, no action needed" across 5 files) — closes the human-alert item opened for this work; no new alert generated.
+
+**Next Steps**: None outstanding from this body of work. All other previously-open items (staging soak for the recall-safe bound, dependency upgrade, `REDIS_PASSWORD`, dashboard hardening, single-symbol fast-path semantics, `sort_symbols` bug, unreachable `r=0` branches, real-corpus selectivity measurement, stale `benchmark_hybrid_architecture.py`) remain open, untouched by this pass.
+
+---
+
+*Agent execution time: < 5 minutes*
+*Response type: Knowledge refinement (Helm-deployment question closed by user confirmation; propagated across DECISIONS.md, SESSION_STATE.md, SPRINT_BACKLOG.md, the completed-bugs archive, and pending-updates.md) — closes the sole remaining open item from the CI schema-init fix*

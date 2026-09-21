@@ -1,9 +1,9 @@
 # CI ClickHouse Schema Init Failure — Three-Bug Fix (Including a Latent Helm Production Bug)
 
 **Completed**: 2026-09-21
-**Status**: COMPLETE, VERIFIED, **COMMITTED and PUSHED** — `3706e73` on `origin/main`
+**Status**: COMPLETE, VERIFIED, **COMMITTED and PUSHED**, **FULLY RESOLVED** — `3706e73` on `origin/main`; no live Helm deployments existed, so the latent bootstrap defect never affected a real deployment
 **Decision**: DECISION-038 (`planning-docs/DECISIONS.md`)
-**Type**: Bug fix (CI infrastructure) — surfaced a second, more serious latent bug (Helm production bootstrap never applying schema)
+**Type**: Bug fix (CI infrastructure) — surfaced a second, more serious latent bug (Helm production bootstrap never applying schema; confirmed to have had zero real-world impact since no deployments existed)
 
 ## Summary
 
@@ -47,11 +47,13 @@ The `;`-then-drop-comment-lines splitter is replaced by a shared-rule `split_sta
 
 ## Commit Status
 
-**Committed and pushed.** Commit `3706e73` "fix(ci): apply the ClickHouse schema one statement per request" on branch `main` (previous HEAD `80901c5`), pushed to `origin/main`. The commit contains exactly the 7 source/config/test files: `.github/workflows/ci.yml`, `charts/kato/scripts/bootstrap.py`, `charts/kato/scripts/init.sql`, `config/clickhouse/init.sql`, `deployment/config/clickhouse/init.sql`, `scripts/apply_clickhouse_schema.py`, `tests/tests/unit/test_clickhouse_schema_init.py` (planning-docs changes were committed separately). The push triggered CI run `35650420692` (in progress at time of writing; the Helm Chart workflow on the same SHA already passed). See `project-manager/pending-updates.md` for the still-open, separate deployment decision — bug #3 means every *existing* real Helm deployment of this chart needs a manual schema-application re-run; this commit only corrects the chart code for installs/upgrades going forward.
+**Committed and pushed.** Commit `3706e73` "fix(ci): apply the ClickHouse schema one statement per request" on branch `main` (previous HEAD `80901c5`), pushed to `origin/main`. The commit contains exactly the 7 source/config/test files: `.github/workflows/ci.yml`, `charts/kato/scripts/bootstrap.py`, `charts/kato/scripts/init.sql`, `config/clickhouse/init.sql`, `deployment/config/clickhouse/init.sql`, `scripts/apply_clickhouse_schema.py`, `tests/tests/unit/test_clickhouse_schema_init.py`. The planning-docs recording this fix were themselves committed as `723fc3c` "docs(planning): record the CI ClickHouse schema-init fix", also pushed to `origin/main`. CI run `35650420692` on `3706e73`: Lint, "Initialise ClickHouse schema", and Import check all green; the unit-test step was still running as of this update.
+
+**Helm deployment impact — fully resolved.** The user confirmed no live Helm deployments of this chart exist as of 2026-09-21, so bug #3's defect never actually affected a real deployment — there was no database anywhere left uninitialized to remediate. **No manual schema re-application is needed.** This is closed because no deployment existed to be harmed by the defect, not because the old bootstrap logic turned out to work — it remained genuinely broken (8 statements silently collapsing to 3) for the entire period no deployment existed. The first real deployment made from this fixed chart will apply the schema correctly. See `project-manager/pending-updates.md` (RESOLVED).
 
 ## Related
 
 - DECISION-038 in `planning-docs/DECISIONS.md` — full rationale, the `?multiquery=1` dead end, and the shared-splitter duplication tradeoff.
-- `planning-docs/project-manager/pending-updates.md` — commit/push portion resolved in place; the Helm re-bootstrap decision for existing deployments remains open.
+- `planning-docs/project-manager/pending-updates.md` — RESOLVED in place: both the commit/push portion and the Helm re-bootstrap decision (no live deployments exist, so no remediation needed).
 - `planning-docs/project-manager/patterns.md` — new knowledge-refinement entry: ClickHouse HTTP interface is strictly one-statement-per-request with no multi-statement mode, and `multiquery` is a `clickhouse-client`-only flag with no HTTP equivalent.
 - CI run that first surfaced this in its currently-failing form: `35632623893` (2026-09-21). CI run triggered by the fix's push: `35650420692` (2026-09-21, in progress at time of writing).

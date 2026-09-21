@@ -3,6 +3,21 @@
 
 ---
 
+## 2026-09-21 - Knowledge Refinement: No Live Helm Deployments Exist — CI Schema-Init Fix Fully Resolved
+
+**Trigger Type**: Secondary — Knowledge Refinement (the last open item on DECISION-038, whether any live Helm deployment needed manual schema remediation, is closed by the user's confirmation that no such deployment exists).
+
+**Event**: User confirmed no live Helm deployments of this chart exist as of 2026-09-21. The latent bootstrap defect (Helm's `bootstrap.py` silently collapsing 8 schema statements to 3 broken ones) therefore never affected a real deployment — nothing to remediate. Also recorded: planning-docs from the prior pass committed as `723fc3c`, pushed to `origin/main`; CI run `35650420692` on code commit `3706e73` has Lint, "Initialise ClickHouse schema", and Import check all green, with the unit-test step still running.
+
+**Documents Updated**: `planning-docs/project-manager/pending-updates.md` (item marked RESOLVED, both portions), `planning-docs/DECISIONS.md` (DECISION-038 Status → FULLY RESOLVED, Open Item #2 closed), `planning-docs/SESSION_STATE.md` (header + Current Task → FULLY RESOLVED, no action remaining), `planning-docs/SPRINT_BACKLOG.md` (header + Active Projects + Recently Completed entry → FULLY RESOLVED), `planning-docs/completed/bugs/2026-09-21-ci-clickhouse-schema-init-multi-bug-fix.md` (Status/Type lines + new "Helm deployment impact" paragraph).
+
+**Human Alert Generated**: No — this closes the sole open alert from this body of work (`pending-updates.md`'s Helm re-bootstrap item). No new alert raised.
+
+**Agent Response Time**: Immediate
+**Action Result**: The CI ClickHouse schema-init fix (DECISION-038) is now recorded as fully resolved everywhere: code committed and pushed (`3706e73`), planning-docs committed and pushed (`723fc3c`), CI green on the steps that have completed, and the latent Helm production defect confirmed to have had zero real-world impact — recorded precisely as "no deployments existed," not "the old logic worked," so the defect's severity isn't understated for future reference.
+
+---
+
 ## 2026-09-21 - Knowledge Refinement: CI ClickHouse Schema-Init Fix Committed and Pushed (`3706e73`)
 
 **Trigger Type**: Secondary — Knowledge Refinement (a previously-recorded "COMPLETE, UNCOMMITTED" status corrected to "COMMITTED and PUSHED" once the coordinator supplied the commit hash, branch, and triggered CI run number).

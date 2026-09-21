@@ -7,6 +7,95 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [6.0.0] - 2026-09-21
+
+Stops every prediction pulling the node's entire pattern corpus into Python.
+ClickHouse now evaluates a provable upper bound on the similarity score, so
+patterns that cannot reach `recall_threshold` are never loaded. Prediction
+output is byte-identical: the real scorer still decides, unchanged, on every
+pattern that survives.
+
+Two settings are removed in the process, which is what makes this a major
+release. See Upgrade notes.
+
+### Upgrade notes — BREAKING
+
+**`recall_threshold = 0` is rejected.** It previously meant "return every
+pattern regardless of similarity". It is now a `400` from `POST /sessions` and
+`POST /sessions/{id}/config`, and a startup validation error from
+`RECALL_THRESHOLD=0`. A session already persisted with `0` is not broken: it
+rehydrates with a warning and falls back to the system default. Use a small
+positive value such as `0.01` for the same practical effect.
+
+**`LengthFilter` is removed**, along with the `length_min_ratio` and
+`length_max_ratio` settings and the `'length'` entry in `filter_pipeline`. A
+`filter_pipeline` naming `'length'` is now rejected by config validation with a
+message naming the filter, rather than being silently skipped. Remove the entry;
+the recall-safe bound replaces it and needs no configuration.
+
+The filter was recall-lossy and always had been. It bounded pattern length by
+fixed `0.5x`/`2.0x` ratios that ignored `recall_threshold`, so at
+`recall_threshold=0.1` with a 20-token STM it kept only lengths `[10, 40]` where
+recall-safety requires `[1, 380]` — silently discarding patterns scoring as high
+as 0.66. If you had it in a pipeline, removing it means you will now see
+predictions it had been hiding.
+
+No endpoint, request schema or response field is added, removed or renamed, and
+no prediction value changes.
+
+### Added
+- **Recall-safe candidate bounding** (`kato/filters/recall_bounds.py`). ClickHouse
+  cannot evaluate KATO's scorer — it has no longest-common-subsequence function,
+  and `arrayLevenshteinDistance` is a different metric (it permits substitution,
+  which LCS does not), so using it would change predictions. Instead a *necessary
+  condition* is pushed down: from `LCS <= min(P, L)` a window on pattern length,
+  and from `LCS <= (count of pattern tokens present in the STM)` an overlap
+  predicate. Both are provable upper bounds on `2*LCS/(P+L)`, so anything they
+  reject cannot clear `recall_threshold`. Uses the existing `idx_token_bloom` and
+  the `(kb_id, length, name)` primary key — no schema migration.
+- **`KATO_RECALL_BOUND_ENABLED`** (default `true`) — kill switch. When disabled
+  the emitted query is identical to the pre-6.0 one.
+- **`KATO_RECALL_BOUND_AUDIT`** (default `false`) — shadow-runs the unbounded
+  query and logs `RECALL BOUND VIOLATION` for anything dropped that was
+  reachable. Recommended for the first day on a new corpus shape.
+- `--boundary` mode for `scripts/check_prediction_parity.py`, building patterns
+  that sit exactly on the bound's edge.
+
+### Changed
+- `recall_threshold` must now be `> 0.0` and `<= 1.0` (was `>= 0.0`). Validation
+  moved in lockstep across the Pydantic field, `SessionConfiguration.validate()`
+  and `ConfigurationService`, and now also rejects `bool`, which is an `int`
+  subclass and previously passed as `1.0`.
+
+### Fixed
+- **`POST /sessions` never validated its `config` payload**, unlike
+  `POST /sessions/{id}/config`. Create-time configuration was accepted unchecked.
+- **Both session managers discarded `SessionConfiguration.update()`'s result**, so
+  a rejected value silently became the default instead of raising.
+- `RapidFuzzFilter` read `recall_threshold` with `or 0.1` (coercing a legitimate
+  `0.0`) and `getattr(config, 'use_token_matching', True)`, which returns `None`
+  — not `True` — when the attribute exists and is `None`, silently selecting
+  character-level matching.
+- Corrected two comments asserting that query parameters are bound server-side.
+  `clickhouse-connect` resolves `%(name)s` client-side; values are escaped, but
+  they do land in the statement text and count against `max_query_size`.
+
+### Performance
+Measured on a 3,000-pattern corpus, identical prediction counts in both
+configurations:
+
+| corpus shape | bound on | bound off |
+|---|---|---|
+| wide vocabulary (4,000 symbols) | 25.4 ms | 89.5 ms |
+| narrow vocabulary (40 symbols) | 109.9 ms | 160.8 ms |
+
+The predicate evaluated over 1,000,000 synthetic patterns with no index
+assistance takes 206 ms and returns 3,925 rows.
+
+The benefit depends entirely on how much vocabulary a corpus shares with its
+probes: large on diverse data, near-none where most patterns genuinely match.
+It never costs correctness.
+
 ## [5.2.0] - 2026-09-18
 
 Makes the prediction path give the same answer twice, and stops it doing work

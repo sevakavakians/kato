@@ -1,7 +1,7 @@
 # Optimization: Recall-Safe Candidate Bound (ClickHouse-Side Pruning Without Running the Scorer There)
 
 **Completed**: 2026-09-21
-**Branch**: `perf/recall-safe-candidate-bound` — **NOT merged to `main`, NOT released.** Last release remains v5.2.0 (2026-09-18). This work is complete and verified on-branch but is not in any deployed or published image.
+**Branch**: `perf/recall-safe-candidate-bound` — merged to `main` same day as commit `51f8213` and **released as KATO v6.0.0**, patched same day as **v6.0.1**. See `planning-docs/completed/features/2026-09-21-kato-v6.0.0-release.md` and `planning-docs/completed/features/2026-09-21-kato-v6.0.1-release.md` (DECISION-035/DECISION-036/DECISION-037). *(This section originally read "NOT merged to `main`, NOT released" — corrected same day once the merge/release happened; the technical detail below is unchanged.)*
 **Type**: Performance (candidate-set bounding) + Correctness safety mechanism + Bug Fix (`recall_threshold=0` validation gaps) + Dead-code/unsafe-code removal (`LengthFilter`)
 **Impact**: Resolves the candidate-set-bounding discussion deferred at DECISION-033/`pending-updates.md` (2026-09-18) — the default `filter_pipeline=[]` full-corpus pull into Python is now bounded at the ClickHouse query itself via a provably lossless necessary-condition predicate, with predictions verified byte-identical.
 **Decision**: DECISION-034 in `planning-docs/DECISIONS.md`
@@ -128,5 +128,5 @@ Full detail logged in `project-manager/patterns.md`.
 ## Decision Reference
 
 **Decision**: DECISION-034 in `planning-docs/DECISIONS.md`
-**Status**: Complete and verified on branch `perf/recall-safe-candidate-bound`. **Not merged, not released** — see `planning-docs/project-manager/pending-updates.md` for the open merge/release item.
+**Status**: Complete and verified on branch `perf/recall-safe-candidate-bound`. **Merged and released same day** as KATO v6.0.0 (DECISION-035), patched same day as v6.0.1 (DECISION-036/DECISION-037) — see `planning-docs/project-manager/pending-updates.md` for the (now resolved) merge/release item.
 **Related Files**: `kato/filters/recall_bounds.py` (new), `kato/filters/executor.py`, `kato/filters/base.py`, `kato/searches/pattern_search.py`, `kato/config/settings.py`, `kato/sessions/session_config.py` (`SessionConfiguration.validate()`), `kato/services/configuration_service.py` (`ConfigurationService.validate_configuration_update()`), `kato/sessions/session_manager.py`, `kato/sessions/redis_session_manager.py`, `kato/filters/rapidfuzz_filter.py`, `scripts/check_prediction_parity.py`, `tests/tests/unit/test_recall_bounds.py` (new), `tests/tests/unit/test_recall_bound_executor.py` (new)

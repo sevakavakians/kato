@@ -560,6 +560,20 @@ absolute latency differences across machines.
 
 **Recurrence Risk**: Medium — any new verification step written quickly under time pressure is at risk of one of these three specific shapes (empty-input check, path-not-exercised check, circular-constant check). Worth a standing habit: when writing a new automated check, spend one extra step confirming it can print "FAIL" under the exact bug it exists to catch.
 
+### 2026-09-21 - A Sixth Adjacent Failure Mode: An Unverified Claim Written Directly Into Published Release Notes
+
+**Pattern**: The v6.0.0 release notes, as first published to GitHub, claimed the `filter_pipeline` rejection came "with a message naming the filter." That sentence was **never exercised at all** before being written — not a check with a blind spot, not a check with no possible failure mode (the five instances above, all of which at least *ran something*) — this claim was asserted directly into user-facing release notes with no test run behind it whatsoever. It was false: the create path actually returned 422 citing `recall_threshold` as an example field (misleading, since the real problem was an unknown filter name), and the update path returned a bare 400 saying "see server logs." The gap was only caught during post-release verification of the shipped artifact, after publication — not before.
+
+**Discovery Trigger**: Post-release verification work on the freshly-pulled v6.0.0 image happened to exercise the `filter_pipeline` rejection path directly (as part of confirming `recall_threshold=0` and `filter_pipeline=['length']` both reject cleanly) and the actual response did not match what the just-published release notes said it would.
+
+**Assumption → Reality**:
+- Assumed: a one-line factual claim about existing behavior, written while summarizing a release for its notes, is safe to state directly — it isn't new work, just a description of what's already there.
+- Reality: a description of behavior is itself a claim that can be wrong, exactly like a piece of code or a test assertion, and it was — the actual message text had never been checked against what got written about it.
+
+**Resolution Pattern**: This is the adjacent case to "a verification that could not have failed" (the five instances above): here nothing was verified at all before the claim was published, rather than a check running and passing vacuously. Release notes that describe behavior (error messages, response shapes, specific numbers) should be verified the same way code is — actually exercise the described path against the real artifact — **before** publishing, not caught after the fact in a follow-up pass. Once caught, the fix was handled correctly: the published GitHub release notes and `CHANGELOG.md`'s v6.0.0 entry were corrected to describe the actual (generic-message) behavior, with an explicit blockquote noting the message was generic in 6.0.0 and improved in 6.0.1 — so the historical record stays accurate rather than silently rewritten. The underlying defect itself was fixed in v6.0.1 (DECISION-036).
+
+**Recurrence Risk**: Medium — release notes are usually written from memory/intent right after finishing work, exactly the moment confidence is highest and the temptation to skip re-verifying a "known" detail is strongest. Any factual, checkable claim in release notes (exact error text, response codes, specific numbers) should get the same "did I actually run this?" discipline as a code change, not be treated as safe because it's "just documentation."
+
 ---
 
 ## Operational Gotchas

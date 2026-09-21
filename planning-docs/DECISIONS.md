@@ -1,13 +1,128 @@
 # DECISIONS.md - Architectural & Design Decision Log
 *Append-Only Log - Started: 2025-08-29*
-*Last Updated: 2026-09-21 (DECISION-034: recall-safe candidate bound — a lossless necessary-condition predicate pushed into ClickHouse to bound the default full-corpus candidate pull, resolving the candidate-set-bounding discussion deferred at DECISION-033. Complete and verified on branch `perf/recall-safe-candidate-bound`; NOT merged to `main`, NOT released.)*
+*Last Updated: 2026-09-21 (DECISION-037: new standing rule — no deprecation/removal notes in runtime messages, enforced by test. DECISION-036: KATO v6.0.1 patch, fixing `filter_pipeline` validation and applying DECISION-037. DECISION-035: KATO v6.0.0 major release — DECISION-034's recall-safe candidate bound merged and shipped.)*
+
+---
+
+## 2026-09-21 - DECISION-037: Standing Rule — Never Include Deprecation/Removal Notes in Runtime Messages
+
+**Decision**: KATO's error messages, API response bodies, and log lines must state the CURRENT requirement only. Information about what changed, when, or why — deprecation notices, removal history, migration commentary, version references — belongs exclusively in `CHANGELOG.md`, never in code or the API surface.
+**Status**: **ADOPTED, STANDING RULE.** Applied retroactively to 5 existing messages in v6.0.1 (see DECISION-036) and **enforced by an automated test** going forward: `test_unknown_filter_is_rejected_naming_the_filter` (`tests/tests/unit/test_session_config.py`) fails if a runtime message contains any of `"deprecat"`, `"removed in"`, `"was removed"`, `"no longer"`, `"superseded"`, or a version-number pattern.
+**Classification**: Standing Project Rule (API/messaging design) — same category as the project's no-locks and determinism rules recorded in `CLAUDE.md`.
+**Confidence**: High — user-explicit, stated directly and unambiguously.
+
+### Context
+While fixing the `filter_pipeline` validation gap for v6.0.1 (DECISION-036), the rejection message drafted for an unknown filter name read:
+
+> "Unknown filter(s): 'length'. Valid filters: minhash, jaccard, bloom, rapidfuzz. The 'length' filter was removed in 6.0.0 because it discarded patterns that genuinely matched; remove it from the pipeline. Candidate bounding is now automatic and needs no configuration."
+
+The user rejected the second sentence onward, in their own words: *"Never include information or notes on deprecated functionality in KATO's messages... All of that information should only be in the changelogs, rather than as part of the code or API."* The first sentence (naming the filter, listing valid ones) is exactly the actionable content a caller needs to fix their request; everything after it is commentary about the *past*, which does not help a caller resolve a present error and which locks the message's wording to a specific release's narrative indefinitely.
+
+### Rationale
+- **Actionability**: a caller fixing a rejected request needs to know what's wrong *now* and what to do about it — not why it used to be different.
+- **Maintenance burden**: messages that narrate history become stale or misleading the moment another change happens near them (e.g. a second removal would require editing the same string again, and old wording about "removed in 6.0.0" persists forever in that code path even in 7.0, 8.0, etc.).
+- **Separation of concerns**: `CHANGELOG.md` already exists as the authoritative record of what changed and why, dated and versioned. Duplicating that narrative into runtime strings creates two sources of truth that can drift.
+- **Consistency with existing behavioral guarantees**: this project already treats determinism and no-locks as inviolable, code-level standing rules rather than one-off review comments (`CLAUDE.md`). This rule is recorded the same way — durable, discoverable, and now machine-checked rather than left to reviewer memory.
+
+### What Changed (v6.0.1, see DECISION-036 for full detail)
+Five messages corrected, each keeping the actionable half and dropping the commentary:
+1. `filter_pipeline` rejection (new this session) — now names the filter and lists valid ones, nothing more.
+2. Session rehydration warning — "no longer valid" → "outside the permitted range (> 0.0 and <= 1.0)".
+3. `getPatterns()`/`getPatternsAsync()` `RuntimeError`s — "is deprecated. Hybrid architecture uses..." → "is not supported. Pattern loading runs through...".
+4. `symbols_kb.update_one()` log warning — "called but is deprecated in hybrid architecture" → "is a no-op; use `increment_symbol_frequency` or `increment_pattern_member_frequency`".
+5. `/percept-data`/`/cognition-data` response `warning` field — "This endpoint is deprecated. Use /sessions/..." → "Use /sessions/{session_id}/percept-data for session-aware data." (field kept, no schema change; endpoints keep their OpenAPI `deprecated` flag — the flag itself is metadata, not prose, and is not what this rule targets).
+
+### Scope Note
+This rule targets **runtime-observable text** — anything a caller or operator sees at request- or log-time (HTTP error bodies, response fields, log messages, exception text). It does not apply to: `CHANGELOG.md` (the correct home for this information), code comments explaining *why* code is shaped a certain way for future maintainers, docstrings describing historical context for developers reading source, or structured API metadata like OpenAPI's `deprecated: true` flag (a machine-readable signal, not prose commentary).
+
+### Enforcement
+`test_unknown_filter_is_rejected_naming_the_filter` scans the actual rejection message text for the banned substrings/patterns. This is a **regression guard**, not just documentation of intent — future work that reintroduces this pattern anywhere the test's scan applies will fail CI, not merely fail a human review pass.
+
+### Related Decisions
+- DECISION-036 (2026-09-21, same day) — the v6.0.1 release that fixed the triggering message and four pre-existing violations of this same rule.
+- `CLAUDE.md` — the existing precedent for durable, code-level standing rules (no locks, determinism) this decision follows the same pattern as.
+
+---
+
+## 2026-09-21 - DECISION-036: KATO v6.0.1 Release (PATCH) — `filter_pipeline` Validation Fix + Runtime-Messaging Rule Applied
+
+**Decision**: Release v6.0.1 same-day as v6.0.0, fixing a `filter_pipeline` validation gap that was the single most likely v6.0.0 upgrade failure, and applying the new DECISION-037 standing rule to 5 runtime messages (1 new, 4 pre-existing).
+**Status**: **RELEASED and DEPLOYED.** Tag `v6.0.1`; version bump commit `e5a4cd6`; fix commits `c687268`, `23f13e9`. GitHub release: https://github.com/sevakavakians/kato/releases/tag/v6.0.1. Images `ghcr.io/sevakavakians/kato:6.0.1`/`:6.0`/`:6`/`:latest`, one manifest, distinct from 6.0.0's.
+**Classification**: Release / Bug Fix (validation gap) + Standing Rule Application (DECISION-037)
+**Confidence**: High — pre-release gates clean, fresh-pull image verification performed.
+
+### Context
+Immediately after v6.0.0 shipped (DECISION-035), post-release verification found that `filter_pipeline` — a config field v6.0.0 itself had just made more consequential by removing the `'length'` filter — was never actually validated by `ConfigurationService`. A rejection fell through to `SessionConfiguration.validate()`, which returns a bare `False` with no field-level detail. Callers got a generic message naming no field; on the create path, a message that actively misled by citing `recall_threshold` as the example field, when the real problem was an unknown filter name. Since v6.0.0 removed `'length'` from the valid set, any deployment still passing `filter_pipeline=['length']` on upgrade would hit exactly this gap — the single most likely v6.0.0 upgrade failure mode.
+
+Drafting the fix message surfaced the runtime-messaging violation that became DECISION-037 (see above) — the first draft included deprecation commentary the user rejected outright.
+
+### What Changed
+1. **`filter_pipeline` validation, both paths**: create (`POST /sessions`) and update (`POST /sessions/{id}/config`) both now return HTTP 400 naming the offending filter(s) and listing valid ones, instead of a generic/misleading message.
+2. **`VALID_FILTERS` hoisted to a shared constant** in `kato/sessions/session_config.py` — previously duplicated between the two validators, which is exactly what let them disagree about which names are accepted in the first place.
+3. **DECISION-037 applied**: 5 runtime messages corrected (see DECISION-037 for the full list) — the new `filter_pipeline` rejection message, plus 4 pre-existing violations found by the same review pass (session rehydration warning, two `getPatterns`/`getPatternsAsync` `RuntimeError`s, a `symbols_kb.update_one()` log warning, and the `/percept-data`/`/cognition-data` response `warning` field).
+4. **New regression test**: `test_unknown_filter_is_rejected_naming_the_filter` (`tests/tests/unit/test_session_config.py`) — asserts both the correct rejection behavior and the absence of deprecation-style commentary in the message text.
+
+### Verification
+- Pre-release gates: ruff clean, bandit 0 findings, pip-audit clean.
+- Full suite: **660 passed / 3 skipped / 1 xfailed** (was 659 at v6.0.0 — the +1 is the new regression test).
+- Fresh-pull image verification: version `6.0.1`, `VALID_FILTERS` correct and shared, `max_length` at `r=0.1` still `114`, rejection message correct and carrying no deprecation wording, 0 `.pyc` files shipped.
+- Live deployment verification: `recall_threshold=0` returns 400, `filter_pipeline=['length']` returns 400 with the clean message naming the filter.
+
+### Impact
+- **Positive**: closes the single most likely v6.0.0 upgrade failure mode within hours of release; unifies a previously-duplicated validation list that could silently drift out of sync; establishes and enforces DECISION-037 going forward.
+- **Neutral**: no API contract change beyond making an already-intended-to-be-rejected case actually rejected with a proper message (PATCH-appropriate — this is a bug fix, not new capability).
+- **Risk**: Low — narrowly scoped, gated by full pre-release suite plus fresh-pull verification.
+
+### Related Decisions
+- DECISION-034 (2026-09-21) — the recall-safe candidate bound work whose `LengthFilter` removal made this validation gap consequential.
+- DECISION-035 (2026-09-21, same day) — the v6.0.0 release this patches within hours.
+- DECISION-037 (2026-09-21, same day) — the standing rule this release's message fixes apply.
+
+---
+
+## 2026-09-21 - DECISION-035: KATO v6.0.0 Release (MAJOR Version Bump) — Recall-Safe Candidate Bound Merged and Shipped
+
+**Decision**: Merge `perf/recall-safe-candidate-bound` to `main` and release as **v6.0.0**, a MAJOR version bump.
+**Status**: **RELEASED and DEPLOYED.** Merge commit `51f8213`; version bump commit `419e695`; tag `v6.0.0` pushed. GitHub release: https://github.com/sevakavakians/kato/releases/tag/v6.0.0 (assets `kato-deployment-v6.0.0.tar.gz`, `kato-0.1.1.tgz`). Images `ghcr.io/sevakavakians/kato:6.0.0`/`:6.0`/`:6`/`:latest`, one manifest, distinct from 5.2.0's.
+**Classification**: Release / Milestone (major version bump)
+**Confidence**: High — pre-release gates clean, fresh-pull image verification performed against the published artifact.
+
+### Context
+DECISION-034 (same day) completed the recall-safe candidate bound — complete, verified, but sitting unmerged on `perf/recall-safe-candidate-bound`, flagged as the top open item in `project-manager/pending-updates.md`. That branch was merged to `main` and released the same day.
+
+### Bump Rationale — MAJOR (reversal of the v5.2.0 pattern)
+`docs/maintenance/releasing.md` lists **"Remove configuration parameters"** as an explicit MAJOR trigger. This release does exactly that: it removes `length_min_ratio`, `length_max_ratio`, and the `'length'` filter pipeline name entirely (DECISION-034's `LengthFilter` deletion), and separately makes `recall_threshold=0` — previously valid input — rejected outright. Both are silent breaks for any deployment currently passing those parameters or that value: a config that validated cleanly under v5.2.0 now fails under v6.0.0.
+
+**MAJOR was user-chosen, from a recommendation**, matching the documented criteria literally rather than weighing "is this really disruptive in practice." This is a deliberate **reversal of the v5.2.0 precedent** (DECISION-033), where the user chose **MINOR** over a MAJOR recommendation for a release that also changed behavior but not the configuration surface's validity — there, "no API contract change" was the deciding factor even though the change was structurally significant; here, the documented "remove configuration parameters" trigger applied literally and the user went with it. Worth recording as a contrast pair: two adjacent releases, two different resolutions of "how literally do we apply the bump-size criteria," both user-decided rather than automatic. Neither is "the rule" — each release gets its own literal read against `docs/maintenance/releasing.md`.
+
+### Content
+This release ships the recall-safe candidate bound work already fully documented in **DECISION-034** and `planning-docs/completed/optimizations/2026-09-21-recall-safe-candidate-bound.md`. Not re-documented here — see those for the technical detail (ClickHouse-side lossless necessary-condition predicate, `LengthFilter` removal, `recall_threshold=0` rejection, safety mechanisms, measured results).
+
+### Verification
+- Pre-release gates: ruff clean, bandit 0 findings, pip-audit no known vulnerabilities.
+- Full suite: **659 passed / 3 skipped / 1 xfailed** (unchanged from DECISION-034's on-branch verification).
+- Fresh-pull verification of the published image: version `6.0.0`, `recall_bounds` present, `LengthFilter` absent, filter registry `['bloom','jaccard','minhash','rapidfuzz']`, `max_length` at `r=0.1` computes to **114** (not 113 — the float-truncation regression case DECISION-034 identified; verifying it survived into the shipped artifact, not just the branch, matters), 0 `.pyc` files shipped.
+
+### Process Note — An Unverified Claim in the Published Release Notes (self-caught, corrected)
+The v6.0.0 release notes as first published claimed the `filter_pipeline` rejection came "with a message naming the filter." **This was asserted without testing and was false**: the create path actually returned 422 citing `recall_threshold` (a misleading example, not the actual problem), and the update path returned 400 saying "see server logs." Caught during post-release verification, not before publishing. The published GitHub release notes and `CHANGELOG.md`'s v6.0.0 entry were corrected to describe the actual (generic-message) behavior, with an explicit blockquote noting the message is generic in 6.0.0 and improved in 6.0.1. The underlying defect was fixed in **DECISION-036** (v6.0.1). See `project-manager/patterns.md` for this logged as a process pattern — a claim written into user-facing release notes without being exercised at all, adjacent to but distinct from the "verification that could not have failed" family of findings already logged there.
+
+### Impact
+- **Positive**: closes the top open item from DECISION-034/`pending-updates.md`; the candidate-bound work is now in production, not just verified on a branch; the MAJOR bump correctly signals the two silent-break changes to any consumer watching version numbers.
+- **Neutral**: prediction output unchanged by design (DECISION-034) — the MAJOR bump is about configuration-surface breakage, not behavior change for compliant callers.
+- **Risk**: Low on the shipped code (exhaustively proven per DECISION-034). The `filter_pipeline` validation gap found immediately after release (DECISION-036) shows the value of fast post-release verification — caught and patched same day.
+
+### Related Decisions
+- DECISION-034 (2026-09-21, same day) — the technical work this release ships; not re-documented here.
+- DECISION-033 (2026-09-18) — the v5.2.0 MINOR-bump precedent this release's MAJOR choice deliberately contrasts with.
+- DECISION-036 (2026-09-21, same day) — the same-day v6.0.1 patch this release necessitated.
+- `planning-docs/project-manager/pending-updates.md` — the merge/release item this decision resolves.
 
 ---
 
 ## 2026-09-21 - DECISION-034: Recall-Safe Candidate Bound — Push a Necessary Condition Into ClickHouse, Not the Scorer
 
 **Decision**: Bound the default candidate-set pull (`filter_pipeline=[]`, currently O(N) in corpus size) by computing, inside the ClickHouse query itself, a cheap **necessary condition** for a pattern to possibly pass `recall_threshold` — never the scorer itself, which ClickHouse cannot run. A pattern is dropped only when even its most favorable possible similarity is provably below threshold; every survivor still runs through the unchanged Python `_lcs_ratio_scorer`. Ship **on by default** (env kill-switch `KATO_RECALL_BOUND_ENABLED`, default `true`), **delete `LengthFilter` entirely** (it was recall-unsafe, not just imprecise), and **reject `recall_threshold=0`** everywhere (API, session config, env) since no candidate bound is valid at `r=0`.
-**Status**: **COMPLETE and VERIFIED** on branch `perf/recall-safe-candidate-bound` (5 commits, 39 files, +1325/-304). **NOT merged to `main`, NOT released** — the last release remains **v5.2.0** (2026-09-18, DECISION-033), which does not contain this work; the deployment stack stays pinned to it. Full detail: `planning-docs/completed/optimizations/2026-09-21-recall-safe-candidate-bound.md`.
+**Status**: **COMPLETE and VERIFIED** on branch `perf/recall-safe-candidate-bound` (5 commits, 39 files, +1325/-304). **UPDATE (same day, 2026-09-21)**: merged to `main` (merge commit `51f8213`) and released as **v6.0.0**, then patched same-day as **v6.0.1** — see DECISION-035 and DECISION-036. No longer unmerged/unreleased; the deployment stack runs v6.0.1. Full technical detail unchanged: `planning-docs/completed/optimizations/2026-09-21-recall-safe-candidate-bound.md`.
 **Classification**: Architectural Decision (candidate-set bounding strategy) + Performance + Correctness Safety Mechanism + Bug Fix (`recall_threshold=0` validation gaps) + Removal (recall-unsafe `LengthFilter`)
 **Confidence**: Very High — losslessness is proven, not measured: exhaustive sweep asserts the bound accepts whenever the float scorer accepts (mutation-checked, catches a 413-violation naive version and a 129-violation off-by-one); 0 violations across 120,000 pattern/STM pairs; live audit-mode shadow run against a real 400-pattern corpus confirms 0 reachable drops among 360 dropped; prediction parity byte-identical including a purpose-built boundary corpus that actually reaches the bound's edge.
 
@@ -76,11 +191,11 @@ Extends the three instances already in `project-manager/patterns.md`. Fourth: `t
 ### Impact
 - **Positive**: resolves the highest-priority open item from DECISION-033; converts the default candidate pull from O(N) to a bound that scales with match density rather than corpus size, at target scale (100k-1M+ patterns/node); proven lossless rather than merely measured-safe; closes two pre-existing validation gaps (`POST /sessions` unvalidated, silently-discarded config-update failures) found along the way; removes a filter (`LengthFilter`) that had been silently discarding valid matches since it was written.
 - **Neutral**: prediction output is unchanged by design — this is a candidate-set bound, not a matching-semantics change.
-- **Risk**: Low on the bound itself (exhaustively proven, mutation-checked, live-audited). **Process risk is the open item**: this is complete and verified but sits entirely on an unmerged branch — see "Open Items" below and `pending-updates.md`.
+- **Risk**: Low on the bound itself (exhaustively proven, mutation-checked, live-audited). ~~**Process risk was the open item**: this was complete and verified but sat entirely on an unmerged branch.~~ **RESOLVED same day**: merged and released as v6.0.0/v6.0.1 — see DECISION-035, DECISION-036.
 
 ### Open Items (carried forward as backlog entries, see `SPRINT_BACKLOG.md`)
-- Merge `perf/recall-safe-candidate-bound` to `main` and cut a release — the work is complete and verified but unreleased; the deployment remains pinned to v5.2.0, which does not contain it.
-- Ship to staging with `KATO_RECALL_BOUND_AUDIT=true` for 24h before trusting it against real corpus shapes no synthetic test anticipates, then turn audit off.
+- ~~Merge `perf/recall-safe-candidate-bound` to `main` and cut a release.~~ **DONE 2026-09-21** — released as v6.0.0, patched same day as v6.0.1. See DECISION-035, DECISION-036.
+- **Top priority now**: ship to staging with `KATO_RECALL_BOUND_AUDIT=true` for 24h before trusting it against real corpus shapes no synthetic test anticipates, then turn audit off.
 - Retire the unreachable `r=0` branches (`pattern_search.py:1113-1127`, `prediction.py:228-232`).
 - Measure selectivity against real training data — current percentages are synthetic estimates.
 - `scripts/benchmark_hybrid_architecture.py` is stale (still imports `pymongo`, removed in v3.0.0; 9 pre-existing lint errors; likely cannot run) — only its filter pipelines were updated in this session.

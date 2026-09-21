@@ -905,3 +905,31 @@
 
 **Agent Response Time**: Immediate
 **Action Result**: Planning docs now reflect the recall-safe candidate bound as complete/verified-on-branch, clearly distinguished from merged/released work — README.md's "Current System State" explicitly states v5.2.0 remains current and names this branch as not yet included. The candidate-set-bounding discussion (open since 2026-09-18) is resolved; the new open item is the merge/release decision. The critical exact-arithmetic finding and the standing rule it implies are recorded in both DECISIONS.md (for the technical record) and patterns.md (for future recurrence-risk awareness). All prior open pending-updates.md items (dependency upgrade, REDIS_PASSWORD, dashboard hardening, single-symbol fast-path semantics, sort_symbols bug) remain untouched.
+
+---
+
+## 2026-09-21 - Milestone Completion x2 + Architectural Decisions: KATO v6.0.0 Then v6.0.1 Released (Same Day, Later)
+
+**Trigger Type**: Primary — Milestone Completion (recall-safe candidate bound merged and released as v6.0.0) + Milestone Completion (same-day patch v6.0.1) + Architectural Decision (MAJOR bump rationale, DECISION-035) + Architectural Decision (new standing rule: no deprecation/removal notes in runtime messages, DECISION-037) + Knowledge Refinement (this morning's "NOT merged, NOT released" status, recorded across 6 files, corrected to reflect both releases)
+
+**Event**: `perf/recall-safe-candidate-bound` merged to `main` (`51f8213`) and released as **v6.0.0** — MAJOR bump, version bump `419e695`, tag pushed, GitHub release live, images `ghcr.io/sevakavakians/kato:6.0.0`/`:6.0`/`:6`/`:latest`. Bump rationale: `docs/maintenance/releasing.md`'s "Remove configuration parameters" trigger applied literally (removes `length_min_ratio`/`length_max_ratio`/the `'length'` filter, rejects `recall_threshold=0`) — a deliberate reversal of the v5.2.0 pattern (DECISION-033), where the user chose MINOR over a MAJOR recommendation. Pre-release gates clean; full suite 659 passed / 3 skipped / 1 xfailed; fresh-pull image verification confirmed `recall_bounds` present, `LengthFilter` absent, `max_length` at `r=0.1` correctly 114, 0 `.pyc` shipped.
+
+Post-release verification found `filter_pipeline` was never validated by `ConfigurationService` — the single most likely v6.0.0 upgrade failure, since that release removed the `'length'` filter. Fixed and released same day as **v6.0.1** — PATCH, version bump `e5a4cd6`, fix commits `c687268`/`23f13e9`. Drafting the fix's rejection message surfaced a standing-rule violation (deprecation commentary in a runtime message) that the user rejected explicitly — recorded as **DECISION-037**: runtime messages must never carry deprecation/removal notes, only the current requirement; that belongs in `CHANGELOG.md` alone. 5 messages corrected (1 new, 4 pre-existing), now enforced by a test that fails on banned substrings/version numbers. Full suite 660 passed / 3 skipped / 1 xfailed; fresh-pull verification and live deployment checks both clean.
+
+Also caught: the v6.0.0 release notes as first published made an unverified, false claim about the `filter_pipeline` rejection message ("names the filter") — the actual v6.0.0 behavior was a generic/misleading message. Corrected in the published GitHub release notes and `CHANGELOG.md`'s v6.0.0 entry (now carries a blockquote noting this); logged as a new process pattern distinct from the existing "verification that could not have failed" family (this was a claim never exercised at all, not a check that ran and passed vacuously).
+
+**Documents Updated**:
+- `planning-docs/DECISIONS.md` (DECISION-035, DECISION-036, DECISION-037 added; DECISION-034's Status/Impact/Open-Items updated in place; header updated)
+- `planning-docs/completed/features/2026-09-21-kato-v6.0.0-release.md` (new)
+- `planning-docs/completed/features/2026-09-21-kato-v6.0.1-release.md` (new)
+- `planning-docs/SESSION_STATE.md` (new Current Task for both releases; prior Current Task — the unmerged recall-safe bound — renamed to Previous Task with a superseding note; header updated)
+- `planning-docs/SPRINT_BACKLOG.md` (header/Active Projects rewritten; Recently-Completed entry rewritten to cover both releases; re-assess-list and Discussion-Needed items' resolution notes updated; "Release Needed... Unmerged" entry marked RESOLVED; new P0 staging-audit entry added)
+- `planning-docs/README.md` (Current System State Version/Next-up/Status rewritten: v6.0.1 now current, "NOT yet included" language removed)
+- `planning-docs/project-manager/pending-updates.md` (the "Decision Needed: Merge and Release" entry marked RESOLVED in place, resolution/verification detail added; cross-reference from the Discussion-Needed entry updated)
+- `planning-docs/project-manager/patterns.md` (new dated entry in "Process Verification Patterns": unverified release-notes claim)
+- `planning-docs/project-manager/maintenance-log.md` (this action logged)
+
+**Human Alert Generated**: No new alert — this pass **closes** the "Decision Needed: Merge and Release" item opened earlier today (`pending-updates.md`, now Resolved). The recommended staging-audit soak is an operational follow-up task, not a decision requiring human review, so it was recorded as a new P0 item in `SPRINT_BACKLOG.md` rather than in `pending-updates.md`.
+
+**Agent Response Time**: Immediate
+**Action Result**: Planning docs now uniformly reflect v6.0.1 as the current, deployed release — every file that recorded the recall-safe candidate bound as "complete but unmerged/unreleased" earlier today (README.md, SESSION_STATE.md, SPRINT_BACKLOG.md, DECISIONS.md, pending-updates.md) has been corrected. The two-decision contrast (v5.2.0 MINOR vs. v6.0.0 MAJOR) and the new standing messaging rule are both recorded prominently for future discoverability. The self-caught release-notes error is logged as a distinct process pattern. All prior open items unrelated to this work (dependency upgrade, REDIS_PASSWORD, dashboard hardening, single-symbol fast-path semantics, sort_symbols bug, retire unreachable r=0 branches, measure real-corpus selectivity, stale benchmark script) remain untouched.

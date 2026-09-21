@@ -677,12 +677,22 @@ class PatternSearcher:
                 redis_client=self.redis_client,
                 kb_id=self.kb_id,  # For ClickHouse partition pruning and node isolation
                 bloom_filter=self.bloom_filter,
-                extractor=self.extractor
+                extractor=self.extractor,
+                # RESOLVED values -- the same ones the scorer uses below (see
+                # self.recall_threshold / self.use_token_matching). The recall
+                # bound is only safe because these are identical to the scorer's;
+                # reading them from session_config instead would pick up None.
+                recall_threshold=self.recall_threshold,
+                use_token_matching=self.use_token_matching,
             )
         else:
             # Update state for new query
             self.filter_executor.state = state
             self.filter_executor.stage_metrics = []
+            # Re-assign too: the executor is a long-lived cached object, and
+            # these must never drift from what the scorer will use.
+            self.filter_executor.recall_threshold = self.recall_threshold
+            self.filter_executor.use_token_matching = self.use_token_matching
 
         # Execute pipeline
         logger.info(f"Executing filter pipeline on state with {len(state)} tokens")

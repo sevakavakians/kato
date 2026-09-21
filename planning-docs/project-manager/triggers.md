@@ -882,3 +882,26 @@
 
 **Agent Response Time**: Immediate
 **Action Result**: Planning docs now reflect v5.2.0 as the current released/deployed version across `README.md`, `SESSION_STATE.md`, `SPRINT_BACKLOG.md`, and `DECISIONS.md`. One long-open pending-updates.md item resolved. The candidate-set-bounding discussion is now the clearly-flagged next task. The standing v5.1.1/v5.1.2 documentation-gap item remains open and untouched (out of scope for this pass — no first-hand record of that earlier work exists in this agent's context).
+
+---
+
+## 2026-09-21 - Milestone Completion + Architectural Decision: Recall-Safe Candidate Bound Complete and Verified (Not Merged/Released)
+
+**Trigger Type**: Primary — Milestone Completion (candidate-set-bounding discussion resolved, DECISION-034) + Architectural Decision (necessary-condition predicate pushed into ClickHouse in place of running the scorer there) + Knowledge Refinement (exact-arithmetic-unsafe finding) + Task Status Change (recall_threshold=0 now rejected)
+
+**Event**: Branch `perf/recall-safe-candidate-bound` (5 commits, 39 files, +1325/-304) completed and verified — resolves the candidate-set-bounding discussion flagged as the top open item after KATO v5.2.0 (DECISION-033). Core decision: ClickHouse cannot run KATO's LCS-based scorer, so a provably-lossless necessary-condition bound (length window + token-overlap count) is applied to the candidate query instead, verified over 120,000 pattern/STM pairs with 0 recall violations. Critical finding recorded: exact `Fraction` arithmetic is unsafe for this bound (413 recall losses) because it is stricter than the float reference scorer it approximates; a deliberately weakened integer bound fixes this (0 losses). Also shipped: `LengthFilter` deleted (recall-unsafe), `recall_threshold=0` rejected everywhere (closing two pre-existing validation gaps found along the way), and a deliberate decision not to register the bound as a `filter_pipeline` entry. Full suite 659 passed / 3 skipped / 1 xfailed (was 625). **NOT merged to `main`, NOT released** — deployment remains pinned to v5.2.0.
+
+**Documents Updated**:
+- `planning-docs/DECISIONS.md` (DECISION-034 added, header updated)
+- `planning-docs/completed/optimizations/2026-09-21-recall-safe-candidate-bound.md` (new)
+- `planning-docs/SESSION_STATE.md` (new Current Task; previous Current Task renamed to Previous Task)
+- `planning-docs/SPRINT_BACKLOG.md` (header/Active Projects updated; new Recently Completed entry; `filter_pipeline`/`LengthFilter` re-assess-list item marked DONE; "Discussion Needed" backlog item marked RESOLVED; four new Backlog entries: merge/release, retire unreachable r=0 branches, measure real-corpus selectivity, stale benchmark script)
+- `planning-docs/README.md` (Current System State: Version/Next-up/Status lines updated — v5.2.0 remains current release, recall-safe bound flagged as awaiting merge/release)
+- `planning-docs/project-manager/pending-updates.md` (candidate-set-bounding entry marked Resolved; new "Decision Needed: Merge and Release" entry added, High priority)
+- `planning-docs/project-manager/patterns.md` (new "Numerical Correctness Patterns" section — exact-arithmetic-vs-float-reference finding; new dated entry in "Testing Strategy Patterns" — fourth and fifth instances of "a verification that could not have failed")
+- `planning-docs/project-manager/maintenance-log.md` (this action logged)
+
+**Human Alert Generated**: Yes — `pending-updates.md`'s new "Decision Needed: Merge and Release `perf/recall-safe-candidate-bound`" entry (High priority): the work is complete and verified but sits unmerged, mirroring the pattern of prior complete-but-uncommitted work (Remediation Pass 1, the deprecation-warnings pass) that needed an explicit human go-ahead to land.
+
+**Agent Response Time**: Immediate
+**Action Result**: Planning docs now reflect the recall-safe candidate bound as complete/verified-on-branch, clearly distinguished from merged/released work — README.md's "Current System State" explicitly states v5.2.0 remains current and names this branch as not yet included. The candidate-set-bounding discussion (open since 2026-09-18) is resolved; the new open item is the merge/release decision. The critical exact-arithmetic finding and the standing rule it implies are recorded in both DECISIONS.md (for the technical record) and patterns.md (for future recurrence-risk awareness). All prior open pending-updates.md items (dependency upgrade, REDIS_PASSWORD, dashboard hardening, single-symbol fast-path semantics, sort_symbols bug) remain untouched.

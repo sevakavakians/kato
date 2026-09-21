@@ -3,7 +3,35 @@
 
 ---
 
+## Numerical Correctness Patterns
+
+### 2026-09-21 - A Bound Approximating a Float Reference Implementation Must Never Be Computed With Exact Arithmetic
+
+**Pattern**: While building a ClickHouse-side candidate-set bound for KATO's prediction path (DECISION-034), the natural instinct — and the author's own initial written guidance — was to compute the bound's threshold with exact rational (`Fraction`) arithmetic, specifically to *avoid* float error. This was backwards and caused silent recall loss: KATO's actual scorer (`_lcs_ratio_scorer`) is floating point, and `float(0.1) > 1/10` exactly (IEEE-754 rounds `0.1` up). An exact `Fraction` comparison is therefore **stricter** than the float implementation it is meant to approximate, and rejects candidates the real scorer accepts. Measured over a sweep of `r ∈ {0.01, 0.1, 1/3, 0.5, 2/3, 0.9, 0.99} × L ∈ [1,40] × P ∈ [2,200] × M`: the naive exact bound produced 413 recall losses; a deliberately weakened integer bound (`num = floor(Fraction(r) * 1_000_000)`, compared in integers, biased toward permissiveness) produced 0.
+
+**Discovery Trigger**: An exhaustive mutation-checked sweep test (`test_recall_bounds.py`) was written specifically to compare the candidate bound's decisions against the real float scorer's decisions across a wide parameter grid, rather than trusting the bound's mathematical derivation alone. The naive exact version failed that sweep; a second independent hazard was found the same way — `int(6 * 1.9 / 0.1)` evaluates to `113`, not `114`, so a float-computed `max_length` would drop a pattern scoring exactly at the threshold.
+
+**Assumption → Reality**:
+- Assumed: exact rational arithmetic is strictly safer than floating point when computing a threshold, since it has no rounding error.
+- Reality: "no rounding error" only helps when the thing being approximated is *also* exact. Here the reference implementation (the production scorer) is itself floating point, so an exact bound is not more correct — it is a *different, stricter* function than the one it needs to bound, and stricter is exactly the wrong direction for a safety bound (it can reject cases the real system would have accepted).
+
+**Resolution Pattern**: When building a bound, filter, or gate meant to approximate — and never be stricter than — an existing floating-point reference implementation, do not reach for exact arithmetic by default. Instead: (1) identify which direction of error is safe for the use case (here: over-inclusion is safe, under-inclusion is not), (2) deliberately bias the approximation toward the safe direction even if that makes it less "exact," and (3) prove it with an exhaustive comparison sweep against the real reference implementation across the parameter space, not just a derivation on paper. **Standing rule worth restating for any future work in this class**: a bound approximating a float reference implementation must never be tighter than that reference.
+
+**Recurrence Risk**: Medium — this class of bug recurs anywhere a system introduces a cheap approximate pre-filter, cache key, or short-circuit in front of an existing floating-point scoring/ranking function (thresholds, top-K cutoffs, similarity gates). The fix pattern (bias toward permissiveness + exhaustive sweep against the real function, not just unit tests at a few hand-picked points) generalizes directly.
+
+---
+
 ## Testing Strategy Patterns
+
+### 2026-09-21 - A Fourth and Fifth Instance of "A Verification That Could Not Have Failed"
+
+**Pattern**: Extends the three prior instances of this failure mode recorded below (the `.dockerignore` check with zero caches present to test against; the metadata-chunking test asserting against the very constant it was meant to guard; the prediction-parity gate not actually exercising the pruned path). During DECISION-034's work, `test_config_filter_pipeline_parameters` ended with `assert 'length_min_ratio' in config or 'length_max_ratio' in config or True` — the trailing `or True` made the assertion unconditionally pass regardless of what `config` actually contained. This is the fourth instance. The **fifth** instance was introduced while fixing the fourth: the replacement assertion checked the test fixture's `get_config()` helper, which hard-codes a fixed set of six keys and never returns filter parameters under any circumstance — so the "fixed" test could never have passed either, just for a different, equally silent reason. It was corrected a second time to read `GET /sessions/{id}/config`, the actual API surface that carries filter-pipeline parameters.
+
+**Discovery Trigger**: Reviewing existing tests for the `filter_pipeline`/`LengthFilter` removal work, specifically asking "would this assertion fire if the behavior were wrong?" as a default review step, not because anything looked suspicious at a glance — the `or True` was easy to miss in a longer assert line, and the fixture-based replacement *looked* like a real fix (it queried something, asserted something) without anyone checking that the something queried could ever carry the value being asserted about.
+
+**Resolution Pattern**: Ask "would this assertion fire if the behavior were wrong?" as a **default** check on every new or modified test, not only when something already looks suspicious — three of the five known instances of this bug class in this codebase were found by proactively auditing tests unrelated to the bug being fixed, not by a test failure. Prefer mutation-checking (deliberately break the thing the test claims to guard, confirm the test goes red) over reading a green checkmark at face value — this is exactly how the fifth instance (a fixed test that still could not fail) was caught immediately rather than shipped a second time. The new tests added in this same session (`test_recall_bounds.py`, `test_recall_bound_executor.py`) were themselves mutation-checked for this reason.
+
+**Recurrence Risk**: High, structurally — this is now the fifth confirmed instance across four separate work sessions in this codebase (2026-09-16 chunking test, 2026-09-18 `.dockerignore`/parity-gate x2, 2026-09-21 `or True`/fixture-mismatch x2). Treat "assert X or True"-shaped constructs and "test queries fixture Y, asserts about field Z" constructs as standing code-smells worth a deliberate second look whenever encountered, not just when this specific bug class is being hunted for.
 
 ### 2026-09-17 - Proving a Negative Against a Deprecated Lifecycle Hook Requires Rewriting the Guard Against Its Replacement, Not Just Updating Call Sites
 

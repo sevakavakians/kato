@@ -653,7 +653,7 @@ For long-running instances:
 
 ## Validation Rules
 
-1. **RECALL_THRESHOLD**: Must be between 0.0 and 1.0
+1. **RECALL_THRESHOLD**: Must be greater than 0.0 and at most 1.0
 2. **MAX_PATTERN_LENGTH**: Must be >= 0
 3. **PERSISTENCE**: Must be between 1 and 100
 4. **MAX_PREDICTIONS**: Must be between 1 and 10000

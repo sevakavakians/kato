@@ -42,8 +42,7 @@ POST /sessions
 {
     "node_id": "my_node",
     "config": {
-        "filter_pipeline": ["length", "jaccard"],
-        "length_min_ratio": 0.7,
+        "filter_pipeline": ["jaccard"],
         "jaccard_threshold": 0.5
     }
 }

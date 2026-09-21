@@ -205,28 +205,49 @@ def test_high_frequency_high_similarity_gets_highest_posterior(kato_fixture):
         f"Highest posterior should be > 0, got {max_posterior_pred['bayesian_posterior']}"
 
 
-def test_zero_similarity_gives_zero_posterior(kato_fixture):
-    """Test that zero similarity results in zero posterior (edge case)."""
-    kato_fixture.clear_all_memory()
-    kato_fixture.set_recall_threshold(0.0)  # Allow all patterns including zero similarity
+def test_posterior_tracks_similarity_across_patterns(kato_fixture):
+    """Posterior is proportional to similarity x prior, and normalised to 1.
 
-    # Learn a pattern
+    This replaces a test that drove the same computation with
+    recall_threshold=0.0 to obtain a zero-similarity prediction. Zero is now
+    rejected at the config boundary, so that path is unreachable; the
+    proportionality and normalisation it depended on are still reachable and
+    are what is actually asserted here.
+    """
+    kato_fixture.clear_all_memory()
+    kato_fixture.set_recall_threshold(0.1)
+
+    # Two patterns sharing a prefix with the probe, but differing in how much
+    # of each pattern the probe covers -- so they get different similarities.
     for item in ['u', 'v', 'w']:
         kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
     kato_fixture.learn()
 
-    # Observe completely different sequence (should get 0 similarity if threshold is 0)
-    kato_fixture.observe({'strings': ['completely'], 'vectors': [], 'emotives': {}})
-    kato_fixture.observe({'strings': ['different'], 'vectors': [], 'emotives': {}})
+    kato_fixture.clear_short_term_memory()
+    for item in ['u', 'v', 'x', 'y', 'z']:
+        kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
+    kato_fixture.learn()
+
+    kato_fixture.clear_short_term_memory()
+    for item in ['u', 'v']:
+        kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
 
-    # Check if any predictions have zero similarity
-    zero_sim_preds = [p for p in predictions if p['similarity'] == 0.0]
+    assert len(predictions) >= 2, \
+        f"Expected both patterns to be recalled, got {len(predictions)}"
 
-    for pred in zero_sim_preds:
-        # Zero likelihood (similarity) should give zero posterior
-        assert pred['bayesian_posterior'] == 0.0, \
-            f"Zero similarity should give zero posterior, got {pred['bayesian_posterior']}"
+    for pred in predictions:
+        assert pred['bayesian_posterior'] >= 0.0, \
+            f"Posterior must be non-negative, got {pred['bayesian_posterior']}"
+
+    total = sum(p['bayesian_posterior'] for p in predictions)
+    assert abs(total - 1.0) < 1e-6, \
+        f"Posteriors over the recalled set should sum to 1.0, got {total}"
+
+    # Higher similarity must not yield a lower posterior at equal frequency.
+    ordered = sorted(predictions, key=lambda p: p['similarity'])
+    assert ordered[0]['bayesian_posterior'] <= ordered[-1]['bayesian_posterior'], \
+        "Posterior must not decrease as similarity increases at equal frequency"
 
 
 def test_single_pattern_gets_posterior_one(kato_fixture):

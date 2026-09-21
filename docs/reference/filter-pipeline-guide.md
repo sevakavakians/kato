@@ -61,31 +61,22 @@ With filtering:
 
 These filters run as SQL queries, leveraging ClickHouse's columnar storage and indexed fields.
 
-#### 1. LengthFilter
-**Type**: Database-side
-**Complexity**: O(log n) with indexing
-**Purpose**: Filter by pattern length relative to STM length
+#### Removed: LengthFilter
 
-```python
-config = SessionConfiguration(
-    filter_pipeline=['length'],
-    length_min_ratio=0.5,    # Min pattern length = 50% of STM
-    length_max_ratio=2.0     # Max pattern length = 200% of STM
-)
-```
+`LengthFilter` has been **removed**. It bounded pattern length by fixed ratios
+(`0.5x`–`2.0x` of STM length) that ignored `recall_threshold`, so it discarded
+patterns that genuinely matched. At `recall_threshold=0.1` with a 20-token STM
+it kept only lengths `[10, 40]`, where recall-safety requires `[1, 380]` —
+silently dropping patterns scoring as high as 0.66.
 
-**When to use:**
-- First stage in pipeline (very fast elimination)
-- When most patterns have similar length (less effective)
-- As sanity check to prevent absurd matches
+It is superseded by the **recall-safe bound** (`kato/filters/recall_bounds.py`),
+which is applied automatically to the default candidate query and needs no
+configuration. That bound is derived from the scorer's own formula, so it can
+only ever remove patterns that provably cannot reach `recall_threshold`.
 
-**Performance:**
-- 1M patterns → <10ms (indexed field scan)
-- 1B patterns → <100ms (partition pruning + index)
+A `filter_pipeline` naming `'length'` is now rejected by config validation.
 
----
-
-#### 2. JaccardFilter
+#### 1. JaccardFilter
 **Type**: Database-side
 **Complexity**: O(n) but fast with ClickHouse array functions
 **Purpose**: Exact token set overlap calculation
@@ -129,7 +120,7 @@ Jaccard = 2/6 = 0.333
 
 ### Hybrid Filters (Database + Python)
 
-#### 3. MinHashFilter
+#### 2. MinHashFilter
 **Type**: Hybrid (Database stage + Python verification)
 **Complexity**: O(1) database lookup, O(k) Python verification
 **Purpose**: Approximate Jaccard similarity for billion-scale datasets
@@ -160,7 +151,7 @@ config = SessionConfiguration(
 
 ### Python-side Filters
 
-#### 4. BloomFilterStage
+#### 3. BloomFilterStage
 **Type**: Python-side
 **Complexity**: O(1) per pattern
 **Purpose**: Fast token presence checking
@@ -181,7 +172,7 @@ config = SessionConfiguration(
 
 ---
 
-#### 5. RapidFuzzFilter
+#### 4. RapidFuzzFilter
 **Type**: Python-side
 **Complexity**: O(n × m) per pattern (optimized)
 **Purpose**: Fast similarity calculation using RapidFuzz library
@@ -189,7 +180,7 @@ config = SessionConfiguration(
 ```python
 config = SessionConfiguration(
     filter_pipeline=['rapidfuzz'],
-    recall_threshold=0.3,          # Min similarity (0.0-1.0)
+    recall_threshold=0.3,          # Min similarity (>0.0-1.0)
     use_token_matching=True        # Token-level vs character-level
 )
 ```
@@ -389,13 +380,13 @@ Pattern Count Decision Tree:
       • Simple, exact, fast
 
 100,000 - 1,000,000
-  └─> ['length', 'jaccard', 'rapidfuzz']
+  └─> ['jaccard', 'rapidfuzz']
       • Length pre-filter (10ms)
       • Jaccard main filter (100-500ms)
       • Still fast enough without MinHash
 
 1,000,000 - 10,000,000
-  └─> ['length', 'jaccard', 'rapidfuzz']
+  └─> ['jaccard', 'rapidfuzz']
       • Jaccard can handle 10M in 1-2s
       • Consider MinHash only if Jaccard too slow
       • Test both to see which is faster for your data
@@ -495,7 +486,7 @@ filter_pipeline = ['minhash', 'jaccard', 'rapidfuzz']
 **How it works**: Only database filters refine each other; Python filters see all database results.
 
 ```python
-filter_pipeline = ['length', 'jaccard']
+filter_pipeline = ['jaccard']
 
 # Execution flow:
 # Length:     1,000,000 → 500,000 candidates (DB query)
@@ -914,8 +905,8 @@ Winner: Jaccard (better recall, acceptable latency)
 | Dataset Size | Recommended Pipeline |
 |-------------|---------------------|
 | < 100K | `['jaccard']` |
-| 100K - 1M | `['length', 'jaccard']` |
-| 1M - 10M | `['length', 'jaccard']` |
+| 100K - 1M | `['jaccard']` |
+| 1M - 10M | `['jaccard']` |
 | 10M - 100M | `['minhash', 'jaccard']` (tune MinHash!) |
 | > 100M | `['minhash', 'jaccard']` (essential) |
 

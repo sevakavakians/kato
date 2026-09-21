@@ -107,6 +107,101 @@ PROBES = [
     [["nothing", "matches", "here"]],                               # no match
 ]
 
+# ---------------------------------------------------------------------------
+# Boundary corpus (--boundary)
+#
+# The corpus above cannot test the recall-safe candidate bound
+# (kato/filters/recall_bounds.py). Its patterns top out around 9 tokens and it
+# is probed at the default recall_threshold, where the bound's length window is
+# [1, ~190] -- every pattern sits far inside it, so the bound never makes a
+# decision and a gate built on it would pass while testing nothing.
+#
+# These patterns are placed exactly ON the boundary, and one token either side
+# of it, using the scorer's own identity:
+#
+#     similarity = 2M/(P+L) = r   <=>   P = 2M/r - L
+#
+# where M is the LCS length, P the pattern's token count and L the probe's.
+# The "exactly r" rows are the ones that matter: they are what an off-by-one or
+# a float-truncation in the bound would wrongly discard. Computing
+# int(6 * 1.9 / 0.1) in floats yields 113, not 114, and would drop BOUND_M6_AT.
+BOUNDARY_L = 6
+BOUNDARY_Q = [f"q{i}" for i in range(1, BOUNDARY_L + 1)]
+BOUNDARY_PROBE = [[q] for q in BOUNDARY_Q]   # L = 6 flattened tokens
+
+
+def _boundary_pattern(shared, total, tag):
+    """Build a pattern with LCS=`shared` against BOUNDARY_PROBE and `total` tokens.
+
+    The `shared` probe tokens go one per event in probe order, so sorting within
+    an event cannot disturb their relative order and the LCS is exactly
+    `shared`. Filler tokens are unique to this pattern, so they add length
+    without adding matches. Patterns need at least two events to be learnable.
+    """
+    events, used = [], 0
+    filler = 0
+    per_event = max(1, (total - shared) // max(shared, 2))
+    for i in range(shared):
+        event = [BOUNDARY_Q[i]]
+        for _ in range(per_event):
+            if used + len(event) + (shared - i - 1) < total:
+                event.append(f"{tag}f{filler}")
+                filler += 1
+        used += len(event)
+        events.append(event)
+    while used < total:                      # top up, keeping >= 2 events
+        event = []
+        for _ in range(min(per_event or 1, total - used)):
+            event.append(f"{tag}f{filler}")
+            filler += 1
+        used += len(event)
+        events.append(event)
+    if len(events) < 2:
+        events.append([f"{tag}f{filler}"])
+        used += 1
+    assert sum(len(e) for e in events) == used
+    return events
+
+
+def _make_boundary_corpus():
+    """(events, times, emotives, metadata) rows straddling the bound."""
+    rows = []
+    # (shared M, total P, label). P chosen so similarity is exactly / just off r.
+    specs = [
+        (6, 114, "m6_at_010"),    # 12/120 = 0.100000 -> kept at r=0.1
+        (6, 115, "m6_below010"),  # 12/121 = 0.099174 -> below r=0.1
+        (6, 113, "m6_above010"),  # 12/119 = 0.100840 -> above r=0.1
+        (1, 14,  "m1_at_010"),    #  2/20  = 0.100000 -> kept at r=0.1
+        (1, 15,  "m1_below010"),  #  2/21  = 0.095238 -> below r=0.1
+        (6, 18,  "m6_at_050"),    # 12/24  = 0.500000 -> kept at r=0.5
+        (6, 19,  "m6_below050"),  # 12/25  = 0.480000 -> below r=0.5
+    ]
+    for i, (shared, total, label) in enumerate(specs):
+        events = _boundary_pattern(shared, total, label)
+        assert sum(len(e) for e in events) == total, (label, sum(len(e) for e in events))
+        rows.append((events, 1 + (i % 3), {"joy": round(0.05 * i, 3)},
+                     {"kind": "boundary", "label": label}))
+    # A pattern repeating one probe token: token-overlap counts 20 (multiplicity)
+    # but the LCS is 1, so the bound keeps it and the scorer rejects it. Proves
+    # the bound is permissive where it must be, and that the scorer still decides.
+    rows.append(([[BOUNDARY_Q[0]] * 10, [BOUNDARY_Q[0]] * 10], 2,
+                 {"joy": 0.4}, {"kind": "boundary", "label": "repeat_x20"}))
+    return rows
+
+
+BOUNDARY_CORPUS = _make_boundary_corpus()
+
+# (probe, recall_threshold). Each threshold puts a different set of the rows
+# above exactly on the edge.
+BOUNDARY_PROBES = [
+    (BOUNDARY_PROBE, 0.1),
+    (BOUNDARY_PROBE, 0.5),
+    (BOUNDARY_PROBE, 0.01),
+    (BOUNDARY_PROBE[:3], 0.1),
+    (BOUNDARY_PROBE[:3], 0.5),
+]
+
+
 # Probes run with a low max_predictions so max_predictions * 3 falls below the
 # number of matching patterns and the top-K prune fires.
 PRUNED_PROBES = [
@@ -126,7 +221,7 @@ def new_session(config=None):
     return call("POST", "/sessions", {"node_id": NODE, "config": config or {}})["session_id"]
 
 
-def build_corpus():
+def build_corpus(rows=None):
     """Clear the node and rebuild it deterministically."""
     session = new_session()
     call("POST", f"/sessions/{session}/clear-all", {})
@@ -134,7 +229,7 @@ def build_corpus():
 
     session = new_session()
     learned = []
-    for events, times, emotives, metadata in CORPUS:
+    for events, times, emotives, metadata in (CORPUS if rows is None else rows):
         for _ in range(times):
             call("POST", f"/sessions/{session}/clear-stm", {})
             for i, event in enumerate(events):
@@ -150,8 +245,12 @@ def build_corpus():
     return learned
 
 
-def _run_probe(probe, max_predictions=None):
-    config = {"max_predictions": max_predictions} if max_predictions else {}
+def _run_probe(probe, max_predictions=None, recall_threshold=None):
+    config = {}
+    if max_predictions:
+        config["max_predictions"] = max_predictions
+    if recall_threshold is not None:
+        config["recall_threshold"] = recall_threshold
     session = new_session(config)
     for event in probe:
         call("POST", f"/sessions/{session}/observe", {"strings": sorted(event)})
@@ -160,6 +259,7 @@ def _run_probe(probe, max_predictions=None):
     return {
         "probe": probe,
         "max_predictions": max_predictions,
+        "recall_threshold": recall_threshold,
         # order is part of the contract, so it is NOT sorted here
         "predictions": predictions["predictions"],
         "future_potentials": predictions.get("future_potentials"),
@@ -167,11 +267,44 @@ def _run_probe(probe, max_predictions=None):
     }
 
 
-def capture():
+def capture(boundary=False):
     """Return the full prediction payload for every probe, in order."""
+    if boundary:
+        return [_run_probe(probe, recall_threshold=r) for probe, r in BOUNDARY_PROBES]
     snapshot = [_run_probe(probe) for probe in PROBES]
     snapshot += [_run_probe(probe, mp) for probe, mp in PRUNED_PROBES]
     return snapshot
+
+
+def boundary_self_check(snapshot):
+    """Fail loudly if the boundary corpus is not actually on the boundary.
+
+    The whole point of these probes is that some prediction sits EXACTLY at
+    recall_threshold -- that is the case an off-by-one or a float truncation in
+    the candidate bound would wrongly discard. If none does, the gate proves
+    nothing, which is exactly how the main corpus fails to test the bound.
+    """
+    problems = []
+    at_boundary = 0
+    for entry in snapshot:
+        threshold = entry.get("recall_threshold")
+        if threshold is None:
+            continue
+        for prediction in entry["predictions"]:
+            similarity = prediction.get("similarity")
+            if similarity is not None and abs(similarity - threshold) < 1e-9:
+                at_boundary += 1
+            if similarity is not None and similarity < threshold - 1e-9:
+                problems.append(
+                    f"probe at recall_threshold={threshold} returned a prediction with "
+                    f"similarity={similarity!r}, below the threshold")
+    if not at_boundary:
+        problems.append(
+            "no prediction sits exactly at its recall_threshold — the boundary corpus "
+            "has drifted and this gate is vacuous")
+    if not any(e["count"] for e in snapshot):
+        problems.append("no boundary probe produced any prediction at all")
+    return problems, at_boundary
 
 
 def self_check(snapshot):
@@ -244,6 +377,11 @@ def main():
     group.add_argument("--capture", type=Path, help="build the corpus and write a snapshot")
     group.add_argument("--compare", type=Path, help="rebuild and diff against a snapshot")
     parser.add_argument("--keep", action="store_true", help="leave the corpus in place")
+    parser.add_argument("--boundary", action="store_true",
+                        help="use the boundary corpus, which places patterns exactly on "
+                             "the recall-safe candidate bound's edge (and one token either "
+                             "side of it). The default corpus sits far inside the bound, "
+                             "so it cannot detect an off-by-one there.")
     parser.add_argument("--reuse", action="store_true",
                         help="query the existing corpus instead of rebuilding it "
                              "(isolates query-path determinism from learn-path determinism)")
@@ -257,17 +395,24 @@ def main():
     worker_at_start = health.get("worker_pid")
     print(f"pinned to uvicorn worker pid {worker_at_start} (keep-alive)")
 
+    corpus_label = "boundary" if args.boundary else "default"
     if args.reuse:
-        print(f"reusing existing corpus on node {NODE} ...")
+        print(f"reusing existing {corpus_label} corpus on node {NODE} ...")
     else:
-        print(f"building corpus on node {NODE} ...")
-        build_corpus()
-    snapshot = capture()
+        print(f"building {corpus_label} corpus on node {NODE} ...")
+        build_corpus(BOUNDARY_CORPUS if args.boundary else None)
+    snapshot = capture(boundary=args.boundary)
 
-    problems, freqs, emotive_count = self_check(snapshot)
-    print(f"  {len(PROBES)} probes + {len(PRUNED_PROBES)} pruned probes, "
-          f"{sum(e['count'] for e in snapshot)} predictions total")
-    print(f"  frequencies seen: {freqs}; predictions carrying emotives: {emotive_count}")
+    if args.boundary:
+        problems, at_boundary = boundary_self_check(snapshot)
+        print(f"  {len(BOUNDARY_PROBES)} boundary probes, "
+              f"{sum(e['count'] for e in snapshot)} predictions total")
+        print(f"  predictions sitting exactly at recall_threshold: {at_boundary}")
+    else:
+        problems, freqs, emotive_count = self_check(snapshot)
+        print(f"  {len(PROBES)} probes + {len(PRUNED_PROBES)} pruned probes, "
+              f"{sum(e['count'] for e in snapshot)} predictions total")
+        print(f"  frequencies seen: {freqs}; predictions carrying emotives: {emotive_count}")
     if problems:
         # In --capture mode this means the baseline would not be able to detect
         # a regression. In --compare mode it usually means the change under test

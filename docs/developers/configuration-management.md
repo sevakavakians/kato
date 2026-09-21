@@ -314,7 +314,7 @@ Qdrant collection names are not configurable; KATO always uses
 |----------|------|---------|-------------|
 | MAX_PATTERN_LENGTH | int | 0 | Auto-learn after N observations (0 = manual) |
 | PERSISTENCE | int | 5 | Rolling window size for emotive values per pattern |
-| RECALL_THRESHOLD | float | 0.1 | Pattern matching threshold (0.0-1.0) |
+| RECALL_THRESHOLD | float | 0.1 | Pattern matching threshold (>0.0-1.0) |
 | STM_MODE | str | "CLEAR" | STM mode after auto-learn (CLEAR or ROLLING) |
 
 Auto-learning is driven solely by `MAX_PATTERN_LENGTH`: any value above `0`
@@ -393,7 +393,7 @@ environment:
 
 **Solution**: Check that all required fields are provided and values are within valid ranges:
 ```bash
-# Example: RECALL_THRESHOLD must be between 0.0 and 1.0
+# Example: RECALL_THRESHOLD must be greater than 0.0 and at most 1.0
 export RECALL_THRESHOLD=0.5  # Valid
 export RECALL_THRESHOLD=1.5  # Invalid - will cause error
 ```

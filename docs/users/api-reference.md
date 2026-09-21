@@ -333,7 +333,7 @@ Updates session configuration parameters.
 This enables continuous learning where every new observation after reaching 3 events will trigger pattern learning while maintaining a sliding window of the last 2 events.
 
 **Available Configuration Parameters:**
-- `recall_threshold`: Pattern matching threshold (0.0-1.0)
+- `recall_threshold`: Pattern matching threshold (>0.0-1.0)
 - `max_predictions`: Maximum predictions to return
 - `persistence`: Rolling window size for emotive values per pattern
 - `max_pattern_length`: Auto-learn threshold (0 = manual only)
@@ -679,5 +679,5 @@ For theoretical details, see: `docs/PREDICTIVE_INFORMATION.md`
 2. **Minimum Prediction Requirement**: STM must contain at least 1 string to generate predictions (single-symbol uses optimized fast path)
 3. **Sorting**: Symbols within events are sorted alphabetically when SORT_SYMBOLS=true (default)
 4. **Auto-Learning**: Triggers when STM reaches MAX_PATTERN_LENGTH (if > 0)
-5. **Recall Threshold**: Controls pattern matching sensitivity (0.0 = all patterns, 1.0 = exact matches only)
+5. **Recall Threshold**: Controls pattern matching sensitivity. Must be greater than 0.0 (a threshold of 0 accepts every pattern regardless of similarity and is rejected); values near 0 are very permissive, 1.0 means exact matches only
 6. **Dynamic Calculation**: Predictive information is calculated at prediction time using ensemble statistics

@@ -53,8 +53,13 @@ class RapidFuzzFilter(PatternFilter):
         super().__init__(config, state)
 
         # Get configuration
-        self.recall_threshold = getattr(config, 'recall_threshold', None) or 0.1
-        self.use_token_matching = getattr(config, 'use_token_matching', True)
+        # `or 0.1` would coerce a legitimate 0.0, and getattr(..., True) returns
+        # None (not True) when the attribute exists and is None -- which silently
+        # selects character-level matching. Resolve None explicitly instead.
+        threshold = getattr(config, 'recall_threshold', None)
+        self.recall_threshold = 0.1 if threshold is None else threshold
+        token_matching = getattr(config, 'use_token_matching', None)
+        self.use_token_matching = True if token_matching is None else token_matching
 
         # Store extractor reference
         self.extractor = extractor

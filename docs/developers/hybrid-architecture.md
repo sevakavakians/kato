@@ -195,26 +195,22 @@ MinHash uses Locality-Sensitive Hashing (LSH) with parameters tuned for **high s
 
 ### Available Filters
 
-1. **LengthFilter** (database-side)
-   - Filters by pattern length relative to STM
-   - O(log n) indexed query
-
-2. **JaccardFilter** (database-side)
+1. **JaccardFilter** (database-side)
    - Set intersection using ClickHouse array functions
    - Exact Jaccard similarity calculation
    - **Recommended for <10M patterns** (faster + exact)
 
-3. **MinHashFilter** (hybrid: DB + Python)
+2. **MinHashFilter** (hybrid: DB + Python)
    - Stage 1 (DB): LSH band matching (99% reduction)
    - Stage 2 (Python): MinHash similarity verification
    - Billion-scale approximate matching
    - **⚠️ Requires parameter tuning** - see [Filter Guide](reference/filter-pipeline-guide.md)
 
-4. **BloomFilterStage** (Python-side)
+3. **BloomFilterStage** (Python-side)
    - Fast token presence checking
    - Zero false negatives
 
-5. **RapidFuzzFilter** (Python-side)
+4. **RapidFuzzFilter** (Python-side)
    - Fast similarity calculation (5-10x speedup)
    - Final candidate ranking
 
@@ -227,7 +223,7 @@ from kato.config.session_config import SessionConfiguration
 
 config = SessionConfiguration(
     # Filter pipeline (ordered list)
-    filter_pipeline=['minhash', 'length', 'jaccard', 'rapidfuzz'],
+    filter_pipeline=['minhash', 'jaccard', 'rapidfuzz'],
 
     # MinHash/LSH parameters
     minhash_threshold=0.7,      # Estimated Jaccard threshold
@@ -236,8 +232,6 @@ config = SessionConfiguration(
     minhash_num_hashes=100,      # Total hash functions
 
     # Length filter parameters
-    length_min_ratio=0.5,        # Min pattern length (50% of STM)
-    length_max_ratio=2.0,        # Max pattern length (200% of STM)
 
     # Jaccard filter parameters
     jaccard_threshold=0.3,       # Min Jaccard similarity
@@ -256,17 +250,17 @@ config = SessionConfiguration(
 
 **Billion-scale (recommended)**:
 ```python
-filter_pipeline=['minhash', 'length', 'jaccard', 'rapidfuzz']
+filter_pipeline=['minhash', 'jaccard', 'rapidfuzz']
 ```
 
 **Million-scale (faster, less filtering)**:
 ```python
-filter_pipeline=['length', 'jaccard', 'rapidfuzz']
+filter_pipeline=['jaccard', 'rapidfuzz']
 ```
 
 **Precision-focused (slower, more accurate)**:
 ```python
-filter_pipeline=['minhash', 'length', 'jaccard', 'bloom', 'rapidfuzz']
+filter_pipeline=['minhash', 'jaccard', 'bloom', 'rapidfuzz']
 ```
 
 ## Usage
@@ -295,10 +289,8 @@ redis_client = get_redis_client()
 
 # Create session config with filter pipeline
 session_config = SessionConfiguration(
-    filter_pipeline=['minhash', 'length', 'jaccard', 'rapidfuzz'],
+    filter_pipeline=['minhash', 'jaccard', 'rapidfuzz'],
     minhash_threshold=0.7,
-    length_min_ratio=0.5,
-    length_max_ratio=2.0,
     jaccard_threshold=0.3,
     recall_threshold=0.1
 )
@@ -372,7 +364,6 @@ When `enable_filter_metrics=True`, logs show per-stage performance:
 
 ```
 [INFO] Filter 'minhash': 10000000 candidates (1250.3ms)
-[INFO] Filter 'length': 5000000 candidates (45.2ms)
 [INFO] Filter 'jaccard': 100000 candidates (892.1ms)
 [INFO] Filter 'rapidfuzz': 100 candidates (34.5ms)
 [INFO] Filter pipeline complete: 100 final candidates (2222.1ms total)

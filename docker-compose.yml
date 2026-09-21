@@ -116,6 +116,14 @@ services:
       # ClickHouse send/receive timeout. Now actually applied (previously the
       # setting existed but nothing read it; the client hardcoded 30s).
       - REQUEST_TIMEOUT=120.0
+      # Recall-safe candidate bound: pushes a provable upper bound on the
+      # similarity score into ClickHouse so patterns that cannot reach
+      # recall_threshold are never loaded. Lossless -- set ENABLED=false to
+      # roll back to querying the whole corpus. AUDIT=true additionally runs
+      # the unbounded query and verifies nothing reachable was dropped
+      # (expensive; for staging and post-rollout windows).
+      - KATO_RECALL_BOUND_ENABLED=${KATO_RECALL_BOUND_ENABLED:-true}
+      - KATO_RECALL_BOUND_AUDIT=${KATO_RECALL_BOUND_AUDIT:-false}
     ports:
       - "8000:8000"
     networks:

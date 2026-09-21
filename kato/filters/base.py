@@ -67,7 +67,9 @@ class PatternFilter(ABC):
         Filters whose SQL embeds anything derived from user input (STM tokens,
         session-supplied thresholds) MUST use ``%(name)s`` placeholders in
         ``get_db_query()`` and return the values here, so clickhouse-connect
-        binds them instead of the values landing in statement text.
+        escapes them. Note it resolves placeholders client-side, so escaped
+        values still land in the statement text and count against
+        ``max_query_size`` -- keep large payloads bounded.
 
         Returns:
             Mapping of placeholder name to value; empty when the query needs none.

@@ -1,9 +1,9 @@
 # SPRINT_BACKLOG.md - Upcoming Work
-*Last Updated: 2026-09-18 (KATO v5.2.0 RELEASED — metadata fetched after top-K pruning, cross-worker statistics divergence fixed, plus determinism/leak/security fixes; see "Recently Completed" below. The `perf/prediction-path-scaling` branch this file previously flagged as carrying concurrent uncommitted work is now fully merged and released. Next up: the user-requested candidate-set-bounding discussion — see `project-manager/pending-updates.md`.)*
+*Last Updated: 2026-09-21 (Recall-safe candidate bound — COMPLETE and VERIFIED on branch `perf/recall-safe-candidate-bound`, NOT merged, NOT released; resolves the candidate-set-bounding discussion. See "Recently Completed" below. KATO v5.2.0 remains the current release. Next up: a human decision on merging/releasing this branch — see `project-manager/pending-updates.md`.)*
 
 ## Active Projects
 
-*No active initiative-scale projects at this time. KATO v5.2.0 is released and deployed (see "Recently Completed" below). **Top priority next**: the user asked to discuss candidate-set bounding (default `filter_pipeline=[]` pulls every pattern in the node into Python per request, O(N) time/memory) before deciding an approach — see `project-manager/pending-updates.md` for the framing and options to present. Everything else below is secondary to that discussion: Phase 1c Step B, Phase 2 (`conditional_probability_cached` removal), Phase 3 (benchmark match-rate axis), the still-open dependency upgrade, `REDIS_PASSWORD`, dashboard hardening, the fast-path single-symbol matching decision, and the `sort_symbols` bug.*
+*No active initiative-scale projects at this time. The candidate-set-bounding discussion is resolved technically (DECISION-034, complete and verified on branch `perf/recall-safe-candidate-bound`), but that branch is not yet merged to `main` or released — KATO v5.2.0 remains the deployed version. **Top priority next**: a human decision on merging and releasing `perf/recall-safe-candidate-bound` — see `project-manager/pending-updates.md`. Everything else below is secondary: Phase 1c Step B, Phase 2 (`conditional_probability_cached` removal), Phase 3 (benchmark match-rate axis), the still-open dependency upgrade, `REDIS_PASSWORD`, dashboard hardening, the fast-path single-symbol matching decision, the `sort_symbols` bug, and the recall-bound follow-ups (retire unreachable `r=0` branches, measure selectivity against real data, staging audit soak).*
 
 ---
 
@@ -302,6 +302,21 @@ Phase 4 (Symbol Statistics & Fail-Fast Architecture) is 100% complete. The Click
 
 ## Recently Completed
 
+### Recall-Safe Candidate Bound ✅ COMPLETE and VERIFIED (NOT MERGED, NOT RELEASED)
+**Priority**: P1 — resolves the user-requested candidate-set-bounding discussion (highest-priority item after v5.2.0)
+**Status**: **COMPLETE and VERIFIED** on branch `perf/recall-safe-candidate-bound` (5 commits, 39 files, +1325/-304). **NOT merged to `main`, NOT released** — deployment remains pinned to v5.2.0. See `planning-docs/project-manager/pending-updates.md` for the open merge/release decision.
+**Files Modified**: `kato/filters/recall_bounds.py` (new), `kato/filters/executor.py`, `kato/filters/base.py`, `kato/searches/pattern_search.py`, `kato/config/settings.py`, `kato/sessions/session_config.py`, `kato/services/configuration_service.py`, `kato/sessions/session_manager.py`, `kato/sessions/redis_session_manager.py`, `kato/filters/rapidfuzz_filter.py`, `scripts/check_prediction_parity.py`, plus 2 new unit test files.
+
+**Summary**: ClickHouse cannot run KATO's scorer (`_lcs_ratio_scorer` — LCS-based; verified `arrayLevenshteinDistance` is a different metric with no LCS function available in ClickHouse 26.2). Instead, a **necessary-condition predicate** (a length window plus a token-overlap count, both computable by counting on stored `length`/`token_set` columns) is pushed into the ClickHouse query — provably never smaller than the true similarity, so it can only drop patterns that cannot possibly pass `recall_threshold`. ClickHouse never decides MATCH, only CANNOT; every survivor still runs the unchanged Python scorer. **Critical finding**: exact `Fraction` arithmetic is *unsafe* here (float(0.1) > 1/10 exactly, so an exact bound is stricter than the float scorer it approximates — 413 recall losses measured with the naive exact version, 0 with a deliberately weakened integer version). **Decisions shipped**: on by default with kill switch `KATO_RECALL_BOUND_ENABLED`; `LengthFilter` deleted entirely (its fixed ratios were recall-unsafe for `r<=2/3`, not just imprecise); `recall_threshold=0` rejected everywhere (the one case with no valid bound), which also closed two pre-existing validation gaps (`POST /sessions` unvalidated; a discarded boolean return silently defaulting rejected config). Deliberately **not** registered as a `filter_pipeline` entry — the executor swallows filter exceptions and would return an empty candidate set behind HTTP 200 on failure; applied intrinsically inside `_get_all_patterns()` with its own fail-open behavior instead.
+
+**Verification**: losslessness proven (not just measured) over an exhaustive sweep and 120,000 pattern/STM pairs (0 violations), mutation-checked test suite (catches a 413-violation naive bound and a 129-violation off-by-one), live audit-mode shadow run against a real 400-pattern corpus (360 dropped, 0 reachable), byte-identical prediction parity including a purpose-built boundary corpus. Full suite **659 passed / 3 skipped / 1 xfailed / 0 failed** (was 625).
+
+**Archive**: `planning-docs/completed/optimizations/2026-09-21-recall-safe-candidate-bound.md`. **Decision**: DECISION-034 in `planning-docs/DECISIONS.md`.
+
+**Next task**: human decision on merge + release — see `project-manager/pending-updates.md`. Before fully trusting it against real corpus shapes, a staging soak with `KATO_RECALL_BOUND_AUDIT=true` for 24h is recommended first.
+
+---
+
 ### KATO v5.2.0 Release — Metadata Fetched After Top-K Pruning + Cross-Worker Determinism Fixes ✅ COMPLETE (RELEASED, DEPLOYED)
 **Priority**: High — performance (Phase 1a) + correctness (cross-worker statistics, determinism, session leak, unchunked query) + security hardening
 **Status**: RELEASED and DEPLOYED (2026-09-18). Branch `perf/prediction-path-scaling` merged to `main` (`c67b2b6`); version bump `0034344`; changelog `f7a78af`; tag `v5.2.0` pushed. MINOR bump per `docs/maintenance/releasing.md`. GitHub release: https://github.com/sevakavakians/kato/releases/tag/v5.2.0. Images `ghcr.io/sevakavakians/kato:5.2.0`/`:5.2`/`:5`/`:latest`, digest `sha256:cafeb01bf051`.
@@ -484,9 +499,9 @@ Phase 4 (Symbol Statistics & Fail-Fast Architecture) is 100% complete. The Click
 
 ### Follow-up: Remediation Pass 1 — Deferred Items (Re-assess List)
 **Priority**: P2 — mix of performance/correctness/observability items, deliberately scoped out of Remediation Pass 1; re-assess and prioritize individually
-**Status**: Identified 2026-09-16 during the comprehensive tech-debt/security/performance review that produced Remediation Pass 1 — see DECISION-030 and `planning-docs/completed/features/2026-09-16-remediation-pass-1.md` for full context on why each was deferred. **Updated 2026-09-16 (same day, follow-on work)**: the `ProcessPoolExecutor` item below is now DONE — see DECISION-031 and `planning-docs/completed/features/2026-09-16-remediation-pass-1-followup-and-determinism-fix.md`. Everything else in this list is still open.
+**Status**: Identified 2026-09-16 during the comprehensive tech-debt/security/performance review that produced Remediation Pass 1 — see DECISION-030 and `planning-docs/completed/features/2026-09-16-remediation-pass-1.md` for full context on why each was deferred. **Updated 2026-09-16 (same day, follow-on work)**: the `ProcessPoolExecutor` item below is now DONE — see DECISION-031 and `planning-docs/completed/features/2026-09-16-remediation-pass-1-followup-and-determinism-fix.md`. **Updated 2026-09-21**: the `filter_pipeline`/`LengthFilter` item below is now DONE — see DECISION-034. Everything else in this list is still open.
 **Items**:
-- **Default `filter_pipeline` is still `[]`** — every prediction scans the node's whole corpus; all of `kato/filters/` is unreachable by default. Exact-safe route identified: derive `LengthFilter` bounds from `recall_threshold` (`T·L/(2−T) ≤ P ≤ L·(2−T)/T`), pending confirmation the bound holds for `weighted_similarity`. Deferred because it's correctness-adjacent (could change which patterns a prediction returns) and needs its own dedicated verification pass — out of scope for the "exact-safe only" scoping of Pass 1. **Measured 2026-09-16 (DECISION-031 investigation)**: the full-corpus scan itself is NOT the bottleneck at realistic scale (~12ms of ~1271ms total at 6000 patterns, sub-linear scaling) — this item should be re-prioritized on correctness/filtering-value grounds, not performance grounds.
+- ~~**Default `filter_pipeline` is still `[]`** — every prediction scans the node's whole corpus; all of `kato/filters/` is unreachable by default.~~ **DONE 2026-09-21** — resolved, but **not** via the route originally proposed here (fixing `LengthFilter`'s ratios). Instead a new lossless length+token-overlap predicate (`kato/filters/recall_bounds.py`) is applied intrinsically to the candidate query, on by default; `LengthFilter` itself was deleted outright as recall-unsafe (its fixed ratios discarded valid matches for any `r<=2/3`) rather than fixed. `filter_pipeline` itself remains `[]` by default — the bound is not a pipeline filter, deliberately, since the executor's exception-swallowing would turn a failure into an empty result set behind HTTP 200. See DECISION-034 and `planning-docs/completed/optimizations/2026-09-21-recall-safe-candidate-bound.md`. Complete and verified on branch `perf/recall-safe-candidate-bound`; not yet merged or released.
 - **Per-request `PatternSearcher` construction swapped onto the shared processor** — a real cross-request config race for concurrent predicts on one node.
 - **Synchronous redis/clickhouse clients blocking the event loop** — the actual throughput ceiling; a structural fix (async clients throughout).
 - ~~**Per-request `ProcessPoolExecutor`** — construction overhead on every request.~~ **DONE 2026-09-16** — measured as an active pessimisation (3378ms vs 1231ms median at 6000/6000 scale, byte-identical output) and disabled by default via `PROCESS_POOL_CANDIDATE_THRESHOLD=0`, kept as an opt-in tunable. See DECISION-031.
@@ -510,16 +525,52 @@ Phase 4 (Symbol Statistics & Fail-Fast Architecture) is 100% complete. The Click
 
 ---
 
-### Discussion Needed: Candidate-Set Bounding Strategy (USER-REQUESTED — highest priority next)
+### Discussion Needed: Candidate-Set Bounding Strategy (USER-REQUESTED — highest priority next) — RESOLVED
 **Priority**: P1 — the user explicitly asked to discuss this after v5.2.0 shipped, before deciding an approach
-**Status**: Open, deferred by the user's own request (2026-09-18): *"Let's discuss this after the other changes. I want to learn more about it from you before making a decision."* See `planning-docs/project-manager/pending-updates.md` for the full framing.
-**Detail**: The default path still pulls **every pattern in the node** into Python per request — `filter_pipeline` defaults to `[]`, and the executor takes the `_get_all_patterns` branch with no `LIMIT`. This is O(N) time and memory, unbounded by `max_predictions`. Options to write up with measurements before the user decides:
-1. Push the `recall_threshold` cutoff into ClickHouse (expressible on the stored length/token_set columns) — bounds the candidate set at the source.
-2. Stream candidates in bounded chunks — caps peak memory without changing the eventual candidate set.
-3. Reopen the recall-safe length filter derived from `recall_threshold` (the exact-safe bound identified in the Remediation Pass 1 re-assess list: `T·L/(2−T) ≤ P ≤ L·(2−T)/T`) — pending confirmation the bound holds for `weighted_similarity`.
-**Context**: target corpus scale is 100k–1M+ patterns and growing; the user's stated goal is "not hurting yet — pre-empting growth," not fixing an active production problem. Phase 1a (metadata-after-prune, DECISION-032) already bounded the metadata-fetch cost; this item is about the candidate set itself, upstream of that fix.
-**Files**: `kato/searches/pattern_search.py`, `kato/filters/`, `kato/storage/clickhouse_writer.py`
-**Related**: DECISION-032 (`planning-docs/DECISIONS.md`); the "Default `filter_pipeline` is still `[]`" item further below in this file (Remediation Pass 1 re-assess list).
+**Status**: **RESOLVED 2026-09-21** — see DECISION-034 and the "Recall-Safe Candidate Bound" entry under "Recently Completed" above. Resolved by a lossless length+token-overlap predicate pushed into ClickHouse, closer in spirit to option 3 below but combining it with a token-overlap clause (the length window alone was measured to keep 99.77% of candidates — worthless on its own). Complete and verified on branch `perf/recall-safe-candidate-bound`; the follow-on merge/release decision is now the open item — see `planning-docs/project-manager/pending-updates.md`.
+**Original framing (for reference)**: deferred by the user's own request (2026-09-18): *"Let's discuss this after the other changes. I want to learn more about it from you before making a decision."* The default path pulled **every pattern in the node** into Python per request — `filter_pipeline` defaults to `[]`, and the executor takes the `_get_all_patterns` branch with no `LIMIT`. Options written up with measurements:
+1. Push the `recall_threshold` cutoff into ClickHouse (expressible on the stored length/token_set columns) — bounds the candidate set at the source. **This is effectively what shipped**, expressed as a provable bound rather than an exact cutoff (ClickHouse has no LCS function to compute an exact cutoff with).
+2. Stream candidates in bounded chunks — caps peak memory without changing the eventual candidate set. Not pursued as a separate mechanism.
+3. Reopen the recall-safe length filter derived from `recall_threshold` (the exact-safe bound identified in the Remediation Pass 1 re-assess list: `T·L/(2−T) ≤ P ≤ L·(2−T)/T`) — pending confirmation the bound holds for `weighted_similarity`. Superseded: the length window alone is too weak; the shipped bound adds a token-overlap clause derived independently.
+**Context**: target corpus scale is 100k–1M+ patterns and growing; the user's stated goal is "not hurting yet — pre-empting growth," not fixing an active production problem.
+**Files**: `kato/filters/recall_bounds.py` (new), `kato/searches/pattern_search.py`, `kato/filters/`
+**Related**: DECISION-032, DECISION-034 (`planning-docs/DECISIONS.md`); `planning-docs/completed/optimizations/2026-09-21-recall-safe-candidate-bound.md`.
+
+---
+
+### Release Needed: `perf/recall-safe-candidate-bound` Is Complete and Verified But Unmerged
+**Priority**: P1 — complete, verified, ready work; nothing technically blocking it
+**Status**: Open — see `planning-docs/project-manager/pending-updates.md` for the human decision needed (merge timing, version bump size, whether to soak in staging first)
+**Detail**: DECISION-034's recall-safe candidate bound is done on branch `perf/recall-safe-candidate-bound` (5 commits, full suite 659 passed / 3 skipped / 1 xfailed). The deployment stack remains pinned to v5.2.0, which does not contain this work. Recommended before merge/release: run with `KATO_RECALL_BOUND_AUDIT=true` in staging for 24h against real corpus shapes no synthetic test anticipates, then turn audit off.
+**Files**: n/a (process item)
+**Related**: DECISION-034; `planning-docs/completed/optimizations/2026-09-21-recall-safe-candidate-bound.md`.
+
+---
+
+### Follow-up: Retire Unreachable `recall_threshold=0` Branches
+**Priority**: P3 — dead code, no functional impact, deliberately left in place for now
+**Status**: Open — identified 2026-09-21 during DECISION-034's `recall_threshold=0` rejection work
+**Detail**: `pattern_search.py:1113-1127` and `prediction.py:228-232` handle `recall_threshold=0` as a special case; that value is now rejected at validation, so these branches can never execute. Deliberately not removed in the same change that made them unreachable (removing behavior-bearing code alongside the validation that prevents it from running is how regressions happen) — retire once the validation has run in production for a while.
+**Files**: `kato/searches/pattern_search.py`, `kato/representations/prediction.py`
+**Related**: DECISION-034 (`planning-docs/DECISIONS.md`).
+
+---
+
+### Follow-up: Measure Recall-Bound Selectivity Against Real Training Data
+**Priority**: P3 — informational; does not affect correctness, only how much benefit to expect
+**Status**: Open — identified 2026-09-21 during DECISION-034's work
+**Detail**: The recall-safe candidate bound's selectivity numbers (e.g. keeps 0.89% on a wide-vocabulary corpus, 82.55% on a narrow-vocabulary one) come from synthetic corpora built by the author — this ClickHouse instance holds only test corpora (14,034 patterns / 471 `kb_id`s, max length 10). The losslessness guarantee is exact and corpus-independent; the selectivity/benefit numbers are estimates that should be re-measured once real training data is available at meaningful scale.
+**Files**: n/a (measurement task)
+**Related**: DECISION-034 (`planning-docs/DECISIONS.md`).
+
+---
+
+### Follow-up: `scripts/benchmark_hybrid_architecture.py` Is Stale
+**Priority**: P3 — tooling hygiene, not on any critical path
+**Status**: Open — noted 2026-09-21 while updating filter pipelines for DECISION-034's work
+**Detail**: The script still imports `pymongo`, removed from the codebase in v3.0.0, and carries 9 pre-existing lint errors — it likely cannot run as-is. Only its filter-pipeline references were updated during this session's work; the script itself was not repaired or tested.
+**Files**: `scripts/benchmark_hybrid_architecture.py`
+**Related**: DECISION-034 (`planning-docs/DECISIONS.md`).
 
 ---
 

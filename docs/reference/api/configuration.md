@@ -93,8 +93,6 @@ GET /sessions/{session_id}/config
     "fuzzy_token_threshold": 0.0,
     "rank_sort_algo": "potential",
     "filter_pipeline": [],
-    "length_min_ratio": 0.5,
-    "length_max_ratio": 2.0,
     "jaccard_threshold": 0.3,
     "jaccard_min_overlap": 2,
     "minhash_threshold": 0.7,
@@ -136,7 +134,7 @@ curl http://localhost:8000/sessions/$SESSION_ID/config
 |-----------|------|-------|---------|-------------|
 | `max_pattern_length` | integer | 0+ | 0 | Auto-learn when STM reaches this length (0=manual) |
 | `persistence` | integer | 1-100 | 5 | Emotive rolling window size |
-| `recall_threshold` | float | 0.0-1.0 | 0.1 | Pattern matching sensitivity |
+| `recall_threshold` | float | >0.0-1.0 | 0.1 | Pattern matching sensitivity |
 | `stm_mode` | string | CLEAR\|ROLLING | CLEAR | STM mode after auto-learning |
 
 ### Processing Configuration
@@ -156,8 +154,6 @@ curl http://localhost:8000/sessions/$SESSION_ID/config
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `filter_pipeline` | array[string] | [] | Ordered filter stages |
-| `length_min_ratio` | float | 0.5 | Min pattern length as ratio of STM |
-| `length_max_ratio` | float | 2.0 | Max pattern length as ratio of STM |
 | `jaccard_threshold` | float | 0.3 | Minimum Jaccard similarity |
 | `jaccard_min_overlap` | integer | 2 | Minimum token overlap count |
 | `minhash_threshold` | float | 0.7 | LSH Jaccard threshold |
@@ -209,8 +205,6 @@ curl -X POST http://localhost:8000/sessions \
     "fuzzy_token_threshold": 0.0,
     "rank_sort_algo": "similarity",
     "filter_pipeline": [],
-    "length_min_ratio": 0.5,
-    "length_max_ratio": 2.0,
     "jaccard_threshold": 0.3,
     "jaccard_min_overlap": 2,
     "minhash_threshold": 0.7,
@@ -291,7 +285,7 @@ For discovering patterns with loose matching:
     "max_predictions": 1000,
     "use_token_matching": false,
     "rank_sort_algo": "potential",
-    "filter_pipeline": ["length", "rapidfuzz"]
+    "filter_pipeline": ["rapidfuzz"]
   }
 }
 ```
@@ -453,7 +447,7 @@ KATO validates all configuration parameters:
 
 | Parameter | Validation | Error |
 |-----------|------------|-------|
-| `recall_threshold` | 0.0 ≤ x ≤ 1.0 | Invalid recall_threshold |
+| `recall_threshold` | 0.0 < x ≤ 1.0 | Invalid recall_threshold |
 | `persistence` | 1 ≤ x ≤ 100 | Invalid persistence |
 | `max_pattern_length` | x ≥ 0 | Invalid max_pattern_length |
 | `max_predictions` | 1 ≤ x ≤ 10000 | Invalid max_predictions |
@@ -464,7 +458,7 @@ KATO validates all configuration parameters:
 curl -X POST http://localhost:8000/sessions/$SESSION_ID/config \
   -d '{"config": {"recall_threshold": 1.5}}'
 
-# Error: Invalid recall_threshold: 1.5 (must be 0.0-1.0)
+# Error: Invalid recall_threshold: 1.5 (must be >0.0-1.0)
 ```
 
 ---

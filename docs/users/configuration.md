@@ -526,17 +526,13 @@ Control pattern length filtering (first stage - fastest).
 
 ```json
 {
-  "length_min_ratio": 0.5,
-  "length_max_ratio": 2.0
 }
 ```
 
-**length_min_ratio**: Minimum pattern length as ratio of STM length
 - `0.5` (default): Pattern must be at least 50% of STM length
 - **Lower values** (0.3): More candidates, slower matching, better recall
 - **Higher values** (0.7): Fewer candidates, faster matching, stricter
 
-**length_max_ratio**: Maximum pattern length as ratio of STM length
 - `2.0` (default): Pattern can be up to 200% of STM length
 - Controls how much longer patterns can be vs current context
 - **Lower values**: Stricter length requirements
@@ -549,8 +545,6 @@ curl -X POST http://localhost:8000/sessions \
   -d '{
     "node_id": "strict_length",
     "config": {
-      "length_min_ratio": 0.7,
-      "length_max_ratio": 1.5
     }
   }'
 ```
@@ -708,7 +702,6 @@ Global pipeline behavior controls.
 
 **Example Metrics**:
 ```
-Filter 'length': 5432 candidates (2.3ms)
 Filter 'jaccard': 1234 candidates (5.7ms)
 Filter 'rapidfuzz': 234 candidates (45.2ms)
 ```
@@ -742,8 +735,7 @@ Filter 'rapidfuzz': 234 candidates (45.2ms)
 **Fast Pipeline** (fewer stages):
 ```json
 {
-  "filter_pipeline": ["length", "rapidfuzz"],
-  "length_min_ratio": 0.6,
+  "filter_pipeline": ["rapidfuzz"],
   "recall_threshold": 0.5,
   "max_predictions": 50
 }
@@ -753,14 +745,17 @@ Filter 'rapidfuzz': 234 candidates (45.2ms)
 **Exploratory Pipeline** (maximum recall):
 ```json
 {
-  "filter_pipeline": ["length"],
-  "length_min_ratio": 0.3,
-  "length_max_ratio": 3.0,
+  "filter_pipeline": [],
   "recall_threshold": 0.1,
   "max_predictions": 1000
 }
 ```
 **Use for**: Pattern discovery, research, exploratory analysis
+
+An empty `filter_pipeline` is the default and does **not** mean an unbounded
+corpus scan: the recall-safe bound (`kato/filters/recall_bounds.py`) is applied
+to the candidate query regardless, and only ever removes patterns that provably
+cannot reach `recall_threshold`.
 
 ## Performance Configuration
 
@@ -877,7 +872,7 @@ SESSION_TTL=86400
   "max_predictions": 100,
   "use_token_matching": true,
   "rank_sort_algo": "potential",
-  "filter_pipeline": ["length", "rapidfuzz"]
+  "filter_pipeline": ["rapidfuzz"]
 }
 ```
 
@@ -918,7 +913,7 @@ For complete list of environment variables, see [Environment Variables Reference
 
 **Learning**:
 - `MAX_PATTERN_LENGTH`: Auto-learn length (0 = manual)
-- `RECALL_THRESHOLD`: Pattern match threshold (0.0-1.0)
+- `RECALL_THRESHOLD`: Pattern match threshold (>0.0-1.0)
 - `STM_MODE`: CLEAR or ROLLING
 
 **Session**:

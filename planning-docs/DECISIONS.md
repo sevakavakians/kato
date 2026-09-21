@@ -1,6 +1,95 @@
 # DECISIONS.md - Architectural & Design Decision Log
 *Append-Only Log - Started: 2025-08-29*
-*Last Updated: 2026-09-18 (DECISION-033: KATO v5.2.0 released, MINOR bump; DECISION-032: pattern metadata now fetched after top-K pruning, plus a cross-worker statistics divergence fix and several determinism/leak/security fixes underneath it)*
+*Last Updated: 2026-09-21 (DECISION-034: recall-safe candidate bound — a lossless necessary-condition predicate pushed into ClickHouse to bound the default full-corpus candidate pull, resolving the candidate-set-bounding discussion deferred at DECISION-033. Complete and verified on branch `perf/recall-safe-candidate-bound`; NOT merged to `main`, NOT released.)*
+
+---
+
+## 2026-09-21 - DECISION-034: Recall-Safe Candidate Bound — Push a Necessary Condition Into ClickHouse, Not the Scorer
+
+**Decision**: Bound the default candidate-set pull (`filter_pipeline=[]`, currently O(N) in corpus size) by computing, inside the ClickHouse query itself, a cheap **necessary condition** for a pattern to possibly pass `recall_threshold` — never the scorer itself, which ClickHouse cannot run. A pattern is dropped only when even its most favorable possible similarity is provably below threshold; every survivor still runs through the unchanged Python `_lcs_ratio_scorer`. Ship **on by default** (env kill-switch `KATO_RECALL_BOUND_ENABLED`, default `true`), **delete `LengthFilter` entirely** (it was recall-unsafe, not just imprecise), and **reject `recall_threshold=0`** everywhere (API, session config, env) since no candidate bound is valid at `r=0`.
+**Status**: **COMPLETE and VERIFIED** on branch `perf/recall-safe-candidate-bound` (5 commits, 39 files, +1325/-304). **NOT merged to `main`, NOT released** — the last release remains **v5.2.0** (2026-09-18, DECISION-033), which does not contain this work; the deployment stack stays pinned to it. Full detail: `planning-docs/completed/optimizations/2026-09-21-recall-safe-candidate-bound.md`.
+**Classification**: Architectural Decision (candidate-set bounding strategy) + Performance + Correctness Safety Mechanism + Bug Fix (`recall_threshold=0` validation gaps) + Removal (recall-unsafe `LengthFilter`)
+**Confidence**: Very High — losslessness is proven, not measured: exhaustive sweep asserts the bound accepts whenever the float scorer accepts (mutation-checked, catches a 413-violation naive version and a 129-violation off-by-one); 0 violations across 120,000 pattern/STM pairs; live audit-mode shadow run against a real 400-pattern corpus confirms 0 reachable drops among 360 dropped; prediction parity byte-identical including a purpose-built boundary corpus that actually reaches the bound's edge.
+
+### Context
+DECISION-033 (2026-09-18) closed KATO v5.2.0 and named the next-largest scaling gap: the default `filter_pipeline=[]` path pulls **every pattern in the node** into Python before any pruning happens at all — O(N) time and memory, not bounded by `max_predictions`, unlike the metadata-fetch cost DECISION-032 already bounded. The user asked to discuss this "after the other changes," wanting to learn more before deciding an approach (`pending-updates.md`, 2026-09-18). This decision is that discussion's technical resolution.
+
+It also **supersedes** the long-standing backlog item first identified during Remediation Pass 1 (DECISION-030, 2026-09-16) proposing to "derive `LengthFilter` bounds from `recall_threshold`" as the exact-safe fix for the empty default pipeline — that specific proposed fix is **not** what shipped (see "Why `LengthFilter` Had To Go" below); the item is nonetheless now **done**.
+
+### The Core Technical Decision
+KATO's scorer is `_lcs_ratio_scorer` (`kato/searches/pattern_search.py:50`): `similarity = 2*LCS(pattern, state) / (len(pattern) + len(state))`. ClickHouse 26.2 has **no longest-common-subsequence function**. Its `arrayLevenshteinDistance` is a different metric entirely — verified live that one token substitution costs 1 under Levenshtein but 2 under LCS (a delete plus an insert), and `arrayLevenshteinDistance(['a','b'],['c','d'])` returns 2 where LCS-distance is 4. Running the scorer (or an approximation of it) as the ClickHouse-side decision function was therefore rejected outright: it would silently change which patterns match, in a system whose stated guarantee is determinism.
+
+Instead: push down a **necessary condition**, computable by counting over stored/derivable columns (`length`, `token_set`), that is provably never smaller than the true similarity:
+- From `LCS <= min(P, L)`: a length window `r*L/(2-r) <= P <= L*(2-r)/r`.
+- From `LCS <= common` (pattern tokens present in the STM's token set): `2*common >= r*(P+L)`.
+
+If even the upper bound is below `recall_threshold`, the pattern cannot pass and is dropped without ever running LCS. **ClickHouse never decides a pattern MATCHES — only that it CANNOT.** This is why prediction output is byte-identical before and after, and why the bound can be shipped on by default rather than as an opt-in approximation.
+
+### CRITICAL FINDING — this inverts the obvious approach, record prominently
+**Exact rational arithmetic is unsafe here and causes silent recall loss.** The natural instinct (and the author's own initial written guidance) was to compute the bounds with exact `Fraction` arithmetic to avoid float error. That is backwards: KATO's reference scorer is floating point, and `float(0.1) > 1/10` exactly. An exact `Fraction` comparison is therefore **stricter** than the float implementation it approximates, and rejects candidates the real scorer accepts.
+
+Measured over a sweep of `r ∈ {0.01, 0.1, 1/3, 0.5, 2/3, 0.9, 0.99} × L ∈ [1,40] × P ∈ [2,200] × M`: naive exact `Fraction` bound produced **413 recall losses**; the weakened integer bound produced **0**. Fix: deliberately weaken the threshold below the float value — `num = floor(Fraction(recall_threshold) * 1_000_000)`, compare in integers (`2*common*DEN >= num*(P+L)`). Weakening `r` makes both predicates strictly more permissive, keeping survivors a superset of the true set.
+
+**Standing rule for all future work approximating a float reference implementation with an exact/integer bound: the bound must never be tighter than the float reference it approximates.** Concrete regression example: at `r=0.1, L=1, P=19, M=1` the scorer accepts (`2.0*1/20 == 0.1`) but the naive exact form rejects. A second, independent float hazard found in the same investigation: `int(6 * 1.9 / 0.1)` evaluates to `113`, not `114` — a float-computed `max_length` would drop a pattern scoring exactly at threshold.
+
+### Decisions Made (user-explicit)
+1. **On by default**, env kill-switch `KATO_RECALL_BOUND_ENABLED` (default `true`) — not opt-in. Rationale: the predicate is lossless, so this is not a behavior change; a default-off optimization does nothing to pre-empt the corpus growth (target 100k-1M+ patterns/node, and growing) it exists for.
+2. **Delete `LengthFilter` entirely**, rather than fix or document it — see below.
+3. **Reject `recall_threshold = 0`** everywhere (API, session config, env) — the one case with no valid candidate bound (similarity >= 0 always, so everything qualifies); banning it makes the new bound unconditionally, not conditionally, safe.
+
+**Implementation decision — deliberately NOT registered as a `filter_pipeline` entry.** Registering it there would require flipping the default pipeline from `[]` to non-empty, moving every deployment onto `execute_pipeline()`, which swallows filter exceptions with `continue` (`executor.py:182-185`) — if the failing filter runs first, `candidates` stays `None` and the pipeline returns an empty set: zero predictions, one log line, HTTP 200. Unacceptable for a system whose core guarantee is determinism. The bound is applied intrinsically inside `_get_all_patterns()` instead, with its own fail-open behavior (see Safety Mechanisms).
+
+### Why `LengthFilter` Had To Go
+It used fixed 0.5x/2.0x length ratios independent of `recall_threshold`. For any `r <= 2/3` its window is a **strict subset** of the recall-safe one — at `r=0.1` with a 20-token STM it kept only lengths `[10, 40]` where recall-safety requires `[1, 380]`, silently discarding patterns scoring as high as 0.66. It was recall-lossy and always had been — very likely why `filter_pipeline` defaulted to `[]` in the first place (a lossy default filter is worse than no filter). This is why the DECISION-030 proposal ("derive `LengthFilter` bounds from `recall_threshold`") is superseded rather than implemented as originally framed: fixing `LengthFilter`'s ratios in place would still have been a second, separately-argued bound, not the one actually derived and proven here.
+
+Removal hazard handled deliberately: unknown filter names are normally skipped with a warning (`executor.py:126-128`), which for a first-stage database filter would leave `candidates=None` and make the *next* filter raise. Dropping `'length'` from `valid_filters` makes a stale config fail **validation** with a clear message instead (verified: `filter_pipeline=['length']` now validates `False`).
+
+### `recall_threshold = 0` Rejection — Implementation Detail
+Three validation points had to move in lockstep, or zero leaked through one: `settings.py` Pydantic field (`ge` -> `gt`), `SessionConfiguration.validate()`, `ConfigurationService.validate_configuration_update()`. Also now rejects `bool` (an `int` subclass, previously silently accepted as `1.0`).
+
+Two **pre-existing** gaps closed along the way (bugs found, not introduced by this change): `POST /sessions` never called `validate_configuration_update()` at all (unlike `POST /sessions/{id}/config`) — create-time config was entirely unvalidated; and both `session_manager.py` and `redis_session_manager.py` discarded the boolean return from `SessionConfiguration.update()`, so a rejected value silently became the default instead of erroring. Also fixed in the same pass: `rapidfuzz_filter.py` reading config with `or 0.1` (coerces a legitimate `0.0`) and `getattr(config, 'use_token_matching', True)`, which returns `None` — not `True` — when the attribute exists and is `None`, silently selecting character-level matching. Rehydration from Redis clamps-with-warning rather than failing, so sessions persisted with `r=0` before this change survive an upgrade.
+
+**Deliberately left for a follow-up** (filed as a backlog item, see `SPRINT_BACKLOG.md`): the now-unreachable `r=0` branches at `pattern_search.py:1113-1127` and `prediction.py:228-232`. Rationale: removing behavior-bearing code in the same change that adds the validation preventing it from ever running is how regressions happen — retire once the validation has run in production.
+
+### Measured Results (verified this session against the live stack)
+- Predicate over 1,000,000 synthetic patterns, no index assistance: 206ms, 1,000,000 -> 3,925 survivors.
+- Selectivity, synthetic wide-vocabulary corpus, `r=0.1`: keeps 0.89% (~112x reduction); 0.42% genuinely match.
+- Selectivity, synthetic narrow-vocabulary corpus, `r=0.1`: keeps 82.55%, but 71.95% genuinely match — little waste to recover.
+- Length window alone, `r=0.1`: keeps 99.77% — worthless without the token-overlap clause.
+- Live 400-pattern corpus (40 sharing probe tokens, 360 disjoint): 400 -> 40 candidates, predictions byte-identical.
+- Recall violations across 120,000 pattern/STM pairs, both predicates: **0**.
+- **Honest caveat**: the selectivity percentages are from synthetic corpora built by the author, not real training data — this ClickHouse instance holds only test corpora (14,034 patterns / 471 `kb_id`s, max length 10). The losslessness result is exact and corpus-independent; the selectivity numbers are estimates and real-world benefit will vary entirely with vocabulary diversity. It never costs correctness either way.
+- **No schema migration needed**: `EXPLAIN indexes=1` confirms `kato.patterns_data`'s existing `ORDER BY (kb_id, length, name)`, `INDEX idx_length` (minmax), and `INDEX idx_token_bloom` (bloom_filter on `token_set`) all already engage — the schema was designed for this, the filter was simply never wired up correctly.
+
+### Safety Mechanisms (each with a dedicated test)
+Fails open (a bounded-query failure retries unbounded rather than returning an empty candidate set behind HTTP 200); kill switch (`KATO_RECALL_BOUND_ENABLED=false` emits the exact pre-bound query); auto-disabled in character-level mode (`use_token_matching=False` uses `fuzz.ratio`, a character metric a token bound cannot bound); a degradation ladder for an oversized STM token payload (drops to the length window alone rather than truncating the token list, since a partial list under-counts `common` and would make the predicate unsafe); an audit mode (`KATO_RECALL_BOUND_AUDIT=true` shadow-runs the unbounded query and logs `RECALL BOUND VIOLATION` for anything dropped that was reachable — live result: "360 of 400 patterns dropped, none reachable"); and `recall_threshold`/`use_token_matching` are read from `PatternSearcher`'s resolved values, never session config directly, since the bound is only safe because these match what the scorer itself uses.
+
+### Two False Comments Corrected
+`kato/filters/executor.py` and `kato/filters/base.py` both asserted "Everything is bound server-side — nothing derived from user input is ever interpolated into statement text." **Verified false**: `clickhouse_connect.driver.binding.finalize_query` is `query % {k: format_query_value(v) ...}` — client-side interpolation. The security conclusion still holds (`format_query_value` escapes quotes/backslashes; verified `a' OR 1=1 --` renders as `'a\' OR 1=1 --'`), but escaped values do land in statement text and count against ClickHouse's `max_query_size` (262144 bytes) — the reason the STM token array needs the byte budget in the degradation ladder above.
+
+### Testing
+Full suite **659 passed, 3 skipped, 1 xfailed** (was 625; +22 `test_recall_bounds.py`, +12 `test_recall_bound_executor.py`). `test_recall_bounds.py` is the losslessness proof, mutation-checked (catches the 413-violation naive-exact bound and a 129-violation off-by-one on `max_length`) with non-vacuity guards (>=300,000 scorer-accepted cases exercised). `test_recall_bound_executor.py` covers fail-open, kill switch, character mode, and audit-leak prevention, including a test that monkeypatches in a deliberately over-aggressive bound to prove the audit actually fires. `scripts/check_prediction_parity.py` gained `--boundary`: the default corpus cannot test the bound at all (every pattern sits far inside the window, so the gate would pass vacuously) — the boundary corpus places patterns exactly on the edge (`P = 2M/r - L`), verified against the real scorer, and `boundary_self_check` requires at least one prediction sitting exactly at threshold. Parity: identical, with the bound demonstrably pruning 5-6 of 8 candidates.
+
+### A Fourth and Fifth Instance of "A Verification That Could Not Have Failed"
+Extends the three instances already in `project-manager/patterns.md`. Fourth: `test_config_filter_pipeline_parameters` ended with `assert 'length_min_ratio' in config or 'length_max_ratio' in config or True` — the trailing `or True` made it unconditionally pass. Fifth: the replacement written to fix the fourth asserted against the fixture's `get_config()`, which hard-codes six keys and never returns filter parameters — it could never have passed either; corrected to read `GET /sessions/{id}/config`, the surface that actually carries them. Recorded as a Testing Strategy Pattern in `project-manager/patterns.md`.
+
+### Impact
+- **Positive**: resolves the highest-priority open item from DECISION-033; converts the default candidate pull from O(N) to a bound that scales with match density rather than corpus size, at target scale (100k-1M+ patterns/node); proven lossless rather than merely measured-safe; closes two pre-existing validation gaps (`POST /sessions` unvalidated, silently-discarded config-update failures) found along the way; removes a filter (`LengthFilter`) that had been silently discarding valid matches since it was written.
+- **Neutral**: prediction output is unchanged by design — this is a candidate-set bound, not a matching-semantics change.
+- **Risk**: Low on the bound itself (exhaustively proven, mutation-checked, live-audited). **Process risk is the open item**: this is complete and verified but sits entirely on an unmerged branch — see "Open Items" below and `pending-updates.md`.
+
+### Open Items (carried forward as backlog entries, see `SPRINT_BACKLOG.md`)
+- Merge `perf/recall-safe-candidate-bound` to `main` and cut a release — the work is complete and verified but unreleased; the deployment remains pinned to v5.2.0, which does not contain it.
+- Ship to staging with `KATO_RECALL_BOUND_AUDIT=true` for 24h before trusting it against real corpus shapes no synthetic test anticipates, then turn audit off.
+- Retire the unreachable `r=0` branches (`pattern_search.py:1113-1127`, `prediction.py:228-232`).
+- Measure selectivity against real training data — current percentages are synthetic estimates.
+- `scripts/benchmark_hybrid_architecture.py` is stale (still imports `pymongo`, removed in v3.0.0; 9 pre-existing lint errors; likely cannot run) — only its filter pipelines were updated in this session.
+
+### Related Decisions
+- DECISION-030 (2026-09-16) — Remediation Pass 1, which first identified the `recall_threshold`-derived length bound as the exact-safe fix for `filter_pipeline=[]`, superseded here by the combined length+token-overlap bound actually implemented.
+- DECISION-031 (2026-09-16) — the cost-breakdown finding that the full-corpus *scan* itself is cheap (~1% of total time); this decision does not contradict that finding — it bounds the *candidate set*, not the scan's per-row cost, which matters as corpus size grows toward the 100k-1M+ target regardless of per-row cost.
+- DECISION-032/DECISION-033 (2026-09-18) — KATO v5.2.0, which named this as the next open item.
+- `planning-docs/project-manager/pending-updates.md` — the candidate-set-bounding discussion entry this decision resolves, and the new merge/release item it opens.
 
 ---
 

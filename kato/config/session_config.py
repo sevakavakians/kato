@@ -45,10 +45,6 @@ class SessionConfiguration:
     # Filter Pipeline Configuration
     filter_pipeline: Optional[list[str]] = None  # Ordered list of filter names
 
-    # Length Filter Parameters
-    length_min_ratio: Optional[float] = None  # Min pattern length as ratio of STM length (default: 0.5)
-    length_max_ratio: Optional[float] = None  # Max pattern length as ratio of STM length (default: 2.0)
-
     # Jaccard Filter Parameters
     jaccard_threshold: Optional[float] = None  # Minimum Jaccard similarity (default: 0.3)
     jaccard_min_overlap: Optional[int] = None  # Minimum absolute token overlap count (default: 2)
@@ -82,7 +78,9 @@ class SessionConfiguration:
         """
         try:
             # Validate recall_threshold
-            if self.recall_threshold is not None and not 0.0 <= self.recall_threshold <= 1.0:
+            # recall_threshold must be > 0. At 0 every pattern qualifies
+            # (similarity >= 0 always), which is never a useful setting.
+            if self.recall_threshold is not None and not 0.0 < self.recall_threshold <= 1.0:
                 logger.error(f"Invalid recall_threshold: {self.recall_threshold}")
                 return False
 
@@ -136,21 +134,13 @@ class SessionConfiguration:
 
             # Validate filter pipeline
             if self.filter_pipeline is not None:
-                valid_filters = ['minhash', 'length', 'jaccard', 'bloom', 'rapidfuzz']
+                valid_filters = ['minhash', 'jaccard', 'bloom', 'rapidfuzz']
                 for filter_name in self.filter_pipeline:
                     if filter_name not in valid_filters:
                         logger.error(f"Invalid filter in pipeline: {filter_name}")
                         return False
 
             # Validate filter parameters
-            if self.length_min_ratio is not None and not 0.0 <= self.length_min_ratio <= 1.0:
-                logger.error(f"Invalid length_min_ratio: {self.length_min_ratio}")
-                return False
-
-            if self.length_max_ratio is not None and self.length_max_ratio < 1.0:
-                logger.error(f"Invalid length_max_ratio: {self.length_max_ratio}")
-                return False
-
             if self.jaccard_threshold is not None and not 0.0 <= self.jaccard_threshold <= 1.0:
                 logger.error(f"Invalid jaccard_threshold: {self.jaccard_threshold}")
                 return False
@@ -280,7 +270,7 @@ class SessionConfiguration:
             'use_token_matching', 'fuzzy_token_threshold', 'rank_sort_algo', 'affinity_emotive',
             'session_id', 'node_id', 'version',
             # Filter pipeline fields
-            'filter_pipeline', 'length_min_ratio', 'length_max_ratio',
+            'filter_pipeline',
             'jaccard_threshold', 'jaccard_min_overlap',
             'minhash_threshold', 'minhash_bands', 'minhash_rows', 'minhash_num_hashes',
             'bloom_false_positive_rate', 'max_candidates_per_stage', 'enable_filter_metrics'
@@ -301,6 +291,20 @@ class SessionConfiguration:
             else:
                 filtered_data['updated_at'] = data['updated_at']
 
+        # Sessions persisted before recall_threshold=0 was rejected can still be
+        # sitting in Redis. Rehydration must not fail on them -- that would break
+        # live sessions across an upgrade -- so drop the value and fall back to
+        # the system default, loudly.
+        if filtered_data.get('recall_threshold') is not None \
+                and not 0.0 < filtered_data['recall_threshold'] <= 1.0:
+            logger.warning(
+                "Session %s was persisted with recall_threshold=%s, which is no "
+                "longer valid; falling back to the system default.",
+                filtered_data.get('session_id', '<unknown>'),
+                filtered_data['recall_threshold'],
+            )
+            filtered_data['recall_threshold'] = None
+
         return cls(**filtered_data)
 
     def get_config_only(self) -> dict[str, Any]:
@@ -317,7 +321,7 @@ class SessionConfiguration:
             'indexer_type', 'max_predictions', 'sort_symbols', 'process_predictions',
             'use_token_matching', 'fuzzy_token_threshold', 'stm_mode', 'rank_sort_algo', 'affinity_emotive',
             # Filter pipeline configuration
-            'filter_pipeline', 'length_min_ratio', 'length_max_ratio',
+            'filter_pipeline',
             'jaccard_threshold', 'jaccard_min_overlap',
             'minhash_threshold', 'minhash_bands', 'minhash_rows', 'minhash_num_hashes',
             'bloom_false_positive_rate', 'max_candidates_per_stage', 'enable_filter_metrics'
@@ -350,7 +354,7 @@ class SessionConfiguration:
             'indexer_type', 'max_predictions', 'sort_symbols', 'process_predictions',
             'use_token_matching', 'fuzzy_token_threshold', 'stm_mode', 'rank_sort_algo', 'affinity_emotive',
             # Filter pipeline configuration
-            'filter_pipeline', 'length_min_ratio', 'length_max_ratio',
+            'filter_pipeline',
             'jaccard_threshold', 'jaccard_min_overlap',
             'minhash_threshold', 'minhash_bands', 'minhash_rows', 'minhash_num_hashes',
             'bloom_false_positive_rate', 'max_candidates_per_stage', 'enable_filter_metrics'

@@ -76,7 +76,7 @@ Collection names are not configurable: KATO always uses
 |----------|------|---------|-------------|
 | `MAX_PATTERN_LENGTH` | integer | `0` | Auto-learn when STM reaches this length (0 = manual learning only) |
 | `PERSISTENCE` | integer | `5` | Emotive rolling window size (1-100) |
-| `RECALL_THRESHOLD` | float | `0.1` | Pattern matching sensitivity (0.0-1.0) |
+| `RECALL_THRESHOLD` | float | `0.1` | Pattern matching sensitivity (>0.0-1.0) |
 | `STM_MODE` | string | `CLEAR` | STM mode after auto-learn (CLEAR or ROLLING) |
 
 Auto-learning is driven solely by `MAX_PATTERN_LENGTH`. Any value greater than

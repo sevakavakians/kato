@@ -14,7 +14,7 @@ Session configuration allows per-session customization of KATO's behavior. Each 
 |-----------|------|-------|---------|-------------|
 | `max_pattern_length` | integer | 0+ | 0 | Auto-learn when STM reaches this length (0=manual only) |
 | `persistence` | integer | 1-100 | 5 | Emotive rolling window size |
-| `recall_threshold` | float | 0.0-1.0 | 0.1 | Pattern matching sensitivity threshold |
+| `recall_threshold` | float | >0.0-1.0 | 0.1 | Pattern matching sensitivity threshold |
 | `stm_mode` | string | CLEAR\|ROLLING | CLEAR | STM behavior after auto-learning |
 
 ## Processing Configuration
@@ -78,8 +78,6 @@ The `rank_sort_algo` parameter controls how predictions are sorted and prioritiz
 
 | Parameter | Type | Range | Default | Description |
 |-----------|------|-------|---------|-------------|
-| `length_min_ratio` | float | 0.0-1.0 | 0.5 | Min pattern length as ratio of STM length |
-| `length_max_ratio` | float | 1.0+ | 2.0 | Max pattern length as ratio of STM length |
 
 ### Jaccard Filter
 
@@ -199,7 +197,7 @@ When fuzzy matching is enabled, predictions include a `fuzzy_matches` array docu
   "max_predictions": 10,
   "rank_sort_algo": "similarity",
   "jaccard_threshold": 0.8,
-  "filter_pipeline": ["length", "jaccard", "rapidfuzz"]
+  "filter_pipeline": ["jaccard", "rapidfuzz"]
 }
 ```
 
@@ -214,7 +212,7 @@ When fuzzy matching is enabled, predictions include a `fuzzy_matches` array docu
   "use_token_matching": false,
   "sort_symbols": false,
   "rank_sort_algo": "potential",
-  "filter_pipeline": ["length", "rapidfuzz"]
+  "filter_pipeline": ["rapidfuzz"]
 }
 ```
 

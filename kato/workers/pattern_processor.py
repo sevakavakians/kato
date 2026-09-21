@@ -175,8 +175,6 @@ class PatternProcessor:
         session_config = SessionConfiguration(
             filter_pipeline=[],
             minhash_threshold=0.7,
-            length_min_ratio=0.5,
-            length_max_ratio=2.0,
             jaccard_threshold=0.3,
             jaccard_min_overlap=2,
             recall_threshold=self.recall_threshold,

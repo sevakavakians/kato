@@ -93,8 +93,6 @@ GET /sessions/{session_id}/config
     "fuzzy_token_threshold": 0.0,
     "rank_sort_algo": "potential",
     "filter_pipeline": [],
-    "length_min_ratio": 0.5,
-    "length_max_ratio": 2.0,
     "jaccard_threshold": 0.3,
     "jaccard_min_overlap": 2,
     "minhash_threshold": 0.7,
@@ -156,8 +154,6 @@ curl http://localhost:8000/sessions/$SESSION_ID/config
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `filter_pipeline` | array[string] | [] | Ordered filter stages |
-| `length_min_ratio` | float | 0.5 | Min pattern length as ratio of STM |
-| `length_max_ratio` | float | 2.0 | Max pattern length as ratio of STM |
 | `jaccard_threshold` | float | 0.3 | Minimum Jaccard similarity |
 | `jaccard_min_overlap` | integer | 2 | Minimum token overlap count |
 | `minhash_threshold` | float | 0.7 | LSH Jaccard threshold |
@@ -209,8 +205,6 @@ curl -X POST http://localhost:8000/sessions \
     "fuzzy_token_threshold": 0.0,
     "rank_sort_algo": "similarity",
     "filter_pipeline": [],
-    "length_min_ratio": 0.5,
-    "length_max_ratio": 2.0,
     "jaccard_threshold": 0.3,
     "jaccard_min_overlap": 2,
     "minhash_threshold": 0.7,
@@ -291,7 +285,7 @@ For discovering patterns with loose matching:
     "max_predictions": 1000,
     "use_token_matching": false,
     "rank_sort_algo": "potential",
-    "filter_pipeline": ["length", "rapidfuzz"]
+    "filter_pipeline": ["rapidfuzz"]
   }
 }
 ```

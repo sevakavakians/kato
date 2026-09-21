@@ -342,7 +342,7 @@ class FilterPipelineExecutor:
         """
         try:
             # Base filters just need config and state
-            if filter_name in ['length', 'jaccard', 'minhash']:
+            if filter_name in ['jaccard', 'minhash']:
                 return filter_class(self.config, self.state)
 
             # Bloom filter needs bloom_filter instance

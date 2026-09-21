@@ -400,8 +400,6 @@ class HybridBenchmark:
             minhash_bands=20,
             minhash_rows=5,
             minhash_num_hashes=100,
-            length_min_ratio=0.5,
-            length_max_ratio=2.0,
             jaccard_threshold=0.3,
             jaccard_min_overlap=2,
             enable_filter_metrics=self.verbose
@@ -530,9 +528,9 @@ class HybridBenchmark:
 
             # Test different filter pipelines
             pipelines = [
-                (['length', 'jaccard', 'rapidfuzz'], 'Million-scale (no MinHash)'),
-                (['minhash', 'length', 'jaccard', 'rapidfuzz'], 'Billion-scale (full pipeline)'),
-                (['length', 'rapidfuzz'], 'Fast (minimal filtering)'),
+                (['jaccard', 'rapidfuzz'], 'Million-scale (no MinHash)'),
+                (['minhash', 'jaccard', 'rapidfuzz'], 'Billion-scale (full pipeline)'),
+                (['rapidfuzz'], 'Fast (minimal filtering)'),
             ]
 
             for filter_pipeline, pipeline_name in pipelines:

@@ -99,8 +99,6 @@ class ConfigurationService:
 
             # Filter Pipeline Configuration (defaults based on documentation)
             'filter_pipeline': [],
-            'length_min_ratio': 0.5,
-            'length_max_ratio': 2.0,
             'jaccard_threshold': 0.3,
             'jaccard_min_overlap': 2,
             'minhash_threshold': 0.7,

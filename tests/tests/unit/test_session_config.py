@@ -205,11 +205,10 @@ def test_config_filter_pipeline_parameters(kato_fixture):
     kato = kato_fixture
     kato.clear_all_memory()
 
-    # Update filter pipeline config - use simple parameters that are more likely to work
-    # Skip filter_pipeline list for now as it may require special handling
+    # length_min_ratio / length_max_ratio are gone: LengthFilter used fixed
+    # ratios independent of recall_threshold, so it discarded genuine matches.
+    # It is superseded by the recall-safe bound in kato/filters/recall_bounds.py.
     result = kato.update_config({
-        'length_min_ratio': 0.5,
-        'length_max_ratio': 2.0,
         'jaccard_threshold': 0.3,
         'jaccard_min_overlap': 2,
         'minhash_threshold': 0.7,
@@ -220,12 +219,25 @@ def test_config_filter_pipeline_parameters(kato_fixture):
 
     assert result.get('status') == 'okay', f"Filter pipeline config update failed: {result}"
 
-    # Verify filter pipeline config persisted
-    config = kato.get_config()
-    # Filter params may or may not be returned if they match defaults
-    # Just verify the update didn't error - actual values may vary
-    assert 'length_min_ratio' in config or 'length_max_ratio' in config or True
-    # The important thing is the update succeeded without errors
+    # Verify the values actually round-trip. The previous assertion here was
+    # `... or True`, which could not fail. The fixture's get_config() only
+    # surfaces six core keys, so read the session config endpoint directly --
+    # that is what actually carries the filter parameters.
+    response = kato.requests_session.get(
+        f"{kato.base_url}/sessions/{kato.session_id}/config", timeout=10
+    )
+    assert response.status_code == 200, f"config read failed: {response.status_code}"
+    config = response.json()['config']
+
+    assert config.get('jaccard_threshold') == 0.3, \
+        f"jaccard_threshold did not persist: {config.get('jaccard_threshold')}"
+    assert config.get('minhash_bands') == 20, \
+        f"minhash_bands did not persist: {config.get('minhash_bands')}"
+
+    # LengthFilter is gone; its parameters must no longer be part of the
+    # configuration surface at all.
+    assert 'length_min_ratio' not in config, "length_min_ratio should have been removed"
+    assert 'length_max_ratio' not in config, "length_max_ratio should have been removed"
 
 
 def test_config_rank_sort_algorithms(kato_fixture):

@@ -15,7 +15,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from kato.config.session_config import SessionConfiguration
+from kato.config.session_config import VALID_FILTERS, SessionConfiguration
 from kato.config.settings import Settings
 
 logger = logging.getLogger('kato.config.configuration_service')
@@ -195,6 +195,31 @@ class ConfigurationService:
                     'A threshold of 0 accepts every pattern regardless of '
                     'similarity and is never a useful setting.'
                 )
+
+        # Validate filter_pipeline. Without this the check falls through to
+        # SessionConfiguration.validate(), which returns a bare False and yields
+        # a generic message that names no field -- unhelpful precisely when a
+        # config carries a filter removed in a major version.
+        if 'filter_pipeline' in updates:
+            value = updates['filter_pipeline']
+            if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+                errors['filter_pipeline'] = 'Must be a list of filter names'
+            else:
+                unknown = [v for v in value if v not in VALID_FILTERS]
+                if unknown:
+                    removed = [v for v in unknown if v == 'length']
+                    message = (
+                        f'Unknown filter(s): {", ".join(repr(u) for u in unknown)}. '
+                        f'Valid filters: {", ".join(VALID_FILTERS)}.'
+                    )
+                    if removed:
+                        message += (
+                            " The 'length' filter was removed in 6.0.0 because it "
+                            "discarded patterns that genuinely matched; remove it "
+                            "from the pipeline. Candidate bounding is now automatic "
+                            "and needs no configuration."
+                        )
+                    errors['filter_pipeline'] = message
 
         # Validate persistence
         if 'persistence' in updates:

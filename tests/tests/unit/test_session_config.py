@@ -9,6 +9,7 @@ Tests session-level configuration functionality including:
 - Config merge with system defaults
 """
 
+import json
 import os
 import sys
 
@@ -356,3 +357,43 @@ def test_config_batch_update(kato_fixture):
     assert config['max_predictions'] == 75
     assert config['stm_mode'] == 'ROLLING'
     assert config['persistence'] == 50
+
+
+def test_removed_length_filter_is_rejected_with_an_actionable_message(kato_fixture):
+    """A config carrying the 6.0.0-removed 'length' filter must say so.
+
+    Before this, filter_pipeline was not validated by the configuration service
+    at all: the rejection fell through to SessionConfiguration.validate(), which
+    returns a bare False, and the caller got a generic message citing
+    recall_threshold as an example -- actively misleading, and on the single
+    most likely 6.0.0 upgrade failure.
+    """
+    kato = kato_fixture
+    kato.clear_all_memory()
+
+    response = kato.requests_session.post(
+        f"{kato.base_url}/sessions",
+        json={"node_id": "filter_reject_probe", "config": {"filter_pipeline": ["length"]}},
+        timeout=10,
+    )
+    assert response.status_code == 400, f"expected 400, got {response.status_code}"
+    body = json.dumps(response.json())
+    assert 'length' in body, f"rejection does not name the offending filter: {body}"
+    assert '6.0.0' in body, f"rejection does not explain the removal: {body}"
+
+    # An unknown-but-never-existing filter is rejected too, without the 6.0.0 note.
+    response = kato.requests_session.post(
+        f"{kato.base_url}/sessions",
+        json={"node_id": "filter_reject_probe", "config": {"filter_pipeline": ["nonesuch"]}},
+        timeout=10,
+    )
+    assert response.status_code == 400
+    assert 'nonesuch' in json.dumps(response.json())
+
+    # A valid pipeline is still accepted.
+    response = kato.requests_session.post(
+        f"{kato.base_url}/sessions",
+        json={"node_id": "filter_reject_probe", "config": {"filter_pipeline": ["jaccard"]}},
+        timeout=10,
+    )
+    assert response.status_code == 200, f"valid pipeline rejected: {response.text}"

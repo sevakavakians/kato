@@ -29,9 +29,13 @@ positive value such as `0.01` for the same practical effect.
 
 **`LengthFilter` is removed**, along with the `length_min_ratio` and
 `length_max_ratio` settings and the `'length'` entry in `filter_pipeline`. A
-`filter_pipeline` naming `'length'` is now rejected by config validation with a
-message naming the filter, rather than being silently skipped. Remove the entry;
-the recall-safe bound replaces it and needs no configuration.
+`filter_pipeline` naming `'length'` is now rejected by config validation rather
+than being silently skipped. Remove the entry; the recall-safe bound replaces it
+and needs no configuration.
+
+> In 6.0.0 that rejection does not name the offending filter — the create path
+> returns a generic message citing `recall_threshold` as an example. Fixed in
+> 6.0.1, which names the filter and explains the removal.
 
 The filter was recall-lossy and always had been. It bounded pattern length by
 fixed `0.5x`/`2.0x` ratios that ignored `recall_threshold`, so at

@@ -13,6 +13,12 @@ from typing import Any, Optional
 
 logger = logging.getLogger('kato.config.session_config')
 
+# Filter names accepted in `filter_pipeline`. Shared with
+# ConfigurationService.validate_configuration_update so the two validators
+# cannot drift -- a name valid in one and not the other produces a rejection
+# with no useful message, which is what happened when 'length' was removed.
+VALID_FILTERS = ['minhash', 'jaccard', 'bloom', 'rapidfuzz']
+
 
 @dataclass
 class SessionConfiguration:
@@ -134,9 +140,8 @@ class SessionConfiguration:
 
             # Validate filter pipeline
             if self.filter_pipeline is not None:
-                valid_filters = ['minhash', 'jaccard', 'bloom', 'rapidfuzz']
                 for filter_name in self.filter_pipeline:
-                    if filter_name not in valid_filters:
+                    if filter_name not in VALID_FILTERS:
                         logger.error(f"Invalid filter in pipeline: {filter_name}")
                         return False
 

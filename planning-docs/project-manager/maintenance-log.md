@@ -3336,3 +3336,37 @@ networks:
 
 *Agent execution time: < 10 minutes*
 *Response type: Milestone documentation (release) + new human-facing item surfaced (candidate-set-bounding discussion)*
+
+---
+
+## 2026-09-21 - Milestone Completion + Architectural Decision: Recall-Safe Candidate Bound — COMPLETE and VERIFIED on branch, NOT merged/released
+
+**Trigger**: Milestone Completion (resolves the candidate-set-bounding discussion, the top open item flagged after v5.2.0) + Architectural Decision (necessary-condition predicate pushed into ClickHouse rather than the scorer) + Knowledge Refinement (exact-arithmetic-vs-float-reference finding) + Task Status Change (`recall_threshold=0` now rejected; `LengthFilter` deleted).
+
+**What shipped** (verified facts supplied for this documentation pass, branch `perf/recall-safe-candidate-bound`, 5 commits, 39 files, +1325/-304):
+- Core decision: ClickHouse 26.2 has no LCS function and its `arrayLevenshteinDistance` is a verified-different metric, so the scorer itself cannot move to ClickHouse. Instead a necessary-condition predicate (length window from `LCS<=min(P,L)`, token-overlap count from `LCS<=common`) is applied to the candidate query — provably never smaller than the true similarity, so it can only drop patterns that cannot pass `recall_threshold`. Verified: 0 recall violations across 120,000 pattern/STM pairs; 1,000,000-pattern predicate run in 206ms; live 400-pattern corpus pruned 400→40 with byte-identical predictions.
+- **Critical finding**: exact `Fraction` arithmetic is unsafe (413 recall losses measured) because KATO's reference scorer is floating point and an exact bound is stricter than it; a deliberately weakened integer bound fixes this (0 losses). Recorded as a standing rule.
+- Decisions shipped: on by default with `KATO_RECALL_BOUND_ENABLED` kill switch; `LengthFilter` deleted entirely (recall-unsafe for `r<=2/3`, not just imprecise); `recall_threshold=0` rejected everywhere (closed two pre-existing validation gaps: unvalidated `POST /sessions`, a discarded-boolean-return bug in both session managers); deliberately not registered as a `filter_pipeline` entry (executor swallows filter exceptions, would silently empty the candidate set on failure).
+- Safety mechanisms, each tested: fail-open, kill switch, auto-disable in character-level mode, a degradation ladder for oversized STM payloads, and an audit mode that shadow-runs the unbounded query and logs any reachable pattern the bound would have dropped (live: 0 found).
+- Testing: full suite 659 passed / 3 skipped / 1 xfailed (was 625; +22 mutation-checked losslessness-proof tests, +12 safety-mechanism tests); new `--boundary` mode for the prediction-parity gate, since the default corpus cannot exercise the bound at all.
+- A fourth and fifth instance of "a verification that could not have failed" found and fixed in the same pass (a trailing `assert ... or True`; then its replacement, which asserted against a fixture that could never carry the field in question).
+- **Not merged to `main`, not released** — deployment stays pinned to v5.2.0.
+
+**Actions Taken**:
+1. `planning-docs/DECISIONS.md` — added DECISION-034 (Context/Core Technical Decision/Critical Finding/Decisions Made/Why LengthFilter Had To Go/recall_threshold=0 detail/Measured Results/Safety Mechanisms/Two False Comments Corrected/Testing/Impact/Open Items/Related Decisions), inserted at the top. Header "Last Updated" line updated.
+2. `planning-docs/completed/optimizations/2026-09-21-recall-safe-candidate-bound.md` — new archive doc, following the established optimization-archive template, with full technical detail including the exact-arithmetic finding, safety mechanisms, and commit list.
+3. `planning-docs/SESSION_STATE.md` — new "Current Task" section at the top recording the work as COMPLETE/VERIFIED-but-unmerged; the previous "Current Task" (v5.2.0 release) renamed "Previous Task (context preserved)".
+4. `planning-docs/SPRINT_BACKLOG.md` — header/Active Projects updated to reflect v5.2.0 as still the deployed release with this branch pending; new "Recently Completed" entry for the recall-safe bound; the long-standing "Default `filter_pipeline` is still `[]`" re-assess-list bullet marked DONE (with a note that the resolution differs from the originally-proposed `LengthFilter` fix); the "Discussion Needed: Candidate-Set Bounding Strategy" backlog entry marked RESOLVED; four new Backlog entries added (merge/release, retire unreachable `r=0` branches, measure real-corpus selectivity, stale `benchmark_hybrid_architecture.py` script).
+5. `planning-docs/README.md` — "Current System State" Version/Status lines updated: v5.2.0 remains explicitly current; a new "Next up" line names the merge/release decision for `perf/recall-safe-candidate-bound`.
+6. `planning-docs/project-manager/pending-updates.md` — the 2026-09-18 "Discussion Needed: Candidate-Set Bounding Strategy" entry marked Resolved with a resolution summary; new "Decision Needed: Merge and Release `perf/recall-safe-candidate-bound`" entry added (High priority, Open).
+7. `planning-docs/project-manager/patterns.md` — new "Numerical Correctness Patterns" section with the exact-arithmetic-vs-float-reference finding (Pattern/Discovery Trigger/Assumption→Reality/Resolution Pattern/Recurrence Risk); new dated entry at the top of "Testing Strategy Patterns" recording the fourth and fifth instances of "a verification that could not have failed."
+8. This entry and a matching `triggers.md` entry.
+
+**Classification**: Milestone Completion (discussion resolved) + Architectural Decision (DECISION-034) + Knowledge Refinement (exact-arithmetic finding) — surfaced as a new pending-updates.md item (merge/release decision, not a silent operation) plus otherwise-silent documentation updates.
+
+**Next Steps**: Human decision on merging `perf/recall-safe-candidate-bound` to `main` and releasing it (see `pending-updates.md` and `SPRINT_BACKLOG.md`). All other previously-open items (dependency upgrade, `REDIS_PASSWORD`, dashboard hardening, single-symbol fast-path semantics, `sort_symbols` bug) remain open, untouched by this pass.
+
+---
+
+*Agent execution time: < 10 minutes*
+*Response type: Milestone documentation (branch completion, unmerged) + new human-facing item surfaced (merge/release decision) + knowledge refinement recorded (exact-arithmetic-vs-float-reference standing rule)*

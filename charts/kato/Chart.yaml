@@ -6,7 +6,7 @@ description: |
   Redis, and Qdrant must be provided externally and configured via values.
 type: application
 version: 0.1.1
-appVersion: "5.2.0"
+appVersion: "6.0.0"
 kubeVersion: ">=1.24.0-0"
 home: https://github.com/sevakavakians/kato
 sources:

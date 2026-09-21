@@ -359,41 +359,48 @@ def test_config_batch_update(kato_fixture):
     assert config['persistence'] == 50
 
 
-def test_removed_length_filter_is_rejected_with_an_actionable_message(kato_fixture):
-    """A config carrying the 6.0.0-removed 'length' filter must say so.
+def test_unknown_filter_is_rejected_naming_the_filter(kato_fixture):
+    """An unknown filter in filter_pipeline must be named in the rejection.
 
-    Before this, filter_pipeline was not validated by the configuration service
-    at all: the rejection fell through to SessionConfiguration.validate(), which
-    returns a bare False, and the caller got a generic message citing
-    recall_threshold as an example -- actively misleading, and on the single
-    most likely 6.0.0 upgrade failure.
+    filter_pipeline was previously not validated by the configuration service,
+    so the rejection fell through to SessionConfiguration.validate(), which
+    returns a bare False and yields a generic message naming no field.
+
+    The message must state the requirement ONLY. Version history and the reason
+    a filter is absent belong in the changelog, never in a runtime message.
     """
     kato = kato_fixture
     kato.clear_all_memory()
 
-    response = kato.requests_session.post(
-        f"{kato.base_url}/sessions",
-        json={"node_id": "filter_reject_probe", "config": {"filter_pipeline": ["length"]}},
-        timeout=10,
-    )
+    def create(config):
+        return kato.requests_session.post(
+            f"{kato.base_url}/sessions",
+            json={"node_id": "filter_reject_probe", "config": config},
+            timeout=10,
+        )
+
+    response = create({"filter_pipeline": ["length"]})
     assert response.status_code == 400, f"expected 400, got {response.status_code}"
     body = json.dumps(response.json())
-    assert 'length' in body, f"rejection does not name the offending filter: {body}"
-    assert '6.0.0' in body, f"rejection does not explain the removal: {body}"
+    assert "length" in body, f"rejection does not name the offending filter: {body}"
+    assert "jaccard" in body, f"rejection does not list the valid filters: {body}"
 
-    # An unknown-but-never-existing filter is rejected too, without the 6.0.0 note.
-    response = kato.requests_session.post(
-        f"{kato.base_url}/sessions",
-        json={"node_id": "filter_reject_probe", "config": {"filter_pipeline": ["nonesuch"]}},
-        timeout=10,
+    # The standing rule, enforced: no deprecation commentary or version history
+    # in a runtime message.
+    forbidden = ["deprecat", "removed in", "was removed", "no longer",
+                 "6.0.0", "5.2.0", "superseded"]
+    lowered = body.lower()
+    leaked = [term for term in forbidden if term in lowered]
+    assert not leaked, (
+        f"runtime message carries deprecation/version information {leaked}; "
+        f"that belongs in the changelog only. Message: {body}"
     )
+
+    # A filter name that never existed is rejected the same way.
+    response = create({"filter_pipeline": ["nonesuch"]})
     assert response.status_code == 400
-    assert 'nonesuch' in json.dumps(response.json())
+    assert "nonesuch" in json.dumps(response.json())
 
     # A valid pipeline is still accepted.
-    response = kato.requests_session.post(
-        f"{kato.base_url}/sessions",
-        json={"node_id": "filter_reject_probe", "config": {"filter_pipeline": ["jaccard"]}},
-        timeout=10,
-    )
+    response = create({"filter_pipeline": ["jaccard"]})
     assert response.status_code == 200, f"valid pipeline rejected: {response.text}"

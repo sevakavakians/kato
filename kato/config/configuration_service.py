@@ -207,19 +207,13 @@ class ConfigurationService:
             else:
                 unknown = [v for v in value if v not in VALID_FILTERS]
                 if unknown:
-                    removed = [v for v in unknown if v == 'length']
-                    message = (
+                    # State the requirement only. Version history and the
+                    # rationale for a filter's absence belong in the changelog,
+                    # never in a runtime message.
+                    errors['filter_pipeline'] = (
                         f'Unknown filter(s): {", ".join(repr(u) for u in unknown)}. '
                         f'Valid filters: {", ".join(VALID_FILTERS)}.'
                     )
-                    if removed:
-                        message += (
-                            " The 'length' filter was removed in 6.0.0 because it "
-                            "discarded patterns that genuinely matched; remove it "
-                            "from the pipeline. Candidate bounding is now automatic "
-                            "and needs no configuration."
-                        )
-                    errors['filter_pipeline'] = message
 
         # Validate persistence
         if 'persistence' in updates:

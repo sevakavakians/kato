@@ -222,7 +222,8 @@ class SuperKnowledgeBase:
                 """
                 # Symbol updates happen via increment_symbol_frequency/increment_pattern_member_frequency
                 # This method exists for backward compatibility but is a no-op
-                logger.warning("symbols_kb.update_one() called but is deprecated in hybrid architecture")
+                logger.warning("symbols_kb.update_one() is a no-op; use increment_symbol_frequency "
+                               "or increment_pattern_member_frequency")
                 return type('UpdateResult', (), {'matched_count': 0, 'modified_count': 0})()
 
         return SymbolsKBInterface(self)

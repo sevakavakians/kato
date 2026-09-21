@@ -131,7 +131,7 @@ async def get_percept_data(
     return {
         "percept_data": {},
         "node_id": processor.id,
-        "warning": "This endpoint is deprecated. Use /sessions/{session_id}/percept-data for session-aware data."
+        "warning": "Use /sessions/{session_id}/percept-data for session-aware data."
     }
 
 
@@ -173,7 +173,7 @@ async def get_cognition_data(
             "short_term_memory": []
         },
         "node_id": processor.id,
-        "warning": "This endpoint is deprecated. Use /sessions/{session_id}/cognition-data for session-aware data."
+        "warning": "Use /sessions/{session_id}/cognition-data for session-aware data."
     }
 
 

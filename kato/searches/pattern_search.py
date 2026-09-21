@@ -626,8 +626,8 @@ class PatternSearcher:
             RuntimeError: Always raises - MongoDB mode no longer supported.
         """
         raise RuntimeError(
-            "getPatterns() is deprecated. Hybrid architecture uses FilterPipelineExecutor "
-            "for pattern loading during getCandidatesViaFilterPipeline()."
+            "getPatterns() is not supported. Pattern loading runs through "
+            "FilterPipelineExecutor during getCandidatesViaFilterPipeline()."
         )
 
     async def getPatternsAsync(self, session_id: Optional[str] = None, limit: int = 1000) -> None:
@@ -645,8 +645,8 @@ class PatternSearcher:
             RuntimeError: Always raises - MongoDB mode no longer supported.
         """
         raise RuntimeError(
-            "getPatternsAsync() is deprecated. Hybrid architecture uses FilterPipelineExecutor "
-            "for pattern loading during getCandidatesViaFilterPipeline()."
+            "getPatternsAsync() is not supported. Pattern loading runs through "
+            "FilterPipelineExecutor during getCandidatesViaFilterPipeline()."
         )
 
     def getCandidatesViaFilterPipeline(self, state: list[str]) -> set[str]:

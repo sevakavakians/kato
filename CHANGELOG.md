@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [6.0.1] - 2026-09-21
+
+### Fixed
+- **An unknown filter in `filter_pipeline` is now named in the rejection.**
+  `filter_pipeline` was not validated by the configuration service at all, so the
+  check fell through to `SessionConfiguration.validate()`, which returns a bare
+  `False`. Callers got a generic message naming no field — and on create, one
+  citing `recall_threshold` as an example, which is misleading when the real
+  problem is a filter name. Both the create and update paths now return `400`
+  with the offending name and the list of valid filters.
+- The valid-filter list is now a single shared constant. It was duplicated
+  between two validators, which is what let them disagree about which names are
+  accepted.
+
+### Changed
+- **Runtime messages no longer carry deprecation notices or version history.**
+  Error messages, API response bodies and log lines state the current
+  requirement only; what changed, when, and why lives in this changelog. Applies
+  to the `filter_pipeline` rejection, the session-rehydration warning for an
+  out-of-range `recall_threshold`, the `getPatterns()`/`getPatternsAsync()`
+  errors, the `symbols_kb.update_one()` no-op warning, and the `warning` field
+  returned by `/percept-data` and `/cognition-data` (which keeps its pointer to
+  the session-scoped endpoint, without the commentary). No response field is
+  added, removed or renamed.
+
 ## [6.0.0] - 2026-09-21
 
 Stops every prediction pulling the node's entire pattern corpus into Python.
@@ -35,7 +60,7 @@ and needs no configuration.
 
 > In 6.0.0 that rejection does not name the offending filter — the create path
 > returns a generic message citing `recall_threshold` as an example. Fixed in
-> 6.0.1, which names the filter and explains the removal.
+> 6.0.1, which names the filter and lists the valid ones.
 
 The filter was recall-lossy and always had been. It bounded pattern length by
 fixed `0.5x`/`2.0x` ratios that ignored `recall_threshold`, so at

@@ -303,8 +303,8 @@ class SessionConfiguration:
         if filtered_data.get('recall_threshold') is not None \
                 and not 0.0 < filtered_data['recall_threshold'] <= 1.0:
             logger.warning(
-                "Session %s was persisted with recall_threshold=%s, which is no "
-                "longer valid; falling back to the system default.",
+                "Session %s has recall_threshold=%s, outside the permitted range "
+                "(> 0.0 and <= 1.0); falling back to the system default.",
                 filtered_data.get('session_id', '<unknown>'),
                 filtered_data['recall_threshold'],
             )

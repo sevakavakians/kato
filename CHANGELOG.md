@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [6.0.2] - 2026-09-23
+
+Documentation and test corrections following an investigation into whether
+KATO distinguishes a pattern learned as one multi-symbol event from the same
+symbols learned as separate events. It does; the reported bug did not
+reproduce. No prediction behavior changes in this release.
+
+### Fixed
+- **`POST /sessions/{id}/learn` reported "from 0 events" on every call.** The
+  response message was built from `len(session.stm)` after the STM had already
+  been replaced with the post-learn remainder. It now counts the events before
+  learning. Only the human-readable `message` string changes; `status` and
+  `pattern_name` are unaffected.
+
+### Documentation
+- **`docs/users/concepts.md` showed a prediction KATO does not produce.** The
+  "Simple Sequential Match" example observed `[['B']]` against
+  `[['A'],['B'],['C']]`, which returns no predictions: single-symbol
+  observations take a fast path that only considers patterns whose *first*
+  token is that symbol. The example now observes `[['A']]`, with a note on the
+  restriction. Its three examples also showed flat `missing`/`extras` where the
+  API returns one sub-list per event, and omitted within-event sorting; all are
+  corrected against live output.
+- `docs/reference/prediction-object.md` contradicted itself on the same point,
+  showing `missing` as flat `["b", "d"]` in one example and nested
+  `[["b"], ["d"]]` in another. Nested is what ships.
+- Both documents now state that event grouping is part of a pattern's identity:
+  learned as `[["hello", "world"]]`, observing `["hello"]` reports `world` in
+  `missing`; learned as `[["hello"], ["world"]]`, it reports `world` in
+  `future`.
+- `PatternProcessor.learn_from()` and two docstrings in `PatternOperations`
+  claimed patterns "shorter than two events" are not learned. The check is
+  `len(pattern) <= 1` and `Pattern.__len__` counts *symbols*, so a single event
+  of two or more symbols is learned.
+
+### Added
+- Four tests in `tests/tests/unit/test_multi_symbol_event_predictions.py`
+  pinning the event-grouping distinction head to head: the two groupings'
+  divergent segmentation, that they hash differently, and that they coexist in
+  one node without interfering. The semantics were previously covered only
+  piecemeal, and never with a single-symbol observation against a single-event
+  pattern.
+
 ## [6.0.1] - 2026-09-21
 
 ### Fixed

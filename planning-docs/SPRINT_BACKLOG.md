@@ -1,9 +1,9 @@
 # SPRINT_BACKLOG.md - Upcoming Work
-*Last Updated: 2026-09-21 (CI ClickHouse schema-init fix — three bugs found and fixed, COMPLETE, VERIFIED, COMMITTED and PUSHED (`3706e73` on `origin/main`), FULLY RESOLVED; includes a latent Helm production bug fix — the bootstrap Job had never actually applied the schema, but the user confirmed no live Helm deployments exist, so it never affected a real deployment and no manual remediation is needed. See "Recently Completed" below.)*
+*Last Updated: 2026-09-22 (Single-event-vs-multi-event pattern grouping investigation — reported bug NOT reproduced, verified live; coverage gap and doc/docstring/API-message defects fixed instead. COMPLETE, UNCOMMITTED. See "Recently Completed" below.)*
 
 ## Active Projects
 
-*No active initiative-scale projects at this time. The candidate-set-bounding discussion is resolved technically (DECISION-034) and now also resolved operationally — merged and released as KATO v6.0.0, patched same day as v6.0.1 (DECISION-035/036/037). KATO v6.0.1 remains the current deployed version; the CI ClickHouse schema-init fix (DECISION-038) is a separate piece of work, now committed and pushed to `main` (`3706e73`) and fully resolved (no live Helm deployments existed, so the latent bootstrap defect never affected a real deployment) — see "Recently Completed". **Top priority next**: ship to staging with `KATO_RECALL_BOUND_AUDIT=true` for 24h before trusting the recall bound on real corpus shapes no synthetic test anticipated, then turn audit off. Everything else below is secondary: Phase 1c Step B, Phase 2 (`conditional_probability_cached` removal), Phase 3 (benchmark match-rate axis), the still-open dependency upgrade, `REDIS_PASSWORD`, dashboard hardening, the fast-path single-symbol matching decision, the `sort_symbols` bug, and the recall-bound follow-ups (retire unreachable `r=0` branches, measure selectivity against real data).*
+*No active initiative-scale projects at this time. The candidate-set-bounding discussion is resolved technically (DECISION-034) and now also resolved operationally — merged and released as KATO v6.0.0, patched same day as v6.0.1 (DECISION-035/036/037). KATO v6.0.1 remains the current deployed version; the CI ClickHouse schema-init fix (DECISION-038) is committed and pushed to `main` (`3706e73`) and fully resolved. The single-event-vs-multi-event pattern grouping investigation (DECISION-039) is a separate, small piece of work — the reported bug was **not reproduced** (segmentation already correct), but it fixed a real test-coverage gap, two wrong docstrings, two wrong doc examples, and one cosmetic API-message bug; **UNCOMMITTED**, 6 files — see "Recently Completed". **Top priority next**: ship to staging with `KATO_RECALL_BOUND_AUDIT=true` for 24h before trusting the recall bound on real corpus shapes no synthetic test anticipated, then turn audit off. Also outstanding: commit the DECISION-039 working tree and rebuild/redeploy to verify its cosmetic API-message fix at runtime (low urgency). Everything else below is secondary: Phase 1c Step B, Phase 2 (`conditional_probability_cached` removal), Phase 3 (benchmark match-rate axis), the still-open dependency upgrade, `REDIS_PASSWORD`, dashboard hardening, the fast-path single-symbol matching decision, the `sort_symbols` bug, and the recall-bound follow-ups (retire unreachable `r=0` branches, measure selectivity against real data).*
 
 ---
 
@@ -301,6 +301,23 @@ Phase 4 (Symbol Statistics & Fail-Fast Architecture) is 100% complete. The Click
 ---
 
 ## Recently Completed
+
+### Single-Event vs. Multi-Event Pattern Grouping Investigation — NOT A BUG ✅ COMPLETE, UNCOMMITTED
+**Priority**: Medium — user-raised correctness concern, closed with direct live evidence; incidental fixes are low-severity (docs, one cosmetic message)
+**Status**: **COMPLETE, UNCOMMITTED.** 6 files modified in the working tree, not yet committed. See DECISION-039 in `planning-docs/DECISIONS.md`.
+**Files Modified**: `docs/reference/prediction-object.md`, `docs/users/concepts.md`, `kato/api/endpoints/sessions.py`, `kato/workers/pattern_operations.py`, `kato/workers/pattern_processor.py`, `tests/tests/unit/test_multi_symbol_event_predictions.py`.
+
+**Summary**: User suspected a pattern learned as ONE event with two symbols (`observe(["hello","world"])` → `learn()`) might be conflated with the same symbols learned as TWO events (`observe(["hello"])`; `observe(["world"])` → `learn()`) — expecting the one-event pattern to report `world` in `missing` after observing `["hello"]`, and the two-event pattern to report it in `future`. **Verified live against KATO 6.0.1** with isolated `node_id`s: behavior matched the expectation exactly on both patterns, cross-checked directly against ClickHouse's stored `pattern_data` (confirmed distinct nesting). Both cases route through the single-symbol fast path, which since `e0ee17d` (DECISION-028) shares the same `segment_by_alignment()` as the general path — closed as **NOT A BUG**.
+
+**Real defects fixed instead**: (1) coverage gap — this exact comparison, including the single-symbol-vs-single-event fast-path case, was never directly tested; 4 new tests added. (2) Two wrong docstrings (`pattern_processor.py`, `pattern_operations.py`) describing the learn-eligibility threshold as event-count when it's actually symbol-count (`Pattern.__len__`). (3) Two wrong examples in `docs/users/concepts.md` — one depicted a prediction for an observation that actually returns none (fast-path first-token-only restriction); others showed flat `missing`/`extras` instead of the real nested form. (4) `docs/reference/prediction-object.md` had one internally-inconsistent flat-`missing` example. (5) Cosmetic API bug: `sessions.py`'s learn-response message always read "from 0 events" because it counted STM *after* it was replaced with the post-learn remainder — fixed to count before learning.
+
+**Verification**: full unit suite 492 passed (319s). No product behavior changed apart from the API response message text.
+
+**Archive**: `planning-docs/completed/bugs/2026-09-22-single-vs-multi-event-grouping-investigation-not-a-bug.md`. **Decision**: DECISION-039.
+
+**Next task**: commit the working tree; rebuild and redeploy to verify the cosmetic API-message fix at runtime (low urgency — cosmetic only, no functional impact). See `project-manager/pending-updates.md`.
+
+---
 
 ### CI ClickHouse Schema Init Failure — Three-Bug Fix ✅ COMPLETE, VERIFIED, COMMITTED and PUSHED, FULLY RESOLVED
 **Priority**: High — CI's "Unit tests" job has been red since the workflow was added; also fixed a latent production bug

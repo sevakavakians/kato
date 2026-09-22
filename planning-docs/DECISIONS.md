@@ -1,6 +1,63 @@
 # DECISIONS.md - Architectural & Design Decision Log
 *Append-Only Log - Started: 2025-08-29*
-*Last Updated: 2026-09-21 (DECISION-038: CI ClickHouse schema-init fix — three bugs, including a latent Helm production bug where the bootstrap Job never actually applied the schema. DECISION-037: new standing rule — no deprecation/removal notes in runtime messages, enforced by test. DECISION-036: KATO v6.0.1 patch, fixing `filter_pipeline` validation and applying DECISION-037. DECISION-035: KATO v6.0.0 major release — DECISION-034's recall-safe candidate bound merged and shipped.)*
+*Last Updated: 2026-09-22 (DECISION-039: single-event-vs-multi-event pattern grouping investigation — reported bug NOT reproduced; live verification confirms `missing`/`future` segmentation is correct; a genuine test-coverage gap and doc/docstring/API-message defects fixed instead. DECISION-038: CI ClickHouse schema-init fix — three bugs, including a latent Helm production bug where the bootstrap Job never actually applied the schema. DECISION-037: new standing rule — no deprecation/removal notes in runtime messages, enforced by test. DECISION-036: KATO v6.0.1 patch, fixing `filter_pipeline` validation and applying DECISION-037. DECISION-035: KATO v6.0.0 major release — DECISION-034's recall-safe candidate bound merged and shipped.)*
+
+---
+
+## 2026-09-22 - DECISION-039: Single-Event vs. Multi-Event Pattern Grouping — Investigation Closed, NOT A BUG
+
+**Decision**: Close the suspected bug ("does KATO correctly distinguish a pattern learned as ONE event of multiple symbols from the same symbols learned as TWO events?") as **NOT REPRODUCED** — live verification against the running service shows the `missing`/`future` segmentation already matches the user's stated expectation exactly. No product behavior was changed as a result of this investigation. Fix instead: a genuine test-coverage gap (this exact head-to-head comparison, including the single-symbol-observation case, was never directly tested), two wrong docstrings, two wrong user-doc examples, and one cosmetic API bug (a "from 0 events" message) found during the investigation.
+**Status**: **COMPLETE.** Uncommitted in the working tree across 6 files as of this entry — see `planning-docs/completed/bugs/2026-09-22-single-vs-multi-event-grouping-investigation-not-a-bug.md`.
+**Classification**: Knowledge Refinement (assumption of a bug → verified-correct behavior) + Task Completion (coverage gap closed, doc/docstring defects fixed) + Bug Fix (one cosmetic API-message bug, not yet runtime-verified — see Verification below).
+**Confidence**: High on the "not a bug" finding — verified live against the running service with isolated `node_id`s and cross-checked directly against ClickHouse's stored `pattern_data`, not inferred from code reading alone.
+
+### Context
+
+The user suspected KATO might conflate two semantically distinct patterns: `observe(["hello","world"])` then `learn()` (one event holding two symbols) versus `observe(["hello"])`; `observe(["world"])` then `learn()` (two events, one symbol each). Expectation: after later observing only `["hello"]`, the one-event pattern should report `world` in `missing` (it's part of the event you're already inside), while the two-event pattern should report it in `future` (it's the next event, not yet reached). This is exactly the distinction `segment_by_alignment()` (`kato/representations/prediction.py:206`) was built to make correctly, per DECISION-028 (2026-09-11) — so the question was whether that fix actually covers this specific case, including through the single-symbol fast path.
+
+### What Was Verified (live, against KATO 6.0.1 at localhost:8000)
+
+Using isolated `node_id`s to avoid cross-contamination:
+- One event `[["hello","world"]]`, observe `["hello"]` → `present=[["hello","world"]]`, `missing=[["world"]]`, `future=[]`, `confidence=0.5`. Pattern hash `3814b8c0...`.
+- Two events `[["hello"],["world"]]`, observe `["hello"]` → `present=[["hello"]]`, `missing=[[]]`, `future=[["world"]]`, `confidence=1.0`. Pattern hash `7d0678ba...`.
+- Both patterns loaded into one node simultaneously → observing `["hello"]` returns **two distinct predictions**, each correctly segmented as above (no cross-talk).
+- ClickHouse's stored `pattern_data` confirmed the distinct nesting directly: `[["hello","world"]]` vs. `[["hello"],["world"]]` — the two patterns are genuinely different rows, not an artifact of the query layer.
+
+Both cases take the single-symbol fast path (`kato/workers/pattern_processor.py:1035`, `_predict_single_symbol_fast`), which — since `e0ee17d` (DECISION-028) — delegates to the identical `segment_by_alignment()` used by the general multi-symbol path. There is exactly one segmentation implementation, not two that could drift apart; that structural fact is a large part of *why* this held up correctly, and is worth remembering the next time a similar "does path X still agree with path Y" question comes up.
+
+### Rationale for Closing as NOT A BUG Rather Than Continuing to Investigate
+
+- The live output matches the user's own stated expectation exactly, on both the ergonomic case (multi-symbol query) and the harder case (single-symbol query hitting the fast path).
+- The mechanism is understood, not just the output: both patterns hash and store distinctly in ClickHouse, and both predict through the same, already-audited segmentation function (DECISION-028/029 covered event-misattribution bugs in this exact function in 2026-09-11).
+- Continuing to search for a bug after a live, mechanism-level confirmation would be investigating a hypothesis already falsified by direct evidence, not exercising due diligence.
+
+### Real Defects Found and Fixed While Investigating
+
+1. **Coverage gap**: this exact head-to-head comparison existed only piecemeal across the 34-test atlas in `tests/tests/unit/test_multi_symbol_event_predictions.py` (DECISION-028) and was never run directly, and never with a *single-symbol* observation against a *single-event* pattern (the fast-path case). Added 4 new tests: `test_one_event_grouping_puts_the_rest_of_the_event_in_missing`, `test_two_event_grouping_puts_the_next_event_in_future`, `test_groupings_of_the_same_symbols_learn_as_distinct_patterns`, `test_both_groupings_coexist_and_predict_side_by_side`.
+2. **Wrong docstrings**: `kato/workers/pattern_processor.py:318` and two places in `kato/workers/pattern_operations.py` claimed patterns "shorter than two events" (or "only one event") are not learned. The actual guard is `len(pattern) <= 1`, and `Pattern.__len__` counts **symbols**, not events — a single event of 2+ symbols genuinely is learned; the docstrings described the wrong axis entirely. Corrected on all three.
+3. **Wrong user docs**: `docs/users/concepts.md`'s "Simple Sequential Match" example showed a prediction for observing `[['B']]` against pattern `[['A'],['B'],['C']]` — that observation actually returns **no prediction at all**, because the single-symbol fast path only considers patterns whose first token matches, and `'B'` isn't a first token of anything. Corrected to observe `[['A']]` with a note explaining the fast-path restriction. The same file's other two examples showed flat `missing: []` / `extras: []`; the API actually returns one nested sub-list per event (`[[], []]`). All three examples corrected against live output.
+4. **`docs/reference/prediction-object.md`**: showed flat `missing: ["b","d"]` in one example while the rest of the same file consistently shows the nested, event-aligned form — internally inconsistent. Corrected to `[["b"], ["d"]]`; added an explicit note under `future` documenting the event-grouping distinction this investigation was about, for the next person who asks the same question.
+5. **Cosmetic API bug**: `kato/api/endpoints/sessions.py:504` built its `POST /sessions/{id}/learn` response message from `len(session.stm)` **after** `session.stm` had already been reassigned to the post-learn remainder — so every learn response read "Learned pattern ... from 0 events", regardless of how many events were actually learned. Fixed by capturing the count before the learn call. **Not yet verified at runtime**: the live deployment serves `ghcr.io/sevakavakians/kato:6.0.1` from `deployment/docker-compose.yml`, not a locally rebuilt image, and was not restarted for this fix (26h uptime, 191 active sessions at time of investigation) — see `pending-updates.md`.
+
+### Verification
+
+Full local unit suite: `./run_tests.sh --no-start --no-stop tests/tests/unit/` → **492 passed** in 319s. No test behavior changed apart from the 4 new tests; the message-string fix changes no return value or status code, only response text, so it required no test updates and none broke.
+
+### Impact
+
+- **Positive**: closes a user-raised correctness concern with direct evidence rather than a code-reading assurance; adds durable regression coverage for a case (single-symbol observation vs. single-event pattern) that was previously an inference from other tests, not a direct assertion; fixes two misleading docstrings and two misleading user-doc examples that could have sent a future reader down the same investigation for no reason; fixes a real (if cosmetic) API response bug.
+- **Neutral**: no behavior change to `observe`/`learn`/predictions — this was documentation, tests, and one non-semantic message string.
+- **Risk**: Low. The one code behavior change (API message text) is a pure string fix already reviewed in the diff; it has not yet been exercised against the actually-deployed image (see Open Items).
+
+### Open Items
+
+1. **Commit the working tree.** 6 files uncommitted: `docs/reference/prediction-object.md`, `docs/users/concepts.md`, `kato/api/endpoints/sessions.py`, `kato/workers/pattern_operations.py`, `kato/workers/pattern_processor.py`, `tests/tests/unit/test_multi_symbol_event_predictions.py`.
+2. **Rebuild and redeploy to verify the cosmetic API-message fix at runtime.** The running stack (`deployment/docker-compose.yml`, `ghcr.io/sevakavakians/kato:6.0.1`) predates this fix and was not restarted; the "from 0 events" message is still live in production until a rebuild/redeploy happens. Low urgency (cosmetic only, no functional impact) but should not be forgotten — see `pending-updates.md`.
+
+### Related Decisions
+
+- DECISION-028 (2026-09-11) — introduced `segment_by_alignment()`, the position-based segmentation function this investigation confirmed still correctly distinguishes event grouping, including through the single-symbol fast path added by that same decision.
+- DECISION-029 (2026-09-11) — the follow-up event-misattribution fix (`refine_alignment_by_events()`) layered on top of the same function; not implicated here (its symbol-recurrence-across-events concern is a different case from single-vs-multi-event grouping of distinct symbols).
 
 ---
 

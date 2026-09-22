@@ -985,3 +985,27 @@ Also caught: the v6.0.0 release notes as first published made an unverified, fal
 
 **Agent Response Time**: Immediate
 **Action Result**: Planning docs now uniformly reflect v6.0.1 as the current, deployed release — every file that recorded the recall-safe candidate bound as "complete but unmerged/unreleased" earlier today (README.md, SESSION_STATE.md, SPRINT_BACKLOG.md, DECISIONS.md, pending-updates.md) has been corrected. The two-decision contrast (v5.2.0 MINOR vs. v6.0.0 MAJOR) and the new standing messaging rule are both recorded prominently for future discoverability. The self-caught release-notes error is logged as a distinct process pattern. All prior open items unrelated to this work (dependency upgrade, REDIS_PASSWORD, dashboard hardening, single-symbol fast-path semantics, sort_symbols bug, retire unreachable r=0 branches, measure real-corpus selectivity, stale benchmark script) remain untouched.
+
+---
+
+## 2026-09-22 - Knowledge Refinement + Task Completion: Single-Event vs. Multi-Event Pattern Grouping Investigation Closed as NOT A BUG
+
+**Trigger Type**: Primary — Knowledge Refinement (user-suspected bug replaced by a live-verified fact) + Task Completion (test-coverage gap closed; documentation and docstring defects fixed; one cosmetic API bug fixed)
+
+**Event**: User suspected KATO might conflate a pattern learned as ONE event of two symbols with the same symbols learned as TWO events — expecting different `missing`/`future` segmentation after observing a single symbol. Verified live against KATO 6.0.1 with isolated `node_id`s and a direct ClickHouse cross-check of stored `pattern_data`: actual behavior already matched the expectation exactly, including through the single-symbol fast path (`_predict_single_symbol_fast`, which since `e0ee17d`/DECISION-028 shares `segment_by_alignment()` with the general path). **Closed as NOT A BUG** — DECISION-039.
+
+Investigating it surfaced five real, unrelated defects: a test-coverage gap (this exact comparison, including the fast-path single-symbol case, was never directly asserted — 4 tests added), two wrong docstrings (learn-eligibility threshold described as event-count instead of symbol-count), two wrong `docs/users/concepts.md` examples (one depicting a prediction that the fast path's first-token-only restriction actually returns nothing for; others showing flat instead of nested `missing`/`extras`), one internally-inconsistent example in `docs/reference/prediction-object.md`, and a cosmetic API bug in `kato/api/endpoints/sessions.py:504` (learn-response message always read "from 0 events" — fixed to count before the STM is replaced with the post-learn remainder; not yet runtime-verified against the deployed image).
+
+**Documents Updated**:
+- `planning-docs/DECISIONS.md` (DECISION-039 added; header updated)
+- `planning-docs/completed/bugs/2026-09-22-single-vs-multi-event-grouping-investigation-not-a-bug.md` (new)
+- `planning-docs/SESSION_STATE.md` (new Current Task; previous Current Task renamed to Previous Task; header updated)
+- `planning-docs/SPRINT_BACKLOG.md` (header/Active Projects updated; new Recently Completed entry added)
+- `planning-docs/project-manager/pending-updates.md` (new Low-priority "Action Needed" entry: commit + eventual rebuild/redeploy to verify the cosmetic fix)
+- `planning-docs/project-manager/patterns.md` (new entries in "Documentation Correctness Patterns" and "Testing Strategy Patterns")
+- `planning-docs/project-manager/maintenance-log.md` (this action logged)
+
+**Human Alert Generated**: Yes — a new Low-priority `pending-updates.md` item (commit the 6 modified files; rebuild/redeploy to verify the cosmetic API-message fix at runtime). Low priority: the "not a bug" finding needs no behavior change, and the one real code fix is cosmetic with no functional impact.
+
+**Agent Response Time**: Immediate
+**Action Result**: Planning docs now record the investigation's outcome (not a bug, verified live with direct database cross-check) alongside the five incidental fixes it produced, clearly distinguished from a product-behavior change. All prior open items (staging soak for the recall-safe bound, dependency upgrade, `REDIS_PASSWORD`, dashboard hardening, single-symbol fast-path first-token-only design question, `sort_symbols` bug, unreachable `r=0` branches, real-corpus selectivity measurement, stale `benchmark_hybrid_architecture.py`) remain open, untouched by this pass.

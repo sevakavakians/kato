@@ -3474,3 +3474,31 @@ networks:
 
 *Agent execution time: < 5 minutes*
 *Response type: Knowledge refinement (Helm-deployment question closed by user confirmation; propagated across DECISIONS.md, SESSION_STATE.md, SPRINT_BACKLOG.md, the completed-bugs archive, and pending-updates.md) — closes the sole remaining open item from the CI schema-init fix*
+
+---
+
+## 2026-09-22 - Knowledge Refinement + Task Completion: Single-Event vs. Multi-Event Pattern Grouping Investigation Closed as NOT A BUG
+
+**Trigger**: Knowledge Refinement (user-suspected bug replaced with a live-verified fact) + Task Completion (test-coverage gap closed, doc/docstring defects fixed, one cosmetic API bug fixed).
+
+**What happened**: The user suspected KATO might conflate a pattern learned as ONE event of two symbols (`observe(["hello","world"])` → `learn()`) with the same symbols learned as TWO events (`observe(["hello"])`; `observe(["world"])` → `learn()`) — expecting the one-event pattern to report the unobserved symbol in `missing` and the two-event pattern to report it in `future`. Verified live against the running KATO 6.0.1 service with isolated `node_id`s and cross-checked directly against ClickHouse's stored `pattern_data`: actual behavior matched the expectation exactly on both patterns, including through the single-symbol fast path. Closed as **NOT A BUG** — see DECISION-039.
+
+The investigation surfaced five real, unrelated defects, fixed in the same pass: (1) a genuine test-coverage gap — this exact comparison was never directly tested, including the single-symbol-vs-single-event fast-path case; 4 tests added to `tests/tests/unit/test_multi_symbol_event_predictions.py`. (2) Two wrong docstrings (`kato/workers/pattern_processor.py`, `kato/workers/pattern_operations.py`) describing the learn-eligibility threshold as event-count when `Pattern.__len__` actually counts symbols. (3) Two wrong examples in `docs/users/concepts.md` — one depicted a prediction for an observation that the fast path's first-token-only restriction actually returns nothing for; others showed flat `missing`/`extras` instead of the real nested, event-aligned form. (4) `docs/reference/prediction-object.md` had one internally-inconsistent flat-`missing` example. (5) A cosmetic API bug in `kato/api/endpoints/sessions.py:504` — the learn-response message always read "from 0 events" because it counted `session.stm` after it had already been reassigned to the post-learn remainder; fixed to capture the count before learning. This last fix is **not yet verified at runtime** — the live deployment serves `ghcr.io/sevakavakians/kato:6.0.1`, unrebuilt and unrestarted since before this investigation.
+
+**Actions Taken**:
+1. `planning-docs/DECISIONS.md` — new DECISION-039 added at the top (full investigation writeup, live-verification evidence, rationale for closing as not-a-bug, all five fixes, open items); header's "Last Updated" line updated.
+2. `planning-docs/completed/bugs/2026-09-22-single-vs-multi-event-grouping-investigation-not-a-bug.md` (new) — full archive of the investigation and fixes.
+3. `planning-docs/SESSION_STATE.md` — new "Current Task" section for this investigation; previous "CI ClickHouse schema-init fix" Current Task renamed to "Previous Task"; header updated.
+4. `planning-docs/SPRINT_BACKLOG.md` — header and "Active Projects" note updated; new "Recently Completed" entry added at the top of that section.
+5. `planning-docs/project-manager/pending-updates.md` — new Low-priority "Action Needed" entry: commit the 6 modified files, then rebuild/redeploy to verify the cosmetic API-message fix at runtime.
+6. `planning-docs/project-manager/patterns.md` — two new dated entries: one in "Documentation Correctness Patterns" (an investigation closed as not-a-bug still turned up three independent doc/docstring defects), one in "Testing Strategy Patterns" (a broad 34-test atlas missed one specific cross-axis combination a user's question depended on).
+7. This entry and a matching `triggers.md` entry.
+
+**Classification**: Knowledge Refinement (assumption of a bug → verified-correct behavior, confirmed live with a direct database cross-check) + Task Completion (coverage gap closed, 4 new tests; 2 wrong docstrings and 2 wrong doc examples corrected) + Bug Fix (1 cosmetic API-message bug, code-reviewed but not yet runtime-verified) — surfaced as a new, Low-priority `pending-updates.md` item (commit + eventual rebuild/redeploy) rather than a silent operation, since real uncommitted code changes exist in the working tree.
+
+**Next Steps**: Commit the 6 modified files. At a convenient point (no urgency — cosmetic fix only), rebuild and redeploy KATO and confirm the learn-response message reports the correct event count. All prior open items (staging soak for the recall-safe bound, dependency upgrade, `REDIS_PASSWORD`, dashboard hardening, single-symbol fast-path first-token-only semantics as a separate open design question, `sort_symbols` bug, unreachable `r=0` branches, real-corpus selectivity measurement, stale `benchmark_hybrid_architecture.py`) remain open, untouched by this pass.
+
+---
+
+*Agent execution time: < 10 minutes*
+*Response type: Investigation closed as not-a-bug (knowledge refinement, live-verified) + task completion (coverage gap + doc/docstring fixes + one cosmetic bug fix, uncommitted) + human alert generated (Low priority: commit + eventual rebuild/redeploy)*

@@ -23,6 +23,20 @@
 
 ## Testing Strategy Patterns
 
+### 2026-09-22 - A 34-Test Atlas Covered Event-Grouping Semantics Piecemeal, But Never the One Head-to-Head Comparison a User Actually Asked About
+
+**Pattern**: `tests/tests/unit/test_multi_symbol_event_predictions.py` (DECISION-028, 2026-09-11) is a deliberately broad atlas — 34 tests over two patterns, covering full/partial/mixed observations, split/merged/reordered/duplicate events, and fast-path single-symbol cases. Despite that breadth, it never directly asserted the specific comparison a user later asked about: does the *same set of symbols*, learned as one event vs. two events, actually predict differently (`missing` vs. `future`) when observed with a *single* symbol that hits the fast path? Individual pieces of this were covered indirectly (single-event patterns existed elsewhere in the atlas; single-symbol fast-path behavior existed elsewhere too) but never combined into one assertion that would fail if the two groupings' segmentation ever silently converged.
+
+**Discovery Trigger**: A direct user question ("does KATO tell these two apart correctly?") that turned out to already be true in practice — but nothing in the existing suite would have caught it if it had *stopped* being true, because no test pinned the comparison itself, only its ingredients separately.
+
+**Resolution Pattern**: A broad test atlas built by varying parameters systematically (event widths, observation coverage, symbol repetition) can still miss a *specific combination* a domain question cares about, especially a combination that crosses two of the atlas's own axes (event-count and fast-path-eligibility) rather than sitting on one. When a user asks "does X behave correctly relative to Y," check whether an existing broad-coverage suite actually asserts that relationship directly, or only asserts X's behavior and Y's behavior separately and leaves the reader to infer the relationship holds. Added 4 targeted tests asserting the comparison directly, including a coexistence test (`test_both_groupings_coexist_and_predict_side_by_side`) that would fail if the two patterns' predictions ever cross-contaminated.
+
+**Lesson**: Breadth (many parameter combinations) is not the same as coverage of every *relationship* a reader might care about between two of those combinations. When closing an investigation as "not a bug," check whether the reason it wasn't caught earlier is a genuine coverage gap (as here) — if so, the coverage gap is worth fixing even though the underlying code was already correct, because the next regression in this area would otherwise go undetected the same way.
+
+**Recurrence Risk**: Medium — any future single-symbol-fast-path change, or any change to `segment_by_alignment()`/`refine_alignment_by_events()`, is now guarded by this specific comparison; but the same class of gap (broad atlas, missing cross-axis combination) could recur elsewhere in this suite or others built the same way.
+
+---
+
 ### 2026-09-21 - A Fourth and Fifth Instance of "A Verification That Could Not Have Failed"
 
 **Pattern**: Extends the three prior instances of this failure mode recorded below (the `.dockerignore` check with zero caches present to test against; the metadata-chunking test asserting against the very constant it was meant to guard; the prediction-parity gate not actually exercising the pruned path). During DECISION-034's work, `test_config_filter_pipeline_parameters` ended with `assert 'length_min_ratio' in config or 'length_max_ratio' in config or True` — the trailing `or True` made the assertion unconditionally pass regardless of what `config` actually contained. This is the fourth instance. The **fifth** instance was introduced while fixing the fourth: the replacement assertion checked the test fixture's `get_config()` helper, which hard-codes a fixed set of six keys and never returns filter parameters under any circumstance — so the "fixed" test could never have passed either, just for a different, equally silent reason. It was corrected a second time to read `GET /sessions/{id}/config`, the actual API surface that carries filter-pipeline parameters.
@@ -243,6 +257,26 @@ absolute latency differences across machines.
 ---
 
 ## Documentation Correctness Patterns
+
+### 2026-09-22 - A Reported Bug Investigation, Closed As "Not A Bug," Still Turned Up Three Independent Documentation Defects
+
+**Pattern**: A user-suspected bug (does KATO distinguish a pattern learned as one event of two symbols from the same symbols learned as two events?) was verified live against the running service and found to be **correct behavior, not a bug** — see DECISION-039. But investigating it required reading the relevant docstrings and user-facing docs closely, and every one of them turned out to be wrong in a way unrelated to the reported concern: (1) two docstrings (`pattern_processor.py`, `pattern_operations.py`) described the learn-eligibility threshold as event-count when the actual guard (`len(pattern) <= 1`) counts symbols; (2) `docs/users/concepts.md`'s flagship "Simple Sequential Match" example showed a prediction for an observation that the running service actually returns *no prediction* for at all (the single-symbol fast path's first-token-only restriction); (3) the same file and `docs/reference/prediction-object.md` both showed flat `missing`/`extras` lists (`[]`) where the API returns the nested, event-aligned form (`[[], []]`) — and `prediction-object.md`'s error was internally inconsistent with its own other examples in the same file.
+
+**Discovery Trigger**: Reading the code and docs closely enough to verify a *different*, more specific claim (the one/two-event distinction) surfaced unrelated defects sitting right next to the code being verified — none of these three would have been caught by a narrower "just check if the reported behavior is wrong" pass that stopped as soon as the live output matched expectations.
+
+**Assumption → Reality**:
+- Assumed (by the docstrings): the learn threshold is about event count
+- Reality: `Pattern.__len__` counts symbols; a single event with 2+ symbols is learned
+- Assumed (by the doc example): observing a single mid-pattern symbol against a 3-event pattern returns a partial-match prediction
+- Reality: the single-symbol fast path only considers patterns whose *first* token matches; a non-first-token single-symbol observation returns nothing
+
+**Resolution Pattern**: When investigating a specific reported behavior, verify it against live output *and* read every docstring/doc passage the investigation touches with the same skepticism — don't stop at confirming the one claim under investigation. Here, running the actual example from the docs (rather than trusting it as already-verified) is what caught defect #2; it would have been easy to leave it alone since it wasn't the thing being investigated.
+
+**Lesson**: "Investigated and closed as not-a-bug" is not the same as "nothing to fix here" — an investigation that reads code and docs closely is a good moment to check the surrounding claims too, even when they're outside the original question's scope.
+
+**Recurrence Risk**: Medium — this codebase has repeatedly shown documentation drift around prediction-field shapes specifically (see the 2026-03-19 and 2026-09-08 entries below); any future investigation that touches `docs/users/concepts.md` or `docs/reference/prediction-object.md` should expect to find more of the same rather than assume this pass caught everything.
+
+---
 
 ### 2026-09-09 - A Backlog Item's Fix Direction, Not Just Its Symptom, Can Be Architecturally Impossible
 

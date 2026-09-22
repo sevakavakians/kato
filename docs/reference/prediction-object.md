@@ -64,7 +64,7 @@ A Prediction Object is generated when KATO's pattern recognition engine identifi
 - The complete original events are included, not just the observed symbols
 **Relationship to missing field**: Symbols that appear in present events but weren't actually observed will be listed in the `missing` field.  
 **Example 1**: If observing `["hello", "world"]` from pattern `[["hello"], ["world"], ["end"]]`, present would be `[["hello"], ["world"]]`.  
-**Example 2**: If observing `["a", "c"]` from pattern `[["a", "b"], ["c", "d"], ["e"]]`, present would be `[["a", "b"], ["c", "d"]]` (complete events), and missing would be `["b", "d"]`.
+**Example 2**: If observing `["a", "c"]` from pattern `[["a", "b"], ["c", "d"], ["e"]]`, present would be `[["a", "b"], ["c", "d"]]` (complete events), and missing would be `[["b"], ["d"]]` (event-aligned, one sub-list per present event).
 
 ### 9. **future** (repeated ListValue)
 **Description**: Events from the learned pattern that have NOT been observed yet.  
@@ -72,6 +72,8 @@ A Prediction Object is generated when KATO's pattern recognition engine identifi
 **Purpose**: Provides predictive capability by showing what should happen next.  
 **Important**: Only contains events that come AFTER all observed events.  
 **Example**: If pattern is `[["hello"], ["world"], ["end"]]` and observing `["hello", "world"]`, future would be `[["end"]]`.
+
+**Event grouping matters**: the same symbols learned as one event or as several are different patterns, and they segment differently. Learned as `[["hello", "world"]]`, observing `["hello"]` gives `present=[["hello", "world"]]`, `missing=[["world"]]`, `future=[]` — the unobserved symbol belongs to the event you are already inside. Learned as `[["hello"], ["world"]]`, the same observation gives `present=[["hello"]]`, `missing=[[]]`, `future=[["world"]]`.
 
 ### 10. **confidence** (float)
 **Description**: Ratio of matched symbols to total symbols in the present context.  

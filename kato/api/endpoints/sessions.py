@@ -490,6 +490,8 @@ async def learn_in_session(session_id: str):
     async with lock:
         # NO PROCESSOR LOCK NEEDED (stateless processor)
         # Learn pattern - stateless call returns (pattern_name, new_stm)
+        # Count the events learned before the STM is replaced with what remains.
+        learned_event_count = len(session.stm)
         pattern_name, new_stm = await processor.learn(session_state=session)
 
         # Update session state
@@ -501,7 +503,7 @@ async def learn_in_session(session_id: str):
         status="learned",
         pattern_name=pattern_name,
         session_id=session_id,
-        message=f"Learned pattern {pattern_name} from {len(session.stm)} events"
+        message=f"Learned pattern {pattern_name} from {learned_event_count} events"
     )
 
 

@@ -313,11 +313,14 @@ class PatternProcessor:
             metadata: Metadata dicts accumulated for the pattern.
 
         Returns:
-            Pattern name (bare hash) if learned, None for patterns shorter than
-            two events (which are not learned).
+            Pattern name (bare hash) if learned, None for patterns holding
+            fewer than two symbols (which are not learned). The threshold is on
+            symbols, not events: a single event of two or more symbols, e.g.
+            [['hello', 'world']], is learned, and is a different pattern from
+            the same symbols split across events, [['hello'], ['world']].
         """
         pattern = Pattern(list(stm))
-        if len(pattern) <= 1:  # Only learn multi-event patterns
+        if len(pattern) <= 1:  # Pattern.__len__ counts symbols, not events
             return None
 
         x = self.patterns_kb.learnPattern(

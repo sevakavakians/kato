@@ -163,37 +163,46 @@ Predictions are organized into temporal fields:
 - **Past**: Events that occurred before the current match
 - **Present**: All contiguous events with matching symbols
 - **Future**: Events expected after the current position
-- **Missing**: Expected symbols not observed in present
-- **Extras**: Observed symbols not expected in present
+- **Missing**: Expected symbols not observed in present — one sub-list per `present` event (so `[[], []]`, not `[]`, when nothing is missing)
+- **Extras**: Observed symbols not expected in present — one sub-list per STM event
+
+How you group symbols into events is part of what gets learned. `[['hello', 'world']]`
+and `[['hello'], ['world']]` are different patterns: after observing `['hello']`, the
+first reports `world` as **missing** (it belongs to the event you are already inside)
+while the second reports it as **future**.
 
 #### Example Predictions
 
 ##### Simple Sequential Match
 ```python
 # Learned pattern: [['A'], ['B'], ['C']]
-# Observation: [['B']]
+# Observation: [['A']]
 
 # Prediction:
 {
-    'past': [['A']],
-    'present': [['B']],
-    'future': [['C']],
-    'missing': [],
-    'extras': []
+    'past': [],
+    'present': [['A']],
+    'future': [['B'], ['C']],
+    'missing': [[]],     # one sub-list per PRESENT event
+    'extras': [[]]       # one sub-list per STM event
 }
 ```
+
+Note: a lone `[['B']]` would yield **no** prediction. Single-symbol observations
+take the fast path, which only considers patterns whose *first* token is that
+symbol. Observe `[['B'], ['C']]` (two symbols) to match from mid-pattern.
 
 ##### Partial Match with Missing Symbols
 ```python
 # Learned: [['hello', 'world'], ['foo', 'bar']]
 # Observed: [['hello'], ['foo']]  # Missing 'world' and 'bar'
 
-# Prediction:
+# Prediction (symbols are sorted within an event, so 'foo','bar' -> 'bar','foo'):
 {
     'past': [],
-    'present': [['hello', 'world'], ['foo', 'bar']],
+    'present': [['hello', 'world'], ['bar', 'foo']],
     'missing': [['world'], ['bar']],
-    'extras': [[]],
+    'extras': [[], []],
     'future': []
 }
 ```
@@ -207,7 +216,7 @@ Predictions are organized into temporal fields:
 {
     'past': [],
     'present': [['cat'], ['dog']],
-    'missing': [],
+    'missing': [[], []],
     'extras': [['bird'], ['fish']],
     'future': []
 }

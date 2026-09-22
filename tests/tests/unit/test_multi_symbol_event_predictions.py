@@ -409,3 +409,65 @@ def test_shared_prefix_predicts_both_futures(kato_fixture):
         _assert_segmentation(pred, past=[], present=RAGGED[:2], future=pred['future'],
                              missing=[[], []], extras=[[], []], anomalies=[])
         assert pred['confidence'] == 1.0
+
+
+# ---------------------------------------------------------------------------
+# Event grouping is load-bearing: the same symbols grouped differently predict
+# differently. One event puts the unobserved symbol in `missing`; two events
+# put it in `future`. Covered piecemeal elsewhere, but never head to head, and
+# never with a single-symbol observation (which takes the fast path) against a
+# single-event pattern.
+# ---------------------------------------------------------------------------
+
+ONE_EVENT = [['hello', 'world']]
+TWO_EVENTS = [['hello'], ['world']]
+
+
+def test_one_event_grouping_puts_the_rest_of_the_event_in_missing(kato_fixture):
+    """Learned as ONE event, a lone 'hello' leaves 'world' missing inside the present event."""
+    _learn(kato_fixture, ONE_EVENT)
+    pred = _top(kato_fixture, [['hello']])
+    _assert_segmentation(pred, past=[], present=[['hello', 'world']], future=[],
+                         missing=[['world']], extras=[[]], anomalies=['world'])
+    assert pred['matches'] == ['hello']
+    assert pred['confidence'] == 0.5
+
+
+def test_two_event_grouping_puts_the_next_event_in_future(kato_fixture):
+    """Learned as TWO events, the same lone 'hello' leaves 'world' in future, nothing missing."""
+    _learn(kato_fixture, TWO_EVENTS)
+    pred = _top(kato_fixture, [['hello']])
+    _assert_segmentation(pred, past=[], present=[['hello']], future=[['world']],
+                         missing=[[]], extras=[[]], anomalies=[])
+    assert pred['matches'] == ['hello']
+    assert pred['confidence'] == 1.0
+
+
+def test_groupings_of_the_same_symbols_learn_as_distinct_patterns(kato_fixture):
+    """The event grouping is part of a pattern's identity, so the hashes differ."""
+    one_event_name = _learn(kato_fixture, ONE_EVENT)
+    two_event_name = _learn(kato_fixture, TWO_EVENTS)
+    assert one_event_name != two_event_name
+
+
+def test_both_groupings_coexist_and_predict_side_by_side(kato_fixture):
+    """With both patterns in one node, 'hello' predicts each with its own segmentation."""
+    kato_fixture.clear_all_memory()
+    names = {}
+    for label, pattern in (('one', ONE_EVENT), ('two', TWO_EVENTS)):
+        kato_fixture.clear_short_term_memory()
+        for event in pattern:
+            kato_fixture.observe({'strings': sorted(event), 'vectors': [], 'emotives': {}})
+        name = kato_fixture.learn()
+        assert name, f"{label}-event pattern should have been learned"
+        names[label] = name.replace('PTRN|', '')
+
+    predictions = _observe(kato_fixture, [['hello']])
+    assert len(predictions) == 2
+    by_name = {p['name'].replace('PTRN|', ''): p for p in predictions}
+    assert set(by_name) == set(names.values())
+
+    _assert_segmentation(by_name[names['one']], past=[], present=[['hello', 'world']], future=[],
+                         missing=[['world']], extras=[[]], anomalies=['world'])
+    _assert_segmentation(by_name[names['two']], past=[], present=[['hello']], future=[['world']],
+                         missing=[[]], extras=[[]], anomalies=[])

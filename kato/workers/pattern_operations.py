@@ -54,7 +54,8 @@ class PatternOperations:
 
         Returns:
             Pattern name in format "PTRN|<hash>" if a pattern was created, "" if
-            the STM had fewer than two events.
+            the STM held fewer than two symbols. A single event of two or more
+            symbols is learned; see PatternProcessor.learn_from.
 
         Raises:
             LearningError: If pattern learning fails
@@ -88,7 +89,7 @@ class PatternOperations:
 
         Returns:
             Pattern name in format "PTRN|<hash>" if pattern was created,
-            empty string if STM was empty or had only one event
+            empty string if STM held fewer than two symbols
 
         Raises:
             LearningError: If pattern learning fails

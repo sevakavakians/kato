@@ -19,6 +19,7 @@ Performance Benefits:
 
 import json
 import logging
+import os
 import time
 from dataclasses import dataclass
 from enum import Enum
@@ -414,8 +415,12 @@ async def get_distributed_stm_manager(processor_id: str) -> Optional[Distributed
     """Get or create global distributed STM manager instance."""
     global _distributed_stm_manager
 
+    # This optional event mirror is not session STM or learned pattern storage.
+    # Single-worker deployments can opt out to avoid an unconsumed vector log.
+    if os.environ.get("KATO_DISTRIBUTED_STM_ENABLED", "true").lower() in {"false", "0", "no"}:
+        return None
+
     if _distributed_stm_manager is None:
-        import os
         redis_url = os.environ.get('REDIS_URL', 'redis://localhost:6379')
         _distributed_stm_manager = DistributedSTMManager(processor_id, redis_url)
 

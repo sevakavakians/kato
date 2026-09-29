@@ -148,7 +148,11 @@ class VectorProcessor:
             if nearest_vectors:
                 if percept_vector.name not in nearest_vectors:
                     nearest_vectors += [percept_vector.name]
-                symbols = list(set(nearest_vectors))
+                # sorted(), not list(): set iteration order over strings varies
+                # with PYTHONHASHSEED, and these symbols feed the learned
+                # pattern's SHA1. Downstream sorting is conditional on
+                # sort_symbols, which character-level matching turns off.
+                symbols = sorted(set(nearest_vectors))
             else:
                 symbols = [percept_vector.name]
 
@@ -181,7 +185,13 @@ class VectorProcessor:
             seen_ids.add(vctr_id)
             raw_score = float(result.score)
             if not isfinite(raw_score):
-                raise ValueError(f"Non-finite vector search score for {vctr_id}")
+                # Report the anomaly rather than raising. Diagnostics are an
+                # opt-in extra on the observe response; a score the store cannot
+                # express must not turn a successful observation into a 500.
+                logger.warning(
+                    "Non-finite vector search score for %s; reporting null", vctr_id
+                )
+                raw_score = None
             matches.append({
                 'vctr_id': vctr_id,
                 'rank': len(matches) + 1,

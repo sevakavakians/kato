@@ -21,7 +21,13 @@ VALID_FILTERS = ['minhash', 'jaccard', 'bloom', 'rapidfuzz']
 
 DEFAULT_VECTOR_EVENT_MODE = 'neighbors_plus_self'
 VECTOR_EVENT_MODE_SELF_ONLY = 'self_only'
-DEFAULT_VECTOR_SEARCH_LIMIT = 20
+# Nearest-neighbour count for a vector observation. This is 3, not a larger
+# value, because the retrieved IDs become symbols in the STM event and so
+# feed the learned pattern's SHA1. Raising the default would change the
+# identity of patterns learned from vector input, making an existing corpus
+# non-comparable with anything learned afterwards. Raise it per session via
+# vector_search_limit instead.
+DEFAULT_VECTOR_SEARCH_LIMIT = 3
 MAX_VECTOR_SEARCH_LIMIT = 100
 DEFAULT_RETURN_VECTOR_SEARCH_RESULTS = False
 VALID_VECTOR_EVENT_MODES = frozenset({

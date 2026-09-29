@@ -339,3 +339,58 @@ def test_kato_processor_and_response_schema_pass_diagnostics_without_session_fie
     assert result['vector_search'] == diagnostics
     assert response.vector_search == diagnostics
     assert not hasattr(session, 'vector_search')
+
+
+def test_non_finite_score_is_reported_as_null_not_raised():
+    """A score the store cannot express must not fail the observation.
+
+    Diagnostics are an opt-in extra on the observe response. Raising here turned
+    an otherwise-successful observe into a 500 whose cause was a reporting
+    detail, so the anomaly is logged and the score reported as null instead.
+    """
+    query = VectorObject(np.array([1.0, 0.0, 0.0]))
+    processor = make_vector_processor([
+        VectorSearchResult(id='VCTR|aaa', score=float('nan')),
+        VectorSearchResult(id='VCTR|bbb', score=float('inf')),
+        VectorSearchResult(id='VCTR|ccc', score=0.25),
+    ])
+
+    symbols, diagnostics = processor.process_with_diagnostics(
+        [query.vector.tolist()],
+        vector_search_limit=3,
+    )
+
+    assert symbols  # the observation still succeeded
+    by_id = {m['vctr_id']: m for m in diagnostics['matches']}
+    assert by_id['VCTR|aaa']['raw_score'] is None
+    assert by_id['VCTR|bbb']['raw_score'] is None
+    assert by_id['VCTR|ccc']['raw_score'] == 0.25
+    # A null score from a real neighbour is still sourced as a retrieved match,
+    # which is what distinguishes it from the appended self ID.
+    assert by_id['VCTR|aaa']['source'] == 'vector_index'
+
+
+def test_emitted_symbols_are_deterministically_ordered():
+    """Symbol order must not depend on PYTHONHASHSEED.
+
+    These IDs become symbols in the STM event and so feed the learned pattern's
+    SHA1. list(set(...)) ordered them by string hash, which is randomised per
+    process, and the downstream sort that masked it is conditional on
+    sort_symbols -- which character-level matching turns off.
+    """
+    query = VectorObject(np.array([1.0, 0.0, 0.0]))
+    neighbours = ['VCTR|ddd', 'VCTR|aaa', 'VCTR|ccc', 'VCTR|bbb']
+
+    processor = make_vector_processor()
+    processor.vector_indexer.findNearestPoints.return_value = list(neighbours)
+    symbols = processor.process([query.vector.tolist()], vector_search_limit=4)
+
+    # The query vector's own ID is appended, then the whole event is ordered.
+    assert symbols == sorted(symbols)
+    assert set(neighbours).issubset(set(symbols))
+    assert len(symbols) == len(neighbours) + 1
+    # Same inputs, same output, every time.
+    for _ in range(5):
+        again = make_vector_processor()
+        again.vector_indexer.findNearestPoints.return_value = list(neighbours)
+        assert again.process([query.vector.tolist()], vector_search_limit=4) == symbols

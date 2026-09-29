@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Session-scoped vector event modes.** `vector_event_mode` chooses between
+  `neighbors_plus_self` (the previous behaviour, still the default) and
+  `self_only`, which skips the neighbour search and emits only the query
+  vector's own ID. Both modes still queue the vector for learning.
+- **`vector_search_limit`**, 1 to 100, sets the nearest-neighbour count for a
+  vector observation. It defaults to 3, which is what the count was previously
+  hard-coded to, so existing behaviour is unchanged. The retrieved IDs become
+  symbols in the STM event and therefore feed the learned pattern's SHA1, so
+  changing this changes the identity of patterns learned from vector input; a
+  corpus learned at one limit is not comparable with one learned at another.
+- **`return_vector_search_results`**, default false, adds a `vector_search`
+  object to an individual observation's response carrying the query vector ID,
+  requested limit, search status, metric, score direction and ranked matches.
+  Diagnostics are request-local: they are never written to session state or
+  into learned pattern events. `VectorIndexer.findNearestResults()` exposes the
+  full results; `findNearestPoints()` remains the ID-only wrapper.
+- **`KATO_DISTRIBUTED_STM_ENABLED=false`** skips initialising the optional
+  distributed STM mirror, which is a cross-worker event log rather than session
+  STM or learned pattern storage. The default remains enabled.
+
+  See [vector event modes](docs/users/vector-modes.md).
+
+### Changed
+- **Metric cache invalidation rotates a generation token** instead of
+  maintaining a `kato:metrics:_index` set and scanning it on every learned
+  pattern. Invalidation scope is unchanged -- the previous implementation also
+  invalidated every indexed key regardless of which pattern changed -- so this
+  is the same behaviour at O(1) rather than O(keys). Rotated-away values are no
+  longer deleted; they lapse on their existing TTL.
+
+### Fixed
+- **Vector event symbols are now deterministically ordered.** They were
+  assembled with `list(set(...))`, whose iteration order over strings varies
+  with `PYTHONHASHSEED`, so an event -- and the pattern hash built from it --
+  was not reproducible across processes. The downstream sort that masked this
+  is conditional on `sort_symbols`, which character-level matching turns off.
+- A non-finite vector search score no longer raises out of the diagnostics
+  builder, which turned an otherwise-successful observation into a 500 over a
+  reporting detail on an opt-in response field. It is logged and reported as a
+  null score.
+
 ## [6.0.2] - 2026-09-23
 
 Documentation and test corrections following an investigation into whether

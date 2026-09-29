@@ -308,7 +308,7 @@ class KatoProcessor:
                 logger.warning(f"Failed to publish observation to distributed STM: {e}")
 
         # Return new state (no mutation of inputs)
-        return {
+        new_state = {
             'status': 'observed',
             'stm': new_stm,
             'time': new_time,
@@ -321,6 +321,11 @@ class KatoProcessor:
             'symbols': result.get('symbols', []),
             'instance_id': self.id
         }
+        # Request-local vector search diagnostics, present only when the
+        # session opted in. Not persisted to session state.
+        if 'vector_search' in result:
+            new_state['vector_search'] = result['vector_search']
+        return new_state
 
     async def get_predictions(
         self,

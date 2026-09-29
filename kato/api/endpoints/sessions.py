@@ -429,6 +429,7 @@ async def observe_in_session(
         session.time = result['time']
         session.percept_data = result['percept_data']
         session.predictions = result.get('predictions', [])
+        # Deliberately do not persist result['vector_search']; it is request-local.
 
         # Save updated session (outside processor lock but inside session lock)
         logger.debug(f"Saving session with STM: {session.stm}")
@@ -441,7 +442,8 @@ async def observe_in_session(
         stm_length=len(session.stm),
         time=session.time,
         unique_id=result.get('unique_id', ''),
-        auto_learned_pattern=result.get('auto_learned_pattern')
+        auto_learned_pattern=result.get('auto_learned_pattern'),
+        vector_search=result.get('vector_search'),
     )
 
 

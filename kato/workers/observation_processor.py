@@ -7,6 +7,11 @@ Extracted from KatoProcessor for better modularity.
 import logging
 from typing import Any, Optional
 
+from kato.config.session_config import (
+    DEFAULT_RETURN_VECTOR_SEARCH_RESULTS,
+    DEFAULT_VECTOR_EVENT_MODE,
+    DEFAULT_VECTOR_SEARCH_LIMIT,
+)
 from kato.exceptions import ObservationError, ValidationError
 
 logger = logging.getLogger('kato.workers.observation_processor')
@@ -156,12 +161,19 @@ class ObservationProcessor:
                         validation_rule="Key must be string type"
                     )
 
-    def process_vectors(self, vector_data: list[list[float]]) -> list[str]:
+    def process_vectors(
+        self,
+        vector_data: list[list[float]],
+        vector_event_mode: str = DEFAULT_VECTOR_EVENT_MODE,
+        vector_search_limit: int = DEFAULT_VECTOR_SEARCH_LIMIT,
+    ) -> list[str]:
         """
         Process vectors through vector processor to get symbolic representations.
 
         Args:
             vector_data: List of vector embeddings
+            vector_event_mode: Whether vector events contain neighbors plus self or only self
+            vector_search_limit: Maximum number of nearest vectors to retrieve
 
         Returns:
             List of vector-derived symbols (e.g., ['VCTR|hash1', 'VCTR|hash2'])
@@ -175,7 +187,11 @@ class ObservationProcessor:
                 return []
 
             # Process vectors to get symbolic names
-            symbols = self.vector_processor.process(vector_data)
+            symbols = self.vector_processor.process(
+                vector_data,
+                vector_event_mode=vector_event_mode,
+                vector_search_limit=vector_search_limit,
+            )
 
             # Sort if configured
             if symbols and self.sort_symbols:
@@ -183,6 +199,39 @@ class ObservationProcessor:
 
             logger.debug(f"Processed {len(vector_data)} vectors into {len(symbols)} symbols")
             return symbols
+
+        except Exception as e:
+            raise ObservationError(
+                f"Failed to process vectors: {str(e)}",
+                observation_data={"vector_count": len(vector_data)}
+            )
+
+    def process_vectors_with_diagnostics(
+        self,
+        vector_data: list[list[float]],
+        vector_event_mode: str = DEFAULT_VECTOR_EVENT_MODE,
+        vector_search_limit: int = DEFAULT_VECTOR_SEARCH_LIMIT,
+    ) -> tuple[list[str], dict[str, Any]]:
+        """Process vectors while returning request-local search diagnostics."""
+        try:
+            if not vector_data:
+                return [], {}
+
+            symbols, diagnostics = self.vector_processor.process_with_diagnostics(
+                vector_data,
+                vector_event_mode=vector_event_mode,
+                vector_search_limit=vector_search_limit,
+            )
+
+            if symbols and self.sort_symbols:
+                symbols.sort()
+
+            logger.debug(
+                "Processed %s vectors into %s symbols with search diagnostics",
+                len(vector_data),
+                len(symbols),
+            )
+            return symbols, diagnostics
 
         except Exception as e:
             raise ObservationError(
@@ -363,6 +412,29 @@ class ObservationProcessor:
             # take effect for sessions after the first on a given node.
             sort_symbols = config.sort_symbols if config and config.sort_symbols is not None else self.sort_symbols  # noqa: F841
 
+            configured_vector_event_mode = getattr(config, 'vector_event_mode', None)
+            vector_event_mode = (
+                configured_vector_event_mode
+                if configured_vector_event_mode is not None
+                else DEFAULT_VECTOR_EVENT_MODE
+            )
+            configured_vector_search_limit = getattr(config, 'vector_search_limit', None)
+            vector_search_limit = (
+                configured_vector_search_limit
+                if configured_vector_search_limit is not None
+                else DEFAULT_VECTOR_SEARCH_LIMIT
+            )
+            configured_return_vector_search_results = getattr(
+                config,
+                'return_vector_search_results',
+                None,
+            )
+            return_vector_search_results = (
+                configured_return_vector_search_results
+                if configured_return_vector_search_results is not None
+                else DEFAULT_RETURN_VECTOR_SEARCH_RESULTS
+            )
+
             unique_id = data['unique_id']
             string_data = data.get('strings', [])
             vector_data = data.get('vectors', [])
@@ -381,7 +453,21 @@ class ObservationProcessor:
             # This processor only handles symbolic processing and predictions
 
             # Process different data types
-            v_identified = self.process_vectors(vector_data) if vector_data else []
+            vector_search = None
+            if vector_data and return_vector_search_results:
+                v_identified, vector_search = self.process_vectors_with_diagnostics(
+                    vector_data,
+                    vector_event_mode=vector_event_mode,
+                    vector_search_limit=vector_search_limit,
+                )
+            elif vector_data:
+                v_identified = self.process_vectors(
+                    vector_data,
+                    vector_event_mode=vector_event_mode,
+                    vector_search_limit=vector_search_limit,
+                )
+            else:
+                v_identified = []
             symbols = self.process_strings(string_data) if string_data else []
 
             if emotives_data:
@@ -425,13 +511,16 @@ class ObservationProcessor:
                 logger.debug("No data to process, skipping auto-learning check")
                 auto_learned_pattern = None
 
-            return {
+            result = {
                 'unique_id': unique_id,
                 'auto_learned_pattern': auto_learned_pattern,
                 'symbols': combined_symbols,
                 'predictions': predictions,
                 'stm': working_stm,
             }
+            if vector_search is not None:
+                result['vector_search'] = vector_search
+            return result
 
         except (ValidationError, ObservationError):
             # Re-raise known exceptions

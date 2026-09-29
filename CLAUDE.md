@@ -75,7 +75,7 @@ docker compose build --no-cache kato
 
 ### Building and Running
 ```bash
-./start.sh                    # Start all services
+./start.sh start              # Start all services (bare ./start.sh prints help)
 docker compose down           # Stop services
 docker compose restart        # Restart services
 docker compose ps             # Check status
@@ -91,7 +91,7 @@ docker compose logs kato      # View logs
 
 ### Testing
 ```bash
-./start.sh  # Services must be running first!
+./start.sh start  # Services must be running first!
 
 # Run all tests
 ./run_tests.sh --no-start --no-stop
@@ -155,7 +155,7 @@ Storage Layer (Hybrid Architecture)
 
 ### Testing
 - `tests/tests/fixtures/kato_fixtures.py` - Test fixtures
-- `./start.sh` - Service startup
+- `./start.sh start` - Service startup
 - `./run_tests.sh` - Test runner
 
 **Code Organization**: See [docs/developers/code-organization.md](docs/developers/code-organization.md)
@@ -262,7 +262,7 @@ POST /sessions/{session_id}/config
 
 ### Local Testing (Recommended)
 ```bash
-./start.sh  # Ensure services running
+./start.sh start  # Ensure services running
 ./run_tests.sh --no-start --no-stop
 ```
 
@@ -319,7 +319,7 @@ Claude Code automatically:
 - **ALWAYS** update `requirements.lock` after modifying `requirements.txt`
 - **NEVER** edit `planning-docs/` files directly (use project-manager agent)
 - **ALWAYS** rebuild KATO docker image after code updates: `docker compose build --no-cache kato`
-- **Services must be running** before tests: `./start.sh` (ClickHouse, Redis, Qdrant)
+- **Services must be running** before tests: `./start.sh start` (ClickHouse, Redis, Qdrant)
 - **Each test needs unique processor_id** for isolation
 - **Do NOT use MCPs** for this project
 - **Architecture**: ClickHouse + Redis hybrid is MANDATORY (no MongoDB fallback)

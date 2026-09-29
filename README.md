@@ -270,7 +270,7 @@ To use a pre-built image with Docker Compose, replace the `build` section with `
 ```bash
 git clone https://github.com/sevakavakians/kato.git
 cd kato
-./start.sh
+./start.sh start
 
 # Services will be available at:
 # - KATO Service: http://localhost:8000
@@ -370,7 +370,7 @@ Sessions can also carry independent per-session configuration set at creation or
 ## Service Management & Testing
 
 ```bash
-./start.sh                  # Start all services
+./start.sh start            # Start all services (bare ./start.sh prints help)
 docker compose down         # Stop all services
 docker compose ps           # Check status
 docker compose logs kato    # View logs

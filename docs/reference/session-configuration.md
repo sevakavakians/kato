@@ -22,6 +22,9 @@ Session configuration allows per-session customization of KATO's behavior. Each 
 | Parameter | Type | Range | Default | Description |
 |-----------|------|-------|---------|-------------|
 | `indexer_type` | string | VI\|LSH\|ANNOY\|FAISS | VI | Vector indexer algorithm |
+| `vector_event_mode` | string | neighbors_plus_self\|self_only | neighbors_plus_self | Symbols a vector observation emits: nearest-neighbour IDs plus its own ID, or only its own ID |
+| `vector_search_limit` | integer | 1-100 | 3 | Nearest-neighbour IDs retrieved per vector. They become STM symbols, so changing this changes learned pattern identities |
+| `return_vector_search_results` | boolean | true\|false | false | Include vector search diagnostics in observation responses |
 | `max_predictions` | integer | 1-10000 | 100 | Maximum predictions to return |
 | `sort_symbols` | boolean | true\|false | true | Sort symbols alphabetically within events |
 | `process_predictions` | boolean | true\|false | true | Enable prediction processing |

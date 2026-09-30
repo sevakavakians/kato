@@ -388,6 +388,29 @@ curl -X POST http://localhost:8000/sessions \
 
 **Recommendation**: Use default `VI` unless handling millions of vector embeddings.
 
+#### vector_search_limit, vector_event_mode, return_vector_search_results
+
+Control what a vector observation adds to STM.
+
+```json
+{
+  "vector_search_limit": 10,
+  "vector_event_mode": "neighbors_plus_self",
+  "return_vector_search_results": true
+}
+```
+
+- **vector_search_limit** (1-100, default `3`): nearest-neighbour IDs retrieved per vector.
+- **vector_event_mode** (default `neighbors_plus_self`): emit the neighbour IDs plus the vector's own ID; `self_only` emits only the own ID and skips the search.
+- **return_vector_search_results** (default `false`): include the ranked matches and scores in the observation response.
+
+**Important**: The retrieved IDs become symbols in the STM event, so they feed the
+learned pattern's SHA1. Patterns learned at one `vector_search_limit` or
+`vector_event_mode` are not comparable with patterns learned at another. Pick the
+values before learning a corpus and keep them fixed for it.
+
+See [Vector event modes](vector-modes.md) for the diagnostics format.
+
 ## Session Management
 
 ### session_ttl

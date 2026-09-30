@@ -49,6 +49,21 @@ with kato_client.KATOClient(base_url="http://localhost:8000", node_id="demo") as
 # leaving the `with` block deletes the session
 ```
 
+**Session configuration**: the constructor accepts `max_pattern_length`,
+`persistence`, `recall_threshold`, `stm_mode`, `indexer_type`,
+`vector_search_limit`, `vector_event_mode`, `return_vector_search_results`,
+`max_predictions`, `sort_symbols` and `process_predictions`. Only values that
+differ from the server defaults are sent. Anything else, such as
+`use_token_matching`, goes through `update_session_config()`:
+
+```python
+client = kato_client.KATOClient(node_id="demo", vector_search_limit=10)
+client.update_session_config({"recall_threshold": 0.5, "use_token_matching": False})
+```
+
+Accepted updates are remembered, so if the client recreates an expired session
+it re-applies them as well as the constructor settings.
+
 **Method groups**:
 
 | Group | Methods |

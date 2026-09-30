@@ -42,7 +42,7 @@ USAGE:
         predictions = client.get_predictions()
 
 Author: KATO Team
-Version: 3.6.0 - Added get_pattern_count() for node-scoped learned-pattern counts
+Version: 3.7.0 - Vector config parameters; config updates survive session recreation
 """
 
 import time
@@ -86,6 +86,19 @@ class KATOClient:
         indexer_type: str ('VI'/'LSH'/'ANNOY'/'FAISS', default='VI')
             - Vector indexer type for similarity search
 
+        vector_search_limit: int (1-100, default=3)
+            - Nearest vector neighbours retrieved per observed vector
+            - The neighbour IDs become STM symbols, so this changes the
+              identity of patterns learned from vector input
+
+        vector_event_mode: str ('neighbors_plus_self' or 'self_only',
+                                default='neighbors_plus_self')
+            - Whether a vector's event holds its neighbours plus itself,
+              or only itself
+
+        return_vector_search_results: bool (default=False)
+            - Include request-local vector search diagnostics in responses
+
         max_predictions: int (1-10000, default=100)
             - Maximum number of predictions to return
 
@@ -121,6 +134,9 @@ class KATOClient:
         **IMPORTANT**: Use update_session_config() for runtime configuration changes.
 
             client.update_session_config({'recall_threshold': 0.1})
+
+        Updates are remembered by the client and re-applied if the session
+        is recreated, so a recovered session keeps the same configuration.
 
     Not Covered By This Client:
         The WebSocket event stream (ws://<host>/ws/events) is not wrapped here.
@@ -176,6 +192,9 @@ class KATOClient:
         recall_threshold: float = 0.1,
         stm_mode: str = 'CLEAR',
         indexer_type: str = 'VI',
+        vector_search_limit: int = 3,
+        vector_event_mode: str = 'neighbors_plus_self',
+        return_vector_search_results: bool = False,
         max_predictions: int = 100,
         sort_symbols: bool = True,
         process_predictions: bool = True,
@@ -199,6 +218,11 @@ class KATOClient:
             recall_threshold: Pattern matching threshold (0.0-1.0, default: 0.1)
             stm_mode: STM mode 'CLEAR' or 'ROLLING' (default: 'CLEAR')
             indexer_type: Vector indexer type (default: 'VI')
+            vector_search_limit: Nearest vector neighbours per vector (1-100, default: 3)
+            vector_event_mode: 'neighbors_plus_self' or 'self_only'
+                    (default: 'neighbors_plus_self')
+            return_vector_search_results: Include vector search diagnostics
+                    in responses (default: False)
             max_predictions: Max predictions to return (1-10000, default: 100)
             sort_symbols: Sort symbols alphabetically (default: True)
             process_predictions: Enable prediction processing (default: True)
@@ -248,6 +272,12 @@ class KATOClient:
             config['stm_mode'] = stm_mode
         if indexer_type != 'VI':
             config['indexer_type'] = indexer_type
+        if vector_search_limit != 3:
+            config['vector_search_limit'] = vector_search_limit
+        if vector_event_mode != 'neighbors_plus_self':
+            config['vector_event_mode'] = vector_event_mode
+        if return_vector_search_results is not False:
+            config['return_vector_search_results'] = return_vector_search_results
         if max_predictions != 100:
             config['max_predictions'] = max_predictions
         if sort_symbols is not True:
@@ -763,10 +793,17 @@ class KATOClient:
             - recall_threshold: float (0.0-1.0) - Pattern matching threshold
             - stm_mode: str - STM mode 'CLEAR' or 'ROLLING'
             - indexer_type: str - Vector indexer type
+            - vector_search_limit: int (1-100) - Nearest vector neighbours per vector
+            - vector_event_mode: str - 'neighbors_plus_self' or 'self_only'
+            - return_vector_search_results: bool - Include vector search diagnostics
             - max_predictions: int (1-10000) - Max predictions to return
             - sort_symbols: bool - Sort symbols alphabetically
             - process_predictions: bool - Enable prediction processing
             - use_token_matching: bool - Token-level vs character-level matching
+
+        Accepted updates are merged into the configuration the client
+        re-applies when it recreates an expired session, so the recovered
+        session keeps them. A rejected update is not remembered.
 
         Args:
             config: Configuration parameters to update
@@ -788,7 +825,11 @@ class KATOClient:
             >>> predictions = client.get_predictions()  # Uses recall_threshold=0.1
         """
         data = {'config': config}
-        return self._request('POST', f'/sessions/{self._session_id}/config', data=data)
+        result = self._request('POST', f'/sessions/{self._session_id}/config', data=data)
+        # Remember the update only once the server has accepted it, so session
+        # recreation re-applies it instead of reverting to constructor values.
+        self._session_config = {**self._session_config, **config}
+        return result
 
     def get_pattern(
         self,

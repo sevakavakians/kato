@@ -86,6 +86,9 @@ GET /sessions/{session_id}/config
     "recall_threshold": 0.6,
     "stm_mode": "CLEAR",
     "indexer_type": "VI",
+    "vector_event_mode": "neighbors_plus_self",
+    "vector_search_limit": 3,
+    "return_vector_search_results": false,
     "max_predictions": 100,
     "sort_symbols": true,
     "process_predictions": true,
@@ -142,6 +145,9 @@ curl http://localhost:8000/sessions/$SESSION_ID/config
 | Parameter | Type | Range | Default | Description |
 |-----------|------|-------|---------|-------------|
 | `indexer_type` | string | VI\|LSH\|ANNOY\|FAISS | VI | Vector indexer algorithm |
+| `vector_event_mode` | string | neighbors_plus_self\|self_only | neighbors_plus_self | Symbols a vector observation emits (see [Vector modes](../../users/vector-modes.md)) |
+| `vector_search_limit` | integer | 1-100 | 3 | Nearest-neighbour IDs retrieved per vector; changes learned pattern identities |
+| `return_vector_search_results` | boolean | true\|false | false | Include vector search diagnostics in observation responses |
 | `max_predictions` | integer | 1-10000 | 100 | Maximum predictions to return |
 | `sort_symbols` | boolean | true\|false | true | Sort symbols alphanumerically |
 | `use_token_matching` | boolean | true\|false | true | Token-level (true) vs character-level (false) |

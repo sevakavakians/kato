@@ -20,6 +20,19 @@ learned at one limit is not comparable with one learned at another. Raise it per
 session when you want broader retrieval; do not treat it as a global tuning knob
 part-way through a corpus.
 
+With the example Python client (`examples/python-client.py`), pass them to the
+constructor or update them later:
+
+```python
+client = KATOClient(node_id="vectors", vector_search_limit=10,
+                    return_vector_search_results=True)
+client.update_session_config({"vector_event_mode": "self_only"})
+```
+
+The client re-applies both its constructor settings and any accepted
+`update_session_config()` changes if it has to recreate an expired session, so a
+recovered session keeps the same limit and mode.
+
 `self_only` is useful when you want each vector observation to mint its own
 symbol rather than collide with earlier vectors — it never returns a neighbour,
 so successive observations of similar vectors stay distinct.

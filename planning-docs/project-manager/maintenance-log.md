@@ -3,6 +3,70 @@
 
 ---
 
+## 2026-09-30 - Knowledge Refinement: python-client.py 3.7.0 Implementation Confirmed Lost From Working Tree — Status Downgraded From "COMPLETE, UNCOMMITTED"
+
+**Trigger**: Knowledge Refinement — the coordinator verified, ahead of committing planning-docs and cutting a v6.1.0 release, that `examples/python-client.py` on disk is byte-identical to `main` (version 3.6.0), with no commit, stash, or reflog trace of the 3.7.0 session-config-persistence fix and new vector constructor params recorded earlier this session as "COMPLETE, verified offline only, UNCOMMITTED." The code was seen and reviewed in the working tree earlier in this session; it is now absent by some means outside any tracked git operation in this session and is not recoverable by git.
+
+**What happened**: A previous pass in this session (see the "Task Completion: Python Client 3.7.0" entry below) correctly and faithfully documented the python-client 3.7.0 work as designed, offline-verified, and uncommitted. That documentation was accurate at the time it was written. Between then and this correction, the implementation vanished from the working tree without a corresponding git event — no `git checkout`, stash, or reset in the reflog accounts for it. The coordinator caught this before committing and asked for the claim not to be committed as stated.
+
+**Actions Taken**:
+1. `planning-docs/completed/bugs/2026-09-30-python-client-session-config-lost-on-recreation.md` — a prominent status-correction banner added at the top; every status field updated from asserting completion to asserting the design is lost and needs reimplementation; body content (bug description, fix shape, new constructor params, verification approach, known limitation) preserved unchanged so redoing the work is cheap. Left filed under `completed/bugs/` for lack of a better location in this planning-docs structure, with an explicit note that filing location does not mean the task is done.
+2. `planning-docs/SESSION_STATE.md` — header's "Prior:" summary corrected; the "Previous Task" section for this work rewritten from "COMPLETE, verified offline only, UNCOMMITTED" to "DESIGN LOST, NOT IN WORKING TREE, NEEDS REDOING," with the correction explained inline and the original design detail kept.
+3. `planning-docs/SPRINT_BACKLOG.md` — header's "Prior:" summary corrected; the "Recently Completed" entry's heading changed from "✅ COMPLETE, UNCOMMITTED" to "⚠️ DESIGN LOST — NOT IN WORKING TREE, NEEDS REDOING," status text rewritten with the same correction.
+4. `planning-docs/project-manager/pending-updates.md` — the existing "Verify and Commit" item retitled and rewritten to "Reimplement... — Prior Implementation Lost," Suggested Action changed from "verify then commit" to "reimplement, then re-verify, then verify live, then commit," and flagged as time-sensitive relative to the upcoming v6.1.0 release (confirm no release notes claim this fix ships).
+5. This entry and a matching `triggers.md` entry.
+
+**Explicitly left untouched, per the coordinator's instruction**: `examples/python-client.py` itself (not modified — the coordinator is handling recovery/reimplementation separately, or it will be redone later); all documentation for the four unrelated items from the prior pass (vector modes port, CI fix, async-insert race fix, test pattern accumulation fix) — none of that content was touched by this correction.
+
+**Classification**: Knowledge Refinement (assumption of completed-but-uncommitted work corrected to lost-and-needs-redoing, based on direct verification: `git diff main -- examples/python-client.py` empty, `git stash list` and reflog checked) — the correction itself constitutes a human-alert-relevant status change, reflected by rewriting the existing `pending-updates.md` item in place rather than silently updating status fields alone.
+
+**Next Steps**: Reimplement the python-client 3.7.0 changes from the preserved design, re-verify offline, then against live services, then commit. Confirm before the v6.1.0 release is cut that no release documentation references this fix as shipped. All other items from this session (DECISION-039 commit, PR #10 merge, DECISION-040/041, the four other 2026-09-30 items) are unaffected and remain as previously recorded.
+
+---
+
+*Agent execution time: < 10 minutes*
+*Response type: Knowledge refinement (status correction across 4 files, prompted by coordinator verification) — no code touched*
+
+---
+
+## 2026-09-30 - Task Completion (x4): Vector Modes Port, CI Fix, Async-Insert Race Fix, Test Pattern Accumulation Fix
+
+**Trigger**: Task Completion — four separate items, all completed today and verified against the live repo's git history (commits, merges, PR states checked directly via `git`/`gh`, not taken on faith): (1) vector modes ported from a collaborator's branch with three corrections (PR #7, merged `6a25b87`); (2) CI unit job fixed to start a KATO service (PR #8, merged `7c7e2c0`); (3) `patterns_data` async_insert visibility race fixed (PR #9, merged `92a977c`); (4) test pattern accumulation fixed (PR #10, branch `fix/test-pattern-accumulation`, committed `038057c`, **still open, not yet merged**, CI pending).
+
+**Actions Taken**:
+1. Four new archive files: `completed/features/2026-09-30-vector-modes-ported-from-collaborator-branch.md`, `completed/bugs/2026-09-30-ci-unit-job-never-started-kato-service.md`, `completed/bugs/2026-09-30-patterns-data-async-insert-visibility-race-fixed.md`, `completed/bugs/2026-09-30-test-pattern-accumulation-fixed.md` (the last one's header explicitly notes PR #10 is still open).
+2. `planning-docs/DECISIONS.md` — two new entries added at the top: **DECISION-040** (vector modes port — the decision to hold `vector_search_limit`'s default at 3 rather than accept the source branch's raise to 20, since the retrieved IDs feed the learned pattern's SHA1; two related corrections recorded); **DECISION-041** (async-insert visibility fix — the decision to gate the drain on the Redis stats version rather than switch `patterns_data` to `wait_for_async_insert=1`, with the residual-window limitation recorded as accepted, not closed). Header's "Last Updated" line updated.
+3. `planning-docs/SPRINT_BACKLOG.md` — header and "Active Projects" note updated to reflect all four landed items and that none has been released yet; the "Bug: patterns_data async_insert visibility race (Root cause #1)" entry (P2, open since 2026-06-18) marked FIXED in place; the "Tech Debt: has_pending/flush_if_pending()/flush_all_pending_writes()..." entry marked addressed (the mistaken reliance on the no-op is closed; the dead-code-removal candidacy itself is unchanged); four new "Recently Completed" entries added.
+4. `planning-docs/SESSION_STATE.md` — new "Current Task" section covering all four items (three merged, one open PR); the previous Current Task (Python client 3.7.0 fix) demoted to "Previous Task (context preserved)"; header updated. Explicitly recorded: no release has been cut for any of this.
+5. `planning-docs/project-manager/pending-updates.md` — new Medium-priority entry: merge PR #10 once CI is green, commit the still-outstanding DECISION-039 working tree, and decide a release (v6.1.0 or later) covering all of today's work plus DECISION-039.
+6. This entry and a matching `triggers.md` entry.
+
+**Key Details**:
+- PR #7 (vector modes): author commits `9da9d82`/`12a0cb6`/`01d3990` by Brian Reed <briank.reed@icloud.com>, correction commit `6215504` by Sevak Avakians, merge `6a25b87`. Verified: 521 unit / 127 integration / 49 api tests, byte-identical prediction parity to v6.0.1.
+- PR #8 (CI fix): commit `a264dc2`, merge `7c7e2c0`. CI went from 10 failed/220 passed/291 skipped in 58m37s to 521 passed/0 skipped in 1m33s on the actual runner.
+- PR #9 (async-insert race): commit `c050119`, merge `92a977c`. Cost +5.7ms median only on predictions following a learn; reproducer 15/15 passing after (failed within ~5 attempts before); closes two backlog items.
+- PR #10 (test pattern accumulation): commit `038057c` on branch `fix/test-pattern-accumulation`, **not merged** — confirmed via `gh pr view 10` (`state: OPEN`, `mergedAt: null`) before recording it as such. 17,869-pattern backlog cleared; steady-state cleanup cost ~3s.
+- Git remote and branch verified before any git inspection (`origin` → `sevakavakians/kato.git`, matching the known KATO project) per standing instruction to always confirm the correct repo first.
+
+**Classification**: Task Completion (4 items, 3 merged + 1 pending merge) + Architectural Decision (DECISION-040, DECISION-041) — surfaced as a new Medium-priority `pending-updates.md` item (merge PR #10, decide a release) since real, verified, unreleased work is now accumulating across five items (these four plus the still-uncommitted DECISION-039).
+
+**Next Steps**: Merge PR #10 once its CI run completes. Commit the DECISION-039 working tree (6 files, separately tracked). Decide a version bump and cut a release covering all of it. All other previously-open items (staging soak for the recall-safe bound, dependency upgrade, `REDIS_PASSWORD`, dashboard hardening, single-symbol fast-path semantics, `sort_symbols` bug, unreachable `r=0` branches, real-corpus selectivity measurement, stale `benchmark_hybrid_architecture.py`) remain open, untouched by this pass.
+
+---
+
+*Agent execution time: < 15 minutes*
+*Response type: Task completion (4 items) + 2 new architectural decisions + human alert generated (Medium priority: merge PR #10, cut a release)*
+
+---
+
+## 2026-09-30 - Task Completion: Python Client 3.7.0 (Session Config Persistence Bug Fix)
+
+**Trigger**: Task Completion (bug fix) + Knowledge Refinement (runtime config silently lost on session recreation).
+**Actions**: Created `completed/bugs/2026-09-30-python-client-session-config-lost-on-recreation.md`; updated `SESSION_STATE.md` (new Current Task, prior tasks demoted), `SPRINT_BACKLOG.md` (Recently Completed), `project-manager/pending-updates.md` (Low: verify live and commit; STM replay limitation), `triggers.md`.
+**Status**: verified offline only, uncommitted. No DECISIONS entry (client example fix, no architectural choice).
+
+---
+
 ## 2026-09-16 - Task Completion: Remediation Pass 1 Follow-On (Branch Closed Out + DECISION-031 Determinism Fix) — COMPLETE
 
 **Trigger**: Task Completion — Remediation Pass 1's four previously-open items (commit/merge, `requirements.lock`, orphan Redis key cleanup, full stack recreate) all resolved; one claim in DECISION-030 (the `protected-mode no` verification) found invalid and reverted; and, discovered while investigating a separate performance question, a real prediction-ranking nondeterminism bug found and fixed (new DECISION-031), plus a ProcessPoolExecutor performance pessimisation removed and two incidental bugs (metadata-chunking silent failure, dead `shutdown_event` call) fixed along the way.

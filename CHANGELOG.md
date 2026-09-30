@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [6.1.0] - 2026-09-30
+
+Configurable vector retrieval, and a fix for predictions issued immediately
+after a learn returning nothing.
+
 ### Added
 - **Session-scoped vector event modes.** `vector_event_mode` chooses between
   `neighbors_plus_self` (the previous behaviour, still the default) and
@@ -39,6 +44,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   longer deleted; they lapse on their existing TTL.
 
 ### Fixed
+- **A prediction issued shortly after a learn could return nothing.**
+  `patterns_data` is inserted with `wait_for_async_insert=0`, so the row waits
+  in ClickHouse's server-side async buffer, and ClickHouse *increases* that
+  delay under load toward `async_insert_busy_timeout_max_ms`. The window was
+  therefore widest exactly when traffic was heaviest, and absent on an idle
+  server. The read paths meant to prevent this and called `flush_if_pending()`,
+  which drains only the client buffer -- permanently empty at `batch_size=1` --
+  so it did nothing.
+
+  Prediction paths now drain the server queue before reading, gated on the
+  Redis stats version so the drain is skipped unless a learn has landed since
+  the last one. A read-only workload pays nothing; a prediction following a
+  learn costs about 6ms more. Prediction output is unchanged.
+
+  `finalize-training` remains optional, as documented -- predicting straight
+  after learning is supported usage and now behaves that way.
+
+  One limit is not closed: between the insert being enqueued and the stats
+  version being bumped a few lines later, a reader can still miss the row. That
+  gap is microseconds rather than up to 200ms, and the next read corrects it.
 - **Vector event symbols are now deterministically ordered.** They were
   assembled with `list(set(...))`, whose iteration order over strings varies
   with `PYTHONHASHSEED`, so an event -- and the pattern hash built from it --
@@ -48,6 +73,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   builder, which turned an otherwise-successful observation into a 500 over a
   reporting detail on an opt-in response field. It is logged and reported as a
   null score.
+
+### Development
+- **CI now starts a KATO service for the unit job.** It started Redis, Qdrant
+  and ClickHouse but never the application, so 291 tests skipped and 10 failed
+  on connection-refused after exhausting their retries -- red on every commit,
+  and about 59 minutes to say so. Now 528 tests pass in roughly two minutes.
+  `REDIS_ENABLED=true` is required for the service to serve observations, and
+  `KATO_WORKERS` is pinned so worker-dependent test gates evaluate correctly.
+- **The test suite reclaims learned patterns instead of accumulating them.**
+  Sessions were cleaned between runs; patterns, being durable by design, never
+  were, so every run left its corpus behind -- 17,869 patterns on one stack,
+  nearly all dead test data, which inflated `total_unique_patterns` and
+  filter-pipeline candidate counts and made the suite slower and less
+  reproducible. Test node ids now carry a recognisable prefix, and only
+  partitions idle for `KATO_TEST_PURGE_QUIET_MINUTES` (default 15) are dropped,
+  so a suite running alongside another is not disturbed. No runtime code is
+  affected.
 
 ## [6.0.2] - 2026-09-23
 

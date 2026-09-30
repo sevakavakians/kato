@@ -1,6 +1,90 @@
 # DECISIONS.md - Architectural & Design Decision Log
 *Append-Only Log - Started: 2025-08-29*
-*Last Updated: 2026-09-22 (DECISION-039: single-event-vs-multi-event pattern grouping investigation — reported bug NOT reproduced; live verification confirms `missing`/`future` segmentation is correct; a genuine test-coverage gap and doc/docstring/API-message defects fixed instead. DECISION-038: CI ClickHouse schema-init fix — three bugs, including a latent Helm production bug where the bootstrap Job never actually applied the schema. DECISION-037: new standing rule — no deprecation/removal notes in runtime messages, enforced by test. DECISION-036: KATO v6.0.1 patch, fixing `filter_pipeline` validation and applying DECISION-037. DECISION-035: KATO v6.0.0 major release — DECISION-034's recall-safe candidate bound merged and shipped.)*
+*Last Updated: 2026-09-30 (DECISION-041: gate the `patterns_data` async_insert visibility drain on the Redis stats version rather than switching to `wait_for_async_insert=1`. DECISION-040: vector modes ported from a collaborator's branch — `vector_search_limit` default kept at 3, not raised to 20, because it feeds the learned pattern's SHA1. DECISION-039: single-event-vs-multi-event pattern grouping investigation — reported bug NOT reproduced; live verification confirms `missing`/`future` segmentation is correct; a genuine test-coverage gap and doc/docstring/API-message defects fixed instead. DECISION-038: CI ClickHouse schema-init fix — three bugs, including a latent Helm production bug where the bootstrap Job never actually applied the schema. DECISION-037: new standing rule — no deprecation/removal notes in runtime messages, enforced by test. DECISION-036: KATO v6.0.1 patch, fixing `filter_pipeline` validation and applying DECISION-037. DECISION-035: KATO v6.0.0 major release — DECISION-034's recall-safe candidate bound merged and shipped.)*
+
+---
+
+## 2026-09-30 - DECISION-041: Gate the patterns_data Async-Insert Visibility Drain on the Redis Stats Version, Not `wait_for_async_insert=1`
+
+**Decision**: Fix the `patterns_data` async_insert visibility race (a prediction issued shortly after a learn could return nothing, because the row was still sitting in ClickHouse's server-side async buffer) by draining that buffer explicitly on the read path (`ClickHouseWriter.ensure_visible(stats_version)`, gated on the Redis `{kb_id}:stats:version` stamp), rather than switching `patterns_data` inserts from `wait_for_async_insert=0` to `wait_for_async_insert=1`.
+**Status**: **COMPLETE, VERIFIED, COMMITTED and MERGED** — fix commit `c050119`, merge commit `92a977c` (PR #9). See `planning-docs/completed/bugs/2026-09-30-patterns-data-async-insert-visibility-race-fixed.md`.
+**Classification**: Bug Fix (correctness under load) elevated to an architectural decision because the rejected alternative (`wait_for_async_insert=1`) was the simpler, more obvious fix and had already been proposed in the original backlog entry (`SPRINT_BACKLOG.md`, "Bug: patterns_data async_insert visibility race (Root cause #1)," filed 2026-06-18) as "Fix Option 1."
+**Confidence**: High — root cause confirmed directly from the server's own log (same query, "No patterns found" then "Found 1 patterns" 182ms later, nothing else changed), not inferred; cost and effectiveness both measured before and after.
+
+### Context
+
+`patterns_data` is written with `wait_for_async_insert=0` (batched server-side, per DECISION-017's `DEFAULT_BATCH_SIZE=1` client-side decision — the two are independent knobs). ClickHouse adapts the server-side flush delay between `async_insert_busy_timeout_min_ms` and `_max_ms` (50ms/200ms by default), *increasing* it under load, so a prediction issued immediately after a learn can race a row that has not yet become queryable. The original 2026-06-18 backlog entry proposed two options: switch to `wait_for_async_insert=1` (simplest, but a per-insert latency cost on every single learn, not just the ones followed immediately by a read), or add an explicit server-queue flush on the predict path before the filter pipeline executes (this decision's approach, option 2 from that entry).
+
+### Decision Made
+
+Option 2: add `ClickHouseWriter.ensure_visible(stats_version)`, called from `predictPattern` and `getPattern`, gated on the Redis `{kb_id}:stats:version` stamp so the drain is skipped entirely unless a learn has landed since the last drain.
+
+### Rationale
+
+- **`wait_for_async_insert=1` pays a cost on every learn, whether or not a prediction ever follows it closely.** Most learns in a training workload are not immediately followed by a predict call; paying blocking-insert latency on all of them to protect the minority that are is the wrong end of the tradeoff. The gated drain pays cost only on the actual hazard: a predict/getPattern call that follows a learn.
+- **The stats-version gate is correct across uvicorn workers, which an in-process flag could not be.** Each worker process holds its own `ClickHouseWriter` instance; a learn served by worker A must still be visible to a predict served by worker B. The Redis stamp is written after `write_pattern` enqueues the insert (so observing a new version implies the row is already buffered — a drain will find it) and is shared process-wide via Redis, not per-instance state.
+- **Measured cost is small and scoped to exactly the hazard case**: predictions that skip the drain are unchanged at 38.9ms median; those that drain cost 44.5ms (+5.7ms), and that only happens on a prediction issued after a learn. A blanket `wait_for_async_insert=1` would not have this "only when it matters" property — the cost would land on every learn unconditionally.
+- **`SYSTEM FLUSH ASYNC INSERT QUEUE` is server-global**, not scoped to a `kb_id` or table. This makes the drain slightly wasteful when several nodes learn concurrently (any drain also flushes other nodes' pending rows) — measured at 2,197 redundant drains in a 5-minute concurrent-load test — but this was accepted rather than optimized away, because coalescing would require comparing a Redis nanosecond timestamp against a local wall clock across potentially different machines, which is unsound.
+
+### Known Limitation, Accepted Rather Than Closed
+
+A microsecond-scale residual window exists between `write_pattern` enqueueing the insert and `batch_update_symbol_stats` bumping the Redis version a few lines later — a reader in that narrow gap can observe the old version and skip the drain. This cannot be closed by reordering (bumping the version first would drain before the row is even enqueued, which is worse) — only by making the two-store write atomic, which was explicitly out of scope for this fix. The gap is microseconds, not the up-to-200ms window this fix closes, and the very next read self-corrects.
+
+### Impact
+
+- **Positive**: closes a real, previously-flaky-test-producing correctness bug (likely the same mechanism behind the previously-logged `test_bayesian_likelihood_equals_similarity` flakiness) at a cost bounded to the actual hazard window, with no change to prediction output (byte-identical, verified via `scripts/check_prediction_parity.py`).
+- **Neutral**: the pre-existing `flush_if_pending()` dead-no-op (client-side buffer, permanently empty at `DEFAULT_BATCH_SIZE=1`) remains in the codebase, now called alongside the real drain inside `ensure_visible()` rather than removed — harmless, but the P3 "candidate for removal" tech-debt framing is unchanged by this fix.
+- **Risk**: Low. The one accepted limitation (microsecond residual window) is self-correcting on the next read and was explicitly reasoned about rather than overlooked.
+
+### Related Decisions
+
+- DECISION-017 (`DEFAULT_BATCH_SIZE=1`) — a different, already-settled knob on the same write path; this decision does not revisit it.
+- Closes `SPRINT_BACKLOG.md`'s "Bug: patterns_data async_insert visibility race (Root cause #1)" (P2, open since 2026-06-18) and "Tech Debt: `has_pending`/`flush_if_pending()`/`flush_all_pending_writes()` are permanent no-ops" (P3).
+
+---
+
+## 2026-09-30 - DECISION-040: Vector Modes Ported from a Collaborator's Branch — `vector_search_limit` Default Held at 3
+
+**Decision**: Port the lower-risk half of collaborator Brian Reed's branch `codex/kato-reliability-vector-modes-20260918` onto `main` (session-scoped `vector_event_mode`/`vector_search_limit`/`return_vector_search_results`, generation-token metric-cache invalidation, distributed-STM opt-out), but **override the source branch's `vector_search_limit` default of 20 back to the existing default of 3** rather than accepting the raise as part of the port.
+**Status**: **COMPLETE, VERIFIED, COMMITTED and MERGED** — author commits `9da9d82`/`12a0cb6`/`01d3990` (Brian Reed), correction commit `6215504` (Sevak Avakians), merge `6a25b87` (PR #7). See `planning-docs/completed/features/2026-09-30-vector-modes-ported-from-collaborator-branch.md`.
+**Classification**: Architectural Decision (standing rule about what may change a corpus-identity-affecting default) applied while integrating an external contribution.
+**Confidence**: High — the mechanism (retrieved vector IDs become STM symbols, which feed the learned pattern's SHA1 name) is a direct code-level fact, not an inference.
+
+### Context
+
+The source branch raised `vector_search_limit`'s default from a hard-coded 3 to 20, presumably to improve retrieval recall by default. Reviewing the port before merge surfaced that `vector_search_limit` is not purely a retrieval-quality knob: the IDs returned by the Qdrant nearest-neighbour search become symbols written into the STM event for that observation, and that event's symbol set is exactly what gets hashed (SHA1) to name the learned pattern.
+
+### Decision Made
+
+Keep `vector_search_limit`'s **default** at 3 (unchanged from pre-port behavior). The new session-scoped parameter itself ships as designed — any session can opt into `vector_search_limit=20` (or any value 1-100) — but the *default* for sessions that don't set it explicitly is not changed by this port.
+
+### Rationale
+
+- **A default change here is a silent corpus-breaking change, not a tuning improvement.** Raising the default from 3 to 20 means every vector observation made by every session that doesn't explicitly override the setting retrieves a different neighbour set than it did yesterday, producing a different STM event, a different pattern hash, and therefore a pattern that is not the same pattern as the one an identical-looking observation would have produced before the upgrade. An existing corpus becomes silently non-comparable with anything learned after the upgrade — the same class of hazard this project's determinism guarantee (`CLAUDE.md`) exists to prevent.
+- **The new knob already provides the improvement, opt-in.** Sessions that want higher recall can set `vector_search_limit=20` (or any value) explicitly — that is precisely where a deliberate retrieval-recall change belongs, not silently inside a version upgrade.
+- **Standing rule established by this decision**: any configuration value that becomes part of a pattern's hash input must not have its *default* changed without a corpus-identity discussion, independent of how reasonable the new default sounds as a pure feature improvement. This generalizes beyond `vector_search_limit` to any future session-config field that ends up inside a learned pattern's event content.
+
+### Two Related Corrections Applied in the Same Pass (Not Separately Decision-Worthy, Recorded for Completeness)
+
+- `sorted(set(...))` replaced `list(set(...))` for assembling vector symbols — `set` iteration order over strings varies with `PYTHONHASHSEED`, so the previous code was a second, independent source of non-reproducible pattern hashes for vector-derived patterns, masked only when `sort_symbols` happens to be on (it is conditionally off under character-level matching). This is a correctness fix, not a design tradeoff.
+- A non-finite search score in the opt-in diagnostics builder no longer raises `ValueError` (which had turned an otherwise-successful observation into an HTTP 500 over a reporting detail); it is now logged and reported as `null`.
+
+### Impact
+
+- **Positive**: ships useful new session-scoped vector configurability and an O(1) metric-cache invalidation mechanism while explicitly protecting existing corpora from a silent identity change.
+- **Neutral**: sessions wanting the higher-recall behavior must opt in explicitly; this is a one-line config change for anyone who wants it, not a functional loss.
+- **Risk**: Low. Verified via `scripts/check_prediction_parity.py` that prediction output remains byte-identical to pre-port v6.0.1 for the default (unchanged) configuration.
+
+### Deliberately Not Merged (Remains Under Review, PR #6)
+
+- The pattern retirement/purge lifecycle (10 documented blockers in the source branch).
+- `single_symbol_match_mode` — reads `self.patterns_searcher.session_config` directly instead of taking a parameter, so it is inert on the observe path and leaks across sessions; needs rework before it is safe to ship.
+- `wait_for_async_insert` bump from 0 to 1 on `patterns_data` — wants a throughput measurement first; effectively superseded by DECISION-041's alternative fix for the same underlying visibility hazard, merged later the same day.
+
+### Related Decisions
+
+- DECISION-034 — established the precedent that a bound approximating exact behavior must never be *tighter* than the reference it approximates; this decision is the mirror case for defaults: a default must never silently change what a reference computation (the pattern hash) produces.
+- DECISION-041 (this same log, filed later the same day) — the alternative, accepted fix for the `wait_for_async_insert` visibility concern this port's `wait_for_async_insert=1` proposal was trying to address.
 
 ---
 

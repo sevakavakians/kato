@@ -3,6 +3,42 @@
 
 ---
 
+## 2026-09-30 - Knowledge Refinement: python-client.py 3.7.0 Confirmed Lost From Working Tree
+
+**Trigger Type**: Secondary — Knowledge Refinement (a previously-recorded "COMPLETE, verified offline only, UNCOMMITTED" status corrected to "DESIGN LOST — NOT IN WORKING TREE, NEEDS REDOING" after the coordinator verified `examples/python-client.py` is byte-identical to `main` at 3.6.0, with no commit/stash/reflog trace of the 3.7.0 work).
+
+**Event**: Ahead of committing planning-docs and cutting a v6.1.0 release, the coordinator checked the python-client 3.7.0 work this session had documented as complete-but-uncommitted and found the implementing code gone from the working tree — `git diff main -- examples/python-client.py` empty, no stash, no reflog trace. The design and its offline verification were genuinely done earlier this session; only the code's current presence was false. Status corrected everywhere it was asserted, with the design detail preserved so redoing it is cheap.
+
+**Documents Updated**: `planning-docs/completed/bugs/2026-09-30-python-client-session-config-lost-on-recreation.md` (status-correction banner + all status fields, body preserved), `planning-docs/SESSION_STATE.md` (header + Previous Task section), `planning-docs/SPRINT_BACKLOG.md` (header + Recently Completed entry), `planning-docs/project-manager/pending-updates.md` (item retitled and rewritten from "verify and commit" to "reimplement"), `planning-docs/project-manager/maintenance-log.md` (this action logged).
+
+**Human Alert Generated**: Yes — the existing `pending-updates.md` item was rewritten (not newly created) to reflect that the fix must be reimplemented, not merely verified and committed, and flagged as time-sensitive against the imminent v6.1.0 release.
+
+**Agent Response Time**: Immediate
+**Action Result**: No planning doc now asserts the python-client 3.7.0 fix is complete or exists in the working tree. The design, added constructor params, verification approach, and known limitation are preserved in full across the archive doc and `SESSION_STATE.md` specifically so the work can be redone without re-deriving it. `examples/python-client.py` itself was not touched by this correction. All four unrelated items from the prior pass (vector modes port, CI fix, async-insert race fix, test pattern accumulation fix) and their DECISION-040/DECISION-041 entries are untouched and remain as previously recorded.
+
+---
+
+## 2026-09-30 - Task Completion (x4) + Architectural Decisions: Vector Modes Port, CI Fix, Async-Insert Race Fix, Test Pattern Accumulation Fix
+
+**Trigger Type**: Primary — Task Completion (4 items) + Architectural Decision (DECISION-040, DECISION-041).
+
+**Event**: Four items landed today, verified directly against git/`gh` rather than taken on faith. (1) Vector modes ported from collaborator Brian Reed's branch (PR #7, merged `6a25b87`) — session-scoped `vector_event_mode`/`vector_search_limit`/`return_vector_search_results`, generation-token metric-cache invalidation, distributed-STM opt-out; `vector_search_limit` default deliberately held at 3, not raised to 20 as the source branch had it, because the retrieved IDs feed the learned pattern's SHA1 (DECISION-040). (2) CI unit job fixed to start a KATO service (PR #8, merged `7c7e2c0`) — had been red for 9 days, 291 tests skipping. (3) `patterns_data` async_insert visibility race fixed (PR #9, merged `92a977c`) — gated the drain on the Redis stats version rather than switching to `wait_for_async_insert=1` (DECISION-041); closes two long-open backlog items. (4) Test pattern accumulation fixed (PR #10, branch `fix/test-pattern-accumulation`, committed `038057c`) — **still open, not yet merged**, confirmed via `gh pr view 10`.
+
+**Documents Updated**: `planning-docs/DECISIONS.md` (DECISION-040, DECISION-041 added; header updated), 4 new archive files under `completed/features/` and `completed/bugs/`, `planning-docs/SPRINT_BACKLOG.md` (header/Active Projects rewritten; two backlog items closed in place; 4 new Recently Completed entries), `planning-docs/SESSION_STATE.md` (new Current Task for all four; prior Current Task demoted to Previous Task), `planning-docs/project-manager/pending-updates.md` (new Medium-priority entry: merge PR #10, commit DECISION-039, decide a release), `planning-docs/project-manager/maintenance-log.md` (this action logged).
+
+**Human Alert Generated**: Yes — new Medium-priority `pending-updates.md` item. No release (v6.1.0 or otherwise) has been cut for any of today's four items, nor for the still-uncommitted DECISION-039 work — five items of verified, ready work are now accumulating unreleased.
+
+**Agent Response Time**: Immediate
+**Action Result**: Planning docs now record all four items with accurate merge/PR state (three merged to `main`, one still open) and the two architectural decisions each correction/design choice involved. The distinction between "merged" and "verified but not yet merged" is preserved explicitly per item, matching this project's standing pattern of not overstating completion status. All prior open items (staging soak for the recall-safe bound, dependency upgrade, `REDIS_PASSWORD`, dashboard hardening, single-symbol fast-path semantics, `sort_symbols` bug, unreachable `r=0` branches, real-corpus selectivity measurement, stale `benchmark_hybrid_architecture.py`, the DECISION-039 commit/redeploy item) remain open, untouched by this pass.
+
+---
+
+## 2026-09-30 - Task Completion: examples/python-client.py 3.7.0
+
+**Trigger Type**: Primary, Task Completion (bug fix). **Event**: `update_session_config()` now persists accepted config so session recreation after a 404 keeps runtime settings; new vector constructor params added. Offline-verified, uncommitted. **Documents Updated**: SESSION_STATE.md, SPRINT_BACKLOG.md, pending-updates.md, maintenance-log.md, completed/bugs archive.
+
+---
+
 ## 2026-09-21 - Knowledge Refinement: No Live Helm Deployments Exist — CI Schema-Init Fix Fully Resolved
 
 **Trigger Type**: Secondary — Knowledge Refinement (the last open item on DECISION-038, whether any live Helm deployment needed manual schema remediation, is closed by the user's confirmation that no such deployment exists).

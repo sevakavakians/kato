@@ -73,11 +73,21 @@ jobs:
           --health-retries 10
     env:
       REDIS_URL: redis://localhost:6379
+      # Without this the processor's knowledge base refuses to build a Redis
+      # client and every observe returns 500, while /health and session
+      # creation still succeed -- so the failure looks like a test bug rather
+      # than a missing setting. The compose stack sets it explicitly too.
+      REDIS_ENABLED: 'true'
       QDRANT_HOST: localhost
       QDRANT_PORT: '6333'
       CLICKHOUSE_HOST: localhost
       CLICKHOUSE_PORT: '8123'
       SERVICE_NAME: kato
+      # Several tests gate on the worker count: the same-session write
+      # serialization guarantee only holds under a single worker, and
+      # run_tests.sh normally detects this off the running container, which
+      # does not exist on the runner. Pin it so those gates evaluate correctly.
+      KATO_WORKERS: '1'
     steps:
       - uses: actions/checkout@v4
 
@@ -105,5 +115,45 @@ jobs:
         # a runtime-only ImportError would otherwise surface in production.
         run: python -c "import kato.services.kato_fastapi"
 
+      - name: Start KATO
+        # tests/tests/unit/ is not purely in-process: much of it talks to a live
+        # service on :8000. With no service running, 291 tests skipped and the 10
+        # in test_error_handling.py failed -- that file calls requests directly
+        # with none of the services_available guard the fixture-based tests use,
+        # so each test exhausted its retry budget against a dead port. That is
+        # what made this job take ~59 minutes and report failure on every commit
+        # since the workflow was added.
+        run: |
+          python -m uvicorn kato.services.kato_fastapi:app \
+            --host 127.0.0.1 --port 8000 \
+            --workers "$KATO_WORKERS" \
+            --limit-concurrency 100 \
+            --timeout-keep-alive 5 \
+            > /tmp/kato-server.log 2>&1 &
+          kato_pid=$!
+          echo "kato_pid=$kato_pid" >> "$GITHUB_ENV"
+          for i in $(seq 1 90); do
+            if curl -sf http://localhost:8000/health > /dev/null; then
+              echo "KATO ready after ${i}s"
+              exit 0
+            fi
+            if ! kill -0 "$kato_pid" 2>/dev/null; then
+              echo "::error::KATO exited during startup"
+              cat /tmp/kato-server.log
+              exit 1
+            fi
+            sleep 1
+          done
+          echo "::error::KATO did not become healthy within 90s"
+          cat /tmp/kato-server.log
+          exit 1
+
       - name: Unit tests
         run: python -m pytest tests/tests/unit/ -q
+
+      - name: KATO server log
+        # The server log is the only place a 500 raised inside a request shows a
+        # traceback; the test output sees a status code. Always print it, since a
+        # green run that silently logged errors is worth knowing about too.
+        if: always()
+        run: cat /tmp/kato-server.log || true

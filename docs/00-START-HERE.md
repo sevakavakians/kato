@@ -13,6 +13,7 @@ Welcome to KATO documentation! This guide helps you find the right documentation
 - [Quick Start Guide](users/quick-start.md) - Get KATO running in 5 minutes
 - [API Reference](users/api-reference.md) - Complete API documentation
 - [Core Concepts](users/concepts.md) - Understand how KATO works
+- [Vector Event Modes](users/vector-modes.md) - Control what a vector observation emits
 - [Database Persistence](users/database-persistence.md) - How data persists
 - [Troubleshooting](users/troubleshooting.md) - Common issues and solutions
 

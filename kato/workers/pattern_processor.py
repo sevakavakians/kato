@@ -745,8 +745,10 @@ class PatternProcessor:
         """
         logger.info(f"*** {self.name} [ PatternProcessor _predict_single_symbol_fast called with symbol='{symbol}' ]")
 
-        # Flush any pending ClickHouse writes so recently learned patterns are visible
-        self.superkb.clickhouse_writer.flush_if_pending()
+        # Visibility is handled by predictPattern, this function's only caller,
+        # which calls ensure_visible before dispatching here. This path queries
+        # patterns_data directly, so it is the one most exposed to the async
+        # insert window -- the observed miss was on this query.
 
         try:
             # Step 1: Query ClickHouse directly for patterns starting with this symbol
@@ -1020,8 +1022,24 @@ class PatternProcessor:
         """
         logger.info(f"*** {self.name} [ PatternProcessor predictPattern (async) called with state={state} ]")
 
-        # Flush any pending ClickHouse writes so recently learned patterns are visible
-        self.superkb.clickhouse_writer.flush_if_pending()
+        # Make patterns learned since the last drain queryable before anything
+        # below reads patterns_data. This is the only entry point for predictions
+        # -- including the single-symbol fast path -- so one gate here covers them
+        # all.
+        #
+        # This replaced a flush_if_pending() call that read as "make recent writes
+        # visible" but drained only the CLIENT buffer, permanently empty at
+        # batch_size=1, and so did nothing. The row lives in ClickHouse's
+        # server-side async buffer until it flushes, and under load that delay
+        # grows toward async_insert_busy_timeout_max_ms: observed here as the fast
+        # path logging "No patterns found" for a symbol and, 182ms later, "Found 1
+        # patterns", with nothing changed but time.
+        #
+        # The read is three integers in one MGET, and the drain is skipped unless
+        # a learn has landed since the last one -- see ensure_visible.
+        self.superkb.clickhouse_writer.ensure_visible(
+            self.superkb.redis_writer.get_global_metadata().get('stats_version', 0)
+        )
 
         # FAST PATH: Single-symbol predictions using Redis index.
         #

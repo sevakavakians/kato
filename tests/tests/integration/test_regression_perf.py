@@ -2,7 +2,7 @@
 Regression tests for performance-critical code paths.
 
 These tests verify behavior introduced by recent performance optimizations:
-- Deferred flush visibility (flush_if_pending before queries)
+- Read-your-writes visibility for patterns_data after learn()
 - Symbol batch retrieval correctness (get_all_symbols_batch)
 - Single-symbol fast path consistency (_predict_single_symbol_fast)
 
@@ -14,13 +14,22 @@ import sys
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+from fixtures.store_diagnostics import describe_prediction_miss
+
 
 def test_deferred_flush_visibility(kato_fixture):
     """Test that patterns are immediately queryable after learning.
 
-    Regression test for commit 749a9d2: flush_if_pending ensures deferred
-    ClickHouse writes are flushed before pattern queries. Without this fix,
-    a learn() followed by immediate get_predictions() could miss the pattern.
+    patterns_data is inserted with wait_for_async_insert=0, so a row could in
+    principle lag the insert before becoming queryable. It does not, because
+    learnPattern writes the metadata sidecar with wait=1 straight afterwards and
+    ClickHouse's adaptive busy timeout keeps the applied timeout at 0-50ms.
+
+    Nothing on the read path enforces this -- it is a property of the write path
+    and of a ClickHouse default. This test previously credited flush_if_pending,
+    which only drains the client buffer (empty at batch_size=1) and so did
+    nothing. See test_learn_then_predict_is_never_stale for the repeated-trial
+    version.
     """
     kato_fixture.clear_all_memory()
 
@@ -32,13 +41,13 @@ def test_deferred_flush_visibility(kato_fixture):
     assert pattern_name.startswith('PTRN|'), "Pattern should be learned"
 
     # IMMEDIATELY query predictions (no delay) - this is the critical test
-    # Before the flush_if_pending fix, this could miss the just-learned pattern
+    # If the write-path guarantee ever breaks, this is where it surfaces
     kato_fixture.observe({'strings': ['flush'], 'vectors': [], 'emotives': {}})
     kato_fixture.observe({'strings': ['visibility'], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
 
     assert len(predictions) > 0, \
-        "Just-learned pattern should be immediately visible in predictions (flush_if_pending regression)"
+        "Just-learned pattern should be immediately visible in predictions"
 
     # Verify the specific pattern was found
     matching = [p for p in predictions
@@ -167,3 +176,69 @@ def test_single_symbol_fast_path_no_false_matches(kato_fixture):
         matches = pred.get('matches', [])
         assert 'red' not in matches and 'green' not in matches, \
             f"Single-symbol fast path should not match unrelated pattern, got matches={matches}"
+
+
+def test_learn_then_predict_is_never_stale(kato_fixture):
+    """Learn then predict immediately, repeatedly, with no finalize-training.
+
+    patterns_data is written with wait_for_async_insert=0, so each new pattern is
+    invisible for up to async_insert_busy_timeout_ms (200ms) unless the read path
+    drains the server's async buffer. A single learn-then-predict passes whenever
+    the drain happens to have occurred, which is why this race survived: the
+    existing visibility tests each take one sample.
+
+    Every iteration learns a pattern that did not exist before and immediately
+    requires it back, so a missed drain fails here rather than intermittently in
+    CI. finalize-training is deliberately not called -- the docs describe it as
+    optional, so predictions must work without it.
+    """
+    kato_fixture.clear_all_memory()
+
+    for i in range(20):
+        head, tail = f'stale_head_{i}', f'stale_tail_{i}'
+
+        kato_fixture.observe({'strings': [head], 'vectors': [], 'emotives': {}})
+        kato_fixture.observe({'strings': [tail], 'vectors': [], 'emotives': {}})
+        pattern_name = kato_fixture.learn()
+        assert pattern_name.startswith('PTRN|'), f"iteration {i}: pattern should be learned"
+
+        # No sleep, no finalize-training, no clear_all_memory between iterations.
+        kato_fixture.observe({'strings': [head], 'vectors': [], 'emotives': {}})
+        predictions = kato_fixture.get_predictions()
+
+        assert len(predictions) > 0, (
+            f"iteration {i}: the pattern learned microseconds ago was not visible\n"
+            + describe_prediction_miss(kato_fixture, expected_symbols=[head, tail])
+        )
+        assert any(head in p.get('matches', []) for p in predictions), (
+            f"iteration {i}: predictions returned, but not the just-learned pattern"
+        )
+
+        kato_fixture.clear_stm()
+
+
+def test_single_symbol_fast_path_sees_fresh_pattern(kato_fixture):
+    """The single-symbol fast path queries patterns_data directly.
+
+    predictPattern dispatches to _predict_single_symbol_fast for a one-symbol
+    STM, and that path issues its own SELECT against patterns_data rather than
+    going through the filter pipeline. It is therefore the most exposed to the
+    visibility window, and it relies on its caller having drained first.
+    """
+    kato_fixture.clear_all_memory()
+
+    for i in range(15):
+        symbol = f'fast_fresh_{i}'
+        kato_fixture.observe({'strings': [symbol], 'vectors': [], 'emotives': {}})
+        kato_fixture.observe({'strings': [f'fast_next_{i}'], 'vectors': [], 'emotives': {}})
+        assert kato_fixture.learn().startswith('PTRN|')
+
+        kato_fixture.clear_stm()
+        kato_fixture.observe({'strings': [symbol], 'vectors': [], 'emotives': {}})
+        predictions = kato_fixture.get_predictions()
+
+        assert len(predictions) > 0, (
+            f"iteration {i}: single-symbol fast path missed a pattern learned moments ago\n"
+            + describe_prediction_miss(kato_fixture, expected_symbols=[symbol])
+        )
+        kato_fixture.clear_stm()

@@ -7,8 +7,8 @@ Sessions are handled automatically - one client instance equals one isolated KAT
 Features:
 - Automatic session creation and cleanup
 - Session-based configuration updates (v3.3.0+)
-- Automatic session recreation on 404 errors (expired/lost sessions)
-- STM state recovery after session recreation
+- Automatic session recreation on 404 errors (expired/lost sessions), with
+  configuration re-applied. The STM is not recovered: see Resilience below.
 - Exponential backoff retry for transient failures
 
 USAGE:
@@ -64,8 +64,8 @@ class KATOClient:
     Features:
         - Automatic session creation and cleanup
         - Session-based configuration updates (v3.3.0+)
-        - Automatic session recreation on 404 errors (expired/lost sessions)
-        - STM state recovery after session recreation
+        - Automatic session recreation on 404 errors (expired/lost sessions),
+          with configuration re-applied (the STM is not recovered)
         - Exponential backoff retry for transient failures
 
     Configuration Parameters:
@@ -110,7 +110,8 @@ class KATOClient:
 
         auto_recreate_session: bool (default=True)
             - Automatically recreate session on 404 errors
-            - Attempts to restore STM state when recreating
+            - The recreated session gets the same configuration but starts
+              with an empty STM
 
         max_session_recreate_attempts: int (default=3)
             - Maximum attempts to recreate session before failing
@@ -145,9 +146,17 @@ class KATOClient:
 
     Resilience:
         The client is designed for long-running tasks and handles:
-        - Session expiration: Auto-recreates and restores STM
+        - Session expiration: Auto-recreates the session and re-applies its
+          configuration, then retries the request
         - Network failures: Retries with exponential backoff
         - Transient errors: HTTP 502/503/504 automatic retry
+
+        Session expiration loses the STM. The server discards an expired
+        session's STM, so by the time the client sees the 404 there is
+        nothing left to restore, and the recreated session starts empty.
+        Anything observed but not yet learned is gone. For long runs, learn
+        at natural boundaries or keep SESSION_AUTO_EXTEND on (the default)
+        so an active session does not expire.
 
     Timeout Configuration:
         The timeout parameter controls how long to wait for server responses.
@@ -324,12 +333,15 @@ class KATOClient:
 
     def _recreate_session_with_state_recovery(self) -> None:
         """
-        Recreate session and attempt to restore STM state.
+        Recreate the session with the stored configuration.
 
         This is called automatically when a 404 error occurs, indicating
-        the session has expired or been lost.
+        the session has expired or been lost. It also tries to copy the old
+        session's STM across, but the old session already answered 404, so
+        in practice there is no STM to read and the new session starts empty.
         """
-        # Try to get current STM state before recreation (may fail)
+        # Try to get current STM state before recreation. After a real expiry
+        # this read also returns 404, so cached_stm stays None.
         cached_stm = None
         try:
             # Attempt direct GET without retry wrapper
@@ -375,10 +387,10 @@ class KATOClient:
 
         This method implements retry logic with session recreation on 404 errors.
         If a session expires or is lost, it will:
-        1. Attempt to cache current STM state
-        2. Recreate the session
-        3. Restore STM state if possible
-        4. Retry the original request
+        1. Recreate the session with the stored configuration
+        2. Retry the original request against the new session
+        The new session starts with an empty STM; see Resilience in the
+        class docstring.
 
         Args:
             method: HTTP method (GET, POST, DELETE, etc.)

@@ -22,7 +22,9 @@ Verify services are available:
 **Features**:
 - Synchronous, built on `requests` (no async/await)
 - Transparent session management: one client == one session, created for you
-- Session recovery: auto-recreates and replays STM if the session expires
+- Session recovery: if the session expires, auto-recreates it with the same
+  configuration and retries the request. The STM is not recovered - the
+  server has already discarded it - so the new session starts empty
 - Observation processing (text, vectors, emotives, metadata)
 - Pattern learning and prediction retrieval
 - Node-scoped pattern and symbol introspection

@@ -3,6 +3,10 @@
 
 ---
 
+## 2026-09-30 - Knowledge Refinement: python-client 3.7.0 "Lost" Record Was Wrong; Work Is Merged
+**What happened**: The earlier "DESIGN LOST, reimplement" status was a mistake. The work is commit `289820a` (separate branch), merged as `25703d8`, pushed; invisible earlier only because unmerged. Live-verified 9/10 against kato:6.1.0; not in v6.1.0. The failing check showed STM recovery never works on real expiry; user chose docs correction over client-side STM caching.
+**Updated**: `SESSION_STATE.md`, `SPRINT_BACKLOG.md`, `project-manager/pending-updates.md` (item resolved), archive doc `completed/bugs/2026-09-30-python-client-session-config-lost-on-recreation.md` (title restored, correction note added). Earlier entries in this log describing the loss are left as history.
+
 ## 2026-09-30 - Knowledge Refinement: python-client.py 3.7.0 Implementation Confirmed Lost From Working Tree — Status Downgraded From "COMPLETE, UNCOMMITTED"
 
 **Trigger**: Knowledge Refinement — the coordinator verified, ahead of committing planning-docs and cutting a v6.1.0 release, that `examples/python-client.py` on disk is byte-identical to `main` (version 3.6.0), with no commit, stash, or reflog trace of the 3.7.0 session-config-persistence fix and new vector constructor params recorded earlier this session as "COMPLETE, verified offline only, UNCOMMITTED." The code was seen and reviewed in the working tree earlier in this session; it is now absent by some means outside any tracked git operation in this session and is not recoverable by git.

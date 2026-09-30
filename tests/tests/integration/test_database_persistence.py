@@ -32,8 +32,18 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 # ============================================================================
 
 def generate_unique_node_id(prefix: str = "persist_test") -> str:
-    """Generate a unique node_id for test isolation."""
-    return f"{prefix}_{uuid.uuid4().hex[:8]}"
+    """Generate a unique node_id for test isolation.
+
+    The "test_" prefix is what makes the node reclaimable. Learned patterns are
+    durable by design -- they outlive the session, which is the property this
+    file exercises -- so nothing deletes them when the test ends. Cleanup
+    identifies test-created data by node prefix (see
+    fixtures/redis_test_cleanup.py), and these ids used to carry only a
+    descriptive prefix such as "stress_200", which matched nothing. The result
+    was thousands of orphaned patterns per stack: `stress_200_*` alone accounted
+    for 10,400 on the stack where this was found.
+    """
+    return f"test_{prefix}_{uuid.uuid4().hex[:8]}"
 
 
 def create_session_with_node(base_url: str, node_id: str, ttl_seconds: int = 3600) -> str:

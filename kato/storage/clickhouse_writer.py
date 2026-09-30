@@ -66,8 +66,17 @@ class ClickHouseWriter:
     # actual batching across all callers.
     DEFAULT_BATCH_SIZE = 1
 
+    # Distinct from every possible stats_version, including 0.
+    _UNDRAINED = object()
+
     # Class-level flag: ensure-DDL runs once per process, not once per kb_id.
     _metadata_table_ensured: bool = False
+
+    # Set if SYSTEM FLUSH ASYNC INSERT QUEUE is refused. The privilege belongs to
+    # the server, not to a kb_id, so one refusal applies to every writer in this
+    # process and must not be rediscovered per call -- ensure_visible runs on the
+    # read path.
+    _async_flush_unavailable: bool = False
 
     def __init__(self, kb_id: str, clickhouse_client, batch_size: int = None):
         """
@@ -86,6 +95,12 @@ class ClickHouseWriter:
         # Write buffer for batch inserts
         self._write_buffer: list[list] = []
         self._column_names: list[str] | None = None
+
+        # Redis stats version at which this writer last drained the server's
+        # async_insert queue. _UNDRAINED, not None or 0: delete_all_metadata
+        # removes the version key and get_global_metadata then reports 0, which
+        # is a real value that must still force a drain.
+        self._last_drained_stats_version: object = self._UNDRAINED
 
         if not self.client:
             raise RuntimeError("ClickHouse client is required but was None")
@@ -158,15 +173,73 @@ class ClickHouseWriter:
         default) before they become queryable. Callers that need read-your-writes
         at a checkpoint (finalize_training) call this to force an immediate drain.
         """
+        if ClickHouseWriter._async_flush_unavailable:
+            # Already established that this server refuses the statement. Do not
+            # retry and do not sleep: this runs on the read path, where a 0.5s
+            # sleep per prediction would be far worse than the staleness it is
+            # trying to avoid.
+            return
+
         try:
             self.client.command('SYSTEM FLUSH ASYNC INSERT QUEUE')
             logger.debug(f"Flushed server async_insert queue (kb_id={self.kb_id})")
         except Exception as e:
-            # FLUSH ASYNC INSERT QUEUE requires specific privileges on older versions.
-            # Fall back to a brief sleep (the server will auto-flush in ~200ms).
-            import time as _time
-            logger.warning(f"SYSTEM FLUSH ASYNC INSERT QUEUE failed ({e}); sleeping briefly to let server auto-flush")
-            _time.sleep(0.5)
+            # Requires a privilege the default deployment grants. Latch the
+            # refusal so it costs one attempt per process, and say plainly what
+            # is lost.
+            ClickHouseWriter._async_flush_unavailable = True
+            logger.warning(
+                "SYSTEM FLUSH ASYNC INSERT QUEUE was refused (%s). Read-your-writes "
+                "is disabled for this process: a prediction issued within "
+                "async_insert_busy_timeout of a learn may not see the new pattern. "
+                "Grant the privilege to restore it.", e
+            )
+
+    def ensure_visible(self, stats_version) -> bool:
+        """Make patterns written since our last drain queryable.
+
+        flush() inserts with wait_for_async_insert=0, so a row is enqueued in the
+        server's async buffer and is not queryable until that buffer flushes.
+        ClickHouse adapts the delay between async_insert_busy_timeout_min_ms and
+        _max_ms (50ms and 200ms by default), increasing it under load -- so the
+        window is widest exactly when traffic is heaviest.
+
+        Without this, a prediction issued straight after a learn can miss the new
+        pattern. Observed directly: for one symbol the fast path's query logged
+        "No patterns found" and then, 182ms later, "Found 1 patterns", with
+        nothing changing but time. finalize-training is documented as optional,
+        so callers are entitled to predict immediately after learning.
+
+        Gated on `stats_version`, the Redis stamp bumped by every learnPattern
+        (RedisWriter.batch_update_symbol_stats). Two properties make it the right
+        gate. It is written *after* write_pattern enqueues the insert, so
+        observing a new version implies the row is already in the server's buffer
+        and a drain will expose it. And it is shared across uvicorn workers, which
+        an instance flag could not be: each worker process holds its own
+        ClickHouseWriter, so a learn served by one worker must be visible to a
+        prediction served by another.
+
+        Drains are therefore bounded by learns, not by reads: a workload that
+        stops learning stops draining. That matters because the statement is
+        server-global.
+
+        Compared by equality only, never ordering: the value is a wall-clock
+        time.time_ns() from whichever worker wrote last, so it is not monotonic
+        across workers whose clocks differ.
+
+        Args:
+            stats_version: `stats_version` from RedisWriter.get_global_metadata()
+
+        Returns:
+            True if a drain was performed, False if it was unnecessary.
+        """
+        if stats_version == self._last_drained_stats_version:
+            return False
+
+        self.flush_if_pending()
+        self.flush_async_insert_queue()
+        self._last_drained_stats_version = stats_version
+        return True
 
     def _prepare_row(self, pattern_object) -> dict:
         """

@@ -61,6 +61,7 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from fixtures.kato_fixtures import kato_fixture as kato_fixture
+from fixtures.store_diagnostics import describe_prediction_miss
 
 
 class TestBasicCharacterLevelFunctionality:
@@ -354,9 +355,23 @@ class TestEdgeCases:
 
         predictions = kato.get_predictions()
 
-        # Should match despite special characters
-        assert len(predictions) > 0
-        assert predictions[0].get('similarity', 0) > 0.5
+        # Should match despite special characters.
+        #
+        # This assertion has failed intermittently in CI and never reproduced
+        # locally, so it carries a store dump: whether the pattern reached
+        # ClickHouse, whether it is still sitting in the async_insert buffer,
+        # what Redis knows about it, and the effective config. Without that, an
+        # empty result is indistinguishable from a pattern that was never
+        # written, and the failure is not reproducible on demand.
+        assert len(predictions) > 0, (
+            "character-level matching returned no predictions for "
+            f"{special_tokens[:2]} against a pattern learned from {special_tokens}\n"
+            + describe_prediction_miss(kato, expected_symbols=special_tokens)
+        )
+        assert predictions[0].get('similarity', 0) > 0.5, (
+            f"similarity {predictions[0].get('similarity')} below 0.5\n"
+            + describe_prediction_miss(kato, expected_symbols=special_tokens)
+        )
 
     def test_character_level_with_vectors(self, kato_fixture):
         """Test character-level matching with vector tokens (VCTR|hash)."""

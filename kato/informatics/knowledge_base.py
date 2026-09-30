@@ -543,8 +543,13 @@ class SuperKnowledgeBase:
             Dictionary with pattern data, or None if not found
         """
         try:
-            # Flush pending writes so recently learned patterns are visible
-            self.clickhouse_writer.flush_if_pending()
+            # Drain the server's async_insert buffer if a learn has landed since
+            # the last drain, so a pattern written moments ago is visible. The
+            # previous flush_if_pending() call here drained only the client
+            # buffer, empty at batch_size=1, and so did nothing.
+            self.clickhouse_writer.ensure_visible(
+                self.redis_writer.get_global_metadata().get('stats_version', 0)
+            )
 
             # Get pattern data from ClickHouse
             pattern_data = self.clickhouse_writer.get_pattern_data(pattern)

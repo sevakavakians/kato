@@ -76,8 +76,9 @@ async def create_session(request: CreateSessionRequest):
     # endpoint uses. Without this, an invalid value here would be swallowed by
     # SessionConfiguration.update() and silently fall back to the default.
     config_service = get_configuration_service()
-    if request.config:
-        validation_errors = config_service.validate_configuration_update(request.config)
+    session_config = request.config
+    if session_config:
+        validation_errors = config_service.validate_configuration_update(session_config)
         if validation_errors:
             logger.error(f"Session config validation failed: {validation_errors}")
             raise HTTPException(
@@ -88,11 +89,16 @@ async def create_session(request: CreateSessionRequest):
                 }
             )
 
+        # Same normalization the config-update endpoint applies. Without it,
+        # creating a session with use_token_matching=false left sort_symbols
+        # true, so the two endpoints disagreed about an identical request body.
+        session_config = config_service.normalize_session_config(session_config)
+
     logger.info(f"Creating session with manager id: {id(app_state.session_manager)}")
     logger.debug(f"Calling session_manager.create_session for node: {request.node_id}")
     session = await app_state.session_manager.create_session(
         node_id=request.node_id,
-        config=request.config,
+        config=session_config,
         metadata=request.metadata,
         ttl_seconds=request.ttl_seconds
     )
@@ -295,19 +301,17 @@ async def update_session_config(session_id: str, request_data: dict[str, Any]):
             }
         )
 
-    # AUTO-TOGGLE SORT based on use_token_matching if provided
-    if 'use_token_matching' in config and 'sort_symbols' not in config:
-        # Auto-set sort_symbols based on use_token_matching
-        config['sort_symbols'] = config['use_token_matching']
-        logger.info(f"Auto-toggled sort_symbols={config['sort_symbols']} based on use_token_matching={config['use_token_matching']}")
-    elif 'use_token_matching' in config and 'sort_symbols' in config:
-        # Warn if there's a mismatch
-        if config['sort_symbols'] != config['use_token_matching']:
-            logger.warning(
-                f"CONFIGURATION MISMATCH: sort_symbols={config['sort_symbols']} with use_token_matching={config['use_token_matching']}. "
-                f"Token-level matching requires sort_symbols=True, character-level requires sort_symbols=False. "
-                f"Using user-specified values, but this may cause incorrect matching behavior."
-            )
+    # Derive sort_symbols from use_token_matching where only one was supplied,
+    # and warn on a conflicting pair. Shared with the create endpoint so an
+    # identical request body produces identical configuration either way. The
+    # mismatch check runs against the session's effective config, so setting
+    # sort_symbols alone against an opposing stored value is caught too.
+    config = config_service.normalize_session_config(
+        config,
+        current=session.session_config.get_effective_config(
+            config_service.get_default_configuration()
+        ),
+    )
 
     # Update through SessionConfiguration.update(), which validates every field
     # and rolls back atomically on failure. The previous setattr loop bypassed

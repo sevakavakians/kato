@@ -3,6 +3,7 @@ from collections import Counter
 from itertools import chain
 
 from kato.config.settings import get_settings
+from kato.exceptions import RetiredPatternError
 from kato.informatics.metrics import average_emotives
 
 logger = logging.getLogger('kato.informatics.knowledge-base')
@@ -396,6 +397,17 @@ class SuperKnowledgeBase:
         try:
             logger.info(f"[HYBRID] learnPattern() called for {pattern_object.name}")
 
+            # A pattern's identity is the SHA1 of its data, so re-observing the
+            # same sequence yields the same hash. Without this guard, learning
+            # would silently resurrect a retired pattern and retirement could be
+            # undone by accident. Reversible: un-retire it first if it should
+            # exist again. Raises RetiredPatternError, which the API maps to 409
+            # rather than 500 -- the caller retired it and can undo that.
+            if pattern_object.name in self.redis_writer.get_retired_pattern_ids(
+                [pattern_object.name]
+            ):
+                raise RetiredPatternError(pattern_object.name, kb_id=self.id)
+
             # Track available emotives
             if emotives:
                 # Extract all emotive keys from rolling window list
@@ -526,6 +538,13 @@ class SuperKnowledgeBase:
 
             return False  # Not a new pattern
 
+        except RetiredPatternError:
+            # Propagate unchanged. The bare `except Exception` below would
+            # re-raise it as a plain Exception, which upstream then wraps in
+            # LearningError, and the typed error that carries the 409 and the
+            # un-retire suggestion would be lost three frames from where it was
+            # raised.
+            raise
         except Exception as e:
             logger.error(f"[HYBRID] Exception in learnPattern: {pattern_object.name}, {e}")
             raise Exception(f"\nException in learnPattern: {pattern_object.name}, \n{e}")

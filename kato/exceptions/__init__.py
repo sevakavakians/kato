@@ -364,6 +364,33 @@ class PredictionError(KatoBaseException):
         )
 
 
+class RetiredPatternError(KatoV2Exception):
+    """Raised when learning would recreate a pattern this node has retired.
+
+    A pattern's identity is the SHA1 of its data, so re-observing the same
+    sequence produces the same hash. Without this, re-learning would silently
+    resurrect a retired pattern and retirement would be trivially undone.
+
+    Client-actionable rather than a server fault: un-retire the pattern if it
+    should exist again. Mapped to 409 Conflict.
+    """
+
+    def __init__(self, pattern_name: str, kb_id: Optional[str] = None, **kwargs):
+        context = {'pattern_name': pattern_name}
+        if kb_id:
+            context['kb_id'] = kb_id
+        super().__init__(
+            message=(
+                f"Pattern {pattern_name} is retired on this node and cannot be "
+                f"learned again. Un-retire it first if it should exist."
+            ),
+            error_code='RETIRED_PATTERN',
+            context=context,
+            recoverable=True,
+            **kwargs
+        )
+
+
 class LearningError(KatoBaseException):
     """
     Raised when pattern learning fails.

@@ -22,9 +22,12 @@ from kato.api.schemas import (
     ObservationResult,
     ObservationSequenceRequest,
     ObservationSequenceResult,
+    PatternBatchRequest,
     PredictionsResponse,
+    RetirePatternsResponse,
     SessionResponse,
     STMResponse,
+    UnRetirePatternsResponse,
 )
 from kato.api.schemas.session_extra import (
     AllClearedResponse,
@@ -539,6 +542,95 @@ async def finalize_training(session_id: str):
         session_id=session_id,
         node_id=session.node_id,
         message=f"Computed Shannon entropy and TF vectors for {result['patterns_processed']} patterns in {result['time_ms']}ms"
+    )
+
+
+@router.post(
+    "/{session_id}/patterns/retire",
+    response_model=RetirePatternsResponse,
+)
+async def retire_session_patterns(session_id: str, data: PatternBatchRequest):
+    """Hide patterns from this session's node without deleting them.
+
+    Retirement is a tombstone: the learned rows stay, and every read path filters
+    them out. It is node-scoped, so it affects every session sharing the node_id,
+    and it is durable -- it outlives the session that issued it, as learned
+    patterns do.
+
+    Idempotent. The response separates ids newly retired from ids already retired.
+    Reversible via un-retire.
+    """
+    from kato.services.kato_fastapi import app_state
+
+    # Take the lock first and 404 on a missing one, as observe does: get_session_lock
+    # returns None for a session that does not exist, and `async with None` would
+    # surface as a 500 rather than the 404 the caller should see.
+    lock = await app_state.session_manager.get_session_lock(session_id)
+    if not lock:
+        raise HTTPException(404, detail=f"Session {session_id} not found or expired")
+
+    async with lock:
+        session = await app_state.session_manager.get_session(session_id)
+        if not session:
+            raise HTTPException(404, detail=f"Session {session_id} not found or expired")
+
+        processor = await app_state.processor_manager.get_processor(
+            session.node_id, session.session_config
+        )
+        result = processor.pattern_processor.retire_patterns(data.pattern_ids)
+
+        # The session may be holding a prediction snapshot that names something
+        # just retired; re-filter it rather than serve a stale list.
+        session.predictions = processor.pattern_processor.filter_retired_predictions(
+            session.predictions
+        )
+        await app_state.session_manager.update_session(session)
+
+    return RetirePatternsResponse(
+        status="okay",
+        session_id=session_id,
+        node_id=session.node_id,
+        requested=len(data.pattern_ids),
+        **result,
+    )
+
+
+@router.post(
+    "/{session_id}/patterns/un-retire",
+    response_model=UnRetirePatternsResponse,
+)
+async def un_retire_session_patterns(session_id: str, data: PatternBatchRequest):
+    """Remove tombstones, making the patterns visible and learnable again.
+
+    Without this, retirement would be irreversible and a mistaken call would
+    permanently prevent that sequence from being learned on the node, since
+    learnPattern refuses a tombstoned hash.
+
+    The response separates ids whose tombstone was removed from ids that were not
+    retired in the first place.
+    """
+    from kato.services.kato_fastapi import app_state
+
+    lock = await app_state.session_manager.get_session_lock(session_id)
+    if not lock:
+        raise HTTPException(404, detail=f"Session {session_id} not found or expired")
+
+    async with lock:
+        session = await app_state.session_manager.get_session(session_id)
+        if not session:
+            raise HTTPException(404, detail=f"Session {session_id} not found or expired")
+
+        processor = await app_state.processor_manager.get_processor(
+            session.node_id, session.session_config
+        )
+        result = processor.pattern_processor.un_retire_patterns(data.pattern_ids)
+
+    return UnRetirePatternsResponse(
+        status="okay",
+        session_id=session_id,
+        node_id=session.node_id,
+        requested=len(data.pattern_ids),
+        **result,
     )
 
 

@@ -1,5 +1,5 @@
 # SPRINT_BACKLOG.md - Upcoming Work
-*Last Updated: 2026-10-01 (v6.2.0 released: pattern retirement re-cut from PR #6 (PR #14), session-config endpoint normalization (PR #13), docs corrections (PR #12). New open item: physical purge (PR #6). See "Recently Completed". Prior 2026-09-30: Correction of a correction: python-client 3.7.0 was NOT lost — committed `289820a`, merged `25703d8`, pushed; live-verified. Prior: Four items landed on `main` today: vector modes ported from a collaborator's branch (DECISION-040, PR #7), CI unit job fixed to start a KATO service (PR #8), patterns_data async_insert visibility race fixed (DECISION-041, PR #9) — closes two long-open backlog items below — and test pattern accumulation fixed (PR #10, branch `fix/test-pattern-accumulation`, **not yet merged**, CI pending). See "Recently Completed" below. Prior: Python client 3.7.0 session-config fix recorded under "Recently Completed". Prior: 2026-09-22 (Single-event-vs-multi-event pattern grouping investigation — reported bug NOT reproduced, verified live; coverage gap and doc/docstring/API-message defects fixed instead. COMPLETE, UNCOMMITTED. See "Recently Completed" below.))*
+*Last Updated: 2026-10-01 (Purge merged (916f4c0); added kato_ops.py:99 P2 and 6.3.0 release-pending items. Prior: v6.2.0 released: pattern retirement re-cut from PR #6 (PR #14), session-config endpoint normalization (PR #13), docs corrections (PR #12). New open item: physical purge (PR #6). See "Recently Completed". Prior 2026-09-30: Correction of a correction: python-client 3.7.0 was NOT lost — committed `289820a`, merged `25703d8`, pushed; live-verified. Prior: Four items landed on `main` today: vector modes ported from a collaborator's branch (DECISION-040, PR #7), CI unit job fixed to start a KATO service (PR #8), patterns_data async_insert visibility race fixed (DECISION-041, PR #9) — closes two long-open backlog items below — and test pattern accumulation fixed (PR #10, branch `fix/test-pattern-accumulation`, **not yet merged**, CI pending). See "Recently Completed" below. Prior: Python client 3.7.0 session-config fix recorded under "Recently Completed". Prior: 2026-09-22 (Single-event-vs-multi-event pattern grouping investigation — reported bug NOT reproduced, verified live; coverage gap and doc/docstring/API-message defects fixed instead. COMPLETE, UNCOMMITTED. See "Recently Completed" below.))*
 
 ## Active Projects
 
@@ -7,12 +7,16 @@
 
 ---
 
-### Feature: Physical Purge of Retired Patterns (PR #6, OPEN)
-**Priority**: P2 -- retirement (v6.2.0) hides patterns but reclaims no storage
-**Status**: OPEN. Collaborator PR #6 remains open for this; it must be reworked as a purge-only change against current `main` (do NOT merge it as-is: it would revert the recall-safe bound and break startup, see DECISION-042).
-**Blockers (ten documented in PR #6's review), including**: purge blocks the event loop under the session lock (synchronous clickhouse-connect `mutations_sync=2` ALTERs and Redis SCAN loops); node-shared state assigned from a session-scoped request; `patterns_absent_from_indices` returns `self.filter_executor is None`, which main made worse (executor now long-lived and cached), so purge reports `partial` for provably-gone patterns; an `ALTER TABLE kato.pattern_stats DELETE` with no name predicate; purge refuses every pattern with pre-branch emotives for want of an affinity ledger, so it does nothing on existing data until a backfill exists.
-**New requirement from main**: drop PR #6's `wait_for_async_insert: 0 -> 1` (superseded by `ensure_visible()`, DECISION-041). That makes purge's `flush_if_pending()` calls no-ops, so a pattern still in ClickHouse's async buffer can be missed by the snapshot read, survive `ALTER ... DELETE`, pass all three `get_present_*` verification queries, be marked `purged`, and then become queryable -- a resurrected pattern with corrupted symbol counters. Purge MUST call `ensure_visible(...)` before the snapshot and `flush_async_insert_queue()` before verification.
-**Corrections already posted to PR #6**: blocker 1's crash path is unreachable (`use_hybrid_architecture` hard-coded True); blocker 3's premise was wrong (2 of 4 lock call sites guard, not 4); blocker 8 returns 200 `status: partial`, not 500.
+### Feature: Physical Purge of Retired Patterns -- DONE (merged 916f4c0, 2026-10-01)
+**Status**: **COMPLETE, merged to `main`**, not yet released. See DECISION-045 and `completed/features/2026-10-01-pattern-purge.md`. Collaborator PR #6 is still OPEN (last stale branch); close after the release decision.
+
+### Bug: `/kato_ops` pattern count uses the shared session-bound ClickHouse client
+**Priority**: P2 (pre-existing on main, found during purge work)
+**Status**: OPEN, awaiting user scope decision.
+**Detail**: `kato/api/endpoints/kato_ops.py:99` runs `asyncio.to_thread(processor.get_pattern_count, flush)` on the shared ClickHouse client. clickhouse-connect clients are session-bound, so concurrent use can raise "Attempt to execute concurrent queries within the same session" and surface as a 500 on an unrelated request. `OptimizedConnectionManager.build_clickhouse_client()` (added by purge) is the available fix.
+
+### Release: 6.3.0 (MINOR) -- adds the purge endpoint
+**Status**: PENDING user decision. main is 6.2.0.
 
 ---
 

@@ -3,6 +3,15 @@
 
 ---
 
+## 2026-10-01 - Milestone: Pattern Purge Merged
+
+**Trigger Type**: Primary -- Milestone, Architectural Decision (DECISION-045), Task Completion, New Task, Knowledge Refinement
+**Event**: `feat/pattern-purge` merged to main as 916f4c0; retirement lifecycle complete.
+**Documents Updated**: see maintenance-log entry of the same date.
+**Human Alert Generated**: Yes -- 6.3.0 release + kato_ops.py:99 (Medium).
+**Action Result**: Purge recorded as done, PR #6 noted as still open, correction on vector/affinity concern recorded.
+---
+
 ## 2026-10-01 - Task Completion (x3) + Architectural Decisions (x3) + Milestone: v6.2.0
 
 **Trigger Type**: Primary -- Task Completion (3 PRs), Architectural Decision (DECISION-042 re-cut over rebase; DECISION-043 un-retire as precondition of the learn-side guard; DECISION-044 MINOR bump and scope-limited config fix), Milestone Completion (v6.2.0), Blocker/Requirement (PR #6 purge ordering requirement from `main`).

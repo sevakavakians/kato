@@ -3,6 +3,15 @@
 
 ---
 
+## 2026-10-01 - Milestone + Architectural Decision: Pattern Purge Merged (916f4c0)
+
+**Trigger**: Primary -- Milestone Completion, Architectural Decision (DECISION-045), Task Completion, New Task (kato_ops.py:99), Knowledge Refinement (vector work did NOT affect affinity/emotives)
+**Updated**: `DECISIONS.md` (DECISION-045, header), `SESSION_STATE.md` (new Current Task), `SPRINT_BACKLOG.md` (purge marked done; two new items), `project-manager/pending-updates.md` (PR #6 item resolved; release + kato_ops item opened), `completed/features/2026-10-01-pattern-purge.md` (new), this log, `triggers.md`.
+**Human Alert**: Yes (Medium) -- 6.3.0 release decision and kato_ops.py:99 scope.
+**Note**: `PROJECT_OVERVIEW.md` and `README.md` not touched (version unchanged at 6.2.0; update on release).
+
+---
+
 ## 2026-10-01 - Task Completion (x3) + Architectural Decisions + Release: v6.2.0
 
 **Trigger**: Primary -- Task Completion (pattern retirement PR #14, config normalization PR #13, docs corrections PR #12) + Architectural Decisions (DECISION-042/043/044) + Milestone (v6.2.0 release). Merge/commit/tag facts checked against `git log` and `git tag` (merges `f3b84ea`/`ee8f48c`/`3085cd7`, `1ae3fe1`, `04b1bbd`, tag `v6.2.0`; commit authorship of `dcc539d`/`6bb38a9` to Brian); test counts and PR #6 blocker detail are as reported by the coordinator and not re-run.

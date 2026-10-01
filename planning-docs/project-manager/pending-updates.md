@@ -15,12 +15,14 @@ Track issues and updates that require human intervention or review.
 
 ## Current Issues
 
-## 2026-10-01 - OPEN: PR #6 Physical Purge -- Rework Required, With a New Ordering Requirement From `main`
-**Issue**: v6.2.0 shipped retirement (hide) but not physical purge. Collaborator PR #6 remains open for purge with ten documented blockers (event-loop blocking under the session lock from synchronous `mutations_sync=2` ALTERs and Redis SCAN loops; node-shared state assigned from a session-scoped request; `patterns_absent_from_indices` returning `self.filter_executor is None`, worse now that main's executor is long-lived and cached; an `ALTER TABLE kato.pattern_stats DELETE` with no name predicate; refusal of every pattern with pre-branch emotives for want of an affinity ledger, so it does nothing on existing data until a backfill exists; others in the review). Three corrections were posted to the review: blocker 1's crash path is unreachable (`use_hybrid_architecture` hard-coded True); blocker 3's premise was wrong (2 of 4 lock call sites guard, not 4); blocker 8 returns 200 `status: partial`, not 500.
-**Impact**: Retired patterns still occupy ClickHouse/Redis storage; retirement does NOT reclaim it. Merging PR #6 as-is is unsafe (would revert the recall-safe bound and break service startup, DECISION-042).
-**New requirement created by main since the branch was written**: PR #6's `wait_for_async_insert: 0 -> 1` is superseded by `ensure_visible()` (DECISION-041) and should be dropped. But dropping it makes purge's `flush_if_pending()` calls no-ops, so a pattern still in ClickHouse's async buffer can be missed by the snapshot read, survive the `ALTER ... DELETE`, pass all three `get_present_*` verification queries, be marked `purged`, then become queryable -- a resurrected pattern with corrupted symbol counters. Purge must call `ensure_visible(...)` before the snapshot and `flush_async_insert_queue()` before verification.
-**Suggested Action**: Rework as a purge-only change against current `main` (re-cut, as with retirement), resolving the ten blockers and honoring the ordering requirement above; decide on an affinity-ledger backfill for existing data.
-**Priority**: Medium (no production breakage; storage reclaim and data-removal completeness)
+## 2026-10-01 - RESOLVED: PR #6 Physical Purge
+**Resolution**: Re-cut and merged to `main` as `916f4c0` (DECISION-045). PR #6 itself remains OPEN with its remote branch; close it after the release decision.
+**Status**: Resolved
+
+## 2026-10-01 - OPEN: Release 6.3.0 and `kato_ops.py:99` Shared-Client Concurrency
+**Issue**: (1) Purge is on main but unreleased (main = 6.2.0); 6.3.0 MINOR is pending a user decision. (2) `kato/api/endpoints/kato_ops.py:99` calls `get_pattern_count` via `asyncio.to_thread` on the shared session-bound clickhouse-connect client; can 500 an unrelated request under concurrency. Pre-existing, not introduced by purge.
+**Suggested Action**: Decide release timing and the scope of the `kato_ops.py:99` fix (use `build_clickhouse_client()`).
+**Priority**: Medium
 **Status**: Open
 
 ## 2026-10-01 - INFO: Per-Session `sort_symbols` Still Inert After v6.2.0 Config Normalization

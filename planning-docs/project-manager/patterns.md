@@ -624,6 +624,17 @@ absolute latency differences across machines.
 
 ---
 
+## Process Patterns (2026-10-01 additions)
+
+### 2026-10-01 - A Clean-Merging Stale Branch Can Still Revert Main; Re-Cut Instead
+PR #6 (40 commits behind, 6 conflicts) was not just hard to rebase: merging it in its own direction would have deleted `recall_bounds.py`, re-added the deleted `length_filter.py`, restored `recall_threshold = 0`, and broken startup (`length_min_ratio` passed into a dataclass without that field). Only some of that surfaced as conflicts. Lesson: for a long-diverged external branch, review the net diff direction against current `main` first, then re-cut the wanted subset, preserving authorship (DECISION-042).
+
+### 2026-10-01 - Exception Type Must Match the Registered Handler, and Bare `except Exception` Erases It
+A 409 for re-learning a retired pattern required a base class the FastAPI handler is actually registered for (`KatoV2Exception`, not `KatoBaseException`) plus explicit passthroughs ahead of two bare `except Exception` clauses. A status table alone would have produced a 500 (DECISION-043).
+
+### 2026-10-01 - Removing One Fix Can Silently Disable Another Branch's Safety Net
+PR #6's `flush_if_pending()` calls only worked because of its `wait_for_async_insert: 0 -> 1` change; with main's `ensure_visible()` (DECISION-041) that change is dropped and the calls become no-ops, opening a resurrected-pattern hazard in purge. When porting, check what each retained call depended on.
+
 ## Operational Gotchas
 
 ### 2026-09-21 - ClickHouse HTTP Interface Is Strictly One Statement Per Request; No Multi-Statement Mode Exists

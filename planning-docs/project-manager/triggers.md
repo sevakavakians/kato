@@ -3,6 +3,16 @@
 
 ---
 
+## 2026-10-01 - Task Completion (x3) + Architectural Decisions (x3) + Milestone: v6.2.0
+
+**Trigger Type**: Primary -- Task Completion (3 PRs), Architectural Decision (DECISION-042 re-cut over rebase; DECISION-043 un-retire as precondition of the learn-side guard; DECISION-044 MINOR bump and scope-limited config fix), Milestone Completion (v6.2.0), Blocker/Requirement (PR #6 purge ordering requirement from `main`).
+**Event**: Retirement re-cut from collaborator PR #6 merged (PR #14), config normalization (PR #13) and doc corrections (PR #12) merged, v6.2.0 tagged.
+**Documents Updated**: see maintenance-log entry of the same date.
+**Human Alert Generated**: Yes -- PR #6 purge (Medium).
+**Action Result**: Planning docs record what landed, the explicit non-goals (no storage reclaim; per-session `sort_symbols` still inert), and the outstanding purge work with its new `ensure_visible()` requirement.
+
+---
+
 ## 2026-09-30 - Knowledge Refinement: python-client.py 3.7.0 Confirmed Lost From Working Tree
 
 **Trigger Type**: Secondary — Knowledge Refinement (a previously-recorded "COMPLETE, verified offline only, UNCOMMITTED" status corrected to "DESIGN LOST — NOT IN WORKING TREE, NEEDS REDOING" after the coordinator verified `examples/python-client.py` is byte-identical to `main` at 3.6.0, with no commit/stash/reflog trace of the 3.7.0 work).

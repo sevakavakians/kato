@@ -3,6 +3,15 @@
 
 ---
 
+## 2026-10-01 - Task Completion (x3) + Architectural Decisions + Release: v6.2.0
+
+**Trigger**: Primary -- Task Completion (pattern retirement PR #14, config normalization PR #13, docs corrections PR #12) + Architectural Decisions (DECISION-042/043/044) + Milestone (v6.2.0 release). Merge/commit/tag facts checked against `git log` and `git tag` (merges `f3b84ea`/`ee8f48c`/`3085cd7`, `1ae3fe1`, `04b1bbd`, tag `v6.2.0`; commit authorship of `dcc539d`/`6bb38a9` to Brian); test counts and PR #6 blocker detail are as reported by the coordinator and not re-run.
+**Updated**: `DECISIONS.md` (DECISION-042, 043, 044; header), `SESSION_STATE.md` (new Current Task; previous demoted to Previous Task), `README.md` (version), `SPRINT_BACKLOG.md` (header, new open "Physical Purge" item, `sort_symbols` item annotated, Recently Completed), `project-manager/pending-updates.md` (2 entries), `project-manager/patterns.md`, `project-manager/triggers.md`, new archives `completed/features/2026-10-01-kato-v6.2.0-release.md`, `completed/features/2026-10-01-pattern-retirement-recut-from-pr6.md`, `completed/bugs/2026-10-01-session-config-endpoint-normalization.md`.
+**Human Alert**: Yes -- PR #6 physical purge recorded as open with a newly identified ordering requirement (`ensure_visible()` before snapshot, `flush_async_insert_queue()` before verification).
+**Note**: python-client 3.7.0 being included in 6.2.0 rests on `git merge-base --is-ancestor 25703d8 v6.2.0` (verified). `PROJECT_OVERVIEW.md` last updated 2025-11-13 and was not touched.
+
+---
+
 ## 2026-09-30 - Knowledge Refinement: python-client 3.7.0 "Lost" Record Was Wrong; Work Is Merged
 **What happened**: The earlier "DESIGN LOST, reimplement" status was a mistake. The work is commit `289820a` (separate branch), merged as `25703d8`, pushed; invisible earlier only because unmerged. Live-verified 9/10 against kato:6.1.0; not in v6.1.0. The failing check showed STM recovery never works on real expiry; user chose docs correction over client-side STM caching.
 **Updated**: `SESSION_STATE.md`, `SPRINT_BACKLOG.md`, `project-manager/pending-updates.md` (item resolved), archive doc `completed/bugs/2026-09-30-python-client-session-config-lost-on-recreation.md` (title restored, correction note added). Earlier entries in this log describing the loss are left as history.

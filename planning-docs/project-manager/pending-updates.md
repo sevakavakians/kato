@@ -15,6 +15,20 @@ Track issues and updates that require human intervention or review.
 
 ## Current Issues
 
+## 2026-10-01 - OPEN: PR #6 Physical Purge -- Rework Required, With a New Ordering Requirement From `main`
+**Issue**: v6.2.0 shipped retirement (hide) but not physical purge. Collaborator PR #6 remains open for purge with ten documented blockers (event-loop blocking under the session lock from synchronous `mutations_sync=2` ALTERs and Redis SCAN loops; node-shared state assigned from a session-scoped request; `patterns_absent_from_indices` returning `self.filter_executor is None`, worse now that main's executor is long-lived and cached; an `ALTER TABLE kato.pattern_stats DELETE` with no name predicate; refusal of every pattern with pre-branch emotives for want of an affinity ledger, so it does nothing on existing data until a backfill exists; others in the review). Three corrections were posted to the review: blocker 1's crash path is unreachable (`use_hybrid_architecture` hard-coded True); blocker 3's premise was wrong (2 of 4 lock call sites guard, not 4); blocker 8 returns 200 `status: partial`, not 500.
+**Impact**: Retired patterns still occupy ClickHouse/Redis storage; retirement does NOT reclaim it. Merging PR #6 as-is is unsafe (would revert the recall-safe bound and break service startup, DECISION-042).
+**New requirement created by main since the branch was written**: PR #6's `wait_for_async_insert: 0 -> 1` is superseded by `ensure_visible()` (DECISION-041) and should be dropped. But dropping it makes purge's `flush_if_pending()` calls no-ops, so a pattern still in ClickHouse's async buffer can be missed by the snapshot read, survive the `ALTER ... DELETE`, pass all three `get_present_*` verification queries, be marked `purged`, then become queryable -- a resurrected pattern with corrupted symbol counters. Purge must call `ensure_visible(...)` before the snapshot and `flush_async_insert_queue()` before verification.
+**Suggested Action**: Rework as a purge-only change against current `main` (re-cut, as with retirement), resolving the ten blockers and honoring the ordering requirement above; decide on an affinity-ledger backfill for existing data.
+**Priority**: Medium (no production breakage; storage reclaim and data-removal completeness)
+**Status**: Open
+
+## 2026-10-01 - INFO: Per-Session `sort_symbols` Still Inert After v6.2.0 Config Normalization
+**Issue**: PR #13 made create and update agree, but the per-session value is unused (`kato_processor.py:86`, `observation_processor.py:413` `# noqa: F841`). A reader could assume it now works.
+**Suggested Action**: Unchanged -- dedicated fix with pattern-hash migration consideration (existing P2, SPRINT_BACKLOG).
+**Priority**: Medium
+**Status**: Open (existing item, annotated)
+
 ## 2026-09-30 - RESOLVED: Merge PR #10 and Cut a Release (v6.1.0 or later) Covering Four Landed Items Plus DECISION-039
 **Issue**: Four items landed today. Three are merged to `main`: vector modes ported from a collaborator's branch with three corrections (DECISION-040, PR #7, merge `6a25b87`), the CI unit job fixed to start a KATO service (PR #8, merge `7c7e2c0` — CI had been red for 9 days), and the `patterns_data` async_insert visibility race fixed (DECISION-041, PR #9, merge `92a977c` — closes two long-open backlog items). The fourth, test pattern accumulation fixed (PR #10, branch `fix/test-pattern-accumulation`, commit `038057c`), is **complete and verified locally but not yet merged** — PR #10 is open against `main`, CI pending as of this writing. Separately, the 2026-09-22 single-event-vs-multi-event investigation (DECISION-039) remains uncommitted in the working tree (see the 2026-09-22 entry below) and is still outstanding.
 **Impact**: **No release (v6.1.0 or otherwise) has been cut for any of this work.** The currently deployed/released version remains v6.0.1. All four of today's items plus DECISION-039's fixes are real, verified, ready work sitting idle on `main` (or a still-open PR) rather than in a published image.

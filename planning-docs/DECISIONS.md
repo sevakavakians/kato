@@ -1,6 +1,95 @@
 # DECISIONS.md - Architectural & Design Decision Log
 *Append-Only Log - Started: 2025-08-29*
-*Last Updated: 2026-09-30 (DECISION-041: gate the `patterns_data` async_insert visibility drain on the Redis stats version rather than switching to `wait_for_async_insert=1`. DECISION-040: vector modes ported from a collaborator's branch — `vector_search_limit` default kept at 3, not raised to 20, because it feeds the learned pattern's SHA1. DECISION-039: single-event-vs-multi-event pattern grouping investigation — reported bug NOT reproduced; live verification confirms `missing`/`future` segmentation is correct; a genuine test-coverage gap and doc/docstring/API-message defects fixed instead. DECISION-038: CI ClickHouse schema-init fix — three bugs, including a latent Helm production bug where the bootstrap Job never actually applied the schema. DECISION-037: new standing rule — no deprecation/removal notes in runtime messages, enforced by test. DECISION-036: KATO v6.0.1 patch, fixing `filter_pipeline` validation and applying DECISION-037. DECISION-035: KATO v6.0.0 major release — DECISION-034's recall-safe candidate bound merged and shipped.)*
+*Last Updated: 2026-10-01 (DECISION-044: v6.2.0 released as MINOR; session-config normalization makes the create and update endpoints agree about a per-session `sort_symbols` that is still inert. DECISION-043: un-retire added as a precondition of the learn-side retired-pattern guard, IDs validated at the edge, re-learn maps to 409. DECISION-042: pattern retirement re-cut from collaborator PR #6 rather than rebased, because merging it would have reverted main. Prior 2026-09-30: DECISION-041: gate the `patterns_data` async_insert visibility drain on the Redis stats version rather than switching to `wait_for_async_insert=1`. DECISION-040: vector modes ported from a collaborator's branch — `vector_search_limit` default kept at 3, not raised to 20, because it feeds the learned pattern's SHA1. DECISION-039: single-event-vs-multi-event pattern grouping investigation — reported bug NOT reproduced; live verification confirms `missing`/`future` segmentation is correct; a genuine test-coverage gap and doc/docstring/API-message defects fixed instead. DECISION-038: CI ClickHouse schema-init fix — three bugs, including a latent Helm production bug where the bootstrap Job never actually applied the schema. DECISION-037: new standing rule — no deprecation/removal notes in runtime messages, enforced by test. DECISION-036: KATO v6.0.1 patch, fixing `filter_pipeline` validation and applying DECISION-037. DECISION-035: KATO v6.0.0 major release — DECISION-034's recall-safe candidate bound merged and shipped.)*
+
+---
+
+## 2026-10-01 - DECISION-044: Release v6.2.0 as MINOR; Session-Config Normalization Makes Endpoints Agree About a Value That Is Currently Inert
+
+**Decision**: Cut the release carrying pattern retirement (DECISION-042/043), session-config endpoint normalization, and documentation corrections as **v6.2.0 (MINOR)** via `./container-manager.sh minor`. Fix the `use_token_matching`/`sort_symbols` pairing by extracting `ConfigurationService.normalize_session_config()` and applying it on both `POST /sessions` and `POST /sessions/{id}/config`, **without** making per-session `sort_symbols` actually take effect.
+**Status**: **COMPLETE, MERGED and RELEASED** — config fix PR #13 (merge `ee8f48c`, fix commit `cede1f6`); docs PR #12 (merge `3085cd7`); changelog `1ae3fe1`; version bump `04b1bbd`; tag `v6.2.0`. See `planning-docs/completed/features/2026-10-01-kato-v6.2.0-release.md` and `planning-docs/completed/bugs/2026-10-01-session-config-endpoint-normalization.md`.
+**Classification**: Release decision + Bug Fix (scope-limited)
+**Confidence**: High on the bump and the scope limit; both are explicit trade-offs, recorded below.
+
+### Context
+
+`use_token_matching` and `sort_symbols` were paired only on `POST /sessions/{id}/config`, so an identical body configured a session differently by endpoint: creating with `use_token_matching: false` left `sort_symbols` at `true`. Separately, per-session `sort_symbols` is inert: `ObservationProcessor` is constructed once with `pattern_processor.sort` (`kato_processor.py:86`), a per-node value shared by every session, and `observation_processor.py:413` computes a per-session value marked `# noqa: F841` that nothing reads (the existing P2 "Session-level `sort_symbols` has no effect", identified 2026-09-16, DECISION-030).
+
+### Decision Made
+
+1. Normalize on both endpoints; the mismatch warning now evaluates the effective pair instead of firing only when both fields arrive together.
+2. Do **not** fix the inertness here. Making the per-session value live changes pattern hashes for anyone relying on the shared default, which needs its own migration consideration. This change makes the endpoints agree about a value that currently has no effect on sorting.
+3. Bump **MINOR**: retirement adds endpoints (additive), and the config change alters what the create endpoint *reports* for `sort_symbols` without altering behaviour, since the per-session value is inert. No config parameter is removed and no previously valid input is rejected, so none of the `docs/maintenance/releasing.md` MAJOR triggers (contrast DECISION-035) apply.
+
+### Rationale / Risk
+
+- Fixing only the pairing is strictly safer than bundling a hash-changing behaviour fix into a consistency fix.
+- Risk: a reader may assume per-session `sort_symbols` now works. The inertness is recorded here, in the archive doc, and on the open backlog item to prevent that.
+
+### Related Decisions
+
+DECISION-030 (origin of the inertness finding), DECISION-035 (contrast: MAJOR by literal criteria), DECISION-042/043 (the other release content).
+
+---
+
+## 2026-10-01 - DECISION-043: Add Un-Retire, Validate IDs at the Edge, and Map Re-Learning to 409 -- Reversibility Is a Precondition of the Learn-Side Guard
+
+**Decision**: Ship `POST /sessions/{id}/patterns/un-retire` alongside `/patterns/retire`, validate pattern IDs at the API edge (40-char lowercase SHA1, whitespace stripped, 422 otherwise), and make re-learning a retired pattern return **409** via a new `RetiredPatternError`.
+**Status**: **COMPLETE, MERGED and RELEASED in v6.2.0** (PR #14, merge `f3b84ea`; un-retire in `5299131`, endpoints in `f51b184`). See `planning-docs/completed/features/2026-10-01-pattern-retirement-recut-from-pr6.md`.
+**Classification**: Architectural Decision (API surface, failure semantics)
+**Confidence**: High
+
+### Context
+
+PR #6's version of retirement had a learn-side guard that refuses to learn a tombstoned hash, and nothing that removed a tombstone.
+
+### Decision Made and Rationale
+
+- **Un-retire is a precondition of the guard, not a nicety.** With the guard and no removal path, one mistaken retire permanently prevents that exact sequence from ever being learned on the node (tombstones are node-scoped and durable). Retirement without reversal turns a recoverable operator error into irreversible data-path damage, so the guard may not ship without it.
+- **Edge validation.** Previously only blank strings were rejected, so a typo (wrong length, uppercase, stray text) became a permanent, silently unmatched tombstone. IDs are accepted with or without the `PTRN|` prefix, 1-1000 per call, and anything not a 40-char lowercase SHA1 after whitespace stripping is a 422. Consistent with the project's pattern-name convention (plain SHA1 in storage).
+- **409, not 500.** Re-learning a retired pattern is a client-state conflict. The new `RetiredPatternError` is based on `KatoV2Exception`, not `KatoBaseException`: the FastAPI handler is registered for the former, so a `KatoBaseException` subclass would have been mapped to 500 regardless of the status table. Explicit passthroughs were also added in `learnPattern` and `learn_pattern_from`, both of which have bare `except Exception` clauses that discarded the exception type.
+
+### Impact
+
+Retirement is now reversible and its failure modes are client-visible and typed. Physical purge remains unimplemented (PR #6, open). Retirement hides a pattern without deleting the learned row and does NOT reclaim storage.
+
+### Related Decisions
+
+DECISION-042 (the re-cut that produced this version), DECISION-037 (runtime messages carry current requirements only; applies to the 409/422 text).
+
+---
+
+## 2026-10-01 - DECISION-042: Re-Cut Pattern Retirement From PR #6 Instead of Rebasing or Merging It
+
+**Decision**: Do not rebase or merge the collaborator's PR #6. Re-cut only the retirement subset onto current `main` as PR #14, preserving the collaborator's authorship on the commits that survived (`dcc539d` registry, `6bb38a9` read-path barriers, both authored to Brian <briank.reed@icloud.com>; the other four of six commits are the repo owner's). PR #6 stays open for physical purge.
+**Status**: **COMPLETE, MERGED and RELEASED in v6.2.0** (PR #14, merge `f3b84ea`).
+**Classification**: Architectural / process decision
+**Confidence**: High -- the alternative was demonstrated harmful, not merely inconvenient.
+
+### Context
+
+PR #6's branch was 40 commits behind `main` with 6 conflicts, and about half its content was already merged (via the vector-modes port, DECISION-040). More importantly, merging it in its own direction would have **reverted main**: deleting `kato/filters/recall_bounds.py` (DECISION-034's recall-safe bound), re-adding the deleted `length_filter.py` (recall-unsafe), restoring `recall_threshold = 0` (now rejected), and **failing to start the service** (`pattern_processor.py` passed `length_min_ratio` into a dataclass that no longer has that field). Conflict resolution would not have caught the semantic reversions that merged cleanly.
+
+### Decision Made and Rationale
+
+Re-cut so each change is reviewed against current `main` rather than reconciled with a stale base. Deliberate changes from the PR #6 version:
+
+- **Un-retire added**, IDs validated, re-learn mapped to 409 (DECISION-043).
+- **Read-path barriers reduced from 10 call sites to 4**, one per distinct exit path: `PatternSearcher.causalBelief`/`causalBeliefAsync`, `PatternProcessor._predict_single_symbol_fast`, `PatternOperations.get_predictions`, and `GET /sessions/{id}/cognition-data`. The Redis client is synchronous, so each barrier is a blocking round trip inside an async request, for a feature most nodes never enable. A node with no tombstones pays one `EXISTS` against a missing key.
+- **No node-shared processor state mutated from a session-scoped request.** PR #6's `retire_patterns` cleared `self.predictions` and `self.future_potentials`, which are node-level; a session-scoped retire would have blanked another session's in-flight state. Consistent with the stateless-processor architecture (ADR-001).
+- Tombstone registry: node-scoped, durable Redis key `{kb_id}:retired_patterns`; every session on the `node_id` is affected, a session on another node is not, and the tombstone outlives the session.
+
+### Verification
+
+583 unit, 129 integration (1 documented xfail), 70 api including 14 new request-level tests; prediction parity byte-identical to the pre-retirement baseline (`scripts/check_prediction_parity.py`); ruff and bandit clean.
+
+### Standing lesson
+
+For a long-diverged external branch, read the diff's net direction against current `main` before choosing rebase vs merge; a clean-looking merge can silently revert deliberate work. Logged in `project-manager/patterns.md`.
+
+### Related Decisions
+
+DECISION-034 (recall-safe bound that merging would have reverted), DECISION-040 (earlier port from the same branch), DECISION-043.
 
 ---
 

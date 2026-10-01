@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Pattern retirement.** `POST /sessions/{id}/patterns/retire` hides a learned
+  pattern from every read path without deleting it, and
+  `POST /sessions/{id}/patterns/un-retire` puts it back. Batches of 1-1000 pattern
+  IDs, with or without the `PTRN|` prefix; the response separates what changed
+  from what was already in that state, so re-sending a batch is unambiguous.
+
+  Tombstones are node-scoped, like the learned patterns they hide: every session
+  sharing the `node_id` stops seeing the pattern, a session on another node is
+  unaffected, and the tombstone outlives the session that set it. Filtering covers
+  `/predictions`, observe-time predictions, `/cognition-data` (including a
+  snapshot taken before the retirement) and the single-symbol fast path, where it
+  runs before `max_predictions` truncation so a retired pattern cannot consume a
+  slot and leave the caller short.
+
+  Learning a sequence whose pattern is retired returns **409 Conflict** with code
+  `RETIRED_PATTERN` rather than silently resurrecting it — pattern identity is the
+  SHA1 of the data, so the same sequence always yields the same hash. Un-retire
+  first if it should exist again.
+
+  On a node with no tombstones each read path costs one Redis `EXISTS` against a
+  missing key. Prediction output is unchanged when nothing is retired.
+
+  Retirement does not reclaim storage; the row, its metadata and its symbol
+  statistics remain. Physical deletion is a separate operation and is not yet
+  available. See [pattern retirement](docs/users/pattern-retirement.md).
+
+
 ## [6.1.0] - 2026-09-30
 
 Configurable vector retrieval, and a fix for predictions issued immediately

@@ -744,14 +744,17 @@ class ClickHouseWriter:
         safe_kb_id = validate_kb_id(self.kb_id)
         safe_names = [validate_pattern_name(name) for name in names]
 
+        # The two statements are written out rather than built by interpolating a
+        # table name through a loop. ALTER ... DELETE cannot bind parameters, so
+        # this predicate is assembled as text; keeping the table names literal
+        # means the only interpolated values are the allowlist-validated kb_id and
+        # SHA1 names above, which is the project rule for statement text.
         for start in range(0, len(safe_names), self._PURGE_CHUNK_SIZE):
             chunk = safe_names[start:start + self._PURGE_CHUNK_SIZE]
             name_list = ', '.join(f"'{name}'" for name in chunk)
-            for table in ('patterns_data', 'patterns_metadata'):
-                self.client.command(
-                    f"ALTER TABLE kato.{table} "
-                    f"DELETE WHERE kb_id = '{safe_kb_id}' AND name IN ({name_list})"
-                )
+            predicate = f"DELETE WHERE kb_id = '{safe_kb_id}' AND name IN ({name_list})"
+            self.client.command(f"ALTER TABLE kato.patterns_data {predicate}")
+            self.client.command(f"ALTER TABLE kato.patterns_metadata {predicate}")
 
         logger.info(
             f"Submitted deletion of {len(safe_names)} pattern(s) from ClickHouse "
@@ -802,15 +805,24 @@ class ClickHouseWriter:
         if not names:
             return []
 
+        # Both queries are constant text with bound parameters -- no table name is
+        # interpolated, so nothing here is assembled from a variable.
         present: set[str] = set()
         for start in range(0, len(names), self._PURGE_CHUNK_SIZE):
             chunk = names[start:start + self._PURGE_CHUNK_SIZE]
-            for table in ('patterns_data', 'patterns_metadata'):
-                result = self.client.query(
-                    f"SELECT DISTINCT name FROM kato.{table} "
-                    f"WHERE kb_id = %(kb_id)s AND name IN %(names)s",
-                    parameters={'kb_id': self.kb_id, 'names': chunk},
-                )
+            parameters = {'kb_id': self.kb_id, 'names': chunk}
+            for result in (
+                self.client.query(
+                    "SELECT DISTINCT name FROM kato.patterns_data "
+                    "WHERE kb_id = %(kb_id)s AND name IN %(names)s",
+                    parameters=parameters,
+                ),
+                self.client.query(
+                    "SELECT DISTINCT name FROM kato.patterns_metadata "
+                    "WHERE kb_id = %(kb_id)s AND name IN %(names)s",
+                    parameters=parameters,
+                ),
+            ):
                 present.update(row[0] for row in result.result_rows)
 
         # Input order, so the caller's logs and retries are deterministic.

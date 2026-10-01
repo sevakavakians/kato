@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [6.2.0] - 2026-10-01
+
+Pattern retirement, plus a config-endpoint inconsistency and a round of
+documentation corrections.
+
 ### Added
 - **Pattern retirement.** `POST /sessions/{id}/patterns/retire` hides a learned
   pattern from every read path without deleting it, and
@@ -33,6 +38,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Retirement does not reclaim storage; the row, its metadata and its symbol
   statistics remain. Physical deletion is a separate operation and is not yet
   available. See [pattern retirement](docs/users/pattern-retirement.md).
+
+### Fixed
+- **The two session-config endpoints now agree about `use_token_matching` and
+  `sort_symbols`.** The pair is not independent — token-level matching compares
+  sorted symbols, character-level compares the event as written — so supplying one
+  derives the other. That derivation existed only on `POST /sessions/{id}/config`,
+  which meant an identical request body configured a session differently depending
+  on which endpoint received it: creating with `use_token_matching: false` left
+  `sort_symbols` at `true`, a combination nobody selects deliberately. Extracted
+  to `ConfigurationService.normalize_session_config()` and applied by both.
+
+  The mismatch warning also now runs against the effective pair rather than only
+  when both fields arrive together, so setting one against an opposing stored
+  value no longer passes in silence. Logging only — a caller asking for a
+  conflicting pair still gets what it asked for.
+
+  Note this makes the endpoints agree about a value that currently has no effect
+  on sorting: the observation path reads the processor's construction-time
+  default, which is shared by every session on a node, so a per-session
+  `sort_symbols` is inert. That is a separate tracked item, left alone because
+  fixing it changes pattern hashes for anyone relying on the shared default.
+
+### Documentation
+- Corrected stale commands, container names and API shapes across 21 files,
+  including `./start.sh` invocations with flags the script no longer parses and
+  `PUT` on endpoints that only accept `POST`.
 
 
 ## [6.1.0] - 2026-09-30

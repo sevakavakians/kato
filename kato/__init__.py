@@ -21,4 +21,4 @@ if 'LOG_LEVEL' in environ:
         datefmt='%a %b %d %Y %H:%M:%S')
 
 # Version info
-__version__ = '6.2.0'
+__version__ = '6.3.0'

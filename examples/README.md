@@ -285,8 +285,3 @@ Have a useful KATO integration pattern? Contribute an example:
 2. Include usage instructions and prerequisites
 3. Add entry to this README
 4. Submit pull request
-
----
-
-**Last Updated**: December 2024
-**KATO Version**: 3.0+

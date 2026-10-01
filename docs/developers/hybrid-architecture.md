@@ -169,7 +169,7 @@ All three access the same ClickHouse and Redis instances, but their data is **co
 - ❌ Redis keys overwrite each other
 - ❌ **Critical data integrity violation**
 
-**With kb_id isolation** (v3.0.0+):
+**With kb_id isolation**:
 - ✅ Each node physically isolated in ClickHouse partition
 - ✅ Queries automatically filtered by kb_id (no leakage)
 - ✅ Redis keys namespaced per node
@@ -312,7 +312,7 @@ predictions = searcher.causalBelief(state)
 
 ### 4. Error Handling
 
-**IMPORTANT**: As of KATO v3.0, MongoDB is no longer supported. The system requires ClickHouse + Redis.
+**IMPORTANT**: MongoDB is not supported. The system requires ClickHouse + Redis.
 
 If ClickHouse or Redis are unavailable:
 - The system will raise an error
@@ -320,7 +320,7 @@ If ClickHouse or Redis are unavailable:
 - Ensure all required services are running
 
 ```python
-# Hybrid architecture (required in v3.0+)
+# Hybrid architecture (required)
 searcher = PatternSearcher(
     kb_id='my_kb',
     max_predictions=100,
@@ -332,10 +332,10 @@ searcher = PatternSearcher(
 
 ## Performance
 
-### Performance Improvements (vs. v2.x MongoDB)
+### Performance Improvements (vs. the former MongoDB backend)
 
-| Patterns | v2.x (MongoDB) | v3.0+ (ClickHouse/Redis) | Speedup |
-|----------|----------------|--------------------------|---------|
+| Patterns | MongoDB (before) | ClickHouse/Redis (now) | Speedup |
+|----------|------------------|------------------------|---------|
 | 1M       | ~5s            | ~200ms                   | 25x     |
 | 10M      | ~50s           | ~300ms                   | 166x    |
 | 100M     | Timeout | ~500ms                    | 300x+   |
@@ -415,7 +415,7 @@ If filter pipeline fails, check logs for:
 - Missing data in Redis (run migration script if upgrading from v2.x)
 - Invalid filter configuration (check SessionConfig validation)
 
-**Note**: System will raise an error if ClickHouse or Redis are unavailable (no MongoDB fallback in v3.0+).
+**Note**: System will raise an error if ClickHouse or Redis are unavailable (no MongoDB fallback).
 
 ## Best Practices
 
@@ -434,7 +434,7 @@ If filter pipeline fails, check logs for:
    - Alert on unusual reductions or slow stages
 
 5. **Backup ClickHouse data regularly**
-   - ClickHouse is the primary pattern storage (no MongoDB fallback in v3.0+)
+   - ClickHouse is the primary pattern storage (no MongoDB fallback)
    - Use ClickHouse backup tools for disaster recovery
    - Test restore procedures periodically
 

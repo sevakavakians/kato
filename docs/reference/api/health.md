@@ -165,8 +165,3 @@ statsd.gauge('kato.metrics_collected', health["metrics_collected"])
 - [Monitoring API](monitoring.md) - Detailed metrics and performance data
 - [Configuration Guide](../../operations/configuration.md)
 - [Monitoring Guide](../../operations/monitoring.md)
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

@@ -367,8 +367,3 @@ For more troubleshooting, see [Troubleshooting Guide](troubleshooting.md).
 2. Read [Core Concepts](concepts.md)
 3. Explore [API Reference](../reference/api/)
 4. Try [Example Applications](examples/)
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

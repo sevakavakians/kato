@@ -714,8 +714,3 @@ Query Prometheus metrics and visualize:
 - [Architecture Overview](architecture.md)
 - [Database Management](database-management.md)
 - [Testing Guide](testing.md)
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

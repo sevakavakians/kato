@@ -849,8 +849,3 @@ kubectl logs -f deployment/kato -n kato
 - [Monitoring](monitoring.md)
 - [Kubernetes Deployment](kubernetes-deployment.md)
 - [Production Checklist](production-checklist.md)
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

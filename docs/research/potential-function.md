@@ -499,8 +499,3 @@ potential = (0.2 + 0.3) × 0.4 + 0.3 + (1/6)
 - [Information Theory](information-theory.md) - Theoretical foundations
 - [Entropy Calculations](entropy-calculations.md) - Component calculations
 - [Core Concepts](core-concepts.md) - KATO fundamentals
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

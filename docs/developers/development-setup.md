@@ -628,8 +628,3 @@ python -c "import kato; print(kato.__file__)"
 3. Understand [Data Flow](data-flow.md)
 4. Learn [Design Patterns](design-patterns.md)
 5. See [Contributing Guide](contributing.md)
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

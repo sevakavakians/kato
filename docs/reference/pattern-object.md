@@ -234,8 +234,3 @@ If pattern contains vector-derived symbols (`VCTR|hash`):
 - [Prediction Object](prediction-object.md) - How patterns generate predictions
 - [Observation Object](observation-object.md) - How observations become patterns
 - [Learning API](api/learning.md) - Pattern learning endpoints
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

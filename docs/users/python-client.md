@@ -725,8 +725,3 @@ def test_full_workflow(kato_client):
 - [Session Management](session-management.md)
 - [API Reference](../reference/api/)
 - [Examples](examples/)
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

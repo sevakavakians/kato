@@ -405,8 +405,3 @@ Before releasing, ensure CHANGELOG has:
 - [Version Management](version-management.md)
 - [Keep a Changelog](https://keepachangelog.com/)
 - [Conventional Commits](https://www.conventionalcommits.org/)
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

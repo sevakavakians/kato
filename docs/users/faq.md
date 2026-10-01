@@ -476,8 +476,3 @@ Open GitHub issue with:
 ### Is KATO open source?
 
 Yes. KATO is licensed under the Apache License, Version 2.0.
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

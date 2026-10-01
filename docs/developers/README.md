@@ -40,8 +40,3 @@ Welcome to the KATO developer documentation! This section provides everything yo
 - **Debug an issue** → [Debugging Guide](debugging.md)
 - **Add a new feature** → [Adding Endpoints](adding-endpoints.md)
 - **Optimize performance** → [Performance Profiling](performance-profiling.md)
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

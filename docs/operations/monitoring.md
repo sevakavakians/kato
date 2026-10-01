@@ -889,8 +889,3 @@ async def health_check():
 - [Security Configuration](security-configuration.md)
 - [Scaling](scaling.md)
 - [Production Checklist](production-checklist.md)
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

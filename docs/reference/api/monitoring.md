@@ -384,8 +384,3 @@ if perf["error_rate"] > 0.01:  # 1% error rate
 - [Health API](health.md) - Basic health checks
 - [Monitoring Guide](../../operations/monitoring.md) - Complete monitoring setup
 - [Performance Tuning](../../operations/performance-tuning.md)
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

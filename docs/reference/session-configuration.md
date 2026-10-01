@@ -272,8 +272,3 @@ When fuzzy matching is enabled, predictions include a `fuzzy_matches` array docu
 - [Configuration API](api/configuration.md) - How to update configuration
 - [Environment Variables](configuration-vars.md) - System-level defaults
 - [Pattern Matching](../research/pattern-matching.md) - Matching algorithms
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

@@ -650,8 +650,3 @@ redis:
 - [Performance Profiling](performance-profiling.md)
 - [Debugging Guide](debugging.md)
 - [Deployment Guide](../operations/docker-deployment.md)
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

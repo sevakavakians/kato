@@ -359,6 +359,11 @@ Did any change break backward compatibility?
 
 ## Examples
 
+The version numbers in the transcripts below are illustrative — they show the
+shape of a bump, not the current release. For the version you would actually
+pin to, see the
+[releases page](https://github.com/sevakavakians/kato/releases).
+
 ### Example 1: Bug Fix Release
 
 **Scenario:** Fixed a bug in pattern similarity calculations
@@ -571,8 +576,8 @@ docker logs <container-id>
 
 **Solution:**
 ```bash
-# Wait a few minutes, then verify manually:
-docker manifest inspect ghcr.io/sevakavakians/kato:2.0.1
+# Wait a few minutes, then verify manually (substitute the version you published):
+docker manifest inspect ghcr.io/sevakavakians/kato:<version>
 
 # If still not available, check GitHub Packages:
 # https://github.com/sevakavakians/kato/pkgs/container/kato

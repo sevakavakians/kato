@@ -532,8 +532,3 @@ def stable_entropy(probabilities, epsilon=1e-10):
 - [Predictive Information](predictive-information.md) - Predictive information theory
 - [Core Concepts](core-concepts.md) - KATO fundamentals
 - [Potential Function](potential-function.md) - Prediction scoring
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

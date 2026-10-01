@@ -924,8 +924,3 @@ def get_weighted_predictions(predictions):
 - [Pattern Learning](pattern-learning.md)
 - [Configuration Guide](configuration.md)
 - [Python Client](python-client.md)
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

@@ -551,8 +551,3 @@ class TutorBot:
 - [Session Management](session-management.md)
 - [Architecture Patterns](architecture-patterns.md)
 - [Emotives Processing](/docs/research/emotives-processing.md)
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

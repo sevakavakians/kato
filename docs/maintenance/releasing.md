@@ -240,7 +240,7 @@ echo $GITHUB_TOKEN | docker login ghcr.io -u sevakavakians --password-stdin
 ./build-and-push.sh
 
 # Verify
-docker pull ghcr.io/sevakavakians/kato:3.0.1
+docker pull ghcr.io/sevakavakians/kato:<version>
 docker pull ghcr.io/sevakavakians/kato:latest
 ```
 
@@ -248,8 +248,8 @@ docker pull ghcr.io/sevakavakians/kato:latest
 
 1. Go to https://github.com/sevakavakians/kato/releases
 2. Click "Draft a new release"
-3. Select tag: `v3.0.1`
-4. Release title: `KATO v3.0.1`
+3. Select tag: the `v<version>` tag you just pushed
+4. Release title: `KATO v<version>`
 5. Description: Copy from CHANGELOG.md
 6. Publish release
 
@@ -259,16 +259,16 @@ docker pull ghcr.io/sevakavakians/kato:latest
 
 ```bash
 # 1. Verify container images exist
-docker pull ghcr.io/sevakavakians/kato:3.0.1
-docker pull ghcr.io/sevakavakians/kato:3
+docker pull ghcr.io/sevakavakians/kato:<version>
+docker pull ghcr.io/sevakavakians/kato:<major>
 docker pull ghcr.io/sevakavakians/kato:latest
 
 # 2. Verify version in container
-docker run --rm ghcr.io/sevakavakians/kato:3.0.1 \
+docker run --rm ghcr.io/sevakavakians/kato:<version> \
   python -c "import kato; print(kato.__version__)"
 
 # 3. Test container starts correctly
-docker run --rm -p 8000:8000 ghcr.io/sevakavakians/kato:3.0.1 &
+docker run --rm -p 8000:8000 ghcr.io/sevakavakians/kato:<version> &
 sleep 5
 curl http://localhost:8000/health
 
@@ -355,13 +355,13 @@ If a release has critical issues:
 docker images ghcr.io/sevakavakians/kato
 
 # 2. Redeploy last good version
-docker pull ghcr.io/sevakavakians/kato:3.0.0
-docker tag ghcr.io/sevakavakians/kato:3.0.0 \
+docker pull ghcr.io/sevakavakians/kato:<version>
+docker tag ghcr.io/sevakavakians/kato:<version> \
            ghcr.io/sevakavakians/kato:latest
 docker push ghcr.io/sevakavakians/kato:latest
 
 # 3. Update deployments
-# Kubernetes: kubectl set image deployment/kato kato=ghcr.io/sevakavakians/kato:3.0.0
+# Kubernetes: kubectl set image deployment/kato kato=ghcr.io/sevakavakians/kato:<version>
 # Docker Compose: update docker compose.yml and restart
 ```
 
@@ -380,13 +380,13 @@ git push origin --delete v3.0.1
 ### Communication
 
 ```markdown
-**Rollback Notice: KATO v3.0.1**
+**Rollback Notice: KATO v<version>**
 
 We've rolled back v3.0.1 due to [issue description].
 
 **Action Required:**
 - If you deployed v3.0.1, rollback to v3.0.0
-- Command: docker pull ghcr.io/sevakavakians/kato:3.0.0
+- Command: docker pull ghcr.io/sevakavakians/kato:<version>
 
 **Status:** Investigating issue, fix expected in v3.0.2
 
@@ -431,8 +431,3 @@ Copy this for each release:
 - [Version Management](version-management.md) - Semantic versioning details
 - [Changelog Guidelines](changelog-guidelines.md) - Writing changelogs
 - [Container Manager](/docs/CONTAINER_MANAGER.md) - Automation details
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

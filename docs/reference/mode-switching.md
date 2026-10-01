@@ -2,7 +2,7 @@
 
 ## There Is No Mode Switch
 
-KATO v3.0+ runs on the ClickHouse + Redis hybrid architecture, and that is the
+KATO runs on the ClickHouse + Redis hybrid architecture, and that is the
 only supported architecture. MongoDB has been removed, and there is nothing to
 switch between.
 
@@ -53,8 +53,3 @@ POST /sessions
 - **[Filter Pipeline Guide](filter-pipeline-guide.md)** - MinHash/LSH tuning and pipeline defaults
 - **[Hybrid Architecture](../developers/hybrid-architecture.md)** - How ClickHouse and Redis are used
 - **[Environment Variables Reference](configuration-vars.md)** - Every variable KATO actually reads
-
----
-
-**Last Updated**: September 2026
-**KATO Version**: 3.0+

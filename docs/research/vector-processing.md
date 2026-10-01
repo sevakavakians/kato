@@ -589,8 +589,3 @@ print(f"Search time: {elapsed*1000:.1f}ms")
 - [Similarity Metrics](similarity-metrics.md) - Similarity calculations
 - [Core Concepts](core-concepts.md) - KATO fundamentals
 - [Pattern Theory](pattern-theory.md) - Pattern representation
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

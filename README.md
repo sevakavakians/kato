@@ -246,24 +246,22 @@ KATO achieves competitive performance on commodity CPUs through algorithmic opti
 ### Option 1: Pre-Built Container Images (Recommended)
 
 ```bash
-# Recommended for production - pin to specific version
-docker pull ghcr.io/sevakavakians/kato:6.3.0
-
-# Auto-receive patch updates (security fixes, bug fixes)
-docker pull ghcr.io/sevakavakians/kato:6.3
-
 # Always use latest stable (for development)
 docker pull ghcr.io/sevakavakians/kato:latest
+
+# Recommended for production - pin to an exact release.
+# Release numbers: https://github.com/sevakavakians/kato/releases
+docker pull ghcr.io/sevakavakians/kato:<version>
 ```
 
 | Tag | Description | Use Case |
 |-----|-------------|----------|
-| `6.3.0` | Specific version (immutable) | Production - pin to exact version |
-| `6.3` | Latest patch for 6.3.x | Auto-receive security/bug fixes |
-| `6` | Latest minor for 6.x | Track major version |
+| `X.Y.Z` | Specific version (immutable) | Production - pin to an exact release |
+| `X.Y` | Latest patch for that minor | Auto-receive security/bug fixes |
+| `X` | Latest minor for that major | Track a major version line |
 | `latest` | Latest stable release | Development and testing |
 
-To use a pre-built image with Docker Compose, replace the `build` section with `image: ghcr.io/sevakavakians/kato:6.3.0`. See the [Deployment Guide](docs/operations/docker-deployment.md) for complete instructions.
+To use a pre-built image with Docker Compose, replace the `build` section with `image: ghcr.io/sevakavakians/kato:<version>`. See the [Deployment Guide](docs/operations/docker-deployment.md) for complete instructions.
 
 ### Option 2: Build from Source
 
@@ -438,17 +436,15 @@ Like GAIuS before it, KATO adheres to [ExCITE AI](https://medium.com/@sevakavaki
 - **Traceable** - Complete audit trails for regulatory compliance
 - **Editable** - Real-time knowledge correction via database edits
 
-## Recent Updates
+## Release history
 
-### v6.3.0 (2026-10)
-- **Pattern purging**: `POST /sessions/{id}/patterns/purge` permanently deletes retired patterns and unwinds their contribution to the node's symbol, affinity and global statistics. Only a retired pattern can be purged, so erasure always passes through a reversible step first. Resumable, with a reason reported per pattern ID.
-- **Pattern retirement** (6.2.0): `POST /sessions/{id}/patterns/retire` and `/un-retire` hide a learned pattern from every read path without deleting it.
-- See [pattern retirement and purging](docs/users/pattern-retirement.md).
+See [CHANGELOG.md](CHANGELOG.md) for every release, and the
+[releases page](https://github.com/sevakavakians/kato/releases) for the current
+version and its container images.
 
-### v6.0.0 (2026-09)
-- **Recall-safe candidate bound** (**breaking**): `length_min_ratio`, `length_max_ratio` and the `'length'` filter were removed as recall-unsafe, and `recall_threshold=0` is now rejected.
-
-See [CHANGELOG.md](CHANGELOG.md) for the full release history, including 4.x and 5.x.
+This README describes how KATO behaves now; it deliberately does not name release
+versions, so that nothing here can quietly go stale. Where a feature needs one,
+the page documenting that feature says which release introduced it.
 
 ## Support
 

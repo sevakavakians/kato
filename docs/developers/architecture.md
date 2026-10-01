@@ -704,8 +704,3 @@ GET /health
 - **Code Organization**: [code-organization.md](code-organization.md)
 - **Data Flow**: [data-flow.md](data-flow.md)
 - **Design Patterns**: [design-patterns.md](design-patterns.md)
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

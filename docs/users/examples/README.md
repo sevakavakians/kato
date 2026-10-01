@@ -87,8 +87,3 @@ To add a new example:
 - **Multi-session**: Shared knowledge bases
 - **Custom metrics**: Application-specific ranking
 - **Emotive tracking**: Emotional context
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

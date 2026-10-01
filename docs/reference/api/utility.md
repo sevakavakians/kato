@@ -451,8 +451,3 @@ Use percept for input validation, cognition for output analysis.
 - [Predictions API](predictions.md) - Generate cognition data
 - [Pattern Object Reference](../pattern-object.md)
 - [Core Concepts](../../users/concepts.md)
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

@@ -517,8 +517,3 @@ relevant_chunks = search_similar_vectors(query_emb)
 - [Similarity Metrics](similarity-metrics.md) - Cosine similarity details
 - [Core Concepts](core-concepts.md) - KATO fundamentals
 - [Pattern Theory](pattern-theory.md) - Pattern representation
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

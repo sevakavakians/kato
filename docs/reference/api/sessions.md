@@ -478,8 +478,3 @@ Returns:
 - [Learning API](learning.md) - Learn patterns from sessions
 - [Configuration API](configuration.md) - Update session config
 - [Session Configuration Reference](../session-configuration.md)
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

@@ -577,8 +577,3 @@ git clean -fd
 - **Git Flow**: https://nvie.com/posts/a-successful-git-branching-model/
 - **Conventional Commits**: https://www.conventionalcommits.org/
 - **GitHub Flow**: https://guides.github.com/introduction/flow/
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

@@ -216,8 +216,3 @@ try {
 
 - [API Reference](api/README.md) - Complete API documentation
 - [Troubleshooting](../users/troubleshooting.md) - Common issues and solutions
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

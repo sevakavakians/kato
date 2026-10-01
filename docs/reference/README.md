@@ -35,8 +35,3 @@ Welcome to the KATO reference documentation! This section provides technical spe
 
 ### Terminology
 - **[Glossary](glossary.md)** - Complete terminology reference
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

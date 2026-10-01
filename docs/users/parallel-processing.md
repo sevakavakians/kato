@@ -393,8 +393,3 @@ with ThreadPoolExecutor(max_workers=NUM_WORKERS) as pool:
 - [Pattern Learning Guide](pattern-learning.md) — what gets learned, auto-learn triggers
 - [Python Client Library](python-client.md) — a more complete client than the snippets here
 - [Operations: Scaling](../operations/scaling.md) — infrastructure-side scaling, load balancers, multi-instance
-
----
-
-**Last Updated**: April 2026
-**KATO Version**: 3.10.0+

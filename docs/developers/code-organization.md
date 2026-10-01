@@ -497,8 +497,3 @@ rapidfuzz==3.5.2
 - [Development Setup](development-setup.md)
 - [Code Style Guide](code-style.md)
 - [Adding Endpoints](adding-endpoints.md)
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

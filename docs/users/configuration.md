@@ -1075,8 +1075,3 @@ SESSION_TTL=7200
 - [Session Management](session-management.md)
 - [Pattern Learning](pattern-learning.md)
 - [Performance Tuning](../operations/performance-tuning.md)
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

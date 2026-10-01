@@ -379,8 +379,3 @@ curl -X POST https://kato.yourdomain.com/sessions \
 - [ ] **Known issues** documented and accepted
 - [ ] **Rollback plan** approved
 - [ ] **Go-live authorization** obtained
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

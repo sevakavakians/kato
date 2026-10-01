@@ -25,8 +25,3 @@ Welcome to the KATO research documentation! This section covers the theoretical 
 - **[Emotives Processing](emotives-processing.md)** - Emotional context modeling
 - **[Metadata Processing](metadata-processing.md)** - Contextual tagging
 - **[Vector Embeddings](vector-embeddings.md)** - Multi-dimensional representations
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

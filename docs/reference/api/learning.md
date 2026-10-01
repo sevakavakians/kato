@@ -576,8 +576,3 @@ STM: [["a", "b"]]  # 1 event with 2 symbols → Can learn
 - [Predictions API](predictions.md) - Use learned patterns
 - [Session Configuration](../session-configuration.md) - Configure learning behavior
 - [Pattern Object Reference](../pattern-object.md)
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

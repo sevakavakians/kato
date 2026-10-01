@@ -165,7 +165,7 @@ Error responses (4xx/5xx):
 
 ## Session-Based API (Required)
 
-**⚠️ IMPORTANT**: As of KATO v3.0+, all core operations require session-based endpoints.
+**⚠️ IMPORTANT**: All core operations require session-based endpoints.
 
 Direct endpoints (`/observe`, `/learn`, `/predictions`) have been **permanently removed**.
 
@@ -228,11 +228,10 @@ Monitor concurrency with: `GET /concurrency`
 
 ## Versioning
 
-Current API version: **v3.0+**
-
-KATO uses URL-based versioning. The current API is stable and will maintain backward compatibility.
-
-Breaking changes will be released as new API versions (e.g., `/v2/sessions`).
+Endpoints are not version-prefixed — there is no `/v1/` or `/v2/` path segment, and
+the paths documented here are the paths the service serves. The server reports its
+release in the `info.version` field of `/openapi.json`, and breaking changes are
+called out in [CHANGELOG.md](../../../CHANGELOG.md) under a major version bump.
 
 ## Data Models
 
@@ -307,8 +306,3 @@ See [../error-codes.md](../error-codes.md) for complete error reference.
 - [Core Concepts](../../users/concepts.md)
 - [Configuration Reference](../configuration-vars.md)
 - [Troubleshooting](../../users/troubleshooting.md)
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

@@ -656,8 +656,3 @@ class SessionHealthMonitor:
 - [Load Balancing](load-balancing.md)
 - [Architecture Patterns](architecture-patterns.md)
 - [API Reference](/docs/reference/api/sessions.md)
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

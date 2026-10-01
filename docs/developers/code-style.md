@@ -726,8 +726,3 @@ ignore = [
 - **Google Python Style**: https://google.github.io/styleguide/pyguide.html
 - **Black**: https://black.readthedocs.io/
 - **Ruff**: https://beta.ruff.rs/docs/
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

@@ -692,8 +692,3 @@ from workers.interfaces import MemoryInterface  # ✓
 - [Architecture Overview](architecture.md)
 - [Adding Endpoints](adding-endpoints.md)
 - [Testing Guide](testing.md)
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

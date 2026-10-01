@@ -511,8 +511,3 @@ KATO as deterministic ML:
 - [Vector Embeddings](vector-embeddings.md) - Vector processing
 - [Emotives Processing](emotives-processing.md) - Continuous values
 - [Metadata Processing](metadata-processing.md) - Contextual information
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

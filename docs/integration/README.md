@@ -21,8 +21,3 @@ Welcome to the KATO integration documentation! This section covers architecture 
 - **[Chatbot Integration](chatbot-integration.md)** - KATO in conversational AI
 - **[Recommendation Systems](recommendation-systems.md)** - Pattern-based recommendations
 - **[Zettelkasten / Second Brain](zettelkasten.md)** - KATO as a knowledge management system
-
----
-
-**Last Updated**: August 2026
-**KATO Version**: 4.0+

@@ -522,8 +522,3 @@ docker compose down
 # Or remove all data
 docker compose down -v  # WARNING: Deletes ALL patterns
 ```
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

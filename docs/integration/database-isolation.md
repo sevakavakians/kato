@@ -511,8 +511,3 @@ class QdrantPayloadIsolation:
 - [Multi-Instance Deployment](multi-instance.md)
 - [Security Guidelines](/docs/maintenance/security.md)
 - [Database Persistence](/docs/users/database-persistence.md)
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

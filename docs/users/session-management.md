@@ -504,8 +504,3 @@ print(f"STM length: {kato.get_stm()['length']}")
 - [Configuration Guide](configuration.md)
 - [Database Persistence](database-persistence.md)
 - [API Reference](../reference/api/)
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

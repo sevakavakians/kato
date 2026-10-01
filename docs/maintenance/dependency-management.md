@@ -207,8 +207,3 @@ redis==5.99.0
 
 - [Security Guidelines](security.md)
 - [Vulnerability Management](vulnerability-management.md)
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

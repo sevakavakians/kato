@@ -595,8 +595,3 @@ clusters = cluster_patterns(patterns, similarity_threshold=0.8)
 - [Information Theory](information-theory.md) - Information-theoretic foundations
 - [Pattern Matching](pattern-matching.md) - Matching algorithms
 - [Similarity Metrics](similarity-metrics.md) - Similarity calculations
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

@@ -29,7 +29,7 @@ KATO (Knowledge Abstraction for Traceable Outcomes) is a deterministic memory an
 
 **Core Concept**: **Patterns** - learned sequences (temporal) or profiles (non-temporal) that represent knowledge.
 
-### Storage Architecture (v3.0+)
+### Storage Architecture
 **IMPORTANT**: KATO now uses a **ClickHouse + Redis hybrid architecture** (MongoDB completely removed as of v3.0.0):
 - **ClickHouse**: Pattern data storage with multi-stage filter pipeline (billion-scale performance)
 - **Redis**: Session management, pattern metadata (frequency, emotives), caching
@@ -38,7 +38,7 @@ KATO (Knowledge Abstraction for Traceable Outcomes) is a deterministic memory an
 
 See [docs/developers/hybrid-architecture.md](docs/developers/hybrid-architecture.md) for complete details.
 
-### Stateless Processor Architecture (v3.0+)
+### Stateless Processor Architecture
 **IMPORTANT**: KATO processors use a **stateless request pipeline**:
 - **Externally Stateless**: API contract is stateless — session state passed in/out per request
 - **Per-Request Working State**: `KatoProcessor.observe/learn/get_predictions` hand the session's STM and accumulators to `ObservationProcessor.process_observation`, `PatternOperations.learn_pattern_from` and `PatternProcessor.learn_from`/`predict_from`, which return the updated STM. Nothing about a request is staged in processor instance variables (the former `BRIDGE:` pattern and its lock are gone as of Phase 1.6). The legacy stateful `PatternProcessor.learn()`/`processEvents()`/`STM` remain only as thin delegates for non-request callers.
@@ -48,11 +48,11 @@ See [docs/developers/hybrid-architecture.md](docs/developers/hybrid-architecture
 
 **Pattern**:
 ```python
-# OLD (v2.x - stateful, with locks)
+# BEFORE (stateful, with locks)
 processor.observe(observation)  # MUTATES self.stm
 predictions = processor.get_predictions()  # READS self.stm
 
-# NEW (v3.0+ - stateless, no locks)
+# NOW (stateless, no locks)
 new_state = processor.observe(observation, session_state, config)  # PURE FUNCTION
 predictions = processor.get_predictions(session_state=session_state, config=config)  # PURE FUNCTION
 ```
@@ -375,6 +375,10 @@ Claude Code automatically:
 
 ---
 
-**Last Updated**: November 2025
-**KATO Version**: 3.0+
-- remember to not create locks for this project. Remember to not regress when working on this project.
+## Standing Reminders
+
+- Do not create locks for this project.
+- Do not regress when working on this project.
+- Release versions belong in `CHANGELOG.md` and `planning-docs/` only. Everything
+  else stays evergreen — see "Keep documentation evergreen" in
+  [docs/developers/contributing.md](docs/developers/contributing.md).

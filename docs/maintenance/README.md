@@ -24,8 +24,3 @@ Welcome to the KATO maintenance documentation! This section covers release manag
 ### Project Health
 - **[Known Issues](known-issues.md)** - Current bugs and limitations
 - **[Technical Debt](technical-debt.md)** - Areas needing improvement
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

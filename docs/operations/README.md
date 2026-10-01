@@ -29,8 +29,3 @@ Welcome to the KATO operations documentation! This section covers deploying, con
 - **[Troubleshooting Guide](troubleshooting.md)** - Common operational issues
 - **[Performance Issues](performance-issues.md)** - Diagnosing slowness
 - **[Session Management](session-management.md)** - Session creation and management
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

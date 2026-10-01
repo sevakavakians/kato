@@ -16,9 +16,9 @@ KATO's filter pipeline is a multi-stage system that efficiently reduces billions
 1. **Filtering Phase**: Database and Python-side filters reduce candidates (billions → hundreds)
 2. **Matching Phase**: RapidFuzz performs final similarity calculation on filtered candidates
 
-### Default Configuration (v3.0+)
+### Default Configuration
 
-**IMPORTANT**: As of KATO v3.0, the **default filter pipeline is empty** (`filter_pipeline: []`).
+**IMPORTANT**: The **default filter pipeline is empty** (`filter_pipeline: []`).
 
 ```json
 {
@@ -929,8 +929,3 @@ Winner: Jaccard (better recall, acceptable latency)
 - [Pattern Matching](../research/pattern-matching.md) - Core matching algorithms
 - [Configuration Reference](configuration-vars.md) - Complete config parameter list
 - [API Reference](api/) - REST API documentation
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

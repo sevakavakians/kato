@@ -44,13 +44,13 @@ the attribute `version` is obsolete, it will be ignored
 
 ---
 
-### 3. Redis is Required (v3.0+)
+### 3. Redis is Required
 **Status**: By Design
 **Severity**: Informational
 **Location**: Configuration
 
 **Description**:
-- Redis is a **required** service in KATO v3.0+ (ClickHouse + Redis hybrid architecture)
+- Redis is a **required** service (ClickHouse + Redis hybrid architecture)
 - Redis handles session management, pattern metadata, and caching
 - KATO will fail to start if Redis is unavailable
 
@@ -190,17 +190,12 @@ Factory pattern can be implemented if needed
 
 ## Current Development Status
 
-### Completed Phases
-- ✅ Phase 1: Structured Logging and Error Handling
-- ✅ Phase 2: Type Hints and Documentation
-- ✅ Phase 3: Configuration Management System
-- ✅ ClickHouse + Redis Hybrid Architecture (v3.0)
-- ✅ Stateless Processor Architecture (v3.0)
-- ✅ Database Authentication Support (v3.4)
+Tracked in `planning-docs/`, not here — see `SESSION_STATE.md` for what is in
+flight, `SPRINT_BACKLOG.md` for what is queued, and `DECISIONS.md` for why things
+are the way they are. Release contents are in
+[CHANGELOG.md](../../CHANGELOG.md).
 
-### System Health
-- **Test Coverage**: 445+ tests passing
-- **API Stability**: All endpoints functional
-- **Performance**: 100-300x improvement with ClickHouse/Redis hybrid + Qdrant
-- **Configuration**: Fully managed with Pydantic
-- **Documentation**: Comprehensive and up-to-date
+A duplicate summary lived here and went stale without anything failing: it claimed
+445 passing tests long after the suite passed 800, and listed completed phases by a
+version several majors back. A figure that is only correct on the day it is written
+does not belong in a guide.

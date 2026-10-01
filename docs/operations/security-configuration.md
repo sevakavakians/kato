@@ -952,8 +952,3 @@ async def delete_user_data(user_id: str):
 - [Monitoring](monitoring.md)
 - [Docker Deployment](docker-deployment.md)
 - [Kubernetes Deployment](kubernetes-deployment.md)
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

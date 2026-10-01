@@ -254,6 +254,41 @@ When adding features:
 3. Update docs/users/api-reference.md for new endpoints
 4. Document configuration in docs/operations/configuration.md
 
+### Keep documentation evergreen
+
+**Release versions live in `CHANGELOG.md` and `planning-docs/`. Nowhere else.**
+
+Every version number written into a guide is a line that silently goes stale: it
+is correct on the day it is written and wrong from the next release onward, and
+nothing fails when it rots. A reader following an install snippet that names a
+release three majors old gets a working command and the wrong software, which is
+worse than an error. This had happened in eleven files at once, spanning eight
+different versions, before the rule was written down.
+
+So, outside `CHANGELOG.md` and `planning-docs/`:
+
+- **Do not name a release.** Not in prose, not in a heading, not in a snippet.
+- **Container images** use `:latest` when the example only needs to run the image.
+  When the point of the example *is* pinning, write the placeholder
+  `ghcr.io/sevakavakians/kato:<version>` and link to
+  [releases](https://github.com/sevakavakians/kato/releases) for the current
+  number. Keep the advice, drop the digits.
+- **No `Last Updated` or `KATO Version` footers.** Git history already records
+  when a file changed, and it cannot fall out of date.
+
+There is one exception, and it is about the reader, not the writer:
+
+- **Availability markers.** Write "available as of v6.3" only where a reader on an
+  earlier version would need to act differently — a feature that is simply absent
+  for them, or behaviour that changed under them. If every supported reader sees
+  the same thing, the version adds nothing and goes.
+
+Documents that define the release process itself — `docs/maintenance/releasing.md`,
+`version-management.md`, `changelog-guidelines.md` — necessarily discuss version
+numbers. Use obvious placeholders (`X.Y.Z`) for the scheme, and clearly
+hypothetical numbers for worked examples, so neither can be mistaken for a current
+release.
+
 ## Performance Considerations
 
 ### Profiling

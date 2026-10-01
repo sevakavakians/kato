@@ -799,8 +799,3 @@ fi
 - [Monitoring](monitoring.md) - Metrics and dashboards
 - [Scaling](scaling.md) - Horizontal and vertical scaling
 - [Environment Variables](environment-variables.md) - Configuration options
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

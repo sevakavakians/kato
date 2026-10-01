@@ -138,8 +138,8 @@ version = "3.0.0"
 **Synced Files:**
 1. `setup.py`
 2. `kato/__init__.py`
-3. Git tags (`v3.0.0`)
-4. Container images (`ghcr.io/sevakavakians/kato:3.0.0`)
+3. Git tags (`vX.Y.Z`)
+4. Container images (`ghcr.io/sevakavakians/kato:X.Y.Z`)
 
 ### Version Update Script
 
@@ -310,13 +310,13 @@ Pre-releases **do not** update `:latest` tag:
 
 ```bash
 # Pre-release builds
-ghcr.io/sevakavakians/kato:3.1.0-beta.1    # Specific pre-release
-# (does NOT update :latest, :3.1, or :3)
+ghcr.io/sevakavakians/kato:X.Y.Z-beta.1    # Specific pre-release
+# (does NOT update :latest, :X.Y, or :X)
 
 # Final release builds
-ghcr.io/sevakavakians/kato:3.1.0           # Specific version
-ghcr.io/sevakavakians/kato:3.1             # Minor version
-ghcr.io/sevakavakians/kato:3               # Major version
+ghcr.io/sevakavakians/kato:X.Y.Z           # Specific version
+ghcr.io/sevakavakians/kato:X.Y             # Minor version
+ghcr.io/sevakavakians/kato:X               # Major version
 ghcr.io/sevakavakians/kato:latest          # Latest stable
 ```
 
@@ -448,8 +448,3 @@ print(sorted_versions)
 - [Release Process](releasing.md)
 - [Changelog Guidelines](changelog-guidelines.md)
 - [Semantic Versioning Specification](https://semver.org/)
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

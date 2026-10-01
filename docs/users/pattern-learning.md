@@ -556,8 +556,3 @@ print(f"Connected to: {info['node_id']}")
 - [Predictions Guide](predictions.md)
 - [Core Concepts](concepts.md)
 - [API Reference](../reference/api/)
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

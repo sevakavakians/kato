@@ -36,7 +36,7 @@ metadata:
   name: kato
   labels:
     app: kato
-    version: v3.0.0
+    version: v<version>
 spec:
   ports:
   - port: 8000
@@ -54,16 +54,16 @@ spec:
   selector:
     matchLabels:
       app: kato
-      version: v3.0.0
+      version: v<version>
   template:
     metadata:
       labels:
         app: kato
-        version: v3.0.0
+        version: v<version>
     spec:
       containers:
       - name: kato
-        image: ghcr.io/sevakavakians/kato:3.0.0
+        image: ghcr.io/sevakavakians/kato:<version>
         ports:
         - containerPort: 8000
         env:
@@ -154,10 +154,10 @@ spec:
   subsets:
   - name: standard
     labels:
-      version: v3.0.0
+      version: v<version>
   - name: high-performance
     labels:
-      version: v3.0.0
+      version: v<version>
       tier: premium
 ```
 
@@ -189,7 +189,7 @@ spec:
     spec:
       containers:
       - name: kato
-        image: ghcr.io/sevakavakians/kato:3.0.0
+        image: ghcr.io/sevakavakians/kato:<version>
         ports:
         - containerPort: 8000
 ```
@@ -745,8 +745,3 @@ class ChatbotMemoryService:
 - [Load Balancing Strategies](load-balancing.md)
 - [Session Management](session-management.md)
 - [Multi-Instance Deployment](multi-instance.md)
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

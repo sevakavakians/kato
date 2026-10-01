@@ -395,8 +395,3 @@ Document intentional technical decisions:
 - [Code Quality Standards](code-quality.md)
 - [Code Review Guidelines](code-review.md)
 - [Contributing Guide](/docs/developers/contributing.md)
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

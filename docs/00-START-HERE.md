@@ -133,8 +133,3 @@ docs/
 - **Have a bug?** See [Known Issues](maintenance/known-issues.md) or [Troubleshooting](users/troubleshooting.md)
 - **Want to contribute?** Start with [Contributing Guide](developers/contributing.md)
 - **Questions?** Open an issue on GitHub
-
----
-
-**Last Updated**: April 2026
-**KATO Version**: 3.0+

@@ -510,8 +510,3 @@ KATO uses multi-stage filtering for efficiency:
 - [Prediction Object Reference](../prediction-object.md) - Complete field documentation
 - [Predictive Information Theory](../../research/predictive-information.md)
 - [Pattern Matching Algorithms](../../research/pattern-matching.md)
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

@@ -768,8 +768,3 @@ class IoTPatternDetector:
 - [Microservices Integration](microservices-integration.md)
 - [Session Management](session-management.md)
 - [Load Balancing](load-balancing.md)
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

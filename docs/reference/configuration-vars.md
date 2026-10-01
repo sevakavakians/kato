@@ -222,8 +222,3 @@ CONNECTION_POOL_SIZE=200
 KATO_WORKERS=8
 KATO_LIMIT_CONCURRENCY=200
 ```
-
----
-
-**Last Updated**: September 2026
-**KATO Version**: 3.0+

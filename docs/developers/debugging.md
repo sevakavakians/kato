@@ -670,8 +670,3 @@ watch -n 2 'docker exec kato-clickhouse clickhouse-client --query "SELECT query,
 - [Performance Profiling](performance-profiling.md)
 - [Architecture Overview](architecture.md)
 - [Code Organization](code-organization.md)
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

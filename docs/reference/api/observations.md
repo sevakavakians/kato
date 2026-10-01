@@ -532,8 +532,3 @@ await observe_sequence(session_id, {
 - [Session Management](sessions.md) - Create and manage sessions
 - [Observation Object Specification](../observation-object.md)
 - [Pattern Matching Research](../../research/pattern-matching.md)
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

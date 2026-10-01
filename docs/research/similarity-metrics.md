@@ -527,8 +527,3 @@ def quick_reject(pattern, query, threshold):
 - [Vector Processing](vector-processing.md) - Vector operations
 - [Core Concepts](core-concepts.md) - KATO fundamentals
 - [Performance Tuning](../operations/performance-tuning.md) - Optimization
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

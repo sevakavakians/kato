@@ -266,8 +266,3 @@ Closes #123
 - [Code Quality Standards](code-quality.md)
 - [Testing Standards](testing-standards.md)
 - [Contributing Guide](/docs/developers/contributing.md)
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

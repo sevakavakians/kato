@@ -145,8 +145,3 @@ KATO transforms Luhmann's analog methodology into a **deterministic, scalable, a
 - [Pattern Learning](../users/pattern-learning.md) - Learning patterns from observations
 - [Predictions Guide](../users/predictions.md) - Querying your knowledge base
 - [Session Management](session-management.md) - Multi-user knowledge bases
-
----
-
-**Last Updated**: August 2026
-**KATO Version**: 4.0+

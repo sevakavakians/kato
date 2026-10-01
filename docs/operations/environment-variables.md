@@ -690,8 +690,3 @@ curl http://localhost:8000/metrics | grep prediction_count
 - [Performance Tuning](performance-tuning.md) - Performance optimization
 - [Docker Deployment](docker-deployment.md) - Docker-specific configuration
 - [Kubernetes Deployment](kubernetes-deployment.md) - Kubernetes configuration
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

@@ -738,8 +738,3 @@ class StreamingRecommender:
 - [Vector Embeddings](/docs/research/vector-embeddings.md)
 - [Emotives Processing](/docs/research/emotives-processing.md)
 - [Session Management](session-management.md)
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

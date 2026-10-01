@@ -398,8 +398,3 @@ def test_process_strings(input, expected):
 - [Testing Guide (Developers)](/docs/developers/testing.md)
 - [Code Quality Standards](code-quality.md)
 - [Code Review Guidelines](code-review.md)
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

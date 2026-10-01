@@ -415,7 +415,7 @@ spec:
     spec:
       containers:
       - name: kato
-        image: ghcr.io/sevakavakians/kato:3.0.0
+        image: ghcr.io/sevakavakians/kato:<version>
         ports:
         - containerPort: 8000
         livenessProbe:
@@ -573,8 +573,3 @@ class MetricsBasedLoadBalancer:
 - [Session Management](session-management.md)
 - [Kubernetes Deployment](/docs/operations/kubernetes-deployment.md)
 - [Monitoring](/docs/operations/monitoring.md)
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

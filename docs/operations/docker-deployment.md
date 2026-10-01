@@ -549,8 +549,3 @@ docker exec redis-kb redis-cli ping
 - [Security Configuration](security-configuration.md)
 - [Monitoring](monitoring.md)
 - [Scaling](scaling.md)
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

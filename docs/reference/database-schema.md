@@ -171,8 +171,8 @@ Managed by `RedisSessionManager`. TTL-based (default 3600s, auto-extended on acc
 | `emotives_accumulator` | array | Accumulated emotive observations |
 | `metadata_accumulator` | array | Accumulated metadata observations |
 | `time` | int | Observation counter |
-| `percept_data` | object | Session-isolated percept (v3.0+) |
-| `predictions` | array | Session-isolated predictions (v3.0+) |
+| `percept_data` | object | Session-isolated percept |
+| `predictions` | array | Session-isolated predictions |
 | `metadata` | object | Session metadata |
 | `access_count` | int | Number of accesses |
 | `max_stm_size` | int | STM capacity limit |

@@ -713,25 +713,29 @@ KATO follows [Semantic Versioning 2.0.0](https://semver.org/) with multiple tag 
 
 ### Available Image Tags
 
-| Tag Format | Example | Description | Updates | Use Case |
-|------------|---------|-------------|---------|----------|
-| `MAJOR.MINOR.PATCH` | `2.0.0` | Specific version (immutable) | Never | **Production** - Pin to exact version |
-| `MAJOR.MINOR` | `2.0` | Latest patch for minor | Patches only | Auto-receive bug/security fixes |
-| `MAJOR` | `2` | Latest minor for major | Minor + Patches | Track major version line |
-| `latest` | `latest` | Latest stable release | All updates | Development/testing only |
+Current release numbers are on the
+[releases page](https://github.com/sevakavakians/kato/releases).
+
+| Tag Format | Description | Updates | Use Case |
+|------------|-------------|---------|----------|
+| `X.Y.Z` | Specific version (immutable) | Never | **Production** - pin to an exact release |
+| `X.Y` | Latest patch for that minor | Patches only | Auto-receive bug/security fixes |
+| `X` | Latest minor for that major | Minors + patches | Track a major version line |
+| `latest` | Latest stable release | All updates | Development/testing only |
 
 ### Choosing the Right Tag
 
 **For Production (Recommended):**
 ```yaml
-# Pin to specific version for stability
-image: ghcr.io/sevakavakians/kato:2.0.0
+# Pin to an exact release for stability.
+# Current release numbers: https://github.com/sevakavakians/kato/releases
+image: ghcr.io/sevakavakians/kato:<major>.<minor>.<patch>
 ```
 
 **For Auto-Patching (Security/Bug Fixes):**
 ```yaml
-# Automatically get patches (2.0.1, 2.0.2, etc.)
-image: ghcr.io/sevakavakians/kato:2.0
+# Automatically get patch releases within that minor
+image: ghcr.io/sevakavakians/kato:<major>.<minor>
 ```
 
 **For Development:**
@@ -762,10 +766,10 @@ image: ghcr.io/sevakavakians/kato:latest
 # 1. Edit docker-compose.yml
 vim docker-compose.yml
 
-# Change:
-#   image: ghcr.io/sevakavakians/kato:2.0.0
+# Change the pinned tag from the release you are on to the one you want:
+#   image: ghcr.io/sevakavakians/kato:<current-version>
 # To:
-#   image: ghcr.io/sevakavakians/kato:2.1.0
+#   image: ghcr.io/sevakavakians/kato:<new-version>
 
 # 2. Pull and restart
 ./kato-manager.sh pull
@@ -775,8 +779,8 @@ vim docker-compose.yml
 #### Method 3: Manual Docker Commands
 
 ```bash
-# Pull new version
-docker pull ghcr.io/sevakavakians/kato:2.1.0
+# Pull the release you are upgrading to
+docker pull ghcr.io/sevakavakians/kato:<new-version>
 
 # Stop and remove old container
 docker stop kato
@@ -796,7 +800,7 @@ docker run -d \
   -e QDRANT_PORT=6333 \
   -e REDIS_URL=redis://kato-redis:6379 \
   -e LOG_LEVEL=INFO \
-  ghcr.io/sevakavakians/kato:2.1.0
+  ghcr.io/sevakavakians/kato:<new-version>
 ```
 
 ### Version Verification
@@ -806,7 +810,7 @@ docker run -d \
 docker inspect kato | grep -A 5 "Labels"
 
 # View version metadata
-docker inspect ghcr.io/sevakavakians/kato:2.0.0 | jq '.[0].Config.Labels'
+docker inspect ghcr.io/sevakavakians/kato:<version> | jq '.[0].Config.Labels'
 
 # Test version in container
 docker exec kato python -c "import kato; print(kato.__version__)"
@@ -849,8 +853,8 @@ Data in ClickHouse, Qdrant, and Redis volumes is preserved during version change
 Pre-release versions (alpha, beta, rc) are available with special tags:
 
 ```yaml
-# Use pre-release version
-image: ghcr.io/sevakavakians/kato:2.1.0-beta.1
+# Use a pre-release version
+image: ghcr.io/sevakavakians/kato:<major>.<minor>.<patch>-beta.1
 ```
 
-**Note:** Pre-releases do NOT update `latest`, `2.1`, or `2` tags. Use only for testing.
+**Note:** Pre-releases do NOT update the `latest`, `<major>.<minor>` or `<major>` tags. Use only for testing.

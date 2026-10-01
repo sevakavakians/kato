@@ -135,7 +135,7 @@ async def create_session(user=Depends(verify_token)):
 # docker compose.yml
 services:
   kato:
-    image: ghcr.io/sevakavakians/kato:3.0.0
+    image: ghcr.io/sevakavakians/kato:<version>
     environment:
       - CLICKHOUSE_HOST=${CLICKHOUSE_HOST}  # From environment
       - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
@@ -387,8 +387,3 @@ pip-licenses
 
 - [Vulnerability Management](vulnerability-management.md)
 - [Dependency Management](dependency-management.md)
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

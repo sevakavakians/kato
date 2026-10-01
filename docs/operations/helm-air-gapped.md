@@ -6,17 +6,17 @@ For enterprises whose Kubernetes clusters cannot reach `ghcr.io` directly, the c
 
 ```bash
 # Pull on a host with internet access
-docker pull ghcr.io/sevakavakians/kato:3.10.1
-docker tag  ghcr.io/sevakavakians/kato:3.10.1 \
-            registry.internal.example.com/kato/kato:3.10.1
-docker push registry.internal.example.com/kato/kato:3.10.1
+docker pull ghcr.io/sevakavakians/kato:<version>
+docker tag  ghcr.io/sevakavakians/kato:<version> \
+            registry.internal.example.com/kato/kato:<version>
+docker push registry.internal.example.com/kato/kato:<version>
 ```
 
 Or, with `crane` (faster, no daemon required):
 
 ```bash
-crane copy ghcr.io/sevakavakians/kato:3.10.1 \
-           registry.internal.example.com/kato/kato:3.10.1
+crane copy ghcr.io/sevakavakians/kato:<version> \
+           registry.internal.example.com/kato/kato:<version>
 ```
 
 ## Step 2 — Mirror the Helm chart
@@ -78,7 +78,7 @@ helm install kato ./kato-0.1.0.tgz \
 The container image is signed via cosign keyless. To verify before mirroring:
 
 ```bash
-cosign verify ghcr.io/sevakavakians/kato:3.10.1 \
+cosign verify ghcr.io/sevakavakians/kato:<version> \
   --certificate-identity-regexp '.*' \
   --certificate-oidc-issuer-regexp '.*'
 ```

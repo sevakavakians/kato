@@ -540,8 +540,3 @@ patterns = [
 - [Predictive Information](predictive-information.md) - Detailed predictive information
 - [Pattern Theory](pattern-theory.md) - Pattern representation theory
 - [Entropy Calculations](entropy-calculations.md) - Entropy algorithms
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

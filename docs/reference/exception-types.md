@@ -207,8 +207,3 @@ except VectorDimensionError as e:
 - [Error Codes](error-codes.md) - HTTP error codes
 - [API Reference](api/README.md) - API error responses
 - [Troubleshooting](../users/troubleshooting.md) - Common issues
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

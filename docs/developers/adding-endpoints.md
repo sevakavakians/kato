@@ -628,8 +628,3 @@ Before committing your new endpoint:
 - [Testing Guide](testing.md)
 - [API Reference](../reference/api/)
 - [Code Organization](code-organization.md)
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

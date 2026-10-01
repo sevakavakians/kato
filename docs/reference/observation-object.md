@@ -348,8 +348,3 @@ vector = [0.1, 0.2]  # Only 2 dimensions
 - [Observations API](api/observations.md) - Send observations
 - [Pattern Object](pattern-object.md) - How observations become patterns
 - [Vector Embeddings](../research/vector-embeddings.md) - Vector processing details
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

@@ -531,8 +531,3 @@ async def handle_message(user_id, message):
 - [Microservices Integration](microservices-integration.md) - Microservices patterns
 - [Event-Driven Architecture](event-driven-architecture.md) - Event-driven details
 - [Session Management](session-management.md) - Session handling
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

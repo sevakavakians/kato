@@ -534,8 +534,3 @@ curl -X POST http://localhost:8000/sessions/$SESSION_ID/config \
 - [Session Management API](sessions.md) - Create and manage sessions
 - [Pattern Matching Research](../../research/pattern-matching.md) - Matching algorithms
 - [Filter Pipeline Configuration](../../research/pattern-matching.md#filter-pipeline)
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

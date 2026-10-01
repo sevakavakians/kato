@@ -63,8 +63,3 @@ Welcome to the KATO user documentation! This section helps you get started with 
 - Structured as past/present/future segments
 - Include missing/extras for gap analysis
 - Ranked by potential (default) or other metrics
-
----
-
-**Last Updated**: November 2025
-**KATO Version**: 3.0+

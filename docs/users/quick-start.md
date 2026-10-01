@@ -22,7 +22,7 @@ cd kato
 
 ```bash
 # Start all services (ClickHouse, Qdrant, Redis, KATO)
-./start.sh
+./start.sh start
 ```
 
 ### 3. Verify Installation
@@ -273,7 +273,7 @@ print(f"KATO predicts: {predictions}")
 
 ```bash
 # Ensure services are running
-./start.sh
+./start.sh start
 
 # Run all tests (recommended)
 ./run_tests.sh --no-start --no-stop
@@ -298,7 +298,7 @@ docker compose logs kato
 
 # Rebuild if needed
 docker compose build --no-cache kato
-./start.sh
+./start.sh start
 ```
 
 ## Next Steps

@@ -77,7 +77,7 @@ cd kato
 
 ```bash
 # Start all services (KATO, ClickHouse, Qdrant, Redis)
-./start.sh
+./start.sh start
 ```
 
 The startup script will:
@@ -180,7 +180,7 @@ PORT=9000 ./start.sh
 
 # Or set in .env file
 echo "PORT=9000" >> .env
-./start.sh
+./start.sh start
 ```
 
 ## Post-Installation
@@ -209,7 +209,7 @@ Open in browser:
 
 ```bash
 # Ensure services are running first
-./start.sh
+./start.sh start
 
 # Run all tests
 ./run_tests.sh --no-start --no-stop
@@ -252,7 +252,7 @@ git pull
 docker compose build --no-cache
 
 # Restart KATO
-./start.sh
+./start.sh start
 ```
 
 **Important**: Data in ClickHouse, Redis, and Qdrant persists across upgrades via Docker volumes.
@@ -348,7 +348,7 @@ docker compose up -d kato
 
 # 2. Rebuild without cache
 docker compose build --no-cache kato
-./start.sh
+./start.sh start
 ```
 
 For more troubleshooting, see [Troubleshooting Guide](troubleshooting.md).

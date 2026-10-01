@@ -115,7 +115,7 @@ EOF
 
 ```bash
 # Start all services (ClickHouse, Qdrant, Redis, KATO)
-./start.sh
+./start.sh start
 
 # Or manually with docker compose
 docker compose up -d
@@ -172,7 +172,7 @@ kato/
 
 ```bash
 # Start all services
-./start.sh
+./start.sh start
 
 # View logs
 docker compose logs -f kato
@@ -587,7 +587,7 @@ lsof -i :6333
 # Clean and rebuild
 docker compose down
 docker system prune -f
-./start.sh
+./start.sh start
 ```
 
 ### Tests Failing

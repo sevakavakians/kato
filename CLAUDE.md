@@ -190,7 +190,7 @@ POST /sessions/{session_id}/config
 
 ### Critical Rules
 1. **Minimum Sequence Length**: 1+ strings in STM required for predictions (single-symbol uses fast path via `_predict_single_symbol_fast`)
-2. **Alphanumeric Sorting**: Strings sorted within events (auto-toggled based on `use_token_matching`; token-level=sort on, character-level=sort off)
+2. **Alphanumeric Sorting**: Strings sorted within events. `sort_symbols` is stored per session and derived from `use_token_matching`, but it **does not currently affect sorting**: `ObservationProcessor` is constructed with `pattern_processor.sort` (`kato_processor.py:86`), and a processor is shared by every session on a node — so the node's default wins and a per-session override has no effect. Verified: two sessions on one node with `sort_symbols` true and false produce identically sorted events. Tracked as a P2; fixing it changes pattern hashes for anyone relying on the shared default.
 3. **Deterministic**: Same inputs → same outputs (always)
 4. **Session Isolation**: Each session has isolated STM, shared LTM per node_id
 5. **Config-as-Parameter**: Configuration passed as parameters (not mutated)

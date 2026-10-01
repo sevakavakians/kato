@@ -22,122 +22,123 @@ docker compose logs kato --tail 50
 
 ## Common Issues and Solutions
 
-### Multi-Instance Issues
-
-#### Instance Won't Start
+### Service Won't Start
 
 **Symptoms:**
-- Error: "Port already in use"
-- Container name conflicts
-- Instance not appearing in list
+- `Address already in use` / `Port already in use`
+- `docker compose ps` shows `kato` absent or restarting
+- `curl http://localhost:8000/health` refuses the connection
+
+**Note on older guidance**: KATO used to run one container per configuration,
+each on its own port, tracked in `~/.kato/instances.json`. That is gone. A single
+service now serves every session, and per-session configuration replaces the
+per-instance flags. `./start.sh` no longer accepts `--id`, `--port`,
+`--recall-threshold` or similar; it takes a command (`start`, `stop`, `restart`,
+`status`, `logs`, ...) and an optional service name. A bare `./start.sh` prints
+help and starts nothing.
 
 **Solutions:**
 
-1. Check existing instances:
+1. Check what is actually running:
 ```bash
-./kato-manager.sh list
-docker ps | grep kato
+docker compose ps
+./start.sh status
+curl -s http://localhost:8000/health
 ```
 
-2. Use automatic port allocation:
-```bash
-# Don't specify port - let KATO find available one
-./start.sh --id my-processor
-```
-
-3. Specify unique port manually:
-```bash
-./start.sh --id my-processor --port 8005
-```
-
-4. Clean up orphaned instances:
-```bash
-# Remove from registry if container doesn't exist
-rm ~/.kato/instances.json
-./kato-manager.sh list  # Recreates clean registry
-```
-
-#### Instance Not Found
-
-**Symptoms:**
-- Instance disappeared from list
-- API calls return 404
-
-**Solutions:**
-
-1. Check registry file:
-```bash
-cat ~/.kato/instances.json
-```
-
-2. Re-register running container:
-```bash
-# Container exists but not in registry
-docker ps | grep kato-my-processor
-# Restart to re-register
-docker restart kato-my-processor
-```
-
-3. Verify processor ID in API calls:
-```bash
-# Ensure using correct ID
-curl http://localhost:8000/{processor-id}/ping
-```
-
-#### Port Conflicts
-
-**Symptoms:**
-- "Address already in use" error
-- Can't start new instance
-
-**Solutions:**
-
-1. Find what's using the port:
+2. Find what holds port 8000:
 ```bash
 lsof -i :8000
-# Or on Linux:
+# Linux:
 netstat -tulpn | grep 8000
 ```
 
-2. Use next available port:
+   Usually it is an existing KATO. One service is all you need, so prefer
+   restarting it over starting a second:
 ```bash
-# KATO automatically finds free port
-./start.sh --id new-processor
+./start.sh restart kato
 ```
 
-3. Stop conflicting instance:
+3. If you genuinely need a different port, change the published port in
+   `docker-compose.yml` (the `ports:` entry for the `kato` service). There is no
+   command-line flag for it.
+
+4. Read the startup logs. A service that starts and exits usually says why:
 ```bash
-./kato-manager.sh list
-docker compose down conflicting-processor  # By ID or name
+docker compose logs kato --tail 50
 ```
 
-#### Stopped Containers Not Removed
+   `Redis client is required but not available` means the dependencies are not up
+   or `REDIS_ENABLED` is unset — start the whole stack with `./start.sh start`
+   rather than the `kato` service alone.
 
-**Note**: This issue should not occur with the updated stop command, which automatically removes containers.
-
-**Symptoms:**
-- Containers remain after stopping
-- `docker ps -a` shows stopped KATO containers
-
-**Solutions:**
-
-1. Use the updated stop command:
+5. Clean restart, keeping data:
 ```bash
-# New stop command removes containers automatically
-docker compose down processor-1
+./start.sh restart
 ```
 
-2. Clean up old stopped containers manually:
+   Or a full reset that **destroys all learned patterns**:
 ```bash
-# Remove all stopped KATO containers
-docker rm $(docker ps -a -q -f name=kato- -f status=exited)
+./start.sh clean-data   # empties Qdrant, Redis and ClickHouse
+./start.sh clean-all    # the above, plus volumes, then restarts
 ```
 
-3. Reset registry to match actual containers:
+#### Stale containers
+
 ```bash
-rm ~/.kato/instances.json
-./kato-manager.sh list  # Rebuilds registry
+# What exists, running or not
+docker ps -a | grep kato
+
+# Stop and remove this project's containers
+./start.sh stop
+
+# Remove exited containers if any linger
+docker rm $(docker ps -a -q -f name=kato -f status=exited)
 ```
+
+### Session Issues
+
+#### `404` on a session that worked a moment ago
+
+Sessions expire after `SESSION_TTL` (default 3600s). With
+`SESSION_AUTO_EXTEND=true`, activity pushes the expiry out, so this normally means
+the session sat idle.
+
+```bash
+# Does it still exist?
+curl http://localhost:8000/sessions/$SESSION/exists
+```
+
+Treat it as recoverable: create a new session. Learned patterns are unaffected —
+they belong to the `node_id`, not the session.
+
+#### `400` creating a session or updating config
+
+A parameter failed validation and the response names the field. Two that catch
+people out: `recall_threshold` must be greater than zero (as of 6.0.0), and
+`filter_pipeline` accepts only `minhash`, `jaccard`, `bloom`, `rapidfuzz`.
+
+```bash
+# What is actually in effect
+curl http://localhost:8000/sessions/$SESSION/config
+```
+
+#### Updates to a session go missing
+
+Two writers are sharing one `session_id`. A session supports **one concurrent
+writer**; under multi-worker uvicorn the serialisation lock is per process and the
+session is persisted whole, so concurrent writes can lose an update. Use one
+session per concurrent writer — several sessions on the same `node_id` run
+concurrently and still share learned patterns. See
+[session management](../operations/session-management.md).
+
+#### How many sessions are open?
+
+```bash
+curl http://localhost:8000/sessions/count
+```
+
+There is no endpoint that lists them; `GET /sessions` returns `405`.
 
 ### FastAPI Communication Issues
 
@@ -170,7 +171,7 @@ curl http://localhost:8000/health
 #### Test Runner Timeout
 
 **Symptoms:**
-- `./kato-manager.sh test` times out
+- `./run_tests.sh` times out
 - Tests rebuild Docker image every time
 - Virtual environment hangs
 
@@ -214,15 +215,16 @@ docker version
 2. Check for port conflicts:
 ```bash
 lsof -i :8000
-# Kill conflicting process or use different port
-./start.sh --port 9000
+# Usually this is an existing KATO. Restart it rather than starting a second:
+./start.sh restart kato
+# To publish a different port, edit the `ports:` entry for the kato service in
+# docker-compose.yml -- there is no command-line flag for it.
 ```
 
 3. Rebuild image:
 ```bash
-./kato-manager.sh clean
-docker compose build --no-cache
-./start.sh
+docker compose build --no-cache kato
+./start.sh restart kato
 ```
 
 4. Check disk space:
@@ -243,12 +245,12 @@ docker system prune -a --volumes
 
 1. Check logs for errors:
 ```bash
-docker logs kato-api-${USER}-1 --tail 100
+docker logs kato --tail 100
 ```
 
 2. Check memory limits:
 ```bash
-docker stats kato-api-${USER}-1
+docker stats kato
 # Increase if needed in docker compose.yml
 ```
 
@@ -304,16 +306,24 @@ sudo iptables -L
 1. Verify processor ID:
 ```bash
 # Check environment
-docker exec kato-api-${USER}-1 env | grep PROCESSOR
+docker exec kato env | grep PROCESSOR
 ```
 
-2. Use correct endpoint URLs:
+2. Use correct endpoint URLs. Observation, STM and prediction endpoints are
+   session-scoped -- there are no top-level `/observe`, `/stm` or `/predictions`
+   routes, and requesting them returns `404`:
 ```bash
-# FastAPI endpoints (no processor ID in URL)
-curl http://localhost:8000/observe
-curl http://localhost:8000/predictions
-curl http://localhost:8000/stm
+SESSION=$(curl -s -X POST http://localhost:8000/sessions \
+  -H "Content-Type: application/json" -d '{"node_id": "my_node"}' \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["session_id"])')
+
+curl -X POST http://localhost:8000/sessions/$SESSION/observe \
+  -H "Content-Type: application/json" -d '{"strings": ["hello"]}'
+curl http://localhost:8000/sessions/$SESSION/stm
+curl http://localhost:8000/sessions/$SESSION/predictions
 ```
+
+   The full route list is at http://localhost:8000/docs.
 
 3. Check service health:
 ```bash
@@ -334,7 +344,7 @@ curl http://localhost:8000/health
 
 1. Check resource usage:
 ```bash
-docker stats kato-api-${USER}-1
+docker stats kato
 ```
 
 2. Optimize configuration:
@@ -661,23 +671,35 @@ assert_short_term_memory_equals(actual, expected)
 
 **Solutions:**
 
-1. Check parameter spelling:
+1. Set the parameter in the right place. Processing parameters are per session,
+   not command-line flags -- `./start.sh` does not accept `--max-predictions` or
+   any other configuration flag:
 ```bash
-# Correct: uses hyphens
-./start.sh --max-predictions 50
+# Per session, at creation
+curl -X POST http://localhost:8000/sessions \
+  -H "Content-Type: application/json" \
+  -d '{"node_id": "my_node", "config": {"max_predictions": 50}}'
 
-# Wrong: uses underscores
-./start.sh --max_predictions 50
+# Or on an existing session (POST, not PUT)
+curl -X POST http://localhost:8000/sessions/$SESSION/config \
+  -H "Content-Type: application/json" \
+  -d '{"config": {"max_predictions": 50}}'
 ```
 
-2. Verify configuration:
+   An unknown or out-of-range value is rejected with `400` naming the field, so a
+   typo fails at the call rather than silently reverting to a default.
+
+2. Verify what is actually in effect:
 ```bash
-./kato-manager.sh config
+curl http://localhost:8000/sessions/$SESSION/config
 ```
+
+   For the service-wide defaults behind it, see
+   [configuration-vars.md](../reference/configuration-vars.md).
 
 3. Check environment variables:
 ```bash
-docker exec kato-api-${USER}-1 env | grep KATO
+docker exec kato env | grep KATO
 ```
 
 ## Debug Commands
@@ -686,45 +708,45 @@ docker exec kato-api-${USER}-1 env | grep KATO
 
 ```bash
 # Full container details
-docker inspect kato-api-${USER}-1
+docker inspect kato
 
 # Check mounts
-docker inspect kato-api-${USER}-1 | jq '.[0].Mounts'
+docker inspect kato | jq '.[0].Mounts'
 
 # Check environment
-docker inspect kato-api-${USER}-1 | jq '.[0].Config.Env'
+docker inspect kato | jq '.[0].Config.Env'
 
 # Check networking
-docker inspect kato-api-${USER}-1 | jq '.[0].NetworkSettings'
+docker inspect kato | jq '.[0].NetworkSettings'
 ```
 
 ### Process Investigation
 
 ```bash
 # Check running processes
-docker exec kato-api-${USER}-1 ps aux
+docker exec kato ps aux
 
 # Check open files
-docker exec kato-api-${USER}-1 lsof
+docker exec kato lsof
 
 # Check network connections
-docker exec kato-api-${USER}-1 netstat -an
+docker exec kato netstat -an
 ```
 
 ### Log Analysis
 
 ```bash
 # Search for errors
-docker logs kato-api-${USER}-1 2>&1 | grep -i error
+docker logs kato 2>&1 | grep -i error
 
 # Check recent activity
-docker logs kato-api-${USER}-1 --since 5m
+docker logs kato --since 5m
 
 # Follow logs in real-time
-docker logs kato-api-${USER}-1 -f
+docker logs kato -f
 
 # Save logs for analysis
-docker logs kato-api-${USER}-1 > kato-debug.log 2>&1
+docker logs kato > kato-debug.log 2>&1
 ```
 
 ## Recovery Procedures
@@ -732,11 +754,9 @@ docker logs kato-api-${USER}-1 > kato-debug.log 2>&1
 ### Clean Restart
 
 ```bash
-# Complete cleanup and restart
-docker compose down
-./kato-manager.sh clean
-docker compose build
-./start.sh
+# Complete cleanup and restart. clean-all removes volumes, so every learned
+# pattern is destroyed; use `./start.sh restart` if you only need a bounce.
+./start.sh clean-all
 ```
 
 ### Data Recovery
@@ -874,8 +894,9 @@ docker compose logs --tail 1000 > database.log
 docker inspect kato > container-primary.json
 docker inspect kato-testing > container-testing.json
 
-# Configuration
-./kato-manager.sh config > config.json
+# Configuration (service-wide env, and one session's resolved config)
+docker exec kato env | grep -E 'KATO|REDIS|CLICKHOUSE|QDRANT' > env.txt
+curl -s http://localhost:8000/sessions/$SESSION/config > session-config.json
 ```
 
 ### Where to Get Help
@@ -893,7 +914,7 @@ docker inspect kato-testing > container-testing.json
 1. **Monitor logs regularly**
 ```bash
 # Set up log rotation
-docker logs kato-api-${USER}-1 2>&1 | rotatelogs -n 5 /var/log/kato.log 86400
+docker logs kato 2>&1 | rotatelogs -n 5 /var/log/kato.log 86400
 ```
 
 2. **Clear old data periodically**
@@ -901,7 +922,7 @@ docker logs kato-api-${USER}-1 2>&1 | rotatelogs -n 5 /var/log/kato.log 86400
 # Weekly cleanup script
 docker compose down
 docker system prune -a --volumes
-./start.sh
+./start.sh start
 ```
 
 3. **Update regularly**

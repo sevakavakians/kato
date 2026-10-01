@@ -992,7 +992,7 @@ processing:
 ```bash
 # Via environment variable
 export KATO_CONFIG_FILE=/path/to/config.yaml
-./start.sh
+./start.sh start
 
 # Or in docker compose.yml
 environment:

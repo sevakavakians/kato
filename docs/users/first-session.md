@@ -31,7 +31,7 @@ curl http://localhost:8000/health
 
 If this fails, ensure services are running:
 ```bash
-./start.sh
+./start.sh start
 docker compose ps  # All services should show "Up"
 ```
 

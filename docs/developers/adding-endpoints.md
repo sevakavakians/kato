@@ -330,7 +330,7 @@ def test_my_new_endpoint_edge_cases(kato_fixture):
 **Run Tests**:
 ```bash
 # Start services
-./start.sh
+./start.sh start
 
 # Run tests
 ./run_tests.sh --no-start --no-stop tests/tests/api/test_my_new_endpoint.py -v

@@ -9,7 +9,7 @@ KATO uses a simplified testing architecture where tests run in local Python and 
 ### 1. Start KATO Services
 ```bash
 # Start all services (ClickHouse, Qdrant, Redis, KATO)
-./start.sh
+./start.sh start
 
 # Verify services are running
 docker compose ps
@@ -256,7 +256,7 @@ docker logs -f kato
 docker compose ps
 
 # If not running, start them
-./start.sh
+./start.sh start
 
 # Check health
 curl http://localhost:8000/health
@@ -292,7 +292,7 @@ For systematic troubleshooting of test failures, see the [Test Troubleshooting G
 # Clean restart with fresh databases
 docker compose down
 docker volume prune -f  # WARNING: Removes all unused volumes
-./start.sh
+./start.sh start
 ```
 
 ## Performance Testing

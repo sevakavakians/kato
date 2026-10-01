@@ -494,7 +494,7 @@ External dashboards parse logs in real-time. Excessive logging can:
 
 ```bash
 # 1. Start KATO
-./start.sh
+./start.sh start
 
 # 2. Send request with trace ID
 curl -H "X-Trace-ID: test-trace-123" \

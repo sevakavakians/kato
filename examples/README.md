@@ -6,7 +6,7 @@ This directory contains practical examples demonstrating various KATO features a
 
 Ensure KATO services are running:
 ```bash
-./start.sh
+./start.sh start
 ```
 
 Verify services are available:

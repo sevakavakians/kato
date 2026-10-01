@@ -112,6 +112,28 @@ class RedisWriter:
         already = [name for name, added in zip(normalized, results) if not bool(added)]
         return {'retired': retired, 'already_retired': already}
 
+    def un_retire_patterns(self, pattern_names: list[str]) -> dict[str, list[str]]:
+        """Remove tombstones, making the patterns visible and learnable again.
+
+        Retirement would otherwise be irreversible, and learnPattern refuses a
+        tombstoned hash -- so without this, one mistaken retire permanently
+        prevents that sequence from ever being learned on this node.
+        """
+        normalized = list(dict.fromkeys(
+            self.normalize_pattern_name(name) for name in pattern_names
+        ))
+        if not normalized:
+            return {'un_retired': [], 'not_retired': []}
+
+        pipe = self.client.pipeline(transaction=True)
+        for name in normalized:
+            pipe.hdel(self.retired_patterns_key, name)
+        results = pipe.execute()
+
+        un_retired = [name for name, removed in zip(normalized, results) if bool(removed)]
+        absent = [name for name, removed in zip(normalized, results) if not bool(removed)]
+        return {'un_retired': un_retired, 'not_retired': absent}
+
     def get_retirement_records(self, pattern_names: list[str]) -> dict[str, dict[str, Any]]:
         """Read tombstone state for a bounded set of pattern IDs."""
         normalized = list(dict.fromkeys(
@@ -134,6 +156,17 @@ class RedisWriter:
                 # unreadable record still means "retired".
                 records[name] = {'state': 'retired'}
         return records
+
+    def has_any_retired_patterns(self) -> bool:
+        """Whether this node has any tombstone at all.
+
+        The read-path barriers consult this first. On a node that has never
+        retired anything -- which is every node by default -- it is one EXISTS
+        against a key that does not exist, and the barrier then does no further
+        work. Without it, every prediction paid an HMGET sized to its candidate
+        set for a feature almost nobody has switched on.
+        """
+        return bool(self.client.exists(self.retired_patterns_key))
 
     def get_retired_pattern_ids(self, pattern_names: list[str] | None = None) -> set[str]:
         """Return tombstoned hashes, optionally restricted to candidate IDs."""

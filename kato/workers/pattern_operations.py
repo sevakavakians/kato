@@ -7,7 +7,13 @@ Extracted from KatoProcessor for better modularity.
 import logging
 from typing import Any, Optional
 
-from kato.exceptions import LearningError, PatternProcessingError, ResourceNotFoundError, ValidationError
+from kato.exceptions import (
+    LearningError,
+    PatternProcessingError,
+    ResourceNotFoundError,
+    RetiredPatternError,
+    ValidationError,
+)
 
 logger = logging.getLogger('kato.workers.pattern_operations')
 
@@ -68,6 +74,11 @@ class PatternOperations:
                 return f"PTRN|{name}"
             logger.debug(f"No pattern learned from {len(stm)} event(s)")
             return ""
+        except RetiredPatternError:
+            # Not a learning failure: the caller retired this pattern and can
+            # un-retire it. Wrapping it in LearningError would surface as a 500,
+            # because LearningError is absent from the handler's status map.
+            raise
         except Exception as e:
             logger.error(f"Failed to learn pattern: {e}")
             raise LearningError(
@@ -131,6 +142,11 @@ class PatternOperations:
             logger.debug("No pattern learned (STM empty or single event)")
             return ""
 
+        except RetiredPatternError:
+            # Not a learning failure: the caller retired this pattern and can
+            # un-retire it. Wrapping it in LearningError would surface as a 500,
+            # because LearningError is absent from the handler's status map.
+            raise
         except Exception as e:
             stm_state = MemoryManager.get_stm_from_pattern_processor(self.pattern_processor)
             raise LearningError(
@@ -331,7 +347,9 @@ class PatternOperations:
                     pred.pop('_id')
                 predictions.append(pred)
 
-        return predictions
+        # A stored snapshot may predate a retirement, so apply the barrier on the
+        # way out rather than trusting what was cached.
+        return self.pattern_processor.filter_retired_predictions(predictions)
 
     async def get_predictions_with_config(self, stm: list, config) -> list[dict[str, Any]]:
         """

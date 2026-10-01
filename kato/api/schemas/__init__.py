@@ -12,11 +12,20 @@ from .observation import (
     STMResponse,
 )
 from .prediction import FinalizeTrainingResult, LearnResult, PredictionsResponse
-from .session import CreateSessionRequest, SessionResponse
+from .session import (
+    CreateSessionRequest,
+    PatternBatchRequest,
+    RetirePatternsResponse,
+    SessionResponse,
+    UnRetirePatternsResponse,
+)
 
 __all__ = [
     'CreateSessionRequest',
     'SessionResponse',
+    'PatternBatchRequest',
+    'RetirePatternsResponse',
+    'UnRetirePatternsResponse',
     'ObservationData',
     'ObservationResult',
     'STMResponse',

@@ -947,7 +947,49 @@ class PatternSearcher:
 
         logger.debug(f"Built {len(active_list)} predictions, {len(filtered_list)} after final threshold filter")
 
-        return filtered_list
+        return self._filter_retired_predictions(filtered_list)
+
+    def _filter_retired_predictions(self, predictions: list[dict[str, Any]]):
+        """Drop predictions for patterns this node has retired.
+
+        Placed at the single point each path returns its ranked list, rather than
+        at every stage that handles candidates. Retirement is rare and the Redis
+        client here is synchronous (see connection_manager), so every extra
+        barrier is a blocking round trip inside an async request for a feature
+        most nodes never enable. One per exit path is enough: filtering is purely
+        subtractive and the relative order of survivors is untouched, so a
+        retired pattern cannot displace an active one by being dropped later.
+
+        Returns the list unchanged when the node has no tombstones, which costs a
+        single EXISTS against a key that does not exist.
+        """
+        if not predictions:
+            return predictions
+        if not self.redis_client:
+            # Mirrors attach_pattern_metadata: degrade rather than raise. A
+            # RedisWriter built with a None client raises in its constructor.
+            logger.debug("No Redis client; skipping retired-pattern filter")
+            return predictions
+
+        names = [
+            prediction.get('name')
+            for prediction in predictions
+            if isinstance(prediction, dict) and prediction.get('name')
+        ]
+        if not names:
+            return predictions
+
+        from kato.storage.redis_writer import RedisWriter
+        retired = RedisWriter(self.kb_id, self.redis_client).get_retired_pattern_ids(names)
+        if not retired:
+            return predictions
+
+        def is_active(prediction):
+            name = prediction.get('name') or ''
+            clean = name[5:] if name.startswith('PTRN|') else name
+            return clean not in retired
+
+        return [prediction for prediction in predictions if is_active(prediction)]
 
     def _process_with_rapidfuzz(self, state: list[str],
                                candidates: list[str], results: list):
@@ -1274,6 +1316,8 @@ class PatternSearcher:
             )
 
         logger.debug(f"Final predictions after threshold filter: {len(filtered_list)}")
+
+        filtered_list = self._filter_retired_predictions(filtered_list)
 
         # Sort by potential and return
         try:

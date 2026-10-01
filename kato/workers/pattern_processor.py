@@ -725,6 +725,52 @@ class PatternProcessor:
 
         return weights
 
+    def retire_patterns(self, pattern_names: list[str]) -> dict[str, Any]:
+        """Tombstone a batch of this node's patterns.
+
+        A pure delegate. The ported version also cleared self.predictions and
+        self.future_potentials here, but those are node-level attributes shared by
+        every session on this processor, so a session-scoped retire would have
+        blanked another session's in-flight state. The endpoint re-filters its own
+        session snapshot instead.
+        """
+        return self.superkb.redis_writer.retire_patterns(pattern_names)
+
+    def un_retire_patterns(self, pattern_names: list[str]) -> dict[str, Any]:
+        """Remove tombstones for a batch, making the patterns visible again."""
+        return self.superkb.redis_writer.un_retire_patterns(pattern_names)
+
+    def filter_retired_predictions(self, predictions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Drop predictions for patterns this node has retired.
+
+        For the paths that do not go through PatternSearcher: the single-symbol
+        fast path, which queries patterns_data directly, and retrieval of a stored
+        prediction snapshot, which may have been computed before the retirement.
+
+        Costs one EXISTS on a node with no tombstones. Subtractive, and order
+        among survivors is preserved.
+        """
+        if not predictions:
+            return predictions
+        names = [
+            prediction.get('name')
+            for prediction in predictions
+            if isinstance(prediction, dict) and prediction.get('name')
+        ]
+        if not names:
+            return predictions
+
+        retired = self.superkb.redis_writer.get_retired_pattern_ids(names)
+        if not retired:
+            return predictions
+
+        def is_active(prediction):
+            name = prediction.get('name') or ''
+            clean = name[5:] if name.startswith('PTRN|') else name
+            return clean not in retired
+
+        return [prediction for prediction in predictions if is_active(prediction)]
+
     async def _predict_single_symbol_fast(self, symbol: str, stm_events: Optional[list[list[str]]] = None) -> list[dict[str, Any]]:
         """
         Fast path for single-symbol predictions using Redis symbol-to-pattern index.
@@ -976,6 +1022,12 @@ class PatternProcessor:
                     (ev + conf) * s
                     + frag_contribution
                 )
+
+            # Retirement barrier before ranking, not after: a retired pattern
+            # must not occupy one of the max_predictions slots and then be
+            # dropped, which would return fewer predictions than asked for while
+            # active patterns went unreported.
+            predictions = self.filter_retired_predictions(predictions)
 
             # Sort by potential
             # Tie-break on name so the truncation below is stable; ClickHouse

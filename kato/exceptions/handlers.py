@@ -32,6 +32,7 @@ from kato.exceptions import (
     KatoV2Exception,
     RateLimitExceededError,
     ResourceExhaustedError,
+    RetiredPatternError,
     SessionExpiredError,
     SessionLimitExceededError,
     SessionNotFoundError,
@@ -111,6 +112,8 @@ async def kato_v2_exception_handler(request: Request, exc: KatoV2Exception) -> J
         ConfigurationError: status.HTTP_500_INTERNAL_SERVER_ERROR,
         ResourceExhaustedError: status.HTTP_507_INSUFFICIENT_STORAGE,
         KatoTimeoutError: status.HTTP_504_GATEWAY_TIMEOUT,
+        # Client-actionable: the caller retired this pattern and can un-retire it.
+        RetiredPatternError: status.HTTP_409_CONFLICT,
     }
 
     # Get appropriate status code

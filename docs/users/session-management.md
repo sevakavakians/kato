@@ -384,7 +384,7 @@ of concurrency. Give every concurrent thread its own session (they can share a
 
 ```bash
 # Update configuration mid-session
-curl -X PUT http://localhost:8000/sessions/{session_id}/config \
+curl -X POST http://localhost:8000/sessions/{session_id}/config \
   -H "Content-Type: application/json" \
   -d '{
     "config": {

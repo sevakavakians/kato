@@ -161,14 +161,17 @@ the resolved defaults a session reports when you set nothing.
 | `max_candidates_per_stage` | `100000` | |
 | `enable_filter_metrics` | `True` | |
 
-> **`use_token_matching` and `sort_symbols` are only linked on the update path.**
-> `POST /sessions/{id}/config` auto-sets `sort_symbols` to match
-> `use_token_matching` when you supply one and not the other, and warns if you
-> supply both with conflicting values. `POST /sessions` does **not** — creating a
-> session with `use_token_matching: false` leaves `sort_symbols` at `true`, which
-> is character-level matching over sorted symbols, probably not what was intended.
-> Until that is reconciled, set **both** explicitly at creation:
-> `{"use_token_matching": false, "sort_symbols": false}`.
+> **`sort_symbols` currently has no effect on sorting.** Both endpoints store it
+> correctly, and supplying `use_token_matching` alone derives it, so the
+> configuration a session reports is accurate. But the observation path reads the
+> processor's construction-time default rather than the session's value, and a
+> processor is shared by every session on a node — so whichever setting the first
+> session on that node established is what all of them get. Selecting
+> character-level matching per session does not work yet. Tracked as a P2 in
+> `planning-docs/SPRINT_BACKLOG.md`; the fix changes pattern hashes for anyone
+> relying on the current shared default, so it needs migration consideration
+> rather than a drive-by patch. Until then, set the node's default through
+> configuration rather than expecting a session override to take hold.
 
 > **`vector_search_limit` is not a free tuning knob.** The vector IDs it
 > retrieves become symbols in the STM event, so they feed the learned pattern's

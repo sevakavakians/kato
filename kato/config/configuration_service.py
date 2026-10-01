@@ -190,6 +190,70 @@ class ConfigurationService:
 
         return resolved
 
+    def normalize_session_config(
+        self,
+        updates: dict[str, Any],
+        current: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
+        """Derive `sort_symbols` from `use_token_matching`, and warn on a mismatch.
+
+        The two settings are not independent. Token-level matching compares
+        sorted symbols; character-level matching compares the event as written,
+        so sorting it corrupts the comparison. Callers overwhelmingly think in
+        terms of which matching mode they want, so supplying `use_token_matching`
+        alone derives the sorting to match it.
+
+        This used to live inline in the config-update endpoint only, so
+        `POST /sessions/{id}/config` with `use_token_matching: false` set
+        `sort_symbols` false, while `POST /sessions` with the same body left it
+        true -- character-level matching over sorted symbols, which is nobody's
+        intent. Both paths now call this, so the two agree.
+
+        The pairing is one-directional on purpose. `use_token_matching` selects
+        the algorithm and `sort_symbols` follows from it; deriving the algorithm
+        from a sorting flag would be a surprising thing for that flag to do.
+
+        A caller that sets both to conflicting values keeps what it asked for and
+        gets a warning -- the combination is occasionally deliberate in tests, and
+        rejecting it would break them. The warning is raised against the
+        *effective* pair, not just the supplied one, so setting `sort_symbols`
+        alone against an opposing stored value is caught too.
+
+        Args:
+            updates: the fields supplied in this call.
+            current: configuration already in force, for an update. Omit on
+                create, where system defaults are the baseline.
+
+        Returns:
+            A new dict; `updates` is not mutated.
+        """
+        normalized = dict(updates)
+
+        if 'use_token_matching' in normalized and 'sort_symbols' not in normalized:
+            normalized['sort_symbols'] = normalized['use_token_matching']
+            logger.info(
+                "Derived sort_symbols=%s from use_token_matching=%s",
+                normalized['sort_symbols'], normalized['use_token_matching'],
+            )
+
+        baseline = current if current is not None else self.get_default_configuration()
+        token_matching = normalized.get(
+            'use_token_matching', baseline.get('use_token_matching')
+        )
+        sort_symbols = normalized.get('sort_symbols', baseline.get('sort_symbols'))
+
+        if (token_matching is not None and sort_symbols is not None
+                and bool(token_matching) != bool(sort_symbols)):
+            logger.warning(
+                "Configuration mismatch: use_token_matching=%s with sort_symbols=%s. "
+                "Token-level matching compares sorted symbols and character-level "
+                "matching compares them as written, so this pairing will match "
+                "differently than either mode alone. Keeping the requested values.",
+                token_matching, sort_symbols,
+            )
+
+        return normalized
+
     def validate_configuration_update(self, updates: dict[str, Any]) -> dict[str, str]:
         """
         Validate configuration updates before applying them.

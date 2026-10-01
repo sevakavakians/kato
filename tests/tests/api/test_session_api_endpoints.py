@@ -11,6 +11,7 @@ import os
 import sys
 import uuid
 
+import pytest
 import requests
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -142,3 +143,68 @@ def test_session_exists_for_expired_session():
     data = resp.json()
     assert data['exists'] is False or data['expired'] is True, \
         f"Expired session should not be valid, got {data}"
+
+
+def _config_from_create(base_url, config):
+    resp = requests.post(f"{base_url}/sessions", json={
+        "node_id": f"test_{uuid.uuid4().hex[:8]}", "config": config, "ttl_seconds": 60
+    })
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    requests.delete(f"{base_url}/sessions/{body['session_id']}")
+    return body["session_config"]
+
+
+def _config_from_update(base_url, config):
+    session_id = _create_session(base_url)
+    resp = requests.post(f"{base_url}/sessions/{session_id}/config", json={"config": config})
+    assert resp.status_code == 200, resp.text
+    got = requests.get(f"{base_url}/sessions/{session_id}/config").json()
+    requests.delete(f"{base_url}/sessions/{session_id}")
+    return got.get("config", got)
+
+
+@pytest.mark.parametrize("config", [
+    {"use_token_matching": False},
+    {"use_token_matching": True},
+    {"sort_symbols": False},
+    {"sort_symbols": True},
+    {"use_token_matching": False, "sort_symbols": True},
+    {"use_token_matching": True, "sort_symbols": False},
+])
+def test_create_and_update_agree_on_matching_pair(config):
+    """The same request body must configure a session identically either way.
+
+    `use_token_matching` and `sort_symbols` are linked: supplying one derives the
+    other. That derivation lived only in the config-update endpoint, so
+    `{"use_token_matching": false}` produced sort_symbols=false via
+    POST /sessions/{id}/config and sort_symbols=true via POST /sessions -- the
+    latter being character-level matching over sorted symbols, which is not a
+    combination anyone asks for on purpose.
+
+    Parametrised over every combination of the pair rather than just the broken
+    one, so a future change cannot fix this case by diverging on another.
+    """
+    base_url = _get_base_url()
+    created = _config_from_create(base_url, config)
+    updated = _config_from_update(base_url, config)
+
+    pair = ("use_token_matching", "sort_symbols")
+    assert {k: created[k] for k in pair} == {k: updated[k] for k in pair}, (
+        f"create and update disagree for {config}: "
+        f"create={ {k: created[k] for k in pair} } update={ {k: updated[k] for k in pair} }"
+    )
+
+
+def test_explicit_pair_survives_both_endpoints():
+    """A deliberately mismatched pair is kept, not silently corrected.
+
+    The combination is occasionally intentional, and rewriting it would make the
+    configuration a session reports differ from what the caller asked for.
+    """
+    base_url = _get_base_url()
+    config = {"use_token_matching": False, "sort_symbols": True}
+    for source in (_config_from_create, _config_from_update):
+        got = source(base_url, config)
+        assert got["use_token_matching"] is False
+        assert got["sort_symbols"] is True

@@ -331,7 +331,9 @@ class PatternOperations:
                     pred.pop('_id')
                 predictions.append(pred)
 
-        return predictions
+        # A stored snapshot may predate a retirement, so apply the barrier on the
+        # way out rather than trusting what was cached.
+        return self.pattern_processor.filter_retired_predictions(predictions)
 
     async def get_predictions_with_config(self, stm: list, config) -> list[dict[str, Any]]:
         """

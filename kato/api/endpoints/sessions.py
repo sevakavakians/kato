@@ -887,7 +887,11 @@ async def get_session_cognition_data(session_id: str):
     cognition_data = processor.get_cognition_data(session)
 
     # Add predictions and time from session
-    cognition_data['predictions'] = session.predictions
+    # session.predictions is a snapshot taken at observe time and may predate a
+    # retirement, so it gets the same barrier as a freshly computed list.
+    cognition_data['predictions'] = processor.pattern_processor.filter_retired_predictions(
+        session.predictions
+    )
     cognition_data['time'] = session.time
 
     return {

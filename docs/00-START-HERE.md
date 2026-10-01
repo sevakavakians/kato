@@ -14,7 +14,7 @@ Welcome to KATO documentation! This guide helps you find the right documentation
 - [API Reference](users/api-reference.md) - Complete API documentation
 - [Core Concepts](users/concepts.md) - Understand how KATO works
 - [Vector Event Modes](users/vector-modes.md) - Control what a vector observation emits
-- [Pattern Retirement](users/pattern-retirement.md) - Hide a learned pattern without deleting it
+- [Pattern Retirement and Purging](users/pattern-retirement.md) - Hide a learned pattern, or erase it permanently
 - [Database Persistence](users/database-persistence.md) - How data persists
 - [Troubleshooting](users/troubleshooting.md) - Common issues and solutions
 

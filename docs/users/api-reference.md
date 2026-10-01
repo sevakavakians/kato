@@ -271,6 +271,96 @@ Clears all session memory (STM and long-term patterns for this node).
 }
 ```
 
+### Retire Patterns
+
+```http
+POST /sessions/{session_id}/patterns/retire
+```
+
+Hides learned patterns from every read path without deleting them. Node-scoped,
+durable, idempotent and reversible.
+
+**Request Body:**
+```json
+{"pattern_ids": ["abc123def456789012345678901234567890abcd"]}
+```
+
+1–1000 IDs, with or without the `PTRN|` prefix. A malformed ID is a `422`.
+
+**Response Model: `RetirePatternsResponse`**
+```json
+{
+  "status": "okay",
+  "session_id": "primary",
+  "node_id": "my-node",
+  "requested": 1,
+  "retired": ["abc123def456789012345678901234567890abcd"],
+  "already_retired": []
+}
+```
+
+Learning a sequence whose pattern is retired returns `409` with code
+`RETIRED_PATTERN`.
+
+### Un-Retire Patterns
+
+```http
+POST /sessions/{session_id}/patterns/un-retire
+```
+
+Removes tombstones, making the patterns visible and learnable again. Same request
+body as retire.
+
+**Response Model: `UnRetirePatternsResponse`**
+```json
+{
+  "status": "okay",
+  "session_id": "primary",
+  "node_id": "my-node",
+  "requested": 1,
+  "un_retired": ["abc123def456789012345678901234567890abcd"],
+  "not_retired": []
+}
+```
+
+### Purge Patterns
+
+```http
+POST /sessions/{session_id}/patterns/purge
+```
+
+Permanently deletes retired patterns and subtracts their contribution to the
+node's statistics. **Irreversible.** Only a retired pattern can be purged.
+
+**Request Body:**
+```json
+{"pattern_ids": ["abc123def456789012345678901234567890abcd"], "max_patterns": 1000}
+```
+
+Both fields are optional. Omit `pattern_ids` to purge every retired pattern on the
+node; `max_patterns` (1–10000, default 1000) bounds one call.
+
+**Response Model: `PurgePatternsResponse`**
+```json
+{
+  "status": "completed",
+  "session_id": "primary",
+  "node_id": "my-node",
+  "purged": ["abc123def456789012345678901234567890abcd"],
+  "failed": {},
+  "remaining": 0
+}
+```
+
+`status` is `partial` when some IDs could not be purged, with a reason per ID in
+`failed`; purge is resumable, so re-issuing the call retries them. `remaining`
+counts retired patterns still awaiting a purge.
+
+The tombstone survives a purge, so learning the same sequence still returns `409`
+until it is un-retired. Purging also invalidates the node's precomputed entropy
+metrics; predictions stay correct, and `finalize-training` restores the
+precomputation. See [pattern retirement and purging](pattern-retirement.md).
+
 ## Advanced Endpoints
 
 ### Get Pattern

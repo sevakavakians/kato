@@ -7,7 +7,6 @@ Note: All core KATO operations (observe, learn, predictions) must now use
 session-based endpoints under /sessions/{session_id}/.
 """
 
-import asyncio
 import logging
 from typing import Optional
 
@@ -94,9 +93,17 @@ async def get_pattern_count(
     processor = await app_state.processor_manager.get_processor(node_id)
 
     try:
-        # Offloaded to a thread: the ClickHouse count is a sync driver call and
-        # flush_async_insert_queue() sleeps 0.5s if it lacks the FLUSH privilege.
-        count = await asyncio.to_thread(processor.get_pattern_count, flush)
+        # Called directly, not through asyncio.to_thread. The thread was there
+        # because flush_async_insert_queue() used to sleep 0.5s when it lacked the
+        # FLUSH privilege; it no longer sleeps -- it latches the refusal and
+        # returns -- so the reason is gone and the thread was actively harmful.
+        # clickhouse-connect clients are session-bound, and this shares one with
+        # every other caller, so querying it off the event loop could collide with
+        # a concurrent request and raise "Attempt to execute concurrent queries
+        # within the same session", surfacing as a 500 on that other request.
+        # Every other ClickHouse read in the service runs on this thread, which is
+        # what serialises them.
+        count = processor.get_pattern_count(flush)
         return {"pattern_count": count, "node_id": processor.id}
     except Exception as e:
         logger.error(f"Error getting pattern count: {e}")

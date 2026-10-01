@@ -70,6 +70,83 @@ class RedisWriter:
 
         logger.debug(f"RedisWriter initialized for kb_id: {kb_id}")
 
+    @property
+    def retired_patterns_key(self) -> str:
+        """Durable, node-scoped retired-pattern registry key."""
+        return f"{self.kb_id}:retired_patterns"
+
+    @staticmethod
+    def normalize_pattern_name(pattern_name: str) -> str:
+        """Return the storage hash without changing the learned pattern itself.
+
+        Patterns are stored under the bare SHA1; the 'PTRN|' prefix exists only in
+        human-readable output. Callers may pass either form.
+        """
+        if not isinstance(pattern_name, str):
+            raise TypeError("pattern ID must be a string")
+        clean_name = pattern_name[5:] if pattern_name.startswith('PTRN|') else pattern_name
+        if not clean_name:
+            raise ValueError("pattern ID cannot be empty")
+        return clean_name
+
+    def retire_patterns(self, pattern_names: list[str]) -> dict[str, list[str]]:
+        """Idempotently tombstone pattern IDs in this node's Redis namespace.
+
+        HSETNX rather than HSET, so a repeated retire reports the ID as already
+        retired instead of silently resetting its state. Learned rows are not
+        touched: retirement only hides a pattern from the read paths.
+        """
+        normalized = list(dict.fromkeys(
+            self.normalize_pattern_name(name) for name in pattern_names
+        ))
+        if not normalized:
+            return {'retired': [], 'already_retired': []}
+
+        pipe = self.client.pipeline(transaction=True)
+        value = json.dumps({'state': 'retired'}, separators=(',', ':'))
+        for name in normalized:
+            pipe.hsetnx(self.retired_patterns_key, name, value)
+        results = pipe.execute()
+
+        retired = [name for name, added in zip(normalized, results) if bool(added)]
+        already = [name for name, added in zip(normalized, results) if not bool(added)]
+        return {'retired': retired, 'already_retired': already}
+
+    def get_retirement_records(self, pattern_names: list[str]) -> dict[str, dict[str, Any]]:
+        """Read tombstone state for a bounded set of pattern IDs."""
+        normalized = list(dict.fromkeys(
+            self.normalize_pattern_name(name) for name in pattern_names
+        ))
+        if not normalized:
+            return {}
+
+        raw_records = self.client.hmget(self.retired_patterns_key, normalized)
+        records: dict[str, dict[str, Any]] = {}
+        for name, raw in zip(normalized, raw_records):
+            if raw is None:
+                continue
+            if isinstance(raw, bytes):
+                raw = raw.decode('utf-8')
+            try:
+                records[name] = json.loads(raw)
+            except (TypeError, json.JSONDecodeError):
+                # Fail closed for any legacy or corrupt non-JSON tombstone: an
+                # unreadable record still means "retired".
+                records[name] = {'state': 'retired'}
+        return records
+
+    def get_retired_pattern_ids(self, pattern_names: list[str] | None = None) -> set[str]:
+        """Return tombstoned hashes, optionally restricted to candidate IDs."""
+        if not self.client.exists(self.retired_patterns_key):
+            return set()
+        if pattern_names is None:
+            raw_names = self.client.hkeys(self.retired_patterns_key)
+            return {
+                name.decode('utf-8') if isinstance(name, bytes) else name
+                for name in raw_names
+            }
+        return set(self.get_retirement_records(pattern_names))
+
     def increment_frequency(self, pattern_name: str) -> int:
         """
         Increment pattern frequency counter.

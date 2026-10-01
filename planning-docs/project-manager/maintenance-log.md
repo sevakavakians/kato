@@ -3,6 +3,16 @@
 
 ---
 
+## 2026-10-01 - Milestone Completion: v6.3.0 Released; PR #6 Closed Out
+
+**Trigger**: Primary -- Milestone Completion (release), Task Completion (kato_ops.py:99 P2 fixed in `fc32c52`), Blocker/Open-item resolution (PR #6, 6.3.0 decision)
+**Updated**: `SESSION_STATE.md`, `SPRINT_BACKLOG.md` (purge/release/P2 marked DONE, stash chore added), `DECISIONS.md` (DECISION-045 status), `completed/features/2026-10-01-pattern-purge.md`, `README.md` (version banner 6.2.0 -> 6.3.0; the line already existed), `project-manager/pending-updates.md`, `triggers.md`
+**Not changed**: `PROJECT_OVERVIEW.md` (no version string present)
+**Still open**: three old git stashes (undecided), per-session `sort_symbols` inert P2.
+**Human Alert**: Low -- stash drop decision.
+
+---
+
 ## 2026-10-01 - Milestone + Architectural Decision: Pattern Purge Merged (916f4c0)
 
 **Trigger**: Primary -- Milestone Completion, Architectural Decision (DECISION-045), Task Completion, New Task (kato_ops.py:99), Knowledge Refinement (vector work did NOT affect affinity/emotives)

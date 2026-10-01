@@ -3,6 +3,13 @@
 
 ---
 
+## 2026-10-01 - Milestone: v6.3.0 Released; PR #6 Closed Out
+
+**Trigger Type**: Primary -- Milestone (release), Task Completion (kato_ops.py:99 P2, `fc32c52`), Open-item resolution (PR #6, release decision)
+**Response**: Existing purge entries updated in place (SESSION_STATE, SPRINT_BACKLOG, DECISION-045, purge archive, pending-updates); README version banner bumped to 6.3.0.
+
+---
+
 ## 2026-10-01 - Milestone: Pattern Purge Merged
 
 **Trigger Type**: Primary -- Milestone, Architectural Decision (DECISION-045), Task Completion, New Task, Knowledge Refinement

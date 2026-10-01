@@ -16,13 +16,16 @@ Track issues and updates that require human intervention or review.
 ## Current Issues
 
 ## 2026-10-01 - RESOLVED: PR #6 Physical Purge
-**Resolution**: Re-cut and merged to `main` as `916f4c0` (DECISION-045). PR #6 itself remains OPEN with its remote branch; close it after the release decision.
+**Resolution**: Re-cut and merged to `main` as `916f4c0` (DECISION-045), released in v6.3.0. PR #6 CLOSED 2026-10-01 as fully absorbed; remote branch deleted.
 **Status**: Resolved
 
-## 2026-10-01 - OPEN: Release 6.3.0 and `kato_ops.py:99` Shared-Client Concurrency
-**Issue**: (1) Purge is on main but unreleased (main = 6.2.0); 6.3.0 MINOR is pending a user decision. (2) `kato/api/endpoints/kato_ops.py:99` calls `get_pattern_count` via `asyncio.to_thread` on the shared session-bound clickhouse-connect client; can 500 an unrelated request under concurrency. Pre-existing, not introduced by purge.
-**Suggested Action**: Decide release timing and the scope of the `kato_ops.py:99` fix (use `build_clickhouse_client()`).
-**Priority**: Medium
+## 2026-10-01 - RESOLVED: Release 6.3.0 and `kato_ops.py:99` Shared-Client Concurrency
+**Resolution**: v6.3.0 released (commit `5684a56`, tag `v6.3.0`). `kato_ops.py:99` fixed in `fc32c52` by removing the `asyncio.to_thread` entirely; verified with 12 concurrent `/patterns/count` requests.
+**Status**: Resolved
+
+## 2026-10-01 - OPEN: Three Old Git Stashes
+**Issue**: stash@{0} (2026-04-21, superseded multi-worker attempt, 11 files/141 insertions), stash@{1} (2025-08-28, three .pyc files), stash@{2} (2025-08-27, two log files). All assessed worthless/superseded; recommendation to drop all three given; user has not decided. Not dropped.
+**Priority**: Low
 **Status**: Open
 
 ## 2026-10-01 - INFO: Per-Session `sort_symbols` Still Inert After v6.2.0 Config Normalization

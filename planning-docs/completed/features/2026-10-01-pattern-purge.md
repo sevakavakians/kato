@@ -1,9 +1,9 @@
 # Pattern Purge: Permanent Deletion of Retired Patterns, With Statistics Unwound
 
 **Completed**: 2026-10-01
-**Status**: COMPLETE, VERIFIED, **MERGED to `main`** as `916f4c0` (merge of `feat/pattern-purge`, branch deleted locally). NOT yet released: version on `main` is still 6.2.0; a 6.3.0 MINOR release is pending a user decision.
+**Status**: COMPLETE, VERIFIED, MERGED to `main` as `916f4c0` and **RELEASED as v6.3.0** (2026-10-01, `./container-manager.sh minor`, release commit `5684a56`, tag `v6.3.0`; images `ghcr.io/sevakavakians/kato:6.3.0`/`:6.3`/`:6`/`:latest`; https://github.com/sevakavakians/kato/releases/tag/v6.3.0).
 **Decisions**: DECISION-045
-**Type**: Feature (API + storage). Completes the retirement lifecycle v6.2.0 began, and closes the last half of collaborator PR #6 (Brian Reed's `codex/kato-reliability-vector-modes-20260918`). PR #6 is still OPEN and its remote branch still exists -- the last stale branch. Vector-modes half merged 2026-09-30; retirement half in v6.2.0; purge half is this work.
+**Type**: Feature (API + storage). Completes the retirement lifecycle v6.2.0 began, and closes the last half of collaborator PR #6 (Brian Reed's `codex/kato-reliability-vector-modes-20260918`). PR #6 was CLOSED 2026-10-01 as fully absorbed (closing comment issuecomment-5937318293) and its remote branch deleted. Vector-modes half merged 2026-09-30; retirement half in v6.2.0; purge half is this work.
 
 ## Commits on main
 - `0d66947` (author Brian <briank.reed@icloud.com>) feat(patterns): purge retired patterns and unwind their statistics
@@ -28,6 +28,12 @@
 ## Correction recorded
 An earlier concern that Brian's vector work had affected emotives/affinity was investigated and DISPROVEN. His merged metrics-cache commit `9da9d82` has zero references to affinity or emotives; `git diff merge-base..main` on `kato/informatics/knowledge_base.py` shows no affinity or average_emotives changes. The only affinity change is this purge ledger, and `test_ledger_does_not_change_affinity_values` proves it purely additive (byte-identical affinity hashes with and without journalling).
 
-## Open items arising
-- `kato/api/endpoints/kato_ops.py:99` runs `asyncio.to_thread(processor.get_pattern_count, flush)` against the SHARED ClickHouse client. clickhouse-connect clients are session-bound, so this can raise "Attempt to execute concurrent queries within the same session" and surface as a 500 on an unrelated request. Pre-existing on main, not introduced here; `build_clickhouse_client()` makes the fix available. Awaiting a scope decision from the user.
-- 6.3.0 MINOR release decision pending. PR #6 still open; close it once the release decision is made.
+## Release and close-out (v6.3.0)
+- Version 6.2.0 -> 6.3.0 in `pyproject.toml`, `kato/__init__.py`, `charts/kato/Chart.yaml`; consistent. CI green on `5684a56` and all commits leading to it. Published image verified by deploying it and running the 31 lifecycle tests (17 purge + 14 retirement); all passed.
+- Extra fix `7914db1`: Bandit B608 failed lint on main (merge `916f4c0` was CI-red); table names now literal instead of loop-interpolated; no nosec.
+- Extra fix `fc32c52`: the `kato_ops.py:99` shared-client concurrency P2 is CLOSED by removing the `asyncio.to_thread` entirely (its justification, a 0.5s sleep in `flush_async_insert_queue()` without FLUSH privilege, no longer exists). 12 concurrent `/patterns/count` requests all returned 200.
+- PR #6: closing comment maps each half of the branch to its release and Brian's commit, explains the re-cut, withdraws blockers 1, 3, 8 plus two sub-claims, lists five additional purge-half defects. Branch `codex/kato-reliability-vector-modes-20260918` deleted; only `main`/`origin/main` remain; no open PRs. Brian's commits on main: `01d3990`, `12a0cb6`, `9da9d82` (6.1.0); `dcc539d`, `6bb38a9` (6.2.0); `0d66947` (6.3.0).
+
+## Still open (not part of this work)
+- Three old git stashes undropped, awaiting user decision (stash@{0} 2026-04-21 superseded multi-worker attempt; stash@{1} three .pyc; stash@{2} two log files).
+- Per-session `sort_symbols` inert P2 remains open.

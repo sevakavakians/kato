@@ -247,10 +247,10 @@ KATO achieves competitive performance on commodity CPUs through algorithmic opti
 
 ```bash
 # Recommended for production - pin to specific version
-docker pull ghcr.io/sevakavakians/kato:4.0.0
+docker pull ghcr.io/sevakavakians/kato:6.3.0
 
 # Auto-receive patch updates (security fixes, bug fixes)
-docker pull ghcr.io/sevakavakians/kato:4.0
+docker pull ghcr.io/sevakavakians/kato:6.3
 
 # Always use latest stable (for development)
 docker pull ghcr.io/sevakavakians/kato:latest
@@ -258,12 +258,12 @@ docker pull ghcr.io/sevakavakians/kato:latest
 
 | Tag | Description | Use Case |
 |-----|-------------|----------|
-| `4.0.0` | Specific version (immutable) | Production - pin to exact version |
-| `4.0` | Latest patch for 4.0.x | Auto-receive security/bug fixes |
-| `4` | Latest minor for 4.x | Track major version |
+| `6.3.0` | Specific version (immutable) | Production - pin to exact version |
+| `6.3` | Latest patch for 6.3.x | Auto-receive security/bug fixes |
+| `6` | Latest minor for 6.x | Track major version |
 | `latest` | Latest stable release | Development and testing |
 
-To use a pre-built image with Docker Compose, replace the `build` section with `image: ghcr.io/sevakavakians/kato:4.0.0`. See the [Deployment Guide](docs/operations/docker-deployment.md) for complete instructions.
+To use a pre-built image with Docker Compose, replace the `build` section with `image: ghcr.io/sevakavakians/kato:6.3.0`. See the [Deployment Guide](docs/operations/docker-deployment.md) for complete instructions.
 
 ### Option 2: Build from Source
 
@@ -440,12 +440,15 @@ Like GAIuS before it, KATO adheres to [ExCITE AI](https://medium.com/@sevakavaki
 
 ## Recent Updates
 
-### v4.0.0 (2026-06)
-- **Metadata Migration Complete**: Per-pattern metadata now lives solely in ClickHouse (Redis → ClickHouse migration finished); `KATO_METADATA_*` rollout flags removed (**breaking**)
-- **Metadata Loss Fix**: Strictly-monotonic version column eliminates a same-second re-learn regression that could silently drop metadata updates
-- **Migration Required**: The `patterns_metadata` table must be recreated with the new schema
+### v6.3.0 (2026-10)
+- **Pattern purging**: `POST /sessions/{id}/patterns/purge` permanently deletes retired patterns and unwinds their contribution to the node's symbol, affinity and global statistics. Only a retired pattern can be purged, so erasure always passes through a reversible step first. Resumable, with a reason reported per pattern ID.
+- **Pattern retirement** (6.2.0): `POST /sessions/{id}/patterns/retire` and `/un-retire` hide a learned pattern from every read path without deleting it.
+- See [pattern retirement and purging](docs/users/pattern-retirement.md).
 
-See [CHANGELOG.md](CHANGELOG.md) for the full release history.
+### v6.0.0 (2026-09)
+- **Recall-safe candidate bound** (**breaking**): `length_min_ratio`, `length_max_ratio` and the `'length'` filter were removed as recall-unsafe, and `recall_threshold=0` is now rejected.
+
+See [CHANGELOG.md](CHANGELOG.md) for the full release history, including 4.x and 5.x.
 
 ## Support
 

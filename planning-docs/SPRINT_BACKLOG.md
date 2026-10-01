@@ -1,5 +1,5 @@
 # SPRINT_BACKLOG.md - Upcoming Work
-*Last Updated: 2026-10-01 (Purge merged (916f4c0); added kato_ops.py:99 P2 and 6.3.0 release-pending items. Prior: v6.2.0 released: pattern retirement re-cut from PR #6 (PR #14), session-config endpoint normalization (PR #13), docs corrections (PR #12). New open item: physical purge (PR #6). See "Recently Completed". Prior 2026-09-30: Correction of a correction: python-client 3.7.0 was NOT lost — committed `289820a`, merged `25703d8`, pushed; live-verified. Prior: Four items landed on `main` today: vector modes ported from a collaborator's branch (DECISION-040, PR #7), CI unit job fixed to start a KATO service (PR #8), patterns_data async_insert visibility race fixed (DECISION-041, PR #9) — closes two long-open backlog items below — and test pattern accumulation fixed (PR #10, branch `fix/test-pattern-accumulation`, **not yet merged**, CI pending). See "Recently Completed" below. Prior: Python client 3.7.0 session-config fix recorded under "Recently Completed". Prior: 2026-09-22 (Single-event-vs-multi-event pattern grouping investigation — reported bug NOT reproduced, verified live; coverage gap and doc/docstring/API-message defects fixed instead. COMPLETE, UNCOMMITTED. See "Recently Completed" below.))*
+*Last Updated: 2026-10-01 (v6.3.0 released; kato_ops.py:99 P2 DONE (fc32c52); PR #6 closed; stash cleanup open. Prior: Purge merged (916f4c0); added kato_ops.py:99 P2 and 6.3.0 release-pending items. Prior: v6.2.0 released: pattern retirement re-cut from PR #6 (PR #14), session-config endpoint normalization (PR #13), docs corrections (PR #12). New open item: physical purge (PR #6). See "Recently Completed". Prior 2026-09-30: Correction of a correction: python-client 3.7.0 was NOT lost — committed `289820a`, merged `25703d8`, pushed; live-verified. Prior: Four items landed on `main` today: vector modes ported from a collaborator's branch (DECISION-040, PR #7), CI unit job fixed to start a KATO service (PR #8), patterns_data async_insert visibility race fixed (DECISION-041, PR #9) — closes two long-open backlog items below — and test pattern accumulation fixed (PR #10, branch `fix/test-pattern-accumulation`, **not yet merged**, CI pending). See "Recently Completed" below. Prior: Python client 3.7.0 session-config fix recorded under "Recently Completed". Prior: 2026-09-22 (Single-event-vs-multi-event pattern grouping investigation — reported bug NOT reproduced, verified live; coverage gap and doc/docstring/API-message defects fixed instead. COMPLETE, UNCOMMITTED. See "Recently Completed" below.))*
 
 ## Active Projects
 
@@ -7,16 +7,19 @@
 
 ---
 
-### Feature: Physical Purge of Retired Patterns -- DONE (merged 916f4c0, 2026-10-01)
-**Status**: **COMPLETE, merged to `main`**, not yet released. See DECISION-045 and `completed/features/2026-10-01-pattern-purge.md`. Collaborator PR #6 is still OPEN (last stale branch); close after the release decision.
+### Feature: Physical Purge of Retired Patterns -- DONE (merged 916f4c0, RELEASED in v6.3.0, 2026-10-01)
+**Status**: **COMPLETE, merged and RELEASED** in v6.3.0. See DECISION-045 and `completed/features/2026-10-01-pattern-purge.md`. Collaborator PR #6 CLOSED 2026-10-01 as fully absorbed; remote branch deleted; no stale branches remain.
 
-### Bug: `/kato_ops` pattern count uses the shared session-bound ClickHouse client
+### Bug: `/kato_ops` pattern count uses the shared session-bound ClickHouse client -- DONE (`fc32c52`, v6.3.0)
 **Priority**: P2 (pre-existing on main, found during purge work)
-**Status**: OPEN, awaiting user scope decision.
-**Detail**: `kato/api/endpoints/kato_ops.py:99` runs `asyncio.to_thread(processor.get_pattern_count, flush)` on the shared ClickHouse client. clickhouse-connect clients are session-bound, so concurrent use can raise "Attempt to execute concurrent queries within the same session" and surface as a 500 on an unrelated request. `OptimizedConnectionManager.build_clickhouse_client()` (added by purge) is the available fix.
+**Status**: **DONE 2026-10-01.** User chose to fix now. Fix REMOVED the `asyncio.to_thread` in `kato/api/endpoints/kato_ops.py` rather than adding a dedicated client: the thread existed because `flush_async_insert_queue()` used to sleep 0.5s without the FLUSH privilege; it no longer sleeps, so the justification had lapsed while the hazard remained. Verified with 12 concurrent `/patterns/count` requests, all 200.
 
-### Release: 6.3.0 (MINOR) -- adds the purge endpoint
-**Status**: PENDING user decision. main is 6.2.0.
+### Release: 6.3.0 (MINOR) -- DONE 2026-10-01
+**Status**: **RELEASED.** `./container-manager.sh minor`; commit `5684a56`; tag `v6.3.0`; images `ghcr.io/sevakavakians/kato:6.3.0`/`:6.3`/`:6`/`:latest` verified; https://github.com/sevakavakians/kato/releases/tag/v6.3.0. Includes `7914db1` (Bandit B608 fix, no nosec) and `fc32c52`. Published image verified with 31 lifecycle tests (17 purge + 14 retirement).
+
+### Chore: Drop three old git stashes -- OPEN (awaiting user decision)
+**Priority**: P3
+**Status**: Recommendation to drop all three given; user has not decided. `stash@{0}` 2026-04-21 multi-worker attempt (11 files/141 insertions; superseded, `KATO_WORKERS` shipped); `stash@{1}` 2025-08-28 three .pyc files; `stash@{2}` 2025-08-27 two log files. Not dropped.
 
 ---
 

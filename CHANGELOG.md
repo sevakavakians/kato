@@ -67,6 +67,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   queries within the same session"* — surfacing as a 500 on an unrelated request.
   The purge driver holds its own client for the duration.
 
+- `GET /patterns/count` no longer queries the shared ClickHouse client off the
+  event loop, which could raise that same error and fail an unrelated concurrent
+  request. It was offloaded to a thread because `flush_async_insert_queue()` used
+  to sleep 0.5s without the FLUSH privilege; it no longer sleeps, so the reason had
+  lapsed while the hazard remained.
+
 ## [6.2.0] - 2026-10-01
 
 Pattern retirement, plus a config-endpoint inconsistency and a round of

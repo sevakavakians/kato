@@ -39,7 +39,7 @@ curl -X POST http://localhost:8000/sessions \
 
 ```bash
 # Update configuration for existing session
-curl -X PUT http://localhost:8000/sessions/{session_id}/config \
+curl -X POST http://localhost:8000/sessions/{session_id}/config \
   -H "Content-Type: application/json" \
   -d '{
     "config": {

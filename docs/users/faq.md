@@ -263,7 +263,7 @@ See [Configuration Guide](configuration.md#production-configuration).
 
 **Yes!**
 ```bash
-curl -X PUT http://localhost:8000/sessions/{session_id}/config \
+curl -X POST http://localhost:8000/sessions/{session_id}/config \
   -d '{"config": {"recall_threshold": 0.5}}'
 ```
 

@@ -151,7 +151,7 @@ Factory pattern can be implemented if needed
 ### Running Tests
 ```bash
 # Services must be running
-./start.sh
+./start.sh start
 
 # Run all tests
 ./run_tests.sh --no-start --no-stop

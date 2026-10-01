@@ -295,11 +295,12 @@ logger.debug(f"Short-term memory state: {short_term_memory}")
 ### Docker Debugging
 
 ```bash
-# Run with debug logging
-./start.sh --log-level DEBUG
+# Run with debug logging. LOG_LEVEL is an environment variable, not a flag --
+# set it in docker-compose.yml (or .env) and restart the service.
+LOG_LEVEL=DEBUG docker compose up -d kato
 
-# Open shell in container
-./kato-manager.sh shell
+# Open a shell in the container
+docker exec -it kato /bin/bash
 
 # View logs
 docker compose logs kato -f

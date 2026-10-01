@@ -421,13 +421,33 @@ Returns processor performance metrics.
 **Response:**
 ```json
 {
-  "session_id": "default",
-  "observations_processed": 1234,
-  "patterns_learned": 56,
-  "stm_size": 3,
-  "uptime_seconds": 3600.5
+  "timestamp": 1790859484.95,
+  "databases": {"clickhouse": {}, "qdrant": {}, "redis": {}},
+  "performance": {
+    "total_requests": 0,
+    "total_errors": 0,
+    "error_rate": 0.0,
+    "average_response_time": 0.0
+  },
+  "rates": {"requests_per_second": 0.0, "requests_per_minute": 0.0, "errors_per_minute": 0.0},
+  "resources": {"cpu_percent": 0.0, "memory_percent": 0.0, "disk_percent": 0.0},
+  "sessions": {"active": 0, "total_created": 0, "total_deleted": 0, "operations_total": 0},
+  "processor_manager": {
+    "total_processors": 0,
+    "max_processors": 0,
+    "eviction_ttl_seconds": 0,
+    "processors": []
+  },
+  "active_sessions": null,
+  "uptime_seconds": null,
+  "error": null
 }
 ```
+
+These are service-wide counters, not per-session. `active_sessions` and
+`uptime_seconds` may be `null`; use `GET /sessions/count` and `GET /health`
+respectively for those. Fetch the endpoint on a running service for the current
+shape rather than relying on this sample.
 
 ## WebSocket Endpoint
 

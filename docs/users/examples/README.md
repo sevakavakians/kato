@@ -28,7 +28,7 @@ Practical examples demonstrating KATO usage patterns.
 
 ```bash
 # 1. Start KATO
-./start.sh
+./start.sh start
 
 # 2. Install Python dependencies
 pip install requests numpy  # Add others as needed

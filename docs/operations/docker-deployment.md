@@ -27,7 +27,7 @@ git clone https://github.com/your-org/kato.git
 cd kato
 
 # Start all services
-./start.sh
+./start.sh start
 
 # Verify deployment
 curl http://localhost:8000/health

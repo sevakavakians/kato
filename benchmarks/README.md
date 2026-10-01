@@ -76,7 +76,7 @@ Measures current pattern matching performance without optimizations.
 
 ```bash
 # Ensure KATO services are running
-./start.sh
+./start.sh start
 
 # Run all benchmarks (includes 1M patterns - may take 5-10 minutes)
 python benchmarks/baseline.py
@@ -179,7 +179,7 @@ Compare RapidFuzz vs difflib performance.
 
 ```bash
 # Ensure services running
-./start.sh
+./start.sh start
 
 # Quick comparison (recommended - skip 1M patterns)
 python benchmarks/compare_matchers.py --quick
@@ -264,7 +264,7 @@ python benchmarks/gpu_benchmarks.py --quick
 docker ps | grep clickhouse
 
 # Start services
-./start.sh
+./start.sh start
 ```
 
 **Out of memory:**

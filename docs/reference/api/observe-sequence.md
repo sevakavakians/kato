@@ -38,22 +38,30 @@ Each "observation" in the array represents:
 ### Response
 ```json
 {
-  "status": "okay",
-  "session_id": "primary",
+  "status": "completed",
+  "processor_id": "my_node",
   "observations_processed": 3,
-  "patterns_learned": ["PTRN|abc123..."],
-  "individual_results": [
+  "initial_stm_length": 0,
+  "final_stm_length": 0,
+  "results": [
     {
       "status": "okay",
-      "session_id": "primary",
-      "auto_learned_pattern": null,
+      "sequence_position": 0,
+      "stm_length": 1,
       "time": 1,
-      "unique_id": "obs-1-..."
+      "unique_id": "seq-obs-3f0331e07c7d460e994333d672ac3ed4",
+      "auto_learned_pattern": null
     }
   ],
-  "final_predictions": [...]
+  "auto_learned_patterns": ["PTRN|76d7efca2e96cb5eeddf4e06ac96a0f424630135"],
+  "final_learned_pattern": "PTRN|76d7efca2e96cb5eeddf4e06ac96a0f424630135",
+  "isolated": false
 }
 ```
+
+`auto_learned_patterns` holds anything learned by hitting `max_pattern_length`
+mid-sequence; `final_learned_pattern` is what `learn_at_end` produced, and is
+`null` when `learn_at_end` is false or the STM held fewer than two symbols.
 
 ## Behavioral Modes
 
@@ -226,6 +234,15 @@ The endpoint returns HTTP 500 for:
 ```python
 import requests
 
+BASE = "http://localhost:8000"
+
+# observe-sequence is session-scoped, so create a session first. node_id selects
+# the long-term memory the sequence is learned into.
+session_id = requests.post(
+    f"{BASE}/sessions",
+    json={"node_id": "clickstream"},
+).json()["session_id"]
+
 # Build a user session sequence
 user_session = {
     "observations": [
@@ -239,15 +256,15 @@ user_session = {
 }
 
 response = requests.post(
-    "http://localhost:8000/observe-sequence",
+    f"{BASE}/sessions/{session_id}/observe-sequence",
     json=user_session
 )
 
 if response.status_code == 200:
     result = response.json()
     print(f"Processed {result['observations_processed']} events")
-    if result['patterns_learned']:
-        print(f"Learned pattern: {result['patterns_learned'][0]}")
+    if result['final_learned_pattern']:
+        print(f"Learned pattern: {result['final_learned_pattern']}")
     if result['final_predictions']:
         print(f"Generated {len(result['final_predictions'])} predictions")
 ```

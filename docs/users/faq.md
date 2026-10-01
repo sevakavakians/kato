@@ -52,7 +52,7 @@ No. KATO is CPU-optimized and runs efficiently without GPU.
 ```bash
 git clone https://github.com/sevakavakians/kato.git
 cd kato
-./start.sh
+./start.sh start
 ```
 
 See [Installation Guide](installation.md) for complete instructions.
@@ -328,7 +328,7 @@ docker compose up -d
 
 # 2. Rebuild without cache
 docker compose build --no-cache kato
-./start.sh
+./start.sh start
 ```
 
 See [Troubleshooting Guide](troubleshooting.md).
@@ -337,7 +337,7 @@ See [Troubleshooting Guide](troubleshooting.md).
 
 ```bash
 # Ensure services running
-./start.sh
+./start.sh start
 docker compose ps  # All should be "Up"
 
 # Run tests

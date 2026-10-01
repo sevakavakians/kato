@@ -171,7 +171,7 @@ python -m pytest tests/tests/unit/ --pdb
 python -m pytest tests/tests/unit/ -s
 
 # Check KATO logs during test
-docker logs kato-api-$(whoami)-1 --tail 20
+docker logs kato --tail 20
 
 # Run tests without starting/stopping KATO
 ./run_tests.sh --no-start --no-stop tests/

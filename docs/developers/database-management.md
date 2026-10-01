@@ -602,7 +602,7 @@ docker volume rm kato_qdrant_data
 docker volume rm kato_redis_data
 
 # Restart services (fresh databases)
-./start.sh
+./start.sh start
 ```
 
 ## Database Scaling

@@ -15,6 +15,7 @@ import time
 from datetime import datetime
 from itertools import chain
 from os import environ
+from time import sleep
 from typing import Any
 
 from datasketch import MinHash
@@ -703,6 +704,165 @@ class ClickHouseWriter:
             return True
         except Exception as e:
             logger.error(f"Failed to delete metadata for pattern {name}: {e}")
+            return False
+
+    # ClickHouse mutations are per-statement heavyweight operations, so purge
+    # batches names rather than issuing one per pattern. Chunked because a WHERE
+    # name IN (...) of unbounded width eventually exceeds the server's query
+    # size limit, and a rejected statement deletes nothing.
+    _PURGE_CHUNK_SIZE = 500
+
+    def purge_patterns(self, names: list[str]) -> int:
+        """Irreversibly delete pattern rows and their metadata for this kb_id.
+
+        The mutations are submitted, not waited on. Blocking on them with
+        mutations_sync was tried first and is worse: the wait has its own timeout,
+        and under a batch of concurrent purges it expires while the mutation is
+        still queued, so the client raises UNFINISHED for a delete that then
+        completes seconds later. That turns a success into a reported failure --
+        the one error shape worth going out of the way to avoid. Confirmation
+        comes instead from wait_until_absent, which reads the rows back; a read is
+        the authority on whether they are gone, and it cannot report a false
+        failure for work that succeeded.
+
+        Scoped to names, never a partition drop: the partition key is kb_id, so
+        dropping it would take every other pattern on the node with it.
+
+        Returns:
+            Number of names submitted for deletion.
+
+        Raises:
+            UnsafeIdentifierError: if any name is not a SHA1 hex digest.
+            Exception: if a statement is rejected, leaving the remaining chunks
+                unsubmitted. Callers resume from the tombstone states.
+        """
+        if not names:
+            return 0
+
+        # Validate every name before issuing anything. A bad name must not leave
+        # the first half of the batch deleted and the second half not.
+        safe_kb_id = validate_kb_id(self.kb_id)
+        safe_names = [validate_pattern_name(name) for name in names]
+
+        for start in range(0, len(safe_names), self._PURGE_CHUNK_SIZE):
+            chunk = safe_names[start:start + self._PURGE_CHUNK_SIZE]
+            name_list = ', '.join(f"'{name}'" for name in chunk)
+            for table in ('patterns_data', 'patterns_metadata'):
+                self.client.command(
+                    f"ALTER TABLE kato.{table} "
+                    f"DELETE WHERE kb_id = '{safe_kb_id}' AND name IN ({name_list})"
+                )
+
+        logger.info(
+            f"Submitted deletion of {len(safe_names)} pattern(s) from ClickHouse "
+            f"(kb_id={self.kb_id})"
+        )
+        return len(safe_names)
+
+    def wait_until_absent(self, names: list[str], timeout_seconds: float = 30.0,
+                          poll_seconds: float = 0.2) -> list[str]:
+        """Poll until these patterns are unreadable, or the timeout expires.
+
+        Deletion is a mutation applied in the background, so a read immediately
+        after submitting it still returns the rows. This is what establishes they
+        are really gone -- the precondition for marking a pattern purged.
+
+        A timeout is not a failure of the delete; the mutation stays queued and
+        completes. It only means this call cannot confirm it yet, so the caller
+        leaves the pattern at 'redis_cleaned' and a later call finishes the job.
+
+        Returns:
+            Names still readable when the wait ended. Empty means confirmed gone.
+        """
+        if not names:
+            return []
+
+        deadline = time.monotonic() + timeout_seconds
+        remaining = self.patterns_still_present(names)
+        while remaining and time.monotonic() < deadline:
+            sleep(poll_seconds)
+            remaining = self.patterns_still_present(remaining)
+
+        if remaining:
+            logger.warning(
+                f"{len(remaining)} pattern(s) still readable after waiting "
+                f"{timeout_seconds}s for deletion to apply (kb_id={self.kb_id}); "
+                f"the mutation is still queued and a later purge will confirm it"
+            )
+        return remaining
+
+    def patterns_still_present(self, names: list[str]) -> list[str]:
+        """Names that still have a row in either table, for post-purge verification.
+
+        A non-empty result must block the 'purged' transition: marking a pattern
+        purged while a row of it survives is the one outcome worse than a failed
+        purge, because the tombstone's snapshot is dropped at that point and the
+        counter reversal can no longer be replayed.
+        """
+        if not names:
+            return []
+
+        present: set[str] = set()
+        for start in range(0, len(names), self._PURGE_CHUNK_SIZE):
+            chunk = names[start:start + self._PURGE_CHUNK_SIZE]
+            for table in ('patterns_data', 'patterns_metadata'):
+                result = self.client.query(
+                    f"SELECT DISTINCT name FROM kato.{table} "
+                    f"WHERE kb_id = %(kb_id)s AND name IN %(names)s",
+                    parameters={'kb_id': self.kb_id, 'names': chunk},
+                )
+                present.update(row[0] for row in result.result_rows)
+
+        # Input order, so the caller's logs and retries are deterministic.
+        return [name for name in names if name in present]
+
+    def invalidate_precomputed_metrics(self) -> bool:
+        """Clear precomputed entropy metrics for every pattern on this node.
+
+        Node-wide, not scoped to the purged names, because that is the true blast
+        radius: normalized_entropy uses the node's unique-symbol count as its log
+        base, and global_normalized_entropy uses the node's symbol probabilities.
+        Purge changes both, so every surviving pattern's stored values are now
+        wrong -- including patterns that shared no symbol with the purged ones.
+
+        All three entropy columns are nulled together even though `entropy`
+        itself is pattern-intrinsic and still correct. The read path treats
+        precomputed metrics as all-or-nothing, gating on `entropy is not None`
+        and then reading the others with a 0.0 default -- so nulling only the two
+        stale columns would make predictions report 0.0 for them rather than
+        falling back to runtime computation. Nulling all three restores the
+        documented pre-finalize-training fallback, which computes correct values
+        from current statistics.
+
+        tf_vector is left alone: it is pattern-local, and the branch that reads it
+        is gated on the same entropy check.
+
+        Submitted without waiting, like the deletes: nothing reads these values
+        back to verify, and a stale precomputed metric for a few more seconds is
+        not worth a blocking wait that can time out and report a false failure.
+
+        Callers should re-run finalize-training afterwards to restore the
+        precomputation; predictions are correct either way, only slower.
+        """
+        try:
+            safe_kb_id = validate_kb_id(self.kb_id)
+            self.client.command(
+                f"ALTER TABLE kato.patterns_metadata "
+                f"UPDATE entropy = NULL, normalized_entropy = NULL, "
+                f"global_normalized_entropy = NULL "
+                f"WHERE kb_id = '{safe_kb_id}'"
+            )
+            logger.info(
+                f"Invalidated precomputed entropy metrics for kb_id={self.kb_id}; "
+                f"re-run finalize-training to restore them"
+            )
+            return True
+        except Exception as e:
+            # Not fatal to a purge: the metrics are stale, not wrong-by-identity,
+            # and the next finalize-training overwrites them regardless.
+            logger.error(
+                f"Failed to invalidate precomputed metrics for {self.kb_id}: {e}"
+            )
             return False
 
     def delete_all_pattern_metadata(self) -> bool:

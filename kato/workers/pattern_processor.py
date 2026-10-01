@@ -10,6 +10,7 @@ from typing import Any, Optional
 import numpy as np
 
 from kato.config.session_config import SessionConfiguration
+from kato.exceptions import DataConsistencyError
 from kato.informatics.knowledge_base import SuperKnowledgeBase
 from kato.informatics.metrics import (
     accumulate_metadata,
@@ -21,7 +22,11 @@ from kato.representations.pattern import Pattern
 from kato.representations.prediction import rank_predictions, segment_by_alignment
 from kato.searches.pattern_search import PatternSearcher
 from kato.storage.aggregation_pipelines import OptimizedQueryManager
-from kato.storage.connection_manager import OptimizedConnectionManager
+from kato.storage.clickhouse_writer import ClickHouseWriter
+from kato.storage.connection_manager import (
+    OptimizedConnectionManager,
+    get_connection_manager,
+)
 from kato.storage.identifiers import validate_kb_id, validate_pattern_name
 from kato.storage.metrics_cache import CachedMetricsCalculator, get_metrics_cache_manager
 
@@ -739,6 +744,397 @@ class PatternProcessor:
     def un_retire_patterns(self, pattern_names: list[str]) -> dict[str, Any]:
         """Remove tombstones for a batch, making the patterns visible again."""
         return self.superkb.redis_writer.un_retire_patterns(pattern_names)
+
+    async def purge_retired_patterns(
+        self,
+        pattern_names: Optional[list[str]] = None,
+        max_patterns: int = 1000,
+    ) -> dict[str, Any]:
+        """Permanently delete retired patterns and reverse their contribution.
+
+        Retirement hides a pattern; purge erases it. Each pattern walks its
+        tombstone from 'retired' through 'prepared' and 'redis_cleaned' to
+        'purged', and the order of the two stores is deliberate:
+
+        **Redis first, ClickHouse second.** The Redis step is guarded and
+        abortable -- it verifies the node still matches the snapshot and writes
+        nothing if it does not -- while the ClickHouse delete is irreversible.
+        Doing the reversible, abortable step first means a rejected purge costs
+        nothing; the other order destroys the pattern data before discovering the
+        purge should not have proceeded. (The ported implementation had it the
+        other way round, with the ClickHouse delete before an unguarded Redis
+        loop, so a mid-batch failure left counters permanently inflated for
+        patterns whose rows were already gone.)
+
+        An interrupted purge is resumable, never corrupting: a pattern is only
+        marked 'purged' after both stores have confirmed it absent, and every
+        earlier state is safe to retry. Calling this again finishes the job.
+
+        Errors are isolated per pattern. One malformed or contended id reports
+        itself as failed and the rest of the batch completes -- a batch of 500
+        must not be lost to one bad entry.
+
+        Args:
+            pattern_names: Patterns to purge. Defaults to every retired pattern
+                on this node that has not already been purged.
+            max_patterns: Upper bound on one call, so a node with a large
+                retirement backlog cannot hold a request open indefinitely.
+
+        Returns:
+            A report with 'status' ('completed', 'partial' or 'nothing_to_purge'),
+            'purged', 'failed' (id -> reason) and 'remaining'.
+        """
+        redis_writer = self.superkb.redis_writer
+
+        # A pattern learned moments ago may still be in ClickHouse's async insert
+        # buffer and invisible to the snapshot read below. Without this drain its
+        # symbol counts would be read as absent, the ALTER ... DELETE would not
+        # match it, verification would agree it was gone, and the row would then
+        # surface -- a resurrected pattern with counters already reversed.
+        #
+        # On the shared client, before any thread work starts.
+        self.superkb.clickhouse_writer.ensure_visible(
+            redis_writer.get_global_metadata().get('stats_version', 0)
+        )
+
+        # Every ClickHouse call below runs in a worker thread, so it cannot use
+        # the shared client: clickhouse-connect clients are session-bound and
+        # raise "Attempt to execute concurrent queries within the same session"
+        # the moment the event loop serves another request that reaches
+        # ClickHouse. A purge holds its client for seconds while it polls, which
+        # makes that collision near-certain rather than theoretical -- it showed
+        # up as a 500 on an unrelated request. Hence a dedicated client for the
+        # duration, as clickhouse-connect itself advises, and no lock.
+        purge_client = get_connection_manager().build_clickhouse_client()
+        if purge_client is None:
+            raise DataConsistencyError(
+                resource_id=self.kb_id,
+                consistency_type='clickhouse unavailable',
+                expected_value='a ClickHouse connection for the purge',
+                actual_value='none could be created',
+            )
+        clickhouse_writer = ClickHouseWriter(self.kb_id, purge_client)
+        try:
+            return await self._run_purge(
+                redis_writer, clickhouse_writer, pattern_names, max_patterns
+            )
+        finally:
+            try:
+                purge_client.close()
+            except Exception as e:
+                logger.debug(f"Closing the purge ClickHouse client failed: {e}")
+
+    async def _run_purge(
+        self,
+        redis_writer,
+        clickhouse_writer,
+        pattern_names: Optional[list[str]],
+        max_patterns: int,
+    ) -> dict[str, Any]:
+        """The purge itself, with the stores it should use passed in.
+
+        Split out so the dedicated ClickHouse client is closed on every exit path.
+        """
+
+        candidates, failed = await asyncio.to_thread(
+            self._collect_purge_candidates, pattern_names, max_patterns
+        )
+        if not candidates and not failed:
+            return {
+                'status': 'nothing_to_purge',
+                'purged': [], 'failed': {}, 'remaining': 0,
+            }
+
+        # Phase 1 -- per pattern, in Redis: snapshot, then reverse.
+        cleaned: list[str] = []
+        for name in candidates:
+            try:
+                await asyncio.to_thread(
+                    self._purge_one_from_redis, name, clickhouse_writer
+                )
+                cleaned.append(name)
+            except Exception as e:
+                # Isolated deliberately: a stale snapshot or a contended pattern
+                # must not abort the patterns after it in the batch. The tombstone
+                # is left wherever it got to, and all of those states are
+                # resumable by calling this again.
+                logger.warning(f"Redis purge phase failed for {name}: {e}")
+                failed[name] = str(e)
+
+        # Phase 2 -- one batched ClickHouse mutation for everything that reached
+        # 'redis_cleaned', then wait for it to apply. A failure here leaves those
+        # patterns at that state, which the next call resumes; nothing is marked
+        # 'purged'.
+        purged: list[str] = []
+        if cleaned:
+            try:
+                await asyncio.to_thread(clickhouse_writer.purge_patterns, cleaned)
+            except Exception as e:
+                logger.error(f"ClickHouse purge failed for {len(cleaned)} pattern(s): {e}")
+                for name in cleaned:
+                    failed[name] = f"clickhouse delete failed: {e}"
+                cleaned = []
+
+        if cleaned:
+            # The mutation applies in the background, so read the rows back rather
+            # than trusting the submission. Anything still readable is reported as
+            # unconfirmed and left resumable -- its delete is queued and will
+            # complete, so a later call marks it purged.
+            unconfirmed = await asyncio.to_thread(
+                clickhouse_writer.wait_until_absent, cleaned
+            )
+            for name in unconfirmed:
+                failed[name] = (
+                    'deletion is still being applied; re-run the purge to confirm it'
+                )
+            cleaned = [name for name in cleaned if name not in set(unconfirmed)]
+
+        # Phase 3 -- verify, then mark purged. The two stores are checked
+        # independently of what they reported, because 'purged' is the point of no
+        # return: the tombstone's snapshot is dropped there, so a pattern marked
+        # purged while a record of it survives can never have its counters
+        # replayed.
+        if cleaned:
+            purged, verification_failures = await asyncio.to_thread(
+                self._verify_and_mark_purged, cleaned, clickhouse_writer
+            )
+            failed.update(verification_failures)
+
+        if purged:
+            # Once per batch, not per pattern: this is a whole-partition mutation.
+            await asyncio.to_thread(clickhouse_writer.invalidate_precomputed_metrics)
+            # On the event loop thread, not in a worker: this mutates searcher
+            # state the loop may be reading for another session's prediction, and
+            # it is pure in-memory dict work with nothing to block on.
+            self._drop_purged_from_local_caches(purged)
+
+        remaining = await asyncio.to_thread(self._count_unpurged, redis_writer)
+
+        return {
+            'status': 'completed' if not failed else 'partial',
+            'purged': purged,
+            'failed': failed,
+            'remaining': remaining,
+        }
+
+    @staticmethod
+    def _count_unpurged(redis_writer) -> int:
+        """Retired patterns still awaiting a purge, for the caller's progress."""
+        all_retired = redis_writer.get_retired_pattern_ids()
+        if not all_retired:
+            return 0
+        records = redis_writer.get_retirement_records(list(all_retired))
+        return sum(
+            1 for record in records.values() if record.get('state') != 'purged'
+        )
+
+    def _collect_purge_candidates(
+        self, pattern_names: Optional[list[str]], max_patterns: int
+    ) -> tuple[list[str], dict[str, str]]:
+        """Resolve the batch: retired, not already purged, and well-formed.
+
+        Validation happens here rather than at the edge as well, because this is
+        also reachable with no explicit list at all. Rejected ids are reported,
+        not raised: the caller gets a per-id reason and the rest of the batch
+        proceeds.
+        """
+        redis_writer = self.superkb.redis_writer
+        failed: dict[str, str] = {}
+
+        if pattern_names is None:
+            requested = sorted(redis_writer.get_retired_pattern_ids())
+        else:
+            requested = []
+            for name in pattern_names:
+                try:
+                    requested.append(redis_writer.normalize_pattern_name(name))
+                except (TypeError, ValueError) as e:
+                    failed[str(name)] = str(e)
+            # De-duplicate but keep the caller's order, so a repeated id is not
+            # prepared twice within one batch.
+            requested = list(dict.fromkeys(requested))
+
+        if not requested:
+            return [], failed
+
+        records = redis_writer.get_retirement_records(requested)
+        candidates: list[str] = []
+        for name in requested:
+            record = records.get(name)
+            if record is None:
+                failed[name] = 'not retired'
+            elif record.get('state') == 'purged':
+                # Already done. Not a failure.
+                continue
+            else:
+                candidates.append(name)
+
+        return candidates[:max_patterns], failed
+
+    def _purge_one_from_redis(self, name: str, clickhouse_writer) -> None:
+        """Snapshot one pattern's contribution, then reverse it. Raises on refusal."""
+        redis_writer = self.superkb.redis_writer
+
+        records = redis_writer.get_retirement_records([name])
+        state = records.get(name, {}).get('state')
+
+        if state in ('redis_cleaned', 'purged'):
+            return  # Resuming a partial purge; Redis is already settled.
+
+        if state != 'prepared':
+            stored = clickhouse_writer.get_pattern_data(name)
+            symbol_counts = (
+                dict(Counter(chain(*stored['pattern_data']))) if stored else {}
+            )
+            snapshot = redis_writer.build_purge_snapshot(
+                name, symbol_counts,
+                self._resolve_affinity_contribution(name),
+            )
+
+            # The symbol counts come from the stored pattern, so a missing
+            # ClickHouse row leaves nothing to subtract per symbol -- while the
+            # live Redis frequency key says the pattern did contribute. Purging
+            # on that snapshot would decrement the two global pattern counters
+            # and leave symbols:freq, symbols:pmf, the symbol indices and
+            # affinity inflated for every symbol it held, with the tombstone
+            # marked 'purged' and its snapshot discarded, so nothing could ever
+            # reconstruct the difference.
+            #
+            # Refuse instead, and say which store is missing what. The index
+            # cannot stand in: symbol_to_patterns records that a symbol appears
+            # in the pattern, not how many times, and the reversal needs the
+            # multiplicity. Resolve it by restoring the row or, if the pattern is
+            # genuinely gone from ClickHouse, by un-retiring and re-learning it so
+            # both stores agree before purging again.
+            if snapshot['had_pattern_record'] and not symbol_counts:
+                raise DataConsistencyError(
+                    resource_id=name,
+                    consistency_type='missing patterns_data row',
+                    expected_value='a patterns_data row to read symbol counts from',
+                    actual_value='no row, but Redis still holds its frequency counter',
+                    message=(
+                        f"Cannot purge {name}: its patterns_data row is missing "
+                        f"while Redis still holds its frequency counter, so there "
+                        f"is no way to reverse its per-symbol contribution. Restore "
+                        f"the row, or un-retire and re-learn the pattern so both "
+                        f"stores agree."
+                    ),
+                    context={'kb_id': self.kb_id},
+                )
+            outcome = redis_writer.prepare_pattern_purge(name, snapshot)
+            if outcome == 'not_retired':
+                raise ValueError(f"pattern {name} is not retired")
+
+        outcome = redis_writer.purge_pattern_records(name)
+        if outcome == 'not_retired':
+            raise ValueError(f"pattern {name} is not retired")
+
+    def _resolve_affinity_contribution(self, name: str) -> dict[str, float]:
+        """What this pattern added to per-symbol affinity, exactly or approximately.
+
+        Affinity sums *averaged* emotives, and the average moves with the rolling
+        persistence window on every learn, so nothing in the stored pattern
+        recovers the figure. The ledger written at learn time is the exact record.
+
+        Patterns learned before the ledger existed have none, and for those there
+        is a choice between leaving their contribution behind forever and
+        subtracting a best estimate. The estimate is used: a pattern learned once,
+        with its emotives still inside the persistence window, has a current
+        average identical to what it contributed, so the estimate is exact; beyond
+        that it is approximate, and an approximate reversal is closer to the truth
+        than none. It is subtracted through the same clamped arithmetic as any
+        other, so an over-estimate cannot drive a shared symbol's affinity
+        negative -- it clamps at zero and the field is removed.
+        """
+        redis_writer = self.superkb.redis_writer
+
+        ledger = redis_writer.get_affinity_ledger(name)
+        if ledger is not None:
+            return ledger
+
+        metadata = self.superkb.metadata_router.get_metadata_for_merge(name)
+        emotives = metadata.get('emotives') or []
+        if not emotives:
+            return {}
+
+        averaged = average_emotives(emotives)
+        frequency = redis_writer.get_frequency(name)
+        exact = frequency == 1 and len(emotives) <= self.superkb.persistence
+
+        if exact:
+            estimate = averaged
+        else:
+            # Each learn contributed one average; frequency learns contributed
+            # frequency of them. The window may have discarded older values, so
+            # this is the closest reconstruction available.
+            estimate = {
+                name_: value * max(frequency, 1)
+                for name_, value in averaged.items()
+            }
+
+        logger.info(
+            f"No affinity ledger for pattern {name} (learned before the ledger "
+            f"existed); reversing {'an exact' if exact else 'an estimated'} "
+            f"contribution derived from {len(emotives)} retained emotive "
+            f"record(s) and frequency={frequency}"
+        )
+        return estimate
+
+    def _verify_and_mark_purged(
+        self, names: list[str], clickhouse_writer
+    ) -> tuple[list[str], dict[str, str]]:
+        """Confirm both stores are clear of each pattern, then mark it purged."""
+        redis_writer = self.superkb.redis_writer
+
+        # wait_until_absent has already confirmed these rows are unreadable. This
+        # drain covers the other direction: a row that was still in the async
+        # insert queue when the mutation evaluated its predicate, and so was never
+        # a candidate for deletion, but lands afterwards and becomes queryable.
+        clickhouse_writer.flush_async_insert_queue()
+
+        purged: list[str] = []
+        failed: dict[str, str] = {}
+
+        still_in_clickhouse = set(clickhouse_writer.patterns_still_present(names))
+        for name in names:
+            leftovers = redis_writer.verify_pattern_records_absent(name)
+            if name in still_in_clickhouse:
+                leftovers = leftovers + ['clickhouse row']
+            if leftovers:
+                # Left at 'redis_cleaned' on purpose, so the next call retries.
+                failed[name] = f"records survived purge: {', '.join(leftovers)}"
+                continue
+            redis_writer.mark_pattern_purged(name)
+            purged.append(name)
+
+        return purged, failed
+
+    def _drop_purged_from_local_caches(self, names: list[str]) -> None:
+        """Release purged patterns held by this worker's in-memory caches.
+
+        Hygiene, not correctness. FilterPipelineExecutor.patterns_cache is built
+        once per searcher and only ever added to, so without this a long-lived
+        worker holds every purged pattern's data for its whole life. It is
+        unreachable either way: candidates come from ClickHouse, where the rows
+        are gone, and the tombstone survives the purge so the read-side filter
+        would drop them regardless.
+
+        Only this worker's caches -- other uvicorn workers keep their own copies
+        until they restart, which is harmless for the same two reasons.
+        """
+        searcher = getattr(self, 'patterns_searcher', None)
+        if searcher is None:
+            return
+
+        executor = getattr(searcher, 'filter_executor', None)
+        for name in names:
+            if executor is not None:
+                executor.patterns_cache.pop(name, None)
+            try:
+                searcher.delete_pattern(name)
+            except Exception as e:
+                logger.debug(f"Local cache eviction for {name} failed: {e}")
+
 
     def filter_retired_predictions(self, predictions: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Drop predictions for patterns this node has retired.

@@ -7,6 +7,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Pattern purging.** `POST /sessions/{id}/patterns/purge` permanently deletes
+  retired patterns and unwinds their contribution to the node's statistics,
+  completing the lifecycle that [6.2.0](#620---2026-10-01) began. Only a retired
+  pattern can be purged, so erasure always passes through a reversible step first:
+  retire, confirm the effect on predictions, then purge.
+
+  Each pattern's rows are deleted from `patterns_data` and `patterns_metadata`, and
+  its share of the node's symbol frequencies, pattern-member frequencies, symbol
+  indices, per-symbol emotive affinity and global counters is subtracted — leaving
+  the node as if the pattern had never been learned. Omit `pattern_ids` to purge
+  every retired pattern; `max_patterns` (default 1000) bounds one call, and
+  `remaining` reports the backlog so repeated calls can drive it to zero.
+
+  **Resumable, and never corrupting.** A tombstone advances
+  `retired → prepared → redis_cleaned → purged`, and each transition is durable
+  before the work it authorises begins. The snapshot of what a pattern owes is
+  written before anything is subtracted, and the counters are subtracted in the
+  same atomic Lua script that records them as subtracted — so an interrupted purge
+  can be retried without subtracting twice, and a pattern is marked `purged` only
+  after both stores confirm it absent. Errors are isolated per pattern: one bad or
+  contended ID is reported in `failed` with a reason, and the rest of the batch
+  completes.
+
+  Redis is reversed before ClickHouse is deleted. The Redis step is guarded and
+  abortable — it verifies the node still matches the snapshot and writes nothing if
+  it does not — while the ClickHouse delete is irreversible, so a rejected purge
+  costs nothing.
+
+  The tombstone survives the purge. Without it purge would undo itself, since the
+  next observation of the same sequence re-learns the same hash; learning that
+  sequence therefore still returns 409 until the pattern is un-retired.
+
+  See [pattern retirement and purging](docs/users/pattern-retirement.md).
+
+- Emotive contributions to per-symbol affinity are now journalled per pattern, so
+  a purge can reverse exactly what a learn added. Affinity accumulates *averaged*
+  emotives and the average shifts with the rolling persistence window on every
+  learn, so the figure cannot be recovered after the fact. Patterns learned before
+  this version have no journal and are reversed from a clamped estimate instead;
+  the estimate is exact for a pattern learned once whose emotives are still inside
+  the window. Affinity values themselves are unchanged — the journal is purely
+  additive.
+
+### Changed
+- Purging invalidates the node's precomputed entropy metrics. `normalized_entropy`
+  uses the node's unique-symbol count and `global_normalized_entropy` its symbol
+  probabilities, so a purge makes both wrong for every remaining pattern, including
+  ones that shared no symbol with what was purged. Predictions stay correct by
+  falling back to computing them per request; re-run `finalize-training` to restore
+  the precomputation.
+
+### Fixed
+- `OptimizedConnectionManager.build_clickhouse_client()` creates a dedicated
+  ClickHouse client. clickhouse-connect clients are session-bound and reject
+  concurrent use, so any work that queries ClickHouse from a worker thread while
+  the event loop keeps serving requests could raise *"Attempt to execute concurrent
+  queries within the same session"* — surfacing as a 500 on an unrelated request.
+  The purge driver holds its own client for the duration.
+
 ## [6.2.0] - 2026-10-01
 
 Pattern retirement, plus a config-endpoint inconsistency and a round of

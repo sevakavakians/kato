@@ -15,6 +15,8 @@ from .prediction import FinalizeTrainingResult, LearnResult, PredictionsResponse
 from .session import (
     CreateSessionRequest,
     PatternBatchRequest,
+    PurgePatternsRequest,
+    PurgePatternsResponse,
     RetirePatternsResponse,
     SessionResponse,
     UnRetirePatternsResponse,
@@ -24,6 +26,8 @@ __all__ = [
     'CreateSessionRequest',
     'SessionResponse',
     'PatternBatchRequest',
+    'PurgePatternsRequest',
+    'PurgePatternsResponse',
     'RetirePatternsResponse',
     'UnRetirePatternsResponse',
     'ObservationData',

@@ -24,6 +24,8 @@ from kato.api.schemas import (
     ObservationSequenceResult,
     PatternBatchRequest,
     PredictionsResponse,
+    PurgePatternsRequest,
+    PurgePatternsResponse,
     RetirePatternsResponse,
     SessionResponse,
     STMResponse,
@@ -637,6 +639,63 @@ async def un_retire_session_patterns(session_id: str, data: PatternBatchRequest)
         **result,
     )
 
+
+@router.post(
+    "/{session_id}/patterns/purge",
+    response_model=PurgePatternsResponse,
+)
+async def purge_session_patterns(session_id: str, data: PurgePatternsRequest):
+    """Permanently erase retired patterns and reverse their contribution.
+
+    Only retired patterns can be purged, so erasure always goes through a
+    reversible step first: retire, confirm the effect on predictions, then purge.
+    Node-scoped and irreversible -- unlike retirement, there is no undo.
+
+    Each pattern's rows are deleted from both stores and its share of the node's
+    symbol, affinity and global counters is subtracted, leaving the node as if it
+    had never been learned. The tombstone itself is kept, so the same sequence is
+    not silently re-learned afterwards; un-retire it first if it should exist
+    again.
+
+    Resumable: a purge interrupted part way through reports what failed and why,
+    and re-issuing the call continues it. Returns 'partial' when some ids failed,
+    with a reason per id.
+
+    Precomputed entropy metrics for the node are invalidated, because they are
+    derived from node-wide statistics this changes. Predictions stay correct --
+    they fall back to computing the metrics per request -- but re-running
+    finalize-training restores the precomputation.
+    """
+    from kato.services.kato_fastapi import app_state
+
+    lock = await app_state.session_manager.get_session_lock(session_id)
+    if not lock:
+        raise HTTPException(404, detail=f"Session {session_id} not found or expired")
+
+    async with lock:
+        session = await app_state.session_manager.get_session(session_id)
+        if not session:
+            raise HTTPException(404, detail=f"Session {session_id} not found or expired")
+
+        processor = await app_state.processor_manager.get_processor(
+            session.node_id, session.session_config
+        )
+        result = await processor.pattern_processor.purge_retired_patterns(
+            pattern_names=data.pattern_ids,
+            max_patterns=data.max_patterns,
+        )
+
+        # A stored prediction snapshot may name a pattern that no longer exists.
+        session.predictions = processor.pattern_processor.filter_retired_predictions(
+            session.predictions
+        )
+        await app_state.session_manager.update_session(session)
+
+    return PurgePatternsResponse(
+        session_id=session_id,
+        node_id=session.node_id,
+        **result,
+    )
 
 @router.post("/{session_id}/clear-stm", response_model=STMClearedResponse)
 async def clear_session_stm(session_id: str):

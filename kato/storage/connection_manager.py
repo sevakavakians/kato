@@ -297,6 +297,36 @@ class OptimizedConnectionManager:
 
             return self._clickhouse_client
 
+    def build_clickhouse_client(self) -> Optional[Any]:
+        """Build a brand-new ClickHouse client, outside the shared one.
+
+        clickhouse-connect clients are session-bound and refuse concurrent use:
+        a second query while one is in flight raises "Attempt to execute
+        concurrent queries within the same session." The shared client at
+        `.clickhouse` is safe only because every other caller queries it from the
+        event loop thread, which serialises them.
+
+        A caller that runs ClickHouse work in a worker thread -- so the event loop
+        keeps serving requests that also reach ClickHouse -- therefore needs its
+        own client, as the driver's own error message advises. Close it when done.
+        """
+        if not CLICKHOUSE_AVAILABLE:
+            logger.warning("ClickHouse client not available")
+            return None
+
+        database = self.settings.database
+        return clickhouse_connect.get_client(
+            host=getattr(database, 'clickhouse_host', 'localhost'),
+            port=getattr(database, 'clickhouse_port', 8123),
+            database=getattr(database, 'clickhouse_db', 'default'),
+            username=getattr(database, 'CLICKHOUSE_USER', 'default'),
+            password=getattr(database, 'CLICKHOUSE_PASSWORD', '') or '',
+            secure=getattr(database, 'CLICKHOUSE_SECURE', False),
+            connect_timeout=10,
+            send_receive_timeout=self.settings.performance.request_timeout,
+            compress=True,  # Enable compression for better network performance
+        )
+
     def _create_clickhouse_connection(self) -> None:
         """Create optimized ClickHouse connection."""
         if not CLICKHOUSE_AVAILABLE:
@@ -306,30 +336,10 @@ class OptimizedConnectionManager:
         try:
             start_time = time.time()
 
-            # Get ClickHouse settings from config
-            clickhouse_host = getattr(self.settings.database, 'clickhouse_host', 'localhost')
-            clickhouse_port = getattr(self.settings.database, 'clickhouse_port', 8123)  # HTTP port, not native port
-            clickhouse_db = getattr(self.settings.database, 'clickhouse_db', 'default')
-
-            # Get auth credentials from config
-            clickhouse_user = getattr(self.settings.database, 'CLICKHOUSE_USER', 'default')
-            clickhouse_password = getattr(self.settings.database, 'CLICKHOUSE_PASSWORD', '') or ''
-
-            # TLS configuration
-            clickhouse_secure = getattr(self.settings.database, 'CLICKHOUSE_SECURE', False)
-
-            # Create ClickHouse client with connection pooling
-            self._clickhouse_client = clickhouse_connect.get_client(
-                host=clickhouse_host,
-                port=clickhouse_port,
-                database=clickhouse_db,
-                username=clickhouse_user,
-                password=clickhouse_password,
-                secure=clickhouse_secure,
-                connect_timeout=10,
-                send_receive_timeout=self.settings.performance.request_timeout,
-                compress=True,  # Enable compression for better network performance
-            )
+            # Host, port, database, credentials and TLS all come from config; see
+            # build_clickhouse_client, which is shared with callers that need a
+            # client of their own.
+            self._clickhouse_client = self.build_clickhouse_client()
 
             # Test the connection (result deliberately discarded)
             self._clickhouse_client.command('SELECT 1')

@@ -1,11 +1,13 @@
 """
 Redis Writer for Pattern Metadata Storage
 
-Handles writing pattern metadata to Redis with:
-- Frequency counters
-- Emotives (emotional context)
-- Metadata (tags, categories, etc.)
+Handles the Redis half of the hybrid store:
+- Per-pattern frequency counters
+- Node-level symbol statistics and global counters
+- Per-symbol emotive affinity sums
+- The retired-pattern registry and the purge lifecycle
 
+Pattern emotives and metadata live in ClickHouse patterns_metadata, not here.
 All keys are namespaced by kb_id for complete isolation.
 """
 
@@ -14,7 +16,10 @@ import logging
 import time
 from typing import Any
 
+from redis.exceptions import ResponseError
+
 from kato.config.settings import get_settings
+from kato.exceptions import ConcurrencyError, DataConsistencyError
 
 logger = logging.getLogger('kato.storage.redis_writer')
 
@@ -31,6 +36,219 @@ def escape_glob(value: str) -> str:
     from such a kb_id matches nothing and any cleanup built on it silently no-ops.
     """
     return value.translate(_GLOB_SPECIALS)
+
+# Purge runs as two Lua scripts so that each is atomic against concurrent learns.
+# Redis executes a script to completion with nothing interleaved, which is what
+# makes the counter arithmetic safe: the guards below read the same values the
+# mutations then write, with no window between them.
+
+# Advance a tombstone from 'retired' to 'prepared', attaching the snapshot that
+# records exactly what this pattern contributed. Separate from the purge script
+# because the snapshot has to be durable *before* anything is deleted -- if the
+# process dies mid-purge, the resume path needs to know what was owed.
+# Redis keys owned by exactly one pattern, as suffixes between the kb_id and the
+# pattern hash. Verified against both the codebase and a live node: frequency is
+# the only per-pattern counter, and the affinity ledger is the only per-pattern
+# sidecar. Everything else a pattern owns -- emotives, metadata, precomputed
+# metrics -- lives in ClickHouse patterns_metadata, not here.
+PER_PATTERN_KEY_SUFFIXES = ('frequency', 'pattern_affinity_ledger')
+
+# Marks a ledger hash as present even when a pattern contributed no emotives,
+# distinguishing "recorded, contributed nothing" from "never recorded".
+_LEDGER_SENTINEL_FIELD = '__kato_version__'
+
+_PREPARE_PATTERN_PURGE_SCRIPT = """
+local raw = redis.call('HGET', KEYS[1], ARGV[1])
+if not raw then return -1 end
+local record = cjson.decode(raw)
+if record['state'] ~= 'retired' then return 0 end
+redis.call('HSET', KEYS[1], ARGV[1], ARGV[2])
+return 1
+"""
+
+# Reverse one pattern's contribution to the node's Redis counters, then advance
+# the tombstone to 'redis_cleaned' -- in the same script, so a crash can never
+# leave the counters decremented with the tombstone still 'prepared'. That
+# property is what makes a retry safe rather than double-subtracting.
+#
+# ARGV[4] carries the already-encoded 'redis_cleaned' record. Encoding it in
+# Python rather than calling cjson.encode here matters: cjson.encode is the one
+# operation after the mutations that can fail, and a failure there would leave
+# the counters decremented with the state unadvanced -- the single path by which
+# a retry could subtract twice.
+_PURGE_PATTERN_REDIS_SCRIPT = """
+local registry_key = KEYS[1]
+local pattern_name = ARGV[1]
+local prefix = ARGV[2]
+local stats_version = ARGV[3]
+local cleaned_record = ARGV[4]
+
+local raw = redis.call('HGET', registry_key, pattern_name)
+if not raw then return -1 end
+
+local record = cjson.decode(raw)
+if record['state'] == 'redis_cleaned' or record['state'] == 'purged' then
+    -- Already done. Return before touching anything, including stats:version,
+    -- so a repeated call is observably a no-op.
+    return 0
+end
+if record['state'] ~= 'prepared' or not record['snapshot'] then
+    return redis.error_reply('retired pattern has no prepared purge snapshot')
+end
+
+local snapshot = record['snapshot']
+local had_pattern = snapshot['had_pattern_record'] == true
+local frequency = tonumber(snapshot['frequency'] or 0)
+local symbol_counts = snapshot['symbol_counts'] or {}
+local affinity = snapshot['affinity_contribution'] or {}
+
+-- Integers are written with %d, not tostring(). Lua's tostring uses %.14g, which
+-- renders anything above ~1e14 in scientific notation ('1e+15'); Redis then
+-- rejects the next INCRBY on that key with "value is not an integer".
+local function decrement_string(key, amount)
+    if amount <= 0 then return end
+    local current = tonumber(redis.call('GET', key) or '0')
+    local updated = current - amount
+    if updated <= 0 then
+        redis.call('DEL', key)
+    else
+        redis.call('SET', key, string.format('%d', updated))
+    end
+end
+
+local function decrement_hash_int(key, field, amount)
+    if amount <= 0 then return end
+    local current = tonumber(redis.call('HGET', key, field) or '0')
+    local updated = current - amount
+    if updated <= 0 then
+        redis.call('HDEL', key, field)
+    else
+        redis.call('HSET', key, field, string.format('%d', updated))
+    end
+    if redis.call('HLEN', key) == 0 then redis.call('DEL', key) end
+end
+
+-- Affinity is subtracted with HINCRBYFLOAT so Redis's own long double does the
+-- arithmetic. Doing it in Lua would round-trip the value through a double and
+-- write it back via %.14g, silently re-rounding every surviving pattern's
+-- contribution on each purge.
+--
+-- The delete threshold is relative, not absolute. A fixed 1e-12 works for
+-- emotives near 1.0 and fails above ~100, where float representation error
+-- exceeds it -- leaving a residue field that no later purge can clear, so the
+-- affinity hash survives with a phantom emotive for a symbol owning no patterns.
+local function decrement_affinity(key, field, amount)
+    if amount == 0 then return end
+    if not redis.call('HEXISTS', key, field) then
+        -- Nothing to reverse. Treated as already settled rather than an error:
+        -- two patterns sharing a symbol with opposing contributions drive the
+        -- field to zero, and the first purge deletes it. Erroring here would
+        -- wedge the second pattern permanently, with no way to re-prepare.
+        return
+    end
+    local updated = tonumber(redis.call('HINCRBYFLOAT', key, field, -amount))
+    local magnitude = math.abs(updated)
+    local scale = math.max(1.0, math.abs(amount))
+    if magnitude < 1e-12 * scale then
+        redis.call('HDEL', key, field)
+    end
+    if redis.call('HLEN', key) == 0 then redis.call('DEL', key) end
+end
+
+-- Guard phase. Every check runs before any write, so a tripped guard leaves the
+-- node exactly as it was and the tombstone still 'prepared'.
+if had_pattern then
+    local current_frequency = tonumber(redis.call('GET', prefix .. ':frequency:' .. pattern_name) or '0')
+    if current_frequency ~= frequency then
+        return redis.error_reply('pattern frequency changed after purge preparation')
+    end
+
+    local expected_total_symbols = 0
+    for symbol, count_value in pairs(symbol_counts) do
+        local count = tonumber(count_value)
+        expected_total_symbols = expected_total_symbols + count
+
+        local symbol_frequency = tonumber(redis.call('HGET', prefix .. ':symbols:freq', symbol) or '0')
+        local member_frequency = tonumber(redis.call('HGET', prefix .. ':symbols:pmf', symbol) or '0')
+        if symbol_frequency < count * frequency or member_frequency < 1 then
+            return redis.error_reply('symbol counters changed after purge preparation')
+        end
+
+        if redis.call('SISMEMBER', prefix .. ':symbol_to_patterns:' .. symbol, pattern_name) == 0 then
+            return redis.error_reply('symbol index changed after purge preparation')
+        end
+    end
+
+    local global_symbols = tonumber(redis.call('GET', prefix .. ':global:total_symbols_in_patterns_frequencies') or '0')
+    local global_patterns = tonumber(redis.call('GET', prefix .. ':global:total_pattern_frequencies') or '0')
+    local global_unique = tonumber(redis.call('GET', prefix .. ':global:total_unique_patterns') or '0')
+    if global_symbols < expected_total_symbols * frequency or global_patterns < 1 or global_unique < 1 then
+        return redis.error_reply('global counters changed after purge preparation')
+    end
+
+    -- Mutation phase.
+    local total_symbols = 0
+    for symbol, count_value in pairs(symbol_counts) do
+        local count = tonumber(count_value)
+        total_symbols = total_symbols + count
+
+        -- symbols:freq accrues count on every learn, so the pattern's share is
+        -- count * frequency. pmf accrues 1 only on first learn, so it is 1.
+        decrement_hash_int(prefix .. ':symbols:freq', symbol, count * frequency)
+        decrement_hash_int(prefix .. ':symbols:pmf', symbol, 1)
+
+        local index_key = prefix .. ':symbol_to_patterns:' .. symbol
+        redis.call('SREM', index_key, pattern_name)
+        if redis.call('SCARD', index_key) == 0 then redis.call('DEL', index_key) end
+
+        for emotive_name, value in pairs(affinity) do
+            decrement_affinity(prefix .. ':affinity:' .. symbol, emotive_name, tonumber(value))
+        end
+    end
+
+    decrement_string(prefix .. ':global:total_symbols_in_patterns_frequencies', total_symbols * frequency)
+    -- Both pattern counters move by 1, not by frequency: the learn path
+    -- increments each once per unique pattern, not once per learn (see
+    -- batch_update_symbol_stats, where both sit behind is_new_pattern).
+    -- test_purge_reverses_frequency_weighted_share learns three times and
+    -- compares the whole node before and after, so it fails loudly if the learn
+    -- path ever starts accruing these per learn.
+    decrement_string(prefix .. ':global:total_pattern_frequencies', 1)
+    decrement_string(prefix .. ':global:total_unique_patterns', 1)
+end
+
+-- Per-pattern keys go regardless of had_pattern: a pattern with no Redis
+-- records still needs any stragglers removed.
+--
+-- The list arrives fully built from Python (ARGV[5] onward) instead of being
+-- reassembled here. PER_PATTERN_KEY_SUFFIXES is then the single definition of
+-- what a pattern owns, shared by this purge, the post-purge verification and
+-- has_pattern_records -- three readings that must agree, because a key this
+-- script does not delete is one verification would not look for either, and the
+-- pattern would be marked 'purged' with a live record behind it.
+for i = 5, #ARGV do
+    redis.call('DEL', ARGV[i])
+end
+
+-- Tell other workers their cached symbol statistics are stale.
+redis.call('SET', prefix .. ':stats:version', stats_version)
+
+redis.call('HSET', registry_key, pattern_name, cleaned_record)
+return 1
+"""
+
+# Create the ledger sentinel and add this learn's contribution in one atomic
+# step. Splitting them left a window in which a concurrent re-learner added to
+# affinity while its ledger increment was skipped, so purge later treated an
+# under-counted ledger as exact and silently under-subtracted.
+_ACCRUE_AFFINITY_LEDGER_SCRIPT = """
+redis.call('HSETNX', KEYS[1], '__kato_version__', '1')
+for i = 1, #ARGV, 2 do
+    redis.call('HINCRBYFLOAT', KEYS[1], ARGV[i], ARGV[i + 1])
+end
+return 1
+"""
+
 
 
 class RedisWriter:
@@ -179,6 +397,257 @@ class RedisWriter:
                 for name in raw_names
             }
         return set(self.get_retirement_records(pattern_names))
+
+    # ------------------------------------------------------------------
+    # Purge lifecycle
+    #
+    # A tombstone walks 'retired' -> 'prepared' -> 'redis_cleaned' -> 'purged',
+    # and each transition is durable before the work it authorises begins. That
+    # ordering is what makes an interrupted purge resumable rather than
+    # corrupting: the snapshot recording what a pattern owed is written before
+    # anything is subtracted, and the counters are subtracted in the same atomic
+    # step that records them as subtracted.
+    # ------------------------------------------------------------------
+
+    def _per_pattern_keys(self, clean_name: str) -> list[str]:
+        """Every Redis key owned solely by one pattern, for this kb_id."""
+        return [
+            f"{self.kb_id}:{suffix}:{clean_name}"
+            for suffix in PER_PATTERN_KEY_SUFFIXES
+        ]
+
+    def affinity_ledger_key(self, pattern_name: str) -> str:
+        """Key holding what one pattern has contributed to symbol affinity."""
+        return f"{self.kb_id}:pattern_affinity_ledger:{self.normalize_pattern_name(pattern_name)}"
+
+    def accrue_affinity_ledger(self, pattern_name: str,
+                               contribution: dict[str, float]) -> None:
+        """Record a learn's affinity contribution so purge can reverse it exactly.
+
+        Affinity is a running sum of *averaged* emotives, and the average shifts
+        with every learn as the rolling persistence window slides. Nothing in the
+        stored pattern therefore recovers what a given pattern actually added --
+        so a purge that recomputed it would subtract a different number than was
+        added, permanently skewing every symbol it shares. This ledger is the
+        only exact record.
+
+        The sentinel and the increments go in one script rather than a pipeline:
+        separately, a concurrent re-learn could add to affinity in the window
+        between them and have its own increment skipped, leaving an under-counted
+        ledger that purge would trust as exact.
+        """
+        if not contribution:
+            return
+
+        args: list[Any] = []
+        for emotive_name, value in contribution.items():
+            args.extend([emotive_name, repr(float(value))])
+
+        self.client.eval(
+            _ACCRUE_AFFINITY_LEDGER_SCRIPT, 1,
+            self.affinity_ledger_key(pattern_name), *args
+        )
+
+    def get_affinity_ledger(self, pattern_name: str) -> dict[str, float] | None:
+        """Exact affinity contribution for a pattern, or None if unrecorded.
+
+        None and {} mean different things. None is a pattern learned before the
+        ledger existed, whose contribution can only be estimated; {} is a pattern
+        that genuinely contributed no affinity. Callers must not collapse them --
+        see the backfill note in PatternProcessor.purge_retired_patterns.
+        """
+        raw = self.client.hgetall(self.affinity_ledger_key(pattern_name))
+        if not raw:
+            return None
+
+        ledger: dict[str, float] = {}
+        for key, value in raw.items():
+            name = key.decode('utf-8') if isinstance(key, bytes) else key
+            if name == _LEDGER_SENTINEL_FIELD:
+                continue
+            try:
+                ledger[name] = float(value)
+            except (TypeError, ValueError):
+                logger.warning(
+                    f"Ignoring unparseable affinity ledger entry {name!r} "
+                    f"for pattern {pattern_name}"
+                )
+        return ledger
+
+    def has_pattern_records(self, pattern_name: str) -> bool:
+        """Whether any Redis key for this pattern still exists."""
+        clean_name = self.normalize_pattern_name(pattern_name)
+        pipe = self.client.pipeline(transaction=False)
+        for key in self._per_pattern_keys(clean_name):
+            pipe.exists(key)
+        return any(bool(found) for found in pipe.execute())
+
+    def verify_pattern_records_absent(self, pattern_name: str) -> list[str]:
+        """Return any per-pattern keys that survived a purge.
+
+        A non-empty result blocks the final 'purged' transition: the pattern is
+        left at 'redis_cleaned' so a resume retries, rather than being recorded
+        as gone while a record of it is still readable.
+        """
+        clean_name = self.normalize_pattern_name(pattern_name)
+        keys = self._per_pattern_keys(clean_name)
+        pipe = self.client.pipeline(transaction=False)
+        for key in keys:
+            pipe.exists(key)
+        return [key for key, found in zip(keys, pipe.execute()) if bool(found)]
+
+    def build_purge_snapshot(self, pattern_name: str,
+                             symbol_counts: dict[str, int],
+                             affinity_contribution: dict[str, float]) -> dict[str, Any]:
+        """Capture exactly what this pattern owes the node's counters.
+
+        `symbol_counts` and `affinity_contribution` come from the caller because
+        they are derived from the stored pattern and its emotives; frequency and
+        record existence are read here, together, from Redis.
+        """
+        clean_name = self.normalize_pattern_name(pattern_name)
+        frequency_key = f"{self.kb_id}:frequency:{clean_name}"
+
+        pipe = self.client.pipeline(transaction=False)
+        pipe.get(frequency_key)
+        pipe.exists(frequency_key)
+        raw_frequency, frequency_exists = pipe.execute()
+
+        try:
+            frequency = int(raw_frequency) if raw_frequency is not None else 0
+        except (TypeError, ValueError):
+            frequency = 0
+
+        return {
+            'had_pattern_record': bool(frequency_exists) and frequency > 0,
+            'frequency': frequency,
+            'symbol_counts': {
+                symbol: int(count) for symbol, count in symbol_counts.items()
+            },
+            'affinity_contribution': {
+                name: float(value)
+                for name, value in (affinity_contribution or {}).items()
+            },
+        }
+
+    def prepare_pattern_purge(self, pattern_name: str,
+                              snapshot: dict[str, Any]) -> str:
+        """Attach a purge snapshot to a tombstone: 'retired' -> 'prepared'.
+
+        Returns 'prepared', 'already_advanced' (the tombstone is at or past
+        'prepared' -- resume, do not re-snapshot), or 'not_retired'.
+        """
+        clean_name = self.normalize_pattern_name(pattern_name)
+        record = json.dumps(
+            {
+                'state': 'prepared',
+                'snapshot': snapshot,
+                'prepared_at': time.time_ns(),
+            },
+            separators=(',', ':'),
+        )
+        result = int(self.client.eval(
+            _PREPARE_PATTERN_PURGE_SCRIPT, 1,
+            self.retired_patterns_key, clean_name, record
+        ))
+        if result == 1:
+            return 'prepared'
+        return 'already_advanced' if result == 0 else 'not_retired'
+
+    def purge_pattern_records(self, pattern_name: str) -> str:
+        """Reverse this pattern's Redis contribution and delete its records.
+
+        Returns 'cleaned', 'already_cleaned' or 'not_retired'. Raises
+        ConcurrencyError if the node moved under the snapshot -- the pattern was
+        re-learned between preparation and here -- in which case nothing was
+        written and the caller re-prepares.
+        """
+        clean_name = self.normalize_pattern_name(pattern_name)
+
+        raw = self.client.hget(self.retired_patterns_key, clean_name)
+        if raw is None:
+            return 'not_retired'
+        if isinstance(raw, bytes):
+            raw = raw.decode('utf-8')
+        try:
+            record = json.loads(raw)
+        except (TypeError, json.JSONDecodeError):
+            raise DataConsistencyError(
+                resource_id=clean_name,
+                consistency_type='unparseable tombstone',
+                expected_value='a JSON retirement record',
+                actual_value='a value that is not JSON',
+                context={'kb_id': self.kb_id},
+            ) from None
+
+        state = record.get('state')
+        if state in ('redis_cleaned', 'purged'):
+            return 'already_cleaned'
+
+        # The 'redis_cleaned' record is encoded here, not in Lua. cjson.encode is
+        # the one call in the script that can fail *after* the counters have been
+        # decremented, and a failure there would leave them decremented with the
+        # state unadvanced -- the single path by which a retry double-subtracts.
+        cleaned_record = json.dumps(
+            {**record, 'state': 'redis_cleaned', 'redis_cleaned_at': time.time_ns()},
+            separators=(',', ':'),
+        )
+
+        try:
+            result = int(self.client.eval(
+                _PURGE_PATTERN_REDIS_SCRIPT, 1,
+                self.retired_patterns_key,
+                clean_name,
+                self.kb_id,
+                str(time.time_ns()),
+                cleaned_record,
+                *self._per_pattern_keys(clean_name),
+            ))
+        except ResponseError as exc:
+            message = str(exc)
+            if 'after purge preparation' in message or 'prepared purge snapshot' in message:
+                raise ConcurrencyError(
+                    resource_id=clean_name,
+                    operation='purge_pattern_records',
+                    message=f"Purge snapshot for {clean_name} is stale: {message}",
+                    context={'kb_id': self.kb_id},
+                ) from exc
+            raise
+
+        if result == 1:
+            return 'cleaned'
+        return 'already_cleaned' if result == 0 else 'not_retired'
+
+    def mark_pattern_purged(self, pattern_name: str) -> bool:
+        """Final transition, once every store has confirmed the pattern is gone.
+
+        The tombstone is kept rather than deleted: it is what stops a later
+        observation of the same sequence silently re-learning the hash, and it
+        remains the audit record of the purge.
+        """
+        clean_name = self.normalize_pattern_name(pattern_name)
+        raw = self.client.hget(self.retired_patterns_key, clean_name)
+        if raw is None:
+            return False
+        if isinstance(raw, bytes):
+            raw = raw.decode('utf-8')
+        try:
+            record = json.loads(raw)
+        except (TypeError, json.JSONDecodeError):
+            record = {}
+
+        # The snapshot has served its purpose and is the bulky part of the
+        # record; a node that purges heavily would otherwise carry every purged
+        # pattern's symbol counts in one hash forever.
+        record.pop('snapshot', None)
+        record['state'] = 'purged'
+        record['purged_at'] = time.time_ns()
+        self.client.hset(
+            self.retired_patterns_key, clean_name,
+            json.dumps(record, separators=(',', ':'))
+        )
+        return True
+
 
     def increment_frequency(self, pattern_name: str) -> int:
         """
@@ -782,7 +1251,8 @@ class RedisWriter:
     # ── Symbol affinity ────────────────────────────────────────────────
 
     def batch_update_symbol_affinity(self, symbol_names: list[str],
-                                      averaged_emotives: dict[str, float]) -> None:
+                                      averaged_emotives: dict[str, float],
+                                      pattern_name: str | None = None) -> None:
         """
         Accumulate averaged emotives into per-symbol affinity sums.
 
@@ -792,6 +1262,11 @@ class RedisWriter:
         Args:
             symbol_names: List of unique symbol names to update
             averaged_emotives: Dict mapping emotive name -> value to add
+            pattern_name: Pattern this contribution belongs to. When given, the
+                same amounts are journalled so a later purge can subtract exactly
+                what was added; without it the contribution is unattributable and
+                purge can only estimate. Optional so that callers outside the
+                learn path stay unaffected.
         """
         if not symbol_names or not averaged_emotives:
             return
@@ -805,6 +1280,16 @@ class RedisWriter:
                     pipe.hincrbyfloat(affinity_key, emotive_name, value)
 
             pipe.execute()
+
+            # After the affinity writes, never before. The ledger is purge's
+            # claim about what affinity holds, so a ledger entry without the
+            # matching affinity increment would have purge subtract a
+            # contribution that was never added -- driving a shared symbol's
+            # affinity negative. The reverse ordering only under-records, which
+            # the backfill path already tolerates.
+            if pattern_name:
+                self.accrue_affinity_ledger(pattern_name, averaged_emotives)
+
             logger.debug(f"Batch updated affinity for {len(symbol_names)} symbols, "
                         f"{len(averaged_emotives)} emotive keys")
 

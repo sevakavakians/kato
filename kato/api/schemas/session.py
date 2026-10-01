@@ -91,3 +91,53 @@ class UnRetirePatternsResponse(BaseModel):
     requested: int
     un_retired: list[str] = Field(default_factory=list)
     not_retired: list[str] = Field(default_factory=list)
+
+
+class PurgePatternsRequest(BaseModel):
+    """Which retired patterns to erase. Omitting pattern_ids purges them all.
+
+    Separate from PatternBatchRequest because the list is genuinely optional here:
+    the common operational case is "finish erasing everything already retired",
+    and requiring the caller to enumerate it would mean first reading the registry
+    just to hand it straight back.
+
+    Ids are validated the same way, by delegating to that validator -- a purge
+    reaches ALTER ... DELETE statement text, so the SHA1 shape is a hard
+    requirement, not a courtesy.
+    """
+    pattern_ids: Optional[list[str]] = Field(
+        default=None, max_length=1000,
+        description="Retired pattern IDs to purge. Omit to purge every retired pattern."
+    )
+    max_patterns: int = Field(
+        default=1000, ge=1, le=10000,
+        description="Upper bound on one call, so a large backlog cannot hold the request open."
+    )
+
+    @field_validator('pattern_ids')
+    @classmethod
+    def validate_pattern_ids(cls, pattern_ids: Optional[list[str]]) -> Optional[list[str]]:
+        if pattern_ids is None:
+            return None
+        if not pattern_ids:
+            raise ValueError(
+                "pattern_ids must not be empty; omit the field entirely to purge "
+                "every retired pattern"
+            )
+        return PatternBatchRequest.validate_pattern_ids(pattern_ids)
+
+
+class PurgePatternsResponse(BaseModel):
+    """Result of a purge.
+
+    'partial' is a success for the patterns in `purged` and a per-id explanation
+    for those in `failed`; purge is resumable, so re-issuing the call retries the
+    failures. `remaining` counts retired patterns still awaiting a purge, which is
+    how a caller drives a backlog to zero.
+    """
+    status: str
+    session_id: str
+    node_id: str
+    purged: list[str] = Field(default_factory=list)
+    failed: dict[str, str] = Field(default_factory=dict)
+    remaining: int = 0

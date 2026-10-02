@@ -606,7 +606,7 @@ self.procs = multiprocessing.cpu_count()
 
 ## See Also
 
-- [Configuration Management](CONFIGURATION_MANAGEMENT.md)
-- [System Overview](SYSTEM_OVERVIEW.md)
+- [Configuration Management](../developers/configuration-management.md)
+- [System Overview](../developers/architecture.md)
 - [API Reference](../users/api-reference.md)
-- [Performance Tuning](deployment/PERFORMANCE_TUNING.md)
+- [Performance Tuning](../operations/performance-tuning.md)

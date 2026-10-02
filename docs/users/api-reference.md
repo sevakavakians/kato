@@ -21,7 +21,7 @@ Direct endpoints (`/observe`, `/learn`, `/predictions`, etc.) have been **perman
 - ✅ Configuration per session
 - ✅ Redis-backed session persistence
 
-See [API Migration Guide](API_MIGRATION_GUIDE.md) for migration instructions.
+See [API Migration Guide](migration-guides/api-migration.md) for migration instructions.
 
 ## Core Endpoints
 
@@ -781,7 +781,7 @@ The `future_potentials` field aggregates predictions across multiple patterns:
 
 Predictive Information is based on **Excess Entropy** from information theory, measuring mutual information between past and future sequence segments. Higher values indicate stronger statistical dependencies and more reliable predictions.
 
-For theoretical details, see: `docs/PREDICTIVE_INFORMATION.md`
+For theoretical details, see: [predictive information](../research/predictive-information.md)
 
 ## Notes
 

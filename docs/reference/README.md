@@ -15,7 +15,6 @@ Welcome to the KATO reference documentation! This section provides technical spe
 ### Configuration Reference
 - **[Environment Variables](configuration-vars.md)** - Complete env var reference
 - **[Session Configuration](session-configuration.md)** - Session config options
-- **[Processing Configuration](processing-configuration.md)** - Processing parameters
 
 ### Data Specifications
 - **[Database Schema](database-schema.md)** - Complete field-level reference for ClickHouse, Redis, and Qdrant

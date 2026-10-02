@@ -571,5 +571,5 @@ class MetricsBasedLoadBalancer:
 
 - [Multi-Instance Deployment](multi-instance.md)
 - [Session Management](session-management.md)
-- [Kubernetes Deployment](/docs/operations/kubernetes-deployment.md)
-- [Monitoring](/docs/operations/monitoring.md)
+- [Kubernetes Deployment](../operations/kubernetes-deployment.md)
+- [Monitoring](../operations/monitoring.md)

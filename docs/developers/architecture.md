@@ -79,7 +79,8 @@ app = FastAPI(
 POST   /sessions                    # Create session
 GET    /sessions/{session_id}       # Get session info
 DELETE /sessions/{session_id}       # Delete session
-PUT    /sessions/{session_id}/config # Update config
+GET    /sessions/{session_id}/config # Read config
+POST   /sessions/{session_id}/config # Update config
 ```
 
 **Operations** (`api/endpoints/sessions.py`):

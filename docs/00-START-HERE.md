@@ -106,7 +106,7 @@ When KATO is running:
 - **ReDoc**: http://localhost:8000/redoc
 
 ### AI Assistant Navigation
-- **Claude Code**: See [CLAUDE.md](/CLAUDE.md) for AI-optimized navigation
+- **Claude Code**: See [CLAUDE.md](../CLAUDE.md) for AI-optimized navigation
 
 ---
 

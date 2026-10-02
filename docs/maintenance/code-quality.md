@@ -467,4 +467,4 @@ Before merging:
 
 - [Code Review Guidelines](code-review.md)
 - [Testing Standards](testing-standards.md)
-- [Contributing Guide](/docs/developers/contributing.md)
+- [Contributing Guide](../developers/contributing.md)

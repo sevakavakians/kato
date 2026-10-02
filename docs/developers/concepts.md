@@ -182,7 +182,7 @@ Predictions are generated when:
    - Uses heuristic calculations for speed - similarity values are approximate
    - Higher threshold = stricter filtering, fewer predictions
    - Lower threshold = looser filtering, more predictions
-   - See [Configuration Guide](deployment/CONFIGURATION.md#recall_threshold-tuning-guide) for detailed tuning
+   - See [Configuration Guide](../operations/configuration.md#recall_threshold-tuning-guide) for detailed tuning
 4. Either strings or vectors are present (not just emotives)
 
 **Note**: If no patterns match above the recall_threshold, no predictions are returned even if all other conditions are met.

@@ -85,7 +85,7 @@ the attribute `version` is obsolete, it will be ignored
 - Dependency injection ensures correct configuration
 - Fully compatible with Docker environment variables
 
-See [Configuration Management](CONFIGURATION_MANAGEMENT.md) for details.
+See [Configuration Management](../developers/configuration-management.md) for details.
 
 ---
 

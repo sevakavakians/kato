@@ -734,7 +734,7 @@ class StreamingRecommender:
 
 ## Related Documentation
 
-- [Pattern Matching](/docs/research/pattern-matching.md)
-- [Vector Embeddings](/docs/research/vector-embeddings.md)
-- [Emotives Processing](/docs/research/emotives-processing.md)
+- [Pattern Matching](../research/pattern-matching.md)
+- [Vector Embeddings](../research/vector-embeddings.md)
+- [Emotives Processing](../research/emotives-processing.md)
 - [Session Management](session-management.md)

@@ -28,7 +28,7 @@ Welcome to the KATO user documentation! This section helps you get started with 
 - **[Troubleshooting](troubleshooting.md)** - Common issues and solutions
 - **[FAQ](faq.md)** - Frequently asked questions
 - **[Examples](examples/)** - Code examples and use cases
-- **[Migration Guides](migrations/)** - Upgrading between versions
+- **[Migration Guides](migration-guides/)** - Upgrading between versions
 
 ## 🎯 Quick Navigation by Task
 

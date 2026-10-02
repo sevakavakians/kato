@@ -389,8 +389,8 @@ Brief description of changes
 
 ### Resources
 
-- [System Overview](../SYSTEM_OVERVIEW.md) - Architecture understanding
-- [Core Concepts](../CONCEPTS.md) - KATO behavior reference
+- [System Overview](architecture.md) - Architecture understanding
+- [Core Concepts](concepts.md) - KATO behavior reference
 - [Testing Guide](../developers/testing.md) - Test writing help
 - GitHub Issues - Bug reports and features
 

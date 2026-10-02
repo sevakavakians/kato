@@ -15,7 +15,7 @@ Each "observation" in the array represents:
 ## API Specification
 
 ### Endpoint
-`POST /observe-sequence`
+`POST /sessions/{session_id}/observe-sequence`
 
 ### Request Body
 ```json

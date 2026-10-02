@@ -4,7 +4,7 @@
 
 KATO follows [Keep a Changelog](https://keepachangelog.com/) format. This document provides guidelines for writing clear, useful changelog entries.
 
-See [CHANGELOG.md](/CHANGELOG.md) for the project's changelog.
+See [CHANGELOG.md](../../CHANGELOG.md) for the project's changelog.
 
 ## Table of Contents
 1. [Changelog Format](#changelog-format)

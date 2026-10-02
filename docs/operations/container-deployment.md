@@ -674,10 +674,10 @@ jobs:
 ## Additional Resources
 
 - [Semantic Versioning 2.0.0](https://semver.org/)
-- [RELEASING.md](../RELEASING.md) - Manual release process
-- [CHANGELOG.md](../CHANGELOG.md) - Version history
-- [build-and-push.sh](../build-and-push.sh) - Build script
-- [bump-version.sh](../bump-version.sh) - Version bump script
+- [RELEASING.md](../maintenance/releasing.md) - Manual release process
+- [CHANGELOG.md](../../CHANGELOG.md) - Version history
+- [build-and-push.sh](../../build-and-push.sh) - Build script
+- [bump-version.sh](../../bump-version.sh) - Version bump script
 
 ---
 
@@ -686,7 +686,7 @@ jobs:
 For issues with the container-manager agent:
 
 1. Check this documentation first
-2. Review [RELEASING.md](../RELEASING.md) for manual alternatives
+2. Review [RELEASING.md](../maintenance/releasing.md) for manual alternatives
 3. Check GitHub Issues: https://github.com/sevakavakians/kato/issues
 4. Verify Docker and git configuration
 

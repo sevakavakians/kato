@@ -265,4 +265,4 @@ Closes #123
 
 - [Code Quality Standards](code-quality.md)
 - [Testing Standards](testing-standards.md)
-- [Contributing Guide](/docs/developers/contributing.md)
+- [Contributing Guide](../developers/contributing.md)

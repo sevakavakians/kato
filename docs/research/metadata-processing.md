@@ -679,7 +679,7 @@ metadata = {'session_id': 'abc123', 'user_id': 'user456'}
 
 3. **Check storage directly**:
    - Query pattern storage to verify metadata field
-   - Use KATO API: `GET /patterns/{pattern_name}`
+   - Use KATO API: `GET /pattern/{pattern_name}`
 
 ### Issue: Duplicate Values in Metadata
 
@@ -781,7 +781,7 @@ metadata = pattern.metadata
 
 ## See Also
 
-- [Emotives Processing](EMOTIVES_PROCESSING.md) - Emotional/utility value processing
-- [Pattern Matching](PATTERN_MATCHING.md) - How patterns are matched
+- [Emotives Processing](emotives-processing.md) - Emotional/utility value processing
+- [Pattern Matching](pattern-matching.md) - How patterns are matched
 - [API Reference](../users/api-reference.md) - API endpoints for observations with metadata
-- [Configuration Management](CONFIGURATION_MANAGEMENT.md) - All configuration options
+- [Configuration Management](../developers/configuration-management.md) - All configuration options

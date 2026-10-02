@@ -800,7 +800,7 @@ k6 run load-test.js
 
 ## Related Documentation
 
-- [Performance Reference](../technical/PERFORMANCE.md) - Technical details
+- [Performance Reference](../reference/performance-guide.md) - Technical details
 - [Performance Issues](performance-issues.md) - Troubleshooting
 - [Monitoring](monitoring.md) - Metrics and dashboards
 - [Scaling](scaling.md) - Horizontal and vertical scaling

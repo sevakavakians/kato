@@ -724,8 +724,8 @@ emotives = pattern.emotives
 
 ## See Also
 
-- [Pattern Matching](PATTERN_MATCHING.md) - How patterns are matched
-- [Vector Processing](VECTOR_PROCESSING.md) - How vectors are processed
-- [System Overview](SYSTEM_OVERVIEW.md) - Overall KATO architecture
-- [Configuration Management](CONFIGURATION_MANAGEMENT.md) - All configuration options
+- [Pattern Matching](pattern-matching.md) - How patterns are matched
+- [Vector Processing](vector-processing.md) - How vectors are processed
+- [System Overview](../developers/architecture.md) - Overall KATO architecture
+- [Configuration Management](../developers/configuration-management.md) - All configuration options
 - [API Reference](../users/api-reference.md) - API endpoints for observations with emotives

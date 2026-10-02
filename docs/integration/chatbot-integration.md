@@ -550,4 +550,4 @@ class TutorBot:
 - [Hybrid Agents Guide](hybrid-agents-analysis.md)
 - [Session Management](session-management.md)
 - [Architecture Patterns](architecture-patterns.md)
-- [Emotives Processing](/docs/research/emotives-processing.md)
+- [Emotives Processing](../research/emotives-processing.md)

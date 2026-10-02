@@ -655,4 +655,4 @@ class SessionHealthMonitor:
 - [Multi-Instance Setup](multi-instance.md)
 - [Load Balancing](load-balancing.md)
 - [Architecture Patterns](architecture-patterns.md)
-- [API Reference](/docs/reference/api/sessions.md)
+- [API Reference](../reference/api/sessions.md)

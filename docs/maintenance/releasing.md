@@ -2,11 +2,11 @@
 
 ## Overview
 
-This document expands on the [root RELEASING.md](/RELEASING.md) with additional maintainer guidance, automation details, and best practices.
+This is the release guide. It covers the automated workflow, maintainer guidance
+and best practices.
 
-For quick reference, see:
-- **[RELEASING.md (Root)](/RELEASING.md)** - Quick start and automated release workflow
-- **[Container Manager Agent](/docs/CONTAINER_MANAGER.md)** - Automated version detection
+See also:
+- **[Container deployment](../operations/container-deployment.md)** - the container-manager workflow and automated version detection
 
 ## Table of Contents
 1. [Release Workflow](#release-workflow)
@@ -427,7 +427,6 @@ Copy this for each release:
 
 ## Related Documentation
 
-- **[RELEASING.md (Root)](/RELEASING.md)** - Quick start guide
 - [Version Management](version-management.md) - Semantic versioning details
 - [Changelog Guidelines](changelog-guidelines.md) - Writing changelogs
-- [Container Manager](/docs/CONTAINER_MANAGER.md) - Automation details
+- [Container Deployment](../operations/container-deployment.md) - container-manager automation details

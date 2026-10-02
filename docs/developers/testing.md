@@ -285,7 +285,7 @@ docker compose restart
 ./run_tests.sh --no-start --no-stop
 ```
 
-For systematic troubleshooting of test failures, see the [Test Troubleshooting Guide](../TEST_TROUBLESHOOTING_GUIDE.md) which provides a step-by-step process for identifying and fixing test issues.
+For systematic troubleshooting of test failures, see the [Test Troubleshooting Guide](../operations/troubleshooting.md) which provides a step-by-step process for identifying and fixing test issues.
 
 #### Database Issues
 ```bash

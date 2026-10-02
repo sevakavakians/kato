@@ -394,4 +394,4 @@ Document intentional technical decisions:
 
 - [Code Quality Standards](code-quality.md)
 - [Code Review Guidelines](code-review.md)
-- [Contributing Guide](/docs/developers/contributing.md)
+- [Contributing Guide](../developers/contributing.md)

@@ -306,9 +306,9 @@ docker compose build --no-cache kato
 - **Important**: Read [Database Persistence Guide](database-persistence.md) to understand data persistence
 - Read [Core Concepts](CONCEPTS.md) to understand KATO's behavior
 - Explore the [API Reference](api-reference.md) for all endpoints
-- See [Configuration Guide](deployment/CONFIGURATION.md) for parameters
+- See [Configuration Guide](../operations/configuration.md) for parameters
 
 ## Getting Help
 
-- Check the [Troubleshooting Guide](technical/TROUBLESHOOTING.md)
+- Check the [Troubleshooting Guide](troubleshooting.md)
 - Open an issue on GitHub for bugs or questions

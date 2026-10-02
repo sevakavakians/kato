@@ -175,7 +175,7 @@ pattern_name = learn()
 ### 3. Retrieval
 
 ```bash
-GET /pattern/PTRN|abc123...?kb_id=user_alice
+GET /pattern/PTRN|abc123...?node_id=user_alice
 ```
 
 **Response**:

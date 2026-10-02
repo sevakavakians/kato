@@ -442,9 +442,9 @@ print(response.json())
 
 ## Related Endpoints
 
-- [Observe](observe.md)
-- [Learn](learn.md)
-- [Predictions](predictions.md)
+- [Observe](../reference/api/observations.md)
+- [Learn](../reference/api/learning.md)
+- [Predictions](../reference/api/predictions.md)
 ```
 
 ## Common Patterns

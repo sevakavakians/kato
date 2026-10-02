@@ -509,5 +509,5 @@ class QdrantPayloadIsolation:
 
 - [Session Management](session-management.md)
 - [Multi-Instance Deployment](multi-instance.md)
-- [Security Guidelines](/docs/maintenance/security.md)
-- [Database Persistence](/docs/users/database-persistence.md)
+- [Security Guidelines](../maintenance/security.md)
+- [Database Persistence](../users/database-persistence.md)

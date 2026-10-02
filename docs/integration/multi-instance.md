@@ -5,7 +5,8 @@
 This document covers integration patterns for working with multiple KATO instances in distributed systems.
 
 For operational guidance on deploying and managing multiple KATO instances, see:
-- **[Multi-Instance Deployment (Operations)](/docs/operations/multi-instance.md)** - Complete deployment and orchestration guide
+- **[Scaling](../operations/scaling.md)** - running and sizing multiple instances
+- **[Kubernetes deployment](../operations/kubernetes-deployment.md)** - orchestration
 
 ## Integration Architecture
 
@@ -227,7 +228,7 @@ class MasterCoordinator:
 
 ## Related Documentation
 
-- **[Multi-Instance Deployment (Operations)](/docs/operations/multi-instance.md)** - Deployment guide
+- [Scaling](../operations/scaling.md) - running and sizing multiple instances
 - [Load Balancing](load-balancing.md) - Load balancing strategies
 - [Session Management](session-management.md) - Session lifecycle
 - [Database Isolation](database-isolation.md) - Data partitioning

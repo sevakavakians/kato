@@ -902,7 +902,7 @@ curl -s http://localhost:8000/sessions/$SESSION/config > session-config.json
 ### Where to Get Help
 
 1. Check this troubleshooting guide
-2. Review [System Overview](../SYSTEM_OVERVIEW.md)
+2. Review [System Overview](../developers/architecture.md)
 3. Search existing GitHub issues
 4. Open new issue with diagnostic information
 5. Include logs and configuration
@@ -941,7 +941,7 @@ docker compose restart
 
 ## Related Documentation
 
-- [Docker Deployment](../deployment/DOCKER.md) - Container management
-- [Configuration](../deployment/CONFIGURATION.md) - Parameter tuning
-- [Performance](PERFORMANCE.md) - Optimization strategies
-- [Testing](../development/TESTING.md) - Test troubleshooting
+- [Docker Deployment](../operations/docker-deployment.md) - Container management
+- [Configuration](../operations/configuration.md) - Parameter tuning
+- [Performance](../reference/performance-guide.md) - Optimization strategies
+- [Testing](../developers/testing.md) - Test troubleshooting

@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document expands on [/docs/developers/testing.md](/docs/developers/testing.md) with maintainer-specific testing standards, coverage targets, and quality guidelines.
+This document expands on [/docs/developers/testing.md](../developers/testing.md) with maintainer-specific testing standards, coverage targets, and quality guidelines.
 
 ## Table of Contents
 1. [Testing Pyramid](#testing-pyramid)
@@ -395,6 +395,6 @@ def test_process_strings(input, expected):
 
 ## Related Documentation
 
-- [Testing Guide (Developers)](/docs/developers/testing.md)
+- [Testing Guide (Developers)](../developers/testing.md)
 - [Code Quality Standards](code-quality.md)
 - [Code Review Guidelines](code-review.md)

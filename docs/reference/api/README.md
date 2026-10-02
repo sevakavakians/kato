@@ -235,7 +235,7 @@ called out in [CHANGELOG.md](../../../CHANGELOG.md) under a major version bump.
 
 ## Data Models
 
-See [../data-specifications.md](../data-specifications.md) for complete data model documentation:
+Per-object specifications:
 
 - [Observation Object](../observation-object.md)
 - [Prediction Object](../prediction-object.md)

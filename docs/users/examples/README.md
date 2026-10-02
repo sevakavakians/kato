@@ -4,23 +4,12 @@ Practical examples demonstrating KATO usage patterns.
 
 ## Available Examples
 
-### Basic Examples
-
 1. **[Simple Chatbot](chatbot-simple.py)**: Basic conversational pattern learning
 2. **[Workflow Predictor](workflow-predictor.py)**: Sequential workflow tracking
-3. **[User Preferences](user-preferences.py)**: Non-temporal profile learning
 
-### Intermediate Examples
-
-4. **[Error Diagnosis](error-diagnosis.py)**: Error-solution pattern matching
-5. **[Recommendation System](recommendations.py)**: Content recommendation
-6. **[Session Auto-Reconnect](auto-reconnect.py)**: Resilient session management
-
-### Advanced Examples
-
-7. **[Multi-Modal Learning](multi-modal.py)**: Combining text, vectors, emotives
-8. **[Streaming Analytics](streaming-analytics.py)**: Real-time pattern discovery
-9. **[Batch Processing](batch-processing.py)**: Bulk operations
+More runnable examples — a Python client walkthrough, token matching and
+hierarchical training — are in [`examples/`](../../../examples/README.md) at the
+repository root.
 
 ## Running Examples
 

@@ -564,5 +564,4 @@ Testing with 10,000 learned patterns, observing 10-element pattern:
 
 - [Architecture](../developers/architecture.md) - System design
 - [Configuration](../operations/configuration.md) - Performance parameters
-- [Troubleshooting](TROUBLESHOOTING.md) - Performance issues
-- [Architecture Complete](../ARCHITECTURE_COMPLETE.md) - System architecture
+- [Troubleshooting](../operations/troubleshooting.md) - Performance issues

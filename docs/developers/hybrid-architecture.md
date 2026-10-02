@@ -187,7 +187,7 @@ All three access the same ClickHouse and Redis instances, but their data is **co
 
 MinHash uses Locality-Sensitive Hashing (LSH) with parameters tuned for **high similarity matching (≥0.7)** by default. Using MinHash with low similarity thresholds (<0.4) or wrong parameter combinations will result in **false negatives** and missed patterns.
 
-**Before using MinHash, read**: [Filter Pipeline Configuration Guide](reference/filter-pipeline-guide.md) for:
+**Before using MinHash, read**: [Filter Pipeline Configuration Guide](../reference/filter-pipeline-guide.md) for:
 - LSH probability mathematics and parameter tuning
 - When to use MinHash vs Jaccard
 - Filter ordering considerations
@@ -204,7 +204,7 @@ MinHash uses Locality-Sensitive Hashing (LSH) with parameters tuned for **high s
    - Stage 1 (DB): LSH band matching (99% reduction)
    - Stage 2 (Python): MinHash similarity verification
    - Billion-scale approximate matching
-   - **⚠️ Requires parameter tuning** - see [Filter Guide](reference/filter-pipeline-guide.md)
+   - **⚠️ Requires parameter tuning** - see [Filter Guide](../reference/filter-pipeline-guide.md)
 
 3. **BloomFilterStage** (Python-side)
    - Fast token presence checking

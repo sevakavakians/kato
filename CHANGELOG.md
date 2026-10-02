@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Single-symbol predictions now carry the same fields as every other prediction.**
+  A state of one symbol takes a cheaper candidate selection — it reads patterns by
+  `first_token` from ClickHouse instead of running the filter pipeline — but it also
+  computed its own metrics and returned early, so a one-symbol STM produced a
+  prediction missing fourteen fields that a two-symbol STM returns:
+  `predictive_information`, `confluence`, `entropy`, `normalized_entropy`,
+  `global_normalized_entropy`, `itfdf_similarity`, `tfidf_score`,
+  `pattern_probability`, `bayesian_prior`, `bayesian_likelihood`,
+  `bayesian_posterior`, `weighted_strength`, `type` and `sequence`. Client code
+  reading any of them worked at one STM length and raised `KeyError` at another.
+
+  Three fields it did return disagreed, which is worse than absence because nothing
+  signals it. **`potential` — the ranking key — omitted its `itfdf_similarity`
+  term**, so it was the provisional score used for pruning rather than the final
+  one, and single-symbol rankings were not comparable with any other. `snr` used
+  `m/(m+x)` where the shared code uses `(2m-x)/(2m+x)`; the two agree exactly when
+  there are no extras, which is what a single-symbol smoke test produces, so the
+  divergence never surfaced. `evidence` divided by a different length.
+
+  The path now selects candidates and builds predictions through the same
+  constructor as every other path, then shares one enrichment tail — metadata,
+  metrics, ensemble predictive information, potential, ranking. Selection is the
+  only thing that still differs, which is the only thing that should; the speed
+  benefit is unchanged, because it came from skipping the filter pipeline rather
+  than from skipping metrics.
+
+- **`future_potentials` is populated for single-symbol states.** It was empty
+  because the ensemble pass had not run.
+
+- **Retirement filtering covers the single-symbol path from one place.** The
+  barrier lives in the searcher, which this path skips, so the path applied it
+  itself; it now runs once in the shared tail, after selection and before pruning,
+  so a retired pattern cannot occupy a `max_predictions` slot on either path.
+
+### Changed
+- **Single-symbol predictions no longer include `pattern_data` or `length`.** No
+  other prediction ever did — `pattern_data` is dropped to save bandwidth and
+  `length` is not set at all — so the single-symbol path was the anomaly. Use
+  `sequence`, which carries exactly the content `pattern_data` did and is present
+  on every path.
+
+### Removed
+- Last references to the GPU documentation deleted in 6.1.0: the developers README
+  advertised it as "Phase 1-2 complete", `code-organization.md` still listed
+  `kato/gpu/` in the source tree, and `benchmarks/README.md` linked two deleted
+  guides and set targets against a `gpu_benchmarks.py` that does not exist. Qdrant's
+  own GPU support is unaffected.
+
 ## [6.3.0] - 2026-10-01
 
 Completes the pattern lifecycle: retired patterns can now be permanently erased,

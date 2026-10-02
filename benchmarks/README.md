@@ -146,7 +146,7 @@ Example results structure:
 
 ### Expected Baseline Performance
 
-Current sequential Python implementation (before GPU optimization):
+Current sequential Python implementation:
 
 | Pattern Count | Query Latency | Notes |
 |---------------|---------------|-------|
@@ -156,18 +156,6 @@ Current sequential Python implementation (before GPU optimization):
 | 1M | ~100,000ms (100s) | Unusable for real-time |
 
 **Learning:** ~0.1ms per pattern (fast - no optimization needed)
-
-### GPU Performance Targets
-
-After GPU optimization (Phase 3):
-
-| Pattern Count | Current | Target | Speedup |
-|---------------|---------|--------|---------|
-| 1K | 100ms | 5ms | 20x |
-| 10K | 1,000ms | 20ms | 50x |
-| 100K | 10,000ms | 50ms | 200x |
-| 1M | 100,000ms | 100ms | 1000x |
-| 10M | N/A | 100ms | N/A |
 
 ---
 
@@ -241,7 +229,7 @@ Pattern Count | difflib | RapidFuzz | Speedup
 
 ## Comparing All Results
 
-To compare baseline, CPU-optimized, and GPU performance:
+To compare baseline against the CPU-optimized matcher:
 
 ```bash
 # 1. Run baseline (pre-optimization)
@@ -249,9 +237,6 @@ python benchmarks/baseline.py --quick
 
 # 2. Run CPU optimization comparison (Phase 2)
 python benchmarks/compare_matchers.py --quick
-
-# 3. After GPU implementation (Phase 3 - future)
-python benchmarks/gpu_benchmarks.py --quick
 
 # All results in benchmarks/results/ directory
 ```
@@ -275,7 +260,7 @@ python benchmarks/baseline.py --quick
 
 **Slow performance:**
 - Normal for large datasets (100K+ patterns)
-- This establishes the baseline for measuring GPU improvements
+- This establishes the baseline for measuring optimization work
 - Use `--quick` flag for faster testing
 
 ## Development
@@ -305,6 +290,4 @@ Patterns are realistic representations of KATO data.
 
 ## See Also
 
-- `docs/developers/gpu/IMPLEMENTATION_PLAN.md` - GPU optimization roadmap
-- `docs/developers/gpu/PHASE1_GUIDE.md` - Phase 1 details
 - `CLAUDE.md` - KATO project documentation

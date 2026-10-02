@@ -19,7 +19,7 @@ from kato.informatics.metrics import (
 )
 from kato.informatics.predictive_information import calculate_ensemble_predictive_information
 from kato.representations.pattern import Pattern
-from kato.representations.prediction import rank_predictions, segment_by_alignment
+from kato.representations.prediction import Prediction, rank_predictions
 from kato.searches.pattern_search import PatternSearcher
 from kato.storage.aggregation_pipelines import OptimizedQueryManager
 from kato.storage.clickhouse_writer import ClickHouseWriter
@@ -1167,279 +1167,147 @@ class PatternProcessor:
 
         return [prediction for prediction in predictions if is_active(prediction)]
 
-    async def _predict_single_symbol_fast(self, symbol: str, stm_events: Optional[list[list[str]]] = None) -> list[dict[str, Any]]:
-        """
-        Fast path for single-symbol predictions using Redis symbol-to-pattern index.
+    async def _single_symbol_candidates(
+        self, symbol: str, stm_events: Optional[list[list[str]]] = None
+    ) -> list[Any]:
+        """Select candidate patterns for a single-symbol state, cheaply.
 
-        Bypasses the expensive filter pipeline and directly loads patterns containing
-        the symbol, then filters to patterns starting with the symbol.
+        This is the fast path, and it is now only a *selection* step. It skips the
+        filter pipeline -- the expensive part -- by reading patterns whose
+        `first_token` is this symbol straight out of ClickHouse, then builds the
+        same `Prediction` objects the searcher builds. Everything after selection
+        (metadata, metrics, potential, ranking) is the shared tail in
+        predictPattern, so the two paths cannot disagree.
 
-        Args:
-            symbol: Single symbol to match
-            stm_events: Short-term memory events (for temporal segmentation)
+        It used to compute its own metrics and return, which left single-symbol
+        predictions missing fourteen fields the normal path returns
+        (`predictive_information`, `confluence`, `entropy`, the three `bayesian_*`,
+        `itfdf_similarity`, `tfidf_score`, `pattern_probability`,
+        `normalized_entropy`, `global_normalized_entropy`, `weighted_strength`,
+        `type`, `sequence`) and, worse, disagreeing on three it did return:
+        `snr` used `m/(m+x)` where Prediction uses `(2m-x)/(2m+x)`, `evidence`
+        divided by a different length, and `potential` omitted the
+        `itfdf_similarity` term -- so the ranking key itself was not comparable
+        between paths. A client reading any of the fourteen got a KeyError for a
+        one-symbol STM and a value for a two-symbol one.
 
         Returns:
-            List of prediction dictionaries sorted by potential
-
-        Performance:
-            10-1000x faster than full filter pipeline for single-symbol queries.
-            O(1) Redis lookup + O(k) ClickHouse batch load where k = matching patterns
+            Unranked Prediction objects with placeholder frequency/emotives, ready
+            for the shared tail. Empty list if nothing starts with this symbol.
         """
-        logger.info(f"*** {self.name} [ PatternProcessor _predict_single_symbol_fast called with symbol='{symbol}' ]")
+        logger.info(f"*** {self.name} [ PatternProcessor single-symbol candidate selection symbol='{symbol}' ]")
 
         # Visibility is handled by predictPattern, this function's only caller,
         # which calls ensure_visible before dispatching here. This path queries
         # patterns_data directly, so it is the one most exposed to the async
         # insert window -- the observed miss was on this query.
+        from kato.storage.connection_manager import get_clickhouse_client
+        clickhouse_client = get_clickhouse_client()
+        if not clickhouse_client:
+            logger.warning("ClickHouse not available; cannot select single-symbol candidates")
+            return []
 
-        try:
-            # Step 1: Query ClickHouse directly for patterns starting with this symbol
-            # Uses the first_token column (populated during _prepare_row) instead of
-            # building a large IN-clause from Redis, which overflows max_query_size at scale.
-            from kato.storage.connection_manager import get_clickhouse_client
-            clickhouse_client = get_clickhouse_client()
+        # Uses the first_token column (populated during _prepare_row) instead of
+        # building a large IN-clause from Redis, which overflows max_query_size at scale.
+        result = clickhouse_client.query(
+            """
+            SELECT name, pattern_data, length
+            FROM kato.patterns_data
+            WHERE kb_id = %(kb_id)s AND first_token = %(first_token)s
+            """,
+            parameters={'kb_id': self.superkb.id, 'first_token': symbol},
+        )
+        if not result.result_rows:
+            logger.debug(f"No patterns found starting with symbol '{symbol}'")
+            return []
 
-            if not clickhouse_client:
-                logger.warning("ClickHouse not available, falling back to regular prediction path")
-                return await self.predictPattern([symbol], stm_events=stm_events)
+        candidate_patterns = [
+            {'name': name, 'pattern_data': pattern_data, 'length': length}
+            for name, pattern_data, length in result.result_rows
+            if pattern_data and pattern_data[0] and pattern_data[0][0] == symbol
+        ]
+        if not candidate_patterns:
+            logger.debug(f"No patterns START with symbol '{symbol}' (found patterns containing it)")
+            return []
 
-            result = clickhouse_client.query(
-                """
-                SELECT name, pattern_data, length
-                FROM kato.patterns_data
-                WHERE kb_id = %(kb_id)s AND first_token = %(first_token)s
-                """,
-                parameters={'kb_id': self.superkb.id, 'first_token': symbol},
-            )
+        logger.debug(f"Found {len(candidate_patterns)} patterns STARTING with symbol '{symbol}'")
 
-            if not result.result_rows:
-                logger.debug(f"No patterns found starting with symbol '{symbol}'")
-                return []
+        from kato.searches.pattern_search import InformationExtractor
+        extractor = InformationExtractor(
+            use_fast_matcher=True,
+            use_token_matching=self.use_token_matching
+        )
+        state = [symbol]
 
-            logger.debug(f"Found {len(result.result_rows)} patterns starting with symbol '{symbol}'")
+        # Every candidate already starts with this symbol, so the recall threshold
+        # has nothing left to exclude.
+        single_symbol_threshold = 0.0
 
-            # Step 2: Build candidate list (all rows already start with this symbol)
-            candidate_patterns = []
-            for row in result.result_rows:
-                pattern_name, pattern_data, length = row
-                if pattern_data and pattern_data[0] and pattern_data[0][0] == symbol:
-                    candidate_patterns.append({
-                        'name': pattern_name,
-                        'pattern_data': pattern_data,
-                        'length': length
-                    })
+        weights = self._compute_affinity_weights(state, candidate_patterns)
+        # The shared tail reads weights from the searcher, as the normal path does.
+        self.patterns_searcher.affinity_weights = weights
 
-            if not candidate_patterns:
-                logger.debug(f"No patterns START with symbol '{symbol}' (found patterns containing it)")
-                return []
+        def _build(batch):
+            """Build Prediction objects for a batch of candidates (thread-safe)."""
+            built = []
+            for pattern_dict in batch:
+                prediction_info = extractor.extract_prediction_info(
+                    list(chain(*pattern_dict['pattern_data'])),
+                    state,
+                    cutoff=single_symbol_threshold,
+                    fuzzy_token_threshold=0.0,
+                    weights=weights
+                )
+                if not prediction_info:
+                    continue
 
-            logger.debug(f"Found {len(candidate_patterns)} patterns STARTING with symbol '{symbol}'")
+                (_pattern, matching_intersection, past, present, missing, extras,
+                 similarity, number_of_blocks, anomalies, weighted_similarity,
+                 alignment) = prediction_info[:11]
 
-            # Step 4: Calculate similarity and metrics for each candidate
-            # Use the existing InformationExtractor for consistency
-            from kato.searches.pattern_search import InformationExtractor
-            extractor = InformationExtractor(
-                use_fast_matcher=True,
-                use_token_matching=self.use_token_matching
-            )
-
-            state = [symbol]  # Single-symbol state
-            predictions = []
-
-            # For single-symbol predictions, use a very low threshold (0.0)
-            # since we're already filtering to patterns that START with this symbol.
-            single_symbol_threshold = 0.0
-
-            # Pre-load all pattern metadata in a single batch call via the migration router
-            candidate_names = [p['name'] for p in candidate_patterns]
-            metadata_batch = self.superkb.metadata_router.get_metadata_batch(candidate_names)
-
-            # Compute affinity weights if affinity_emotive is configured
-            affinity_weights = self._compute_affinity_weights(state, candidate_patterns)
-
-            def _process_single_symbol_batch(batch, _state, _extractor, _metadata_batch, _threshold, _weights=None):
-                """Process a batch of candidates for single-symbol prediction (thread-safe)."""
-                batch_results = []
-                for pattern_dict in batch:
-                    pattern_data_flat = list(chain(*pattern_dict['pattern_data']))
-
-                    prediction_info = _extractor.extract_prediction_info(
-                        pattern_data_flat,
-                        _state,
-                        cutoff=_threshold,
-                        fuzzy_token_threshold=0.0,
-                        weights=_weights
-                    )
-
-                    if not prediction_info:
-                        continue
-
-                    (pattern, matching_intersection, past, present, missing, extras,
-                     similarity, number_of_blocks, anomalies, weighted_similarity,
-                     alignment) = prediction_info[:11]
-
-                    # Same event-structured segmentation as the main path (Prediction),
-                    # instead of the flat symbol slices extract_prediction_info returns.
-                    if alignment is not None and stm_events:
-                        past, present, future, missing, extras = segment_by_alignment(
-                            pattern_dict['pattern_data'], stm_events, *alignment)
-                    else:
-                        _present_flat = list(chain(*present)) if present and isinstance(present[0], list) else list(present)
-                        future = pattern[len(past) + len(_present_flat):] if len(past) + len(_present_flat) < len(pattern) else []
-
-                    metadata = _metadata_batch.get(pattern_dict['name'], {'name': pattern_dict['name'], 'frequency': 1})
-                    frequency = metadata.get('frequency', 1)
-                    # Floor frequency at 1: pattern exists in ClickHouse, so frequency=0
-                    # indicates Redis data loss, not an unlearned pattern
-                    if frequency == 0:
-                        logger.warning(
-                            f"Pattern {pattern_dict['name']} found in ClickHouse but has "
-                            f"frequency=0 in Redis — possible Redis data loss. Defaulting to 1."
-                        )
-                        frequency = 1
-                    emotives = metadata.get('emotives', [])
-
-                    total_pattern_symbols = len(pattern)
-                    evidence = len(matching_intersection) / total_pattern_symbols if total_pattern_symbols > 0 else 0.0
-
-                    if present:
-                        present_flat = list(chain(*present)) if isinstance(present[0], list) else present
-                    else:
-                        present_flat = []
-
-                    total_present_symbols = len(present_flat)
-                    confidence = len(matching_intersection) / total_present_symbols if total_present_symbols > 0 else 0.0
-
-                    total_matches = len(matching_intersection)
-                    total_extras = sum(len(e) for e in extras) if extras and isinstance(extras[0], list) else len(extras)
-                    snr = total_matches / (total_matches + total_extras) if (total_matches + total_extras) > 0 else 0.0
-
-                    fragmentation = number_of_blocks - 1
-
-                    # Compute weighted metrics if weights available
-                    weighted_evidence = None
-                    weighted_confidence = None
-                    weighted_snr = None
-                    if _weights:
-                        w_matched = sum(_weights.get(t, 0.0) for t in matching_intersection)
-                        w_pattern = sum(_weights.get(t, 0.0) for t in pattern)
-                        w_present = sum(_weights.get(t, 0.0) for t in present_flat)
-                        w_extras = sum(_weights.get(t, 0.0) for t in (chain(*extras) if extras and isinstance(extras[0], list) else extras))
-
-                        weighted_evidence = (w_matched / w_pattern) if w_pattern > 0 else 0.0
-                        weighted_confidence = (w_matched / w_present) if w_present > 0 else 0.0
-                        weighted_snr = (w_matched / (w_matched + w_extras)) if (w_matched + w_extras) > 0 else 0.0
-
-                    try:
-                        if isinstance(emotives, list) and emotives:
-                            emotives = average_emotives(emotives)
-                        elif not emotives:
-                            emotives = {}
-                    except ZeroDivisionError:
-                        emotives = {}
-
-                    batch_results.append({
+                # Placeholder frequency/emotives, exactly as the searcher does:
+                # attach_pattern_metadata fills them for the survivors of pruning,
+                # and nothing before that point reads them.
+                built.append(Prediction(
+                    {
                         'name': pattern_dict['name'],
                         'pattern_data': pattern_dict['pattern_data'],
                         'length': pattern_dict['length'],
-                        'frequency': frequency,
-                        'emotives': emotives,
-                        'matches': matching_intersection,
-                        'missing': missing,
-                        'present': present,
-                        'past': past,
-                        'future': future,
-                        'extras': extras,
-                        'similarity': similarity,
-                        'evidence': evidence,
-                        'confidence': confidence,
-                        'snr': snr,
-                        'fragmentation': fragmentation,
-                        # Fast path runs with fuzzy matching off, so the only
-                        # deviations are missing/extras symbols.
-                        'fuzzy_matches': anomalies,
-                        'anomalies': (list(chain(*missing)) if missing and isinstance(missing[0], list) else list(missing))
-                                     + (list(chain(*extras)) if extras and isinstance(extras[0], list) else list(extras))
-                                     + [fm['observed'] for fm in anomalies],
-                        'weighted_similarity': weighted_similarity,
-                        'weighted_evidence': weighted_evidence,
-                        'weighted_confidence': weighted_confidence,
-                        'weighted_snr': weighted_snr
-                    })
-                return batch_results
+                        'frequency': 1,
+                        'emotives': {},
+                    },
+                    matching_intersection,
+                    past, present,
+                    missing,
+                    extras,
+                    similarity,
+                    number_of_blocks,
+                    fuzzy_matches=anomalies,
+                    stm_events=stm_events,
+                    weighted_similarity=weighted_similarity,
+                    alignment=alignment,
+                ))
+            return built
 
-            # Parallel processing for large candidate sets, sequential for small
+        SINGLE_SYMBOL_PARALLEL_THRESHOLD = 100
+        if len(candidate_patterns) > SINGLE_SYMBOL_PARALLEL_THRESHOLD:
             import concurrent.futures
             import multiprocessing
-            SINGLE_SYMBOL_PARALLEL_THRESHOLD = 100
+            max_workers = min(multiprocessing.cpu_count(), 8)
+            batch_sz = max(1, len(candidate_patterns) // max_workers)
+            batches = [candidate_patterns[i:i + batch_sz]
+                       for i in range(0, len(candidate_patterns), batch_sz)]
+            predictions = []
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = [executor.submit(_build, b) for b in batches]
+                for future in concurrent.futures.as_completed(futures):
+                    predictions.extend(future.result())
+        else:
+            predictions = _build(candidate_patterns)
 
-            if len(candidate_patterns) > SINGLE_SYMBOL_PARALLEL_THRESHOLD:
-                max_workers = min(multiprocessing.cpu_count(), 8)
-                batch_sz = max(1, len(candidate_patterns) // max_workers)
-                batches = [candidate_patterns[i:i + batch_sz] for i in range(0, len(candidate_patterns), batch_sz)]
+        logger.debug(f"Selected {len(predictions)} single-symbol candidates for '{symbol}'")
+        return predictions
 
-                with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-                    futures = [
-                        executor.submit(_process_single_symbol_batch, batch, state, extractor, metadata_batch, single_symbol_threshold, affinity_weights)
-                        for batch in batches
-                    ]
-                    for future in concurrent.futures.as_completed(futures):
-                        try:
-                            predictions.extend(future.result())
-                        except Exception as e:
-                            logger.error(f"Error processing single-symbol batch: {e}")
-            else:
-                predictions.extend(
-                    _process_single_symbol_batch(candidate_patterns, state, extractor, metadata_batch, single_symbol_threshold, affinity_weights)
-                )
-
-            if not predictions:
-                logger.debug(f"No predictions passed similarity threshold for symbol '{symbol}'")
-                return []
-
-            # Step 5: Calculate metrics using existing infrastructure
-            # This is the same as the regular predictPattern path
-            # (We'll call the same metric calculation code)
-
-            # For now, return predictions without full metric calculations
-            # The regular predictPattern will calculate all metrics
-            # But we need to at least calculate potential for sorting
-
-            for prediction in predictions:
-                frag = prediction['fragmentation']
-                frag_contribution = 0.0 if frag == -1 else (1 / (frag + 1))
-
-                # Use weighted metrics for potential when available
-                ev = prediction.get('weighted_evidence') if prediction.get('weighted_evidence') is not None else prediction['evidence']
-                conf = prediction.get('weighted_confidence') if prediction.get('weighted_confidence') is not None else prediction['confidence']
-                s = prediction.get('weighted_snr') if prediction.get('weighted_snr') is not None else prediction['snr']
-
-                prediction['potential'] = (
-                    (ev + conf) * s
-                    + frag_contribution
-                )
-
-            # Retirement barrier before ranking, not after: a retired pattern
-            # must not occupy one of the max_predictions slots and then be
-            # dropped, which would return fewer predictions than asked for while
-            # active patterns went unreported.
-            predictions = self.filter_retired_predictions(predictions)
-
-            # Sort by potential
-            # Tie-break on name so the truncation below is stable; ClickHouse
-            # gives no row-order guarantee without an ORDER BY.
-            predictions = rank_predictions(predictions, 'potential', self.max_predictions)
-
-            logger.debug(f"Returning {len(predictions)} predictions for single-symbol '{symbol}'")
-            return predictions
-
-        except Exception as e:
-            logger.error(f"Error in _predict_single_symbol_fast for symbol '{symbol}': {e}")
-            import traceback
-            logger.error(f"Traceback: {traceback.format_exc()}")
-            # Fall back to regular prediction path
-            logger.warning("Falling back to regular prediction path")
-            return await self.predictPattern([symbol], stm_events=stm_events)
 
     async def predictPattern(self, state: list[str], stm_events: Optional[list[list[str]]] = None, max_workers: Optional[int] = None, batch_size: int = 100) -> list[dict[str, Any]]:
         """Predict patterns matching the given state (async with caching support).
@@ -1489,32 +1357,46 @@ class PatternProcessor:
             self.superkb.redis_writer.get_global_metadata().get('stats_version', 0)
         )
 
-        # FAST PATH: Single-symbol predictions using Redis index.
-        #
-        # future_potentials is reset here, not inside the fast path, because the
-        # fast path returns before every other assignment to it (the clear on the
-        # no-candidates branch below, and the real assignment after the ensemble
-        # predictive-information pass). Without this reset the attribute still
-        # held the previous request's value, and since a processor is shared by
-        # every session on a node, the endpoint returned ANOTHER SESSION's
-        # future_potentials — observed live as a single-symbol query answering
+        # future_potentials is cleared before either selection strategy runs. A
+        # processor is shared by every session on a node, so a request that
+        # returns before the ensemble predictive-information pass would otherwise
+        # leave the previous request's value in place and the endpoint would serve
+        # ANOTHER SESSION's future_potentials — observed live as a query answering
         # with 0 predictions but 2 future_potentials belonging to a different
-        # session. The fast path computes no ensemble predictive information, so
-        # an empty list is the honest answer for it.
-        if len(state) == 1:
-            logger.info("Using single-symbol fast path for state=%s", state)
-            self.future_potentials = []
-            return await self._predict_single_symbol_fast(state[0], stm_events=stm_events)
+        # session.
+        self.future_potentials = []
 
+        # Candidate selection. Single-symbol states take the cheap path, which
+        # skips the filter pipeline; everything after this point is shared, so the
+        # two strategies produce predictions of the same shape with the same
+        # metrics. Selection is the only thing that differs.
         try:
-            # Compute and set affinity weights on pattern searcher before matching
-            self.patterns_searcher.affinity_weights = self._compute_affinity_weights(state)
+            if len(state) == 1:
+                logger.info("Using single-symbol candidate selection for state=%s", state)
+                causal_patterns = await self._single_symbol_candidates(
+                    state[0], stm_events=stm_events)
+            else:
+                # Compute and set affinity weights on pattern searcher before matching
+                self.patterns_searcher.affinity_weights = self._compute_affinity_weights(state)
 
-            # Use async parallel pattern matching
-            causal_patterns = await self.patterns_searcher.causalBeliefAsync(
-                state, self.target_class_candidates, stm_events, max_workers, batch_size)
+                # Use async parallel pattern matching
+                causal_patterns = await self.patterns_searcher.causalBeliefAsync(
+                    state, self.target_class_candidates, stm_events, max_workers, batch_size)
         except Exception as e:
-            raise Exception(f"\nException in PatternProcessor.predictPattern: Error in causalBeliefAsync! {self.kb_id}: {e}")
+            raise Exception(f"\nException in PatternProcessor.predictPattern: Error in candidate selection! {self.kb_id}: {e}")
+
+        # Retirement barrier, for both selection strategies and before any
+        # pruning or ranking. A retired pattern must not occupy one of the
+        # max_predictions slots and then be dropped, which would return fewer
+        # predictions than asked for while active patterns went unreported.
+        #
+        # The searcher already filters its own candidates, so for the normal path
+        # this is a second pass that finds nothing; on a node with no tombstones
+        # it costs one Redis EXISTS against a key that does not exist. The
+        # single-symbol path has no searcher stage to filter in, and this used to
+        # be done inside it -- keeping it here is what makes the guarantee hold
+        # for both.
+        causal_patterns = self.filter_retired_predictions(causal_patterns)
 
         # Early return if no patterns found
         if not causal_patterns:

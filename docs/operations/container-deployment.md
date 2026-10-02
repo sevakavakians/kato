@@ -194,7 +194,7 @@ When invoked by Claude Code or project-manager, the agent analyzes changes using
 
 **MINOR indicators (new features):**
 - New API endpoints in `kato/api/endpoints/`
-- New modules in `kato/gpu/`, `kato/workers/`, etc.
+- New modules in `kato/workers/`, `kato/searches/`, etc.
 - New configuration options (optional/defaulted)
 - New public functions/classes
 

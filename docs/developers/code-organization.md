@@ -11,7 +11,6 @@ kato/
 │   ├── config/               # Configuration management
 │   ├── exceptions/           # Custom exception classes
 │   ├── filters/              # Pattern filtering logic
-│   ├── gpu/                  # GPU acceleration (experimental)
 │   ├── informatics/          # Information theory utilities
 │   ├── representations/      # Data representations
 │   ├── searches/             # Pattern search algorithms

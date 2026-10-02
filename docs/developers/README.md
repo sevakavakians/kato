@@ -27,9 +27,6 @@ Welcome to the KATO developer documentation! This section provides everything yo
 - **[Performance Profiling](performance-profiling.md)** - Optimizing KATO
 - **[Database Management](database-management.md)** - Working with ClickHouse, Redis, and Qdrant
 
-### Projects
-- **[GPU Optimization](gpu/)** - GPU acceleration project (Phase 1-2 complete, Phase 3 awaiting hardware)
-
 ## 🎯 Quick Navigation by Task
 
 ### I want to...

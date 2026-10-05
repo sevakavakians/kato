@@ -148,7 +148,7 @@ def expectation(p: float, num_symbols: int) -> float:
         >>> expectation(0.5, 10)
         0.15051499783199057
         >>> expectation(0.25, 4)
-        0.3465735902799726
+        0.25
     """
     try:
         if p > 0 and num_symbols > 1:
@@ -191,10 +191,12 @@ def global_normalized_entropy(state: list[str], symbol_probabilities: dict[str, 
     # this metric return 0.6586558556598887 or ...888 for identical input across
     # runs. Sorting fixes the order, so the value is reproducible. The set is one
     # pattern's symbols, so the sort is negligible.
+    # float(): expectation() returns int 0 for a zero-probability symbol, so a
+    # pattern made only of unseen symbols would otherwise report int 0.
     symbols: set[str] = set(state)
-    return sum(
+    return float(sum(
         [expectation(symbol_probabilities.get(symbol, 0), total_symbols) for
-         symbol in sorted(symbols)])
+         symbol in sorted(symbols)]))
 
 
 def normalized_entropy(state: list[str], total_symbols: int) -> float:
@@ -215,7 +217,7 @@ def normalized_entropy(state: list[str], total_symbols: int) -> float:
 
     Example:
         >>> normalized_entropy(['a', 'b', 'a', 'c'], 4)
-        0.8112781244591328
+        0.75
         >>> normalized_entropy([], 4)
         0.0
     """
@@ -227,7 +229,7 @@ def normalized_entropy(state: list[str], total_symbols: int) -> float:
             return 0.0
         # Optimized: Use Counter to count symbols once (O(N) instead of O(N²))
         symbol_counts = Counter(state)
-        return sum([expectation(count / state_length, total_symbols) for count in symbol_counts.values()])
+        return float(sum([expectation(count / state_length, total_symbols) for count in symbol_counts.values()]))
     except ZeroDivisionError as e:
         import logging
         logger = logging.getLogger(__name__)

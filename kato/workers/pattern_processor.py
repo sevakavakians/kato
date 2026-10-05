@@ -3,7 +3,7 @@ import itertools
 import logging
 from collections import Counter, deque
 from itertools import chain
-from math import log, log2
+from math import log2
 from os import environ
 from typing import Any, Optional
 
@@ -16,6 +16,8 @@ from kato.informatics.metrics import (
     accumulate_metadata,
     average_emotives,
     confluence,
+    global_normalized_entropy,
+    normalized_entropy,
 )
 from kato.informatics.predictive_information import calculate_ensemble_predictive_information
 from kato.representations.pattern import Pattern
@@ -447,27 +449,13 @@ class PatternProcessor:
                     p = count / pattern_length
                     entropy_val -= p * log2(p)
 
-            # Normalized entropy: Σ expectation(count/length, total_symbols)
-            # Uses log base = total_symbols (matching metrics.py:expectation)
-            normalized_entropy_val = 0.0
-            if total_symbols > 1:
-                for count in symbol_counts.values():
-                    if count > 0:
-                        p = count / pattern_length
-                        normalized_entropy_val -= p * log(p, total_symbols)
-
-            # Global normalized entropy: Σ expectation(symbol_prob, total_symbols)
-            # Uses global symbol probabilities from the corpus.
-            # sorted(), not raw set order: float addition is not associative and
-            # set iteration order for strings depends on the process hash seed,
-            # so this returned a value that changed every time the container
-            # restarted. See the note on the same sum in metrics.py.
-            global_normalized_entropy_val = 0.0
-            if total_symbols > 1:
-                for symbol in sorted(set(pattern_symbols)):
-                    prob = symbol_probability_cache.get(symbol, 0)
-                    if prob > 0:
-                        global_normalized_entropy_val -= prob * log(prob, total_symbols)
+            # The prediction-time fallback calls the same two functions on the
+            # same full pattern, so a pattern reports the same value whether or
+            # not finalize_training has run.
+            normalized_entropy_val = normalized_entropy(pattern_symbols, total_symbols)
+            global_normalized_entropy_val = global_normalized_entropy(
+                pattern_symbols, symbol_probability_cache, total_symbols
+            )
 
             # TF vector: {symbol: count / pattern_length}
             tf_vector = {
@@ -1506,6 +1494,13 @@ class PatternProcessor:
             total_symbols = len(symbol_cache)
             logger.debug(f"Loaded {total_symbols} symbols using optimized aggregation pipeline (async)")
 
+            def _corpus_probability(symbol: str) -> float:
+                """Probability that a random pattern contains `symbol`."""
+                symbol_data = symbol_cache.get(symbol)
+                if symbol_data is None or total_unique_patterns <= 0:
+                    return 0.0
+                return float(symbol_data['pattern_member_frequency'] / total_unique_patterns)
+
             # Calculate totals and caches
             for prediction in causal_patterns:
                 total_ensemble_pattern_frequencies += prediction['frequency']
@@ -1515,17 +1510,9 @@ class PatternProcessor:
                     missing_symbols_calc = [s for event in missing_symbols_calc for s in event]
                 for symbol in itertools.chain(prediction['matches'], missing_symbols_calc):
                     if symbol not in symbol_probability_cache:
-                        if symbol not in symbol_cache:
-                            symbol_probability_cache[symbol] = 0
-                            continue
-                        symbol_data = symbol_cache[symbol]
-                        # FIX: Use total_unique_patterns for pattern-based probability (compatible units)
-                        if total_unique_patterns > 0:
-                            # Probability that a random pattern contains this symbol
-                            symbol_probability = float(symbol_data['pattern_member_frequency'] / total_unique_patterns)
-                        else:
-                            symbol_probability = 0.0
-                        symbol_probability_cache[symbol] = symbol_probability
+                        # total_unique_patterns, not total frequency: pattern-based
+                        # probability, in units compatible with pattern_member_frequency.
+                        symbol_probability_cache[symbol] = _corpus_probability(symbol)
 
             symbol_frequency_in_state = Counter(state)
 
@@ -1624,8 +1611,12 @@ class PatternProcessor:
                     normalized_entropy_val = precomp['normalized_entropy']
                     global_normalized_entropy_val = precomp['global_normalized_entropy']
                 else:
-                    # Fallback: compute at runtime (pattern predates finalize-training)
-                    pattern_symbols = [s for event in prediction['present'] for s in event]
+                    # Fallback: compute at runtime (pattern predates finalize-training).
+                    # These are pattern-intrinsic, so they are computed over the
+                    # whole pattern exactly as finalize_training does -- not over
+                    # `present`, which is only the matched events and gave the same
+                    # pattern a different value before and after finalization.
+                    pattern_symbols = [s for event in prediction['pattern_data'] for s in event]
                     pattern_length = len(pattern_symbols)
                     if pattern_symbols:
                         symbol_counts = Counter(pattern_symbols)
@@ -1635,23 +1626,16 @@ class PatternProcessor:
                             if count > 0:
                                 p = count / pattern_length
                                 entropy_val -= p * log2(p)
-                        # Normalized entropy (log base total_symbols)
-                        normalized_entropy_val = 0.0
-                        if total_symbols > 1:
-                            for count in symbol_counts.values():
-                                if count > 0:
-                                    p = count / pattern_length
-                                    normalized_entropy_val -= p * log(p, total_symbols)
-                        # Global normalized entropy (using symbol probabilities).
-                        # sorted() for the same reason as the copy in
-                        # finalize_training above: summing over raw set order
-                        # made this value depend on the process hash seed.
-                        global_normalized_entropy_val = 0.0
-                        if total_symbols > 1:
-                            for symbol in sorted(set(pattern_symbols)):
-                                prob = symbol_probability_cache.get(symbol, 0)
-                                if prob > 0:
-                                    global_normalized_entropy_val -= prob * log(prob, total_symbols)
+                        normalized_entropy_val = normalized_entropy(pattern_symbols, total_symbols)
+                        # Not symbol_probability_cache: that holds only matched and
+                        # missing symbols, so past/future symbols would read as 0.
+                        # finalize_training uses the whole symbol table; so must this.
+                        pattern_probabilities = {
+                            symbol: _corpus_probability(symbol) for symbol in set(pattern_symbols)
+                        }
+                        global_normalized_entropy_val = global_normalized_entropy(
+                            pattern_symbols, pattern_probabilities, total_symbols
+                        )
                     else:
                         entropy_val = 0.0
                         normalized_entropy_val = 0.0
@@ -1672,9 +1656,10 @@ class PatternProcessor:
                         tfidf_scores.append(tf * idf)
                     tfidf_score = sum(tfidf_scores) / len(tfidf_scores) if tfidf_scores else 0.0
                 else:
-                    # Fallback: compute TF and IDF at runtime
+                    # Fallback: compute TF and IDF at runtime, over the whole
+                    # pattern to match the pre-computed tf_vector.
                     if not precomp:
-                        pattern_symbols = [s for event in prediction['present'] for s in event]
+                        pattern_symbols = [s for event in prediction['pattern_data'] for s in event]
                     else:
                         pattern_symbols = []  # precomp exists but total_unique_patterns == 0
                     # Counter, not repeated list.count(): counting each unique

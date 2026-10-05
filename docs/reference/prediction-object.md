@@ -105,14 +105,14 @@ A Prediction Object is generated when KATO's pattern recognition engine identifi
 **Purpose**: Measures how broken up or scattered the pattern match is. Lower values indicate more cohesive matches.
 
 ### 15. **entropy** (float)
-**Description**: Information entropy of the present symbols using Shannon entropy.  
-**Formula**: `entropy = Σ(-p(symbol) * log2(p(symbol)))` for each symbol in present  
+**Description**: Information entropy of the pattern's symbols using Shannon entropy.  
+**Formula**: `entropy = Σ(-p(symbol) * log2(p(symbol)))` for each symbol in the pattern  
 **Range**: 0.0 to log2(n) where n is vocabulary size  
-**Purpose**: Measures the information content or uncertainty in the present context.
+**Purpose**: Measures the information content or uncertainty of the pattern. Pattern-intrinsic: the same for every prediction of a given pattern, whatever part of it matched.
 
 ### 16. **normalized_entropy** (float)
-**Description**: Local entropy considering symbol distribution within the present state.
-**Formula**: `normalized_entropy = Σ(expectation(count(symbol)/len(state), total_symbols))` for each symbol
+**Description**: Local entropy considering symbol distribution within the pattern.
+**Formula**: `normalized_entropy = Σ(expectation(count(symbol)/len(pattern), total_symbols))` for each symbol
 **Range**: 0.0 to theoretical maximum based on symbol distribution
 **Purpose**: Measures the "energy" or disorder of the local symbol configuration.
 

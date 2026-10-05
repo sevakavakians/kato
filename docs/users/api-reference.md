@@ -673,8 +673,8 @@ Common HTTP status codes:
 - `similarity`: Overall pattern similarity (0-1)
 - `snr`: Signal-to-noise ratio (-1 to 1)
 - `fragmentation`: Pattern cohesion measure (0-n)
-- `entropy`: Shannon entropy of present symbols
-- `normalized_entropy`: Local entropy based on symbol distribution
+- `entropy`: Shannon entropy of the pattern's symbols
+- `normalized_entropy`: Local entropy based on the pattern's symbol distribution
 - `global_normalized_entropy`: Entropy using global symbol probabilities
 - `confluence`: Pattern probability vs random chance (0-1)
 - `itfdf_similarity`: Inverse TF-DF similarity (0-1)

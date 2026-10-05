@@ -171,8 +171,8 @@ When fuzzy token matching is enabled (`fuzzy_token_threshold` > 0.0), the `anoma
 | `similarity` | 0.0-1.0 | Base similarity score (unweighted) |
 | `snr` | -1.0-1.0 | Signal-to-noise ratio (matches vs extras) |
 | `fragmentation` | 0.0-n | Degree of match discontinuity |
-| `entropy` | 0.0-n | Shannon entropy of present symbols |
-| `normalized_entropy` | 0.0-n | Local entropy based on symbol distribution within present |
+| `entropy` | 0.0-n | Shannon entropy of the pattern's symbols |
+| `normalized_entropy` | 0.0-n | Local entropy based on symbol distribution within the pattern |
 | `global_normalized_entropy` | 0.0-n | Entropy using global symbol probability distributions |
 | `confluence` | 0.0-1.0 | Pattern probability vs random chance |
 | `itfdf_similarity` | 0.0-1.0 | Inverse TF-DF similarity (frequency-weighted) |

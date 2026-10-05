@@ -451,7 +451,7 @@ predictions = kato.get_predictions()
 
 #### entropy
 
-**Shannon entropy of the present symbols.**
+**Shannon entropy of the pattern's symbols.**
 
 **Formula**: `entropy = Σ(-p(symbol) * log2(p(symbol)))`
 

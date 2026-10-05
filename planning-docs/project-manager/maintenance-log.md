@@ -3,6 +3,16 @@
 
 ---
 
+## 2026-10-05 - Milestone + Architectural Decision + Knowledge Refinement: v6.3.1 Released (Single-Symbol Path Parity)
+
+**Trigger**: Primary -- Milestone Completion (PATCH release), Task Completion (single-symbol parity fix `c39ffa1`), Architectural Decision (DECISION-046), Knowledge Refinement (GPU-doc deletion was deliberate; earlier "possibly accidental" note was wrong)
+**Updated**: `DECISIONS.md` (DECISION-046 added, header), `SESSION_STATE.md` (new Current Task; v6.3.0 task demoted to Previous; stash item marked done), `SPRINT_BACKLOG.md` (fix, release, stash chore DONE; `sort_symbols` P2 restated open), `README.md` (banner 6.3.0 -> 6.3.1, 6.3.0 text folded into "Previous release"; test-coverage line), `project-manager/pending-updates.md` (stash resolved; GPU resolved/not-a-bug; behaviour-change info), `project-manager/patterns.md`, `project-manager/triggers.md`.
+**Created**: `completed/bugs/2026-10-05-single-symbol-path-parity.md`, `completed/features/2026-10-05-kato-v6.3.1-release.md`.
+**Still open**: per-session `sort_symbols` inert P2; fast path first-token-only selection (2026-09-11 item); 24h staging soak.
+**Human Alert**: Low -- behaviour change note (info only).
+
+---
+
 ## 2026-10-01 - Milestone Completion: v6.3.0 Released; PR #6 Closed Out
 
 **Trigger**: Primary -- Milestone Completion (release), Task Completion (kato_ops.py:99 P2 fixed in `fc32c52`), Blocker/Open-item resolution (PR #6, 6.3.0 decision)

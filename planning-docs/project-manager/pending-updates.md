@@ -15,6 +15,17 @@ Track issues and updates that require human intervention or review.
 
 ## Current Issues
 
+## 2026-10-05 - INFO: v6.3.1 Released; One-Symbol Predictions No Longer Carry `pattern_data` or `length`
+**Issue**: DECISION-046 reduced the single-symbol path to candidate selection with a shared tail. Output change worth knowing: one-symbol predictions gain 14 fields and lose `pattern_data`/`length` (no other path ever had them; `sequence` has identical content). Classified PATCH; recorded in CHANGELOG under Changed.
+**Suggested Action**: None unless a known client reads `pattern_data` or `length` from one-symbol predictions.
+**Priority**: Low
+**Status**: Info
+
+## 2026-10-05 - RESOLVED (NOT A BUG): `docs/developers/gpu/` Deletion Was Not Accidental
+**Issue**: An earlier note suggested commit `df9a76a` might have deleted the GPU docs by accident because its title concerned error handling and SQL parameterization.
+**Resolution**: WRONG. `CHANGELOG.md` documents the removal under "### Removed" for v6.1.0 (nothing outside `kato/gpu/` imported it; 34 tests skipped in every environment; encoder written for the MongoDB layer removed in v3.0), and the user confirmed with "Get rid of the GPU docs". Remaining references removed in 6.3.1. Any item about restoring them is closed.
+**Status**: Resolved
+
 ## 2026-10-01 - RESOLVED: PR #6 Physical Purge
 **Resolution**: Re-cut and merged to `main` as `916f4c0` (DECISION-045), released in v6.3.0. PR #6 CLOSED 2026-10-01 as fully absorbed; remote branch deleted.
 **Status**: Resolved
@@ -23,10 +34,9 @@ Track issues and updates that require human intervention or review.
 **Resolution**: v6.3.0 released (commit `5684a56`, tag `v6.3.0`). `kato_ops.py:99` fixed in `fc32c52` by removing the `asyncio.to_thread` entirely; verified with 12 concurrent `/patterns/count` requests.
 **Status**: Resolved
 
-## 2026-10-01 - OPEN: Three Old Git Stashes
-**Issue**: stash@{0} (2026-04-21, superseded multi-worker attempt, 11 files/141 insertions), stash@{1} (2025-08-28, three .pyc files), stash@{2} (2025-08-27, two log files). All assessed worthless/superseded; recommendation to drop all three given; user has not decided. Not dropped.
-**Priority**: Low
-**Status**: Open
+## 2026-10-01 - RESOLVED: Three Old Git Stashes
+**Resolution**: Dropped on 2026-10-02 at the user's instruction.
+**Status**: Resolved
 
 ## 2026-10-01 - INFO: Per-Session `sort_symbols` Still Inert After v6.2.0 Config Normalization
 **Issue**: PR #13 made create and update agree, but the per-session value is unused (`kato_processor.py:86`, `observation_processor.py:413` `# noqa: F841`). A reader could assume it now works.

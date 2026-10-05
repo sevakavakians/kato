@@ -635,6 +635,20 @@ A 409 for re-learning a retired pattern required a base class the FastAPI handle
 ### 2026-10-01 - Removing One Fix Can Silently Disable Another Branch's Safety Net
 PR #6's `flush_if_pending()` calls only worked because of its `wait_for_async_insert: 0 -> 1` change; with main's `ensure_visible()` (DECISION-041) that change is dropped and the calls become no-ops, opening a resurrected-pattern hazard in purge. When porting, check what each retained call depended on.
 
+## Process Patterns (2026-10-05 additions)
+
+### 2026-10-05 - A Comment Promising Downstream Work Is a Claim to Verify
+The single-symbol fast path carried "The regular predictPattern will calculate all metrics", but returned before predictPattern ran. The comment stayed true-sounding for months while fourteen fields were absent. When code defers work to another stage, confirm the stage is reachable from that branch.
+
+### 2026-10-05 - A Smoke Test That Cannot Produce the Diverging Input Cannot Detect the Divergence
+`snr` `m/(m+x)` vs `(2m-x)/(2m+x)` are identical when there are no extras, which is exactly what a single-symbol smoke test produces. Parity tests need inputs where the candidate formulas differ (here: extras present), not just inputs where the field exists.
+
+### 2026-10-05 - Hand-Rolled Fast Paths Duplicate Formulas; Share the Tail, Differ Only in Selection
+Every formula in the fast path was a second copy and drifted (including the ranking key, off by exactly one `itfdf_similarity`). Reducing the fast path to candidate selection removed the drift surface. Corollary: removing code can silently remove a safety net it hosted (the retirement barrier lived inside the deleted metrics loop; caught before commit). Same family as the 2026-10-01 "Removing One Fix Can Silently Disable Another Branch's Safety Net" entry.
+
+### 2026-10-05 - Assumption -> Reality: "GPU Doc Deletion Was Accidental" -> Deliberate
+Inferred from a commit title that did not mention GPU. Reality: CHANGELOG v6.1.0 "### Removed" documented it with rationale. Discovery trigger: reading CHANGELOG, then user confirmation. Check CHANGELOG before inferring a deletion was accidental from a commit title.
+
 ## Operational Gotchas
 
 ### 2026-09-21 - ClickHouse HTTP Interface Is Strictly One Statement Per Request; No Multi-Statement Mode Exists

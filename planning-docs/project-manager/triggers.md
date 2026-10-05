@@ -3,6 +3,13 @@
 
 ---
 
+## 2026-10-05 - Milestone: v6.3.1 Released (Single-Symbol Path Parity)
+
+**Trigger Type**: Primary -- Milestone (PATCH release), Task Completion (`c39ffa1`), Architectural Decision (DECISION-046), Knowledge Refinement (GPU-doc deletion confirmed deliberate)
+**Response**: Existing entries updated in place (SESSION_STATE, SPRINT_BACKLOG, DECISIONS, pending-updates); README banner bumped to 6.3.1 with 6.3.0 folded into "Previous release"; two archives created.
+
+---
+
 ## 2026-10-01 - Milestone: v6.3.0 Released; PR #6 Closed Out
 
 **Trigger Type**: Primary -- Milestone (release), Task Completion (kato_ops.py:99 P2, `fc32c52`), Open-item resolution (PR #6, release decision)

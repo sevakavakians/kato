@@ -10,6 +10,7 @@ Welcome to the KATO research documentation! This section covers the theoretical 
 - **[Core Concepts](core-concepts.md)** - Theoretical foundations of KATO
 - **[Information Theory Basis](information-theory.md)** - Predictive information framework
 - **[Pattern Theory](pattern-theory.md)** - Pattern representation and learning
+- **[Deterministic ML Comparison](deterministic-ml-comparison.md)** - How KATO's determinism compares to other ML families
 
 ### Algorithms
 - **[Pattern Matching](pattern-matching.md)** - Similarity and matching algorithms

@@ -22,7 +22,7 @@ KATO is built for highly regulated and mission-critical problem domains from whi
 
 **KATO is predictive AI, not generative AI.**
 
-Generative AI answers the question: *what would plausible content look like here?* It synthesizes — sampling from statistical distributions baked into billions of opaque weights. That's what makes it powerful for open-ended creation, and it's also *why* generative models hallucinate: they are built to produce the plausible, not the observed. Predictive AI answers a different question: *given what has actually been observed, what happens next — and why?* KATO is built for that question. It observes, learns patterns, and predicts from evidence. Same inputs, same outputs. Always. No temperature. No sampling. No randomness.
+Generative AI answers the question: *what would plausible content look like here?* It synthesizes — sampling from statistical distributions baked into billions of opaque weights. That's what makes it powerful for open-ended creation, and it's also *why* generative models hallucinate: they are built to produce the plausible, not the observed. Predictive AI answers a different question: *given what has actually been observed, what happens next — and why?* KATO is built for that question. It observes, learns patterns, and predicts from evidence. Same knowledge base, same inputs, same outputs. No temperature. No sampling. No randomness.
 
 Under the hood, KATO is a neuro-symbolic, **deterministic AI/ML architecture** that provides transparent, explainable machine learning through pattern-based learning — an alternative to neural networks for applications requiring real-time learning, complete traceability, and computational efficiency on commodity CPUs.
 
@@ -54,7 +54,7 @@ Understanding when to use KATO versus a generative model is critical for buildin
 | **Learning** | Batch pre-training on billions of tokens | Incremental learning from single observations | LLM for language, KATO for memory |
 | **Hardware** | GPUs required ($1000s/month) | CPU-only ($50/month) | Reduced LLM calls = cost savings |
 | **Explainability** | Black-box attention weights | Complete pattern traceability | Transparent decisions + language interface |
-| **Determinism** | Non-deterministic (sampling) | 100% deterministic | Deterministic core + reasoning fallback |
+| **Determinism** | Non-deterministic (sampling) | Deterministic by design ([limits](docs/research/deterministic-ml-comparison.md#known-limits-on-end-to-end-determinism)) | Deterministic core + reasoning fallback |
 | **Knowledge Updates** | Requires retraining | Direct database edits | Update patterns without retraining LLM |
 | **Real-time Learning** | Not possible | Instant pattern learning | Adapt in production without downtime |
 | **Regulatory Compliance** | Challenging (no audit trail) | Built-in (complete traceability) | Best of both worlds |
@@ -69,6 +69,52 @@ Understanding when to use KATO versus a generative model is critical for buildin
 - **Transparency**: Traceable patterns vs feature weights
 - **Multi-modal**: Unified event model vs separate pipelines
 - **Scalability**: Stateless horizontal scaling vs stateful challenges
+
+## Deterministic Machine Learning, Compared
+
+"Deterministic" means three different things in machine learning, and KATO is built to meet all three:
+
+| Kind | Question | KATO |
+|------|----------|------|
+| **Algorithmic** | Does the method use randomness? | No. Learning is hashing and counting; prediction is exact alignment plus closed-form metrics. |
+| **Order** | Does training-data order change the model? | Mostly no. Patterns are content-addressed and their statistics are commutative counts, so learning the same patterns in any order gives the same knowledge base. |
+| **Implementation** | Same bytes across runs and workers? | Yes, on the same build and hardware, by engineering: total-order ranking, fixed float-summation order, recall-safe pruning. |
+
+Order-independence makes **exact unlearning** possible: purging a pattern subtracts exactly what learning it added.
+
+**Determinism alone does not set KATO apart.** Neural networks, LLMs and randomized ensembles meet few of these properties without heavy configuration. Classical interpretable models can meet all three: logistic regression with a deterministic solver, single decision trees, Naive Bayes, scorecards and rules engines. What distinguishes KATO is what it pairs with determinism: one-shot incremental learning, exact unlearning by subtraction, and native sequence matching.
+
+| Family | No randomness | Order-independent | Byte-reproducible | Exact unlearning | Learns incrementally | Sequence-native |
+|--------|:-------------:|:-----------------:|:-----------------:|:----------------:|:--------------------:|:---------------:|
+| **KATO** | ✅ | ✅ mostly | ✅ | ✅ | ✅ | ✅ |
+| Deep nets (SGD) | ❌ | ❌ | ⚙️ | ❌ | ⚠️ | ✅ RNN / transformer |
+| LLM inference | ❌ | n/a | ❌ | ❌ | ❌ | ✅ |
+| Random forests | ⚙️ | ❌ | ⚙️ | ❌ | ❌ | ❌ |
+| Logistic regression | ✅ | ✅ | ⚙️ | ❌ | ❌ | ❌ |
+| Single decision tree | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Scorecards / rules engines | ✅ | n/a / ⚠️ | ✅ | n/a | ❌ | ❌ |
+| Naive Bayes | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| Exact k-NN, alignment distance | ✅ | ✅ | ⚙️ | ✅ | ✅ | ✅ |
+| n-gram / variable-order Markov | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ next symbol |
+| HMM, supervised | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+
+**Legend:**
+- ✅ holds by default
+- ⚙️ holds once configured (pinned seed, solver or thread count)
+- ⚠️ holds only partially or in some variants
+- ❌ does not hold
+- n/a does not apply
+
+**Closest relatives**: Alignment-based k-NN, variable-order Markov models and supervised HMMs share most of these properties. KATO is not a new class of learner. It brings these properties together with:
+- event structure;
+- partial matching anywhere in short-term memory, returning the whole stored future;
+- per-prediction past / present / future / missing / extras;
+- ensemble information-theoretic metrics;
+- a serving layer engineered to stay reproducible at scale.
+
+**The trade-off**: KATO generalizes less than neural networks or linear models. It predicts from what it has observed and does not interpolate beyond it, which is also why it cannot hallucinate.
+
+The [Deterministic ML Comparison](docs/research/deterministic-ml-comparison.md) gives the full analysis: 20 ML families with solver and configuration caveats, the trade-offs, and the [known limits on end-to-end determinism](docs/research/deterministic-ml-comparison.md#known-limits-on-end-to-end-determinism).
 
 ## When to Use KATO
 
@@ -167,7 +213,7 @@ In domains where errors have serious consequences — healthcare, aerospace, def
 - ✅ **Complete audit trails** — every prediction traceable to source patterns (GDPR Article 22, HIPAA, SOX, Basel III)
 - ✅ **Explainable decisions** — stakeholders understand "why" without technical expertise
 - ✅ **Real-time correction** — fix errors immediately via database updates, no retraining downtime, no recertification delays
-- ✅ **Deterministic behavior** — same inputs always produce same outputs (required for certification: DO-178C, IEC 62304, ISO 26262)
+- ✅ **Deterministic behavior** — no randomness in learning or matching; the same knowledge base and inputs produce the same ranked predictions (required for certification: DO-178C, IEC 62304, ISO 26262)
 - ✅ **Validation & verification** — pattern-based logic can be formally tested and certified
 
 **Sensor fusion for mission-critical applications**. Building on GAIuS's award-winning sensor-fusion capabilities, KATO integrates multiple sensor streams in real time — vision embeddings, IoT telemetry, audio, time-series, and geospatial data — in a single unified event model:
@@ -194,7 +240,7 @@ predictions = get_predictions()  # Detects patterns indicating maintenance needs
 
 ## Key Features
 
-- ✨ **Deterministic Learning** - Same inputs always yield same outputs
+- ✨ **Deterministic Learning** - No randomness in learning or prediction; reproducible ranked predictions
 - 🔍 **Full Transparency** - All internal states and decisions are explainable
 - 🎯 **Temporal Predictions** - Sophisticated past/present/future segmentation
 - 🧠 **Multi-Modal Sensor Fusion** - Integrate text, vectors, vision systems, and multiple sensor streams

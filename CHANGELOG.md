@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Pattern-intrinsic metrics no longer change when `finalize-training` runs.**
+  `entropy`, `normalized_entropy` (formerly `hamiltonian`),
+  `global_normalized_entropy` (formerly `grand_hamiltonian`) and `tfidf_score`
+  describe the pattern. `finalize-training` precomputes them over the whole
+  pattern, but until it runs — and again after every learn, which clears the
+  stored values for the node — predictions computed them at request time over
+  `present`, the matched events only. The same pattern therefore reported one value
+  before finalization and another after (Shannon entropy 1.0 vs 1.92 in the
+  regression test), and any ranking on these metrics shifted with it. The runtime
+  path now uses the whole pattern, and `global_normalized_entropy` looks up corpus
+  probabilities for every pattern symbol rather than reading 0 for symbols in
+  `past` or `future`. Both paths now call the same functions in
+  `kato/informatics/metrics.py`. **Values change** for predictions served from
+  a node that has learned since its last `finalize-training`; finalized values do
+  not change.
+
 ## [6.3.1] - 2026-10-05
 
 Single-symbol predictions now return the same fields, computed the same way, as

@@ -234,6 +234,11 @@ absolute latency differences across machines.
 
 ## Correctness / API Design Patterns
 
+### 2026-10-05 - A Fallback Path Is a Second Implementation; Test It Against the Authoritative Path, and Verify "Not Implemented" Claims by Searching History for Renames
+
+**Pattern**: (1) The entropy-family fallback (live whenever stored metrics are cleared, i.e. after every learn) computed over `present` while `finalize_training` computed over the whole pattern, so values flipped. Same family as the single-symbol parity bug the same day: duplicated formulas drift. Fix shape: one shared function, both paths call it, and a parity test that fails on the old code. (2) An external claim that `hamiltonian` metrics were missing was a stale-name artifact (renamed in `1bbb3ed`); `git log -S` on the old name resolves such claims fast, and checking the claim still paid off by exposing a real bug. (3) A cache covering only matched+missing symbols silently yields 0 for other symbols: lookups outside a cache's coverage need an explicit helper (`_corpus_probability`).
+**Assumption -> Reality**: "fallback is just a cheaper version of the precomputed value" -> it used different inputs.
+
 ### 2026-09-09 - Flat Membership Tests Under-Report Repeated Symbols; Overloaded Fields Should Split Rather Than Type-Switch
 
 **Pattern**: Two related but distinct lessons from the same day's work on `kato/representations/prediction.py`.

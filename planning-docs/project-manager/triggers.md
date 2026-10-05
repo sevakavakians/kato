@@ -3,6 +3,9 @@
 
 ---
 
+## 2026-10-05 - Task Completion + Decision + Knowledge Refinement: Entropy-Metrics Parity Fix (uncommitted)
+Activated by: completed bug fix (fallback vs finalize_training metrics), DECISION-047, refuted external claim (hamiltonian renamed in 1bbb3ed), 4 new backlog items. Actions: archive, SESSION_STATE, SPRINT_BACKLOG, DECISIONS, pending-updates, patterns, maintenance-log.
+
 ## 2026-10-05 - Milestone: v6.3.1 Released (Single-Symbol Path Parity)
 
 **Trigger Type**: Primary -- Milestone (PATCH release), Task Completion (`c39ffa1`), Architectural Decision (DECISION-046), Knowledge Refinement (GPU-doc deletion confirmed deliberate)
@@ -1078,3 +1081,8 @@ Investigating it surfaced five real, unrelated defects: a test-coverage gap (thi
 
 **Agent Response Time**: Immediate
 **Action Result**: Planning docs now record the investigation's outcome (not a bug, verified live with direct database cross-check) alongside the five incidental fixes it produced, clearly distinguished from a product-behavior change. All prior open items (staging soak for the recall-safe bound, dependency upgrade, `REDIS_PASSWORD`, dashboard hardening, single-symbol fast-path first-token-only design question, `sort_symbols` bug, unreachable `r=0` branches, real-corpus selectivity measurement, stale `benchmark_hybrid_architecture.py`) remain open, untouched by this pass.
+
+---
+
+## 2026-10-05 - Task Completion (docs) + New Tasks
+Deterministic ML comparison doc, README section, research index entry done. 4 follow-up candidates logged in `SPRINT_BACKLOG.md`. Silent; no alert except item 4 awaiting user decision.

@@ -15,6 +15,13 @@ Track issues and updates that require human intervention or review.
 
 ## Current Issues
 
+## 2026-10-05 - ACTION NEEDED: Entropy-Metrics Parity Fix Is Uncommitted
+**Issue**: Fix for prediction-time fallback vs finalize-training entropy mismatch (DECISION-047) is in the working tree: `CHANGELOG.md`, 4 docs, `metrics.py`, `pattern_processor.py`, new test file. 841 passed / 2 skipped / 1 xfailed.
+**Impact**: Released 6.3.1 still returns flipping entropy-family values after finalize-training.
+**Suggested Action**: Commit; then PATCH release when convenient. Four P3 follow-ups are in SPRINT_BACKLOG (tfidf IDF lookup, 3 failing doctests, global_normalized_entropy semantics, test-stack container-name conflict with the `deployment` project).
+**Priority**: Medium
+**Status**: Open
+
 ## 2026-10-05 - INFO: v6.3.1 Released; One-Symbol Predictions No Longer Carry `pattern_data` or `length`
 **Issue**: DECISION-046 reduced the single-symbol path to candidate selection with a shared tail. Output change worth knowing: one-symbol predictions gain 14 fields and lose `pattern_data`/`length` (no other path ever had them; `sequence` has identical content). Classified PATCH; recorded in CHANGELOG under Changed.
 **Suggested Action**: None unless a known client reads `pattern_data` or `length` from one-symbol predictions.
@@ -200,3 +207,10 @@ Track issues and updates that require human intervention or review.
 ---
 
 *This file is automatically maintained by the project-manager agent*
+
+---
+
+## 2026-10-05 - Decision Needed (Low): README "100% deterministic" wording
+The new README comparison table says "100% deterministic"; `docs/research/deterministic-ml-comparison.md` documents limits (unverified Qdrant HNSW order dependence, lossy VectorObject names, future_potentials ties). Soften, or keep? Awaiting user.
+
+**RESOLVED 2026-10-05**: The "README 100% deterministic wording" decision above is resolved. User chose to scope all four claims; done in README.md, with `docs/research/deterministic-ml-comparison.md` revised to match.

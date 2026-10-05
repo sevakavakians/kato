@@ -3,6 +3,14 @@
 
 ---
 
+## 2026-10-05 - Task Completion + Architectural Decision + Knowledge Refinement: Entropy-Metrics Parity Fix (UNCOMMITTED)
+
+**Trigger**: Task Completion (bug fix), Architectural Decision (DECISION-047), Knowledge Refinement (reviewer's "hamiltonian not implemented" claim verified false: renamed to `normalized_entropy`/`global_normalized_entropy` in `1bbb3ed`), New Tasks (4 follow-ups).
+**Files updated**: `completed/bugs/2026-10-05-entropy-metrics-fallback-vs-finalize-parity.md` (new), `SESSION_STATE.md` (new Current Task; prior demoted), `SPRINT_BACKLOG.md` (entry + 4 follow-ups), `DECISIONS.md` (DECISION-047), `project-manager/pending-updates.md` (commit needed), `patterns.md`, `triggers.md`, this log.
+**Human Alert**: Yes, Medium: uncommitted work to commit/release.
+
+---
+
 ## 2026-10-05 - Milestone + Architectural Decision + Knowledge Refinement: v6.3.1 Released (Single-Symbol Path Parity)
 
 **Trigger**: Primary -- Milestone Completion (PATCH release), Task Completion (single-symbol parity fix `c39ffa1`), Architectural Decision (DECISION-046), Knowledge Refinement (GPU-doc deletion was deliberate; earlier "possibly accidental" note was wrong)
@@ -3608,3 +3616,19 @@ The investigation surfaced five real, unrelated defects, fixed in the same pass:
 
 *Agent execution time: < 10 minutes*
 *Response type: Investigation closed as not-a-bug (knowledge refinement, live-verified) + task completion (coverage gap + doc/docstring fixes + one cosmetic bug fix, uncommitted) + human alert generated (Low priority: commit + eventual rebuild/redeploy)*
+
+---
+
+## 2026-10-05 - Docs Task Completed: Deterministic ML Comparison
+
+**Classification**: Task Completion (docs only, no code) + New backlog candidates.
+**Done**: Added `docs/research/deterministic-ml-comparison.md` (three kinds of determinism; order-independence via SHA1 content addressing, commutative counts, set-union metadata, enabling exact unlearning; comparison vs 11 ML families; trade-offs; known limits). Added README section "Deterministic Machine Learning, Compared"; added `docs/research/README.md` index entry.
+**Planning updates**: 4 candidate items appended to `SPRINT_BACKLOG.md` (tie-breaker, unverified Qdrant HNSW order dependence, VectorObject defects, README wording decision). Append-only; concurrent entropy-parity edits untouched. Not committed.
+
+---
+
+## 2026-10-05 - Docs Revision: Determinism Claims Scoped
+
+**Classification**: Knowledge Refinement (docs only, no code).
+**Done**: `docs/research/deterministic-ml-comparison.md` corrected (removed false "mainstream methods achieve at most one kind" claim; 20-family table; new "Where KATO Is Actually Different"; known limits split). README.md's four unscoped determinism claims scoped.
+**Planning updates**: pending-updates.md README-wording decision marked RESOLVED; SPRINT_BACKLOG.md determinism section: item 4 marked done, candidates 5-7 added (candidate-query ORDER BY, cross-hardware BLAS check, stale known-issues skip entry). Append-only. Not committed.

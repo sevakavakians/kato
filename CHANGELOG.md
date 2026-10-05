@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [6.3.1] - 2026-10-05
+
+Single-symbol predictions now return the same fields, computed the same way, as
+every other prediction.
+
 ### Fixed
 - **Single-symbol predictions now carry the same fields as every other prediction.**
   A state of one symbol takes a cheaper candidate selection — it reads patterns by

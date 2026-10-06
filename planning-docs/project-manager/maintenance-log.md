@@ -3632,3 +3632,10 @@ The investigation surfaced five real, unrelated defects, fixed in the same pass:
 **Classification**: Knowledge Refinement (docs only, no code).
 **Done**: `docs/research/deterministic-ml-comparison.md` corrected (removed false "mainstream methods achieve at most one kind" claim; 20-family table; new "Where KATO Is Actually Different"; known limits split). README.md's four unscoped determinism claims scoped.
 **Planning updates**: pending-updates.md README-wording decision marked RESOLVED; SPRINT_BACKLOG.md determinism section: item 4 marked done, candidates 5-7 added (candidate-query ORDER BY, cross-hardware BLAS check, stale known-issues skip entry). Append-only. Not committed.
+
+---
+
+## 2026-10-06 - Release Recorded: v6.3.2 (PATCH)
+
+**Classification**: Milestone Completion.
+**Done**: Recorded v6.3.2 (`07674e6`, `372f369`, tag `v6.3.2`; contents `c6177b8` entropy parity fix and `c2a2b48` docs; images 6.3.2/6.3/6/latest verified) in SESSION_STATE.md and new `completed/features/2026-10-06-kato-v6.3.2-release.md`. Added low-priority backlog candidate 8 (intermittent RemoteDisconnected in `test_multimodal_pattern_persistence`). Noted 2026-10-05 local stack swap (data volumes kept). Append-only; not committed.

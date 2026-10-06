@@ -1268,3 +1268,7 @@ New candidates (not started):
 5. **Candidate queries have no ORDER BY** - `kato/filters/recall_bounds.py` query constants and the single-symbol query in `pattern_processor._single_symbol_candidates`. The total-order pre-prune runs only above `max_predictions*3`; below that, `calculate_ensemble_predictive_information` sees ClickHouse arrival order, so `future_potentials` ties AND the last bits of `aggregate_potential` / `predictive_information` (float sums when 3+ patterns share a future) can vary. Ranked predictions are unaffected. Fix: `ORDER BY name` in the candidate queries, or rank before the ensemble pass. Found by code reading; not reproduced. Related to item 1.
 6. **Cross-hardware determinism check** - `itfdf_similarity` uses BLAS (`matrix @ vector`, `np.linalg.norm`) and the Bayesian posterior uses `np.dot`; reduction order can differ across CPU architectures.
 7. **Stale known-issues entry** - `docs/maintenance/known-issues.md` says one test in `tests/tests/unit/test_determinism_preservation.py` is skipped, but the file contains no skip marker. Entry looks stale; verify and fix.
+
+### Low-priority candidate (2026-10-06)
+
+8. **Intermittent RemoteDisconnected in `test_multimodal_pattern_persistence`** - seen once in the 2026-10-05 full run (server closed the connection mid-request; no container restart or OOM). Cause unknown because docker logs had rotated. Passed 3/3 on rerun and 10/10 for its file. If it recurs, capture server logs immediately.

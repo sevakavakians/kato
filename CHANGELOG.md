@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [6.3.2] - 2026-10-06
+
+Pattern-intrinsic metrics are now computed the same way before and after
+`finalize-training`.
+
 ### Fixed
 - **Pattern-intrinsic metrics no longer change when `finalize-training` runs.**
   `entropy`, `normalized_entropy` (formerly `hamiltonian`),

@@ -3639,3 +3639,4 @@ The investigation surfaced five real, unrelated defects, fixed in the same pass:
 
 **Classification**: Milestone Completion.
 **Done**: Recorded v6.3.2 (`07674e6`, `372f369`, tag `v6.3.2`; contents `c6177b8` entropy parity fix and `c2a2b48` docs; images 6.3.2/6.3/6/latest verified) in SESSION_STATE.md and new `completed/features/2026-10-06-kato-v6.3.2-release.md`. Added low-priority backlog candidate 8 (intermittent RemoteDisconnected in `test_multimodal_pattern_persistence`). Noted 2026-10-05 local stack swap (data volumes kept). Append-only; not committed.
+- 2026-10-08: Recorded SPRINT_BACKLOG item 7 (stale known-issues entries) as DONE in commit be813db; two kept claims remain unverified (Redis-required startup, ~99.9% HNSW accuracy).

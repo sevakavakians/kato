@@ -1,50 +1,18 @@
 # Known Issues and Bugs
 
-Last Updated: 2026-03-19
-
-## Test Suite Status ✅
-**Current Status**: 445+ tests passing, 2 skipped
-- All test suites passing
-
 ## Critical Issues 🔴
-*None at this time - all major functionality working correctly*
+*None at this time.*
 
 ## High Priority Issues 🟠
-*None at this time - Phase 3 Configuration Management completed successfully*
+*None at this time.*
 
 ## Medium Priority Issues 🟡
 
-### 1. One Test Consistently Skipped
-**Status**: Active  
-**Severity**: Low  
-**Location**: `tests/tests/unit/test_determinism_preservation.py`
-
-**Description**:
-- One test is intentionally skipped in the test suite
-- This appears to be by design, not a failure
-- Does not affect functionality
-
----
+*None at this time.*
 
 ## Low Priority Issues 🟢
 
-### 2. Docker Compose Version Warning
-**Status**: Active  
-**Severity**: Minimal  
-**Location**: `docker compose.yml` files
-
-**Warning Message**:
-```
-the attribute `version` is obsolete, it will be ignored
-```
-
-**Fix Needed**:
-- Remove `version: '3.8'` from docker compose files
-- Update to latest compose file format
-
----
-
-### 3. Redis is Required
+### 1. Redis is Required
 **Status**: By Design
 **Severity**: Informational
 **Location**: Configuration
@@ -58,7 +26,7 @@ the attribute `version` is obsolete, it will be ignored
 
 ## Performance Considerations 📊
 
-### 4. Vector Search Accuracy Trade-offs
+### 2. Vector Search Accuracy Trade-offs
 **Status**: By Design  
 **Severity**: Informational  
 
@@ -73,40 +41,9 @@ the attribute `version` is obsolete, it will be ignored
 
 ---
 
-## Configuration Notes 📝
-
-### 5. Environment Variable Loading
-**Status**: Resolved  
-**Implementation**: Application Startup Pattern
-
-**Solution Implemented**:
-- Configuration now uses FastAPI lifespan context manager
-- Settings loaded at startup, not module import time
-- Dependency injection ensures correct configuration
-- Fully compatible with Docker environment variables
-
-See [Configuration Management](../developers/configuration-management.md) for details.
-
----
-
 ## Feature Enhancements (Future) 💡
 
-### 6. GPU Acceleration
-**Status**: Prepared but Not Active  
-**Priority**: Low  
-
-**Description**:
-- GPU-enabled Qdrant configuration exists but not enabled
-- Requires NVIDIA GPU and container toolkit
-
-**To Enable**:
-1. Install NVIDIA Container Toolkit
-2. Uncomment GPU section in docker compose.yml
-3. Set appropriate GPU device IDs
-
----
-
-### 7. Additional Vector Database Backends
+### 3. Additional Vector Database Backends
 **Status**: Architecture Ready
 **Priority**: Low
 
@@ -116,33 +53,7 @@ See [Configuration Management](../developers/configuration-management.md) for de
 - ⏳ Milvus (planned)
 - ⏳ Weaviate (planned)
 
-Factory pattern can be implemented if needed
-
----
-
-## Recently Resolved Issues ✅
-
-### Phase 3 Configuration Management
-**Status**: COMPLETED (2025-09-06)
-- Implemented Application Startup Pattern
-- Fixed Docker environment variable timing issues
-- Added comprehensive Pydantic configuration system
-- All endpoints use dependency injection
-- Full test coverage passing
-
-### Recall Threshold Behavior
-**Status**: RESOLVED
-- Understood as heuristic filter, not exact decimal matching
-- Documentation updated across all files
-- Tests updated to reflect approximate behavior
-
-### Test Suite Failures
-**Status**: RESOLVED
-- Previously: 102 failures (~46% pass rate)
-- Currently: 0 failures (445+ tests passing)
-- All pattern handling tests passing
-- All memory management tests passing
-- All API tests passing
+The backend factory exists (`kato/storage/vector_store_factory.py`); only Qdrant is implemented.
 
 ---
 
@@ -164,9 +75,8 @@ Factory pattern can be implemented if needed
 
 ### Test Architecture
 - Tests run in local Python environment
-- Each test gets unique session_id for isolation
+- Each test uses a unique `test_`-prefixed node_id for isolation
 - Services must be running before tests
-- ~590 seconds (10 min) for full test suite
 
 ---
 

@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+A single observed symbol now matches a pattern wherever the symbol occurs. Two
+new metrics describe where and how the observation lands in the pattern.
+
+### Fixed
+- **A lone symbol no longer has to be the first sorted token of a pattern to
+  match it** ([#15](https://github.com/sevakavakians/kato/issues/15)).
+  Single-symbol candidate selection read only patterns whose `first_token` was
+  the symbol. Events are sorted, so of `[["A","B","C"],["marker"]]` a lone `A`
+  matched, but `B`, `C` and `marker` returned nothing. Lowering
+  `recall_threshold` did not help, because the pattern was excluded before
+  scoring. Selection now takes every pattern containing the symbol, filtering on
+  `token_set` and its bloom index. **More predictions** are returned for
+  single-symbol observations.
+
+### Added
+- **`event_cohesion`** prediction field: for each STM event, the largest share of
+  its symbols found together in one pattern event, averaged over STM events. Flat
+  matching scores `[["A","C"]]` as a complete match for `[["A"],["C"]]`; cohesion
+  scores it 0.5.
+- **`onset_alignment`** prediction field: the overlap of the first STM event with
+  each pattern event, divided by `1 + event index`, maximised over events. It is
+  1.0 when the first pattern event holds every observed symbol.
+- Both are valid `rank_sort_algo` values.
+
+### Changed
+- **`potential` includes `onset_alignment` when the STM is a single event**, so
+  for the first observation after a clear, patterns that start with the observed
+  symbols rank above patterns that hold them later. **Values and rankings
+  change** for single-event STMs. Multi-event STMs are unaffected. The term also
+  enters the top-K pre-prune, so starting patterns are not dropped before the
+  final ranking.
+
 ## [6.3.2] - 2026-10-06
 
 Pattern-intrinsic metrics are now computed the same way before and after

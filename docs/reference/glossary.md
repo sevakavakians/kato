@@ -237,7 +237,7 @@ Identifier prefix for vector-derived symbols. Format: `VCTR|<hash>`
 Empty events `[]` are NOT supported and should be filtered before observation.
 
 ### Minimum Pattern Length
-Patterns require at least 1 string in STM to generate predictions. Single-symbol observations use an optimized fast path (`_predict_single_symbol_fast`).
+Patterns require at least 1 string in STM to generate predictions. Single-symbol observations use an optimized fast path that skips the filter pipeline and selects every pattern containing the symbol.
 
 ### Division by Zero Protection
 Various metrics include protection against division by zero:

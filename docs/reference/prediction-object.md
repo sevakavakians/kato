@@ -37,7 +37,7 @@ A Prediction Object is generated when KATO's pattern recognition engine identifi
 **Example 1**: If pattern has `[["a", "b"], ["c", "d"]]` and observing `["a", "c"]`, present would be `[["a", "b"], ["c", "d"]]` (complete events) and missing would be `[["b"], ["d"]]`.  
 **Example 2**: If pattern has `[["hello", "world"], ["foo", "bar"]]` and observing `["hello", "foo"]`, present would be `[["hello", "world"], ["foo", "bar"]]` and missing would be `[["world"], ["bar"]]`.
 **Repeated symbols**: attribution follows the matcher's alignment of positions, not symbol identity, so a pattern symbol that occurs several times is only "missing" at the occurrence that went unmatched. Matching runs on the flattened sequence, so the alignment is refined with event structure before segmentation: a matched symbol is attributed to the pattern event where the other symbols of its observed event matched (dropping the `y` from event 0 or from event 1 of `[["x","y"],["y","z"],…]` is reported against the right event), and a symbol observed alone prefers the occurrence that leaves the fewest symbols missing (a lone `["x"]` matches an exact pattern event `["x"]` rather than the `x` of `["x","y"]`). The number of matches and `similarity` never change under this refinement.
-**Known limitations**: matching is flat, so an observation that splits one pattern event across two observations, or merges two pattern events into one, still counts as a complete match; the matcher's blocks are not always a maximum common subsequence while `similarity` uses the true one, so `matches` can undercount in rare repeated-symbol cases; single-symbol observations only consider patterns whose first token is that symbol.
+**Known limitations**: matching is flat, so an observation that splits one pattern event across two observations, or merges two pattern events into one, still counts as a complete match; the matcher's blocks are not always a maximum common subsequence while `similarity` uses the true one, so `matches` can undercount in rare repeated-symbol cases.
 
 ### 6. **extras** (array[array[string]], event-aligned)
 **Description**: Symbols observed in the current context that are not part of the expected pattern.  
@@ -45,7 +45,7 @@ A Prediction Object is generated when KATO's pattern recognition engine identifi
 **Structure**: List of lists, where each sub-list corresponds to an STM event and contains observed symbols from that event not expected in the pattern's present events.  
 **Example**: If observing `[["a", "x"], ["b"], ["y"]]` against pattern `[["a"], ["b"]]`, extras would be `[["x"], [], ["y"]]`.
 
-**Segmentation**: `past`/`present`/`future` boundaries come from the matched *positions* (the first and last matched symbol's events), so a match that starts or ends inside an event includes that whole event in `present` with its unmatched symbols in `missing`. Single-symbol observations go through the fast path (patterns whose first token is the symbol) and are segmented the same way.
+**Segmentation**: `past`/`present`/`future` boundaries come from the matched *positions* (the first and last matched symbol's events), so a match that starts or ends inside an event includes that whole event in `present` with its unmatched symbols in `missing`. Single-symbol observations go through the fast path (every pattern containing the symbol, in any event) and are segmented the same way: a lone symbol from a later event puts the events before it in `past`.
 
 ### 7. **past** (repeated ListValue)
 **Description**: Pattern of events from the learned pattern that occur BEFORE any observed matches.  
@@ -167,13 +167,14 @@ A Prediction Object is generated when KATO's pattern recognition engine identifi
 
 ### 24. **potential** (float)
 **Description**: Primary composite ranking metric combining multiple pattern quality measures.
-**Formula**: `potential = (evidence + confidence) * snr + itfdf_similarity + (1/(fragmentation + 1))`
-**Range**: Unbounded. Typically 0.0 to ~3.0 for quality matches. Can be negative when SNR < 0 (excessive noise/extras in observation), indicating low-quality or spurious matches.
+**Formula**: `potential = (evidence + confidence) * snr + itfdf_similarity + (1/(fragmentation + 1)) [+ onset_alignment]`. The `onset_alignment` term is added only when the STM holds a single event.
+**Range**: Unbounded. Typically 0.0 to ~4.0 for quality matches. Can be negative when SNR < 0 (excessive noise/extras in observation), indicating low-quality or spurious matches.
 **Purpose**: Default ranking metric that balances multiple dimensions:
 - Match completeness (evidence + confidence)
 - Signal quality (snr)
 - Frequency-weighted similarity (itfdf_similarity)
 - Pattern cohesion (fragmentation term)
+- Position, for a single-event STM (onset_alignment term): see field 30
 
 **Configuration**: Can be replaced as ranking metric using `rank_sort_algo` parameter. Alternative rankings include similarity, evidence, confidence, predictive_information, bayesian_posterior, and others.
 
@@ -245,6 +246,18 @@ A Prediction Object is generated when KATO's pattern recognition engine identifi
 - High TF-IDF: Pattern contains rare symbols that appear frequently within it (distinctive)
 - Low TF-IDF: Pattern contains mostly common symbols (generic)
 
+### 29. **event_cohesion** (float)
+**Description**: How much of each observed event co-occurs in a single pattern event, wherever that event is.
+**Formula**: for each non-empty STM event `s`, `max_j |s ∩ P[j]| / |s|` over the pattern events `P[j]`; `event_cohesion` is the mean over STM events. Events are compared as sets, so sorting within an event does not matter.
+**Range**: 0.0 to 1.0
+**Purpose**: Matching is flat, so observing `[["A","C"]]` against `[["A"],["C"]]` counts as a complete match even though the pattern never holds A and C together. Cohesion tells the two apart: 1.0 against `[["A","B","C"]]`, 0.5 against `[["A"],["C"]]`. Reported only; it is not part of `potential`.
+
+### 30. **onset_alignment** (float)
+**Description**: How early in the pattern the observed symbols occur, decaying with position.
+**Formula**: for the first non-empty STM event `s0`, `max_j (|s0 ∩ P[j]| / |s0|) / (1 + j)`. It reads pattern membership directly, so a symbol that occurs in the first event and again later scores as the first occurrence.
+**Range**: 0.0 to 1.0. A lone symbol scores 1.0 in the first event, 0.5 in the second, 1/3 in the third.
+**Purpose**: When the STM is a single event -- the first observation after the STM is cleared -- a pattern that starts with the observed symbols is the more likely one. For that case only, `onset_alignment` is added to `potential`, so those patterns rank first. With more than one STM event it is reported but not added, and rankings are unaffected.
+
 ## Metric Categories
 
 ### Matching Metrics
@@ -257,6 +270,8 @@ A Prediction Object is generated when KATO's pattern recognition engine identifi
 ### Temporal Metrics
 - **past, present, future**: Temporal context and predictions
 - **fragmentation**: Temporal cohesion
+- **onset_alignment**: How early in the pattern the observation lands
+- **event_cohesion**: Whether each observed event's symbols sit together in one pattern event
 
 ### Information Theory Metrics
 - **entropy**: Local information content
@@ -276,7 +291,7 @@ A Prediction Object is generated when KATO's pattern recognition engine identifi
 
 ## Usage Notes
 
-1. **Prediction Selection**: When multiple predictions are generated, use `potential` as the default ranking metric. The formula `potential = (evidence + confidence) * snr + itfdf_similarity + (1/(fragmentation + 1))` provides balanced ranking across multiple quality dimensions. Alternative ranking metrics can be selected via `rank_sort_algo` configuration to optimize for specific use cases:
+1. **Prediction Selection**: When multiple predictions are generated, use `potential` as the default ranking metric. The formula `potential = (evidence + confidence) * snr + itfdf_similarity + (1/(fragmentation + 1))`, plus `onset_alignment` for a single-event STM, provides balanced ranking across multiple quality dimensions. Alternative ranking metrics can be selected via `rank_sort_algo` configuration to optimize for specific use cases:
    - `similarity`: Best pattern matches by similarity score
    - `frequency`: Most common patterns
    - `predictive_information`: Information-theoretic ranking

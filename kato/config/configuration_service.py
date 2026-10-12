@@ -370,6 +370,7 @@ class ConfigurationService:
                 'bayesian_likelihood', 'tfidf_score',
                 'weighted_similarity', 'weighted_evidence',
                 'weighted_confidence', 'weighted_snr',
+                'event_cohesion', 'onset_alignment',
             ]
             if not isinstance(value, str) or value not in valid_algorithms:
                 errors['rank_sort_algo'] = f'Must be one of: {", ".join(valid_algorithms)}'

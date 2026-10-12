@@ -333,7 +333,7 @@ def test_single_symbol_that_starts_the_pattern(kato_fixture):
 def test_single_symbol_that_starts_the_pattern_with_repeats(kato_fixture):
     """A lone 'x' is an exact match for pattern event ['x'], so present is that event, nothing missing.
 
-    The fast path finds the pattern because 'x' is also its first token; the
+    The fast path finds the pattern because it contains 'x'; the
     alignment then prefers the occurrence that leaves the fewest symbols
     missing over the 'x' of ['x','y'].
     """
@@ -355,17 +355,25 @@ def test_repeated_observed_symbol_extra_attributed_to_its_event(kato_fixture):
                          missing=[[], []], extras=[['b'], []], anomalies=['b'])
 
 
-@pytest.mark.parametrize("symbol", ['d', 'g', 'k', 'm'])
-def test_single_symbol_from_mid_pattern_is_not_predicted(kato_fixture, symbol):
-    """The single-symbol fast path only considers patterns whose FIRST token is the symbol.
+@pytest.mark.parametrize("symbol, event", [('b', 0), ('d', 1), ('g', 3), ('k', 4), ('m', 5)])
+def test_single_symbol_from_anywhere_predicts_the_pattern(kato_fixture, symbol, event):
+    """A lone symbol predicts the pattern wherever it occurs, segmented at its event.
 
-    So a lone symbol from anywhere else in the pattern yields no prediction, even
-    though the same symbol as part of a two-symbol observation would. This pins
-    the fast path's documented first-token filter (PatternProcessor.
-    _predict_single_symbol_fast); change this test if that semantic changes.
+    The single-symbol path used to consider only patterns whose first stored
+    token was the symbol, so 'b' -- a member of the first event that merely
+    sorts after 'a' -- and every symbol past the first event yielded nothing
+    (issue #15). Position now ranks rather than selects: `onset_alignment`
+    decays as 1 / (1 + event index).
     """
     _learn(kato_fixture, RAGGED)
-    assert _observe(kato_fixture, [[symbol]]) == []
+    pred = _top(kato_fixture, [[symbol]])
+    others = [s for s in RAGGED[event] if s != symbol]
+    _assert_segmentation(pred, past=RAGGED[:event], present=[RAGGED[event]],
+                         future=RAGGED[event + 1:], missing=[others], extras=[[]],
+                         anomalies=others)
+    assert pred['matches'] == [symbol]
+    assert pred['onset_alignment'] == pytest.approx(1 / (1 + event))
+    assert pred['event_cohesion'] == 1.0
 
 
 # ---------------------------------------------------------------------------

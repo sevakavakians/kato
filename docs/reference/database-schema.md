@@ -24,7 +24,7 @@ Engine: `MergeTree()`, partitioned by `kb_id`, ordered by `(kb_id, length, name)
 | `token_count` | UInt32 | Distinct token count (precomputed) | `5` |
 | `minhash_sig` | Array(UInt32) | MinHash signature (100 hash values for LSH) | `[283741, 9182, 44012, ...]` |
 | `lsh_bands` | Array(UInt64) | LSH band hashes (20 bands x 5 rows each) | `[8827361, 1923847, ...]` |
-| `first_token` | String | First token in the pattern (prefix filtering) | `"hello"` |
+| `first_token` | String | First token in the pattern. Not read by prediction: single-symbol selection filters on `token_set` | `"hello"` |
 | `last_token` | String | Last token in the pattern (suffix filtering) | `"you"` |
 | `created_at` | DateTime | Creation timestamp (default: `now()`) | `2026-03-27 10:00:00` |
 | `updated_at` | DateTime | Last update timestamp (default: `now()`) | `2026-03-27 10:00:00` |

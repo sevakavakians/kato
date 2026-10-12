@@ -174,7 +174,8 @@ class SessionConfiguration:
                     'global_normalized_entropy', 'itfdf_similarity', 'confluence',
                     'predictive_information', 'bayesian_posterior', 'bayesian_prior',
                     'bayesian_likelihood', 'tfidf_score',
-                    'weighted_similarity', 'weighted_evidence', 'weighted_confidence', 'weighted_snr'
+                    'weighted_similarity', 'weighted_evidence', 'weighted_confidence', 'weighted_snr',
+                    'event_cohesion', 'onset_alignment'
                 ]
                 if self.rank_sort_algo not in valid_algorithms:
                     logger.error(f"Invalid rank_sort_algo: {self.rank_sort_algo}")

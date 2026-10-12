@@ -44,14 +44,15 @@ def describe_prediction_miss(kato_fixture, expected_symbols: Optional[list[str]]
     # Is anything in patterns_data at all, and is it queryable right now?
     add(f"  patterns_data rows for this kb_id: {_clickhouse(f'SELECT count() FROM kato.patterns_data WHERE kb_id = {kb_id!r}')}")
     add(f"  patterns_metadata rows for this kb_id: {_clickhouse(f'SELECT count() FROM kato.patterns_metadata WHERE kb_id = {kb_id!r}')}")
-    # first_token is included because _predict_single_symbol_fast filters on it
-    # rather than on pattern_data, so a row that looks present can still be
-    # unreachable by that path if the column disagrees with pattern_data[0][0].
+    # token_set is included because the single-symbol candidate selection
+    # (_single_symbol_candidates) filters on it rather than on pattern_data, so a
+    # row that looks present can still be unreachable by that path if the column
+    # disagrees with pattern_data.
     names = _clickhouse(
-        f"SELECT name, first_token, length, toString(pattern_data) FROM kato.patterns_data "
+        f"SELECT name, toString(token_set), length, toString(pattern_data) FROM kato.patterns_data "
         f"WHERE kb_id = {kb_id!r} ORDER BY name LIMIT 10 FORMAT TSV"
     )
-    add("  patterns_data (name, first_token, length, pattern_data):\n    " + (names.replace('\n', '\n    ') if names else '<none>'))
+    add("  patterns_data (name, token_set, length, pattern_data):\n    " + (names.replace('\n', '\n    ') if names else '<none>'))
 
     # Rows still sitting in the server's async_insert buffer would explain a
     # write that happened but is not yet visible to a SELECT.
@@ -71,19 +72,19 @@ def describe_prediction_miss(kato_fixture, expected_symbols: Optional[list[str]]
             "ORDER BY event_time DESC LIMIT 5 FORMAT TSV"
         ).replace('\n', '\n    '))
 
-    # Replay the exact predicate _predict_single_symbol_fast uses. If this
+    # Replay the exact predicate _single_symbol_candidates uses. If this
     # returns rows but the prediction was empty, the miss is downstream of
     # candidate selection; if it returns nothing while pattern_data plainly
-    # contains the symbol, first_token is the culprit.
+    # contains the symbol, token_set is the culprit.
     if expected_symbols:
         sym = expected_symbols[0]
-        add(f"  fast-path predicate (first_token = {sym!r}): " + _clickhouse(
+        add(f"  fast-path predicate (has(token_set, {sym!r})): " + _clickhouse(
             f"SELECT count() FROM kato.patterns_data "
-            f"WHERE kb_id = {kb_id!r} AND first_token = {sym!r}"
+            f"WHERE kb_id = {kb_id!r} AND has(token_set, {sym!r})"
         ))
-        add(f"  same, via pattern_data[1][1] = {sym!r}: " + _clickhouse(
+        add(f"  same, via has(flatten(pattern_data), {sym!r}): " + _clickhouse(
             f"SELECT count() FROM kato.patterns_data "
-            f"WHERE kb_id = {kb_id!r} AND pattern_data[1][1] = {sym!r}"
+            f"WHERE kb_id = {kb_id!r} AND has(flatten(pattern_data), {sym!r})"
         ))
 
     # Redis side: frequency keys are the authority on which patterns exist.

@@ -1161,9 +1161,15 @@ class PatternProcessor:
         """Select candidate patterns for a single-symbol state, cheaply.
 
         This is the fast path, and it is now only a *selection* step. It skips the
-        filter pipeline -- the expensive part -- by reading patterns whose
-        `first_token` is this symbol straight out of ClickHouse, then builds the
-        same `Prediction` objects the searcher builds. Everything after selection
+        filter pipeline -- the expensive part -- by reading patterns that contain
+        this symbol, in any event, straight out of ClickHouse, then builds the
+        same `Prediction` objects the searcher builds.
+
+        It used to read only patterns whose `first_token` was the symbol. Events
+        are sorted, so that made eligibility depend on alphabetical order: of
+        [['A','B','C'], ['marker']], a lone 'A' matched and a lone 'B' did not
+        (issue #15). Preferring patterns that start with the observed symbols is
+        now a ranking concern -- `onset_alignment` -- not a selection filter. Everything after selection
         (metadata, metrics, potential, ranking) is the shared tail in
         predictPattern, so the two paths cannot disagree.
 
@@ -1181,7 +1187,7 @@ class PatternProcessor:
 
         Returns:
             Unranked Prediction objects with placeholder frequency/emotives, ready
-            for the shared tail. Empty list if nothing starts with this symbol.
+            for the shared tail. Empty list if no pattern contains this symbol.
         """
         logger.info(f"*** {self.name} [ PatternProcessor single-symbol candidate selection symbol='{symbol}' ]")
 
@@ -1195,30 +1201,27 @@ class PatternProcessor:
             logger.warning("ClickHouse not available; cannot select single-symbol candidates")
             return []
 
-        # Uses the first_token column (populated during _prepare_row) instead of
-        # building a large IN-clause from Redis, which overflows max_query_size at scale.
+        # Filters on token_set, which carries the idx_token_bloom skip index, in
+        # ClickHouse rather than building a large IN-clause from Redis, which
+        # overflows max_query_size at scale.
         result = clickhouse_client.query(
             """
             SELECT name, pattern_data, length
             FROM kato.patterns_data
-            WHERE kb_id = %(kb_id)s AND first_token = %(first_token)s
+            WHERE kb_id = %(kb_id)s AND has(token_set, %(symbol)s)
             """,
-            parameters={'kb_id': self.superkb.id, 'first_token': symbol},
+            parameters={'kb_id': self.superkb.id, 'symbol': symbol},
         )
-        if not result.result_rows:
-            logger.debug(f"No patterns found starting with symbol '{symbol}'")
-            return []
-
         candidate_patterns = [
             {'name': name, 'pattern_data': pattern_data, 'length': length}
             for name, pattern_data, length in result.result_rows
-            if pattern_data and pattern_data[0] and pattern_data[0][0] == symbol
+            if pattern_data
         ]
         if not candidate_patterns:
-            logger.debug(f"No patterns START with symbol '{symbol}' (found patterns containing it)")
+            logger.debug(f"No patterns found containing symbol '{symbol}'")
             return []
 
-        logger.debug(f"Found {len(candidate_patterns)} patterns STARTING with symbol '{symbol}'")
+        logger.debug(f"Found {len(candidate_patterns)} patterns containing symbol '{symbol}'")
 
         from kato.searches.pattern_search import InformationExtractor
         extractor = InformationExtractor(
@@ -1227,8 +1230,9 @@ class PatternProcessor:
         )
         state = [symbol]
 
-        # Every candidate already starts with this symbol, so the recall threshold
-        # has nothing left to exclude.
+        # Every candidate contains this symbol, so it matches. The recall threshold
+        # is not applied: one symbol against a long pattern has a similarity below
+        # the default threshold, and this path has always returned such patterns.
         single_symbol_threshold = 0.0
 
         weights = self._compute_affinity_weights(state, candidate_patterns)
@@ -1386,6 +1390,13 @@ class PatternProcessor:
         # for both.
         causal_patterns = self.filter_retired_predictions(causal_patterns)
 
+        # Positional heuristic: with a single-event STM -- a cleared STM's first
+        # observation -- a pattern whose early events hold the observed symbols is
+        # the more likely one, so onset_alignment joins the ranking. With more
+        # events the observation is a window into a sequence and position says
+        # nothing; the term is 0 and rankings are as before.
+        onset_weight = 1.0 if stm_events is not None and sum(1 for e in stm_events if e) == 1 else 0.0
+
         # Early return if no patterns found
         if not causal_patterns:
             self.future_potentials = []  # Clear stale future_potentials
@@ -1435,6 +1446,9 @@ class PatternProcessor:
         # Top-K pruning: reduce candidates before expensive metrics loop
         # Uses a cheap pre-potential from already-available fields (same formula as
         # final potential minus itfdf_similarity which hasn't been computed yet).
+        # The onset term must be here too: a lone symbol now selects every pattern
+        # containing it, and pruning without it would drop the patterns that start
+        # with it before the final ranking could prefer them.
         # itfdf_similarity is bounded [0,1], so a 3x safety margin prevents losing
         # high-quality predictions that might reorder after full metrics.
         PRUNING_FACTOR = 3
@@ -1446,6 +1460,7 @@ class PatternProcessor:
                 p['_pre_potential'] = (
                     (p['evidence'] + p['confidence']) * p['snr']
                     + (0.0 if frag == -1 else 1.0 / (frag + 1))
+                    + onset_weight * p['onset_alignment']
                 )
             # Same total order as the final ranking: ties here decide which
             # candidates even reach the metrics loop, so settling them by
@@ -1729,6 +1744,7 @@ class PatternProcessor:
 
             # Vectorized potential calculation
             # potential = (evidence + confidence) * snr + itfdf_similarity + (1/(fragmentation + 1))
+            #             + onset_alignment (single-event STM only)
             # Use weighted metrics when available
             use_weighted = weights and any(p.get('weighted_evidence') is not None for p in causal_patterns)
             evidence_arr = np.array([p.get('weighted_evidence', p['evidence']) if use_weighted else p['evidence'] for p in causal_patterns])
@@ -1737,7 +1753,8 @@ class PatternProcessor:
             itfdf_arr = np.array([p.get('itfdf_similarity', 0.0) for p in causal_patterns])
             frag_arr = np.array([p['fragmentation'] for p in causal_patterns])
             frag_contrib = np.where(frag_arr == -1, 0.0, 1.0 / (frag_arr + 1))
-            potentials = (evidence_arr + confidence_arr) * snr_arr + itfdf_arr + frag_contrib
+            onset_arr = np.array([p['onset_alignment'] for p in causal_patterns])
+            potentials = (evidence_arr + confidence_arr) * snr_arr + itfdf_arr + frag_contrib + onset_weight * onset_arr
             for i, p in enumerate(causal_patterns):
                 p['potential'] = float(potentials[i])
 

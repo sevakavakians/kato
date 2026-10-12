@@ -142,7 +142,7 @@ kato.learn()
 
 KATO generates predictions when observations match learned patterns.
 
-**CRITICAL REQUIREMENT**: KATO requires at least 1 string in short-term memory (STM) to generate predictions. Single-symbol observations use an optimized fast path (`_predict_single_symbol_fast`).
+**CRITICAL REQUIREMENT**: KATO requires at least 1 string in short-term memory (STM) to generate predictions. Single-symbol observations use an optimized fast path that skips the filter pipeline and selects every pattern containing the symbol.
 
 Valid for predictions:
 - Single string: `[['hello']]` ✅ (uses single-symbol fast path)
@@ -188,9 +188,11 @@ while the second reports it as **future**.
 }
 ```
 
-Note: a lone `[['B']]` would yield **no** prediction. Single-symbol observations
-take the fast path, which only considers patterns whose *first* token is that
-symbol. Observe `[['B'], ['C']]` (two symbols) to match from mid-pattern.
+A lone `[['B']]` also predicts this pattern, with `past: [['A']]` and
+`present: [['B']]`. A single symbol matches every pattern that contains it, in
+any event. When the STM is a single event, `potential` includes
+`onset_alignment`, so patterns that *start* with the observed symbols rank
+above patterns that hold them later.
 
 ##### Partial Match with Missing Symbols
 ```python

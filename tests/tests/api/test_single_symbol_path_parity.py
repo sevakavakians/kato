@@ -1,7 +1,7 @@
 """The single-symbol fast path must be indistinguishable from the normal path.
 
 A state of one symbol is dispatched to a cheaper candidate-selection strategy: it
-reads patterns whose `first_token` matches straight out of ClickHouse instead of
+reads patterns containing the symbol straight out of ClickHouse instead of
 running the filter pipeline. That is a legitimate optimisation of *selection*.
 What it must not change is the prediction.
 
@@ -116,6 +116,9 @@ def test_one_symbol_potential_uses_the_shared_formula():
     The fast path used the pre-potential formula -- the real one minus
     `itfdf_similarity` -- which made its scores incomparable with the normal
     path's rather than merely imprecise.
+
+    A one-symbol STM is a single event, so the shared formula includes the
+    `onset_alignment` term.
     """
     session_id, _ = _session()
     _learn(session_id, ["sr_a", "sr_b", "sr_c", "sr_d"], emotives={"joy": 0.5})
@@ -126,6 +129,7 @@ def test_one_symbol_potential_uses_the_shared_formula():
         (prediction["evidence"] + prediction["confidence"]) * prediction["snr"]
         + prediction["itfdf_similarity"]
         + (0.0 if frag == -1 else 1.0 / (frag + 1))
+        + prediction["onset_alignment"]
     )
     assert prediction["potential"] == pytest.approx(expected, rel=1e-9, abs=1e-12)
 

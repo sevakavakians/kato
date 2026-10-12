@@ -250,6 +250,39 @@ def segment_by_alignment(pattern_events, stm_events, pattern_positions, state_po
     return past, present, future, missing, extras
 
 
+def event_overlap_metrics(pattern_events, stm_events):
+    """
+    Event cohesion and onset alignment of a pattern against the STM.
+
+    Both read the overlap profile o_j(s) = |s ∩ P[j]| / |s| of an observed event
+    s against each pattern event P[j]. Events are compared as sets, so the sort
+    order within an event never matters.
+
+    - event_cohesion: mean over non-empty STM events s of max_j o_j(s). How much
+      of each observed event co-occurs in a single pattern event, wherever it
+      is. Flat matching cannot tell [['A','C']] against [['A'],['C']] from an
+      exact match; cohesion scores it 0.5.
+    - onset_alignment: max_j o_j(s0) / (1 + j) for the first non-empty STM event
+      s0. Rewards patterns whose early events hold the observed symbols, decaying
+      with position. It reads pattern membership directly rather than `past`,
+      because the alignment refinement may attribute a repeated symbol to a
+      later occurrence than the first one.
+
+    Returns (event_cohesion, onset_alignment), both 0.0 without STM events.
+    """
+    observed = [set(event) for event in (stm_events or []) if event]
+    if not observed:
+        return 0.0, 0.0
+    pattern_sets = [set(event) for event in pattern_events]
+
+    def profile(s):
+        return [len(s & p) / len(s) for p in pattern_sets]
+
+    cohesion = sum(max(profile(s), default=0.0) for s in observed) / len(observed)
+    onset = max((o / (1 + j) for j, o in enumerate(profile(observed[0]))), default=0.0)
+    return float(cohesion), float(onset)
+
+
 class Prediction(dict):
     "Pattern prediction."
     def __init__(self, _pattern, matching_intersection, past, present, missing, extras, similarity, number_of_blocks, fuzzy_matches=None, stm_events=None, weighted_similarity=None, alignment=None):
@@ -393,6 +426,10 @@ class Prediction(dict):
 
         __present_length__ = sum([len(_event) for _event in self['present']])
         self['confidence'] = float(len(self['matches'])/__present_length__) if __present_length__ > 0 else 0.0
+
+        # Positional metrics. predictPattern adds onset_alignment to potential
+        # only when the STM is a single event.
+        self['event_cohesion'], self['onset_alignment'] = event_overlap_metrics(sequence, stm_events)
 
         # Affinity-weighted metrics (None when disabled)
         self['weighted_similarity'] = weighted_similarity

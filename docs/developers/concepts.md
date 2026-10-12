@@ -18,7 +18,7 @@ This document provides a comprehensive reference for KATO's core concepts, behav
 
 ### Minimum Pattern Requirements
 
-**CRITICAL**: KATO requires at least 1 string in short-term memory (STM) to generate predictions. Single-symbol observations use an optimized fast path (`_predict_single_symbol_fast`).
+**CRITICAL**: KATO requires at least 1 string in short-term memory (STM) to generate predictions. Single-symbol observations use an optimized fast path that skips the filter pipeline and selects every pattern containing the symbol.
 
 #### Valid Patterns for Predictions:
 - **Single string**: `[['hello']]` ✅ (uses single-symbol fast path)

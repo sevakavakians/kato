@@ -1086,3 +1086,9 @@ Investigating it surfaced five real, unrelated defects: a test-coverage gap (thi
 
 ## 2026-10-05 - Task Completion (docs) + New Tasks
 Deterministic ML comparison doc, README section, research index entry done. 4 follow-up candidates logged in `SPRINT_BACKLOG.md`. Silent; no alert except item 4 awaiting user decision.
+
+## 2026-10-12 - New Task + Architectural Decision
+Issue #15 fix planned and started (DECISION-048). Silent; one INFO item in pending-updates (MINOR release needed).
+
+## 2026-10-12 - Task Completion (uncommitted)
+Issue #15 implemented and verified (DECISION-048). Silent; pending-updates item promoted to ACTION NEEDED (commit/PR approval).

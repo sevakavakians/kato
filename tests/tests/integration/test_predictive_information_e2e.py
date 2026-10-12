@@ -55,13 +55,15 @@ class TestPredictiveInformationE2E:
             potential = pred.get('potential', 0)
 
             # Verify the current formula: potential = (evidence + confidence) * snr + itfdf_similarity + (1/(fragmentation + 1))
+            # + onset_alignment, because this STM is a single event
             expected_potential = (
                 (evidence + confidence) * snr
                 + itfdf_similarity
                 + (1 / (fragmentation + 1))
+                + pred['onset_alignment']
             )
             assert abs(potential - expected_potential) < 0.0001, \
-                f"Potential {potential} != (evidence {evidence} + confidence {confidence}) * snr {snr} + itfdf_similarity {itfdf_similarity} + (1/(fragmentation {fragmentation} + 1))"
+                f"Potential {potential} != (evidence {evidence} + confidence {confidence}) * snr {snr} + itfdf_similarity {itfdf_similarity} + (1/(fragmentation {fragmentation} + 1)) + onset_alignment {pred['onset_alignment']}"
 
     def test_pi_increases_with_pattern_repetition(self, kato_fixture):
         """Test that PI increases when patterns are learned multiple times."""

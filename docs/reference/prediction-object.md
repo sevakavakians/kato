@@ -289,6 +289,28 @@ A Prediction Object is generated when KATO's pattern recognition engine identifi
 - **itfdf_similarity**: Frequency-weighted importance
 - **tfidf_score**: TF-IDF measure of pattern distinctiveness
 
+### Data Dependencies
+
+The categories above group metrics by meaning. This table groups them by what they are computed from: the prediction alone, or data from the rest of the node or from the other predictions.
+
+| Computable from the prediction alone (the pattern, the STM, and the match result) | Need data from the rest of the node or from the other predictions |
+|---|---|
+| `matches`, `past`, `present`, `future`, `missing`, `extras`, `anomalies`, `fuzzy_matches` | `itfdf_similarity`: how many patterns in the node contain each symbol, this pattern's frequency, and the total frequency of all predictions |
+| `evidence` | `confluence`: this pattern's share of all learned frequency, plus how many patterns in the node contain each symbol |
+| `confidence` | `tfidf_score`: total number of patterns in the node, and how many contain each symbol |
+| `snr` | `normalized_entropy`: number of distinct symbols in the node |
+| `similarity` (and `bayesian_likelihood`, which is a copy of it) | `global_normalized_entropy`: node-wide symbol probabilities and the number of distinct symbols |
+| `fragmentation` | `predictive_information`: the other predictions' frequencies and futures |
+| `event_cohesion` | `bayesian_prior`, `bayesian_posterior`: the other predictions' frequencies |
+| `onset_alignment` | `weighted_similarity`, `weighted_evidence`, `weighted_confidence`, `weighted_snr`: each symbol's node-wide affinity and frequency (set only when the session configures `affinity_emotive`) |
+| `entropy` (Shannon entropy over the pattern's own symbols; precomputed, but computable from the pattern) | `potential`: combines metrics from both columns, including `itfdf_similarity` |
+
+Notes:
+
+- `frequency` and `emotives` sit between the two columns. They are the pattern's own stored values, not node-wide statistics, but they are read from storage only after pruning (below). Before that, `frequency` is a placeholder of 1.
+- Before the metrics in the right-hand column are computed, the candidates are cut to `3 × max_predictions`. The cut ranks on a provisional potential built from metrics in the left-hand column. The right-hand metrics are computed only for the candidates that survive.
+- Metrics that depend on the other predictions (`predictive_information`, the Bayesian prior and posterior, and the ensemble total in `itfdf_similarity`) are computed over the candidates that survive that cut, so their values depend on which candidates were kept.
+
 ## Usage Notes
 
 1. **Prediction Selection**: When multiple predictions are generated, use `potential` as the default ranking metric. The formula `potential = (evidence + confidence) * snr + itfdf_similarity + (1/(fragmentation + 1))`, plus `onset_alignment` for a single-event STM, provides balanced ranking across multiple quality dimensions. Alternative ranking metrics can be selected via `rank_sort_algo` configuration to optimize for specific use cases:

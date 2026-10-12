@@ -3640,3 +3640,17 @@ The investigation surfaced five real, unrelated defects, fixed in the same pass:
 **Classification**: Milestone Completion.
 **Done**: Recorded v6.3.2 (`07674e6`, `372f369`, tag `v6.3.2`; contents `c6177b8` entropy parity fix and `c2a2b48` docs; images 6.3.2/6.3/6/latest verified) in SESSION_STATE.md and new `completed/features/2026-10-06-kato-v6.3.2-release.md`. Added low-priority backlog candidate 8 (intermittent RemoteDisconnected in `test_multimodal_pattern_persistence`). Noted 2026-10-05 local stack swap (data volumes kept). Append-only; not committed.
 - 2026-10-08: Recorded SPRINT_BACKLOG item 7 (stale known-issues entries) as DONE in commit be813db; two kept claims remain unverified (Redis-required startup, ~99.9% HNSW accuracy).
+
+---
+
+## 2026-10-12 - New Task + Architectural Decision: Issue #15 (single-symbol matching anywhere)
+
+**Classification**: New Task, Architectural Decision, Bug (in progress).
+**Done**: SESSION_STATE.md Current Task replaced (prior task demoted to Previous); DECISION-048 appended to DECISIONS.md; SPRINT_BACKLOG.md active item added; pending-updates.md INFO item (MINOR release). Plan reference: `/Users/sevakavakians/.claude/plans/a-bug-report-has-zippy-stearns.md`. Not committed.
+
+---
+
+## 2026-10-12 - Task Completion (uncommitted): Issue #15 implemented and verified
+
+**Classification**: Task Completion (not committed), Verification.
+**Done**: SESSION_STATE.md Current Task updated to IMPLEMENTED/VERIFIED/UNCOMMITTED with file list and results; SPRINT_BACKLOG.md item set to DONE-uncommitted; DECISION-048 status line added; pending-updates.md item promoted to ACTION NEEDED (approval to commit + PR, then MINOR release). Verification: 868 passed, 1 skipped, 2 unrelated failures (one identical on `main`, one flaky). Not committed; archive to `completed/bugs/` deferred until commit.

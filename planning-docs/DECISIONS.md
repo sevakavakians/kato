@@ -13,7 +13,7 @@
 **Confidence**: High on selection fix; Medium on onset weighting (heuristic, validate against real corpora).
 **Impact**: MINOR release; more single-symbol candidates; one-event `potential` changes. Files: `kato/workers/pattern_processor.py`, `kato/representations/prediction.py`, `kato/config/session_config.py`, `kato/config/configuration_service.py`, docs, CHANGELOG.
 **Related**: DECISION-046 (shared tail; this changes selection, which it left alone).
-**Status (2026-10-12)**: IMPLEMENTED and VERIFIED, UNCOMMITTED (awaiting user approval to commit + PR). Suite 868 passed / 1 skipped / 2 unrelated failures. Issue repro fixed.
+**Status (2026-10-12)**: RELEASED in 6.4.0 (PR #16 merge `5252143`, fix `81f408d`, tag `v6.4.0`). Open: whether `event_cohesion` should enter `potential` (user undecided, pending ranking benchmark). Prior: IMPLEMENTED and VERIFIED. Suite 868 passed / 1 skipped / 2 unrelated failures. Issue repro fixed.
 
 ---
 

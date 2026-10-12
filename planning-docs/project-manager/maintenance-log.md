@@ -3654,3 +3654,12 @@ The investigation surfaced five real, unrelated defects, fixed in the same pass:
 
 **Classification**: Task Completion (not committed), Verification.
 **Done**: SESSION_STATE.md Current Task updated to IMPLEMENTED/VERIFIED/UNCOMMITTED with file list and results; SPRINT_BACKLOG.md item set to DONE-uncommitted; DECISION-048 status line added; pending-updates.md item promoted to ACTION NEEDED (approval to commit + PR, then MINOR release). Verification: 868 passed, 1 skipped, 2 unrelated failures (one identical on `main`, one flaky). Not committed; archive to `completed/bugs/` deferred until commit.
+
+---
+
+## 2026-10-12 - Release Recorded: v6.4.0 (MINOR); Issue #15 Archived
+
+**Classification**: Milestone Completion, Task Completion.
+**Done**: Recorded v6.4.0 (PR #16 merge `5252143`, `eee775a`, `dbd47bd`, tag `v6.4.0`; images recorded as published, verification pending) in SESSION_STATE.md, README.md, SPRINT_BACKLOG.md (item marked released; optional follow-ups 9-10 added), DECISIONS.md (DECISION-048 status: released). Archived `completed/bugs/2026-10-12-issue-15-single-symbol-any-position.md` and `completed/features/2026-10-12-kato-v6.4.0-release.md`. pending-updates.md ACTION NEEDED item resolved. Open question logged: should `event_cohesion` enter `potential` (user undecided). Append-only; not committed.
+
+**Follow-up (2026-10-12)**: Images and deployment verified; provisional wording replaced in SESSION_STATE.md and `completed/features/2026-10-12-kato-v6.4.0-release.md`. `:6.4.0` and `:latest` are the same image (`sha256:434ca694...`, label 6.4.0); `deployment/` stack restarted on 6.4.0, five containers healthy, Redis data preserved; issue #15 repro confirmed on :8000. Not committed.

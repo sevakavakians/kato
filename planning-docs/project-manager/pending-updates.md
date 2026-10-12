@@ -15,12 +15,13 @@ Track issues and updates that require human intervention or review.
 
 ## Current Issues
 
-## 2026-10-12 - ACTION NEEDED: Issue #15 Fix Is Implemented but Uncommitted; Needs Approval to Commit + PR, Then MINOR Release
+## 2026-10-12 - Issue #15 Fix Committed, Merged and Released in 6.4.0 -- RESOLVED
 **Issue**: Single-symbol matching anywhere in the pattern plus two new metrics (DECISION-048). Behaviour changes: single-symbol queries return more patterns; one-event STM `potential` now includes `onset_alignment`; new prediction fields.
 **Update**: Implemented and verified (868 passed / 1 skipped / 2 unrelated failures: `test_concurrent_session_modifications` fails identically on `main`; `test_metrics_collection_after_requests` flaky). NOT committed, awaiting user approval to commit + open PR on `fix/issue-15-single-symbol-any-position`. After merge: comment on/close issue #15.
 **Suggested Action**: Approve commit/PR, then release as MINOR. Validate onset weighting against a real corpus (heuristic). Closes the 2026-09-11 first-token-only item.
-**Priority**: Medium
-**Status**: Open (awaiting user approval to commit)
+**Resolution**: PR #16 merged (`5252143`), released as v6.4.0 (`dbd47bd`, tag `v6.4.0`); issue #15 closed. Remaining (low priority, optional): benchmark single-symbol candidate volume on a large node; user to decide whether `event_cohesion` enters `potential` (pending ranking benchmark); validate onset weighting on a real corpus.
+**Priority**: Low
+**Status**: Resolved 2026-10-12
 
 ## 2026-10-05 - ACTION NEEDED: Entropy-Metrics Parity Fix Is Uncommitted
 **Issue**: Fix for prediction-time fallback vs finalize-training entropy mismatch (DECISION-047) is in the working tree: `CHANGELOG.md`, 4 docs, `metrics.py`, `pattern_processor.py`, new test file. 841 passed / 2 skipped / 1 xfailed.

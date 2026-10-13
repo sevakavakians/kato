@@ -3663,3 +3663,18 @@ The investigation surfaced five real, unrelated defects, fixed in the same pass:
 **Done**: Recorded v6.4.0 (PR #16 merge `5252143`, `eee775a`, `dbd47bd`, tag `v6.4.0`; images recorded as published, verification pending) in SESSION_STATE.md, README.md, SPRINT_BACKLOG.md (item marked released; optional follow-ups 9-10 added), DECISIONS.md (DECISION-048 status: released). Archived `completed/bugs/2026-10-12-issue-15-single-symbol-any-position.md` and `completed/features/2026-10-12-kato-v6.4.0-release.md`. pending-updates.md ACTION NEEDED item resolved. Open question logged: should `event_cohesion` enter `potential` (user undecided). Append-only; not committed.
 
 **Follow-up (2026-10-12)**: Images and deployment verified; provisional wording replaced in SESSION_STATE.md and `completed/features/2026-10-12-kato-v6.4.0-release.md`. `:6.4.0` and `:latest` are the same image (`sha256:434ca694...`, label 6.4.0); `deployment/` stack restarted on 6.4.0, five containers healthy, Redis data preserved; issue #15 repro confirmed on :8000. Not committed.
+
+---
+
+## 2026-10-13 - Task Completion (uncommitted): Session Prediction Settings Plumbing
+
+**Classification**: Task Completion (not committed), Architectural Decision, Verification.
+**Done**: SESSION_STATE.md Current Task replaced (prior v6.4.0 task demoted to Previous Task); SPRINT_BACKLOG.md item added plus follow-up 11 (`future_potentials` shared state); DECISIONS.md DECISION-049 added; archived `completed/bugs/2026-10-13-session-prediction-settings-plumbing.md`; triggers.md entry. Verification: 9 new tests pass on :8011, 4 fail on released 6.4.0; suite 878 passed, 1 skipped, 1 pre-existing failure. Not committed; no PR; PATCH release 6.4.1 pending.
+
+---
+
+## 2026-10-13 - Decision Rewording + Update (uncommitted): DECISION-049 Per-Session Searcher Cache
+
+**Classification**: Architectural Decision (rewording and extension), Task update.
+**Done**: DECISION-049 in DECISIONS.md reworded (and its "Last Updated" summary): settings are stored in the session configuration and not sent with each request; the fix only changes how the server hands the stored config to prediction code (in-process `PredictionSettings`). Added the per-session `PatternSearcher` cache (`_session_searchers`, LRU 1024, config fingerprint, `release_request_data()`), measurements, and rejected alternatives. SESSION_STATE.md Current Task and `completed/bugs/2026-10-13-session-prediction-settings-plumbing.md` updated. Verification: 17 tests (11 unit, 6 end-to-end) pass on :8011; full-suite rerun pending, no result claimed. Not committed.
+- 2026-10-13 10:15 EDT: replaced 'full-suite rerun pending' in DECISIONS.md (DECISION-049), SESSION_STATE.md, completed/bugs/2026-10-13-session-prediction-settings-plumbing.md with result 885 passed / 1 skipped / 2 pre-existing unrelated failures.

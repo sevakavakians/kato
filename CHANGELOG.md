@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **A session's `rank_sort_algo` now orders its predictions.** The setting was
+  accepted and stored but never read: predictions were always ranked by the
+  node's default, `potential` unless `RANK_SORT_ALGO` was set.
+- **Predictions returned by observe now use the session's prediction settings.**
+  The observe path passed no configuration, so the predictions it stored on
+  the session (served by `/sessions/{id}/cognition-data`) used the node defaults
+  for `recall_threshold`, `max_predictions`, `use_token_matching`,
+  `rank_sort_algo`, the filter pipeline, fuzzy matching and `affinity_emotive`.
+- **Concurrent sessions on one node no longer pick up each other's prediction
+  settings.** `GET /sessions/{id}/predictions` applied a session's settings by
+  swapping the searcher and `max_predictions` on the node's shared processor
+  around an await, then restoring them. A concurrent request on the same node
+  could run with the other session's settings. Interleaved restores could also
+  leave the processor with one session's `max_predictions` for every later request
+  on that node. The settings still live only in the session's stored
+  configuration. The server now reads them into the prediction code as an
+  argument and never writes them onto the processor.
+
+### Changed
+- **A session's pattern searcher is built once and reused.** The searcher
+  carries the session's matching settings. It was rebuilt on every
+  `GET /sessions/{id}/predictions`, and observe now needs one too. Each session's
+  searcher is now cached and rebuilt only when that session's configuration
+  changes. The pattern data a request loads is released when the request ends,
+  so a cached searcher holds only its configuration.
+
 ## [6.4.0] - 2026-10-12
 
 A single observed symbol now matches a pattern wherever the symbol occurs. Two

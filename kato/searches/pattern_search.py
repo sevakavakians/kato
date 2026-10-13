@@ -784,6 +784,23 @@ class PatternSearcher:
         logger.debug(f"Deleted pattern {name}")
         return True
 
+    def release_request_data(self) -> None:
+        """Drop the pattern data one prediction request loaded.
+
+        A searcher cached for a session outlives its requests, and what a request
+        loads is not cleared by the next one: the filter executor fills its
+        patterns_cache with setdefault and never empties it. Without this, a
+        cached searcher would keep every pattern row it has ever loaded -- the
+        whole node under the default empty filter_pipeline -- once per cached
+        session. After this the searcher holds what a newly built one holds.
+        """
+        self.patterns_cache = {}
+        self.patterns_count = 0
+        self._pattern_strings_cache = {}
+        self.affinity_weights = None
+        if self.filter_executor is not None:
+            self.filter_executor.patterns_cache = {}
+
     def clearPatternsFromRAM(self) -> None:
         """
         Clear all patterns from memory.

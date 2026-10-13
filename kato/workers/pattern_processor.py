@@ -1,11 +1,11 @@
 import asyncio
 import itertools
 import logging
-from collections import Counter, deque
+from collections import Counter, OrderedDict, deque
 from itertools import chain
 from math import log2
 from os import environ
-from typing import Any, Optional
+from typing import Any, NamedTuple, Optional
 
 import numpy as np
 
@@ -35,6 +35,29 @@ from kato.storage.metrics_cache import CachedMetricsCalculator, get_metrics_cach
 # Standard logger configuration
 logger = logging.getLogger('kato.pattern_processor')
 logger.setLevel(getattr(logging, environ.get('LOG_LEVEL', 'INFO')))
+
+
+# Most sessions a processor keeps a searcher for. A cached searcher holds only
+# its configuration between requests (release_request_data drops what a request
+# loaded), so an entry is small; the bound is for sessions that end without
+# being deleted.
+SESSION_SEARCHER_CACHE_SIZE = 1024
+
+
+class PredictionSettings(NamedTuple):
+    """A session's prediction settings, read from its stored configuration.
+
+    A processor is shared by every session on a node, so the predict path takes
+    these as an argument rather than reading them from the processor. Setting
+    them on the processor -- as get_predictions_async used to, swapping the
+    searcher and max_predictions around an await -- let a concurrent request on
+    the same node run with another session's settings.
+    """
+    searcher: PatternSearcher
+    max_predictions: int
+    rank_sort_algo: str
+    use_token_matching: bool
+
 
 class PatternProcessor:
     """
@@ -217,6 +240,9 @@ class PatternProcessor:
         self.target_class = None
         self.target_class_candidates = []
         self.future_potentials = []  # Store aggregated future potentials for API
+        # Per-session searchers, built from each session's stored configuration and
+        # reused until that configuration changes. See _prediction_settings.
+        self._session_searchers: OrderedDict[str, tuple[str, PatternSearcher]] = OrderedDict()
         # Prediction-level caches (invalidated on learn())
         logger.info(f"PatternProcessor {self.name} started!")
         return
@@ -542,6 +568,7 @@ class PatternProcessor:
         stm: list[list[str]],
         current_unique_id: str,
         trigger_predictions: bool = True,
+        config: Optional[SessionConfiguration] = None,
     ) -> list[dict[str, Any]]:
         """
         Generate predictions by matching the given short-term memory against learned patterns.
@@ -554,6 +581,10 @@ class PatternProcessor:
             stm: Events, oldest first.
             current_unique_id: Unique identifier for this observation.
             trigger_predictions: False disables prediction generation.
+            config: The session's configuration. Its prediction settings
+                (recall_threshold, max_predictions, use_token_matching,
+                rank_sort_algo, and the searcher's session settings) apply to
+                this request; None uses the node defaults.
 
         Returns:
             List of prediction dictionaries with pattern matches and metrics.
@@ -567,7 +598,7 @@ class PatternProcessor:
         # Generate predictions if we have at least 1 string in state
         # Single-symbol predictions use optimized fast path
         if len(state) >= 1 and self.predict and trigger_predictions:
-            predictions = await self.predictPattern(state, stm_events=list(stm))
+            predictions = await self._predict_with_config(state, list(stm), config)
 
             # Most recent predictions, for the legacy unique_id-less retrieval path
             self.predictions = predictions
@@ -663,7 +694,12 @@ class PatternProcessor:
         """
         return float(freq/total_pattern_frequencies) if total_pattern_frequencies > 0 else 0.0
 
-    def _compute_affinity_weights(self, state: list[str], candidate_patterns: list[dict] = None) -> Optional[dict[str, float]]:
+    def _compute_affinity_weights(
+        self,
+        state: list[str],
+        candidate_patterns: list[dict] = None,
+        searcher: Optional[PatternSearcher] = None,
+    ) -> Optional[dict[str, float]]:
         """
         Compute affinity-weighted token weights for pattern matching.
 
@@ -674,14 +710,17 @@ class PatternProcessor:
             candidate_patterns: Optional list of candidate pattern dicts (for single-symbol path).
                 If None, weights are computed only for state tokens (pattern tokens
                 will get floor weight if not in the weight map).
+            searcher: The request's searcher, which carries its session
+                configuration. Defaults to the processor's own searcher.
 
         Returns:
             Dict mapping symbol -> weight, or None if affinity weighting is not active.
         """
         # Check if affinity_emotive is configured (session_config lives on the PatternSearcher)
         affinity_emotive = None
-        if hasattr(self, 'patterns_searcher') and self.patterns_searcher:
-            sc = getattr(self.patterns_searcher, 'session_config', None)
+        searcher = searcher or getattr(self, 'patterns_searcher', None)
+        if searcher:
+            sc = getattr(searcher, 'session_config', None)
             if sc:
                 affinity_emotive = getattr(sc, 'affinity_emotive', None)
 
@@ -1156,7 +1195,10 @@ class PatternProcessor:
         return [prediction for prediction in predictions if is_active(prediction)]
 
     async def _single_symbol_candidates(
-        self, symbol: str, stm_events: Optional[list[list[str]]] = None
+        self,
+        symbol: str,
+        settings: PredictionSettings,
+        stm_events: Optional[list[list[str]]] = None,
     ) -> list[Any]:
         """Select candidate patterns for a single-symbol state, cheaply.
 
@@ -1226,7 +1268,7 @@ class PatternProcessor:
         from kato.searches.pattern_search import InformationExtractor
         extractor = InformationExtractor(
             use_fast_matcher=True,
-            use_token_matching=self.use_token_matching
+            use_token_matching=settings.use_token_matching
         )
         state = [symbol]
 
@@ -1235,9 +1277,9 @@ class PatternProcessor:
         # the default threshold, and this path has always returned such patterns.
         single_symbol_threshold = 0.0
 
-        weights = self._compute_affinity_weights(state, candidate_patterns)
+        weights = self._compute_affinity_weights(state, candidate_patterns, settings.searcher)
         # The shared tail reads weights from the searcher, as the normal path does.
-        self.patterns_searcher.affinity_weights = weights
+        settings.searcher.affinity_weights = weights
 
         def _build(batch):
             """Build Prediction objects for a batch of candidates (thread-safe)."""
@@ -1301,7 +1343,7 @@ class PatternProcessor:
         return predictions
 
 
-    async def predictPattern(self, state: list[str], stm_events: Optional[list[list[str]]] = None, max_workers: Optional[int] = None, batch_size: int = 100) -> list[dict[str, Any]]:
+    async def predictPattern(self, state: list[str], stm_events: Optional[list[list[str]]] = None, max_workers: Optional[int] = None, batch_size: int = 100, settings: Optional[PredictionSettings] = None) -> list[dict[str, Any]]:
         """Predict patterns matching the given state (async with caching support).
 
         Provides 3-10x performance improvement through:
@@ -1319,6 +1361,9 @@ class PatternProcessor:
             state: Flattened list of symbols representing current STM state.
             max_workers: Maximum number of worker threads (defaults to CPU count)
             batch_size: Number of patterns per batch for parallel processing
+            settings: This request's settings, from _prediction_settings. None
+                uses the node defaults. Everything below reads the searcher,
+                max_predictions and rank_sort_algo from here, never from self.
 
         Returns:
             List of prediction dictionaries sorted by potential, containing
@@ -1329,6 +1374,10 @@ class PatternProcessor:
             ValueError: If predictions are missing required fields.
         """
         logger.info(f"*** {self.name} [ PatternProcessor predictPattern (async) called with state={state} ]")
+
+        if settings is None:
+            settings = self._prediction_settings(None)
+        searcher = settings.searcher
 
         # Make patterns learned since the last drain queryable before anything
         # below reads patterns_data. This is the only entry point for predictions
@@ -1366,13 +1415,13 @@ class PatternProcessor:
             if len(state) == 1:
                 logger.info("Using single-symbol candidate selection for state=%s", state)
                 causal_patterns = await self._single_symbol_candidates(
-                    state[0], stm_events=stm_events)
+                    state[0], settings, stm_events=stm_events)
             else:
                 # Compute and set affinity weights on pattern searcher before matching
-                self.patterns_searcher.affinity_weights = self._compute_affinity_weights(state)
+                searcher.affinity_weights = self._compute_affinity_weights(state, searcher=searcher)
 
                 # Use async parallel pattern matching
-                causal_patterns = await self.patterns_searcher.causalBeliefAsync(
+                causal_patterns = await searcher.causalBeliefAsync(
                     state, self.target_class_candidates, stm_events, max_workers, batch_size)
         except Exception as e:
             raise Exception(f"\nException in PatternProcessor.predictPattern: Error in candidate selection! {self.kb_id}: {e}")
@@ -1416,7 +1465,7 @@ class PatternProcessor:
                 raise ValueError(f"Prediction '{pred_name}' missing required fields: {missing_fields}")
 
         # Compute weighted metrics for predictions if affinity weighting is active
-        weights = self.patterns_searcher.affinity_weights
+        weights = searcher.affinity_weights
         if weights:
             for p in causal_patterns:
                 matches = p.get('matches', [])
@@ -1452,7 +1501,7 @@ class PatternProcessor:
         # itfdf_similarity is bounded [0,1], so a 3x safety margin prevents losing
         # high-quality predictions that might reorder after full metrics.
         PRUNING_FACTOR = 3
-        max_for_metrics = self.max_predictions * PRUNING_FACTOR
+        max_for_metrics = settings.max_predictions * PRUNING_FACTOR
         if len(causal_patterns) > max_for_metrics:
             original_count = len(causal_patterns)
             for p in causal_patterns:
@@ -1482,7 +1531,7 @@ class PatternProcessor:
         # this line.
         # Also returns the precomputed entropy/tf metrics from the same rows,
         # so the second read of patterns_metadata below is no longer needed.
-        precomputed_metrics = self.patterns_searcher.attach_pattern_metadata(causal_patterns)
+        precomputed_metrics = searcher.attach_pattern_metadata(causal_patterns)
 
         try:
             # Pre-calculate symbol probability cache using optimized aggregation pipeline
@@ -1764,10 +1813,10 @@ class PatternProcessor:
                 # makes repeated identical requests return the same predictions
                 # in the same order -- see its docstring.
                 active_causal_patterns = rank_predictions(
-                    causal_patterns, self.rank_sort_algo, self.max_predictions
+                    causal_patterns, settings.rank_sort_algo, settings.max_predictions
                 )
             except KeyError:
-                raise ValueError(f"Invalid rank_sort_algo '{self.rank_sort_algo}': metric not found in predictions. Available metrics: {list(causal_patterns[0].keys()) if causal_patterns else 'none'}")
+                raise ValueError(f"Invalid rank_sort_algo '{settings.rank_sort_algo}': metric not found in predictions. Available metrics: {list(causal_patterns[0].keys()) if causal_patterns else 'none'}")
             except Exception as e:
                 raise Exception(f"\nException in PatternProcessor.predictPattern (async): Error in sorting predictions! {self.kb_id}: {e}")
 
@@ -1781,7 +1830,8 @@ class PatternProcessor:
         """
         Generate predictions with session-specific configuration (async version).
 
-        This is the config-as-parameter version that doesn't mutate processor state.
+        Config-as-parameter: the session's settings are passed down the predict
+        path, and nothing on the processor is changed.
 
         Args:
             stm: Short-term memory (list of events)
@@ -1799,49 +1849,74 @@ class PatternProcessor:
             logger.debug("No symbols in state for predictions")
             return []
 
-        # Extract config values or use instance defaults
-        recall_threshold = config.recall_threshold if config and config.recall_threshold is not None else self.recall_threshold
-        max_predictions = config.max_predictions if config and config.max_predictions is not None else self.max_predictions
-        use_token_matching = config.use_token_matching if config and config.use_token_matching is not None else self.use_token_matching
+        predictions = await self._predict_with_config(state, stm, config)
+        return predictions or []
 
-        # Temporarily create a PatternSearcher with config values
-        # This avoids mutating the instance's patterns_searcher
-        # Use same architecture mode as main searcher
-        temp_searcher_kwargs = {
-            'kb_id': self.kb_id,
-            'max_predictions': max_predictions,
-            'recall_threshold': recall_threshold,
-            'use_token_matching': use_token_matching
-        }
-
-        # Check if main searcher is using hybrid architecture
-        if hasattr(self.patterns_searcher, 'use_hybrid_architecture') and self.patterns_searcher.use_hybrid_architecture:
-            # Pass hybrid parameters from main searcher
-            temp_searcher_kwargs.update({
-                'session_config': config if config else self.patterns_searcher.session_config,
-                'clickhouse_client': self.patterns_searcher.clickhouse_client,
-                'redis_client': self.patterns_searcher.redis_client
-            })
-
-        temp_searcher = PatternSearcher(**temp_searcher_kwargs)
-
-        # Save original searcher
-        original_searcher = self.patterns_searcher
-        original_max_predictions = self.max_predictions
-
+    async def _predict_with_config(
+        self,
+        state: list[str],
+        stm_events: list[list[str]],
+        config: Optional[SessionConfiguration],
+    ) -> list[dict[str, Any]]:
+        """predictPattern with the session's settings, releasing what it loaded."""
+        settings = self._prediction_settings(config)
         try:
-            # Temporarily swap searcher and max_predictions
-            self.patterns_searcher = temp_searcher
-            self.max_predictions = max_predictions
-
-            # Call predictPattern with the provided STM
-            predictions = await self.predictPattern(state, stm_events=stm)
-
-            return predictions or []
+            return await self.predictPattern(state, stm_events=stm_events, settings=settings)
         finally:
-            # Restore original searcher and max_predictions
-            self.patterns_searcher = original_searcher
-            self.max_predictions = original_max_predictions
+            if settings.searcher is not self.patterns_searcher:
+                settings.searcher.release_request_data()
+
+    def _prediction_settings(self, config: Optional[SessionConfiguration]) -> PredictionSettings:
+        """Resolve a request's prediction settings from its session configuration.
+
+        Settings live in the session's stored configuration; this reads them.
+        Each value comes from the session when it sets one and from the node
+        default otherwise.
+
+        The searcher carries the session's recall threshold, filter pipeline,
+        fuzzy matching and affinity settings, so a session needs its own. It is
+        built once and cached under the session id, then reused until the
+        session's configuration changes. It is never shared between sessions:
+        it holds per-request working state (affinity weights, the loaded
+        candidates), and a session's requests are serialized by its session lock
+        while other sessions' are not. The cache is bounded, least recently used
+        first out. Without a configuration the processor's own searcher is used;
+        a configuration with no session id gets a newly built, uncached one.
+        """
+        def pick(name, default):
+            value = getattr(config, name, None) if config is not None else None
+            return default if value is None else value
+
+        max_predictions = pick('max_predictions', self.max_predictions)
+        use_token_matching = pick('use_token_matching', self.use_token_matching)
+        rank_sort_algo = pick('rank_sort_algo', self.rank_sort_algo)
+
+        if config is None:
+            return PredictionSettings(
+                self.patterns_searcher, max_predictions, rank_sort_algo, use_token_matching)
+
+        session_id = getattr(config, 'session_id', '') or ''
+        fingerprint = repr(sorted(config.get_config_only().items()))
+        cached = self._session_searchers.get(session_id) if session_id else None
+        if cached is not None and cached[0] == fingerprint:
+            searcher = cached[1]
+            self._session_searchers.move_to_end(session_id)
+        else:
+            searcher = PatternSearcher(
+                kb_id=self.kb_id,
+                max_predictions=max_predictions,
+                recall_threshold=pick('recall_threshold', self.recall_threshold),
+                use_token_matching=use_token_matching,
+                session_config=config,
+                clickhouse_client=self.patterns_searcher.clickhouse_client,
+                redis_client=self.patterns_searcher.redis_client,
+            )
+            if session_id:
+                self._session_searchers[session_id] = (fingerprint, searcher)
+                self._session_searchers.move_to_end(session_id)
+                while len(self._session_searchers) > SESSION_SEARCHER_CACHE_SIZE:
+                    self._session_searchers.popitem(last=False)
+        return PredictionSettings(searcher, max_predictions, rank_sort_algo, use_token_matching)
 
     def get_predictions(self, stm: list[list[str]], config=None) -> list[dict[str, Any]]:
         """

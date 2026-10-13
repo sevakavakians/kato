@@ -490,7 +490,8 @@ class ObservationProcessor:
                 # Generate predictions ONLY if enabled
                 if process_predictions:
                     predictions = await self.pattern_processor.predict_from(
-                        working_stm, unique_id, trigger_predictions=process_predictions
+                        working_stm, unique_id, trigger_predictions=process_predictions,
+                        config=config,
                     )
                     logger.debug(f"Generated {len(predictions)} predictions (process_predictions=True)")
                 else:

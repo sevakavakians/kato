@@ -1095,3 +1095,6 @@ Issue #15 implemented and verified (DECISION-048). Silent; pending-updates item 
 
 ## 2026-10-13 - Task Completion (uncommitted) + Architectural Decision
 Session prediction settings plumbing fixed and verified (DECISION-049). Silent; follow-up 11 (future_potentials) logged.
+
+## 2026-10-13 - Milestone Completion (release)
+v6.4.1 PATCH released (DECISION-049 fix). Silent; deployment update logged in pending-updates as awaiting approval.

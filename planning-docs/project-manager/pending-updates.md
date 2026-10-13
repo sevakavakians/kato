@@ -15,6 +15,12 @@ Track issues and updates that require human intervention or review.
 
 ## Current Issues
 
+## 2026-10-13 - Session Prediction Settings Fix Released in 6.4.1; Deployment Update Awaiting Approval
+**Issue**: v6.4.1 (DECISION-049) is released, but the `deployment/` stack on :8000 still runs 6.4.0, so session `rank_sort_algo`, observe-path settings and the cross-session race fix are not live there; the 4 session-settings end-to-end tests fail against :8000 until it is updated.
+**Suggested Action**: Approve updating the deployment stack to 6.4.1. Then work `future_potentials` shared state (SPRINT_BACKLOG item 11), the prerequisite for the configurable potential formula (still under discussion; open decision: pruning behavior when a formula uses post-pruning metrics).
+**Priority**: Low
+**Status**: Open (awaiting user approval to update deployment)
+
 ## 2026-10-12 - Issue #15 Fix Committed, Merged and Released in 6.4.0 -- RESOLVED
 **Issue**: Single-symbol matching anywhere in the pattern plus two new metrics (DECISION-048). Behaviour changes: single-symbol queries return more patterns; one-event STM `potential` now includes `onset_alignment`; new prediction fields.
 **Update**: Implemented and verified (868 passed / 1 skipped / 2 unrelated failures: `test_concurrent_session_modifications` fails identically on `main`; `test_metrics_collection_after_requests` flaky). NOT committed, awaiting user approval to commit + open PR on `fix/issue-15-single-symbol-any-position`. After merge: comment on/close issue #15.

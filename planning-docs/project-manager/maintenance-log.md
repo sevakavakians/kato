@@ -3678,3 +3678,10 @@ The investigation surfaced five real, unrelated defects, fixed in the same pass:
 **Classification**: Architectural Decision (rewording and extension), Task update.
 **Done**: DECISION-049 in DECISIONS.md reworded (and its "Last Updated" summary): settings are stored in the session configuration and not sent with each request; the fix only changes how the server hands the stored config to prediction code (in-process `PredictionSettings`). Added the per-session `PatternSearcher` cache (`_session_searchers`, LRU 1024, config fingerprint, `release_request_data()`), measurements, and rejected alternatives. SESSION_STATE.md Current Task and `completed/bugs/2026-10-13-session-prediction-settings-plumbing.md` updated. Verification: 17 tests (11 unit, 6 end-to-end) pass on :8011; full-suite rerun pending, no result claimed. Not committed.
 - 2026-10-13 10:15 EDT: replaced 'full-suite rerun pending' in DECISIONS.md (DECISION-049), SESSION_STATE.md, completed/bugs/2026-10-13-session-prediction-settings-plumbing.md with result 885 passed / 1 skipped / 2 pre-existing unrelated failures.
+
+---
+
+## 2026-10-13 - Release Recorded: v6.4.1 (PATCH); Session Settings Fix Archived
+
+**Classification**: Milestone Completion, Task Completion.
+**Done**: Recorded v6.4.1 (PR #17 merge `32897c3`, fix `2b9bf51`, `378f920`, `02614ea`, tag `v6.4.1`, image `ghcr.io/sevakavakians/kato:6.4.1`) in SESSION_STATE.md (Current Task now the release; prior task moved to Previous), README.md, SPRINT_BACKLOG.md (item marked released; optional deployment-update item added), DECISIONS.md (DECISION-049 status: released), `completed/bugs/2026-10-13-session-prediction-settings-plumbing.md` (status + Release section). Created `completed/features/2026-10-13-kato-v6.4.1-release.md`. pending-updates.md: new low-priority item for the deployment update (needs user approval). Image digest/registry verification not recorded (not provided). Append-only; not committed.

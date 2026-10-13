@@ -1,5 +1,5 @@
 # Session prediction settings plumbing (DECISION-049)
-*Status: implemented and verified 2026-10-13; NOT COMMITTED. Branch `fix/session-prediction-config`. PATCH release (6.4.1) once merged.*
+*Status: implemented, verified, merged (PR #17, `32897c3`; fix `2b9bf51`) and RELEASED in 6.4.1 on 2026-10-13 (release commit `02614ea`, tag `v6.4.1`). Branch `fix/session-prediction-config`.*
 
 ## Root cause
 1. Session `rank_sort_algo` was stored but never read; ranking used the node default.
@@ -22,3 +22,6 @@ A session's `PatternSearcher` is cached per session id in `PatternProcessor._ses
 
 ## Not fixed
 `PatternProcessor.future_potentials` remains node-level shared state (SPRINT_BACKLOG follow-up 11); prerequisite for the configurable potential formula feature.
+
+## Release
+Released as v6.4.1 (PATCH), 2026-10-13: changelog `378f920`, bump `02614ea`, tag `v6.4.1`, image `ghcr.io/sevakavakians/kato:6.4.1`, https://github.com/sevakavakians/kato/releases/tag/v6.4.1. CI on PR #17 passed (lint/security, unit tests). The deployment stack on :8000 still runs 6.4.0 until the user approves an update.

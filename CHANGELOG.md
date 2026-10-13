@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [6.4.1] - 2026-10-13
+
 ### Fixed
 - **A session's `rank_sort_algo` now orders its predictions.** The setting was
   accepted and stored but never read: predictions were always ranked by the

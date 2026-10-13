@@ -1092,3 +1092,6 @@ Issue #15 fix planned and started (DECISION-048). Silent; one INFO item in pendi
 
 ## 2026-10-12 - Task Completion (uncommitted)
 Issue #15 implemented and verified (DECISION-048). Silent; pending-updates item promoted to ACTION NEEDED (commit/PR approval).
+
+## 2026-10-13 - Task Completion (uncommitted) + Architectural Decision
+Session prediction settings plumbing fixed and verified (DECISION-049). Silent; follow-up 11 (future_potentials) logged.

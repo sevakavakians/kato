@@ -222,3 +222,6 @@ Track issues and updates that require human intervention or review.
 The new README comparison table says "100% deterministic"; `docs/research/deterministic-ml-comparison.md` documents limits (unverified Qdrant HNSW order dependence, lossy VectorObject names, future_potentials ties). Soften, or keep? Awaiting user.
 
 **RESOLVED 2026-10-05**: The "README 100% deterministic wording" decision above is resolved. User chose to scope all four claims; done in README.md, with `docs/research/deterministic-ml-comparison.md` revised to match.
+
+## 2026-10-13 - ACTION NEEDED: Approval to commit + open PR (session prediction settings fix)
+Branch `fix/session-prediction-config`, uncommitted (DECISION-049). After merge: PATCH release 6.4.1. Also decide whether to take `future_potentials` shared state (SPRINT_BACKLOG follow-up 11) before the configurable potential formula feature; open decision there: pruning behavior when a formula uses post-pruning metrics.

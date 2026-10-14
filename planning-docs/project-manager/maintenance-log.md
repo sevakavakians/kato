@@ -3689,3 +3689,7 @@ The investigation surfaced five real, unrelated defects, fixed in the same pass:
 ## 2026-10-14 - Deployment Updated to 6.4.1
 **Classification**: Task Completion, Blocker Identified.
 **Done**: Recorded user-approved deployment update to 6.4.1 (image sha256:841f798b..., kato container only, data preserved, live verification on :8000) in SESSION_STATE.md, completed/features/2026-10-13-kato-v6.4.1-release.md; closed SPRINT_BACKLOG 10a and the pending-updates.md entry; added backlog 10b and a pending-updates entry plus SESSION_STATE blocker for the broken venv (python@3.13 removed). Next work: item 11 `future_potentials`.
+
+## 2026-10-14 - Blocker Resolved: venv Rebuilt; Test-Node Purge Done
+**Classification**: Blocker Resolved, Task Completion.
+**Done**: Closed the ENVIRONMENT BLOCKER in SESSION_STATE.md, SPRINT_BACKLOG item 10b, and the open Medium entry in pending-updates.md. venv rebuilt on Python 3.14.2 (`pip check` clean; 17 passed in 27.77s on :8000/6.4.1, no nodes left behind). `test_verify641_1791984800` purged via API (0 rows in patterns_data/patterns_metadata, no Redis keys); `test_issue15_*` already absent everywhere (random 8-hex suffix, not identifiable further). Next action: backlog item 11, `future_potentials` node-level shared state (prerequisite for configurable potential formula; pruning behavior undecided). Not committed.

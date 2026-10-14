@@ -12,7 +12,7 @@
 
 ### Follow-up from the session-settings fix -- OPEN (2026-10-13, after 6.4.1)
 10a. ~~Update the `deployment/` stack from 6.4.0 to 6.4.1~~ **DONE 2026-10-14** (user-approved): override pin re-pointed to :6.4.1, only the kato container recreated (`--no-deps`), health and session-settings behavior verified live on :8000. See `completed/features/2026-10-13-kato-v6.4.1-release.md`.
-10b. **Needs user approval**: recreate the broken project `venv/` (Homebrew python@3.13 removed; python3.14, 3.11 or 3.10 installed) so `./run_tests.sh` works. Optionally purge test nodes `test_verify641_1791984800` and `test_issue15_*` from the deployment LTM.
+10b. ~~Recreate the broken project `venv/`; optionally purge test nodes~~ **DONE 2026-10-14** (user-approved): new `venv/` on Python 3.14.2 from requirements.txt + tests/requirements.txt, `pip check` clean, 17 tests in `test_session_prediction_settings.py` pass against :8000 (6.4.1). Test node `test_verify641_1791984800` purged via API (0 rows in patterns_data/patterns_metadata, no Redis keys); `test_issue15_*` was already gone everywhere, nothing to purge.
 11. **P2** `PatternProcessor.future_potentials` is node-level shared state, written per request and read by the predictions endpoint after the await; concurrent sessions on one node can see each other's `future_potentials`. Fix: return it with the predictions (per-request) instead of storing on the processor; no locks. **Prerequisite** for the proposed configurable potential formula feature (under discussion; open decision: pruning behavior when a formula uses post-pruning metrics).
 
 ### Bug: Issue #15 single-symbol queries omit patterns when the symbol is not first -- DONE, RELEASED in 6.4.0 (P1, 2026-10-12, DECISION-048)

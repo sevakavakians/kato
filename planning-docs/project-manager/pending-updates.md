@@ -15,11 +15,17 @@ Track issues and updates that require human intervention or review.
 
 ## Current Issues
 
-## 2026-10-13 - Session Prediction Settings Fix Released in 6.4.1; Deployment Update Awaiting Approval
+## 2026-10-14 - Project venv Broken (Homebrew python@3.13 Removed)
+**Issue**: `venv/bin/python3.13` points to the missing `/usr/local/opt/python@3.13`; `./run_tests.sh` fails with "No module named pytest".
+**Suggested Action**: Approve recreating `venv/` with python3.14, 3.11 or 3.10 (all installed). Optionally approve purging test nodes `test_verify641_1791984800` and `test_issue15_*` from the deployment LTM.
+**Priority**: Medium
+**Status**: Open (awaiting user approval)
+
+## 2026-10-13 - Session Prediction Settings Fix Released in 6.4.1; Deployment Update -- RESOLVED 2026-10-14
 **Issue**: v6.4.1 (DECISION-049) is released, but the `deployment/` stack on :8000 still runs 6.4.0, so session `rank_sort_algo`, observe-path settings and the cross-session race fix are not live there; the 4 session-settings end-to-end tests fail against :8000 until it is updated.
 **Suggested Action**: Approve updating the deployment stack to 6.4.1. Then work `future_potentials` shared state (SPRINT_BACKLOG item 11), the prerequisite for the configurable potential formula (still under discussion; open decision: pruning behavior when a formula uses post-pruning metrics).
 **Priority**: Low
-**Status**: Open (awaiting user approval to update deployment)
+**Status**: RESOLVED 2026-10-14 -- deployment stack updated to 6.4.1 with user approval (kato container only; image `sha256:841f798b...`) and verified live on :8000. Remaining: `future_potentials` follow-up (item 11).
 
 ## 2026-10-12 - Issue #15 Fix Committed, Merged and Released in 6.4.0 -- RESOLVED
 **Issue**: Single-symbol matching anywhere in the pattern plus two new metrics (DECISION-048). Behaviour changes: single-symbol queries return more patterns; one-event STM `potential` now includes `onset_alignment`; new prediction fields.

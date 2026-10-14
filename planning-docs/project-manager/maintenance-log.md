@@ -3685,3 +3685,7 @@ The investigation surfaced five real, unrelated defects, fixed in the same pass:
 
 **Classification**: Milestone Completion, Task Completion.
 **Done**: Recorded v6.4.1 (PR #17 merge `32897c3`, fix `2b9bf51`, `378f920`, `02614ea`, tag `v6.4.1`, image `ghcr.io/sevakavakians/kato:6.4.1`) in SESSION_STATE.md (Current Task now the release; prior task moved to Previous), README.md, SPRINT_BACKLOG.md (item marked released; optional deployment-update item added), DECISIONS.md (DECISION-049 status: released), `completed/bugs/2026-10-13-session-prediction-settings-plumbing.md` (status + Release section). Created `completed/features/2026-10-13-kato-v6.4.1-release.md`. pending-updates.md: new low-priority item for the deployment update (needs user approval). Image digest/registry verification not recorded (not provided). Append-only; not committed.
+
+## 2026-10-14 - Deployment Updated to 6.4.1
+**Classification**: Task Completion, Blocker Identified.
+**Done**: Recorded user-approved deployment update to 6.4.1 (image sha256:841f798b..., kato container only, data preserved, live verification on :8000) in SESSION_STATE.md, completed/features/2026-10-13-kato-v6.4.1-release.md; closed SPRINT_BACKLOG 10a and the pending-updates.md entry; added backlog 10b and a pending-updates entry plus SESSION_STATE blocker for the broken venv (python@3.13 removed). Next work: item 11 `future_potentials`.

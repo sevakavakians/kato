@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [6.4.2] - 2026-10-16
+
 ### Fixed
 - **`GET /sessions/{id}/predictions` no longer returns another session's
   `future_potentials`.** The value was kept on the node's shared processor and

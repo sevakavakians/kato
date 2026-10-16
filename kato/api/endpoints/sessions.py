@@ -967,22 +967,19 @@ async def get_session_predictions(session_id: str):
 
     async with lock:
         # NO PROCESSOR LOCK NEEDED (stateless processor)
-        # Get predictions with session state - stateless call
-        predictions = await processor.get_predictions(
+        # Get predictions with session state - stateless call. The future
+        # potentials come back with the predictions they were computed from;
+        # nothing is read off the node's shared processor.
+        result = await processor.get_predictions(
             session_state=session,
             config=session.session_config
         )
 
-        # Get future_potentials from the pattern processor if available
-        future_potentials = None
-        if hasattr(processor.pattern_processor, 'future_potentials'):
-            future_potentials = processor.pattern_processor.future_potentials
-
     return PredictionsResponse(
-        predictions=predictions,
-        future_potentials=future_potentials,
+        predictions=result.predictions,
+        future_potentials=result.future_potentials,
         session_id=session_id,
-        count=len(predictions)
+        count=len(result.predictions)
     )
 
 

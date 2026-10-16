@@ -14,6 +14,7 @@ from kato.exceptions import (
     RetiredPatternError,
     ValidationError,
 )
+from kato.workers.pattern_processor import PredictionResult
 
 logger = logging.getLogger('kato.workers.pattern_operations')
 
@@ -351,7 +352,7 @@ class PatternOperations:
         # way out rather than trusting what was cached.
         return self.pattern_processor.filter_retired_predictions(predictions)
 
-    async def get_predictions_with_config(self, stm: list, config) -> list[dict[str, Any]]:
+    async def get_predictions_with_config(self, stm: list, config) -> PredictionResult:
         """
         Generate predictions with session-specific configuration.
 
@@ -362,7 +363,7 @@ class PatternOperations:
             config: SessionConfiguration with prediction parameters
 
         Returns:
-            List of prediction dictionaries
+            PredictionResult with the predictions and their future potentials
         """
         # Pass config directly to pattern processor's get_predictions_async
         return await self.pattern_processor.get_predictions_async(stm, config=config)

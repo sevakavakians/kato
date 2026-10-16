@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **`GET /sessions/{id}/predictions` no longer returns another session's
+  `future_potentials`.** The value was kept on the node's shared processor and
+  read back after predicting. A request with an empty STM returns before
+  predicting, so it served whatever the previous request in that worker had
+  computed, including another session's learned futures. Each response's
+  `future_potentials` is now returned with that request's own predictions, and
+  an empty STM gets an empty list.
+- **Tied `future_potentials` come out in the same order on every request.** Futures
+  with equal `aggregate_potential` were listed in database arrival order, which
+  is not stable. They are now ordered by a hash of the future.
+- **The predictions reference shows the real `future_potentials` fields.** It
+  listed `symbol`, `total_potential`, `prediction_count` and `patterns`, which
+  the API does not return, and its examples read them. It also said the list is
+  computed from all matching patterns; it is computed from the scored
+  candidates, up to 3 × `max_predictions`.
+
 ## [6.4.1] - 2026-10-13
 
 ### Fixed

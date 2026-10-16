@@ -1098,3 +1098,11 @@ Session prediction settings plumbing fixed and verified (DECISION-049). Silent; 
 
 ## 2026-10-13 - Milestone Completion (release)
 v6.4.1 PATCH released (DECISION-049 fix). Silent; deployment update logged in pending-updates as awaiting approval.
+
+## 2026-10-14 - New Task + Priority Change + Proposed Decision
+future_potentials shared-state leak planned (SPRINT_BACKLOG 11 now P1, DECISION-050 proposed). Silent; approval request in pending-updates.
+
+## 2026-10-14 - Task Completion + Decision Accepted
+future_potentials fix implemented (DECISION-050 accepted, SPRINT_BACKLOG 11). Silent; suite running, uncommitted.
+
+## 2026-10-14 - Task Completion (verified): future_potentials per-request fix; full suite 898 passed. Uncommitted.

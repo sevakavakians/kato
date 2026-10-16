@@ -9,7 +9,7 @@ from kato.config.settings import get_settings
 from kato.workers.memory_manager import MemoryManager
 from kato.workers.observation_processor import ObservationProcessor
 from kato.workers.pattern_operations import PatternOperations
-from kato.workers.pattern_processor import PatternProcessor
+from kato.workers.pattern_processor import PatternProcessor, PredictionResult
 from kato.workers.vector_processor import VectorProcessor
 
 if TYPE_CHECKING:
@@ -333,7 +333,7 @@ class KatoProcessor:
         session_state: 'SessionState',
         config: SessionConfiguration,
         unique_id: str = None
-    ) -> list:
+    ) -> PredictionResult:
         """
         Get predictions based on session STM.
 
@@ -349,11 +349,13 @@ class KatoProcessor:
             unique_id: Optional unique ID to retrieve stored predictions
 
         Returns:
-            List of prediction objects
+            PredictionResult with the predictions and the future potentials
+            aggregated over them. Stored predictions carry no future
+            potentials, so a unique_id lookup returns an empty list for them.
         """
         if unique_id:
             # Retrieve stored predictions from database (no state needed)
-            return self.pattern_operations.get_predictions(unique_id)
+            return PredictionResult(self.pattern_operations.get_predictions(unique_id), [])
 
         # Generate new predictions from the session's STM (no processor state involved)
         return await self.pattern_operations.get_predictions_with_config(

@@ -199,12 +199,12 @@ The items below are where guarantees beyond that do not hold, or have not been s
     pre-prune runs only when candidates exceed `max_predictions × 3`. Below that, the
     ensemble pass in `kato/informatics/predictive_information.py` sees candidates in
     ClickHouse arrival order.
-  - **Effect 1:** ties in `future_potentials` appear in arrival order.
-  - **Effect 2:** when three or more patterns share a future, `aggregate_potential`,
+  - **Effect:** when three or more patterns share a future, `aggregate_potential`,
     and the `predictive_information` derived from it, are floating-point sums whose
     last bits can vary with that order.
-  - **Not affected:** the ranked predictions and their `potential`. Neither depends on
-    these values.
+  - **Not affected:** the ranked predictions and their `potential`, which do not depend
+    on these values, and the order of `future_potentials`, whose ties are settled by a
+    hash of the future.
   - **Status:** identified by reading the code; not yet reproduced.
 - **Cross-hardware reproducibility is not shown.** `itfdf_similarity` uses BLAS
   matrix-vector products and norms, and the Bayesian posterior uses `np.dot`. Their

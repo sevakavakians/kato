@@ -709,3 +709,7 @@ Inferred from a commit title that did not mention GPU. Reality: CHANGELOG v6.1.0
 ### 2026-10-14
 - Recurring class: per-request state stored on the node-shared processor (DECISION-049 settings swap, now future_potentials). Safety that depends on "no await in between" is incidental. Fix pattern: return per-request data, never store it on the processor. Audit other processor attributes written in request paths.
 - Early-return paths (empty STM) can skip the code that resets shared state, producing stale reads; a leak surfaced only by testing the empty-STM case with two sessions.
+
+### 2026-10-16
+- Same-day release-to-deploy loop for a data-exposure fix: PR merge, changelog, container-manager patch, deployment pin bump, live reproduction script flipped from 39/40 leaks to 0/40. Re-running the original failing repro against the deployed image is the strongest verification.
+- Tooling gap: ./run_tests.sh accepts only one test path (given two, runs the last); run files separately or via pytest directly.

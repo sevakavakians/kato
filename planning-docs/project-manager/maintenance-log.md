@@ -3705,3 +3705,7 @@ The investigation surfaced five real, unrelated defects, fixed in the same pass:
 ## 2026-10-14 - Verification Complete: future_potentials Per-Request (IMPLEMENTED and VERIFIED, uncommitted)
 **Classification**: Task Completion.
 **Done**: Full suite finished: 898 passed, 3 skipped, 1 xfailed, 0 failed in 636.89s (./run_tests.sh --no-start --no-stop, source on :8011, Python 3.14 venv). test_concurrent_session_modifications and test_metrics_collection_after_requests (previously failing, pre-existing, untouched by this change) passed in this run; not claimed fixed. :8011 server stopped, .kato-ports.json removed. bandit -ll clean on changed kato files; ruff clean on kato/ and new test file. Refreshed stale Last Updated headers in SESSION_STATE.md and SPRINT_BACKLOG.md. Next: on approval, commit, PR, merge, release 6.4.2 (PATCH), update :8000 deployment (still on 6.4.1). Not committed.
+
+## 2026-10-16 - Release Recorded: v6.4.2 (PATCH) and Deployment Update
+**Classification**: Milestone Completion + Task Completion.
+**Done**: Added completed/features/2026-10-16-kato-v6.4.2-release.md. Updated SESSION_STATE.md (Current Task: released and deployed, prior task demoted), SPRINT_BACKLOG.md (item 11 DONE), DECISIONS.md (DECISION-050 RELEASED in 6.4.2), README.md version line (6.4.2; removed stale "deployment still on 6.4.0" sentence). Resolved pending-updates commit/PR/release approval entry. Follow-ups recorded (benchmark section, unreachable cache, configurable formula, run_tests.sh single-path).

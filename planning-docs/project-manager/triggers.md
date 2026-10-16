@@ -1106,3 +1106,5 @@ future_potentials shared-state leak planned (SPRINT_BACKLOG 11 now P1, DECISION-
 future_potentials fix implemented (DECISION-050 accepted, SPRINT_BACKLOG 11). Silent; suite running, uncommitted.
 
 ## 2026-10-14 - Task Completion (verified): future_potentials per-request fix; full suite 898 passed. Uncommitted.
+
+## 2026-10-16 - Milestone Completion: v6.4.2 released (DECISION-050) and deployed to :8000; leak test 0/40. Silent.

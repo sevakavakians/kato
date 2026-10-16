@@ -148,7 +148,7 @@ def run_prediction_benchmark(tier_size: int, collector: TimingCollector,
                 pp.predictPattern(query['stm_flat'], stm_events=list(pp.STM))
             )
         if i == 0:
-            print(f"    First query: {len(result)} predictions for {len(query['stm_flat'])} symbols")
+            print(f"    First query: {len(result.predictions)} predictions for {len(query['stm_flat'])} symbols")
 
     multi_ms = (time.perf_counter() - multi_start) * 1000
     print(f"  Multi-symbol total: {multi_ms:.0f}ms ({multi_ms/max(1,len(multi_queries)):.1f}ms avg)")

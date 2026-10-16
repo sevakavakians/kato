@@ -3693,3 +3693,15 @@ The investigation surfaced five real, unrelated defects, fixed in the same pass:
 ## 2026-10-14 - Blocker Resolved: venv Rebuilt; Test-Node Purge Done
 **Classification**: Blocker Resolved, Task Completion.
 **Done**: Closed the ENVIRONMENT BLOCKER in SESSION_STATE.md, SPRINT_BACKLOG item 10b, and the open Medium entry in pending-updates.md. venv rebuilt on Python 3.14.2 (`pip check` clean; 17 passed in 27.77s on :8000/6.4.1, no nodes left behind). `test_verify641_1791984800` purged via API (0 rows in patterns_data/patterns_metadata, no Redis keys); `test_issue15_*` already absent everywhere (random 8-hex suffix, not identifiable further). Next action: backlog item 11, `future_potentials` node-level shared state (prerequisite for configurable potential formula; pruning behavior undecided). Not committed.
+
+## 2026-10-14 - New Plan Documented: future_potentials Cross-Session Leak (PLANNED)
+**Classification**: New Task Creation, Architectural Decision (proposed), Priority Change.
+**Done**: SESSION_STATE.md Current Task set to the plan (status PLANNED, awaiting user approval; prior task moved to Previous Task). SPRINT_BACKLOG item 11 rewritten and upgraded P2 -> P1 (live leak confirmed 39/40 on :8000/6.4.1 with empty STM). DECISIONS.md: DECISION-050 added as PROPOSED, not accepted. pending-updates.md: ACTION NEEDED entry. Nothing implemented; not committed.
+
+## 2026-10-14 - Task Completion (implemented, uncommitted) + Decision Accepted: future_potentials Per-Request
+**Classification**: Task Completion, Architectural Decision.
+**Done**: DECISION-050 marked ACCEPTED (user approved (a) and (b)). SESSION_STATE.md Current Task set to IMPLEMENTED, full suite RUNNING (started 10:38 EDT), not committed; SPRINT_BACKLOG item 11 updated with follow-ups (broken benchmark section, unreachable `PatternProcessor.predictions` cache). pending-updates.md approval entry resolved. Not committed.
+
+## 2026-10-14 - Verification Complete: future_potentials Per-Request (IMPLEMENTED and VERIFIED, uncommitted)
+**Classification**: Task Completion.
+**Done**: Full suite finished: 898 passed, 3 skipped, 1 xfailed, 0 failed in 636.89s (./run_tests.sh --no-start --no-stop, source on :8011, Python 3.14 venv). test_concurrent_session_modifications and test_metrics_collection_after_requests (previously failing, pre-existing, untouched by this change) passed in this run; not claimed fixed. :8011 server stopped, .kato-ports.json removed. bandit -ll clean on changed kato files; ruff clean on kato/ and new test file. Refreshed stale Last Updated headers in SESSION_STATE.md and SPRINT_BACKLOG.md. Next: on approval, commit, PR, merge, release 6.4.2 (PATCH), update :8000 deployment (still on 6.4.1). Not committed.

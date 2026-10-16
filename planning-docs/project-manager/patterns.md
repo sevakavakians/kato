@@ -705,3 +705,7 @@ Inferred from a commit title that did not mention GPU. Reality: CHANGELOG v6.1.0
 - Two-phase bug discovery (visible symptom → hidden root cause) is a recurring pattern in async service work
 - Running the full test suite immediately after a targeted fix is essential — targeted fixes in async services often have sibling failure modes
 - Stress tests (5/5 passed) provided higher confidence than integration tests alone for persistence correctness
+
+### 2026-10-14
+- Recurring class: per-request state stored on the node-shared processor (DECISION-049 settings swap, now future_potentials). Safety that depends on "no await in between" is incidental. Fix pattern: return per-request data, never store it on the processor. Audit other processor attributes written in request paths.
+- Early-return paths (empty STM) can skip the code that resets shared state, producing stale reads; a leak surfaced only by testing the empty-STM case with two sessions.

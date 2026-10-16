@@ -139,7 +139,10 @@ def calculate_ensemble_predictive_information(
         # As requested: new simplified formula for potential
         pattern['potential'] = pattern.get('similarity', 1.0) * pattern['predictive_information']
 
-    # Prepare future potentials for response
+    # Prepare future potentials for response. Ties on aggregate_potential are
+    # settled by the future's hash: candidates reach this function in database
+    # arrival order, which is not stable, and a sort on the potential alone would
+    # keep that order for equal futures.
     future_potentials = [
         {
             'future': fa['future'],
@@ -147,10 +150,9 @@ def calculate_ensemble_predictive_information(
             'supporting_patterns': fa['pattern_count'],
             'total_weighted_frequency': fa['total_weighted_frequency']
         }
-        for fa in sorted(
-            future_aggregates.values(),
-            key=lambda x: x['aggregate_potential'],
-            reverse=True
+        for _, fa in sorted(
+            future_aggregates.items(),
+            key=lambda item: (-item[1]['aggregate_potential'], item[0])
         )
     ]
 

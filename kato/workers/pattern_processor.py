@@ -59,6 +59,20 @@ class PredictionSettings(NamedTuple):
     use_token_matching: bool
 
 
+class PredictionResult(NamedTuple):
+    """One request's predictions and the future potentials aggregated over them.
+
+    future_potentials is an ensemble figure, so it comes back with the
+    predictions it was computed from rather than being left on the processor.
+    A processor is shared by every session on a node: when it was kept there,
+    the predictions endpoint read it back after the request, and a request that
+    computed none -- an empty STM returns before predicting -- served the
+    previous request's value, which could be another session's.
+    """
+    predictions: list[dict[str, Any]]
+    future_potentials: list[dict[str, Any]]
+
+
 class PatternProcessor:
     """
     Responsible for creating new, recognizing known, discovering unknown, and predicting patterns.
@@ -239,7 +253,6 @@ class PatternProcessor:
         self.mood = {}
         self.target_class = None
         self.target_class_candidates = []
-        self.future_potentials = []  # Store aggregated future potentials for API
         # Per-session searchers, built from each session's stored configuration and
         # reused until that configuration changes. See _prediction_settings.
         self._session_searchers: OrderedDict[str, tuple[str, PatternSearcher]] = OrderedDict()
@@ -598,7 +611,7 @@ class PatternProcessor:
         # Generate predictions if we have at least 1 string in state
         # Single-symbol predictions use optimized fast path
         if len(state) >= 1 and self.predict and trigger_predictions:
-            predictions = await self._predict_with_config(state, list(stm), config)
+            predictions = (await self._predict_with_config(state, list(stm), config)).predictions
 
             # Most recent predictions, for the legacy unique_id-less retrieval path
             self.predictions = predictions
@@ -760,10 +773,10 @@ class PatternProcessor:
     def retire_patterns(self, pattern_names: list[str]) -> dict[str, Any]:
         """Tombstone a batch of this node's patterns.
 
-        A pure delegate. The ported version also cleared self.predictions and
-        self.future_potentials here, but those are node-level attributes shared by
-        every session on this processor, so a session-scoped retire would have
-        blanked another session's in-flight state. The endpoint re-filters its own
+        A pure delegate. The ported version also cleared self.predictions here,
+        but that is a node-level attribute shared by every session on this
+        processor, so a session-scoped retire would have blanked another
+        session's in-flight state. The endpoint re-filters its own
         session snapshot instead.
         """
         return self.superkb.redis_writer.retire_patterns(pattern_names)
@@ -1343,7 +1356,7 @@ class PatternProcessor:
         return predictions
 
 
-    async def predictPattern(self, state: list[str], stm_events: Optional[list[list[str]]] = None, max_workers: Optional[int] = None, batch_size: int = 100, settings: Optional[PredictionSettings] = None) -> list[dict[str, Any]]:
+    async def predictPattern(self, state: list[str], stm_events: Optional[list[list[str]]] = None, max_workers: Optional[int] = None, batch_size: int = 100, settings: Optional[PredictionSettings] = None) -> PredictionResult:
         """Predict patterns matching the given state (async with caching support).
 
         Provides 3-10x performance improvement through:
@@ -1366,8 +1379,9 @@ class PatternProcessor:
                 max_predictions and rank_sort_algo from here, never from self.
 
         Returns:
-            List of prediction dictionaries sorted by potential, containing
-            pattern information and calculated metrics.
+            PredictionResult: the prediction dictionaries, ranked by the
+            settings' rank_sort_algo and carrying their metrics, and the future
+            potentials aggregated over the scored candidates.
 
         Raises:
             Exception: If async pattern search fails.
@@ -1397,15 +1411,6 @@ class PatternProcessor:
         self.superkb.clickhouse_writer.ensure_visible(
             self.superkb.redis_writer.get_global_metadata().get('stats_version', 0)
         )
-
-        # future_potentials is cleared before either selection strategy runs. A
-        # processor is shared by every session on a node, so a request that
-        # returns before the ensemble predictive-information pass would otherwise
-        # leave the previous request's value in place and the endpoint would serve
-        # ANOTHER SESSION's future_potentials — observed live as a query answering
-        # with 0 predictions but 2 future_potentials belonging to a different
-        # session.
-        self.future_potentials = []
 
         # Candidate selection. Single-symbol states take the cheap path, which
         # skips the filter pipeline; everything after this point is shared, so the
@@ -1448,9 +1453,8 @@ class PatternProcessor:
 
         # Early return if no patterns found
         if not causal_patterns:
-            self.future_potentials = []  # Clear stale future_potentials
             logger.debug(f" {self.name} [ PatternProcessor predictPattern (async) ] No causal patterns found, returning empty list")
-            return []
+            return PredictionResult([], [])
 
         # Validate all predictions have required fields (same validation as sync version)
         for idx, prediction in enumerate(causal_patterns):
@@ -1763,8 +1767,6 @@ class PatternProcessor:
             # Calculate ensemble-based predictive information for metrics
             # Let exceptions propagate - client should receive HTTP 500 on calculation failure
             causal_patterns, future_potentials = calculate_ensemble_predictive_information(causal_patterns)
-            # Store future_potentials for the API response
-            self.future_potentials = future_potentials
 
             # Vectorized Bayesian posterior probabilities
             # P(pattern|obs) = P(obs|pattern) × P(pattern) / P(obs)
@@ -1821,12 +1823,12 @@ class PatternProcessor:
                 raise Exception(f"\nException in PatternProcessor.predictPattern (async): Error in sorting predictions! {self.kb_id}: {e}")
 
             logger.debug(f" [ PatternProcessor predictPattern (async) ] {len(active_causal_patterns)} active_causal_patterns")
-            return active_causal_patterns
+            return PredictionResult(active_causal_patterns, future_potentials)
 
         except Exception as e:
             raise Exception(f"\nException in PatternProcessor.predictPattern (async): Error in metrics calculation! {self.kb_id}: {e}")
 
-    async def get_predictions_async(self, stm: list[list[str]], config=None) -> list[dict[str, Any]]:
+    async def get_predictions_async(self, stm: list[list[str]], config=None) -> PredictionResult:
         """
         Generate predictions with session-specific configuration (async version).
 
@@ -1838,7 +1840,8 @@ class PatternProcessor:
             config: Optional SessionConfiguration with prediction parameters
 
         Returns:
-            List of prediction dictionaries
+            PredictionResult with the predictions and their future potentials;
+            both are empty when the STM holds no symbols.
         """
         # Flatten STM to state
         state = list(chain(*stm))
@@ -1847,17 +1850,16 @@ class PatternProcessor:
         # Single-symbol predictions use optimized fast path
         if len(state) < 1:
             logger.debug("No symbols in state for predictions")
-            return []
+            return PredictionResult([], [])
 
-        predictions = await self._predict_with_config(state, stm, config)
-        return predictions or []
+        return await self._predict_with_config(state, stm, config)
 
     async def _predict_with_config(
         self,
         state: list[str],
         stm_events: list[list[str]],
         config: Optional[SessionConfiguration],
-    ) -> list[dict[str, Any]]:
+    ) -> PredictionResult:
         """predictPattern with the session's settings, releasing what it loaded."""
         settings = self._prediction_settings(config)
         try:
@@ -1932,13 +1934,17 @@ class PatternProcessor:
             List of prediction dictionaries
         """
         import asyncio
+
+        async def predictions_only():
+            return (await self.get_predictions_async(stm, config)).predictions
+
         try:
             loop = asyncio.get_event_loop()
             if loop.is_running():
                 # If we're in an async context, create a task
-                return asyncio.create_task(self.get_predictions_async(stm, config))
+                return asyncio.create_task(predictions_only())
             else:
-                return loop.run_until_complete(self.get_predictions_async(stm, config))
+                return loop.run_until_complete(predictions_only())
         except RuntimeError:
             # No event loop, create one
-            return asyncio.run(self.get_predictions_async(stm, config))
+            return asyncio.run(predictions_only())

@@ -51,10 +51,10 @@ GET /sessions/{session_id}/predictions
   ],
   "future_potentials": [
     {
-      "symbol": "end",
-      "total_potential": 2.45,
-      "prediction_count": 1,
-      "patterns": ["abc123def456..."]
+      "future": [["end"]],
+      "aggregate_potential": 1.0,
+      "supporting_patterns": 1,
+      "total_weighted_frequency": 0.85
     }
   ],
   "session_id": "session-abc123...",
@@ -211,42 +211,54 @@ weighted_snr        = sum(w(t) for t in matches) / (sum(w(t) for t in matches) +
 
 ## Future Potentials
 
-Aggregated predictions for future symbols.
+Predictions grouped by the future they predict. Patterns that predict the same
+future pool their support into one entry.
 
 ```json
 {
   "future_potentials": [
     {
-      "symbol": "end",
-      "total_potential": 5.67,
-      "prediction_count": 3,
-      "patterns": [
-        "abc123def456...",
-        "def456789012...",
-        "ghi789012345..."
-      ]
+      "future": [["end"]],
+      "aggregate_potential": 0.75,
+      "supporting_patterns": 3,
+      "total_weighted_frequency": 4.5
     },
     {
-      "symbol": "logout",
-      "total_potential": 2.45,
-      "prediction_count": 1,
-      "patterns": ["xyz999012345..."]
+      "future": [["logout"]],
+      "aggregate_potential": 0.25,
+      "supporting_patterns": 1,
+      "total_weighted_frequency": 1.5
     }
   ]
 }
 ```
 
+| Field | Meaning |
+|-------|---------|
+| `future` | The predicted future events. Symbols are compared sorted within each event, so two patterns with the same future in a different symbol order share an entry. |
+| `total_weighted_frequency` | Sum of `frequency × similarity` over the patterns that predict this future. |
+| `aggregate_potential` | This future's share of the total weighted frequency. The entries sum to 1. |
+| `supporting_patterns` | Number of patterns that predict this future. |
+
 **Use Cases**:
-- Next symbol prediction
-- Multi-pattern aggregation
+- Next-event prediction
+- Pooling evidence from several patterns that predict the same thing
 - Confidence weighting
 
 **Calculation**:
 
-1. Extract all symbols from `future` events across all predictions
-2. Sum `potential` for each unique symbol
-3. Track which patterns contribute to each symbol
-4. Sort by `total_potential` (descending)
+1. Take the scored candidates. That is every candidate when there are at most
+   3 × `max_predictions` of them, and otherwise the 3 × `max_predictions` that rank
+   highest before the full metrics are computed. The list can therefore include
+   patterns that are not among the returned predictions.
+2. Skip candidates with an empty `future`.
+3. Group the rest by `future`, summing `frequency × similarity` for each group.
+4. Divide each group's sum by the total over all groups to get `aggregate_potential`.
+5. Sort by `aggregate_potential`, descending. Equal values are ordered by a hash of
+   the future, so the order is the same on every request.
+
+Each response's `future_potentials` is computed from that request's own
+predictions. An empty STM, or an STM that matches nothing, returns an empty list.
 
 ---
 
@@ -295,7 +307,7 @@ Limit number of predictions with `max_predictions` configuration:
 **Behavior**:
 - Predictions sorted by `potential` (descending)
 - Top N predictions returned
-- `future_potentials` computed from all matching patterns
+- `future_potentials` computed from the scored candidates (up to 3 × N); see [Future Potentials](#future-potentials)
 
 ---
 
@@ -400,11 +412,10 @@ import requests
 response = requests.get(f"http://localhost:8000/sessions/{session_id}/predictions")
 data = response.json()
 
-# Get most likely next symbol
+# Get the most likely future
 if data["future_potentials"]:
-    next_symbol = data["future_potentials"][0]["symbol"]
-    confidence = data["future_potentials"][0]["total_potential"]
-    print(f"Most likely next: {next_symbol} (potential: {confidence})")
+    best = data["future_potentials"][0]
+    print(f"Most likely next: {best['future']} (potential: {best['aggregate_potential']})")
 ```
 
 ### 3. Custom Filtering
@@ -448,10 +459,11 @@ def get_most_likely_future(data):
     if not data["future_potentials"]:
         return None
 
+    best = data["future_potentials"][0]
     return {
-        "symbol": data["future_potentials"][0]["symbol"],
-        "potential": data["future_potentials"][0]["total_potential"],
-        "supporting_patterns": data["future_potentials"][0]["prediction_count"]
+        "future": best["future"],
+        "potential": best["aggregate_potential"],
+        "supporting_patterns": best["supporting_patterns"]
     }
 ```
 

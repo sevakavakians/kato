@@ -93,3 +93,12 @@ The new README comparison table says "100% deterministic"; `docs/research/determ
 
 ## 2026-10-13 - ACTION NEEDED: Approval to commit + open PR (session prediction settings fix)
 Branch `fix/session-prediction-config`, uncommitted (DECISION-049). After merge: PATCH release 6.4.1. Also decide whether to take `future_potentials` shared state (SPRINT_BACKLOG follow-up 11) before the configurable potential formula feature; open decision there: pruning behavior when a formula uses post-pruning metrics.
+
+## 2026-10-14 - RESOLVED (approved; implemented, uncommitted): future_potentials leak fix plan
+Approved 2026-10-14 with (a) and (b) as recommended; DECISION-050 ACCEPTED. Full suite running (10:38 EDT). Remaining: user approval to commit/PR and release 6.4.2.
+
+(Original request, historical:)
+Confirmed live cross-session data exposure in GET predictions with an empty STM (39/40 on 6.4.1). Plan in SESSION_STATE.md "Current Task"; DECISION-050 PROPOSED. Needs: approval to implement (branch + PATCH 6.4.2 afterwards), and answers to (a) keep future_potentials over the scored candidate set (recommended) vs returned max_predictions, (b) include the deterministic tie-break (recommended). Consider whether the deployment should be updated promptly after release, since 6.4.1 is exposed.
+
+## 2026-10-14 - ACTION NEEDED: approve commit/PR/release of future_potentials fix
+Implemented and verified (898 passed, 0 failed), not committed. On approval: commit, open PR, merge, release 6.4.2 (PATCH), then update the :8000 deployment, which is still exposed to the cross-session leak on 6.4.1.

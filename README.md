@@ -4,7 +4,7 @@
 
 ## Full deterministic control of AI
 
-KATO is deterministic, explainable **predictive AI** for safety-critical and regulated systems. It learns patterns from observations and predicts what comes next, and every part of that decision is something you can see, verify, and change:
+KATO is a deterministic, explainable **cognitive architecture** for safety-critical and regulated systems. It learns patterns from observations and predicts what comes next, and every part of that decision is something you can see, verify, and change:
 
 - **Deterministic**: no sampling, no temperature, no randomness. The same knowledge base and the same input give the same ranked predictions, and every prediction traces back to a pattern KATO actually observed.
 - **Emotives as the control surface**: signed values you name (`utility`, `danger`, `satisfaction`), attached to learned patterns and carried by every prediction. You decide what matters, and you can read and change it.
@@ -30,13 +30,13 @@ KATO is built for highly regulated and mission-critical problem domains from whi
 
 ## What is KATO?
 
-**KATO is predictive AI, not generative AI.**
+**KATO is deterministic AI, for prediction and for generation.**
 
-Generative AI answers the question: *what would plausible content look like here?* It synthesizes — sampling from statistical distributions baked into billions of opaque weights. That's what makes it powerful for open-ended creation, and it's also *why* generative models hallucinate: they are built to produce the plausible, not the observed. Predictive AI answers a different question: *given what has actually been observed, what happens next — and why?* KATO is built for that question. It observes, learns patterns, and predicts from evidence. Same knowledge base, same inputs, same outputs. No temperature. No sampling. No randomness.
+Stochastic generative models answer the question: *what would plausible content look like here?* They synthesize by sampling from statistical distributions baked into billions of opaque weights. That's what makes them powerful for open-ended creation, and it's also *why* they hallucinate: they are built to produce the plausible, not the observed. KATO answers a different question: *given what has actually been observed, what can happen next, and why?* Its answer is a prediction ensemble, a ranked set of possible continuations, each traced to a learned pattern and carrying the frequencies and metrics that ranked it. That makes KATO probabilistic in what it reports, but not opaque: every probability is a count you can inspect and recompute, not a property buried in weights. The same machinery generates as well as predicts. [KATO-LM](https://github.com/sevakavakians/kato-lm) produces text by unraveling learned patterns, so every generated word traces back to its source. Same knowledge base, same inputs, same outputs. No temperature. No sampling. No randomness.
 
-Under the hood, KATO is a neuro-symbolic, **deterministic AI/ML architecture** that provides transparent, explainable machine learning through pattern-based learning — an alternative to neural networks for applications requiring real-time learning, complete traceability, and computational efficiency on commodity CPUs.
+Under the hood, KATO is a connectionist-symbolic, **deterministic AI/ML architecture** that provides transparent, explainable machine learning through pattern-based learning — an alternative to neural networks for applications requiring real-time learning, complete traceability, and computational efficiency on commodity CPUs.
 
-The "neuro" in KATO's neuro-symbolic design expresses its *connectionist* nature: KATO agents can consist of a network of cognitive processor nodes. These are not simple neural network nodes, but complete, deterministic, coherent processes that efficiently *emulate* cognitive functionality rather than expensively *simulate* brain structures, as artificial neural networks do.
+The "connectionist" in KATO's connectionist-symbolic design refers to the broad family of systems built from networks of interconnected processing units. Neural networks are one kind of connectionist system, but connectionist systems aren't always neural networks, and KATO is not one. KATO agents can consist of a network of cognitive processor nodes. These are not simple neural network nodes, but complete, deterministic, coherent processes that efficiently *emulate* cognitive functionality rather than expensively *simulate* brain structures, as artificial neural networks do. The "symbolic" half is what each node learns and stores: explicit, human-readable patterns of symbols.
 
 So where does KATO fit in today's AI landscape? Three distinct ways:
 

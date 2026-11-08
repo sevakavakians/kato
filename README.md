@@ -207,7 +207,7 @@ Where a transformer learns token statistics in billions of opaque weights, KATO-
 
 - **Zero hallucinations** — cannot generate facts absent from the training corpus
 - **Complete transparency** — every generated token traceable to a source pattern with a frequency count
-- **Determinism** — same seed + context → same output, fully reproducible
+- **Determinism** — same recall_threshold + context → same output, fully reproducible
 - **Multi-scale control** — generate at sentence, paragraph, chapter, or document level
 
 **Trade-offs**: less creative than transformers (recombines learned patterns only); requires a training corpus that covers the target domain; cannot synthesize novel facts or reasoning beyond training data.

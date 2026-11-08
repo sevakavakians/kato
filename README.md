@@ -4,120 +4,21 @@
 
 ## Full deterministic control of AI
 
-In 1899, aviation pioneers had lift and they had power. What Wilbur Wright found, twisting the ends of an empty inner-tube box in his Dayton bicycle shop, was the last missing piece: **control**, the ability to steer an aircraft moment to moment to where the pilot wants it to go.
+KATO is deterministic, explainable **predictive AI** for safety-critical and regulated systems. It learns patterns from observations and predicts what comes next, and every part of that decision is something you can see, verify, and change:
 
-Today's language models fly. They're powerful. But ask one why it trusted one output over another, or tell it to deliberately downweight a risky pattern, and there is nothing to twist. Its preferences live in the same weights as its knowledge, so you can't read them, trace them, or change one without disturbing the rest.
+- **Deterministic**: no sampling, no temperature, no randomness. The same knowledge base and the same input give the same ranked predictions, and every prediction traces back to a pattern KATO actually observed.
+- **Emotives as the control surface**: signed values you name (`utility`, `danger`, `satisfaction`), attached to learned patterns and carried by every prediction. You decide what matters, and you can read and change it.
+- **Real-time editing without retraining**: when a prediction is wrong, retire the pattern behind it and teach the right one. The next prediction reflects the fix, and no other pattern moves.
+- **"I don't know"**: when nothing learned matches, KATO returns an empty prediction ensemble instead of a guess.
+- **ExCITE capabilities**: together, these let KATO **Ex**plain, **C**ompute, **I**nterpret, **T**race, and **E**dit every output and process.
 
-KATO is a deterministic machine learning system built so that every part of a decision is a control surface you can see, verify, and change:
+That is the bar for software safety certification. GAIuS, the technology KATO evolved from, passed FAA DO-178C Stage of Involvement 1 (SOI #1) in review by an FAA Designated Engineering Representative, with plans targeting DAL-C.
 
-1. **Emotives**: signed values you name in plain language (`utility`, `danger`, `satisfaction`), attached to learned patterns and carried by every prediction, so you can tell the system what matters.
-2. **Prediction objects**: every prediction carries its past, present, and entire expected future, plus what matched, what was **missing**, and what showed up as **extras**, so you can see what it expected and exactly where reality diverged.
-3. **Determinism**: no sampling, no temperature, no randomness in learning or prediction. The same knowledge base and the same input give the same ranked predictions.
-4. **Editability**: when a prediction is wrong, retire the pattern that produced it and teach the right one. The very next prediction reflects the fix. No retraining, and no other pattern moves.
-5. **The empty ensemble**: when nothing it has learned matches, KATO returns an empty list instead of a guess. That is how it says *"I don't know."*
+🆕 **Latest Features**: Multi-user session isolation, guaranteed writes, Redis sessions, complete backwards compatibility
 
-KATO is the Apache-licensed successor to GAIuS, winner of Lockheed Martin's Sikorsky Entrepreneurial Challenge Award (2018), redesigned for enterprise use.
+🎖️ **Heritage**: Evolved from GAIuS (Lockheed Martin Sikorsky Award Winner 2018) | Adheres to [ExCITE AI](https://medium.com/@sevakavakians/what-is-excite-ai-712afd372af4) principles
 
 ![KATO Crystal](assets/kato-graphic.png "KATO crystal")
-
-## What's Missing in Today's AI
-
-> *A man can do what he wants, but he cannot want what he wants.*
->
-> Arthur Schopenhauer, *On the Freedom of the Will* (1839)
-
-Neither can a language model. Its preferences were fused into its weights during training, alongside everything it knows: unreadable, untraceable, uneditable.
-
-Neuroscience shows what that costs. Patients with damage to the ventromedial prefrontal cortex keep their IQ, vocabulary, memory, and reasoning on paper, yet make catastrophically poor real-world decisions. What they lose is the value signal that tags an experience as good or bad as it happens, which Antonio Damasio called a *somatic marker* (*Descartes' Error*, 1994; Bechara & Damasio, *Games and Economic Behavior*, 2005). Knowledge without a value signal isn't intelligence. It's a library.
-
-KATO keeps the two apart. Knowledge lives in learned patterns. Values live in emotives attached to those patterns. Both are records you can read, point at, and change.
-
-## The Control Surfaces
-
-### Emotives: values you name
-
-When KATO observes and learns, you can attach **emotives**: signed numbers on whatever dimensions you care about, named by you.
-
-```bash
-curl -X POST http://localhost:8000/sessions/$SESSION/observe \
-  -H "Content-Type: application/json" \
-  -d '{"strings": ["payment_failed", "mobile_app"], "emotives": {"danger": 0.7, "utility": -0.4}}'
-```
-
-The values ride with the learned pattern. Each time the pattern recurs, its new values join a rolling window (`PERSISTENCE`, default 5) and are averaged, so the number moves as evidence accumulates. At prediction time, every object in the ensemble carries the emotives of the pattern that produced it. A danger score of 0.56 is not a feeling; it is an average over recorded observations, and you can go look at every one of them.
-
-That gives an application a way to weigh candidate responses by what each is *worth*, not only by how well it fits. A support assistant can score its candidate replies by `satisfaction − cost − policy risk` and pick the second-best fit because it is the best outcome. A user-selected *mood* (which emotives count, how much each weighs, and where the hard veto lines are) can switch the same agent between cautious and customer-first at runtime, with the same knowledge and no retraining. KATO supplies the ensemble and its emotives; the mood is a scoring layer your application owns.
-
-Who sets the values? Emotives answer how a system carries, applies, exposes, and corrects values, not which values it should hold. Choosing them stays a human governance decision. What KATO changes is that the decision is explicit instead of emergent. See [Emotives Processing](docs/research/emotives-processing.md) for the averaging algorithm and configuration.
-
-### The prediction object: beyond the next token
-
-A KATO prediction is not a single next token. It is an object with fields. Suppose KATO learned the pattern `[["alarm"], ["coffee", "wake_up"], ["commute", "shower"], ["arrive_office"], ["check_email"]]` and now observes `[["coffee", "wake_up"], ["commute", "radio"]]`:
-
-```jsonc
-{
-  "name": "PTRN|…",                              // the learned pattern; trace is a pointer
-  "frequency": 14,                               // times this pattern was learned
-  "past":    [["alarm"]],                        // what led up to this moment
-  "present": [["coffee", "wake_up"], ["commute", "shower"]],
-  "future":  [["arrive_office"], ["check_email"]], // the whole expected continuation
-  "matches": ["coffee", "commute", "wake_up"],
-  "missing": [[], ["shower"]],                   // expected, but not observed
-  "extras":  [[], ["radio"]],                    // observed, but never expected
-  "similarity": …, "confidence": …, "evidence": …, "snr": …, "potential": …,
-  "emotives": {"lateness_risk": 0.3}             // what mattered when it happened
-}
-```
-
-`future` is the entire continuation, not one guess dressed up as an answer. `missing` and `extras` are the anomaly pair: in a next-token world an anomaly just looks like a low-probability guess, while here it is a labeled field telling you exactly where reality diverged from the pattern. Every number that ranked the prediction ships with it and can be redone on paper. See the [Prediction Object Reference](docs/reference/prediction-object.md) for all fields.
-
-### Ensembles built at prediction time: learning in real time
-
-What comes out of KATO at any moment is an **ensemble** of prediction objects, each a different plausible continuation with its own past, future, missing, extras, and emotives. That ensemble isn't looked up from something baked in at training time. It is built live, at the moment of prediction, from the patterns accumulated so far:
-
-- **Learning is an insert.** A learned sequence is hashed (SHA-1) into its pattern name and stored; seeing it again increments its frequency. No gradient, no epoch, no loss curve.
-- **Prediction is retrieval, then a cut.** Candidate patterns from this knowledge base are scored against short-term memory, anything below `recall_threshold` is discarded, and the survivors are ranked (by `potential`, unless you configure another metric).
-
-A transformer learns its data once, freezes it into weights, and stays frozen until someone pays to retrain it. KATO models at prediction time instead of training time, so it never has to make that trade: a pattern learned this second shows up in the very next ensemble.
-
-### The empty ensemble: "I don't know"
-
-If no pattern clears `recall_threshold`, nothing survives the cut and the ensemble comes back as `[]`. Not a low-confidence guess, not a plausible-sounding paragraph, not a hedge. An empty list, telling you structurally that there is no matching pattern. KATO can only say what it has a pattern for, so when it has none, the honest answer falls out of the architecture.
-
-The threshold is a dial you own: with a permissive `recall_threshold`, weak matches do come back, so set it to the evidence your use case demands.
-
-### Editability: fix one prediction, touch nothing else
-
-When a prediction is wrong, find the pattern that produced it (its name is in the prediction), retire it, and teach the right one:
-
-```bash
-# Hide the bad pattern from every prediction, immediately (reversible with /patterns/un-retire)
-curl -X POST http://localhost:8000/sessions/$SESSION/patterns/retire \
-  -H "Content-Type: application/json" \
-  -d '{"pattern_ids": ["<pattern hash>"]}'
-
-# Teach the correct sequence: observe it, then learn it
-curl -X POST http://localhost:8000/sessions/$SESSION/observe \
-  -H "Content-Type: application/json" \
-  -d '{"strings": ["<correct>", "<symbols>"]}'
-curl -X POST http://localhost:8000/sessions/$SESSION/learn
-```
-
-Two calls, a few seconds, no retraining, and no other pattern touched. Re-query and the corrected pattern answers, and you can prove both that the model was wrong and that it no longer is. A retired pattern can later be purged for good. See [Pattern Retirement](docs/users/pattern-retirement.md).
-
-### ExCITE: what determinism makes possible
-
-Every surface above works because of what sits underneath it: KATO is fully deterministic, and every prediction traces back to a pattern the system actually observed. A score on a prediction isn't a guess pulled from a black box; it's a fact you can verify. [ExCITE](https://medium.com/@sevakavakians/what-is-excite-ai-712afd372af4) names five capabilities a system needs before you let it decide anything about your money, your health, or your flight, each of which rests on that determinism:
-
-| | Capability | Applied to one wrong prediction |
-|---|------------|---------------------------------|
-| **Ex** | Explain | Which stored pattern produced this answer, by name, not by approximation |
-| **C** | Compute | The arithmetic that ranked it (similarity, confidence, potential), redoable on paper |
-| **I** | Interpret | What the pattern actually says, in symbols a human reads, not a weight |
-| **T** | Trace | The training record that put it there, and how many times it was seen |
-| **E** | Edit | Retire the bad pattern, teach the right one, re-query to prove it, with no retraining |
-
-Use ExCITE as a guide to the capabilities a use case needs. These capabilities were not bolted on as features; they follow from designing the system around determinism from the ground up.
 
 ## Why KATO?
 
@@ -129,9 +30,9 @@ KATO is built for highly regulated and mission-critical problem domains from whi
 
 ## What is KATO?
 
-**KATO is predictive AI, not stochastic generative AI.**
+**KATO is predictive AI, not generative AI.**
 
-Stochastic generative AI answers the question: *what would plausible content look like here?* It synthesizes — sampling from statistical distributions baked into billions of opaque weights. That's what makes it powerful for open-ended creation, and it's also *why* those models hallucinate: they are built to produce the plausible, not the observed. Predictive AI answers a different question: *given what has actually been observed, what happens next — and why?* KATO is built for that question. It observes, learns patterns, and predicts from evidence. Same knowledge base, same inputs, same outputs. No temperature. No sampling. No randomness.
+Generative AI answers the question: *what would plausible content look like here?* It synthesizes — sampling from statistical distributions baked into billions of opaque weights. That's what makes it powerful for open-ended creation, and it's also *why* generative models hallucinate: they are built to produce the plausible, not the observed. Predictive AI answers a different question: *given what has actually been observed, what happens next — and why?* KATO is built for that question. It observes, learns patterns, and predicts from evidence. Same knowledge base, same inputs, same outputs. No temperature. No sampling. No randomness.
 
 Under the hood, KATO is a neuro-symbolic, **deterministic AI/ML architecture** that provides transparent, explainable machine learning through pattern-based learning — an alternative to neural networks for applications requiring real-time learning, complete traceability, and computational efficiency on commodity CPUs.
 
@@ -154,11 +55,11 @@ Both are represented by the same pattern object: a sequence of events of symbols
 
 Every learned structure is identified by a unique hash: `PTRN|<sha1_hash>` (stored in databases as the plain SHA1 hash without the prefix).
 
-## Predictive AI vs Stochastic Generative AI
+## Predictive AI vs Generative AI
 
-Understanding when to use KATO versus a stochastic generative model is critical for building effective AI systems:
+Understanding when to use KATO versus a generative model is critical for building effective AI systems:
 
-| Feature | Stochastic generative AI (GPT, Claude, LLaMA) | KATO (Predictive AI) | Hybrid (KATO + LLM) |
+| Feature | Generative AI (GPT, Claude, LLaMA) | KATO (Predictive AI) | Hybrid (KATO + LLM) |
 |---------|------------------------------------|----------------------|---------------------|
 | **Learning** | Batch pre-training on billions of tokens | Incremental learning from single observations | LLM for language, KATO for memory |
 | **Hardware** | GPUs required ($1000s/month) | CPU-only ($50/month) | Reduced LLM calls = cost savings |
@@ -237,7 +138,7 @@ The [Deterministic ML Comparison](docs/research/deterministic-ml-comparison.md) 
 - ✅ **Temporal patterns primary** (sequences, workflows, time-series)
 - ✅ **Multi-tenancy required** (isolated knowledge bases per user/organization)
 
-### Choose Stochastic Generative AI When:
+### Choose Generative AI When:
 
 - ✅ **Open-ended generation primary** (creative writing, code generation, brainstorming)
 - ✅ **Zero-shot learning needed** (handle completely novel domains)
@@ -300,9 +201,7 @@ WHERE kb_id = 'production' AND name = 'pattern_hash';
 
 KATO's primary role is predictive AI — but its deterministic machine learning is also being investigated as a **replacement for the neural networks at the core of language models**. That research lives in the [KATO-LM project](https://github.com/sevakavakians/kato-lm).
 
-Where a transformer flattens text into one enormous context window and learns token statistics in billions of opaque weights, KATO-LM builds a **hierarchy**. Node 0 learns raw tokens in fixed chunks of 15 (no sentence detection, no parsing), and every learned pattern gets a name. That name then becomes a token one level up: node 1 learns sequences of node 0 names (roughly a paragraph, ~225 tokens of original text), node 2 learns sequences of node 1 names (a section, ~3,375 tokens), and node 3 learns sequences of node 2 names (a chapter or document, ~50,625 tokens). Compression is 15 : 1 per level, and it is lossless: a node 3 pattern unravels downward, name by name, to every original token. It is how vision works, from pixels to edges to shapes to objects: the semantics are in the composition, not in the tokens.
-
-KATO-LM generates text by selecting high-level patterns and unraveling them hierarchically, so every generated word has an address. The constraint is the point: it can only produce sequences that were actually observed (or are compositions of observed sequences) in the training corpus. A model that cannot say what it never saw cannot hallucinate.
+Where a transformer learns token statistics in billions of opaque weights, KATO-LM learns **hierarchical patterns at multiple scales** — token chunks (node0), paragraphs (node1), chapters (node2), documents (node3) — and generates text by sampling high-level patterns and unraveling them hierarchically. The constraint is the point: it can only produce sequences that were actually observed (or are compositions of observed sequences) in the training corpus. A model that cannot say what it never saw cannot hallucinate.
 
 **What deterministic ML brings to language modeling**:
 
@@ -355,11 +254,7 @@ predictions = get_predictions()  # Detects patterns indicating maintenance needs
 - 🔍 **Full Transparency** - All internal states and decisions are explainable
 - 🎯 **Temporal Predictions** - Sophisticated past/present/future segmentation
 - 🧠 **Multi-Modal Sensor Fusion** - Integrate text, vectors, vision systems, and multiple sensor streams
-- 🎚️ **Emotives** - Named, signed value signals on patterns, carried by every prediction
-- 🧾 **Prediction Objects** - Past, present, future, matches, missing, and extras in every prediction
-- 🛑 **Empty Ensemble** - Returns `[]` instead of a guess when nothing learned matches
-- ✏️ **Real-Time Editing** - Retire, un-retire, and purge individual patterns with no retraining
-- 📋 **ExCITE Capabilities** - Explain, Compute, Interpret, Trace, Edit, all resting on determinism
+- 📋 **ExCITE AI Compliant** - Explainable, Computable, Interpretable, Traceable, Editable
 - ⚡ **High Performance** - 3.57x throughput, 72% latency reduction, comprehensive optimizations
 - 🔄 **Session Context** - Maintains observation context within isolated sessions
 - 🎪 **Vector Database** - Modern vector search with Qdrant (10-100x faster)
@@ -587,7 +482,15 @@ Licensed under the Apache License, Version 2.0 — see [LICENSE](LICENSE) and [N
 
 ## Heritage
 
-KATO is derived from the [GAIuS](https://medium.com/@sevakavakians/what-is-gaius-a-responsible-alternative-to-neural-network-artificial-intelligence-part-1-of-3-1f7bbe583a32) framework, which won **Lockheed Martin's Sikorsky 8th Entrepreneurial Challenge Award in 2018** for its breakthrough approach to integrating multiple sensor streams — vision systems, telemetry, audio, and environmental data — into a unified, explainable prediction framework. GAIuS was also reviewed against the FAA's DO-178C standard for airborne software and passed Stage of Involvement 1 (SOI #1). KATO retains GAIuS's transparent, symbolic, and physics-informed learning process and its [ExCITE](#excite-what-determinism-makes-possible) capabilities, redesigned for enterprise use and released under the Apache License.
+KATO is derived from the [GAIuS](https://medium.com/@sevakavakians/what-is-gaius-a-responsible-alternative-to-neural-network-artificial-intelligence-part-1-of-3-1f7bbe583a32) framework, which won **Lockheed Martin's Sikorsky 8th Entrepreneurial Challenge Award in 2018** for its breakthrough approach to integrating multiple sensor streams — vision systems, telemetry, audio, and environmental data — into a unified, explainable prediction framework. KATO retains GAIuS's transparent, symbolic, and physics-informed learning process while focusing on deterministic memory and abstraction for production AI systems.
+
+Like GAIuS before it, KATO adheres to [ExCITE AI](https://medium.com/@sevakavakians/what-is-excite-ai-712afd372af4) principles — AI systems should be able to **Ex**plain, **C**ompute, **I**nterpret, **T**race, and **E**dit all outputs and processes:
+
+- **Explainable** - Every prediction traceable to source patterns
+- **Computable** - All metrics derivable from explicit, documented calculations
+- **Interpretable** - Internal states meaningful to humans, not opaque weights
+- **Traceable** - Complete audit trails for regulatory compliance
+- **Editable** - Real-time knowledge correction via database edits
 
 ## Release history
 
@@ -605,7 +508,7 @@ the page documenting that feature says which release introduced it.
 - 🐛 [Issue Tracker](https://github.com/sevakavakians/kato/issues) - Report bugs
 - 💬 [Discussions](https://github.com/sevakavakians/kato/discussions) - Ask questions
 
-KATO only works if you can open it, so open it. If you dislike any part of it, fix it: contributions are welcome. If transparent, deterministic, controllable AI matters to your domain, let's build it together.
+If transparent, deterministic AI matters to your domain, let's build it together.
 
 ---
 

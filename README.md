@@ -214,7 +214,7 @@ Where a transformer learns token statistics in billions of opaque weights, KATO-
 
 **Trade-offs**: less creative than transformers (recombines learned patterns only); requires a training corpus that covers the target domain; cannot synthesize novel facts or reasoning beyond training data.
 
-**Status**: Experimental. Pattern learning infrastructure complete; basic generation implemented; advanced multi-scale sampling in active development. This is research into the future of KATO's machine learning — not KATO's recommended production use today. But if it succeeds, the machine learning inside a language model stops being a black box.
+**Status**: Experimental. Pattern learning infrastructure complete; basic generation implemented; advanced multi-scale unraveling in active development. This is research into the future of KATO's machine learning — not KATO's recommended production use today. But if it succeeds, the machine learning inside a language model stops being a black box.
 
 ## KATO for Regulated & Safety-Critical Systems
 

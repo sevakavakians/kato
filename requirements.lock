@@ -16,8 +16,9 @@ anyio==4.14.2
     #   watchfiles
 async-timeout==5.0.1
     # via redis
-certifi==2025.8.3
+certifi==2026.10.23
     # via
+    #   -r requirements.txt
     #   clickhouse-connect
     #   httpcore
     #   httpx

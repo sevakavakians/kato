@@ -19,7 +19,7 @@ That is the bar for software safety certification. GAIuS, the technology KATO ev
 🎖️ **Heritage**: Evolved from GAIuS (Lockheed Martin Sikorsky Award Winner 2018) | Adheres to [ExCITE AI](https://medium.com/@sevakavakians/what-is-excite-ai-712afd372af4) principles
 
 <p align="center">
-  <img src="assets/kato-mascot.png" alt="KATO crystal cat mascot" width="200">
+  <img src="assets/kato-mascot.png" alt="KATO crystal cat mascot" width="240">
 </p>
 
 ## Why KATO?

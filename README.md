@@ -18,7 +18,9 @@ That is the bar for software safety certification. GAIuS, the technology KATO ev
 
 🎖️ **Heritage**: Evolved from GAIuS (Lockheed Martin Sikorsky Award Winner 2018) | Adheres to [ExCITE AI](https://medium.com/@sevakavakians/what-is-excite-ai-712afd372af4) principles
 
-![KATO Crystal](assets/kato-graphic.png "KATO crystal")
+<p align="center">
+  <img src="assets/kato-mascot.png" alt="KATO crystal cat mascot" width="200">
+</p>
 
 ## Why KATO?
 
@@ -201,7 +203,7 @@ WHERE kb_id = 'production' AND name = 'pattern_hash';
 
 KATO's primary role is predictive AI — but its deterministic machine learning is also being investigated as a **replacement for the neural networks at the core of language models**. That research lives in the [KATO-LM project](https://github.com/sevakavakians/kato-lm).
 
-Where a transformer learns token statistics in billions of opaque weights, KATO-LM learns **hierarchical patterns at multiple scales** — token chunks (node0), paragraphs (node1), chapters (node2), documents (node3) — and generates text by sampling high-level patterns and unraveling them hierarchically. The constraint is the point: it can only produce sequences that were actually observed (or are compositions of observed sequences) in the training corpus. A model that cannot say what it never saw cannot hallucinate.
+Where a transformer learns token statistics in billions of opaque weights, KATO-LM learns **hierarchical patterns at multiple scales** — token chunks (node0), paragraphs (node1), chapters (node2), documents (node3) — and generates text by unraveling high-level patterns hierarchically. The constraint is the point: it can only produce sequences that were actually observed (or are compositions of observed sequences) in the training corpus. A model that cannot say what it never saw cannot hallucinate.
 
 **What deterministic ML brings to language modeling**:
 

@@ -2,13 +2,25 @@
 
 **Knowledge Abstraction for Traceable Outcomes**
 
-> *Deterministic, explainable **predictive AI** for safety-critical and regulated systems. KATO learns patterns from observations and predicts what comes next — with every prediction traceable to its source, correctable in real time. Evolution of award-winning GAIuS sensor-fusion technology.*
+## Full deterministic control of AI
+
+KATO is a deterministic, explainable **cognitive architecture** for safety-critical and regulated systems. It learns patterns from observations and predicts what comes next, and every part of that decision is something you can see, verify, and change:
+
+- **Deterministic**: no sampling, no temperature, no randomness. The same knowledge base and the same input give the same ranked predictions, and every prediction traces back to a pattern KATO actually observed.
+- **Emotives as the control surface**: signed values you name (`utility`, `danger`, `satisfaction`), attached to learned patterns and carried by every prediction. You decide what matters, and you can read and change it.
+- **Real-time editing without retraining**: when a prediction is wrong, retire the pattern behind it and teach the right one. The next prediction reflects the fix, and no other pattern moves.
+- **"I don't know"**: when nothing learned matches, KATO returns an empty prediction ensemble instead of a guess.
+- **ExCITE capabilities**: together, these let KATO **Ex**plain, **C**ompute, **I**nterpret, **T**race, and **E**dit every output and process.
+
+That is the bar for software safety certification. GAIuS, the technology KATO evolved from, passed FAA DO-178C Stage of Involvement 1 (SOI #1) in review by an FAA Designated Engineering Representative, with plans targeting DAL-C.
 
 🆕 **Latest Features**: Multi-user session isolation, guaranteed writes, Redis sessions, complete backwards compatibility
 
 🎖️ **Heritage**: Evolved from GAIuS (Lockheed Martin Sikorsky Award Winner 2018) | Adheres to [ExCITE AI](https://medium.com/@sevakavakians/what-is-excite-ai-712afd372af4) principles
 
-![KATO Crystal](assets/kato-graphic.png "KATO crystal")
+<p align="center">
+  <img src="assets/kato-mascot.png" alt="KATO crystal cat mascot" width="240">
+</p>
 
 ## Why KATO?
 
@@ -20,13 +32,13 @@ KATO is built for highly regulated and mission-critical problem domains from whi
 
 ## What is KATO?
 
-**KATO is predictive AI, not generative AI.**
+**KATO is deterministic AI, for prediction and for generation.**
 
-Generative AI answers the question: *what would plausible content look like here?* It synthesizes — sampling from statistical distributions baked into billions of opaque weights. That's what makes it powerful for open-ended creation, and it's also *why* generative models hallucinate: they are built to produce the plausible, not the observed. Predictive AI answers a different question: *given what has actually been observed, what happens next — and why?* KATO is built for that question. It observes, learns patterns, and predicts from evidence. Same knowledge base, same inputs, same outputs. No temperature. No sampling. No randomness.
+Stochastic generative models answer the question: *what would plausible content look like here?* They synthesize by sampling from statistical distributions baked into billions of opaque weights. That's what makes them powerful for open-ended creation, and it's also *why* they hallucinate: they are built to produce the plausible, not the observed. KATO answers a different question: *given what has actually been observed, what can happen next, and why?* Its answer is a prediction ensemble: a ranked set of possible continuations, each traced to a learned pattern and carrying the frequencies and metrics that ranked it. The ensemble itself is deterministic. The same knowledge base and the same input always produce the identical ensemble, with identical counts and scores. What is probabilistic is what the ensemble describes: several possible outcomes, each with how often it was actually observed. What an application does with that is its own choice, made in the open on top of a deterministic result: take the top prediction, weigh the candidates by their emotives, or sample from them if it needs variety. Whatever it chooses, every probability is a count you can inspect and recompute, not a property buried in weights. The same machinery generates as well as predicts. [KATO-LM](https://github.com/sevakavakians/kato-lm) produces text by unraveling learned patterns, so every generated word traces back to its source. Same knowledge base, same inputs, same outputs. No temperature. No sampling. No randomness.
 
-Under the hood, KATO is a neuro-symbolic, **deterministic AI/ML architecture** that provides transparent, explainable machine learning through pattern-based learning — an alternative to neural networks for applications requiring real-time learning, complete traceability, and computational efficiency on commodity CPUs.
+Under the hood, KATO is a connectionist-symbolic, **deterministic AI/ML architecture** that provides transparent, explainable machine learning through pattern-based learning — an alternative to neural networks for applications requiring real-time learning, complete traceability, and computational efficiency on commodity CPUs.
 
-The "neuro" in KATO's neuro-symbolic design expresses its *connectionist* nature: KATO agents can consist of a network of cognitive processor nodes. These are not simple neural network nodes, but complete, deterministic, coherent processes that efficiently *emulate* cognitive functionality rather than expensively *simulate* brain structures, as artificial neural networks do.
+The "connectionist" in KATO's connectionist-symbolic design refers to the broad family of systems built from networks of interconnected processing units. Neural networks are one kind of connectionist system, but connectionist systems aren't always neural networks, and KATO is not one. KATO agents can consist of a network of cognitive processor nodes. These are not simple neural network nodes, but complete, deterministic, coherent processes that efficiently *emulate* cognitive functionality rather than expensively *simulate* brain structures, as artificial neural networks do. The "symbolic" half is what each node learns and stores: explicit, human-readable patterns of symbols.
 
 So where does KATO fit in today's AI landscape? Three distinct ways:
 
@@ -191,18 +203,18 @@ WHERE kb_id = 'production' AND name = 'pattern_hash';
 
 KATO's primary role is predictive AI — but its deterministic machine learning is also being investigated as a **replacement for the neural networks at the core of language models**. That research lives in the [KATO-LM project](https://github.com/sevakavakians/kato-lm).
 
-Where a transformer learns token statistics in billions of opaque weights, KATO-LM learns **hierarchical patterns at multiple scales** — token chunks (node0), paragraphs (node1), chapters (node2), documents (node3) — and generates text by sampling high-level patterns and unraveling them hierarchically. The constraint is the point: it can only produce sequences that were actually observed (or are compositions of observed sequences) in the training corpus. A model that cannot say what it never saw cannot hallucinate.
+Where a transformer learns token statistics in billions of opaque weights, KATO-LM learns **hierarchical patterns at multiple scales** — token chunks (node0), paragraphs (node1), chapters (node2), documents (node3) — and generates text by unraveling high-level patterns hierarchically. The constraint is the point: it can only produce sequences that were actually observed (or are compositions of observed sequences) in the training corpus. A model that cannot say what it never saw cannot hallucinate.
 
 **What deterministic ML brings to language modeling**:
 
 - **Zero hallucinations** — cannot generate facts absent from the training corpus
 - **Complete transparency** — every generated token traceable to a source pattern with a frequency count
-- **Determinism** — same seed + context → same output, fully reproducible
+- **Determinism** — same recall_threshold + context → same output, fully reproducible
 - **Multi-scale control** — generate at sentence, paragraph, chapter, or document level
 
 **Trade-offs**: less creative than transformers (recombines learned patterns only); requires a training corpus that covers the target domain; cannot synthesize novel facts or reasoning beyond training data.
 
-**Status**: Experimental. Pattern learning infrastructure complete; basic generation implemented; advanced multi-scale sampling in active development. This is research into the future of KATO's machine learning — not KATO's recommended production use today. But if it succeeds, the machine learning inside a language model stops being a black box.
+**Status**: Experimental. Pattern learning infrastructure complete; basic generation implemented; advanced multi-scale unraveling in active development. This is research into the future of KATO's machine learning — not KATO's recommended production use today. But if it succeeds, the machine learning inside a language model stops being a black box.
 
 ## KATO for Regulated & Safety-Critical Systems
 

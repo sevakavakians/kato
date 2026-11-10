@@ -48,25 +48,25 @@ def _session(**overrides) -> SessionState:
     return state
 
 
-def test_apply_learn_result_replaces_stm_and_resets_accumulators():
+def test_apply_learn_result_empties_stm_and_resets_accumulators():
     state = _session()
-    state.apply_learn_result([['b']])
-    assert state.stm == [['b']]
+    state.apply_learn_result()
+    assert state.stm == []
     assert state.emotives_accumulator == []
     assert state.metadata_accumulator == []
 
 
 def test_apply_learn_result_leaves_other_session_state_alone():
     state = _session(time=7, percept_data={'k': 'v'})
-    state.apply_learn_result([])
+    state.apply_learn_result()
     assert state.time == 7
     assert state.percept_data == {'k': 'v'}
 
 
 def test_reset_accumulators_are_fresh_lists_not_shared():
     first, second = _session(), _session()
-    first.apply_learn_result([])
-    second.apply_learn_result([])
+    first.apply_learn_result()
+    second.apply_learn_result()
     first.emotives_accumulator.append({'joy': 1.0})
     assert second.emotives_accumulator == []
 

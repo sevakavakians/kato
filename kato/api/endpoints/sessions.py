@@ -503,10 +503,10 @@ async def learn_in_session(session_id: str):
         # Learn pattern - stateless call returns (pattern_name, new_stm)
         # Count the events learned before the STM is replaced with what remains.
         learned_event_count = len(session.stm)
-        pattern_name, new_stm = await processor.learn(session_state=session)
+        pattern_name, _ = await processor.learn(session_state=session)
 
-        # Update session state: replaces STM and resets the accumulators
-        session.apply_learn_result(new_stm)
+        # Update session state: empties the STM and resets the accumulators
+        session.apply_learn_result()
 
         await app_state.session_manager.update_session(session)
 
@@ -885,8 +885,8 @@ async def observe_sequence_in_session(
 
                 # Learn after each if requested
                 if data.learn_after_each and current_state.stm:
-                    pattern_name, new_stm = await processor.learn(session_state=current_state)
-                    current_state.apply_learn_result(new_stm)
+                    pattern_name, _ = await processor.learn(session_state=current_state)
+                    current_state.apply_learn_result()
                     auto_learned_patterns.append(pattern_name)
 
                 # Track auto-learned patterns from auto-learning
@@ -907,8 +907,8 @@ async def observe_sequence_in_session(
             final_learned_pattern = None
             if data.learn_at_end and current_state.stm:
                 try:
-                    final_learned_pattern, new_stm = await processor.learn(session_state=current_state)
-                    current_state.apply_learn_result(new_stm)
+                    final_learned_pattern, _ = await processor.learn(session_state=current_state)
+                    current_state.apply_learn_result()
                     auto_learned_patterns.append(final_learned_pattern)
                     logger.info(f"Learned final pattern: {final_learned_pattern}")
                 except Exception as learn_error:

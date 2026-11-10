@@ -64,17 +64,16 @@ class SessionState:
         self.last_accessed = datetime.now(timezone.utc)
         self.access_count += 1
 
-    def apply_learn_result(self, new_stm: list[list[str]]) -> None:
+    def apply_learn_result(self) -> None:
         """
         Apply the outcome of a learn to this session.
 
         Learning consumes everything accumulated for the pattern: the STM is
-        replaced with what remains (nothing, or a kept tail) and the emotives
-        and metadata accumulators are reset, so they cannot leak into the next
-        pattern. This is what the legacy stateful learn() did; clear-stm
-        resets the same accumulators.
+        emptied and the emotives and metadata accumulators are reset, so they
+        cannot leak into the next pattern. This is what the legacy stateful
+        learn() did; clear-stm resets the same accumulators.
         """
-        self.stm = new_stm
+        self.stm = []
         self.emotives_accumulator = []
         self.metadata_accumulator = []
 

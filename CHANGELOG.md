@@ -23,6 +23,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stores the accumulators (including the triggering observation's) and resets
   them, as a manual learn does. Patterns auto-learned from sessions that send
   emotives or metadata now carry them; existing patterns are unchanged.
+- **`clear_stm_between` now drops the emotives and metadata of the events it
+  clears.** `observe-sequence` in isolation mode emptied the STM before each
+  observation and left the session's accumulators alone, so the emotives and
+  metadata of a cleared observation were stored with the next pattern learned in
+  the session, which that observation is not part of. `learn_after_each` hid
+  this, because each learn resets the accumulators. Clearing now goes through
+  `SessionState.discard_stm`, which empties the STM and both accumulators
+  together. In isolation mode the percept's emotives are therefore the current
+  observation's alone, not an average that includes cleared observations.
+  Existing patterns are unchanged.
 
 ### Removed
 - **`keep_tail`.** `KatoProcessor.learn()` no longer takes `keep_tail`, and

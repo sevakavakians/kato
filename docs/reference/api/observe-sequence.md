@@ -109,6 +109,10 @@ Process Event 3: [["sensor3", "warning"]]
 # Note: Final STM contains only the last event (unless learning is triggered)
 ```
 
+Clearing the STM also drops the emotives and metadata observed with the cleared
+events, so a pattern learned afterwards holds only the fields of the events it
+contains.
+
 ## Learning Options
 
 ### learn_after_each

@@ -341,33 +341,6 @@ class MemoryManager:
                 operation="set_stm"
             )
 
-    def set_stm_tail_context(
-        self,
-        pattern_processor,
-        tail_event: list[str]
-    ) -> None:
-        """
-        Set STM with a tail event for context continuity (side effect operation).
-
-        Used during auto-learning to maintain context between learned patterns.
-
-        Args:
-            pattern_processor: Pattern processor to update
-            tail_event: The last event to keep as context
-
-        Raises:
-            MemoryOperationError: If setting fails
-        """
-        try:
-            pattern_processor.setSTM([tail_event])
-            logger.debug(f"STM tail context set with {len(tail_event)} symbols")
-        except Exception as e:
-            raise MemoryOperationError(
-                f"Failed to set STM tail context: {str(e)}",
-                memory_type="STM",
-                operation="set_tail_context"
-            )
-
     # =========================================================================
     # SYMBOL OPERATIONS (Pure functions)
     # =========================================================================

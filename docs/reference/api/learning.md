@@ -24,6 +24,12 @@ POST /sessions/{session_id}/learn
 
 **Request**: No body required
 
+**What it consumes**: Learning stores the pattern with the emotives and metadata
+the session accumulated for it, then empties the STM and resets both
+accumulators, so nothing carries into the next pattern. Auto-learning (when
+`max_pattern_length` is reached during an observation) does the same, including
+the emotives and metadata of the observation that triggered it.
+
 **Response** (`200 OK`):
 
 ```json

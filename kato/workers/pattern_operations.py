@@ -88,7 +88,7 @@ class PatternOperations:
                 auto_learn=False
             ) from e
 
-    def learn_pattern(self, keep_tail=False, keep_stm_for_rolling=False) -> str:
+    def learn_pattern(self, keep_stm_for_rolling=False) -> str:
         """
         Learn a new pattern from current STM.
 
@@ -96,7 +96,6 @@ class PatternOperations:
         The pattern is stored in both RAM (for fast search) and database (for persistence).
 
         Args:
-            keep_tail: If True, keeps the last event in STM after learning (for auto-learning)
             keep_stm_for_rolling: If True, preserves STM for rolling window mode (new feature)
 
         Returns:
@@ -110,29 +109,16 @@ class PatternOperations:
             # Use static method to get STM from pattern processor
             from kato.workers.memory_manager import MemoryManager
 
-            # Save tail event if needed BEFORE learning (which normally clears STM)
-            tail_event = None
-
-            if keep_tail and not keep_stm_for_rolling:
-                # For tail mode: only save the last event
-                stm_state = MemoryManager.get_stm_from_pattern_processor(self.pattern_processor)
-                if len(stm_state) > 1:
-                    tail_event = stm_state[-1]
-
             # Learn vectors first (if any)
             self.vector_processor.learn()
 
             # Learn pattern from STM (this clears STM)
             pattern_name = self.pattern_processor.learn()
 
-            # Handle STM restoration based on mode
             if keep_stm_for_rolling:
                 # Rolling mode: DON'T restore full STM - that's handled by maintain_rolling_window
                 # The STM has already been cleared by learn(), which is correct for rolling mode
                 logger.debug("Rolling mode: STM cleared after learning, will be maintained by rolling window logic")
-            elif tail_event:
-                # Tail mode: only restore the last event
-                self.memory_manager.set_stm_tail_context(self.pattern_processor, tail_event)
 
             if pattern_name:
                 full_name = f"PTRN|{pattern_name}"

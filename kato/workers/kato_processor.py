@@ -175,7 +175,6 @@ class KatoProcessor:
         self,
         *,
         session_state: 'SessionState',
-        keep_tail: bool = False
     ) -> tuple[str, list[list[str]]]:
         """
         Learn a pattern from session STM and return updated STM.
@@ -185,12 +184,12 @@ class KatoProcessor:
 
         Args:
             session_state: Current session state with STM to learn
-            keep_tail: Whether to keep last event in STM after learning (for rolling mode)
 
         Returns:
             Tuple of (pattern_name, new_stm):
             - pattern_name: Name of learned pattern (or None if learning failed)
-            - new_stm: Updated STM after learning
+            - new_stm: Updated STM after learning (always empty: learning
+              consumes the whole STM)
         """
         stm = [list(event) for event in session_state.stm]
         pattern_name = self.pattern_operations.learn_pattern_from(
@@ -199,10 +198,8 @@ class KatoProcessor:
             session_state.metadata_accumulator,
         )
 
-        # Learning consumes the STM; keep_tail keeps the last event as context
-        # for the next pattern (used by auto-learning callers).
-        new_stm = [stm[-1]] if keep_tail and len(stm) > 1 else []
-        return pattern_name, new_stm
+        # Learning consumes the STM.
+        return pattern_name, []
 
     async def finalize_training(self) -> dict:
         """
@@ -268,28 +265,34 @@ class KatoProcessor:
         # observation pipeline and the updated STM comes back. Nothing is loaded
         # into shared processor state, so concurrent requests on this processor
         # (other sessions on the same node) cannot interfere with each other.
-        # NOTE: auto-learned patterns are stored without the session's
-        # emotives/metadata, exactly as before this refactor (the old bridge
-        # only loaded STM on this path); see check_auto_learning.
-        result = await self.observation_processor.process_observation(
-            observation,
-            config=config,
-            stm=session_state.stm,
-        )
-        new_stm = result['stm']
-        new_time = MemoryManager.increment_time(session_state.time)
-
-        # Process emotives using stateless helper
+        #
+        # The accumulators are updated with this observation first, so that an
+        # auto-learned pattern is stored with the session's emotives and metadata
+        # including the event that triggered it -- the same as a manual learn.
         new_emotives_acc, new_current_emotives = MemoryManager.process_emotives(
             session_state.emotives_accumulator,
             observation.get('emotives', {})
         )
-
-        # Process metadata using stateless helper
         new_metadata_acc = MemoryManager.process_metadata(
             session_state.metadata_accumulator,
             observation.get('metadata', {})
         )
+
+        result = await self.observation_processor.process_observation(
+            observation,
+            config=config,
+            stm=session_state.stm,
+            emotives=new_emotives_acc,
+            metadata=new_metadata_acc,
+        )
+        new_stm = result['stm']
+        new_time = MemoryManager.increment_time(session_state.time)
+
+        # Auto-learning consumed the STM, and with it the emotives and metadata
+        # accumulated for the pattern: reset them, as a manual learn does.
+        if result.get('auto_learn_triggered'):
+            new_emotives_acc = []
+            new_metadata_acc = []
 
         # Build percept data using stateless helper
         new_percept = MemoryManager.build_percept_data(

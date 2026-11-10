@@ -295,7 +295,7 @@ class ObservationProcessor:
         metadata: list[dict[str, Any]],
         max_pattern_length: int,
         stm_mode: str,
-    ) -> tuple[Optional[str], list[list[str]]]:
+    ) -> tuple[Optional[str], list[list[str]], bool]:
         """
         Auto-learn from the given STM if it has reached max_pattern_length.
 
@@ -314,12 +314,15 @@ class ObservationProcessor:
             stm_mode: STM mode ('CLEAR' or 'ROLLING')
 
         Returns:
-            (pattern name or None, STM after auto-learning)
+            (pattern name or None, STM after auto-learning, whether auto-learning
+            fired). The flag is True even when nothing was stored (a single-event
+            STM), because the STM was consumed either way and the caller must
+            reset the emotives and metadata accumulated for it.
         """
         logger.debug(f"check_auto_learning: max_pattern_length={max_pattern_length}")
         if max_pattern_length <= 0:
             logger.debug(f"Auto-learning disabled (max_pattern_length={max_pattern_length})")
-            return None, stm
+            return None, stm, False
 
         stm_length = len(stm)
 
@@ -329,7 +332,7 @@ class ObservationProcessor:
         logger.info(f"check_auto_learning: STM length={stm_length}, max={max_pattern_length}, mode={stm_mode}")
 
         if stm_length < max_pattern_length:
-            return None, stm
+            return None, stm, False
 
         logger.info(f"Auto-learning triggered: STM length {stm_length} >= "
                     f"max_pattern_length {max_pattern_length} (mode: {stm_mode})")
@@ -343,9 +346,9 @@ class ObservationProcessor:
             window_size = max_pattern_length - 1
             new_stm = stm[-window_size:] if len(stm) > window_size else stm[1:]
             logger.info(f"ROLLING mode: keeping {len(new_stm)} events as the new window")
-            return pattern_name, list(new_stm)
+            return pattern_name, list(new_stm), True
 
-        return pattern_name, []
+        return pattern_name, [], True
 
     async def process_observation(
         self,
@@ -500,7 +503,7 @@ class ObservationProcessor:
                 # Check for auto-learning AFTER adding current event
                 # Pass config values to check_auto_learning
                 logger.debug(f"About to check auto-learning with max_pattern_length={max_pattern_length}")
-                auto_learned_pattern, working_stm = self.check_auto_learning(
+                auto_learned_pattern, working_stm, auto_learn_triggered = self.check_auto_learning(
                     working_stm,
                     learn_emotives,
                     learn_metadata,
@@ -511,10 +514,12 @@ class ObservationProcessor:
             else:
                 logger.debug("No data to process, skipping auto-learning check")
                 auto_learned_pattern = None
+                auto_learn_triggered = False
 
             result = {
                 'unique_id': unique_id,
                 'auto_learned_pattern': auto_learned_pattern,
+                'auto_learn_triggered': auto_learn_triggered,
                 'symbols': combined_symbols,
                 'predictions': predictions,
                 'stm': working_stm,

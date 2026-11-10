@@ -15,6 +15,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `learn()` reset both, and the stateless rewrite dropped that. The same gap was
   in `observe-sequence` with `learn_after_each` and `learn_at_end`. All three now
   go through `SessionState.apply_learn_result`.
+- **Auto-learning stores the session's emotives and metadata and resets them.**
+  A pattern learned automatically when `max_pattern_length` was reached was stored
+  with empty emotives and metadata, and the session's accumulators kept growing
+  across auto-learned patterns, so the next manual learn picked up emotives and
+  metadata from events an earlier pattern had already consumed. Auto-learning now
+  stores the accumulators (including the triggering observation's) and resets
+  them, as a manual learn does. Patterns auto-learned from sessions that send
+  emotives or metadata now carry them; existing patterns are unchanged.
+
+### Removed
+- **`keep_tail`.** `KatoProcessor.learn()` no longer takes `keep_tail`, and
+  `PatternOperations.learn_pattern()` no longer takes it or restores a tail event,
+  which also removes the unused `MemoryManager.set_stm_tail_context`. No caller
+  used it; learning always consumes the whole STM. The returned STM from
+  `KatoProcessor.learn()` is therefore always empty.
 
 ## [6.4.2] - 2026-10-16
 

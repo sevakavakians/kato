@@ -348,7 +348,7 @@ class PatternProcessor:
         Convert the given short-term memory into a persistent pattern.
 
         Stateless with respect to STM: the caller owns `stm` and decides what
-        becomes of it afterwards (cleared, rolled, or tail kept). Creates a
+        becomes of it afterwards (cleared or rolled). Creates a
         hash-named pattern, stores it in ClickHouse/Redis, and distributes it to
         search workers for future pattern matching.
 

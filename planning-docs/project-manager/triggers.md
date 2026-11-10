@@ -1108,3 +1108,7 @@ future_potentials fix implemented (DECISION-050 accepted, SPRINT_BACKLOG 11). Si
 ## 2026-10-14 - Task Completion (verified): future_potentials per-request fix; full suite 898 passed. Uncommitted.
 
 ## 2026-10-16 - Milestone Completion: v6.4.2 released (DECISION-050) and deployed to :8000; leak test 0/40. Silent.
+
+- 2026-11-10: Task Completion (verification) - full suite 908/3/1/0 on containerized local main 2aa6c2e.
+
+- 2026-11-10 (~21:52 UTC): Task Completion (merge + verification) - fix/clear-stm-between-accumulators merged as 3516685; full suite 918/3/1/0.

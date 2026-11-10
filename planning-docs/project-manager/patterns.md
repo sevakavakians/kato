@@ -713,3 +713,8 @@ Inferred from a commit title that did not mention GPU. Reality: CHANGELOG v6.1.0
 ### 2026-10-16
 - Same-day release-to-deploy loop for a data-exposure fix: PR merge, changelog, container-manager patch, deployment pin bump, live reproduction script flipped from 39/40 leaks to 0/40. Re-running the original failing repro against the deployed image is the strongest verification.
 - Tooling gap: ./run_tests.sh accepts only one test path (given two, runs the last); run files separately or via pytest directly.
+
+## 2026-11-10 - Assumption -> Reality: Running the full suite against source
+- Assumption: uvicorn on :8011 with KATO_BASE_URL runs the full suite against source.
+- Reality: the shared `kato_client` fixture and several test files hardcode `localhost:8000`, so the run was invalid (it hit whatever was on :8000). Use the container playbook: `docker compose build --no-cache kato` -> `./start.sh start` -> `./run_tests.sh --no-start --no-stop`.
+- Discovery trigger: invalid results from the source-run attempt.

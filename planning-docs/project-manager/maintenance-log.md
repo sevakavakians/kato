@@ -3709,3 +3709,11 @@ The investigation surfaced five real, unrelated defects, fixed in the same pass:
 ## 2026-10-16 - Release Recorded: v6.4.2 (PATCH) and Deployment Update
 **Classification**: Milestone Completion + Task Completion.
 **Done**: Added completed/features/2026-10-16-kato-v6.4.2-release.md. Updated SESSION_STATE.md (Current Task: released and deployed, prior task demoted), SPRINT_BACKLOG.md (item 11 DONE), DECISIONS.md (DECISION-050 RELEASED in 6.4.2), README.md version line (6.4.2; removed stale "deployment still on 6.4.0" sentence). Resolved pending-updates commit/PR/release approval entry. Follow-ups recorded (benchmark section, unreachable cache, configurable formula, run_tests.sh single-path).
+
+## 2026-11-10 - Verification Recorded: Full Suite Passed on Containerized Local main (2aa6c2e)
+**Classification**: Task Completion (verification step), Knowledge Refinement.
+**Done**: SESSION_STATE.md Current Task set to the verification record (908 passed / 3 skipped / 1 xfailed / 0 failed, 11m15s; container playbook, KATO_WORKERS=4). Recorded that `19646d8..2aa6c2e` are unpushed, that the `deployment/` stack was found stopped and the root-compose stack now runs on the shared volumes (dashboard not running; Redis backup taken), and the lesson that source runs on :8011 are invalid for the full suite (hardcoded localhost:8000). Prior v6.4.2 task demoted to Previous Task. README coverage line updated. Nothing committed.
+
+## 2026-11-10 (~21:52 UTC) - Merge + Verification Recorded: fix/clear-stm-between-accumulators -> main 3516685
+**Classification**: Task Completion (merge + verification).
+**Done**: SESSION_STATE.md Current Task set to the merge record (9a7bba4, fb3dca4, merge 3516685; 918 passed / 3 skipped / 1 xfailed / 0 failed, 9m42s; Redis durable key count 814 matched backup); prior verification task demoted. Marked "push 3 commits" DONE (origin/main = 2aa6c2e); recorded 3 new unpushed commits. README coverage line updated. Still open: push decision, deployment/ vs root-compose stack. Nothing committed.

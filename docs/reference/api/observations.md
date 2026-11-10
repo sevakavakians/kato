@@ -172,12 +172,12 @@ POST /sessions/{session_id}/observe-sequence
 | `observations` | array | Yes | - | List of observation objects |
 | `learn_after_each` | boolean | No | false | Learn pattern after each observation |
 | `learn_at_end` | boolean | No | false | Learn pattern from final STM state |
-| `clear_stm_between` | boolean | No | false | Clear STM between observations (isolation mode) |
+| `clear_stm_between` | boolean | No | false | Clear STM, and the emotives and metadata observed with it, between observations (isolation mode) |
 
 **Processing Modes**:
 
 1. **Sequential (default)**: Observations accumulate in STM
-2. **Isolated** (`clear_stm_between=true`): Each observation starts with fresh STM
+2. **Isolated** (`clear_stm_between=true`): Each observation starts with fresh STM and no emotives or metadata carried over
 3. **Learn After Each** (`learn_after_each=true`): Creates pattern after each observation
 4. **Learn At End** (`learn_at_end=true`): Creates pattern from final sequence
 

@@ -77,6 +77,19 @@ class SessionState:
         self.emotives_accumulator = []
         self.metadata_accumulator = []
 
+    def discard_stm(self) -> None:
+        """
+        Drop the events in the STM without learning them.
+
+        The emotives and metadata accumulators hold what was observed with those
+        events, so they go with the STM. Left behind, they would be stored with
+        the next pattern learned in this session, which the dropped events are
+        not part of. The session clock, percept and predictions are untouched.
+        """
+        self.stm = []
+        self.emotives_accumulator = []
+        self.metadata_accumulator = []
+
     def enforce_limits(self):
         """Enforce resource limits on session data"""
         # Trim STM if too large (keep most recent)

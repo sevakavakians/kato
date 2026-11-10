@@ -824,11 +824,12 @@ async def observe_sequence_in_session(
 
         try:
             for i, obs_data in enumerate(data.observations):
-                # Clear STM before each observation if isolation requested
+                # Isolation: before each observation after the first, drop what
+                # the STM holds together with the emotives and metadata
+                # accumulated for it, so neither reaches a later pattern.
                 if data.clear_stm_between and i > 0:
-                    from kato.workers.memory_manager import MemoryManager
-                    current_state.stm = MemoryManager.clear_symbols()
-                    logger.debug(f"Cleared STM for isolated observation {i}")
+                    current_state.discard_stm()
+                    logger.debug(f"Cleared STM and accumulators for isolated observation {i}")
 
                 observation = {
                     'strings': obs_data.strings,

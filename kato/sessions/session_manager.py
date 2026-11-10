@@ -408,9 +408,7 @@ class SessionManager:
         if not session:
             return False
 
-        session.stm = []
-        session.emotives_accumulator = []
-        session.metadata_accumulator = []
+        session.discard_stm()
         session.time = 0
         session.percept_data = {}
         session.predictions = []

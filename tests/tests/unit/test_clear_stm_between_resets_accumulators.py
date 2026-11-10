@@ -9,7 +9,8 @@ session - a pattern that observation is not part of. learn_after_each hid this,
 because each learn resets the accumulators.
 
 Clearing now goes through SessionState.discard_stm, which empties the STM and
-both accumulators together.
+both accumulators together. The clear-stm endpoint drops events the same way, so
+both session managers call it too.
 
 The endpoint tests run the real observe-sequence endpoint, KatoProcessor.observe
 and learn, and ObservationProcessor. Only storage is faked: learn_pattern_from
@@ -30,7 +31,8 @@ from kato.api.endpoints import sessions as sessions_endpoint
 from kato.api.schemas.observation import ObservationDataItem, ObservationSequenceRequest
 from kato.config.session_config import SessionConfiguration
 from kato.services import kato_fastapi
-from kato.sessions.session_manager import SessionState
+from kato.sessions.redis_session_manager import RedisSessionManager
+from kato.sessions.session_manager import SessionManager, SessionState
 from kato.workers.kato_processor import KatoProcessor
 from kato.workers.observation_processor import ObservationProcessor
 
@@ -251,3 +253,48 @@ async def test_without_isolation_fields_still_accumulate_across_the_sequence(iso
             [{'source': 'A'}, {'source': 'B'}],
         ),
     ]
+
+
+# ── clear-stm ──────────────────────────────────────────────────────────
+
+def _held_session() -> SessionState:
+    return _session(
+        stm=[['a'], ['b']],
+        emotives_accumulator=[{'joy': 0.5}],
+        metadata_accumulator=[{'source': 'x'}],
+        time=7,
+        percept_data={'k': 'v'},
+        predictions=['p'],
+    )
+
+
+def _assert_cleared(session: SessionState) -> None:
+    assert session.stm == []
+    assert session.emotives_accumulator == []
+    assert session.metadata_accumulator == []
+    assert session.time == 0
+    assert session.percept_data == {}
+    assert session.predictions == []
+
+
+@pytest.mark.asyncio
+async def test_clear_session_stm_resets_everything_the_session_holds():
+    manager = SessionManager()
+    session = _held_session()
+    manager.sessions[session.session_id] = session
+
+    assert await manager.clear_session_stm(session.session_id) is True
+    _assert_cleared(session)
+    assert await manager.clear_session_stm('missing') is False
+
+
+@pytest.mark.asyncio
+async def test_redis_clear_session_stm_resets_and_saves_the_session():
+    session = _held_session()
+    manager = object.__new__(RedisSessionManager)
+    manager.get_session = AsyncMock(return_value=session)
+    manager.update_session = AsyncMock(return_value=True)
+
+    assert await manager.clear_session_stm(session.session_id) is True
+    _assert_cleared(session)
+    manager.update_session.assert_awaited_once_with(session)

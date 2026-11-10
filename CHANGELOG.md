@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **A manual learn now resets the session's emotives and metadata accumulators.**
+  `POST /sessions/{id}/learn` replaced the session's STM and nothing else, so the
+  emotives and metadata accumulated for one pattern carried into the next pattern
+  learned in the same session; only `clear-stm` reset them. The legacy stateful
+  `learn()` reset both, and the stateless rewrite dropped that. The same gap was
+  in `observe-sequence` with `learn_after_each` and `learn_at_end`. All three now
+  go through `SessionState.apply_learn_result`.
+
 ## [6.4.2] - 2026-10-16
 
 ### Fixed

@@ -28,8 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`keep_tail`.** `KatoProcessor.learn()` no longer takes `keep_tail`, and
   `PatternOperations.learn_pattern()` no longer takes it or restores a tail event,
   which also removes the unused `MemoryManager.set_stm_tail_context`. No caller
-  used it; learning always consumes the whole STM. The returned STM from
-  `KatoProcessor.learn()` is therefore always empty.
+  used it; learning always consumes the whole STM. `KatoProcessor.learn()`
+  therefore returns just the pattern name instead of `(pattern_name, new_stm)`.
 
 ## [6.4.2] - 2026-10-16
 

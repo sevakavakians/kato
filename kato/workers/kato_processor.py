@@ -175,31 +175,28 @@ class KatoProcessor:
         self,
         *,
         session_state: 'SessionState',
-    ) -> tuple[str, list[list[str]]]:
+    ) -> str:
         """
-        Learn a pattern from session STM and return updated STM.
+        Learn a pattern from the session's STM and return its name.
 
-        STATELESS: Takes session state, returns pattern name and new STM.
-        Does NOT mutate processor or session_state.
+        STATELESS: Takes session state, returns the pattern name.
+        Does NOT mutate processor or session_state. Learning consumes the whole
+        STM and the accumulated emotives and metadata; the caller applies that to
+        the session with SessionState.apply_learn_result().
 
         Args:
             session_state: Current session state with STM to learn
 
         Returns:
-            Tuple of (pattern_name, new_stm):
-            - pattern_name: Name of learned pattern (or None if learning failed)
-            - new_stm: Updated STM after learning (always empty: learning
-              consumes the whole STM)
+            Name of the learned pattern, or an empty string if the STM held
+            fewer than two symbols and nothing was stored.
         """
         stm = [list(event) for event in session_state.stm]
-        pattern_name = self.pattern_operations.learn_pattern_from(
+        return self.pattern_operations.learn_pattern_from(
             stm,
             session_state.emotives_accumulator,
             session_state.metadata_accumulator,
         )
-
-        # Learning consumes the STM.
-        return pattern_name, []
 
     async def finalize_training(self) -> dict:
         """

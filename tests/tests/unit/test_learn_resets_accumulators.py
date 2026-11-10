@@ -82,7 +82,7 @@ async def test_learn_endpoint_resets_accumulators(monkeypatch):
 
     class FakeProcessor:
         async def learn(self, *, session_state):
-            return 'PTRN|abc', []
+            return 'PTRN|abc'
 
     class FakeLock:
         async def __aenter__(self):

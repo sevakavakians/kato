@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [6.4.3] - 2026-11-10
+
 ### Fixed
 - **A manual learn now resets the session's emotives and metadata accumulators.**
   `POST /sessions/{id}/learn` replaced the session's STM and nothing else, so the

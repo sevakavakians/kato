@@ -3717,3 +3717,7 @@ The investigation surfaced five real, unrelated defects, fixed in the same pass:
 ## 2026-11-10 (~21:52 UTC) - Merge + Verification Recorded: fix/clear-stm-between-accumulators -> main 3516685
 **Classification**: Task Completion (merge + verification).
 **Done**: SESSION_STATE.md Current Task set to the merge record (9a7bba4, fb3dca4, merge 3516685; 918 passed / 3 skipped / 1 xfailed / 0 failed, 9m42s; Redis durable key count 814 matched backup); prior verification task demoted. Marked "push 3 commits" DONE (origin/main = 2aa6c2e); recorded 3 new unpushed commits. README coverage line updated. Still open: push decision, deployment/ vs root-compose stack. Nothing committed.
+
+## 2026-11-10 (~22:04 UTC) - Release Recorded: v6.4.3 (PATCH), Not Deployed
+**Classification**: Milestone Completion + Task Completion.
+**Done**: Added completed/features/2026-11-10-kato-v6.4.3-release.md. Updated SESSION_STATE.md (Current Task: v6.4.3 released, not deployed; merge/verification task demoted; stale "unpushed" wording corrected), README.md version and coverage lines. Closed the open item "push 9a7bba4, fb3dca4, 3516685" as done. Open: deploy 6.4.3 (override pin bump, restore deployment/ stack), user's call. Nothing committed.

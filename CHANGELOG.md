@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **`deployment/kato-manager.sh` now loads a local `docker-compose.override.yml`.**
+  The script passes `-f docker-compose.yml` explicitly, which stops Compose from
+  loading the override file on its own. So `start`, `stop`, `restart`, `update`,
+  `logs` and `status` ignored a version pinned there, and any other local
+  settings in it, and `start` ran `kato:latest`. The script now adds the override
+  when it exists. `pull` and `update` pull the image the compose files name, which
+  is the pinned version when one is set, instead of always pulling `:latest`. The
+  deployment docs no longer say that `pull` then `restart kato` moves KATO to a
+  new image; `restart` keeps the old container, so they use `update` or
+  `start kato`.
+
 ## [6.4.3] - 2026-11-10
 
 ### Fixed

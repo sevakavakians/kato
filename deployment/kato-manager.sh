@@ -131,9 +131,15 @@ fi
 COMMAND=${1:-help}
 SERVICE=${2:-all}
 
-# Build docker compose command with optional auth override
+# Build docker compose command with the optional local and auth overrides.
+# Passing -f turns off Compose's automatic loading of docker-compose.override.yml,
+# so it is added here explicitly, in the same order Compose would use. That file
+# is local and gitignored; it typically pins the KATO image version.
 compose_cmd() {
     local cmd="docker compose -f $SCRIPT_DIR/docker-compose.yml"
+    if [ -f "$SCRIPT_DIR/docker-compose.override.yml" ]; then
+        cmd="$cmd -f $SCRIPT_DIR/docker-compose.override.yml"
+    fi
     if [ -f "$SCRIPT_DIR/docker-compose.auth.yml" ]; then
         cmd="$cmd -f $SCRIPT_DIR/docker-compose.auth.yml"
     fi
@@ -200,15 +206,17 @@ case "$COMMAND" in
         ;;
 
     pull)
-        print_info "Pulling latest KATO image from registry..."
-        docker pull ghcr.io/sevakavakians/kato:latest
-        print_info "Image updated. Run './kato-manager.sh restart kato' to use the new version"
+        # Pull the image the compose files name: :latest, or the version pinned
+        # in docker-compose.override.yml.
+        print_info "Pulling KATO image from registry..."
+        $(compose_cmd) pull kato
+        print_info "Image updated. Run './kato-manager.sh update' to recreate KATO on it"
         ;;
 
     update)
-        print_info "Updating KATO to latest version..."
-        docker pull ghcr.io/sevakavakians/kato:latest
-        print_info "Restarting KATO service..."
+        print_info "Updating KATO to the configured image..."
+        $(compose_cmd) pull kato
+        print_info "Recreating KATO service..."
         $(compose_cmd) up -d kato
         print_info "✓ KATO updated and restarted"
         ;;
@@ -1039,8 +1047,8 @@ ENVEOF
         echo "  start [SERVICE]    - Start service(s) (default: all)"
         echo "  stop [SERVICE]     - Stop service(s) (default: all)"
         echo "  restart [SERVICE]  - Restart service(s) (default: all)"
-        echo "  pull               - Pull latest KATO image from registry"
-        echo "  update             - Pull latest image and restart KATO"
+        echo "  pull               - Pull the KATO image (latest, or the version pinned in docker-compose.override.yml)"
+        echo "  update             - Pull the KATO image and recreate KATO on it"
         echo "  logs [SERVICE] [N] - Show last N lines of logs (default: kato, 50 lines)"
         echo "  follow [SERVICE]   - Follow logs in real-time (default: kato)"
         echo "  status             - Check all service status"

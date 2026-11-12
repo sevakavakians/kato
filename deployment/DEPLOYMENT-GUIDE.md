@@ -86,14 +86,14 @@ The `kato-manager.sh` script ensures:
 ```bash
 cd kato/deployment
 git pull origin main           # Get latest configs
-./kato-manager.sh pull         # Pull latest container image
-./kato-manager.sh restart      # Apply changes
+./kato-manager.sh update       # Pull the KATO image and recreate KATO on it
+./kato-manager.sh restart      # Reload the mounted config files
 ./kato-manager.sh verify       # Verify config
 ```
 
 ### Option 2: Update Just KATO Container
 ```bash
-./kato-manager.sh update       # Pulls latest image and restarts KATO
+./kato-manager.sh update       # Pulls the configured image (latest, or your pinned version) and recreates KATO
 ```
 
 ---

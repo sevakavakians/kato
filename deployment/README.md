@@ -323,9 +323,10 @@ docker volume rm kato-clickhouse-data kato-qdrant-data kato-redis-data
 # Update KATO to latest version
 ./kato-manager.sh update
 
-# Or manually pull and restart
+# Or pull, then recreate KATO on the new image
+# (restart would keep the old container and its old image)
 ./kato-manager.sh pull
-./kato-manager.sh restart kato
+./kato-manager.sh start kato
 ```
 
 ### Logs
@@ -770,10 +771,16 @@ vim docker-compose.yml
 #   image: ghcr.io/sevakavakians/kato:<current-version>
 # To:
 #   image: ghcr.io/sevakavakians/kato:<new-version>
+#
+# To keep the pin out of the tracked file, set it in a local
+# docker-compose.override.yml instead; kato-manager.sh loads that file when
+# it exists:
+#   services:
+#     kato:
+#       image: ghcr.io/sevakavakians/kato:<new-version>
 
-# 2. Pull and restart
-./kato-manager.sh pull
-./kato-manager.sh restart kato
+# 2. Pull the pinned image and recreate KATO on it
+./kato-manager.sh update
 ```
 
 #### Method 3: Manual Docker Commands

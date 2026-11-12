@@ -3729,3 +3729,6 @@ The investigation surfaced five real, unrelated defects, fixed in the same pass:
 ## 2026-11-12 - Task Completion: kato-manager.sh Honors the Override File (SPRINT_BACKLOG 12)
 **Classification**: Task Completion, Knowledge Refinement.
 **Done**: SPRINT_BACKLOG.md item 12 marked DONE; SESSION_STATE.md Current Task updated (fix, verification, workaround no longer needed; nothing open except whether to release the tooling fix with the next version); patterns.md 2026-11-11 lesson annotated as resolved. Fix is in the working tree with a CHANGELOG [Unreleased] Fixed entry; not released. Nothing committed by this agent.
+
+## 2026-11-12 - Knowledge Refinement: v6.4.3 release record follow-up closed
+**Done**: In completed/features/2026-11-10-kato-v6.4.3-release.md, marked the kato-manager.sh override follow-up as Closed (fixed 2026-11-12, 02cd5d2) and noted in the Deployment section that the `docker compose up -d` workaround is no longer needed. Nothing committed.

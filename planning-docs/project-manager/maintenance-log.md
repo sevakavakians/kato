@@ -3721,3 +3721,11 @@ The investigation surfaced five real, unrelated defects, fixed in the same pass:
 ## 2026-11-10 (~22:04 UTC) - Release Recorded: v6.4.3 (PATCH), Not Deployed
 **Classification**: Milestone Completion + Task Completion.
 **Done**: Added completed/features/2026-11-10-kato-v6.4.3-release.md. Updated SESSION_STATE.md (Current Task: v6.4.3 released, not deployed; merge/verification task demoted; stale "unpushed" wording corrected), README.md version and coverage lines. Closed the open item "push 9a7bba4, fb3dca4, 3516685" as done. Open: deploy 6.4.3 (override pin bump, restore deployment/ stack), user's call. Nothing committed.
+
+## 2026-11-11 (~17:50 local) - Deployment Recorded: v6.4.3 on :8000
+**Classification**: Milestone Completion (deployment), Blocker Identified (tooling), Knowledge Refinement.
+**Done**: Added a Deployment section to completed/features/2026-11-10-kato-v6.4.3-release.md. Updated SESSION_STATE.md (Current Task: released and deployed; "deploy 6.4.3" closed), README.md version line, SPRINT_BACKLOG.md (new item 12: kato-manager.sh ignores the override file), patterns.md (deploy lesson). Verified per user: version 6.4.3, healthy, Redis durable keys 814 unchanged, dashboard 200, smoke test passed. Nothing committed.
+
+## 2026-11-12 - Task Completion: kato-manager.sh Honors the Override File (SPRINT_BACKLOG 12)
+**Classification**: Task Completion, Knowledge Refinement.
+**Done**: SPRINT_BACKLOG.md item 12 marked DONE; SESSION_STATE.md Current Task updated (fix, verification, workaround no longer needed; nothing open except whether to release the tooling fix with the next version); patterns.md 2026-11-11 lesson annotated as resolved. Fix is in the working tree with a CHANGELOG [Unreleased] Fixed entry; not released. Nothing committed by this agent.

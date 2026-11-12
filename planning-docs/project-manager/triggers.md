@@ -1114,3 +1114,7 @@ future_potentials fix implemented (DECISION-050 accepted, SPRINT_BACKLOG 11). Si
 - 2026-11-10 (~21:52 UTC): Task Completion (merge + verification) - fix/clear-stm-between-accumulators merged as 3516685; full suite 918/3/1/0.
 
 - 2026-11-10 (~22:04 UTC): Milestone Completion - KATO v6.4.3 (PATCH) released (a24cc8e, tag v6.4.3); not deployed. Silent.
+
+- 2026-11-11 (~17:50 local): Milestone Completion - KATO v6.4.3 deployed to the deployment/ stack on :8000; tooling bug (kato-manager.sh ignores override) logged as SPRINT_BACKLOG 12. Silent.
+
+- 2026-11-12: Task Completion + Blocker Resolved - kato-manager.sh now honors deployment/docker-compose.override.yml (SPRINT_BACKLOG 12 DONE); in working tree, unreleased. Silent.

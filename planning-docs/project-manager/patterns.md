@@ -718,3 +718,10 @@ Inferred from a commit title that did not mention GPU. Reality: CHANGELOG v6.1.0
 - Assumption: uvicorn on :8011 with KATO_BASE_URL runs the full suite against source.
 - Reality: the shared `kato_client` fixture and several test files hardcode `localhost:8000`, so the run was invalid (it hit whatever was on :8000). Use the container playbook: `docker compose build --no-cache kato` -> `./start.sh start` -> `./run_tests.sh --no-start --no-stop`.
 - Discovery trigger: invalid results from the source-run attempt.
+
+## 2026-11-11 - Assumption -> Reality: kato-manager.sh start applies the deployment override
+- Assumption: `./kato-manager.sh start` in `deployment/` starts the stack with `docker-compose.override.yml` (image pin, OrbStack `NO_PROXY`).
+- Reality: it passes `-f docker-compose.yml` explicitly, which disables auto-loading of the override; it started ghcr `kato:latest` with neither the pin nor `NO_PROXY`.
+- Lesson: deploy with `docker compose up -d` in `deployment/` and confirm the container's `config_files` label includes the override (and the image tag is the pinned one) before verifying.
+- Resolved 2026-11-12: `kato-manager.sh` `compose_cmd()` now adds the override when the file exists, so the `docker compose up -d` workaround is no longer needed. Still worth confirming the image tag after a deploy. Also: compose `restart` keeps the old container, so `pull` + `restart kato` never moved KATO to a new image; use `update` or `start kato`.
+- Discovery trigger: post-start check of the running image tag and environment during the 6.4.3 deploy. Open follow-up: SPRINT_BACKLOG item 12.

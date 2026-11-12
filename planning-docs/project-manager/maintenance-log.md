@@ -3732,3 +3732,7 @@ The investigation surfaced five real, unrelated defects, fixed in the same pass:
 
 ## 2026-11-12 - Knowledge Refinement: v6.4.3 release record follow-up closed
 **Done**: In completed/features/2026-11-10-kato-v6.4.3-release.md, marked the kato-manager.sh override follow-up as Closed (fixed 2026-11-12, 02cd5d2) and noted in the Deployment section that the `docker compose up -d` workaround is no longer needed. Nothing committed.
+
+## 2026-11-12 - Housekeeping: Branch Cleanup (main is the only branch)
+**Classification**: Housekeeping (no trigger-class event).
+**Done**: Recorded in SESSION_STATE.md Current Task. All merged branches deleted; main is the only branch locally and on origin, in sync, no open PRs. Local via `git branch -d`: fix/clear-stm-between-accumulators (was fb3dca4, never pushed, merged via 3516685), fix/issue-15-single-symbol-any-position (was e730e96). Remote (all merged): deps/certifi-security-floor (PR #20), readme/full-deterministic-control (PR #19), fix/issue-15-single-symbol-any-position. User ran the remote deletion push themselves after the permission check blocked it. Nothing committed by this agent.

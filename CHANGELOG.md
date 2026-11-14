@@ -19,6 +19,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   new image; `restart` keeps the old container, so they use `update` or
   `start kato`.
 
+### Documentation
+- **The configuration guide now shows how much of a pattern each
+  `recall_threshold` requires.** A table under `recall_threshold` gives, for
+  thresholds from 0.02 to 1.0, the share of a pattern that must be observed
+  before the pattern clears the threshold, the STM length that takes for a
+  100-symbol pattern, and the longest pattern a 10-symbol STM can return. The
+  rule behind it is `L / P >= recall_threshold / (2 - recall_threshold)`. The
+  Prediction Object reference now states the `similarity` formula and links to
+  the table. `tests/tests/unit/test_recall_threshold_observed_share.py` pins
+  every row to the scorer and the candidate bound.
+
 ## [6.4.3] - 2026-11-10
 
 ### Fixed

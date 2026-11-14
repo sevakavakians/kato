@@ -89,8 +89,10 @@ A Prediction Object is generated when KATO's pattern recognition engine identifi
 
 ### 12. **similarity** (float)
 **Description**: Base similarity score between observation and pattern.  
+**Formula**: `similarity = 2 * LCS / (len(pattern) + len(STM))` with token matching (the default). Lengths are counted in symbols. `LCS` is the length of the longest common subsequence of the pattern and the STM, counted by the candidate scorer. It can be larger than `len(matches)`, which comes from the alignment.  
 **Range**: 0.0 to 1.0  
-**Purpose**: General measure of pattern resemblance before other metrics are applied.
+**Purpose**: General measure of pattern resemblance before other metrics are applied.  
+**Note**: For an STM of two or more symbols, a pattern is returned only when `similarity >= recall_threshold`, so the threshold decides how much of a pattern must be observed before KATO predicts from it. The table under [recall_threshold](../users/configuration.md#recall_threshold) gives that share for each threshold.
 
 ### 13. **snr** (float)
 **Description**: Signal-to-Noise Ratio measuring the quality of the match.  

@@ -93,6 +93,68 @@ curl -X POST http://localhost:8000/sessions \
   }'
 ```
 
+**How Much of a Pattern Must Be Observed**:
+
+With token matching (the default), KATO compares the threshold with the
+similarity between the STM and each pattern:
+
+```
+similarity = 2 * LCS / (len(pattern) + len(STM))
+```
+
+Lengths are counted in symbols. `LCS` is the length of the longest common
+subsequence: the most symbols the pattern and the STM share in the same order.
+
+The pattern's whole length is in the denominator, so the threshold decides how
+much of a pattern has to be observed before KATO predicts from it. In the best
+case, where every STM symbol matches, a pattern of `P` symbols clears the
+threshold once the STM holds `L` of them and:
+
+```
+L / P >= recall_threshold / (2 - recall_threshold)
+```
+
+| `recall_threshold` | Share of the pattern that must be observed | STM symbols needed for a 100-symbol pattern | Longest pattern a 10-symbol STM can return |
+|---|---|---|---|
+| 0.02 | 1.0% | 2 | 990 symbols |
+| 0.1 (default) | 5.3% | 6 | 190 symbols |
+| 0.2 | 11.1% | 12 | 90 symbols |
+| 0.3 | 17.6% | 18 | 56 symbols |
+| 0.4 | 25.0% | 25 | 40 symbols |
+| 0.5 | 33.3% | 34 | 30 symbols |
+| 0.6 | 42.9% | 43 | 23 symbols |
+| 0.7 | 53.8% | 54 | 18 symbols |
+| 0.8 | 66.7% | 67 | 15 symbols |
+| 0.9 | 81.8% | 82 | 12 symbols |
+| 1.0 | 100% | 100 | 10 symbols |
+
+How to read the table:
+
+- **The share observed is where prediction starts.** At 0.8 a pattern is used
+  only for its last third. At 1.0 only a fully observed pattern is returned, and
+  it has no `future` left to predict.
+- **Choose the threshold from how early you need the prediction.** For
+  predictions once a share `f` of a pattern has been observed, set
+  `recall_threshold` no higher than `2f / (1 + f)`: 0.18 for 10%, 0.40 for 25%,
+  0.66 for 50%, 0.85 for 75%.
+- **These are best cases.** An STM symbol that the pattern does not match adds
+  to the denominator and not to the LCS, so more of the pattern has to be
+  observed. With 25 matching symbols and one unmatched symbol, a 100-symbol
+  pattern no longer clears 0.4.
+- **Symbols are counted, not events.** An event of three symbols counts as three.
+- **Position does not matter.** The observed symbols can lie at the start of the
+  pattern or in the middle of it.
+- **An STM of one symbol is a lookup, not a match.** KATO looks up the patterns
+  that hold the symbol and does not apply the threshold.
+- **The table describes the default, empty `filter_pipeline`.** A configured
+  filter runs before the similarity comparison and can drop a pattern that would
+  have cleared the threshold. See the
+  [Filter Pipeline Guide](../reference/filter-pipeline-guide.md).
+
+A pattern that clears the threshold is a candidate.
+[max_predictions](#max_predictions) then limits how many predictions are
+returned.
+
 #### use_token_matching
 
 Token-level (true) vs character-level (false) matching.

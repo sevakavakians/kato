@@ -85,3 +85,21 @@ def test_missing_metric_raises_keyerror():
     """predictPattern relies on this to report an invalid rank_sort_algo."""
     with pytest.raises(KeyError):
         rank_predictions(_preds([1.0]), 'no_such_metric', 1)
+
+
+def test_a_metric_with_no_value_ranks_below_every_value():
+    """The affinity-weighted fields are None unless the session sets affinity_emotive."""
+    predictions = [
+        {'name': 'unset_b', 'weighted_similarity': None},
+        {'name': 'negative', 'weighted_similarity': -3.0},
+        {'name': 'unset_a', 'weighted_similarity': None},
+        {'name': 'zero', 'weighted_similarity': 0.0},
+    ]
+    ranked = [p['name'] for p in rank_predictions(predictions, 'weighted_similarity', 4)]
+    assert ranked == ['zero', 'negative', 'unset_b', 'unset_a']
+    assert [p['name'] for p in rank_predictions(list(reversed(predictions)), 'weighted_similarity', 4)] == ranked
+
+
+def test_all_values_missing_ranks_by_name():
+    predictions = [{'name': name, 'weighted_snr': None} for name in ('p2', 'p3', 'p1')]
+    assert [p['name'] for p in rank_predictions(predictions, 'weighted_snr', 2)] == ['p3', 'p2']

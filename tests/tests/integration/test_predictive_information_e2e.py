@@ -1,122 +1,152 @@
 """
-End-to-end integration tests for predictive information in predictions.
+End-to-end tests for `potential`, `future_potentials` and `predictive_information`.
+
+    potential                the weighted sum of eleven terms (POTENTIAL_WEIGHTS)
+    future_potentials        P(E | STM) = sum of e^potential over the predictions whose
+                             next event is E / the same sum over the predictions with a future
+    predictive_information   share x log2(P(E | STM) / q(E)), in bits; share is the
+                             prediction's own part of P(E | STM), q(E) the product of q(s)
+                             over the next event's symbols
+
+Each test learns into a node of its own, so every count in the expected values is
+exactly what the test learned.
 """
 
+import math
+
 import pytest
+
+from kato.informatics.prediction_metrics import POTENTIAL_WEIGHTS as W
+
+CLOSE = {'rel': 1e-9, 'abs': 1e-12}
+
+
+def _learn(fixture, events, times=1):
+    name = None
+    for _ in range(times):
+        fixture.clear_stm()
+        for event in events:
+            fixture.observe({"strings": event, "vectors": [], "emotives": {}})
+        name = fixture.learn()
+    return name[5:] if name.startswith('PTRN|') else name
+
+
+def _predict(fixture, events):
+    fixture.clear_stm()
+    for event in events:
+        fixture.observe({"strings": event, "vectors": [], "emotives": {}})
+    response = fixture.get_predictions_response()
+    return {p['name']: p for p in response['predictions']}, response
 
 
 class TestPredictiveInformationE2E:
     """End-to-end tests for predictive information in predictions."""
 
-    def test_predictions_include_pi_field(self, kato_fixture):
-        """Verify predictions include the predictive_information field."""
-        # Learn a simple pattern
-        kato_fixture.observe({"strings": ["A", "B"], "vectors": [], "emotives": {}})
-        kato_fixture.observe({"strings": ["C", "D"], "vectors": [], "emotives": {}})
-        kato_fixture.learn()
+    def test_a_certain_next_event_carries_its_whole_surprise(self, kato_fixture):
+        """One pattern, one future: P(E | STM) is 1, so the information is log2(1 / q(E)).
 
-        # Clear STM and observe to trigger predictions
-        kato_fixture.clear_stm()
-        kato_fixture.observe({"strings": ["A", "B"], "vectors": [], "emotives": {}})
+        The node holds four symbol occurrences, one each, and the next event is
+        [C, D]: q(E) = 1/4 x 1/4, which is 4 bits.
+        """
+        name = _learn(kato_fixture, [["A", "B"], ["C", "D"]])
 
-        # Get predictions
-        predictions = kato_fixture.get_predictions()
-        assert len(predictions) > 0
+        predictions, response = _predict(kato_fixture, [["A", "B"]])
 
-        # Check that predictive_information field exists
-        for pred in predictions:
-            assert 'predictive_information' in pred
-            assert isinstance(pred['predictive_information'], float)
-            assert pred['predictive_information'] >= 0.0
-            assert pred['predictive_information'] <= 1.0  # Normalized value
+        assert list(predictions) == [name]
+        assert predictions[name]['future'] == [["C", "D"]]
+        assert predictions[name]['predictive_information'] == pytest.approx(4.0, **CLOSE)
+        assert response['future_potentials'] == [
+            {'next_event': ["C", "D"], 'probability': 1.0, 'supporting_patterns': 1}]
 
-    def test_potential_uses_correct_formula(self, kato_fixture):
-        """Verify potential is calculated using the composite formula."""
-        # Learn a pattern
-        kato_fixture.observe({"strings": ["X", "Y", "Z"], "vectors": [], "emotives": {}})
-        kato_fixture.observe({"strings": ["W", "V"], "vectors": [], "emotives": {}})
-        kato_fixture.learn()
+    def test_a_prediction_with_no_future_carries_no_information(self, kato_fixture):
+        name = _learn(kato_fixture, [["A"], ["B"]])
 
-        # Clear and observe for predictions
-        kato_fixture.clear_stm()
-        kato_fixture.observe({"strings": ["X", "Y"], "vectors": [], "emotives": {}})
+        predictions, response = _predict(kato_fixture, [["A"], ["B"]])
 
-        # Get predictions
-        predictions = kato_fixture.get_predictions()
-        assert len(predictions) > 0
+        assert predictions[name]['future'] == []
+        assert predictions[name]['predictive_information'] == 0.0
+        assert response['future_potentials'] == []
 
-        for pred in predictions:
-            # Extract metrics
-            evidence = pred.get('evidence', 0)
-            confidence = pred.get('confidence', 0)
-            snr = pred.get('snr', 0)
-            itfdf_similarity = pred.get('itfdf_similarity', 0)
-            fragmentation = pred.get('fragmentation', 0)
-            potential = pred.get('potential', 0)
+    def test_potential_is_the_weighted_sum_of_its_terms(self, kato_fixture):
+        """[X, Y] in one event against [[X, Y, Z], [V, W]], the node's only pattern.
 
-            # Verify the current formula: potential = (evidence + confidence) * snr + itfdf_similarity + (1/(fragmentation + 1))
-            # + onset_alignment, because this STM is a single event
-            expected_potential = (
-                (evidence + confidence) * snr
-                + itfdf_similarity
-                + (1 / (fragmentation + 1))
-                + pred['onset_alignment']
-            )
-            assert abs(potential - expected_potential) < 0.0001, \
-                f"Potential {potential} != (evidence {evidence} + confidence {confidence}) * snr {snr} + itfdf_similarity {itfdf_similarity} + (1/(fragmentation {fragmentation} + 1)) + onset_alignment {pred['onset_alignment']}"
+        Two matches in one block, Z missing from the matched event, nothing
+        extra. Every symbol is held by the one pattern, so each weighs 1 in the
+        cosine.
+        """
+        name = _learn(kato_fixture, [["X", "Y", "Z"], ["W", "V"]])
 
-    def test_pi_increases_with_pattern_repetition(self, kato_fixture):
-        """Test that PI increases when patterns are learned multiple times."""
-        # Learn the same pattern multiple times
-        for _ in range(3):
-            kato_fixture.observe({"strings": ["START"], "vectors": [], "emotives": {}})
-            kato_fixture.observe({"strings": ["MIDDLE"], "vectors": [], "emotives": {}})
-            kato_fixture.observe({"strings": ["END"], "vectors": [], "emotives": {}})
-            kato_fixture.learn()
+        predictions, _ = _predict(kato_fixture, [["X", "Y"]])
 
-        # Clear and observe for predictions
-        kato_fixture.clear_stm()
-        kato_fixture.observe({"strings": ["START", "MIDDLE"], "vectors": [], "emotives": {}})
+        prediction = predictions[name]
+        assert prediction['matches'] == ["X", "Y"]
+        assert prediction['missing'] == [["Z"]]
+        expected = (
+            W['snr']                                      # snr 1: no extras
+            + W['inverse_fragmentation']                  # one block
+            + W['last_event_matched'] + W['last_event_share']
+            + 2 * W['recency_07'] + 2 * W['recency_09']   # two matched symbols, both in the newest event
+            + W['tversky'] / 2                            # 2 / (2 + 2 x 1 missing)
+            + W['cosine_idf_present'] * 2 / math.sqrt(6)  # dot 2, norms sqrt 2 and sqrt 3
+            + W['evidence_to_end'] * 2 / 3                # 2 matches of 3 symbols up to the end of present
+        )                                                 # frequency 1: log_frequency adds nothing
+        assert prediction['potential'] == pytest.approx(expected, **CLOSE)
 
-        # Get predictions
-        predictions = kato_fixture.get_predictions()
-        assert len(predictions) > 0
+    def test_learning_a_pattern_again_raises_its_potential_by_log_frequency(self, kato_fixture):
+        events = [["START"], ["MIDDLE"], ["END"]]
+        name = _learn(kato_fixture, events)
+        once, _ = _predict(kato_fixture, [["START"], ["MIDDLE"]])
 
-        # With repeated patterns, PI should be non-zero
-        # (as co-occurrence statistics build up)
-        max_pi = max(p['predictive_information'] for p in predictions)
-        assert max_pi >= 0.0  # Should have some predictive information
+        _learn(kato_fixture, events, times=2)
+        thrice, _ = _predict(kato_fixture, [["START"], ["MIDDLE"]])
 
-    def test_different_patterns_have_different_pi(self, kato_fixture):
-        """Test that different patterns have different PI values."""
-        # Learn first pattern (highly predictable)
-        for _ in range(5):
-            kato_fixture.observe({"strings": ["A1"], "vectors": [], "emotives": {}})
-            kato_fixture.observe({"strings": ["B1"], "vectors": [], "emotives": {}})
-            kato_fixture.learn()
+        assert thrice[name]['frequency'] == 3
+        assert thrice[name]['potential'] - once[name]['potential'] == pytest.approx(
+            W['log_frequency'] * math.log(3), rel=1e-9)
 
-        # Learn second pattern (less predictable, only once)
-        kato_fixture.observe({"strings": ["X9"], "vectors": [], "emotives": {}})
-        kato_fixture.observe({"strings": ["Y9"], "vectors": [], "emotives": {}})
-        kato_fixture.learn()
+    def test_patterns_that_match_alike_share_the_next_event_by_frequency(self, kato_fixture):
+        """A1 B1 learned five times and X9 Y9 once; one event [A1, X9] is observed.
 
-        # Clear and observe both patterns
-        kato_fixture.clear_stm()
+        Each pattern matches one symbol and has the other as an extra, so their
+        potentials differ by log_frequency alone and e^potential is in the ratio
+        5^weight to 1. Twelve symbol occurrences are learned: B1 five times, Y9
+        once.
+        """
+        often = _learn(kato_fixture, [["A1"], ["B1"]], times=5)
+        seldom = _learn(kato_fixture, [["X9"], ["Y9"]])
 
-        # Observe to match both patterns
-        kato_fixture.observe({"strings": ["A1", "X9"], "vectors": [], "emotives": {}})
+        predictions, response = _predict(kato_fixture, [["A1", "X9"]])
 
-        # Get predictions
-        predictions = kato_fixture.get_predictions()
-        assert len(predictions) >= 2  # Should have predictions for both patterns
+        assert set(predictions) == {often, seldom}
+        weight = 5 ** W['log_frequency']
+        p_b1, p_y9 = weight / (weight + 1), 1 / (weight + 1)
+        assert response['future_potentials'] == [
+            {'next_event': ["B1"], 'probability': pytest.approx(p_b1, **CLOSE), 'supporting_patterns': 1},
+            {'next_event': ["Y9"], 'probability': pytest.approx(p_y9, **CLOSE), 'supporting_patterns': 1},
+        ]
+        assert predictions[often]['predictive_information'] == pytest.approx(
+            p_b1 * math.log2(p_b1 / (5 / 12)), **CLOSE)
+        assert predictions[seldom]['predictive_information'] == pytest.approx(
+            p_y9 * math.log2(p_y9 / (1 / 12)), **CLOSE)
 
-        # Verify all predictions have predictive_information field
-        # Note: PI values may be the same for structurally similar patterns
-        # The important thing is that the field exists and is valid
-        for pred in predictions:
-            assert 'predictive_information' in pred
-            assert isinstance(pred['predictive_information'], (int, float))
-            assert 0.0 <= pred['predictive_information'] <= 1.0
+    def test_predictive_information_adds_up_over_the_predictions(self, kato_fixture):
+        """The values add up to the divergence of the next-event probabilities from chance."""
+        _learn(kato_fixture, [["a"], ["b"], ["c"]], times=2)
+        _learn(kato_fixture, [["a"], ["b"], ["d"]])
+        _learn(kato_fixture, [["a"], ["b"], ["c"], ["e"]])
+
+        predictions, response = _predict(kato_fixture, [["a"], ["b"]])
+
+        assert len(predictions) == 3
+        # 13 symbol occurrences: c is 3 of them (twice in one pattern's learns, once in another), d is 1.
+        chance = {'c': 3 / 13, 'd': 1 / 13}
+        divergence = sum(
+            entry['probability'] * math.log2(entry['probability'] / chance[entry['next_event'][0]])
+            for entry in response['future_potentials']
+        )
+        assert sum(p['predictive_information'] for p in predictions.values()) == pytest.approx(divergence, **CLOSE)
+        assert [entry['next_event'] for entry in response['future_potentials']] == [["c"], ["d"]]
+        assert response['future_potentials'][0]['supporting_patterns'] == 2
 
 
 if __name__ == "__main__":

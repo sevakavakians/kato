@@ -1,18 +1,23 @@
 """
-Unit tests for v3.0 prediction metrics in KATO.
+Unit tests for the prediction metrics in KATO.
 
-Tests the new TF-IDF metric and integration of all prediction metrics:
+Tests the TF-IDF metric and the integration of all prediction metrics:
 - tfidf_score: TF-IDF based pattern ranking
 - Metrics integration: All metrics work together correctly
-- Edge cases: Zero probabilities, empty predictions, single patterns
+- Edge cases: empty predictions, single patterns
 """
 
+import math
 import os
 import sys
+
+import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from fixtures.kato_fixtures import kato_fixture as kato_fixture
+
+from kato.config.session_config import VALID_RANK_SORT_ALGORITHMS
 
 
 def test_tfidf_score_present(kato_fixture):
@@ -137,7 +142,7 @@ def test_tfidf_as_ranking_metric(kato_fixture):
 
 
 def test_all_metrics_present_in_predictions(kato_fixture):
-    """Test that all v3.0 metrics are present in predictions."""
+    """Test that every metric is present in predictions."""
     kato_fixture.clear_all_memory()
     kato_fixture.set_recall_threshold(0.2)
 
@@ -153,21 +158,9 @@ def test_all_metrics_present_in_predictions(kato_fixture):
 
     assert len(predictions) > 0, "Should have at least one prediction"
 
-    # Required v3.0 metrics
-    required_metrics = [
-        'bayesian_posterior',
-        'bayesian_prior',
-        'bayesian_likelihood',
-        'tfidf_score',
-        'frequency',
-        'similarity',
-        'potential',
-        'entropy',
-        'normalized_entropy'
-    ]
-
+    # Every metric a session can rank by is a field of every prediction.
     for pred in predictions:
-        for metric in required_metrics:
+        for metric in VALID_RANK_SORT_ALGORITHMS:
             assert metric in pred, f"Missing required metric: {metric}"
 
 
@@ -235,10 +228,14 @@ def test_edge_case_identical_patterns(kato_fixture):
     assert len(predictions) == 1, "Should have 1 unique pattern"
 
     pred = predictions[0]
-    # Frequency could be 1 (deduplicated) or 3 (incremented) depending on implementation
-    assert pred['frequency'] >= 1, "Pattern should have frequency >= 1"
-    assert pred['bayesian_prior'] == 1.0, "Single unique pattern should have prior=1.0"
-    assert pred['bayesian_posterior'] == 1.0, "Single pattern should have posterior=1.0"
+    assert pred['frequency'] == 3, "Learning a pattern again adds to its frequency"
+    # Three learns of the node's only pattern: it holds every learn the node has seen.
+    assert pred['bayesian_prior'] == 1.0, "The only pattern has every learn: prior 3/3"
+    # Each symbol is half of the six learned symbol occurrences, so each match
+    # is worth log2(0.95 / 0.5) bits, and the pattern is weighed against chance.
+    odds = (0.95 / 0.5) ** 2
+    assert pred['bayesian_likelihood'] == pytest.approx(2 * math.log2(1.9), rel=1e-9)
+    assert pred['bayesian_posterior'] == pytest.approx(odds / (1 + odds), rel=1e-9)
 
 
 def test_metric_ranges_are_valid(kato_fixture):
@@ -266,16 +263,22 @@ def test_metric_ranges_are_valid(kato_fixture):
     assert len(predictions) > 0, "Should have predictions"
 
     for pred in predictions:
-        # Probability metrics should be in [0, 1]
+        # Probabilities and shares
         assert 0.0 <= pred['bayesian_posterior'] <= 1.0, "Posterior should be in [0,1]"
-        assert 0.0 <= pred['bayesian_prior'] <= 1.0, "Prior should be in [0,1]"
-        assert 0.0 <= pred['bayesian_likelihood'] <= 1.0, "Likelihood should be in [0,1]"
+        assert 0.0 < pred['bayesian_prior'] <= 1.0, "Prior should be in (0,1]"
         assert 0.0 <= pred['similarity'] <= 1.0, "Similarity should be in [0,1]"
+        assert 0.0 <= pred['itfdf_similarity'] <= 1.0, "itfdf_similarity should be in [0,1]"
+
+        # Bits and scores: any finite number, of either sign
+        for metric in ('bayesian_likelihood', 'good_odds', 'potential',
+                       'predictive_information', 'confluence'):
+            assert math.isfinite(pred[metric]), f"{metric} should be a finite number"
+        assert pred['good_odds'] == pytest.approx(
+            math.log2(pred['bayesian_prior']) + pred['bayesian_likelihood'], rel=1e-9, abs=1e-12)
 
         # Non-negative metrics
         assert pred['tfidf_score'] >= 0, "TF-IDF should be non-negative"
         assert pred['frequency'] >= 1, "Frequency should be at least 1"
-        assert pred['potential'] >= 0, "Potential should be non-negative"
         assert pred['entropy'] >= 0, "Entropy should be non-negative"
 
 
@@ -294,19 +297,10 @@ def test_metrics_integration_with_different_ranking_algorithms(kato_fixture):
             kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
         kato_fixture.learn()
 
-    # Test with different ranking algorithms
-    ranking_algorithms = [
-        'potential',
-        'similarity',
-        'frequency',
-        'bayesian_posterior',
-        'bayesian_prior',
-        'bayesian_likelihood',
-        'tfidf_score'
-    ]
-
-    for algo in ranking_algorithms:
-        kato_fixture.update_config({'rank_sort_algo': algo})
+    # Every metric of a prediction is a ranking key.
+    for algo in VALID_RANK_SORT_ALGORITHMS:
+        result = kato_fixture.update_config({'rank_sort_algo': algo})
+        assert result.get('status') == 'okay', f"rank_sort_algo={algo} was refused: {result}"
 
         # Generate predictions
         kato_fixture.clear_short_term_memory()
@@ -314,17 +308,20 @@ def test_metrics_integration_with_different_ranking_algorithms(kato_fixture):
         kato_fixture.observe({'strings': ['test'], 'vectors': [], 'emotives': {}})
         predictions = kato_fixture.get_predictions()
 
-        if len(predictions) > 0:
-            # Verify predictions are sorted by the selected metric (descending)
-            if algo in predictions[0]:  # Metric exists in predictions
-                metric_values = [p[algo] for p in predictions]
-                assert metric_values == sorted(metric_values, reverse=True), \
-                    f"Predictions not sorted correctly by {algo}"
+        assert len(predictions) == 2, f"Both patterns should be predicted with algo={algo}"
 
-            # Verify all metrics still present regardless of ranking algo
-            for pred in predictions:
-                assert 'bayesian_posterior' in pred, f"Missing bayesian_posterior with algo={algo}"
-                assert 'tfidf_score' in pred, f"Missing tfidf_score with algo={algo}"
+        # Ranked by the selected metric, highest first, ties by pattern name.
+        # The affinity-weighted fields are null without affinity_emotive, and
+        # then the name alone decides.
+        keys = [(p[algo] is not None, p[algo] if p[algo] is not None else 0.0, p['name'])
+                for p in predictions]
+        assert keys == sorted(keys, reverse=True), f"Predictions not sorted correctly by {algo}"
+
+        # Verify all metrics still present regardless of ranking algo
+        for pred in predictions:
+            assert 'bayesian_posterior' in pred, f"Missing bayesian_posterior with algo={algo}"
+            assert 'tfidf_score' in pred, f"Missing tfidf_score with algo={algo}"
+            assert 'good_odds' in pred, f"Missing good_odds with algo={algo}"
 
 
 def test_tfidf_calculation_with_varying_term_frequency(kato_fixture):

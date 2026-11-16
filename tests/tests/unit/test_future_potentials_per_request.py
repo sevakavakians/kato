@@ -1,16 +1,18 @@
 """
 A request's future_potentials come back with its own predictions.
 
-future_potentials aggregates the futures of a request's scored candidates. It
-used to be kept on the PatternProcessor, which every session on a node shares,
-and the predictions endpoint read it back off the processor after predicting. A
-request that computed none -- an empty STM returns before predicting -- then
-served the previous request's value, which could be another session's: one
-session's learned futures appeared in a different session's response.
+future_potentials is the probability of each next event a request's candidates
+propose. It used to be kept on the PatternProcessor, which every session on a
+node shares, and the predictions endpoint read it back off the processor after
+predicting. A request that computed none -- an empty STM returns before
+predicting -- then served the previous request's value, which could be another
+session's: one session's learned futures appeared in a different session's
+response.
 
-predictPattern now returns a PredictionResult carrying both lists, and the
-endpoint builds its response from that. Ties on aggregate_potential are settled
-by the future's hash, so the order no longer follows database arrival order.
+predictPattern returns a PredictionResult carrying the predictions and the
+figures computed over their ensemble, and the endpoint builds its response from
+that. Equal probabilities go to the event that sorts first, so the order never
+follows database arrival order.
 """
 
 import os
@@ -23,7 +25,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 from fixtures.kato_fixtures import kato_fixture as kato_fixture
 
-from kato.informatics.predictive_information import calculate_ensemble_predictive_information
+from kato.informatics.prediction_metrics import future_potentials
 from kato.workers.pattern_processor import PatternProcessor, PredictionResult
 
 # ── in-process ─────────────────────────────────────────────────────────
@@ -43,7 +45,7 @@ async def test_an_empty_stm_returns_empty_lists_without_predicting():
 @pytest.mark.asyncio
 async def test_the_result_is_returned_as_predicted(monkeypatch):
     processor = object.__new__(PatternProcessor)
-    expected = PredictionResult([{'name': 'p'}], [{'future': [['f']]}])
+    expected = PredictionResult([{'name': 'p'}], [{'next_event': ['f']}], 0.25)
 
     async def fake_predict(state, stm_events, config):
         return expected
@@ -56,35 +58,37 @@ def test_the_sync_wrapper_still_returns_only_the_predictions(monkeypatch):
     processor = object.__new__(PatternProcessor)
 
     async def fake_async(stm, config=None):
-        return PredictionResult([{'name': 'p'}], [{'future': [['f']]}])
+        return PredictionResult([{'name': 'p'}], [{'next_event': ['f']}], 0.25)
 
     monkeypatch.setattr(processor, 'get_predictions_async', fake_async)
     assert processor.get_predictions([['a']]) == [{'name': 'p'}]
 
 
+def test_a_result_without_a_prediction_attempt_has_no_chance_posterior():
+    assert PredictionResult([], []).chance_posterior is None
+
+
 def _tied_predictions():
-    """Two patterns of equal weight with different futures."""
+    """Two patterns of equal potential with different futures."""
     return [
-        {'name': name, 'frequency': 1, 'similarity': 1.0, 'future': future}
+        {'name': name, 'potential': 3.0, 'future': future}
         for name, future in (('p1', [['zeta']]), ('p2', [['alpha']]))
     ]
 
 
 def test_tied_futures_come_out_in_one_order_whatever_the_arrival_order():
-    forward = _tied_predictions()
-    _, forward_potentials = calculate_ensemble_predictive_information(forward)
-    _, reverse_potentials = calculate_ensemble_predictive_information(
-        list(reversed(_tied_predictions())))
+    forward = future_potentials(_tied_predictions())
+    reverse = future_potentials(list(reversed(_tied_predictions())))
 
-    assert forward_potentials[0]['aggregate_potential'] == forward_potentials[1]['aggregate_potential']
-    assert [fp['future'] for fp in forward_potentials] == [fp['future'] for fp in reverse_potentials]
+    assert forward[0]['probability'] == forward[1]['probability'] == 0.5
+    assert [fp['next_event'] for fp in forward] == [['alpha'], ['zeta']]
+    assert forward == reverse
 
 
 def test_a_higher_potential_still_ranks_first():
     predictions = _tied_predictions()
-    predictions[1]['frequency'] = 3
-    _, potentials = calculate_ensemble_predictive_information(predictions)
-    assert [fp['future'] for fp in potentials] == [[['alpha']], [['zeta']]]
+    predictions[0]['potential'] = 4.0
+    assert [fp['next_event'] for fp in future_potentials(predictions)] == [['zeta'], ['alpha']]
 
 
 # ── end to end ─────────────────────────────────────────────────────────
@@ -148,6 +152,7 @@ def test_an_empty_stm_does_not_receive_another_sessions_future_potentials(two_se
         response = second.predictions()
         assert response['count'] == 0
         assert response['future_potentials'] == []
+        assert response['chance_posterior'] is None
 
 
 def test_concurrent_sessions_get_the_future_potentials_of_their_own_predictions(two_sessions):
@@ -161,4 +166,6 @@ def test_concurrent_sessions_get_the_future_potentials_of_their_own_predictions(
         for expected, job in jobs:
             response = job.result()
             assert [p['future'] for p in response['predictions']] == [expected]
-            assert [fp['future'] for fp in response['future_potentials']] == [expected]
+            # One pattern, one event still to come: it is the next event, for certain.
+            assert response['future_potentials'] == [
+                {'next_event': expected[0], 'probability': 1.0, 'supporting_patterns': 1}]

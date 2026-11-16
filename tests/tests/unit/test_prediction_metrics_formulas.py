@@ -83,7 +83,7 @@ def axy(**overrides):
 
 def test_the_constant_and_the_penalty():
     assert NOISE == 0.05
-    assert PENALTY_BITS == math.log2(20)
+    assert math.log2(20) == PENALTY_BITS
 
 
 def test_per_symbol_bits_come_from_the_share_of_learned_occurrences():

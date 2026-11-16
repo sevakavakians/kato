@@ -1,5 +1,5 @@
 # Prediction metrics rebuild (PR #22, DECISION-051)
-*Merged 2026-11-16; gated and recorded 2026-11-16. UNRELEASED: release 7.0.0 (MAJOR) is next.*
+*Merged 2026-11-16; gated and recorded 2026-11-16. RELEASED in 7.0.0 the same day; see `2026-11-16-kato-v7.0.0-release.md`. Open follow-ups: SPRINT_BACKLOG items 13-22.*
 
 ## Delivery
 - origin/main = `dff5169`, merge of PR #22 (branch `feat/prediction-metrics`), 2026-11-16.
@@ -39,5 +39,5 @@
 
 ## Release impact and next steps
 - MAJOR (7.0.0) per `docs/maintenance/releasing.md`: response schema changed (`future_potentials` keys; `pattern_probability` and `weighted_strength` removed), core algorithms changed, existing nodes need a one-time recount (`scripts/recount_pattern_frequencies.py`; NOT run anywhere yet; NOT in the image, the Dockerfile copies only `kato/`).
-- Next: release 7.0.0 (MAJOR), then a second planning pass.
+- Done: release 7.0.0 (MAJOR), recorded in `2026-11-16-kato-v7.0.0-release.md`. Correction: the first pass listed a deploy step as the plan; no deploy plan is agreed. Deploy and recount are pending the user's approval (SPRINT_BACKLOG item 13).
 - Open: the 11.5% cost is not measured on the live instance; the recount has not been run on live node data.

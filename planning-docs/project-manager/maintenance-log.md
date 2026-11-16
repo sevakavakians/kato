@@ -3740,3 +3740,7 @@ The investigation surfaced five real, unrelated defects, fixed in the same pass:
 ## 2026-11-16 - Milestone: Prediction Metrics Rebuild Merged and Gated (DECISION-051)
 **Classification**: Architectural Decision + Task Completion (first planning pass; release 7.0.0 not done).
 **Done**: Added DECISION-051 to DECISIONS.md; demoted the v6.4.3 Current Task in SESSION_STATE.md to a Previous Task and wrote the new Current Task (main = dff5169, PR #22, gate 1092 passed / 3 skipped / 1 xfailed / 0 failed); created completed/features/2026-11-16-prediction-metrics-rebuild.md; updated README.md current-state line and test coverage. No release recorded.
+
+## 2026-11-16 - Milestone: KATO v7.0.0 Released (MAJOR), Second Planning Pass
+**Classification**: Milestone Completion (release). Silent.
+**Done**: Created completed/features/2026-11-16-kato-v7.0.0-release.md; SESSION_STATE.md header + new Current Task (released = 7.0.0, deployed = 6.4.3, recount not run), PR #22 task demoted to Previous Task; README.md Current state and Version lines; DECISION-051 marked RELEASED in 7.0.0; SPRINT_BACKLOG.md items 13-22 added; first-pass archive updated and its deploy-plan wording corrected (no deploy plan agreed; pending user approval).

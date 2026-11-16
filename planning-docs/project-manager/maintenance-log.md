@@ -3748,3 +3748,7 @@ The investigation surfaced five real, unrelated defects, fixed in the same pass:
 ## 2026-11-16 ~16:05 EST - Milestone: KATO v7.0.0 Deployed (fresh store), Third Planning Pass
 **Classification**: Milestone Completion (deployment) + Task Completion (backlog 13, 22) + new backlog item 23. Silent.
 **Done**: Added "Deployment (2026-11-16 ~16:05 EST, user-approved)" section to completed/features/2026-11-16-kato-v7.0.0-release.md; README.md Current state and Version lines (released = deployed = 7.0.0, store wiped fresh); SESSION_STATE.md header and Current Task; SPRINT_BACKLOG.md item 13 DONE (by wiping, recount not run), item 22 DONE, item 23 added (clear-all/session delete leave stm:events stream, unverified whether intended). Pre-wipe Redis/ClickHouse archives are in a temporary session scratchpad; Qdrant not backed up (noted). Nothing committed.
+
+## 2026-11-16 - Milestone: KATO v7.1.0 Released (MINOR) and Deployed (clean store), Fourth Planning Pass
+**Classification**: Architectural Decision + Task Completion + Milestone Completion (wipe, gate, release, deployment). Silent.
+**Done**: Created completed/features/2026-11-16-kato-v7.1.0-release.md; added DECISION-052 to DECISIONS.md; SESSION_STATE.md header and Current Task (7.0.0 task demoted to Previous Task); README.md Current state, Version and Test Coverage; SPRINT_BACKLOG.md item 14 closed by 7.1.0, items 24-25 added. Pending with the user: delete of remote branch feat/ends-here-share.

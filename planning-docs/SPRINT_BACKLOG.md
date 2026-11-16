@@ -1294,7 +1294,7 @@ New candidates (not started):
 
 ### Open follow-ups after v7.0.0 (2026-11-16; none part of the release)
 
-13. **Deploy 7.0.0 and recount existing nodes** - `scripts/recount_pattern_frequencies.py` runs from the checkout against the stack's Redis (`--dry-run` first), while no node is learning or purging; it is not in the image. :8000 runs 6.4.3. Pending the user's approval; no plan agreed.
+13. **Deploy 7.0.0 and recount existing nodes** - **DONE 2026-11-16 ~16:05 EST by wiping instead of recounting** (user-approved: no client was using KATO, databases could be wiped; chose "wipe and deploy fresh" over "keep data and recount"). `deployment/` stack on :8000 now runs `ghcr.io/sevakavakians/kato:7.0.0` on fresh volumes; `scripts/recount_pattern_frequencies.py` was not run anywhere (a fresh store has no stale counters). Pre-wipe Redis and ClickHouse archives are in the session scratchpad (temporary); Qdrant not backed up. See `completed/features/2026-11-16-kato-v7.0.0-release.md` "Deployment".
 14. **`future_potentials` has no "ends here" share** - when the pattern that best explains the STM has no future, a weak candidate can get probability 1.0. Documented, with the `good_odds` of the proposing predictions as the check.
 15. **Affinity not measured with the new potential** - and for an STM of two or more symbols only the STM's symbols get an affinity weight, so the `weighted_*` metrics overstate the match.
 16. **Fuzzy matching ignores position and multiplicity** - with `fuzzy_token_threshold` above 0, `matches` ignores both, so evidence and confidence can exceed 1. OPEN QUESTION: does anything use that path?
@@ -1303,4 +1303,5 @@ New candidates (not started):
 19. **Pruned potential untested** - a potential cut to four or five terms has not been fitted or tested.
 20. **Scoring cost on live nodes not measured** - the cost of scoring every candidate has not been measured on the live instance's nodes.
 21. **`examples/python-client.py` lint** - two findings (F401, F841), outside CI's lint scope.
-22. **Delete merged remote branches** `feat/prediction-metrics` and `docs/recall-threshold-observed-share` - awaiting user.
+22. **Delete merged remote branches** `feat/prediction-metrics` and `docs/recall-threshold-observed-share` - **DONE 2026-11-16** (confirmed merged into origin/main, deleted from origin, user-approved; `main` is the only branch locally and on origin).
+23. **`clear-all` / session delete leave the node's `stm:events` stream** - found 2026-11-16 during the deploy smoke test: `stm:events:<kb_id>` (8 entries) survived clear-all and session delete and was deleted by hand. The test cleanup fixture already removes such streams for test nodes, so this is likely existing behaviour. OPEN QUESTION: is it intended? Unverified.

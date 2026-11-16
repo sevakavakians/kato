@@ -774,8 +774,9 @@ class KATOClient:
 
         Returns:
             Predictions response: the ranked `predictions` list; `future_potentials`,
-            the probability of each next event; `chance_posterior`, the probability
-            that no learned pattern explains the STM better than chance; and `count`
+            the probability of each next event; `ends_here`, the probability that no
+            event follows; `chance_posterior`, the probability that no learned
+            pattern explains the STM better than chance; and `count`
 
         Example:
             >>> result = client.get_predictions()

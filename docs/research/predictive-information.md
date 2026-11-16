@@ -84,8 +84,10 @@ This mapping makes sense because:
 
 ```
 P(E | STM) = Σ e^potential over the candidates whose next event is E
-             / Σ e^potential over the candidates that have a future
+             / Σ e^potential over every candidate
 ```
+
+A candidate whose pattern ends where the STM ends proposes no event. Its weight is `ends_here`, the probability that nothing follows, so the events hold `1 - ends_here` between them.
 
 The candidates above the recall threshold are KATO's estimate of what can follow this STM, so no separate store of present and future co-occurrences is needed.
 
@@ -106,14 +108,14 @@ D = Σ P(E | STM) × log2( P(E | STM) / q(E) )
     E
 ```
 
-Each term says how many bits the ensemble's probability for an event is above its chance probability, weighted by that probability.
+Each term says how many bits the ensemble's probability for an event is above its chance probability, weighted by that probability. The sum runs over the events the candidates propose. When no candidate has ended, their probabilities add up to 1 and `D` is the Kullback-Leibler divergence of the next-event distribution from chance. When some have ended, `D` counts the events alone: "nothing follows" is not an event with symbols, so it has no chance probability to be measured against.
 
 ### 3.4 One Prediction's Part
 
 Several predictions can propose the same next event. Each gets its part of that event's term:
 
 ```python
-share = e^potential / Σ e^potential over the candidates that have a future
+share = e^potential / Σ e^potential over every candidate
 
 predictive_information = share × log2(P(E | STM) / q(E))
 ```
@@ -134,7 +136,7 @@ A prediction with no `future` proposes nothing and has `predictive_information` 
 ### 4.2 Order of Operations
 
 1. Every candidate above the recall threshold gets its `potential`.
-2. The shares and the next-event probabilities are computed over the candidates that have a future.
+2. The shares are computed over every candidate, and the next-event probabilities add up the shares of the candidates that have a future.
 3. Each such candidate gets `share × (log2 P(E | STM) + Σ log2(1 / q(s)))`, the sum taken over the symbols of its next event.
 4. The candidates are ranked and cut to `max_predictions`.
 
@@ -225,23 +227,23 @@ The sum of `predictive_information` over a request is a claim: this many bits ab
 
 | Mean bits per query | Generated sequences | HDFS logs | MSNBC clicks | WikiText-2 text |
 |---|---|---|---|---|
-| Claimed (sum of `predictive_information`) | 8.64 | 2.47 | 1.78 | 3.67 |
-| Delivered | 8.42 | 2.42 | 2.09 | 0.73 |
+| Claimed (sum of `predictive_information`) | 8.35 | 2.45 | 1.46 | 3.46 |
+| Delivered | 8.36 | 2.42 | 1.93 | 0.67 |
 | Available (chance bits of the event that followed) | 9.85 | 3.06 | 3.75 | 9.87 |
 
-The claim holds on three kinds of data. On text it overclaims: for 14% of the queries there, no candidate proposes the event that actually followed, and the ensemble is confident about the events it does propose.
+The claim holds on generated data and on logs, and it is on the cautious side on click streams. On text it overclaims: for 14% of the queries there, no candidate proposes the event that actually followed, and the ensemble is confident about the events it does propose.
 
 "Delivered" is computed with a floor: the ensemble's probability is mixed 99 to 1 with the chance probability, so that an event no candidate proposed counts as slightly below chance instead of minus infinity.
 
 ### 7.2 As a Ranking Key
 
-Ranked by `predictive_information`, the top prediction that has a future names the right next event for 0.617 of the queries (mean of the four kinds), against 0.633 when ranked by `potential`: 1.6 points lower.
+Ranked by `predictive_information`, the top prediction that has a future names the right next event for 0.616 of the queries (mean of the four kinds), against 0.633 when ranked by `potential`: 1.7 points lower.
 
 The reason is in the formula. It multiplies a probability by a rarity, and the most probable next event is the best single guess whatever its rarity.
 
 ### 7.3 As a Confidence Value
 
-Used to separate right answers from wrong ones, the `predictive_information` of the top prediction has an AUROC of 0.70. The `probability` of the top entry of `future_potentials` has 0.80.
+Used to separate right answers from wrong ones, the `predictive_information` of the top prediction has an AUROC of 0.71. The `probability` of the top entry of `future_potentials` has 0.80.
 
 ## 8. Edge Cases and Considerations
 

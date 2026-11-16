@@ -275,8 +275,10 @@ The direct construction would add the posteriors of the patterns that share a ne
 
 ```
 P(E | STM) = Σ e^potential over the candidates whose next event is E
-             / Σ e^potential over the candidates that have a future
+             / Σ e^potential over every candidate
 ```
+
+A candidate that has ended proposes no event; its share is `ends_here`, the probability that nothing follows.
 
 The reason is calibration. The observation model adds each matched symbol's bits as if the symbols were independent observations. In real data symbols travel together: the words of a phrase, the steps of a fixed routine. The same evidence is then counted several times, and the posterior is pushed toward 0 and 1. This is the known behaviour of a posterior built on an independence assumption: it can rank well while overstating its certainty (Domingos and Pazzani 1997; Niculescu-Mizil and Caruana 2005).
 
@@ -285,7 +287,7 @@ Measured on 58,600 held-out queries from four kinds of data, the probability giv
 | | Generated sequences | HDFS logs | MSNBC clicks | WikiText-2 text |
 |---|---|---|---|---|
 | Posteriors summed by next event, as shares of the candidates that have a future: said / right | 0.909 / 0.837 | 0.906 / 0.874 | 0.662 / 0.686 | 0.564 / 0.127 |
-| `e^potential` summed by next event (`future_potentials`): said / right | 0.812 / 0.851 | 0.837 / 0.860 | 0.615 / 0.688 | 0.202 / 0.193 |
+| `e^potential` summed by next event, as shares of every candidate (`future_potentials`): said / right | 0.789 / 0.851 | 0.834 / 0.860 | 0.553 / 0.689 | 0.194 / 0.193 |
 
 On text the sum of posteriors claims 56% and delivers 13%. With chance left in the sum the claim falls to 26%, still twice what is delivered. The weights of `potential` were fitted on outcomes, to make the probability of the event that actually followed as large as possible, and the probabilities built on it track what happens.
 

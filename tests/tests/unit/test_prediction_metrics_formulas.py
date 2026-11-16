@@ -27,6 +27,7 @@ from kato.informatics.prediction_metrics import (
     Observation,
     bayesian_posteriors,
     confluence,
+    ends_here,
     future_potentials,
     good_odds,
     itfdf_similarity,
@@ -353,18 +354,68 @@ def test_future_potentials_add_up_the_patterns_that_agree_on_the_next_event():
     assert result[1]['probability'] == pytest.approx(6 ** weight / total, **EXACT)
     assert [entry['supporting_patterns'] for entry in result] == [2, 1]
     assert result[0]['probability'] == pytest.approx(0.6216, abs=1e-4)
+    assert ends_here(predictions) == 0.0, "every candidate goes on"
     assert set(result[0]) == {'next_event', 'probability', 'supporting_patterns'}
 
 
-def test_a_prediction_with_no_future_proposes_nothing():
+def test_a_prediction_with_no_future_votes_for_the_end():
+    """e^potential is 3 for the pattern that has ended and 1 for the one that goes on."""
     predictions = [
-        _with_potential('ends_here', [], 50.0),
-        _with_potential('goes_on', [['next']], 1.0),
+        _with_potential('ended', [], math.log(3)),
+        _with_potential('goes_on', [['next']], 0.0),
     ]
     assert future_potentials(predictions) == [
-        {'next_event': ['next'], 'probability': 1.0, 'supporting_patterns': 1}]
-    assert future_potentials([_with_potential('ends_here', [], 50.0)]) == []
+        {'next_event': ['next'], 'probability': pytest.approx(0.25, **EXACT), 'supporting_patterns': 1}]
+    assert ends_here(predictions) == pytest.approx(0.75, **EXACT)
+
+
+def test_a_weak_candidate_cannot_take_the_whole_probability():
+    """The pattern that explains the STM has ended; the only one with a future matches poorly."""
+    predictions = [
+        _with_potential('ended', [], 17.0),
+        _with_potential('goes_on', [['next']], 9.0),
+    ]
+    (entry,) = future_potentials(predictions)
+    assert entry['probability'] == pytest.approx(1 / (1 + math.exp(8)), **EXACT)
+    assert entry['probability'] < 0.001
+    assert ends_here(predictions) == pytest.approx(math.exp(8) / (1 + math.exp(8)), **EXACT)
+
+
+def test_the_probabilities_and_ends_here_add_up_to_one():
+    predictions = [
+        _with_potential('p1', [['c']], 1.3),
+        _with_potential('p2', [], 0.7),
+        _with_potential('p3', [['x']], 0.9),
+        _with_potential('p4', [], -0.4),
+        _with_potential('p5', [['c'], ['y']], 0.2),
+    ]
+    total = sum(entry['probability'] for entry in future_potentials(predictions)) + ends_here(predictions)
+    assert total == pytest.approx(1.0, **EXACT)
+    weights = [math.exp(p['potential']) for p in predictions]
+    assert ends_here(predictions) == pytest.approx((weights[1] + weights[3]) / sum(weights), **EXACT)
+
+
+def test_ends_here_at_its_limits():
+    assert future_potentials([_with_potential('ended', [], 50.0)]) == []
+    assert ends_here([_with_potential('ended', [], 50.0)]) == 1.0
+    assert ends_here([_with_potential('goes_on', [['next']], 50.0)]) == 0.0
+    # No candidate: there is nothing to take a share of.
     assert future_potentials([]) == []
+    assert ends_here([]) is None
+
+
+def test_ends_here_does_not_depend_on_the_order_candidates_arrive_in():
+    predictions = [
+        _with_potential('p3', [], 0.1),
+        _with_potential('p1', [['c']], 7.3),
+        _with_potential('p4', [], -2.2),
+        _with_potential('p2', [['x']], 7.3000001),
+        _with_potential('p5', [], 3.9),
+    ]
+    reference = (ends_here(predictions), future_potentials(predictions))
+    for order in itertools.permutations(range(5)):
+        shuffled = [predictions[i] for i in order]
+        assert (ends_here(shuffled), future_potentials(shuffled)) == reference
 
 
 def test_equal_probabilities_go_to_the_event_that_sorts_first():
@@ -398,6 +449,8 @@ def test_future_potentials_survive_potentials_no_exponential_can_hold():
     ]
     result = future_potentials(predictions)
     assert [(entry['next_event'], entry['probability']) for entry in result] == [(['a'], 1.0), (['b'], 0.0)]
+    assert ends_here(predictions) == 0.0
+    assert ends_here(predictions + [_with_potential('p3', [], 9000.0)]) == 1.0
 
 
 # ── predictive_information ─────────────────────────────────────────────
@@ -407,23 +460,39 @@ def test_predictive_information_is_the_share_times_the_bits_over_chance():
     predictions = [
         _with_potential('abc', [['c']], math.log(3)),             # share 3/4
         _with_potential('axy', [['x'], ['y']], 0.0),              # share 1/4
-        _with_potential('ended', [], 9.0),
     ]
     information = predictive_information(predictions, stats)
     # P(c) = 3/4 against q(c) = 1/12; P(x) = 1/4 against q(x) = 3/12
     assert information['abc'] == pytest.approx(0.75 * math.log2(0.75 * 12), **EXACT)
     assert information['axy'] == pytest.approx(0.25 * math.log2(0.25 * 4), **EXACT)
     assert information['axy'] == pytest.approx(0.0, abs=1e-12), "as probable as chance makes it: no information"
+
+
+def test_a_pattern_that_has_ended_takes_its_share_and_carries_no_information():
+    """e^potential is 3, 1 and 4: the ended pattern holds half of the weight."""
+    stats = node()
+    predictions = [
+        _with_potential('abc', [['c']], math.log(3)),             # share 3/8
+        _with_potential('axy', [['x'], ['y']], 0.0),              # share 1/8
+        _with_potential('ended', [], math.log(4)),                # share 4/8, to ends_here
+    ]
+    information = predictive_information(predictions, stats)
+    # P(c) = 3/8 against q(c) = 1/12; P(x) = 1/8 against q(x) = 3/12
+    assert information['abc'] == pytest.approx(0.375 * math.log2(0.375 * 12), **EXACT)
+    assert information['axy'] == pytest.approx(0.125 * math.log2(0.125 * 4), **EXACT)
+    assert information['axy'] == pytest.approx(-0.125, **EXACT)
     assert information['ended'] == 0.0
+    assert ends_here(predictions) == pytest.approx(0.5, **EXACT)
 
 
-def test_predictive_information_adds_up_to_the_divergence_from_chance():
+def test_predictive_information_adds_up_over_the_events_proposed():
     stats = node()
     predictions = [
         _with_potential('p1', [['c']], 1.3),
         _with_potential('p2', [['c'], ['y']], 0.2),
         _with_potential('p3', [['x']], 0.9),
         _with_potential('p4', [['x', 'y']], -0.4),
+        _with_potential('p5', [], 0.5),
     ]
     information = predictive_information(predictions, stats)
     divergence = 0.0
@@ -530,6 +599,7 @@ def test_score_ensemble_sets_the_fields_and_returns_the_ensemble_figures():
     ]
     assert first['predictive_information'] == pytest.approx(
         share_abc * (math.log2(share_abc) + math.log2(12)), **EXACT)
+    assert scores.ends_here == 0.0
     assert scores.candidate_frequency == 4
     assert scores.total_pattern_frequency == 4
 
@@ -547,7 +617,7 @@ def test_score_ensemble_gives_the_same_bits_in_any_arrival_order():
         fields = ('bayesian_prior', 'bayesian_likelihood', 'good_odds', 'potential',
                   'bayesian_posterior', 'predictive_information')
         return ({p['name']: tuple(p[f] for f in fields) for p in predictions},
-                scores.future_potentials, scores.chance_posterior)
+                scores.future_potentials, scores.chance_posterior, scores.ends_here)
 
     reference = snapshot(*_scored(build()))
     for order in itertools.permutations(range(5)):

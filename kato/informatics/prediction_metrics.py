@@ -2,8 +2,9 @@
 Prediction metrics that read the node's counts.
 
 `good_odds`, `bayesian_prior`, `bayesian_likelihood`, `bayesian_posterior`,
-`potential`, `future_potentials`, `predictive_information`, `confluence`,
-`tfidf_score` and `itfdf_similarity` are computed here, as pure functions of
+`potential`, `future_potentials`, `ends_here`, `predictive_information`,
+`confluence`, `tfidf_score` and `itfdf_similarity` are computed here, as pure
+functions of
 
 - a prediction's own match fields (`matches`, `missing`, `extras`, `past`,
   `present`, `future`, `fragmentation`, `snr`, `frequency`),
@@ -57,7 +58,7 @@ import math
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from itertools import chain
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, Optional
 
 # The assumed chance that a symbol is dropped from, or intrudes into, an
 # observation of a pattern. The only constant of good-odds.
@@ -400,29 +401,36 @@ def bayesian_posteriors(names: Sequence[str], odds_bits: Sequence[float]) -> tup
 def _next_events(
     predictions: Sequence[Mapping[str, Any]],
     order: Sequence[int],
-) -> tuple[list[float], dict[tuple, list]]:
-    """(share of every prediction, {next event: [probability, supporting patterns]}).
+) -> tuple[list[float], dict[tuple, list], Optional[float]]:
+    """(share of every prediction, {next event: [probability, supporting patterns]}, ends_here).
 
-    share = e^potential / sum of e^potential over the predictions that have a
-    future; 0.0 for a prediction without one. `order` is the pattern-name
-    order: the shares are summed in it, and so is each event's probability.
-    Every exponential is taken relative to the largest potential.
+    share = e^potential / sum of e^potential over every prediction. A prediction
+    with a future adds its share to the probability of its next event; a
+    prediction without one adds it to `ends_here`, the probability that nothing
+    follows, and its own entry in the returned shares is 0.0. The probabilities
+    and `ends_here` add up to 1. `ends_here` is None when there is no
+    prediction. `order` is the pattern-name order: every sum runs in it. Every
+    exponential is taken relative to the largest potential.
     """
     shares = [0.0] * len(predictions)
-    with_future = [i for i in order if predictions[i]['future']]
     events: dict[tuple, list] = {}
-    if not with_future:
-        return shares, events
-    top = max(predictions[i]['potential'] for i in with_future)
+    if not predictions:
+        return shares, events, None
+    top = max(prediction['potential'] for prediction in predictions)
     total = 0.0
-    for i in with_future:
+    for i in order:
         total += math.exp(predictions[i]['potential'] - top)
-    for i in with_future:
-        shares[i] = math.exp(predictions[i]['potential'] - top) / total
-        entry = events.setdefault(tuple(predictions[i]['future'][0]), [0.0, 0])
-        entry[0] += shares[i]
-        entry[1] += 1
-    return shares, events
+    ends_here = 0.0
+    for i in order:
+        share = math.exp(predictions[i]['potential'] - top) / total
+        if predictions[i]['future']:
+            shares[i] = share
+            entry = events.setdefault(tuple(predictions[i]['future'][0]), [0.0, 0])
+            entry[0] += share
+            entry[1] += 1
+        else:
+            ends_here += share
+    return shares, events, ends_here
 
 
 def _future_potentials(events: Mapping[tuple, Sequence]) -> list[dict[str, Any]]:
@@ -453,18 +461,37 @@ def future_potentials(predictions: Sequence[Mapping[str, Any]]) -> list[dict[str
     """`future_potentials`: the probability of each next event the ensemble proposes.
 
         P(E | STM) = sum of e^potential over the predictions whose next event is E
-                     / sum of e^potential over the predictions that have a future
+                     / sum of e^potential over every prediction
 
     The next event of a prediction is the first event of its `future`. Returns
     [{'next_event': [...], 'probability': P, 'supporting_patterns': n}], most
-    probable first; equal probabilities go to the event that sorts first. The
-    probabilities add up to 1. Empty when no prediction has a future.
+    probable first; equal probabilities go to the event that sorts first. A
+    prediction with no future proposes no event: its weight goes to `ends_here`,
+    and the probabilities add up to 1 - ends_here. Empty when no prediction has
+    a future.
 
     `predictions` are every candidate above the recall threshold, each with its
     `potential` already set.
     """
-    _, events = _next_events(predictions, _name_order(predictions))
+    _, events, _ = _next_events(predictions, _name_order(predictions))
     return _future_potentials(events)
+
+
+def ends_here(predictions: Sequence[Mapping[str, Any]]) -> Optional[float]:
+    """`ends_here`: the probability that no event follows the STM.
+
+        sum of e^potential over the predictions that have no future
+        / sum of e^potential over every prediction
+
+    A prediction has no future when its pattern ends where the observation
+    ends. With the probabilities of `future_potentials` it adds up to 1. None
+    when there is no prediction.
+
+    `predictions` are every candidate above the recall threshold, each with its
+    `potential` already set.
+    """
+    _, _, share = _next_events(predictions, _name_order(predictions))
+    return share
 
 
 def predictive_information(
@@ -477,13 +504,14 @@ def predictive_information(
 
     E is the prediction's next event, P(E | STM) its probability in
     `future_potentials`, `share` the prediction's own part of that probability
-    (e^potential over its sum across the predictions that have a future), and
-    q(E) the chance probability of the event: the product of q(s) over its
-    symbols. Over the predictions the values add up to the information the STM
-    carries about the next event, measured against chance. A prediction with no
-    future carries none: 0.0.
+    (e^potential over its sum across every prediction), and q(E) the chance
+    probability of the event: the product of q(s) over its symbols. Over the
+    predictions the values add up to the sum, over the events proposed, of
+    P(E | STM) x log2(P(E | STM) / q(E)): the information the STM carries about
+    which event follows, measured against chance. A prediction with no future
+    proposes no event and carries none: 0.0.
     """
-    shares, events = _next_events(predictions, _name_order(predictions))
+    shares, events, _ = _next_events(predictions, _name_order(predictions))
     information = _predictive_information(predictions, shares, events, node)
     return {prediction['name']: information[i] for i, prediction in enumerate(predictions)}
 
@@ -567,6 +595,8 @@ class EnsembleScores(NamedTuple):
     """What score_ensemble returns beside the fields it sets on each prediction."""
     future_potentials: list[dict[str, Any]]
     chance_posterior: float
+    # Probability that no event follows; None when there is no candidate.
+    ends_here: Optional[float]
     # Sum of the candidates' frequencies, and the node total the priors were
     # taken against. The second is the larger of the node's counter and the
     # first, so a prior never exceeds 1.
@@ -585,8 +615,8 @@ def score_ensemble(
     `frequency` already read; `observation` is the STM they were matched
     against. Sets `bayesian_prior`, `bayesian_likelihood`, `good_odds`,
     `potential`, `bayesian_posterior` and `predictive_information` on each, in
-    place, and returns `future_potentials`, the chance posterior and the totals
-    used.
+    place, and returns `future_potentials`, the chance posterior, `ends_here`
+    and the totals used.
 
     Ranking and cutting to `max_predictions` come after this, never before: the
     posterior, `future_potentials` and `predictive_information` are sums over
@@ -609,7 +639,7 @@ def score_ensemble(
 
     order = _name_order(predictions)
     posteriors, chance_posterior = _posteriors(odds_bits, order)
-    shares, events = _next_events(predictions, order)
+    shares, events, ends_here = _next_events(predictions, order)
     information = _predictive_information(predictions, shares, events, node)
     for i, prediction in enumerate(predictions):
         prediction['bayesian_posterior'] = posteriors[i]
@@ -618,6 +648,7 @@ def score_ensemble(
     return EnsembleScores(
         _future_potentials(events),
         chance_posterior,
+        ends_here,
         candidate_frequency,
         total_pattern_frequency,
     )

@@ -198,12 +198,17 @@ The second pattern, `login, browse, logout`, matches exactly as the first does. 
 
 ```
 P(E | STM) = Σ e^potential over the candidates whose next event is E
-             / Σ e^potential over the candidates that have a future
+             / Σ e^potential over every candidate
 ```
 
 This is the softmax the weights were fitted under, summed over the candidates that agree on the next event. In the example the three weights, relative to the best, are 1, `e^-0.347` = 0.707 and `e^-9.091` = 0.0001, which gives `checkout` 0.586, `logout` 0.414 and `reset_password` 0.0001.
 
-A candidate whose `future` is empty ends where the observation ends. It proposes no next event and is left out of both sums.
+A candidate whose `future` is empty ends where the observation ends. It proposes no next event, and its share of the weight is returned as `ends_here`, the probability that nothing follows. With the probabilities of `future_potentials` it adds up to 1.
+
+This matches how the weights were fitted. The softmax of the fitting objective ran over every candidate of a query, and a candidate with no future was one of the answers it could put weight on. Two things follow from the data the fit saw:
+
+1. An event followed every fitting query, so a pattern that had ended was always a wrong answer there.
+2. None of the eleven terms reads `future`, so the fit had no term with which to mark a pattern down for having ended. It could only do so through what ended patterns tend to have in common.
 
 ## Measured Accuracy
 

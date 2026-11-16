@@ -981,6 +981,7 @@ async def get_session_predictions(session_id: str):
         predictions=result.predictions,
         future_potentials=result.future_potentials,
         chance_posterior=result.chance_posterior,
+        ends_here=result.ends_here,
         session_id=session_id,
         count=len(result.predictions)
     )

@@ -432,6 +432,7 @@ future_potentials = [
     {"next_event": ["F"], "probability": 0.273, "supporting_patterns": 1},
     {"next_event": ["G"], "probability": 0.178, "supporting_patterns": 1}
 ]
+ends_here = 0.0
 chance_posterior = 0.110
 ```
 
@@ -439,6 +440,7 @@ chance_posterior = 0.110
 - Shows alternative possibilities
 - Weighted by reliability (frequency, potential)
 - Gives each next event a probability (`future_potentials`)
+- Says how probable it is that no event follows (`ends_here`)
 - Says how probable it is that nothing learned explains the observation (`chance_posterior`)
 - Supports decision-making under uncertainty
 
@@ -457,7 +459,7 @@ MAX_PREDICTIONS = 100  # Limit result set
 
 # Return top 100 by potential.
 # Every candidate above the recall threshold is scored first, so
-# future_potentials and chance_posterior cover all of them.
+# future_potentials, ends_here and chance_posterior cover all of them.
 ```
 
 ## Theoretical Foundations

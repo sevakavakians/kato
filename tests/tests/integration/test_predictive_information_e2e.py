@@ -3,7 +3,8 @@ End-to-end tests for `potential`, `future_potentials` and `predictive_informatio
 
     potential                the weighted sum of eleven terms (POTENTIAL_WEIGHTS)
     future_potentials        P(E | STM) = sum of e^potential over the predictions whose
-                             next event is E / the same sum over the predictions with a future
+                             next event is E / the same sum over every prediction
+    ends_here                the share of that sum held by predictions with no future
     predictive_information   share x log2(P(E | STM) / q(E)), in bits; share is the
                              prediction's own part of P(E | STM), q(E) the product of q(s)
                              over the next event's symbols
@@ -57,6 +58,7 @@ class TestPredictiveInformationE2E:
         assert predictions[name]['predictive_information'] == pytest.approx(4.0, **CLOSE)
         assert response['future_potentials'] == [
             {'next_event': ["C", "D"], 'probability': 1.0, 'supporting_patterns': 1}]
+        assert response['ends_here'] == 0.0
 
     def test_a_prediction_with_no_future_carries_no_information(self, kato_fixture):
         name = _learn(kato_fixture, [["A"], ["B"]])
@@ -66,6 +68,30 @@ class TestPredictiveInformationE2E:
         assert predictions[name]['future'] == []
         assert predictions[name]['predictive_information'] == 0.0
         assert response['future_potentials'] == []
+        assert response['ends_here'] == 1.0
+
+    def test_a_pattern_that_has_ended_keeps_a_weak_candidate_from_the_whole_probability(self, kato_fixture):
+        """a b c and a b d, learned once each; a, b, c is observed.
+
+        a b c matches in full and has ended. a b d matches two of three symbols
+        and proposes d. The candidates share the probability by e^potential, so
+        d gets what a b d holds of the two, and the rest says nothing follows.
+        """
+        ended = _learn(kato_fixture, [["a"], ["b"], ["c"]])
+        goes_on = _learn(kato_fixture, [["a"], ["b"], ["d"]])
+
+        predictions, response = _predict(kato_fixture, [["a"], ["b"], ["c"]])
+
+        assert set(predictions) == {ended, goes_on}
+        assert predictions[ended]['future'] == [] and predictions[goes_on]['future'] == [["d"]]
+        ratio = math.exp(predictions[goes_on]['potential'] - predictions[ended]['potential'])
+        assert response['future_potentials'] == [
+            {'next_event': ["d"], 'probability': pytest.approx(ratio / (1 + ratio), rel=1e-9),
+             'supporting_patterns': 1}]
+        assert response['ends_here'] == pytest.approx(1 / (1 + ratio), rel=1e-9)
+        assert response['future_potentials'][0]['probability'] < 0.001
+        assert response['ends_here'] > 0.999
+        assert predictions[ended]['predictive_information'] == 0.0
 
     def test_potential_is_the_weighted_sum_of_its_terms(self, kato_fixture):
         """[X, Y] in one event against [[X, Y, Z], [V, W]], the node's only pattern.
@@ -147,6 +173,7 @@ class TestPredictiveInformationE2E:
         assert sum(p['predictive_information'] for p in predictions.values()) == pytest.approx(divergence, **CLOSE)
         assert [entry['next_event'] for entry in response['future_potentials']] == [["c"], ["d"]]
         assert response['future_potentials'][0]['supporting_patterns'] == 2
+        assert response['ends_here'] == 0.0
 
 
 if __name__ == "__main__":

@@ -184,6 +184,7 @@ def test_one_symbol_reports_future_potentials():
     # One pattern: the event after the observed symbol is the next event, for certain.
     assert potentials == [{"next_event": ["st_b"], "probability": 1.0, "supporting_patterns": 1}]
     assert isinstance(response["chance_posterior"], float)
+    assert response["ends_here"] == 0.0, "the one pattern goes on after the observed symbol"
 
 
 # ------------------------------------------------------------------ regressions

@@ -238,6 +238,7 @@ The example is a node that has learned `login, browse, checkout` five times, `lo
     {"next_event": ["logout"], "probability": 0.414, "supporting_patterns": 1},
     {"next_event": ["reset_password"], "probability": 0.0001, "supporting_patterns": 1}
   ],
+  "ends_here": 0.0,                  // Probability that no event follows
   "chance_posterior": 0.1093,        // Probability that no learned pattern explains the STM better than chance
   "session_id": "primary",
   "count": 3
@@ -705,11 +706,12 @@ Formulas, ranges and what each metric is for: [Prediction Object Reference](../r
 ### Ensemble Fields (beside the predictions)
 - `future_potentials`: The probability of each next event the candidates propose, most probable first. Each entry:
   - `next_event`: The event, a list of symbols
-  - `probability`: The probability that this event comes next (entries sum to 1.0)
+  - `probability`: The probability that this event comes next (the entries and `ends_here` sum to 1.0)
   - `supporting_patterns`: Number of candidates whose next event this is
+- `ends_here`: The probability that no event follows (0-1): the share of the candidates' weight held by patterns that end where the observation ends. `null` when there is no candidate
 - `chance_posterior`: The probability that no learned pattern explains the STM better than chance (0-1). `1.0` when nothing matched, `null` when no prediction was computed
 
-Both are computed over every candidate above the recall threshold, not only the returned predictions.
+All three are computed over every candidate above the recall threshold, not only the returned predictions.
 
 ## Reading the Scores
 
@@ -738,9 +740,13 @@ Predictions arrive ranked by `potential`, a weighted sum of eleven terms: how al
 ]
 ```
 
-Each candidate votes for its next event with weight `e^potential`, and the votes are normalised. Patterns that agree on the next event add up, so the list answers "what comes next" better than the top prediction alone, and `probability` is a usable confidence: a difference of 1.0 in `potential` is a factor of `e` in weight.
+Each candidate votes with weight `e^potential`: for its next event, or for `ends_here` when its pattern has ended. Each sum is divided by the total. Patterns that agree on the next event add up, so the list answers "what comes next" better than the top prediction alone, and `probability` is a usable confidence: a difference of 1.0 in `potential` is a factor of `e` in weight.
 
 **Best Practice**: Read the next event from `future_potentials[0]`, and use its `probability` to decide whether to act on it.
+
+### Nothing follows: `ends_here`
+
+`ends_here` (0.0 here, since all three patterns go on) is the probability that no event follows: the share of the weight held by patterns that end where the observation ends. With the probabilities above it adds up to 1. When it is larger than the top `probability`, the patterns that fit the observation have nothing left to propose.
 
 ### How sure, in bits: `good_odds`
 
@@ -760,7 +766,7 @@ In bits. The values of a request add up to the information the STM carries about
 
 1. **Primary Ranking**: Predictions are sorted by `potential` (descending) by default
 2. **Next Event**: Take it from `future_potentials`, with `probability` as the confidence
-3. **Abstaining**: Decline to answer when `chance_posterior` is high or the top `probability` is low
+3. **Abstaining**: Decline to answer when `chance_posterior` is high or the top `probability` is low. When `ends_here` exceeds the top `probability`, the answer is that nothing follows
 4. **Explaining a Score**: `good_odds`, `bayesian_prior` and `bayesian_likelihood` break a match into how often the pattern was learned and how strongly the observation supports it, in bits
 
 For the formulas and what each metric is for, see the [Prediction Object Reference](../reference/prediction-object.md).

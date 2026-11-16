@@ -176,6 +176,7 @@ def test_returned_values_do_not_depend_on_max_predictions():
             assert values == full[name]
         assert cut.future_potentials == everything.future_potentials
         assert cut.chance_posterior == everything.chance_posterior
+        assert cut.ends_here == everything.ends_here
 
 
 def test_the_posteriors_of_every_candidate_and_chance_add_up_to_one():
@@ -193,8 +194,14 @@ def test_future_potentials_count_candidates_that_are_not_returned():
     assert len(result.predictions) == 1
     supporters = sum(entry['supporting_patterns'] for entry in result.future_potentials)
     assert supporters == 4, "p_abc, p_abd, p_abce and p_amb have a future; p_xab and p_ab end with the STM"
-    assert sum(entry['probability'] for entry in result.future_potentials) == pytest.approx(1.0, **EXACT)
     assert {tuple(entry['next_event']) for entry in result.future_potentials} == {('c',), ('d',)}
+    # p_xab and p_ab end with the STM: their weight is the probability that nothing follows.
+    weights = {p['name']: math.exp(p['potential']) for p in Node(LEARNED).predict(STM).predictions}
+    ended = (weights['p_xab'] + weights['p_ab']) / sum(weights.values())
+    assert result.ends_here == pytest.approx(ended, rel=1e-9)
+    assert 0.0 < result.ends_here < 1.0
+    assert (sum(entry['probability'] for entry in result.future_potentials) + result.ends_here
+            == pytest.approx(1.0, **EXACT))
 
 
 def test_values_do_not_depend_on_the_order_candidates_arrive_in():
@@ -206,6 +213,7 @@ def test_values_do_not_depend_on_the_order_candidates_arrive_in():
         assert _values(other) == _values(reference)
         assert other.future_potentials == reference.future_potentials
         assert other.chance_posterior == reference.chance_posterior
+        assert other.ends_here == reference.ends_here
 
 
 # ── ranking ────────────────────────────────────────────────────────────
@@ -293,16 +301,40 @@ def test_a_lone_weak_candidate_is_not_believed():
     assert prediction['bayesian_posterior'] == pytest.approx(odds / (1 + odds), **EXACT)
     assert result.chance_posterior == pytest.approx(1 / (1 + odds), **EXACT)
     assert result.chance_posterior > 0.999
-    # future_potentials is the distribution among the futures the ensemble
-    # proposes; whether to believe the ensemble at all is the chance posterior.
+    # future_potentials and ends_here share the candidates' weight between
+    # them; whether to believe the candidates at all is the chance posterior.
     assert result.future_potentials == [
         {'next_event': ['b'], 'probability': 1.0, 'supporting_patterns': 1}]
+    assert result.ends_here == 0.0
+
+
+def test_a_pattern_that_has_ended_keeps_a_weak_candidate_from_the_whole_probability():
+    """a b c and a b d, learned once each; a, b, c is observed.
+
+    a b c matches in full and has ended. a b d misses the newest symbol and
+    proposes d. Left to the candidates that have a future, d would be certain.
+    """
+    node = Node([('p_abc', seq('a b c'), 1), ('p_abd', seq('a b d'), 1)])
+    result = node.predict(seq('a b c'))
+    by_name = {p['name']: p for p in result.predictions}
+
+    assert by_name['p_abc']['future'] == [] and by_name['p_abd']['future'] == [['d']]
+    assert by_name['p_abd']['good_odds'] < 0 < by_name['p_abc']['good_odds']
+    ratio = math.exp(by_name['p_abd']['potential'] - by_name['p_abc']['potential'])
+    assert result.future_potentials == [
+        {'next_event': ['d'], 'probability': pytest.approx(ratio / (1 + ratio), **EXACT),
+         'supporting_patterns': 1}]
+    assert result.future_potentials[0]['probability'] < 0.001
+    assert result.ends_here == pytest.approx(1 / (1 + ratio), **EXACT)
+    assert result.ends_here > 0.999
+    assert by_name['p_abc']['predictive_information'] == 0.0
 
 
 def test_no_candidate_means_chance_explains_everything():
     result = Node(LEARNED).predict(seq('never seen'))
     assert result.predictions == [] and result.future_potentials == []
     assert result.chance_posterior == 1.0
+    assert result.ends_here is None, "no candidate: nothing to take a share of"
 
 
 def test_a_node_total_that_missed_re_learns_cannot_push_a_prior_above_one(caplog):

@@ -56,12 +56,13 @@ The example is a node that has learned three patterns: `login, browse, checkout`
     {"next_event": ["checkout"], "probability": 0.586, "supporting_patterns": 1},
     {"next_event": ["logout"], "probability": 0.414, "supporting_patterns": 1}
   ],
+  "ends_here": 0.0,
   "chance_posterior": 0.2597,
   "count": 2
 }
 ```
 
-`future_potentials` and `chance_posterior` describe the whole set of candidates, not one prediction: the probability of each next event, and the probability that no learned pattern explains the observation better than chance. See [What Comes Next](#what-comes-next).
+`future_potentials`, `ends_here` and `chance_posterior` describe the whole set of candidates, not one prediction: the probability of each next event, the probability that no event follows, and the probability that no learned pattern explains the observation better than chance. See [What Comes Next](#what-comes-next).
 
 ## Prediction Components
 
@@ -752,12 +753,20 @@ Two figures come back beside the predictions and describe the whole set of candi
 ]
 ```
 
-Each candidate that has a `future` votes for its next event with weight `e^potential`. Patterns that agree on the next event add up, even when they differ later, and the votes are normalised to sum to 1.0. It is computed over every candidate, including those `max_predictions` leaves out.
+Each candidate votes with weight `e^potential`. A candidate that has a `future` votes for its next event; patterns that agree on the next event add up, even when they differ later. A candidate whose pattern has ended votes for `ends_here`. Each sum is divided by the total, so the probabilities and `ends_here` add up to 1.0. It is computed over every candidate, including those `max_predictions` leaves out.
 
 **Use Cases**:
 - **Next-event prediction**: `future_potentials[0]['next_event']`
 - **Confidence**: `probability` is a usable confidence in that event
 - **Alternatives**: the full list is the distribution over what may follow
+
+### ends_here
+
+**The probability that no event follows the observation.**
+
+It is the share of the candidates' weight held by patterns that end where the observation ends. Such a pattern is often the best match there is, and it has no next event to propose. `0.0` when every candidate goes on; `1.0` when every candidate has ended; `null` when there is no candidate.
+
+When `ends_here` is larger than the top `probability`, the most probable reading is that nothing follows. It reports where the learned patterns end, not whether the session is over.
 
 ### chance_posterior
 
@@ -770,7 +779,9 @@ data = kato.get_predictions()
 
 if not data['predictions'] or data['chance_posterior'] > 0.5:
     print("I don't know")
-elif data['future_potentials']:
+elif not data['future_potentials'] or data['ends_here'] > data['future_potentials'][0]['probability']:
+    print("Nothing follows")
+else:
     best = data['future_potentials'][0]
     print(f"Next: {best['next_event']} ({best['probability']:.0%})")
 ```
@@ -961,6 +972,9 @@ best = predictions['future_potentials'][0] if predictions['future_potentials'] e
 
 if best is None or predictions['chance_posterior'] > 0.5:
     # Nothing learned explains this observation: do not act
+    pass
+elif predictions['ends_here'] > best['probability']:
+    # The patterns that fit have ended: no next event to act on
     pass
 elif best['probability'] > 0.9:
     # Auto-execute

@@ -301,7 +301,7 @@ Maximum number of predictions to return (1-10000).
 - Minimal impact below 100
 - Linear scaling above 100
 
-**What it does not limit**: every candidate above `recall_threshold` is matched and scored before the list is cut. The values of a returned prediction, `future_potentials` and `chance_posterior` are therefore the same whatever `max_predictions` is. To bound the work of a request, raise `recall_threshold` or configure a `filter_pipeline`.
+**What it does not limit**: every candidate above `recall_threshold` is matched and scored before the list is cut. The values of a returned prediction, `future_potentials`, `ends_here` and `chance_posterior` are therefore the same whatever `max_predictions` is. To bound the work of a request, raise `recall_threshold` or configure a `filter_pipeline`.
 
 **Example - Limited Predictions**:
 ```bash

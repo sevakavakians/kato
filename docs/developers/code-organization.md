@@ -198,7 +198,7 @@ informatics/
 **Key Files**:
 - **extractor.py**: Sequence matcher behind `matches`, `missing`, `extras` and the past / present / future split
 - **metrics.py**: Normalized entropy, global normalized entropy, emotive averaging, metadata accumulation
-- **prediction_metrics.py**: `potential`, `good_odds`, the Bayesian fields, `future_potentials`, `predictive_information`, `confluence`, `tfidf_score` and `itfdf_similarity`, as pure functions of a prediction's match fields, the STM and the node's counts
+- **prediction_metrics.py**: `potential`, `good_odds`, the Bayesian fields, `future_potentials`, `ends_here`, `predictive_information`, `confluence`, `tfidf_score` and `itfdf_similarity`, as pure functions of a prediction's match fields, the STM and the node's counts
 
 **Usage**:
 ```python
@@ -211,6 +211,7 @@ observation = Observation(stm_events, node)
 # and predictive_information on every candidate, and returns the ensemble's figures.
 scores = score_ensemble(candidates, observation, node)
 scores.future_potentials     # probability of each next event
+scores.ends_here             # probability that no event follows
 scores.chance_posterior      # probability that no learned pattern explains the STM
 ```
 

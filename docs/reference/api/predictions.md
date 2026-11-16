@@ -12,8 +12,9 @@ Each prediction contains:
 - **Information metrics**: confidence, evidence, similarity, SNR, entropy, potential, good-odds, Bayesian posteriors
 - **Pattern metadata**: frequency, emotives
 
-Beside the predictions, the response carries two figures computed over the whole set of candidates:
+Beside the predictions, the response carries three figures computed over the whole set of candidates:
 - **`future_potentials`**: the probability of each next event
+- **`ends_here`**: the probability that no event follows the observation
 - **`chance_posterior`**: the probability that no learned pattern explains the observation better than chance
 
 ## Endpoints
@@ -77,6 +78,7 @@ The example is a node that has learned three patterns: `login, browse, checkout`
     {"next_event": ["logout"], "probability": 0.414, "supporting_patterns": 1},
     {"next_event": ["reset_password"], "probability": 0.0001, "supporting_patterns": 1}
   ],
+  "ends_here": 0.0,
   "chance_posterior": 0.1093,
   "session_id": "session-abc123...",
   "count": 3
@@ -276,7 +278,7 @@ after it.
 | Field | Meaning |
 |-------|---------|
 | `next_event` | The event, as the patterns store it: a list of symbols. |
-| `probability` | The probability that this event comes next. The entries sum to 1. |
+| `probability` | The probability that this event comes next. The entries and `ends_here` sum to 1. |
 | `supporting_patterns` | Number of candidates whose next event this is. |
 
 **Use Cases**:
@@ -288,30 +290,43 @@ after it.
 
 1. Take every candidate above the recall threshold. The list includes patterns
    that `max_predictions` leaves out of the returned predictions.
-2. Skip candidates with an empty `future`: a pattern that ends where the
-   observation ends proposes nothing.
-3. Give each remaining candidate the weight `e^potential`.
-4. Group the candidates by the first event of their `future`, summing the weights
-   of each group.
-5. Divide each group's sum by the total over all groups to get `probability`.
-6. Sort by `probability`, descending. Equal values go to the event that sorts
+2. Give each candidate the weight `e^potential`.
+3. Group the candidates that have a `future` by its first event, summing the
+   weights of each group. A candidate with an empty `future` ends where the
+   observation ends and proposes no event: its weight goes to `ends_here`.
+4. Divide each group's sum by the total over every candidate to get
+   `probability`.
+5. Sort by `probability`, descending. Equal values go to the event that sorts
    first, so the order is the same on every request.
 
 Each response's `future_potentials` is computed from that request's own
 candidates. An empty STM, an STM that matches nothing, or a set of candidates
 with no future among them returns an empty list.
 
-The probabilities are shares among the next events the candidates propose.
-They do not say how well those candidates explain the STM, so two cases need a
-second look:
+The probabilities are shares of the candidates' weight. They do not say how
+well those candidates explain the STM: a lone candidate with a future gets a
+probability of 1.0, however weak its match. Whether to believe the candidates
+at all is what `chance_posterior` says.
 
-- A lone candidate with a future gets a probability of 1.0, however weak its
-  match. Whether to believe the candidates at all is what `chance_posterior`
-  says.
-- When the pattern that best explains the STM ends where the STM ends, it
-  proposes nothing, and the entries come from the remaining candidates. The
-  `good_odds` of the predictions that propose an event says how well they
-  explain the STM: below 0, worse than chance.
+---
+
+## Ends Here
+
+`ends_here` is the probability that no event follows the observation: the
+share of the candidates' weight (`e^potential`) held by patterns that end where
+the observation ends. With the probabilities in `future_potentials` it sums to 1.
+
+| Value | Reading |
+|-------|---------|
+| `0.0` | Every candidate goes on: some event follows. |
+| above the top `probability` | The most probable reading is that nothing follows. |
+| `1.0` | Every candidate has ended: `future_potentials` is empty. |
+| `null` | There is no candidate: the STM is empty, or nothing matched. |
+
+A pattern that has ended is often the best match there is. Its weight keeps a
+poor match from being given the whole probability for an event the fitting
+pattern never led to. `ends_here` reports where the learned patterns end. It is
+not a statement that the session is over.
 
 ---
 
@@ -331,10 +346,13 @@ candidate)`. With the `bayesian_posterior` of every candidate it sums to 1.
 ```python
 data = requests.get(f"http://localhost:8000/sessions/{session_id}/predictions").json()
 
+entries = data["future_potentials"]
 if not data["predictions"] or data["chance_posterior"] > 0.5:
     answer = None                      # "I don't know"
+elif not entries or data["ends_here"] > entries[0]["probability"]:
+    answer = None                      # nothing follows
 else:
-    answer = data["future_potentials"][0]["next_event"] if data["future_potentials"] else None
+    answer = entries[0]["next_event"]
 ```
 
 ---
@@ -385,7 +403,7 @@ Limit number of predictions with `max_predictions` configuration:
 - Every candidate above the recall threshold is scored first
 - The candidates are sorted by the session's `rank_sort_algo` (`potential` by default), descending
 - Top N predictions returned
-- `future_potentials`, `chance_posterior` and each returned prediction's metrics are computed over every candidate, so they do not change with N; see [Future Potentials](#future-potentials)
+- `future_potentials`, `ends_here`, `chance_posterior` and each returned prediction's metrics are computed over every candidate, so they do not change with N; see [Future Potentials](#future-potentials)
 
 ---
 
@@ -397,6 +415,7 @@ If STM is empty, predictions will be empty:
 {
   "predictions": [],
   "future_potentials": [],
+  "ends_here": null,
   "chance_posterior": null,
   "session_id": "session-abc123...",
   "count": 0

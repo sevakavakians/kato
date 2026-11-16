@@ -84,8 +84,10 @@ This mapping makes sense because:
 
 ```
 P(E | STM) = Σ e^potential over the candidates whose next event is E
-             / Σ e^potential over the candidates that have a future
+             / Σ e^potential over every candidate
 ```
+
+A candidate whose pattern ends where the STM ends proposes no event. Its weight is `ends_here`, the probability that nothing follows, so the events hold `1 - ends_here` between them.
 
 The candidates above the recall threshold are KATO's estimate of what can follow this STM, so no separate store of present and future co-occurrences is needed.
 
@@ -106,14 +108,14 @@ D = Σ P(E | STM) × log2( P(E | STM) / q(E) )
     E
 ```
 
-Each term says how many bits the ensemble's probability for an event is above its chance probability, weighted by that probability.
+Each term says how many bits the ensemble's probability for an event is above its chance probability, weighted by that probability. The sum runs over the events the candidates propose. When no candidate has ended, their probabilities add up to 1 and `D` is the Kullback-Leibler divergence of the next-event distribution from chance. When some have ended, `D` counts the events alone: "nothing follows" is not an event with symbols, so it has no chance probability to be measured against.
 
 ### 3.4 One Prediction's Part
 
 Several predictions can propose the same next event. Each gets its part of that event's term:
 
 ```python
-share = e^potential / Σ e^potential over the candidates that have a future
+share = e^potential / Σ e^potential over every candidate
 
 predictive_information = share × log2(P(E | STM) / q(E))
 ```
@@ -134,7 +136,7 @@ A prediction with no `future` proposes nothing and has `predictive_information` 
 ### 4.2 Order of Operations
 
 1. Every candidate above the recall threshold gets its `potential`.
-2. The shares and the next-event probabilities are computed over the candidates that have a future.
+2. The shares are computed over every candidate, and the next-event probabilities add up the shares of the candidates that have a future.
 3. Each such candidate gets `share × (log2 P(E | STM) + Σ log2(1 / q(s)))`, the sum taken over the symbols of its next event.
 4. The candidates are ranked and cut to `max_predictions`.
 

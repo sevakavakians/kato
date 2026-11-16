@@ -148,10 +148,13 @@ The probability that a pattern, and not another candidate or chance, produced th
 The probability that no learned pattern explains the observation better than chance: `1 / (1 + Σ 2^good_odds)`. Returned beside the predictions. It is 1.0 when nothing matched, which is KATO's "I don't know".
 
 ### Future Potentials
-The probability of each next event the candidates propose, returned beside the predictions. Each candidate that has a `future` votes for its next event with weight `e^potential`, and the votes are normalised to add up to 1.
+The probability of each next event the candidates propose, returned beside the predictions. Each candidate that has a `future` votes for its next event with weight `e^potential`, and each event's votes are divided by the weight of every candidate. With `ends_here` the probabilities add up to 1.
+
+### Ends Here
+The probability that no event follows the observation, returned beside the predictions: the share of the candidates' weight (`e^potential`) held by patterns that end where the observation ends.
 
 ### Predictive Information
-A prediction's part of the information the STM carries about the next event, in bits. Over the predictions of a request the values add up to the Kullback-Leibler divergence of the next-event distribution from chance.
+A prediction's part of the information the STM carries about the next event, in bits. Over the predictions of a request the values add up to `Σ P(E) × log2(P(E) / q(E))` over the events proposed, which is the Kullback-Leibler divergence of the next-event distribution from chance when no candidate has ended.
 
 ### Candidate
 A learned pattern whose similarity to the STM reaches the recall threshold. Every candidate is scored before the list is ranked and cut to `max_predictions`.

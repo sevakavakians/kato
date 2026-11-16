@@ -6,7 +6,7 @@ The Prediction Object is the core output structure of the KATO cognitive process
 
 A Prediction Object is generated when KATO's pattern recognition engine identifies potential matches between current observations and previously learned patterns. Each prediction contains detailed information about the quality of the match, temporal relationships, and various information-theoretic metrics that quantify the prediction's reliability and significance.
 
-A response holds a ranked list of Prediction Objects and two figures computed over the whole set of candidates: `future_potentials`, the probability of each next event, and `chance_posterior`, the probability that no learned pattern explains the observation better than chance. They are described under [Ensemble Fields](#ensemble-fields). [Metrics at a Glance](#metrics-at-a-glance) says what each metric answers and what data it suits, and [Measured Accuracy](#measured-accuracy) gives each one's accuracy as a ranking key.
+A response holds a ranked list of Prediction Objects and three figures computed over the whole set of candidates: `future_potentials`, the probability of each next event; `ends_here`, the probability that no event follows; and `chance_posterior`, the probability that no learned pattern explains the observation better than chance. They are described under [Ensemble Fields](#ensemble-fields). [Metrics at a Glance](#metrics-at-a-glance) says what each metric answers and what data it suits, and [Measured Accuracy](#measured-accuracy) gives each one's accuracy as a ranking key.
 
 ## Complete Field Reference
 
@@ -153,11 +153,11 @@ A response holds a ranked list of Prediction Objects and two figures computed ov
 **Formula**: `predictive_information = share * log2(P(E | STM) / q(E))`
   - `E` = the prediction's next event: the first event of its `future`.
   - `P(E | STM)` = the probability of that event in [`future_potentials`](#future_potentials).
-  - `share` = this prediction's own part of that probability: `e^potential` over the sum of `e^potential` across the predictions that have a future.
+  - `share` = this prediction's own part of that probability: `e^potential` over the sum of `e^potential` across every candidate.
   - `q(E)` = the chance probability of the event: the product of `q(s)` over its symbols.
 
 **Range**: Unbounded, in bits. 0.0 for a prediction with no `future`. Negative when the ensemble makes the event less probable than chance does.  
-**Purpose**: Over the predictions of a request the values add up to `Σ P(E | STM) * log2(P(E | STM) / q(E))`, the Kullback-Leibler divergence of the ensemble's next-event probabilities from chance: how many bits the STM tells about what comes next. Each prediction's value is its part of that total.  
+**Purpose**: Over the predictions of a request the values add up to `Σ P(E | STM) * log2(P(E | STM) / q(E))` over the events proposed: how many bits the STM tells about which event comes next, measured against chance. Each prediction's value is its part of that total. When no candidate has ended, the probabilities add up to 1 and the total is the Kullback-Leibler divergence of the next-event distribution from chance.  
 **Use**: Measuring how informative a context is, and which patterns carry the information. As a ranking key it trades probability for rarity, so it ranks slightly worse than `potential`.
 
 ### 21. **bayesian_posterior** (float)
@@ -341,7 +341,7 @@ The weights are constants, held in `kato/informatics/prediction_metrics.py` to f
 
 ## Ensemble Fields
 
-Two figures describe a request's whole set of candidates. They come back beside the `predictions` list, not inside a prediction.
+Three figures describe a request's whole set of candidates. They come back beside the `predictions` list, not inside a prediction.
 
 ### future_potentials
 
@@ -351,17 +351,24 @@ Two figures describe a request's whole set of candidates. They come back beside 
 | Key | Meaning |
 |---|---|
 | `next_event` | The event, as the patterns store it: a list of symbols. |
-| `probability` | The probability that this event comes next, given the STM. The entries add up to 1.0. |
+| `probability` | The probability that this event comes next, given the STM. The entries and `ends_here` add up to 1.0. |
 | `supporting_patterns` | How many candidates have this event as their next event. |
 
-**Formula**: `P(E | STM) = Σ e^potential over the candidates whose next event is E / Σ e^potential over the candidates that have a future`  
-The next event of a candidate is the first event of its `future`. A candidate with an empty `future` ends where the observation ends: it proposes nothing and is left out of both sums.  
+**Formula**: `P(E | STM) = Σ e^potential over the candidates whose next event is E / Σ e^potential over every candidate`  
+The next event of a candidate is the first event of its `future`. A candidate with an empty `future` ends where the observation ends. It proposes no event, and its weight goes to [`ends_here`](#ends_here).  
 **Order**: By `probability`, highest first. Equal probabilities go to the event that sorts first.  
 **Purpose**: The answer to "what comes next". Patterns that agree on the next event pool their support, even when they differ later, so on most data the top entry is right more often than the top prediction's own `future`. The probability is also a usable confidence value: see [Measured Accuracy](#measured-accuracy).  
 **Scope**: Computed over every candidate above the recall threshold, including those `max_predictions` leaves out of the response. Empty when the STM is empty, when nothing matches, or when no candidate has a future.  
-**What the probability is a share of**: the next events the candidates propose. It does not say how well those candidates explain the STM, so two cases need a second look:
-- A lone candidate with a future gets a probability of 1.0, however weak its match. Whether to believe the candidates at all is what `chance_posterior` says.
-- When the pattern that best explains the STM ends where the STM ends, it proposes nothing, and the entries come from the remaining candidates. The `good_odds` of the predictions that propose an event says how well they explain the STM: below 0, worse than chance.
+**What the probability is a share of**: the weight of the candidates. It does not say how well those candidates explain the STM. A lone candidate with a future gets a probability of 1.0, however weak its match. Whether to believe the candidates at all is what `chance_posterior` says.
+
+### ends_here
+
+**Description**: The probability that no event follows the observation.  
+**Formula**: `ends_here = Σ e^potential over the candidates with an empty future / Σ e^potential over every candidate`  
+**Range**: 0.0 to 1.0. With the probabilities in `future_potentials` it adds up to 1.0. `null` when there is no candidate: an empty STM, or an STM that matches nothing.  
+**Purpose**: Keeps a pattern that has ended in the vote. A candidate whose pattern ends where the STM ends is often the best match there is, and it has no next event to propose. Its weight says that the learned sequence is complete. Without it the probability would be shared among the candidates that go on, and a poor match could be given 1.0 for an event that the pattern which fits has never led to.  
+**Use**: Compare it with the top entry of `future_potentials`. When `ends_here` is the larger, the most probable reading is that nothing follows. An application that must name a next event anyway can still take the top entry, knowing how little weight it carries.  
+**What it is not**: a statement about the session. KATO learned where its patterns end, not when a user stops. `ends_here` is high when the patterns that fit the observation have nothing left, and that is all it reports.
 
 ### chance_posterior
 
@@ -373,7 +380,7 @@ The next event of a candidate is the first event of its `future`. A candidate wi
 ## How the Scores Are Computed
 
 1. **Candidates.** Every pattern whose `similarity` to the STM reaches `recall_threshold`. For a one-symbol STM: every pattern that holds the symbol.
-2. **Ensemble scores, for every candidate.** The frequency of each candidate is read. Then `bayesian_prior`, `bayesian_likelihood`, `good_odds`, `potential`, `bayesian_posterior` and `predictive_information` are computed for all of them, along with `future_potentials` and `chance_posterior`.
+2. **Ensemble scores, for every candidate.** The frequency of each candidate is read. Then `bayesian_prior`, `bayesian_likelihood`, `good_odds`, `potential`, `bayesian_posterior` and `predictive_information` are computed for all of them, along with `future_potentials`, `ends_here` and `chance_posterior`.
 3. **Ranking and the cut.** The candidates are ranked by the session's `rank_sort_algo`, highest value first, and the best `max_predictions` are kept. Equal values are ordered by pattern name, so the same request always returns the same predictions in the same order.
 4. **Pattern metrics, for what is returned.** `entropy`, `normalized_entropy`, `global_normalized_entropy`, `tfidf_score`, `itfdf_similarity`, `confluence` and the averaged `emotives` are computed for the returned predictions. When the session ranks by one of these six metrics, they are computed for every candidate first, and step 3 follows.
 
@@ -415,6 +422,7 @@ A session observes `login`, then `browse`. All three patterns reach the default 
   {"next_event": ["logout"], "probability": 0.414, "supporting_patterns": 1},
   {"next_event": ["reset_password"], "probability": 0.0001, "supporting_patterns": 1}
 ],
+"ends_here": 0.0,
 "chance_posterior": 0.1093
 ```
 
@@ -448,7 +456,27 @@ The total is 2.34 bits: odds of about 5 to 1 that this pattern, and not chance, 
 
 The second prediction differs from the first in one term: `log_frequency` is `ln(3)` in place of `ln(5)`, which is 0.347 less.
 
-**What comes next.** Each candidate votes for its next event with weight `e^potential`. Relative to the best, the weights are 1, `e^-0.347` = 0.707 and `e^-9.091` = 0.0001. Normalised, they are the probabilities in `future_potentials`: `checkout` 0.586, `logout` 0.414, `reset_password` 0.0001.
+**What comes next.** Each candidate votes for its next event with weight `e^potential`. Relative to the best, the weights are 1, `e^-0.347` = 0.707 and `e^-9.091` = 0.0001. Normalised, they are the probabilities in `future_potentials`: `checkout` 0.586, `logout` 0.414, `reset_password` 0.0001. Every candidate has a future, so `ends_here` is 0.0.
+
+**When a pattern has ended.** The session then observes `checkout`. The first pattern now matches in full and has no event left. The second matches `login` and `browse` and still proposes `logout`; the third matches `login` and proposes `reset_password`.
+
+| | `login, browse, checkout` | `login, browse, logout` | `login, reset_password, logout` |
+|---|---|---|---|
+| next event | none | `logout` | `reset_password` |
+| `similarity` | 1.0 | 0.667 | 0.333 |
+| `good_odds` | 4.85 bits | -2.72 bits | -9.45 bits |
+| `potential` | 18.13 | 9.95 | 6.07 |
+
+```json
+"future_potentials": [
+  {"next_event": ["logout"], "probability": 0.0003, "supporting_patterns": 1},
+  {"next_event": ["reset_password"], "probability": 0.000006, "supporting_patterns": 1}
+],
+"ends_here": 0.9997,
+"chance_posterior": 0.0332
+```
+
+The weights relative to the best are 1, `e^-8.18` = 0.0003 and `e^-12.05` = 0.000006. The pattern that has ended holds 0.9997 of the total, which is `ends_here`. `logout` is the most probable next event and it is still improbable: the only pattern that proposes it explains the observation worse than chance.
 
 ## Metrics at a Glance
 
@@ -478,11 +506,12 @@ The second prediction differs from the first in one term: `log_frequency` is `ln
 | `itfdf_similarity` | How close are the STM and `present` on the symbols patterns share? | `1 - (1 - cosine) × f / candidate frequency` | 0 to 1 | Prediction, node, candidates | A symbol-overlap check | Clean observations: 0.844 without noise, 0.356 at 20% noise. 0.775 on the logs |
 | `weighted_similarity`, `weighted_evidence`, `weighted_confidence`, `weighted_snr` | The matching metrics, with each symbol counted by its affinity to an emotive | [Field 32](#32-weighted_similarity-weighted_evidence-weighted_confidence-weighted_snr-float-or-null) | 0 to 1; `null` without `affinity_emotive` | Prediction, node | Ranking by what matters to an emotive | Nodes that learn emotives. Not measured: the data sets carry none |
 
-The two ensemble fields, in the same terms:
+The three ensemble fields, in the same terms:
 
 | Field | Answers | Formula | Unit and range | Reads | Use it for | Suits |
 |---|---|---|---|---|---|---|
-| `future_potentials` | What comes next, and how probable is it? | `e^potential` summed by next event, normalised | Probability; the entries add up to 1 | Candidates | The next-event answer and its confidence | Every kind of data measured. On the mean of the four kinds its top entry is right more often than the top prediction of any ranking key; the gain is largest on text (0.193 against 0.127), and on logs it is 1 point behind |
+| `future_potentials` | What comes next, and how probable is it? | `e^potential` summed by next event, over the sum for every candidate | Probability; with `ends_here` the entries add up to 1 | Candidates | The next-event answer and its confidence | Every kind of data measured. On the mean of the four kinds its top entry is right more often than the top prediction of any ranking key; the gain is largest on text (0.193 against 0.127), and on logs it is 1 point behind |
+| `ends_here` | Has the sequence come to its end? | `e^potential` of the candidates with no future, over the sum for every candidate | Probability; 0 to 1 | Candidates | Not naming a next event when the patterns that fit have none left | {{ENDS_SUITS}} |
 | `chance_posterior` | Does anything learned explain the observation? | `1 / (1 + Σ 2^G)` over every candidate | Probability; 0 to 1 | Candidates | Declining to answer | Telling a learned situation from an unfamiliar one. Above 0.5 for 4% of the queries on sequence libraries and 50% on text |
 
 **Reads** says what a value depends on. *Prediction*: the pattern, the STM and the match between them. *Node*: counts kept for the whole node (symbol occurrences, how many patterns hold a symbol, pattern totals). *Candidates*: every pattern above the recall threshold for this request.
@@ -687,7 +716,7 @@ The categories above group metrics by meaning. This table groups them by what th
 | The prediction alone (the pattern, the STM, and the match result) | The prediction and the node's counts | Every candidate of the request |
 |---|---|---|
 | `matches`, `past`, `present`, `future`, `sequence`, `missing`, `extras`, `anomalies`, `fuzzy_matches` | `bayesian_prior`: the pattern's frequency and the node's total of pattern frequencies | `bayesian_posterior` and `chance_posterior`: the `good_odds` of every candidate |
-| `evidence`, `confidence`, `snr`, `similarity`, `fragmentation` | `bayesian_likelihood`, `good_odds`: each matched symbol's learned occurrences and the node's total | `future_potentials`: the `potential` and next event of every candidate that has a future |
+| `evidence`, `confidence`, `snr`, `similarity`, `fragmentation` | `bayesian_likelihood`, `good_odds`: each matched symbol's learned occurrences and the node's total | `future_potentials` and `ends_here`: the `potential` and next event of every candidate |
 | `event_cohesion`, `onset_alignment` | `potential`: the pattern's frequency, and how many patterns hold each symbol of the STM and of `present` | `predictive_information`: the same, plus the learned occurrences of each symbol of the next event |
 | `entropy` (Shannon entropy over the pattern's own symbols; precomputed, but computable from the pattern) | `confluence`: the pattern's frequency, the node's totals, and the learned occurrences of each of its symbols | `itfdf_similarity`: the summed frequency of every candidate (and, from the node, how many patterns hold each symbol) |
 | | `tfidf_score`: the number of patterns in the node, and how many hold each symbol | |
@@ -710,9 +739,9 @@ Notes:
    - `frequency`: the most often learned candidates
    - `similarity`, `evidence`, `confidence`, `snr`: one aspect of the match at a time
 
-2. **What Comes Next**: Read `future_potentials`, not only the top prediction. The top prediction is sometimes a pattern that ends where the observation ends, so its `future` is empty and it predicts nothing: on click-stream data that was the case for four requests in five. `future_potentials` skips those patterns, pools the ones that agree, and gives each next event a probability.
+2. **What Comes Next**: Read `future_potentials`, not only the top prediction. The top prediction is sometimes a pattern that ends where the observation ends, so its `future` is empty and it predicts nothing: on click-stream data that was the case for four requests in five. `future_potentials` pools the patterns that agree and gives each next event a probability; the weight of the patterns that have ended is reported as `ends_here`, the probability that nothing follows.
 
-3. **How Sure**: Use `probability` in `future_potentials` as the confidence in the next event, and `chance_posterior` as the check on the whole ensemble. A high `chance_posterior` means nothing learned explains the observation well.
+3. **How Sure**: Use `probability` in `future_potentials` as the confidence in the next event, `ends_here` as the probability that there is none, and `chance_posterior` as the check on the whole ensemble. A high `chance_posterior` means nothing learned explains the observation well.
 
 4. **Confidence vs Evidence**:
    - `confidence` measures match quality in the current context

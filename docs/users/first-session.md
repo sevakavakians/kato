@@ -275,6 +275,7 @@ curl http://localhost:8000/sessions/$SESSION_ID/predictions | jq .
   "future_potentials": [
     {"next_event": ["get_dressed", "shower"], "probability": 1.0, "supporting_patterns": 1}
   ],
+  "ends_here": 0.0,
   "chance_posterior": 0.017,
   "count": 1
 }
@@ -293,6 +294,7 @@ Only some of the prediction's fields are shown. The full list is in the [Predict
 - **potential**: 16.646 = the ranking score. It matters when several patterns compete; here there is one
 - **good_odds**: 5.852 bits = the observation is about 58 times more probable under this pattern than by chance
 - **future_potentials**: the next event, with its probability
+- **ends_here**: 0.0 = the probability that nothing follows. The pattern goes on, so an event does
 - **chance_posterior**: 0.017 = the probability that nothing learned explains this observation
 - **emotives**: Averaged emotional values from learned pattern
 
@@ -346,6 +348,7 @@ curl http://localhost:8000/sessions/$SESSION_ID/predictions | jq .
   "future_potentials": [
     {"next_event": ["drive_to_work", "leave_home"], "probability": 1.0, "supporting_patterns": 1}
   ],
+  "ends_here": 0.0,
   "chance_posterior": 0.017
 }
 ```
@@ -403,6 +406,7 @@ curl http://localhost:8000/sessions/$SESSION_ID/predictions | jq .
   "future_potentials": [
     {"next_event": ["drive_to_work", "leave_home"], "probability": 1.0, "supporting_patterns": 1}
   ],
+  "ends_here": 0.0,
   "chance_posterior": 0.725
 }
 ```

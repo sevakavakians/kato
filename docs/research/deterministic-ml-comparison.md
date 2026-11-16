@@ -195,7 +195,7 @@ The precise claim is this:
   configuration, on the same build and hardware, KATO returns the same ranked
   predictions.
 - The figures computed over all the candidates of a request (`bayesian_posterior`,
-  `chance_posterior`, `future_potentials`, `predictive_information`) are sums taken
+  `chance_posterior`, `future_potentials`, `ends_here`, `predictive_information`) are sums taken
   in pattern-name order, and ranking ties are settled by pattern name. Neither
   depends on the order in which storage returns the candidates.
 

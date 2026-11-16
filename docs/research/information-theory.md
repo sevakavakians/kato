@@ -253,7 +253,7 @@ Predictive information captures **temporal structure**:
 
 In KATO, `predictive_information` is computed per request, between the **short-term memory** (what has been observed) and the **next event** (the first event of each prediction's `future`).
 
-The candidates of a request give the distribution of the next event, `P(E | STM)`, returned as `future_potentials`. With nothing known, an event is as probable as its symbols are common: `q(E)` is the product, over the event's symbols, of each symbol's share of all learned symbol occurrences. The information the STM carries about the next event is the divergence between the two:
+The candidates of a request give the distribution of the next event, `P(E | STM)`, returned as `future_potentials`. With nothing known, an event is as probable as its symbols are common: `q(E)` is the product, over the event's symbols, of each symbol's share of all learned symbol occurrences. The information the STM carries about which event comes next is the sum, over the events proposed, of each event's probability times its gain over chance. When no candidate has ended, the probabilities add up to 1 and the sum is the divergence between the two distributions:
 
 ```
 D = Σ P(E | STM) × log2( P(E | STM) / q(E) )
@@ -266,7 +266,7 @@ Each prediction's `predictive_information` is its part of that sum:
 def predictive_information(prediction, future_potentials, share, q):
     """
     share: the prediction's part of its next event's probability
-           (e^potential over the sum of e^potential across the predictions that have a future)
+           (e^potential over the sum of e^potential across every candidate)
     q:     symbol -> share of all learned symbol occurrences
     """
     if not prediction['future']:

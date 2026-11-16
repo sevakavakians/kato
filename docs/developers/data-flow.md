@@ -478,6 +478,7 @@ def _format_prediction(
   "future_potentials": [
     {"next_event": ["arrive", "work"], "probability": 1.0, "supporting_patterns": 1}
   ],
+  "ends_here": 0.0,
   "chance_posterior": 0.012,
   "stm": [["commute", "train"]],
   "stm_length": 1
@@ -485,7 +486,7 @@ def _format_prediction(
 ```
 
 Every candidate above the recall threshold is scored before the list is ranked
-and cut to `max_predictions`, so `future_potentials`, `chance_posterior` and
+and cut to `max_predictions`, so `future_potentials`, `ends_here`, `chance_posterior` and
 each returned prediction's values do not depend on the cut. The fields and
 their formulas are in the
 [Prediction Object Reference](../reference/prediction-object.md).

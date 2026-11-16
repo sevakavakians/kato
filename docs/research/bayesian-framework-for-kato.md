@@ -275,8 +275,10 @@ The direct construction would add the posteriors of the patterns that share a ne
 
 ```
 P(E | STM) = Σ e^potential over the candidates whose next event is E
-             / Σ e^potential over the candidates that have a future
+             / Σ e^potential over every candidate
 ```
+
+A candidate that has ended proposes no event; its share is `ends_here`, the probability that nothing follows.
 
 The reason is calibration. The observation model adds each matched symbol's bits as if the symbols were independent observations. In real data symbols travel together: the words of a phrase, the steps of a fixed routine. The same evidence is then counted several times, and the posterior is pushed toward 0 and 1. This is the known behaviour of a posterior built on an independence assumption: it can rank well while overstating its certainty (Domingos and Pazzani 1997; Niculescu-Mizil and Caruana 2005).
 

@@ -174,8 +174,10 @@ def test_purge_leaves_shared_symbols_owned_by_survivor(writer):
 
 
 def test_purge_reverses_frequency_weighted_share(writer):
-    """symbols:freq accrues per learn; pmf accrues once. Purge must match both.
+    """Some counters accrue per learn and some once per pattern. Purge must match both.
 
+    symbols:freq, the symbol total and total_pattern_frequencies gain on every
+    learn; symbols:pmf and total_unique_patterns gain on the first learn only.
     Conflating the two is the likeliest arithmetic error, and with frequency == 1
     the two are indistinguishable -- so this learns three times.
     """
@@ -185,6 +187,8 @@ def test_purge_reverses_frequency_weighted_share(writer):
     assert writer.client.hget(f"{writer.kb_id}:symbols:freq", 'alpha') == '6'
     assert writer.client.hget(f"{writer.kb_id}:symbols:pmf", 'alpha') == '1'
     assert writer.get_frequency(PATTERN_A) == 3
+    assert writer.client.get(f"{writer.kb_id}:global:total_pattern_frequencies") == '3'
+    assert writer.client.get(f"{writer.kb_id}:global:total_unique_patterns") == '1'
 
     assert _purge(writer, PATTERN_A, counts) == 'cleaned'
     assert _snapshot_state(writer) == before

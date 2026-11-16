@@ -19,6 +19,21 @@ logger = logging.getLogger('kato.config.session_config')
 # with no useful message, which is what happened when 'length' was removed.
 VALID_FILTERS = ['minhash', 'jaccard', 'bloom', 'rapidfuzz']
 
+# Values accepted for `rank_sort_algo`: every numeric metric of a prediction.
+# Predictions are ranked highest value first, whichever metric is chosen.
+# Shared with ConfigurationService.validate_configuration_update, for the same
+# reason as VALID_FILTERS.
+VALID_RANK_SORT_ALGORITHMS = [
+    'potential', 'good_odds',
+    'similarity', 'evidence', 'confidence', 'snr', 'fragmentation', 'frequency',
+    'bayesian_posterior', 'bayesian_prior', 'bayesian_likelihood',
+    'predictive_information', 'confluence',
+    'entropy', 'normalized_entropy', 'global_normalized_entropy',
+    'tfidf_score', 'itfdf_similarity',
+    'event_cohesion', 'onset_alignment',
+    'weighted_similarity', 'weighted_evidence', 'weighted_confidence', 'weighted_snr',
+]
+
 DEFAULT_VECTOR_EVENT_MODE = 'neighbors_plus_self'
 VECTOR_EVENT_MODE_SELF_ONLY = 'self_only'
 # Nearest-neighbour count for a vector observation. This is 3, not a larger
@@ -168,16 +183,7 @@ class SessionConfiguration:
 
             # Validate rank_sort_algo
             if self.rank_sort_algo is not None:
-                valid_algorithms = [
-                    'potential', 'similarity', 'evidence', 'confidence', 'snr',
-                    'fragmentation', 'frequency', 'normalized_entropy',
-                    'global_normalized_entropy', 'itfdf_similarity', 'confluence',
-                    'predictive_information', 'bayesian_posterior', 'bayesian_prior',
-                    'bayesian_likelihood', 'tfidf_score',
-                    'weighted_similarity', 'weighted_evidence', 'weighted_confidence', 'weighted_snr',
-                    'event_cohesion', 'onset_alignment'
-                ]
-                if self.rank_sort_algo not in valid_algorithms:
+                if self.rank_sort_algo not in VALID_RANK_SORT_ALGORITHMS:
                     logger.error(f"Invalid rank_sort_algo: {self.rank_sort_algo}")
                     return False
 

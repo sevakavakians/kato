@@ -237,33 +237,6 @@ def normalized_entropy(state: list[str], total_symbols: int) -> float:
         raise
 
 
-def confluence(state: list[str], symbols_kb: dict[str, float], _P1: Optional[float] = None) -> float:
-    """Calculate the confluence of a pattern.
-
-    Confluence measures the probability of a pattern occurring vs random chance.
-    Formula: P(pattern in observations) * (1 - P(pattern occurring randomly))
-
-    Args:
-        state: List of symbols in the pattern.
-        symbols_kb: Dictionary of symbol probabilities from knowledge base.
-        _P1: Optional probability of sequence occurring in observations (reserved for future use).
-
-    Returns:
-        The conditional probability of the pattern.
-
-    Raises:
-        Exception: If state is empty.
-
-    Note:
-        Currently only returns conditional probability. Full confluence
-        calculation with P1 is not yet implemented.
-    """
-    if state:
-        return conditionalProbability(state, symbols_kb)
-    else:
-        raise Exception("Cannot calculate confluence for empty state")
-
-
 def conditionalProbability(state: list[str], symbol_probabilities: dict[str, float]) -> float:
     """Calculate the conditional probability of a state given symbol probabilities.
 

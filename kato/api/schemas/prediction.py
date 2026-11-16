@@ -29,7 +29,17 @@ class FinalizeTrainingResult(BaseModel):
 class PredictionsResponse(BaseModel):
     """Predictions response"""
     predictions: list[dict] = Field(default_factory=list, description="List of predictions")
-    future_potentials: Optional[list[dict]] = Field(None, description="Aggregated future potentials")
+    future_potentials: Optional[list[dict]] = Field(
+        None,
+        description="Probability of each next event the predictions propose, most probable first"
+    )
+    chance_posterior: Optional[float] = Field(
+        None,
+        description=(
+            "Probability that no learned pattern explains the STM better than chance: what the "
+            "bayesian_posterior values of every candidate leave over. Null when no prediction was computed."
+        )
+    )
     session_id: Optional[str] = Field(None, description="Session ID")
     processor_id: Optional[str] = Field(None, description="Processor ID for v1 compatibility")
     count: int = Field(..., description="Number of predictions")

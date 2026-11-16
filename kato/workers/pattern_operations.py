@@ -349,7 +349,8 @@ class PatternOperations:
             config: SessionConfiguration with prediction parameters
 
         Returns:
-            PredictionResult with the predictions and their future potentials
+            PredictionResult with the predictions, their future potentials
+            and the chance posterior
         """
         # Pass config directly to pattern processor's get_predictions_async
         return await self.pattern_processor.get_predictions_async(stm, config=config)

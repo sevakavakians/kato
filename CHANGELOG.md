@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [7.0.0] - 2026-11-16
+
 ### Upgrade notes
 - **Recount the pattern-frequency total once per Redis:**
   `python scripts/recount_pattern_frequencies.py --all` (`--dry-run` first to see

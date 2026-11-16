@@ -188,52 +188,59 @@ GET /sessions/{session_id}/predictions?unique_id=<observation_id>
 Returns predictions based on the session's current STM or specific observation.
 
 **Response Model: `PredictionsResponse`**
+
+The example is a node that has learned `login, browse, checkout` five times, `login, browse, logout` three times and `login, reset_password, logout` twice, with `login` and `browse` observed. The first of the three predictions is shown; values are rounded to four decimals.
+
 ```json
 {
   "predictions": [
     {
-      "name": "abc123def456789012345678901234567890abcd",
+      "name": "a629167ef78bdb4dee0784c40fe2b39a4ffd207d",
       "type": "prototypical",
       "frequency": 5,
-      "matches": ["hello", "world"],
-      "missing": [["foo"]],
-      "extras": [["bar"]],
-      "anomalies": ["foo", "bar"],
+      "matches": ["login", "browse"],
+      "missing": [[], []],
+      "extras": [[], []],
+      "anomalies": [],
       "fuzzy_matches": [],
-      "past": [["previous"]],
-      "present": [["hello", "world", "foo"]],
-      "future": [["next"]],
-      "evidence": 0.8,
-      "confidence": 0.7,
-      "similarity": 0.85,
-      "snr": 0.9,
-      "fragmentation": 0,
-      "emotives": {"joy": 0.5},
-      "predictive_information": 0.75,
-      "potential": 2.45,
-      "normalized_entropy": 0.3,
-      "global_normalized_entropy": 0.4,
-      "confluence": 0.6,
-      "itfdf_similarity": 0.65,
-      "tfidf_score": 0.82,
-      "bayesian_posterior": 0.35,
-      "bayesian_prior": 0.20,
-      "bayesian_likelihood": 0.85,
+      "past": [],
+      "present": [["login"], ["browse"]],
+      "future": [["checkout"]],
+      "sequence": [["login"], ["browse"], ["checkout"]],
+      "evidence": 0.6667,
+      "confidence": 1.0,
+      "similarity": 0.8,
+      "snr": 1.0,
+      "fragmentation": 0.0,
+      "event_cohesion": 1.0,
+      "onset_alignment": 1.0,
+      "emotives": {},
+      "potential": 17.1968,
+      "good_odds": 2.3439,
+      "bayesian_prior": 0.5,
+      "bayesian_likelihood": 3.3439,
+      "bayesian_posterior": 0.5548,
+      "predictive_information": 1.0627,
+      "confluence": 5.0768,
+      "entropy": 1.585,
+      "normalized_entropy": 0.6826,
+      "global_normalized_entropy": 0.3955,
+      "itfdf_similarity": 1.0,
+      "tfidf_score": 0.5744,
       "weighted_similarity": null,
       "weighted_evidence": null,
       "weighted_confidence": null,
       "weighted_snr": null
     }
   ],
-  "future_potentials": [             // Optional: aggregate future predictions
-    {
-      "future": [["next"]],
-      "aggregate_potential": 0.85,
-      "supporting_patterns": 3,
-      "total_weighted_frequency": 12.5
-    }
+  "future_potentials": [             // Probability of each next event, over every candidate
+    {"next_event": ["checkout"], "probability": 0.5859, "supporting_patterns": 1},
+    {"next_event": ["logout"], "probability": 0.414, "supporting_patterns": 1},
+    {"next_event": ["reset_password"], "probability": 0.0001, "supporting_patterns": 1}
   ],
-  "session_id": "primary"
+  "chance_posterior": 0.1093,        // Probability that no learned pattern explains the STM better than chance
+  "session_id": "primary",
+  "count": 3
 }
 ```
 
@@ -428,7 +435,7 @@ This enables continuous learning where every new observation after reaching 3 ev
 - `persistence`: Rolling window size for emotive values per pattern
 - `max_pattern_length`: Auto-learn threshold (0 = manual only)
 - `stm_mode`: Short-term memory mode ('CLEAR' or 'ROLLING')
-- `rank_sort_algo`: Prediction ranking metric ('potential', 'similarity', 'evidence', 'confidence', 'snr', 'fragmentation', 'frequency', 'normalized_entropy', 'global_normalized_entropy', 'itfdf_similarity', 'tfidf_score', 'confluence', 'predictive_information', 'bayesian_posterior', 'bayesian_prior', 'bayesian_likelihood', 'weighted_similarity', 'weighted_evidence', 'weighted_confidence', 'weighted_snr')
+- `rank_sort_algo`: Prediction ranking metric. Any numeric metric of a prediction: 'potential' (default), 'good_odds', 'similarity', 'evidence', 'confidence', 'snr', 'fragmentation', 'frequency', 'bayesian_posterior', 'bayesian_prior', 'bayesian_likelihood', 'predictive_information', 'confluence', 'entropy', 'normalized_entropy', 'global_normalized_entropy', 'tfidf_score', 'itfdf_similarity', 'event_cohesion', 'onset_alignment', 'weighted_similarity', 'weighted_evidence', 'weighted_confidence', 'weighted_snr'
 - `process_predictions`: Enable/disable prediction processing (true/false)
 - And others (see Configuration guide)
 
@@ -673,115 +680,90 @@ Common HTTP status codes:
 - `similarity`: Overall pattern similarity (0-1)
 - `snr`: Signal-to-noise ratio (-1 to 1)
 - `fragmentation`: Pattern cohesion measure (0-n)
+- `event_cohesion`: How much of each observed event sits together in one pattern event (0-1)
+- `onset_alignment`: How early in the pattern the observed symbols occur (0-1)
 - `entropy`: Shannon entropy of the pattern's symbols
-- `normalized_entropy`: Local entropy based on the pattern's symbol distribution
+- `normalized_entropy`: The pattern's entropy over the largest entropy the node's vocabulary allows (0-1)
 - `global_normalized_entropy`: Entropy using global symbol probabilities
-- `confluence`: Pattern probability vs random chance (0-1)
-- `itfdf_similarity`: Inverse TF-DF similarity (0-1)
+- `confluence`: How far the pattern is from a chance co-occurrence of its symbols, in bits (unbounded)
+- `itfdf_similarity`: One minus the distance between the STM and `present`, the distance scaled by the pattern's share of the candidates' frequency (0-1)
 - `tfidf_score`: TF-IDF pattern distinctiveness (0-~2.0)
-- `predictive_information`: Information-theoretic predictive value (0-1)
-- `potential`: Composite ranking metric: `(evidence + confidence) * snr + itfdf_similarity + (1/(fragmentation+1))` (unbounded)
-- `bayesian_posterior`: P(pattern|observation), sums to 1.0 across ensemble (0-1)
-- `bayesian_prior`: P(pattern) base rate frequency (0-1)
-- `bayesian_likelihood`: P(observation|pattern), equivalent to similarity (0-1)
+- `potential`: Default ranking score: a weighted sum of eleven match terms (unbounded; higher is better)
+- `good_odds`: Posterior log-odds of the pattern against chance, in bits: `log2(bayesian_prior) + bayesian_likelihood` (unbounded; above 0 beats chance)
+- `bayesian_prior`: The pattern's share of every learn in the node: `frequency / total_pattern_frequencies` (0-1)
+- `bayesian_likelihood`: Weight of evidence the observation gives for the pattern over chance, in bits (unbounded)
+- `bayesian_posterior`: P(pattern|observation); with `chance_posterior`, sums to 1.0 over every candidate (0-1)
+- `predictive_information`: The prediction's part of what the STM tells about the next event, in bits (unbounded; 0 with no future)
 - `emotives`: Emotional/utility values (averaged from pattern)
 - `weighted_similarity`: Affinity-weighted similarity (null when disabled)
 - `weighted_evidence`: Affinity-weighted evidence (null when disabled)
 - `weighted_confidence`: Affinity-weighted confidence (null when disabled)
 - `weighted_snr`: Affinity-weighted SNR (null when disabled)
 
-### Future Potentials Fields (Optional Response)
-- `future`: The predicted future event sequence
-- `aggregate_potential`: Combined potential of all patterns predicting this future (0-1)
-- `supporting_patterns`: Number of patterns that predict this future
-- `total_weighted_frequency`: Sum of frequency × similarity for supporting patterns
+Formulas, ranges and what each metric is for: [Prediction Object Reference](../reference/prediction-object.md).
 
-## Predictive Information User Guide
+### Ensemble Fields (beside the predictions)
+- `future_potentials`: The probability of each next event the candidates propose, most probable first. Each entry:
+  - `next_event`: The event, a list of symbols
+  - `probability`: The probability that this event comes next (entries sum to 1.0)
+  - `supporting_patterns`: Number of candidates whose next event this is
+- `chance_posterior`: The probability that no learned pattern explains the STM better than chance (0-1). `1.0` when nothing matched, `null` when no prediction was computed
 
-### Understanding Predictive Information Values
+Both are computed over every candidate above the recall threshold, not only the returned predictions.
 
-**Predictive Information (PI)** measures how much information a pattern provides about its future outcomes. This information-theoretic metric helps rank predictions based on their reliability and usefulness.
+## Reading the Scores
 
-### Key Concepts
+The numbers below are from the example response above: `login` and `browse` observed, against three learned patterns.
 
-#### 1. **Predictive Information Range: 0.0 to 1.0**
-- **0.0**: Pattern provides no predictive information about the future
-- **0.5**: Pattern provides moderate predictive information  
-- **1.0**: Pattern provides maximum predictive information (rare, indicates strong predictive relationship)
+| Pattern (times learned) | Match | `potential` | `good_odds` | `bayesian_posterior` | Next event |
+|---|---|---|---|---|---|
+| `login, browse, checkout` (5) | both symbols | 17.20 | 2.34 bits | 0.555 | `checkout` |
+| `login, browse, logout` (3) | both symbols | 16.85 | 1.61 bits | 0.333 | `logout` |
+| `login, reset_password, logout` (2) | `login` only; `browse` is an extra | 8.11 | -5.13 bits | 0.003 | `reset_password` |
 
-#### 2. **Potential Formula**
-```
-potential = (evidence + confidence) * snr + itfdf_similarity + (1/(fragmentation + 1))
-```
-- **evidence + confidence**: Match completeness
-- **snr**: Signal quality (matches vs extras)
-- **itfdf_similarity**: Frequency-weighted similarity
-- **fragmentation term**: Pattern cohesion bonus
-- **potential**: Composite ranking metric (unbounded, typically 0.0-3.0)
+### Which prediction first: `potential`
 
-### Practical Usage Examples
+Predictions arrive ranked by `potential`, a weighted sum of eleven terms: how alike the observation and the matched part of the pattern are, whether the newest event is explained, how recent the matches are, how much is missing or extra, how broken up the match is, and how often the pattern was learned.
 
-#### Example 1: High PI Pattern
-```json
-{
-  "name": "abc123def456789012345678901234567890abcd",
-  "similarity": 0.9,
-  "predictive_information": 0.8,
-  "potential": 2.72,
-  "frequency": 15,
-  "future": [["expected_next_event"]]
-}
-```
-**Interpretation**: This pattern matches well (90%) and has strong predictive power (80%). The high frequency (15) suggests it's been learned many times, making it very reliable.
+- The first two patterns match identically. They differ only in frequency, which enters as `0.680 * ln(frequency)`: 5 learns against 3 is worth 0.35.
+- The third matches one symbol of two and leaves the newest event unexplained. That costs 9 points.
 
-#### Example 2: Low PI Pattern  
-```json
-{
-  "name": "def456789012345678901234567890abcdef012345",
-  "similarity": 0.85,
-  "predictive_information": 0.2,
-  "potential": 0.45,
-  "frequency": 2,
-  "future": [["uncertain_outcome"]]
-}
-```
-**Interpretation**: Although this pattern matches reasonably well (85%), it has low predictive power (20%) and low frequency (2), making it less reliable for prediction.
-
-### Using Future Potentials
-
-The `future_potentials` field aggregates predictions across multiple patterns:
+### What comes next: `future_potentials`
 
 ```json
 "future_potentials": [
-  {
-    "future": [["high_confidence_outcome"]],
-    "aggregate_potential": 0.85,
-    "supporting_patterns": 5,
-    "total_weighted_frequency": 47.3
-  },
-  {
-    "future": [["lower_confidence_outcome"]],
-    "aggregate_potential": 0.3,
-    "supporting_patterns": 2,
-    "total_weighted_frequency": 8.1
-  }
+  {"next_event": ["checkout"], "probability": 0.5859, "supporting_patterns": 1},
+  {"next_event": ["logout"], "probability": 0.414, "supporting_patterns": 1},
+  {"next_event": ["reset_password"], "probability": 0.0001, "supporting_patterns": 1}
 ]
 ```
 
-**Best Practice**: Use futures with high `aggregate_potential` and multiple `supporting_patterns` for most reliable predictions.
+Each candidate votes for its next event with weight `e^potential`, and the votes are normalised. Patterns that agree on the next event add up, so the list answers "what comes next" better than the top prediction alone, and `probability` is a usable confidence: a difference of 1.0 in `potential` is a factor of `e` in weight.
+
+**Best Practice**: Read the next event from `future_potentials[0]`, and use its `probability` to decide whether to act on it.
+
+### How sure, in bits: `good_odds`
+
+`good_odds` says how many times more probable the observation is under the pattern than under chance, as a base-2 logarithm, counting how often the pattern was learned. Above 0 the pattern beats chance. Here the first pattern is at 2.34 bits (about 5 to 1 in its favour) and the third at -5.13 bits (35 to 1 against).
+
+`bayesian_posterior` turns those odds into probabilities over the candidates and chance together: 0.555, 0.333 and 0.003, with 0.109 left for chance.
+
+### "I don't know": `chance_posterior`
+
+`chance_posterior` (0.109 here) is the probability that none of the learned patterns explains the observation better than chance. When nothing matches, `predictions` is empty and `chance_posterior` is 1.0. When something matches weakly, predictions come back with a `chance_posterior` near 1.0: treat that the same way.
+
+### How much the observation tells: `predictive_information`
+
+In bits. The values of a request add up to the information the STM carries about the next event, measured against chance: 1.063 + 0.544 - 0.001 = 1.606 bits here. A context that pins the next event down to one rare event carries many bits; one that leaves several common events open carries few. A prediction with no `future` has 0.
 
 ### Decision-Making Guidelines
 
-1. **Primary Ranking**: Sort predictions by `potential` (descending) for best overall predictions
-2. **Reliability Check**: Consider both `predictive_information` and `frequency` for confidence assessment
-3. **Future Planning**: Use `future_potentials` to identify most likely outcomes across all patterns
-4. **Threshold Setting**: Patterns with PI < 0.3 may be unreliable for critical decisions
+1. **Primary Ranking**: Predictions are sorted by `potential` (descending) by default
+2. **Next Event**: Take it from `future_potentials`, with `probability` as the confidence
+3. **Abstaining**: Decline to answer when `chance_posterior` is high or the top `probability` is low
+4. **Explaining a Score**: `good_odds`, `bayesian_prior` and `bayesian_likelihood` break a match into how often the pattern was learned and how strongly the observation supports it, in bits
 
-### Information-Theoretic Foundation
-
-Predictive Information is based on **Excess Entropy** from information theory, measuring mutual information between past and future sequence segments. Higher values indicate stronger statistical dependencies and more reliable predictions.
-
-For theoretical details, see: [predictive information](../research/predictive-information.md)
+For the formulas and what each metric is for, see the [Prediction Object Reference](../reference/prediction-object.md).
 
 ## Notes
 

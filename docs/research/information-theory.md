@@ -251,53 +251,49 @@ Predictive information captures **temporal structure**:
 
 ### KATO Implementation
 
-In KATO, predictive information calculated between **present** (matched portion) and **future** (predicted portion):
+In KATO, `predictive_information` is computed per request, between the **short-term memory** (what has been observed) and the **next event** (the first event of each prediction's `future`).
+
+The candidates of a request give the distribution of the next event, `P(E | STM)`, returned as `future_potentials`. With nothing known, an event is as probable as its symbols are common: `q(E)` is the product, over the event's symbols, of each symbol's share of all learned symbol occurrences. The information the STM carries about the next event is the divergence between the two:
+
+```
+D = Σ P(E | STM) × log2( P(E | STM) / q(E) )
+    E
+```
+
+Each prediction's `predictive_information` is its part of that sum:
 
 ```python
-def calculate_predictive_information(prediction, kb):
+def predictive_information(prediction, future_potentials, share, q):
     """
-    Calculate predictive information for a prediction.
-
-    Maps to: I(Present; Future) where:
-    - Present = matched segment of pattern
-    - Future = predicted segment of pattern
+    share: the prediction's part of its next event's probability
+           (e^potential over the sum of e^potential across the predictions that have a future)
+    q:     symbol -> share of all learned symbol occurrences
     """
-    present = prediction['present']
-    future = prediction['future']
-
-    # Hash segments for lookup
-    present_hash = hash_segment(present)
-    future_hash = hash_segment(future)
-
-    # Get co-occurrence statistics
-    joint_freq = kb.get_cooccurrence_count(present_hash, future_hash)
-    present_freq = kb.get_present_count(present_hash)
-    future_freq = kb.get_future_count(future_hash)
-    total_freq = kb.get_total_count()
-
-    # Calculate probabilities
-    p_joint = joint_freq / total_freq
-    p_present = present_freq / total_freq
-    p_future = future_freq / total_freq
-
-    # Calculate predictive information
-    if p_joint > 0 and p_present > 0 and p_future > 0:
-        pi = p_joint * log2(p_joint / (p_present * p_future))
-    else:
-        pi = 0.0
-
-    return pi
+    if not prediction['future']:
+        return 0.0                                   # proposes no next event
+    event = prediction['future'][0]
+    p_event = next(e['probability'] for e in future_potentials if e['next_event'] == event)
+    chance_bits = sum(log2(1 / q[s]) for s in event)
+    return share * (log2(p_event) + chance_bits)
 ```
+
+Averaged over the STMs a node sees, `D` is the mutual information `I(Past; Future)` defined above.
 
 **Usage in Predictions**:
 ```python
+# Learned: login, browse, checkout (5 times); login, browse, logout (3 times);
+#          login, reset_password, logout (2 times). Observed: login, browse.
 prediction = {
-    "present": [["commute", "train"]],
-    "future": [["arrive", "work"]],
-    "predictive_information": 0.342,  # bits
-    "potential": 2.1  # composite score
+    "present": [["login"], ["browse"]],
+    "future": [["checkout"]],
+    "predictive_information": 1.063,  # bits
+    "potential": 17.197               # ranking score
 }
+# The three predictions of this request carry 1.063 + 0.544 - 0.001 = 1.606 bits
+# about the next event.
 ```
+
+**Details**: [Predictive Information](predictive-information.md)
 
 ### Relationship to Entropy Rate
 
@@ -366,34 +362,65 @@ def calculate_prediction_uncertainty(stm, predictions):
 
 ## Information-Theoretic Metrics
 
+### Weight of Evidence and Good-Odds
+
+The logarithm of a likelihood ratio is a quantity of information. KATO measures each candidate pattern against chance, in bits:
+
+```python
+def weight_of_evidence(matches, n_missing, n_extras, q, e=0.05):
+    """
+    bayesian_likelihood: log2 of P(STM | pattern) / P(STM | chance).
+
+    q: symbol -> share of all learned symbol occurrences
+    e: assumed chance that a symbol is dropped from, or intrudes into, an observation
+    """
+    bits = sum(log2((1 - e) / q[s]) for s in matches)        # rarer symbols earn more
+    return bits - log2(1 / e) * (n_missing + n_extras)       # 4.32 bits per symbol explained away
+
+
+def good_odds(frequency, total_pattern_frequencies, evidence_bits):
+    """Prior log-odds plus weight of evidence: posterior log-odds against chance."""
+    return log2(frequency / total_pattern_frequencies) + evidence_bits
+```
+
+A matched symbol that makes up a thousandth of the node's symbol occurrences is worth `log2(0.95 × 1000)` = 9.9 bits: it is 950 times more probable under the pattern than under chance. `good_odds` above 0 means the pattern explains the observation better than chance does.
+
+**Details**: [Bayesian Framework](bayesian-framework-for-kato.md)
+
+### Confluence
+
+How far a pattern is from a chance co-occurrence of its symbols, in bits:
+
+```python
+def confluence(pattern_symbols, frequency, total_pattern_frequencies, q):
+    """log2 of how often the pattern was learned over how often chance would produce it."""
+    return log2(frequency / total_pattern_frequencies) + sum(log2(1 / q[s]) for s in pattern_symbols)
+```
+
+It is a property of the pattern and the node, and it is the ceiling of `good_odds`: an exact, complete observation of the pattern scores `confluence` less 0.074 bits per symbol.
+
 ### ITFDF Similarity
 
 **Inverse Term Frequency - Document Frequency** similarity in KATO:
 
 ```python
-def calculate_itfdf_similarity(pattern_symbols, stm_symbols, kb):
+def itfdf_similarity(stm_counts, present_counts, frequency, candidate_frequency, pattern_share):
     """
-    Calculate ITFDF similarity between pattern and STM.
+    1 - distance × frequency / candidate_frequency
 
-    Similar to TF-IDF but for pattern matching:
-    - Common symbols (high frequency) weighted less
-    - Rare symbols (low frequency) weighted more
+    stm_counts, present_counts: symbol -> number of occurrences in the STM / in `present`
+    pattern_share:              symbol -> share of the node's patterns that hold it
+    candidate_frequency:        summed frequency of every candidate of the request
     """
-    similarity = 0.0
-
-    for symbol in pattern_symbols:
-        if symbol in stm_symbols:
-            # Inverse frequency weighting
-            symbol_freq = kb.get_symbol_frequency(symbol)
-            total_patterns = kb.get_total_patterns()
-
-            # ITFDF score
-            itfdf = 1.0 / (1.0 + log2(1.0 + symbol_freq / total_patterns))
-            similarity += itfdf
-
-    # Normalize
-    return similarity / max(len(pattern_symbols), len(stm_symbols))
+    dot = sum(pattern_share[s] ** 2 * stm_counts[s] * present_counts[s]
+              for s in stm_counts if s in present_counts)
+    norm_stm = sqrt(sum((pattern_share[s] * n) ** 2 for s, n in stm_counts.items()))
+    norm_present = sqrt(sum((pattern_share[s] * n) ** 2 for s, n in present_counts.items()))
+    cosine = min(dot / (norm_stm * norm_present), 1.0) if norm_stm and norm_present else 0.0
+    return 1.0 - (1.0 - cosine) * frequency / candidate_frequency
 ```
+
+The distance between the observation and the matched events counts in proportion to the pattern's share of the candidates' frequency. An STM that holds exactly the symbols of `present` scores 1.0.
 
 ### Signal-to-Noise Ratio
 
@@ -404,20 +431,20 @@ def calculate_snr(matched_symbols, extra_symbols):
     """
     Calculate signal-to-noise ratio.
 
-    SNR = Signal / (Signal + Noise)
+    SNR = (2 × Signal - Noise) / (2 × Signal + Noise)
     """
     signal = len(matched_symbols)
     noise = len(extra_symbols)
 
     if signal + noise > 0:
-        snr = signal / (signal + noise)
+        snr = (2 * signal - noise) / (2 * signal + noise)
     else:
         snr = 0.0
 
     return snr
 ```
 
-**Information interpretation**: Proportion of information that is signal vs. noise.
+**Information interpretation**: How far the matched symbols outweigh the unexpected ones, from 1.0 (no extras) down to -1.0 (extras only).
 
 ## Practical Applications
 
@@ -426,27 +453,22 @@ def calculate_snr(matched_symbols, extra_symbols):
 Using information-theoretic metrics to rank predictions:
 
 ```python
-def rank_predictions(predictions):
+def rank_by_bits(predictions):
     """
-    Rank predictions by information-theoretic criteria.
+    Rank predictions by good-odds: the bits by which each pattern
+    explains the observation better than chance.
     """
-    for pred in predictions:
-        # Predictive information (main signal)
-        pi = pred['predictive_information']
+    return sorted(predictions, key=lambda p: (p['good_odds'], p['name']), reverse=True)
 
-        # Evidence (proportion observed)
-        evidence = pred['evidence']
 
-        # Confidence (match quality)
-        confidence = pred['confidence']
-
-        # Composite score
-        score = pi * evidence * confidence
-        pred['info_score'] = score
-
-    # Sort by information score
-    return sorted(predictions, key=lambda p: p['info_score'], reverse=True)
+def informative_context(predictions, min_bits=1.0):
+    """
+    True when the observation tells at least `min_bits` about the next event.
+    """
+    return sum(p['predictive_information'] for p in predictions) >= min_bits
 ```
+
+The same ranking is available from KATO directly with `rank_sort_algo: "good_odds"`. The sum in `informative_context` covers every candidate only when `max_predictions` returns them all.
 
 ### Anomaly Detection
 

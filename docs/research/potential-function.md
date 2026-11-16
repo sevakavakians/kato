@@ -3,499 +3,312 @@
 ## Table of Contents
 1. [Overview](#overview)
 2. [Potential Function Definition](#potential-function-definition)
-3. [Component Metrics](#component-metrics)
-4. [Mathematical Properties](#mathematical-properties)
-5. [Alternative Ranking Functions](#alternative-ranking-functions)
-6. [Tuning and Optimization](#tuning-and-optimization)
-7. [Examples](#examples)
-8. [Comparison to Other Approaches](#comparison-to-other-approaches)
+3. [The Eleven Terms](#the-eleven-terms)
+4. [How the Weights Were Fitted](#how-the-weights-were-fitted)
+5. [Mathematical Properties](#mathematical-properties)
+6. [Worked Example](#worked-example)
+7. [From Potential to Probabilities](#from-potential-to-probabilities)
+8. [Measured Accuracy](#measured-accuracy)
+9. [Alternative Ranking Functions](#alternative-ranking-functions)
+10. [Comparison to Other Approaches](#comparison-to-other-approaches)
+11. [References](#references)
 
 ## Overview
 
-The **potential function** is KATO's composite score for ranking predictions. It combines multiple information-theoretic and statistical metrics into a single value that represents the overall quality and reliability of a prediction.
+The **potential function** is KATO's default score for ranking predictions. Every candidate pattern gets one number, and the candidates are returned highest first.
+
+`potential` answers one question: of the patterns that match the short-term memory (STM), which is most likely to continue it? It is a weighted sum of eleven terms. Each term is computed from the prediction's own fields and the node's counts, and each weight is a constant.
 
 ### Purpose
 
-- Rank predictions by likelihood and quality
-- Balance multiple factors (similarity, frequency, structure)
-- Provide interpretable scoring
-- Enable configurable weighting
+- Rank the candidates so that the top prediction is the pattern most likely to continue the observation
+- Supply the weights behind `future_potentials`, the probability of each next event
+- Stay explainable: a score is eleven named numbers that can be printed and checked by hand
 
 ## Potential Function Definition
 
-### Standard Formula
+### Formula
 
 ```
-potential = (evidence + confidence) × snr + itfdf_similarity + (1/(fragmentation + 1))
+potential = Σ weight × term        over the eleven terms below
 ```
 
-### Components
+### Terms and Weights
 
-| Component | Range | Description |
-|-----------|-------|-------------|
-| evidence | [0, 1] | Proportion of pattern observed |
-| confidence | [0, 1] | Match quality in present |
-| snr | [0, 1] | Signal-to-noise ratio |
-| itfdf_similarity | [0, 1] | Weighted symbol similarity |
-| fragmentation | [0, ∞) | Pattern cohesion (0 = contiguous) |
+| Term | Weight | What it measures |
+|------|--------|------------------|
+| `cosine_idf_present` | +6.037962738972206 | Cosine between the STM and `present` as bags of symbols, rare symbols counting more |
+| `last_event_matched` | +2.7551983021381603 | 1 if the newest STM event has a matched symbol, else 0 |
+| `evidence_to_end` | +2.2050945031820732 | Matches over the symbols of `past` and `present` |
+| `recency_07` | +1.7897143000355997 | Matched STM symbols, each counted `0.7^n` for an event `n` events back from the newest |
+| `tversky` | +0.947709643038957 | `matches / (matches + 2 × missing + 2 × extras)` |
+| `fragmentation` | -0.7701727284444962 | Matched blocks minus one |
+| `log_frequency` | +0.6797831284041117 | Natural logarithm of the pattern's frequency |
+| `snr` | +0.5843639561444975 | `(2 × matches - extras) / (2 × matches + extras)` |
+| `inverse_fragmentation` | +0.3874235103814889 | `1 / (fragmentation + 1)` |
+| `recency_09` | +0.0632088710855439 | As `recency_07`, with 0.9 |
+| `last_event_share` | +0.022364665110185304 | Matched share of the newest STM event's symbols |
+
+The weights are held in `kato/informatics/prediction_metrics.py` as `POTENTIAL_WEIGHTS`. In the same module, `potential_terms()` returns the eleven term values of a prediction and `potential()` adds them up.
 
 ### Interpretation
 
-**High potential** (> 2.0):
-- Most of pattern observed (high evidence)
-- Good match quality (high confidence)
-- Few extra symbols (high SNR)
-- Rare symbols matched (high ITFDF)
-- Contiguous match (low fragmentation)
+`potential` has no fixed scale. What carries meaning is the difference between two candidates of the same STM: `future_potentials` weights each candidate by `e^potential`, so a difference of 1.0 is a factor of `e` in a candidate's say about the next event, and a difference of 5 is a factor of about 150.
 
-**Low potential** (< 1.0):
-- Little of pattern observed
-- Poor match quality
-- Many extra symbols
-- Common symbols only
-- Fragmented match
+For orientation: an STM of two one-symbol events that exactly matches the first two events of a pattern learned once scores 16.10. Every doubling of the frequency adds 0.47.
 
-## Component Metrics
+## The Eleven Terms
 
-### Evidence
+The terms fall into seven groups. Each group answers one question about the match.
 
-**Definition**: Fraction of pattern actually observed
+### Do the observation and the pattern agree on rare symbols?
 
-```python
-def calculate_evidence(pattern, matching_events):
-    """
-    Evidence = observed_events / total_pattern_events
+**`cosine_idf_present`** treats the STM and the prediction's `present` as bags of symbols and takes the cosine between them. Each symbol is weighted by its inverse document frequency, `log2(patterns / patterns holding the symbol) + 1`, the same IDF that `tfidf_score` uses.
 
-    Measures how much of the pattern has been seen.
-    """
-    observed = len(matching_events)
-    total = len(pattern.events)
+A symbol that half the node's patterns hold says little about which pattern is occurring. A symbol that three patterns hold says a lot. The weighting makes agreement on the second kind count for more.
 
-    return observed / total if total > 0 else 0.0
-```
+The cosine is 1.0 when the STM and `present` hold the same symbols in the same numbers. It falls with every symbol on one side that the other lacks, and falls faster when that symbol is rare.
 
-**Example**:
-```python
-pattern = [["A"], ["B"], ["C"], ["D"], ["E"]]  # 5 events
-matching = [["B"], ["C"], ["D"]]  # 3 events matched
+It carries the largest weight. Weight is not importance, though: see the ablation under [How the Weights Were Fitted](#how-the-weights-were-fitted).
 
-evidence = 3 / 5 = 0.6
-```
+### Is the newest event explained?
 
-**Properties**:
-- Always in [0, 1]
-- 1.0 = entire pattern observed
-- 0.0 = no pattern observed
+**`last_event_matched`** is 1 when at least one symbol of the newest STM event is matched, and 0 otherwise. **`last_event_share`** is the share of that event's symbols that are matched.
 
-### Confidence
+A pattern that accounts for the older events and not for the one that just arrived describes where the sequence was. The newest event is the best evidence of where it is.
 
-**Definition**: Quality of symbol matching within observed events
+### How recent are the matches?
 
-```python
-def calculate_confidence(pattern_present, stm_present):
-    """
-    Confidence = matched_symbols / total_present_symbols
+**`recency_07`** counts the matched symbols of the STM, each multiplied by `0.7^n`, where `n` is how many events back from the newest its event is. **`recency_09`** is the same with 0.9.
 
-    Measures match quality in the present region.
-    """
-    pattern_symbols = set(flatten(pattern_present))
-    stm_symbols = set(flatten(stm_present))
+Two candidates can match the same number of symbols, one at the start of the STM and one at the end. The one that matches at the end is the better guide to what comes next, and this term says by how much.
 
-    matched = pattern_symbols & stm_symbols
-    total = pattern_symbols | stm_symbols
+### How much of the pattern, up to now, was observed?
 
-    return len(matched) / len(total) if total > 0 else 0.0
-```
+**`evidence_to_end`** is the number of matches over the number of symbols in `past` and `present`.
 
-**Example**:
-```python
-pattern_present = [["A", "B", "C"], ["D"]]
-stm_present = [["A", "B", "X"], ["D", "Y"]]
+The `evidence` field divides by the whole pattern, so a long pattern with most of its events still ahead scores low on it. That is the wrong direction for prediction: the unobserved future is what the pattern has to offer. `evidence_to_end` leaves the future out of the denominator and asks only how much of the pattern, up to the last matched event, the observation confirms.
 
-matched = {"A", "B", "D"}  # 3 symbols
-total = {"A", "B", "C", "D", "X", "Y"}  # 6 symbols
+It also carries position. The less of a pattern lies before the match, the higher it scores, so for a one-symbol STM a pattern that starts with the symbol ranks above one that holds it later, other things equal.
 
-confidence = 3 / 6 = 0.5
-```
+### How much had to be explained away?
 
-**Properties**:
-- Range [0, 1]
-- 1.0 = perfect match
-- 0.5 = half matched, half extras/missing
-- 0.0 = no overlap
+**`tversky`** is `matches / (matches + 2 × missing + 2 × extras)`, a Tversky index with both penalties set to 2 (Tversky 1977). **`snr`** is KATO's signal-to-noise field, `(2 × matches - extras) / (2 × matches + extras)`.
 
-### Signal-to-Noise Ratio (SNR)
+Both fall with every symbol the pattern expected and did not get, or got and did not expect. `tversky` counts missing and extra symbols alike. `snr` counts extras only.
 
-**Definition**: Proportion of signal (matches) vs. noise (extras)
+### Is the match in one piece?
 
-```python
-def calculate_snr(matched_symbols, extra_symbols):
-    """
-    SNR = signal / (signal + noise)
+**`fragmentation`** is the number of matched blocks minus one, and it carries the only negative weight. **`inverse_fragmentation`** is `1 / (fragmentation + 1)`.
 
-    Measures match purity.
-    """
-    signal = len(matched_symbols)
-    noise = len(extra_symbols)
+A match in one block is a sequence observed in order. The same symbols scattered over five blocks are more likely to be a coincidence of vocabulary.
 
-    if signal + noise > 0:
-        return signal / (signal + noise)
-    return 0.0
-```
+The two terms together give a penalty that is steep for the first break and close to linear afterwards.
 
-**Example**:
-```python
-matched = ["A", "B", "C"]  # 3 matches
-extras = ["X"]  # 1 extra
+### How often was the pattern learned?
 
-snr = 3 / (3 + 1) = 0.75
-```
+**`log_frequency`** is the natural logarithm of the pattern's frequency.
 
-**Properties**:
-- Range [0, 1]
-- 1.0 = no noise (perfect match)
-- 0.5 = equal signal and noise
-- 0.0 = all noise (no matches)
+A pattern learned 500 times is a better bet than one learned once, when both match equally well. The logarithm keeps frequency from drowning the match: the step from 1 learn to 2 is worth as much as the step from 100 to 200.
 
-### ITFDF Similarity
+## How the Weights Were Fitted
 
-**Definition**: Inverse term frequency-document frequency weighted similarity
+The weights are constants. They were fitted once, offline, and are part of the code. Nothing is fitted when a node learns or predicts, and no random seed is involved anywhere.
 
-```python
-def calculate_itfdf(pattern, stm, kb):
-    """
-    ITFDF = Σ (weight × match) / max_symbols
+1. **Objective.** For one STM, a softmax of the score over the candidates gives each candidate a probability. The weights maximise the probability that falls on the candidates whose next event is the event that actually followed. This is the listwise approach to learning to rank (Cao et al. 2007).
+2. **Data.** 3,096 fitting queries drawn from 55 data sets of four kinds, each kind weighing the same: generated sequence libraries, system logs (HDFS), click streams (MSNBC) and text (WikiText-2). A query is the opening of a held-out sequence together with the event that followed it.
+3. **Constraint.** The sign of every weight was fixed in advance: more matches, fewer missing symbols, fewer extras, fewer blocks and a higher frequency may never lower the score. The fit was offered 44 candidate terms under that constraint and left 11 of them non-zero.
+4. **Method.** L-BFGS-B, started from all-zero weights, on the whole fitting set, with a small ridge penalty. There are no mini-batches and no random initialisation, so the fit gives the same weights every time it is run.
+5. **Held-out check.** The fitted sum was then scored on queries the fit never saw; see [Measured Accuracy](#measured-accuracy).
 
-    Rare symbols weighted higher than common.
-    """
-    similarity = 0.0
+Two results say how far the weights can be trusted on new data:
 
-    pattern_symbols = get_all_symbols(pattern)
-    stm_symbols = get_all_symbols(stm)
+- **They are not tuned to the real data sets.** A sum fitted on the generated libraries alone is 0.31 points of accuracy behind this one on held-out queries of all four kinds.
+- **Four terms carry most of the accuracy.** With the weight of `log_frequency` set to zero and the others left as they are, accuracy falls by 8.1 points on the mean of the four kinds. For `recency_07` the loss is 1.2 points, for `cosine_idf_present` 1.0 and for `last_event_matched` 0.7. Each of the other seven is worth 0.2 points or less. The largest weight belongs to `cosine_idf_present` and the largest effect to `log_frequency`: a weight says how far one unit of a term moves the score, not how much the term differs between the candidates of a request.
 
-    for symbol in pattern_symbols:
-        if symbol in stm_symbols:
-            # Get symbol frequency in knowledge base
-            freq = kb.get_symbol_frequency(symbol)
-            total_patterns = kb.get_total_patterns()
-
-            # Inverse frequency weight
-            weight = 1.0 / (1.0 + np.log2(1.0 + freq / total_patterns))
-
-            similarity += weight
-
-    # Normalize
-    max_size = max(len(pattern_symbols), len(stm_symbols))
-    return similarity / max_size if max_size > 0 else 0.0
-```
-
-**Example**:
-```python
-# Rare symbol "error" (freq=5 in 1000 patterns)
-weight_rare = 1.0 / (1.0 + log₂(1.0 + 5/1000)) ≈ 0.993
-
-# Common symbol "login" (freq=800 in 1000 patterns)
-weight_common = 1.0 / (1.0 + log₂(1.0 + 800/1000)) ≈ 0.527
-
-# Rare symbol matches contribute more to similarity
-```
-
-**Properties**:
-- Range [0, 1]
-- Rewards rare symbol matches
-- Penalizes common symbol matches
-- Context-aware (uses KB statistics)
-
-### Fragmentation
-
-**Definition**: Number of disjoint matching blocks minus one
-
-```python
-def calculate_fragmentation(matching_blocks):
-    """
-    Fragmentation = num_blocks - 1
-
-    Measures match cohesion.
-    0 = contiguous match (single block)
-    N = N+1 disjoint blocks
-    """
-    return max(0, len(matching_blocks) - 1)
-```
-
-**Example**:
-```python
-# Contiguous match
-blocks = [(1, 0, 3)]  # Single block
-fragmentation = 0
-
-# Fragmented match
-blocks = [(1, 0, 2), (4, 3, 1)]  # Two blocks
-fragmentation = 1
-```
-
-**In Potential**:
-```python
-cohesion_term = 1 / (fragmentation + 1)
-
-# Contiguous (frag=0): 1/1 = 1.0
-# Two blocks (frag=1): 1/2 = 0.5
-# Three blocks (frag=2): 1/3 = 0.33
-```
+**The tradeoff.** A fitted weight has no derivation. `+2.755` for `last_event_matched` is the value that worked best on the fitting data, and that is all that can be said for it. Where every term of a score must follow from stated assumptions, rank by `good_odds` instead: it has one constant, a closed form in bits, and it is 1.4 points behind `potential` on the mean of the four kinds of data.
 
 ## Mathematical Properties
 
+### Independence from the other candidates
+
+`potential` reads the prediction's own fields and the node's counts. It reads nothing from the other candidates. The score of a prediction is therefore the same whatever else matched, in whatever order the candidates were found, and whatever `max_predictions` is set to.
+
+### No penalty for the unobserved future
+
+No term has the length of the whole pattern in a denominator. A pattern of 100 events matched on its first 5 is scored on those 5 and on what lies before them, not on the 95 it has yet to predict.
+
+### Direction, for candidates of one STM
+
+Among the candidates of one STM, a candidate with fewer extras, fewer missing symbols, fewer blocks or a higher frequency, and otherwise the same, never scores lower. The signs of the weights guarantee it.
+
+### A limit: scores of different STMs
+
+The property above compares candidates of the same STM. It does not extend to one pattern scored against two STMs. When the STM grows by an event that holds fewer symbols than the older events, the recency terms of a fully matching pattern can fall, and the score with them: the new event adds few matched symbols at full weight, and every older event is multiplied by 0.7 once more. This happens only with events of several symbols.
+
+Compare `potential` values within a request, not across requests. `good_odds` is the score to compare across requests.
+
 ### Bounds
 
-**Theoretical Range**: [0, ~4.0]
+There are none. `recency_07` and `log_frequency` grow with the STM and with the frequency, and `fragmentation` can take the score below zero for a match broken into many blocks among many extras.
 
-**Component Contributions**:
+### Determinism
+
+The eleven products are added in a fixed order, with plain floating-point addition. The same prediction and the same node counts give the same bits.
+
+## Worked Example
+
+A node has learned three patterns, one symbol per event:
+
+| Pattern | Times learned |
+|---|---|
+| `login`, `browse`, `checkout` | 5 |
+| `login`, `browse`, `logout` | 3 |
+| `login`, `reset_password`, `logout` | 2 |
+
+A session observes `login`, then `browse`. The first pattern matches both symbols. The third matches `login` and has to treat `browse` as an extra.
+
+| Term | Weight | `login, browse, checkout`: value | contributes | `login, reset_password, logout`: value | contributes |
+|---|---|---|---|---|---|
+| `cosine_idf_present` | +6.038 | 1.000 | 6.038 | 0.534 | 3.222 |
+| `last_event_matched` | +2.755 | 1 | 2.755 | 0 | 0.000 |
+| `evidence_to_end` | +2.205 | 1.000 | 2.205 | 1.000 | 2.205 |
+| `recency_07` | +1.790 | 1.700 | 3.043 | 0.700 | 1.253 |
+| `tversky` | +0.948 | 1.000 | 0.948 | 0.333 | 0.316 |
+| `fragmentation` | -0.770 | 0 | 0.000 | 0 | 0.000 |
+| `log_frequency` | +0.680 | 1.609 | 1.094 | 0.693 | 0.471 |
+| `snr` | +0.584 | 1.000 | 0.584 | 0.333 | 0.195 |
+| `inverse_fragmentation` | +0.387 | 1.000 | 0.387 | 1.000 | 0.387 |
+| `recency_09` | +0.063 | 1.900 | 0.120 | 0.900 | 0.057 |
+| `last_event_share` | +0.022 | 1.000 | 0.022 | 0.000 | 0.000 |
+| **`potential`** | | | **17.197** | | **8.106** |
+
+Reading the third column pair against the first:
+
+- `browse` is held by two of the three patterns, `login` by all three. Missing `browse` on the pattern's side takes the cosine from 1.0 to 0.534.
+- The newest event, `browse`, is unexplained: `last_event_matched` contributes nothing.
+- The one match is an event back, so `recency_07` counts it at 0.7 and has nothing to count at full weight.
+- `evidence_to_end` is 1.0 for both. The third pattern's `present` is `login` alone, and `login` was observed.
+
+The second pattern, `login, browse, logout`, matches exactly as the first does. It differs in one term: `log_frequency` is `ln(3)` in place of `ln(5)`, and its `potential` is 16.850, lower by 0.347.
+
+## From Potential to Probabilities
+
+`potential` ranks. `future_potentials` turns the ranking into probabilities of the next event:
+
 ```
-(evidence + confidence) × snr:  [0, 2.0]
-itfdf_similarity:              [0, 1.0]
-1/(fragmentation + 1):         [0, 1.0]
+P(E | STM) = Σ e^potential over the candidates whose next event is E
+             / Σ e^potential over the candidates that have a future
 ```
 
-**Typical Ranges**:
-- Excellent predictions: 2.0 - 3.0
-- Good predictions: 1.5 - 2.0
-- Moderate predictions: 1.0 - 1.5
-- Poor predictions: 0.0 - 1.0
+This is the softmax the weights were fitted under, summed over the candidates that agree on the next event. In the example the three weights, relative to the best, are 1, `e^-0.347` = 0.707 and `e^-9.091` = 0.0001, which gives `checkout` 0.586, `logout` 0.414 and `reset_password` 0.0001.
 
-### Sensitivity Analysis
+A candidate whose `future` is empty ends where the observation ends. It proposes no next event and is left out of both sums.
 
-**Evidence sensitivity**:
-```python
-# High evidence (0.8) vs low evidence (0.2)
-# With confidence=0.8, snr=0.9, itfdf=0.7, frag=0
+## Measured Accuracy
 
-potential_high = (0.8 + 0.8) × 0.9 + 0.7 + 1.0 = 3.14
-potential_low = (0.2 + 0.8) × 0.9 + 0.7 + 1.0 = 2.60
+Next-event prediction at `recall_threshold` 0.1. A query is the opening of a held-out sequence, and an answer is right when the predicted next event equals the event that followed. The four kinds of data are generated sequence libraries (39 data sets), HDFS system logs (6), MSNBC click streams (2) and WikiText-2 text (10); the mean gives each kind the same weight.
 
-# Difference: 0.54 (significant)
-```
+| Share of queries answered right | Mean | Generated | HDFS logs | MSNBC clicks | WikiText-2 text |
+|---|---|---|---|---|---|
+| Top prediction that has a future, ranked by `potential` | 0.631 | 0.855 | 0.876 | 0.673 | 0.120 |
+| The same, ranked by `good_odds` | 0.617 | 0.839 | 0.877 | 0.666 | 0.085 |
+| Top entry of `future_potentials` | 0.647 | 0.856 | 0.860 | 0.690 | 0.183 |
 
-**Fragmentation sensitivity**:
-```python
-# Contiguous (frag=0) vs fragmented (frag=3)
-# With evidence=0.7, confidence=0.8, snr=0.9, itfdf=0.7
+These figures are from 117,200 test queries that were read once, after the formulas were fixed.
 
-potential_cont = (0.7 + 0.8) × 0.9 + 0.7 + 1.0 = 3.05
-potential_frag = (0.7 + 0.8) × 0.9 + 0.7 + 0.25 = 2.30
+1. **`future_potentials` is the better read-out.** Pooling the candidates that agree on the next event gains 1.6 points on the mean, and 6 points on text.
+2. **Text is hard for a single stored pattern.** On WikiText-2 the top prediction is right 12% of the time and the top entry of `future_potentials` 18%. A plain count of the stored contexts that end as the STM does reaches 17.8% on the same queries.
+3. **Short STMs are the weak spot.** With an STM of two events, the top prediction that has a future is right 53% of the time on generated data, where a predictor that knows the generating process reaches 71%.
 
-# Difference: 0.75 (significant)
-```
-
-### Monotonicity
-
-**Theorem**: Potential is monotonic in each component (holding others constant).
-
-**Proof**: Each component appears with positive coefficient or in denominator with positive contribution.
+The accuracy of every metric as a ranking key is tabulated in the [Prediction Object Reference](../reference/prediction-object.md#measured-accuracy).
 
 ## Alternative Ranking Functions
 
-### Predictive Information Ranking
+`rank_sort_algo` accepts every numeric metric of the prediction object. Predictions are ranked highest value first.
+
+### Good-Odds Ranking
 
 ```python
-rank_sort_algo = "predictive_information"
-
-# Sort by I(Present; Future) instead of potential
-predictions.sort(key=lambda p: p["predictive_information"], reverse=True)
+rank_sort_algo = "good_odds"
 ```
 
-**When to use**: Pure information-theoretic ranking
+**When to use**: Every term of the score must have a stated derivation, or scores have to be compared across requests. `bayesian_posterior` gives the same order.
+
+### Likelihood Ranking
+
+```python
+rank_sort_algo = "bayesian_likelihood"
+```
+
+**When to use**: Match strength alone, leaving out how often a pattern was learned.
 
 ### Frequency Ranking
 
 ```python
 rank_sort_algo = "frequency"
-
-# Sort by observation count
-predictions.sort(key=lambda p: p["frequency"], reverse=True)
 ```
 
-**When to use**: Popularity-based recommendations
+**When to use**: The most often learned candidates first. `bayesian_prior` gives the same order.
 
 ### Similarity Ranking
 
 ```python
 rank_sort_algo = "similarity"
-
-# Sort by sequence similarity only
-predictions.sort(key=lambda p: p["similarity"], reverse=True)
 ```
 
-**When to use**: Structural pattern matching
+**When to use**: Structural pattern matching, where the observation covers most of each pattern.
 
-### Custom Composite
+### Affinity-Weighted Ranking
 
 ```python
-def custom_potential(pred, weights):
-    """
-    Custom weighted potential function.
-
-    Args:
-        pred: Prediction dictionary
-        weights: Dictionary of component weights
-
-    Returns:
-        Custom potential score
-    """
-    return (
-        weights["evidence"] * pred["evidence"] +
-        weights["confidence"] * pred["confidence"] +
-        weights["snr"] * pred["snr"] +
-        weights["itfdf"] * pred["itfdf_similarity"] +
-        weights["freq"] * np.log(1 + pred["frequency"]) +
-        weights["cohesion"] / (pred["fragmentation"] + 1)
-    )
+rank_sort_algo = "weighted_similarity"   # with affinity_emotive set
 ```
 
-## Tuning and Optimization
+**When to use**: Matches should be weighed by the symbols that matter to an emotive such as utility.
 
-### Component Weights
+### Re-ranking in the Application
 
-Modify standard formula with configurable weights:
+`potential` is not configurable: the weights are constants. An application that needs another tradeoff can sort the returned predictions by its own function of their fields.
 
 ```python
-def weighted_potential(pred, weights):
-    """
-    Weighted potential with configurable contributions.
-    """
-    # Default weights
-    default_weights = {
-        "evidence": 1.0,
-        "confidence": 1.0,
-        "snr": 1.0,
-        "itfdf": 1.0,
-        "cohesion": 1.0
-    }
+def utility_first(prediction):
+    """Rank by learned utility, then by how well the pattern explains the STM."""
+    return (prediction["emotives"].get("utility", 0.0), prediction["good_odds"])
 
-    w = {**default_weights, **weights}
-
-    return (
-        w["evidence"] * pred["evidence"] +
-        w["confidence"] * pred["confidence"]
-    ) * w["snr"] * pred["snr"] + \
-    w["itfdf"] * pred["itfdf_similarity"] + \
-    w["cohesion"] / (pred["fragmentation"] + 1)
+predictions.sort(key=utility_first, reverse=True)
 ```
 
-### Application-Specific Tuning
-
-**High Precision Application** (prefer quality over recall):
-```python
-weights = {
-    "confidence": 2.0,  # Double-weight confidence
-    "snr": 2.0,         # Double-weight SNR
-    "evidence": 0.5     # De-emphasize evidence
-}
-```
-
-**High Recall Application** (prefer coverage):
-```python
-weights = {
-    "evidence": 2.0,    # Double-weight evidence
-    "confidence": 0.5,  # De-emphasize confidence
-    "snr": 0.5          # Allow some noise
-}
-```
-
-**Rare Event Detection**:
-```python
-weights = {
-    "itfdf": 3.0,       # Emphasize rare symbols
-    "frequency": 0.1    # De-emphasize common patterns
-}
-```
-
-## Examples
-
-### Example 1: High-Quality Prediction
-
-```python
-prediction = {
-    "evidence": 0.8,
-    "confidence": 0.9,
-    "snr": 0.95,
-    "itfdf_similarity": 0.75,
-    "fragmentation": 0,
-    "frequency": 100
-}
-
-potential = (0.8 + 0.9) × 0.95 + 0.75 + 1.0
-         = 1.7 × 0.95 + 0.75 + 1.0
-         = 1.615 + 0.75 + 1.0
-         = 3.365
-
-# Excellent prediction (> 3.0)
-```
-
-### Example 2: Moderate Prediction
-
-```python
-prediction = {
-    "evidence": 0.5,
-    "confidence": 0.6,
-    "snr": 0.7,
-    "itfdf_similarity": 0.5,
-    "fragmentation": 2,
-    "frequency": 15
-}
-
-potential = (0.5 + 0.6) × 0.7 + 0.5 + (1/3)
-         = 1.1 × 0.7 + 0.5 + 0.333
-         = 0.77 + 0.5 + 0.333
-         = 1.603
-
-# Moderate prediction (1.5 - 2.0)
-```
-
-### Example 3: Poor Prediction
-
-```python
-prediction = {
-    "evidence": 0.2,
-    "confidence": 0.3,
-    "snr": 0.4,
-    "itfdf_similarity": 0.3,
-    "fragmentation": 5,
-    "frequency": 3
-}
-
-potential = (0.2 + 0.3) × 0.4 + 0.3 + (1/6)
-         = 0.5 × 0.4 + 0.3 + 0.167
-         = 0.2 + 0.3 + 0.167
-         = 0.667
-
-# Poor prediction (< 1.0)
-```
+Set `max_predictions` high enough that the predictions to be re-ranked are all returned.
 
 ## Comparison to Other Approaches
 
 ### vs. Simple Similarity
 
-**KATO Potential**: Multifaceted quality metric
-**Simple Similarity**: Single-dimension comparison
-
-**Advantage**: Captures reliability, structure, rarity
+`similarity` divides the common subsequence by the lengths of the pattern and the STM together. It falls as the unobserved part of a pattern grows, so it favours short patterns that the STM nearly completes, and those are the patterns with the least left to predict. `potential` scores the match on the part of the pattern that has been reached.
 
 ### vs. Frequency-Only
 
-**KATO Potential**: Balances popularity with match quality
-**Frequency-Only**: Pure popularity contest
+Frequency alone ignores the observation beyond the recall threshold. It works where a few patterns account for most of what a node has learned, and fails where patterns were learned about equally often. `potential` takes frequency as one term of eleven, on a logarithmic scale.
 
-**Advantage**: Handles rare but relevant patterns
+### vs. Good-Odds
 
-### vs. Neural Network Confidence
+`good_odds` is derived: a prior, plus the bits each matched symbol earns, minus a fixed cost per missing or extra symbol. `potential` is fitted: it reaches a higher accuracy by weighing things `good_odds` has no term for, such as recency and whether the newest event is matched. One has a meaning in bits, the other is the better ranker.
 
-**KATO Potential**: Deterministic, interpretable, traceable
-**NN Confidence**: Probabilistic, opaque
+### vs. a Neural Network's Confidence
 
-**Advantage**: Explainable, reproducible
+A network's softmax output is a function of all its weights, and the path from input to score cannot be read off. `potential` is a sum of eleven named terms. For any prediction the terms can be printed, multiplied by the published weights and added by hand, and the same inputs give the same score on every run.
+
+## References
+
+- Z. Cao, T. Qin, T.-Y. Liu, M.-F. Tsai and H. Li, "Learning to Rank: From Pairwise Approach to Listwise Approach", *Proceedings of the 24th International Conference on Machine Learning*, 2007 ([doi:10.1145/1273496.1273513](https://doi.org/10.1145/1273496.1273513)). The objective the weights were fitted under.
+- A. Tversky, "Features of Similarity", *Psychological Review* 84(4), 1977 ([doi:10.1037/0033-295X.84.4.327](https://doi.org/10.1037/0033-295X.84.4.327)). The index behind the `tversky` term.
+- K. Spärck Jones, "A Statistical Interpretation of Term Specificity and Its Application in Retrieval", *Journal of Documentation* 28(1), 1972 ([doi:10.1108/eb026526](https://doi.org/10.1108/eb026526)). Inverse document frequency.
 
 ## Related Documentation
 
-- [Predictive Information](predictive-information.md) - Alternative ranking metric
+- [Prediction Object Reference](../reference/prediction-object.md) - Every field, its formula and its measured accuracy
+- [Bayesian Framework](bayesian-framework-for-kato.md) - `good_odds` and the Bayesian fields
+- [Predictive Information](predictive-information.md) - Information the STM carries about the next event
 - [Information Theory](information-theory.md) - Theoretical foundations
-- [Entropy Calculations](entropy-calculations.md) - Component calculations
 - [Core Concepts](core-concepts.md) - KATO fundamentals

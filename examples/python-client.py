@@ -773,7 +773,9 @@ class KATOClient:
         Get predictions based on the current STM.
 
         Returns:
-            Predictions response with predictions list, future_potentials, count
+            Predictions response: the ranked `predictions` list; `future_potentials`,
+            the probability of each next event; `chance_posterior`, the probability
+            that no learned pattern explains the STM better than chance; and `count`
 
         Example:
             >>> result = client.get_predictions()

@@ -8,47 +8,60 @@ Complete guide to understanding and working with KATO predictions.
 
 ### Prediction Structure
 
+The example is a node that has learned three patterns: `login, browse, checkout` five times, `login, browse, logout` three times and `login, reset_password, logout` twice. The session then observes `browse`. The first of the two predictions is shown; values are rounded to four decimals.
+
 ```json
 {
   "predictions": [
     {
-      "name": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+      "name": "a629167ef78bdb4dee0784c40fe2b39a4ffd207d",
       "type": "prototypical",
       "frequency": 5,
-      "past": [["event1"], ["event2"]],
-      "present": [["current_event"]],
-      "future": [["next_event"], ["final_event"]],
-      "matches": ["current_event"],
+      "past": [["login"]],
+      "present": [["browse"]],
+      "future": [["checkout"]],
+      "sequence": [["login"], ["browse"], ["checkout"]],
+      "matches": ["browse"],
       "missing": [[]],
       "extras": [[]],
       "anomalies": [],
       "fuzzy_matches": [],
-      "similarity": 0.85,
-      "confidence": 0.88,
-      "evidence": 0.90,
-      "snr": 0.75,
+      "similarity": 0.5,
+      "confidence": 1.0,
+      "evidence": 0.3333,
+      "snr": 1.0,
       "fragmentation": 0.0,
-      "entropy": 1.58,
-      "normalized_entropy": 0.72,
-      "global_normalized_entropy": 0.65,
-      "itfdf_similarity": 0.82,
-      "tfidf_score": 1.12,
-      "confluence": 0.34,
-      "predictive_information": 0.45,
-      "bayesian_posterior": 0.62,
-      "bayesian_prior": 0.15,
-      "bayesian_likelihood": 0.85,
-      "potential": 2.45,
-      "weighted_similarity": 0.88,
-      "weighted_evidence": 0.92,
-      "weighted_confidence": 0.90,
-      "weighted_snr": 0.78,
-      "emotives": {"joy": 0.7, "energy": 0.6}
+      "event_cohesion": 1.0,
+      "onset_alignment": 0.5,
+      "entropy": 1.585,
+      "normalized_entropy": 0.6826,
+      "global_normalized_entropy": 0.3955,
+      "itfdf_similarity": 1.0,
+      "tfidf_score": 0.5744,
+      "confluence": 5.0768,
+      "predictive_information": 1.0628,
+      "bayesian_posterior": 0.4627,
+      "bayesian_prior": 0.5,
+      "bayesian_likelihood": 1.8329,
+      "good_odds": 0.8329,
+      "potential": 14.7846,
+      "weighted_similarity": null,
+      "weighted_evidence": null,
+      "weighted_confidence": null,
+      "weighted_snr": null,
+      "emotives": {}
     }
   ],
-  "count": 1
+  "future_potentials": [
+    {"next_event": ["checkout"], "probability": 0.586, "supporting_patterns": 1},
+    {"next_event": ["logout"], "probability": 0.414, "supporting_patterns": 1}
+  ],
+  "chance_posterior": 0.2597,
+  "count": 2
 }
 ```
+
+`future_potentials` and `chance_posterior` describe the whole set of candidates, not one prediction: the probability of each next event, and the probability that no learned pattern explains the observation better than chance. See [What Comes Next](#what-comes-next).
 
 ## Prediction Components
 
@@ -361,27 +374,44 @@ kato.update_config({
 
 ### potential
 
-**Composite ranking metric combining match quality, signal strength, frequency-weighted similarity, and pattern cohesion.**
+**The default ranking score: a weighted sum of eleven terms that describe the match.**
 
-**Higher = More useful** for reducing uncertainty about future.
+**Higher = more likely to be the pattern that continues the observation.**
 
-**Formula**: `(evidence + confidence) * snr + itfdf_similarity + (1/(fragmentation + 1))`
+**Formula**: `potential = Σ weight * term`, with fixed weights:
 
-**Range**: Unbounded (typically 0.0 to ~3.0, can be negative with poor SNR).
+| Term | Weight |
+|---|---|
+| Cosine between the STM and `present`, rare symbols counting more | +6.038 |
+| The newest STM event has a matched symbol (1 or 0) | +2.755 |
+| `matches / symbols of past and present` | +2.205 |
+| Matched STM symbols, each counted `0.7^n` for an event `n` back from the newest | +1.790 |
+| `matches / (matches + 2 * missing + 2 * extras)` | +0.948 |
+| `fragmentation` | -0.770 |
+| Natural logarithm of `frequency` | +0.680 |
+| `snr` | +0.584 |
+| `1 / (fragmentation + 1)` | +0.387 |
+| The recency count again, with `0.9^n` | +0.063 |
+| Matched share of the newest STM event | +0.022 |
+
+**Range**: Unbounded. In the example above the two predictions score 14.78 and 14.44; they match alike and differ only in how often each pattern was learned.
+
+**What it does not depend on**: the other candidates, their order, and `max_predictions`. A long pattern is not penalised for the future it has yet to predict.
 
 **Use Cases**:
 - **Ranking**: Default sort order
-- **Filtering**: Keep only high-value predictions
-- **Prioritization**: Focus on most informative patterns
+- **Next-event probabilities**: `future_potentials` weights each candidate by `e^potential`
+- **Comparing two matches of one observation**: a difference of 1.0 is a factor of `e` in weight
 
 ```python
 predictions = kato.get_predictions()
 
 # Sorted by potential (highest first)
-# predictions[0]['potential']: 2.95  ← Most informative
-# predictions[1]['potential']: 1.72
-# predictions[2]['potential']: 0.45
+# predictions[0]['potential']: 14.78  ← login, browse, checkout (learned 5 times)
+# predictions[1]['potential']: 14.44  ← login, browse, logout (learned 3 times)
 ```
+
+Full definition of each term: [Prediction Object Reference](../reference/prediction-object.md#25-potential-float).
 
 ### evidence
 
@@ -483,27 +513,28 @@ predictions = kato.get_predictions()
 
 #### predictive_information
 
-**How much information this pattern contributes to predicting future events, relative to other patterns in the ensemble.**
+**This prediction's part of the information the STM carries about the next event, in bits.**
 
-**Range**: 0.0 to 1.0 (normalized)
+**Formula**: `share * log2(P(E | STM) / q(E))`, where `E` is the prediction's next event, `P(E | STM)` its probability in `future_potentials`, `share` the prediction's own part of that probability, and `q(E)` the probability of the event by chance.
+
+**Range**: Unbounded, in bits. 0.0 for a prediction with no `future`; negative when the event is less probable than chance.
 
 **Use Cases**:
-- **Maximum information gain**: Rank by which patterns are most informative
-- **Pattern selection**: Choose the most predictive patterns for downstream tasks
+- **How informative is this context**: the values of a request add up to the bits the STM tells about the next event
+- **Which patterns carry it**: each prediction's value is its part of that total
 
 ### Frequency/Relevance Metrics
 
 #### itfdf_similarity
 
-**Inverse Term-Document Frequency similarity, adapted from information retrieval.**
+**One minus the distance between the observation and the matched part of the pattern, with the distance scaled by the pattern's share of the candidates' frequency.**
 
-**Formula**: `itfdf_similarity = 1 - (distance * frequency / total_ensemble_frequencies)`
+**Formula**: `itfdf_similarity = 1 - (distance * frequency / candidate_frequency)`, with `distance` one minus the cosine between the STM and `present`, each symbol weighted by the share of patterns that hold it, and `candidate_frequency` the summed frequency of every candidate.
 
-**Range**: 0.0 to 1.0
+**Range**: 0.0 to 1.0. Exactly 1.0 when the STM and `present` hold the same symbols.
 
 **Use Cases**:
-- **Balanced ranking**: Weights both local frequency and global rarity
-- **Component of potential**: Contributes to the default ranking formula
+- **Symbol overlap**: How close the observation is to the matched events, on the symbols patterns share
 
 #### tfidf_score
 
@@ -519,51 +550,69 @@ predictions = kato.get_predictions()
 
 #### confluence
 
-**Probability the pattern is meaningful (frequent AND non-random).**
+**How far the pattern is from a chance co-occurrence of its symbols, in bits.**
 
-**Formula**: `confluence = P(pattern in observations) * (1 - P(pattern occurring randomly))`
+**Formula**: `confluence = log2(frequency / F) + Σ log2(1 / q(s))` over the pattern's symbols, with `F` the node's total of pattern frequencies and `q(s)` a symbol's share of all learned symbol occurrences.
 
-**Range**: 0.0 to 1.0
+**Range**: Unbounded, in bits. Longer patterns and rarer symbols score higher.
 
 **Use Cases**:
 - **Signal vs noise**: Identifies patterns that are both common and non-coincidental
-- **Pattern quality**: High confluence = genuinely meaningful pattern
+- **Describing a pattern**: It is the same for every prediction of the pattern, whatever was observed
 
 ### Bayesian Metrics
 
-#### bayesian_posterior
-
-**Posterior probability that this pattern generated the observation.**
-
-**Formula**: `P(pattern|obs) = P(obs|pattern) * P(pattern) / P(obs)` (Bayes' theorem)
-
-**Range**: 0.0 to 1.0. **Sums to 1.0 across all predictions in the ensemble.**
-
-**Use Cases**:
-- **Probabilistic decision-making**: True probability distribution over patterns
-- **Uncertainty quantification**: "62% chance this is the right pattern"
+The four fields below come from one model. A pattern that is occurring shows each of its symbols with probability 0.95; a symbol it does not account for is an intrusion; and the alternative to every pattern is chance, where symbols are drawn by how often they were learned.
 
 #### bayesian_prior
 
-**Base rate probability of this pattern before observing current data.**
+**The pattern's share of everything the node has learned.**
 
-**Formula**: `P(pattern) = frequency / total_frequencies`
+**Formula**: `frequency / total_pattern_frequencies`. Every learn counts once in the total.
 
-**Range**: 0.0 to 1.0
+**Range**: Above 0.0, up to 1.0
 
 **Use Cases**:
-- **Frequency-based ranking**: How common is this pattern overall
-- **Prior analysis**: Understand base rates before observation
+- **Base rates**: How common is this pattern, before any observation
+- **Frequency-based ranking**: It orders predictions as `frequency` does
 
 #### bayesian_likelihood
 
-**How well this pattern explains the current observation.**
+**How strongly the observation supports this pattern over chance, in bits. This is I. J. Good's weight of evidence.**
 
-**Formula**: `P(obs|pattern) = similarity`
+**Formula**: `Σ log2(0.95 / q(s))` over the matched symbols, less `log2(20)` = 4.32 bits for each missing or extra symbol.
 
-**Range**: 0.0 to 1.0
+**Range**: Unbounded, in bits. Positive when the pattern explains the observation better than chance.
 
-**Note**: Identical to `similarity`, labeled as likelihood for Bayesian interpretation.
+**Use Cases**:
+- **Match strength alone**: Compare matches without counting how often each pattern was learned
+- **Rare symbols count more**: A match on a symbol seen once in a thousand is worth about 10 bits; on one seen every other time, 1 bit
+
+#### good_odds
+
+**The posterior odds of this pattern against chance, as a base-2 logarithm. Named for I. J. Good.**
+
+**Formula**: `good_odds = log2(bayesian_prior) + bayesian_likelihood`
+
+**Range**: Unbounded, in bits. Above 0 the pattern beats chance; each bit doubles the odds.
+
+**Use Cases**:
+- **Explainable ranking**: Every term is a count of bits with a stated cause
+- **Comparable across requests**: The value does not depend on the other candidates or on `max_predictions`
+
+#### bayesian_posterior
+
+**Posterior probability that this pattern, and not another candidate or chance, produced the observation.**
+
+**Formula**: `2^good_odds / (1 + Σ 2^good_odds)`, summed over every candidate.
+
+**Range**: 0.0 to 1.0. **With `chance_posterior`, sums to 1.0 over every candidate.**
+
+**Use Cases**:
+- **Pattern identification**: "Which learned pattern is this, and how probable"
+- **Uncertainty quantification**: A lone weak match gets a low posterior, because chance is always the other hypothesis
+
+**Caution**: Where symbols travel together (phrases, fixed motifs), the posterior is surer than it should be. For the probability of what comes next, use `future_potentials`.
 
 ### Affinity-Weighted Metrics
 
@@ -622,37 +671,45 @@ curl -X POST http://localhost:8000/sessions \
   }'
 ```
 
-**Options**:
+**Options**: every numeric metric of a prediction. Predictions are ranked highest value first.
 
 *Core metrics:*
-- **potential** (default): Information-theoretic value (recommended)
+- **potential** (default): Weighted sum of eleven match terms (recommended)
+- **good_odds**: Posterior log-odds against chance, in bits
 - **similarity**: Pattern match score
-- **evidence**: Observation count
-- **confidence**: Bayesian confidence
+- **evidence**: Share of the pattern observed
+- **confidence**: Share of the matched events observed
 - **snr**: Signal-to-noise ratio
-- **fragmentation**: Pattern fragmentation score
+- **fragmentation**: Pattern fragmentation score (the most fragmented first)
 - **frequency**: Pattern frequency count
 
-*Information-theoretic:*
-- **normalized_entropy**: Entropy-normalized score
-- **global_normalized_entropy**: Global entropy normalization
-- **predictive_information**: Predictive information content
-
-*TF-IDF / confluence:*
-- **itfdf_similarity**: TF-IDF-inspired similarity
-- **tfidf_score**: TF-IDF score
-- **confluence**: Pattern confluence score
-
 *Bayesian:*
-- **bayesian_posterior**: Bayesian posterior probability
-- **bayesian_prior**: Bayesian prior probability
-- **bayesian_likelihood**: Bayesian likelihood
+- **bayesian_posterior**: Probability of the pattern (ranks as `good_odds` does)
+- **bayesian_prior**: Share of the node's learns (ranks as `frequency` does)
+- **bayesian_likelihood**: Weight of evidence, in bits
+
+*Information-theoretic:*
+- **predictive_information**: Part of the STM's information about the next event
+- **confluence**: Distance of the pattern from chance, in bits
+- **entropy**: Shannon entropy of the pattern's symbols
+- **normalized_entropy**: Entropy over the node's maximum
+- **global_normalized_entropy**: Entropy from node-wide symbol probabilities
+
+*TF-IDF:*
+- **itfdf_similarity**: Closeness on shared symbols, scaled by frequency share
+- **tfidf_score**: TF-IDF score
+
+*Position:*
+- **event_cohesion**: Observed events sitting together in pattern events
+- **onset_alignment**: How early in the pattern the observation lands
 
 *Affinity-weighted (emotive-weighted variants):*
 - **weighted_similarity**: Emotive-weighted similarity
 - **weighted_evidence**: Emotive-weighted evidence
 - **weighted_confidence**: Emotive-weighted confidence
 - **weighted_snr**: Emotive-weighted SNR
+
+Every candidate above the recall threshold is ranked, then the list is cut to `max_predictions`. Which key suits which data: [Metrics at a Glance](../reference/prediction-object.md#metrics-at-a-glance).
 
 ### Max Predictions
 
@@ -678,6 +735,44 @@ curl -X POST http://localhost:8000/sessions \
     "node_id": "my_app",
     "config": {"recall_threshold": 0.5}
   }'
+```
+
+## What Comes Next
+
+Two figures come back beside the predictions and describe the whole set of candidates.
+
+### future_potentials
+
+**The probability of each next event the candidates propose, most probable first.**
+
+```json
+"future_potentials": [
+  {"next_event": ["checkout"], "probability": 0.586, "supporting_patterns": 1},
+  {"next_event": ["logout"], "probability": 0.414, "supporting_patterns": 1}
+]
+```
+
+Each candidate that has a `future` votes for its next event with weight `e^potential`. Patterns that agree on the next event add up, even when they differ later, and the votes are normalised to sum to 1.0. It is computed over every candidate, including those `max_predictions` leaves out.
+
+**Use Cases**:
+- **Next-event prediction**: `future_potentials[0]['next_event']`
+- **Confidence**: `probability` is a usable confidence in that event
+- **Alternatives**: the full list is the distribution over what may follow
+
+### chance_posterior
+
+**The probability that no learned pattern explains the observation better than chance.**
+
+It is what the `bayesian_posterior` values of every candidate leave over. `1.0` when nothing matched; near `1.0` when something matched and none of it should be trusted; `null` when the STM was empty.
+
+```python
+data = kato.get_predictions()
+
+if not data['predictions'] or data['chance_posterior'] > 0.5:
+    print("I don't know")
+elif data['future_potentials']:
+    best = data['future_potentials'][0]
+    print(f"Next: {best['next_event']} ({best['probability']:.0%})")
 ```
 
 ## Prediction Patterns
@@ -861,16 +956,18 @@ print(f"Possible next steps: {all_next_steps}")
 ### Prediction Confidence Thresholds
 
 ```python
-# Different actions based on confidence
-top = predictions['predictions'][0]
-confidence = top['confidence']
+# Different actions based on the probability of the next event
+best = predictions['future_potentials'][0] if predictions['future_potentials'] else None
 
-if confidence > 0.9:
+if best is None or predictions['chance_posterior'] > 0.5:
+    # Nothing learned explains this observation: do not act
+    pass
+elif best['probability'] > 0.9:
     # Auto-execute
-    execute(top['future'][0])
-elif confidence > 0.7:
+    execute(best['next_event'])
+elif best['probability'] > 0.7:
     # Suggest to user
-    suggest(top['future'][0])
+    suggest(best['next_event'])
 else:
     # Ignore low-confidence
     pass

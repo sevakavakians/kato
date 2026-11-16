@@ -139,7 +139,7 @@ def make_decision(predictions, action_costs):
         # Calculate composite score
         emotive_score = sum(prediction.emotives.values())
         cost = calculate_sequence_cost(prediction.future, action_costs)
-        weight = prediction.potential * emotive_score - cost
+        weight = prediction.bayesian_posterior * emotive_score - cost
         weights.append(max(0, weight))
     
     # Weighted random selection
@@ -207,12 +207,12 @@ class MCPInterface:
 
 **Reasoning Trigger Logic:**
 ```python
-def should_use_reasoning(predictions):
+def should_use_reasoning(predictions, chance_posterior):
     if not predictions:
         return True
     if all(sum(p.emotives.values()) < 0 for p in predictions):
         return True
-    if max(p.potential for p in predictions) < threshold:
+    if chance_posterior > threshold:      # nothing learned explains the observation
         return True
     return False
 ```
@@ -439,12 +439,12 @@ kato:
         
   reasoning:
     model: "openai"
-    trigger_threshold: 0.3
+    trigger_threshold: 0.5        # chance_posterior above this hands the turn to reasoning
     negative_emotive_threshold: -0.5
     
   decision:
     weight_factors:
-      potential: 1.0
+      posterior: 1.0
       emotives: 0.8
       cost: 0.5
     random_temperature: 0.2

@@ -231,24 +231,28 @@ request; database isolation follows from that, not from configuration.
 - **Type**: String
 - **Default**: `potential`
 - **Description**: Metric to use for ranking predictions
-- **Options**:
-  - `potential`: Primary composite ranking metric (default)
+- **Options**: every numeric metric of a prediction
+  - `potential`: Weighted sum of eleven match terms (default)
+  - `good_odds`: Posterior log-odds of the pattern against chance, in bits
   - `similarity`: Base pattern similarity score
   - `evidence`: Proportion of pattern observed
   - `confidence`: Match quality in current context
   - `snr`: Signal-to-noise ratio
   - `frequency`: Pattern occurrence count
   - `fragmentation`: Pattern cohesion measure
-  - `normalized_entropy`: Local information content
-  - `global_normalized_entropy`: Global information content
-  - `itfdf_similarity`: Frequency-weighted importance
-  - `confluence`: Probability vs random occurrence
-  - `predictive_information`: Future prediction reliability
-- **Example**: `potential`, `similarity`, `evidence`
+  - `bayesian_posterior`, `bayesian_prior`, `bayesian_likelihood`: Probability of the pattern, its share of the node's learns, and the weight of evidence for it
+  - `predictive_information`: The prediction's part of the information about the next event
+  - `confluence`: How far the pattern is from a chance co-occurrence
+  - `entropy`, `normalized_entropy`, `global_normalized_entropy`: Information content of the pattern
+  - `tfidf_score`, `itfdf_similarity`: TF-IDF measures
+  - `event_cohesion`, `onset_alignment`: Position of the observation in the pattern
+  - `weighted_similarity`, `weighted_evidence`, `weighted_confidence`, `weighted_snr`: Affinity-weighted metrics (need `affinity_emotive`)
+- **Example**: `potential`, `good_odds`, `similarity`
 - **Notes**:
-  - Controls how predictions are sorted in the response
+  - Controls how predictions are sorted in the response: highest value first, equal values by pattern name
   - Can be changed at runtime via `/sessions/{session_id}/config` endpoint
   - Different metrics optimize for different use cases (match quality vs predictive power vs frequency)
+  - What each metric measures and how it performs as a ranking key: [Prediction Object Reference](../reference/prediction-object.md#metrics-at-a-glance)
 
 ## Performance Configuration
 
@@ -563,10 +567,10 @@ curl -X POST http://localhost:8000/sessions/{session_id}/config \
   -H "Content-Type: application/json" \
   -d '{"config": {"rank_sort_algo": "frequency"}}'
 
-# Prioritize predictive reliability
+# Rank by bits of evidence against chance (every term explainable)
 curl -X POST http://localhost:8000/sessions/{session_id}/config \
   -H "Content-Type: application/json" \
-  -d '{"config": {"rank_sort_algo": "predictive_information"}}'
+  -d '{"config": {"rank_sort_algo": "good_odds"}}'
 ```
 
 ## Configuration Best Practices

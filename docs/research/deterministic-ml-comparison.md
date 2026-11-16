@@ -30,10 +30,15 @@ determinism itself.
 
 - **Total-order ranking.** Predictions are ranked on `(metric, name)`, so ties never
   depend on the order results arrive in (`kato/representations/prediction.py`,
-  `rank_predictions`). The same ordering drives the top-K pre-prune when candidates
-  exceed `max_predictions × 3`.
+  `rank_predictions`). The same ordering makes the cut to `max_predictions`.
+- **Scoring before the cut.** Every candidate above the recall threshold is scored
+  before any is dropped, so a returned value does not depend on `max_predictions` or
+  on which other candidates were kept.
 - **Fixed summation order.** Floating-point addition is not associative, so entropy
-  sums iterate in sorted symbol order (`kato/informatics/metrics.py`).
+  sums iterate in sorted symbol order (`kato/informatics/metrics.py`), and the
+  prediction scores add a prediction's own terms in a stated order and anything
+  summed over the candidates in pattern-name order
+  (`kato/informatics/prediction_metrics.py`).
 - **Exact alignment.** Matching uses a vendored difflib
   (`kato/informatics/extractor.py`) without autojunk / "popular element" pruning. The
   same pair of sequences always produces the same alignment.
@@ -174,8 +179,9 @@ Determinism and traceability have costs.
   patterns, not a fixed parameter budget. With the default (empty) filter pipeline,
   prediction cost grows with corpus size.
 - **Deterministic is not the same as stable.** Learning one new pattern changes the
-  ensemble normalizations (pattern probabilities, global entropy, predictive
-  information), so rankings can reorder. The result is reproducible but not monotone.
+  node's counts (each symbol's share of the learned occurrences, how many patterns
+  hold it, the total of pattern frequencies), and every metric that reads them, so
+  rankings can reorder. The result is reproducible but not monotone.
 - **Some settings change pattern identity.** Changing `vector_search_limit` or the
   symbol sort mode changes pattern hashes. They cannot be changed in place on an
   existing knowledge base without breaking comparability with what is already stored.
@@ -188,28 +194,21 @@ The precise claim is this:
 - Given the same knowledge base, the same short-term memory and the same
   configuration, on the same build and hardware, KATO returns the same ranked
   predictions.
+- The figures computed over all the candidates of a request (`bayesian_posterior`,
+  `chance_posterior`, `future_potentials`, `predictive_information`) are sums taken
+  in pattern-name order, and ranking ties are settled by pattern name. Neither
+  depends on the order in which storage returns the candidates.
 
 The items below are where guarantees beyond that do not hold, or have not been shown.
 
 ### Determinism limits
 
-- **Ensemble fields follow candidate arrival order.**
-  - **Cause:** candidate queries have no `ORDER BY` (`kato/filters/recall_bounds.py`,
-    and the single-symbol query in `kato/workers/pattern_processor.py`). The total-order
-    pre-prune runs only when candidates exceed `max_predictions × 3`. Below that, the
-    ensemble pass in `kato/informatics/predictive_information.py` sees candidates in
-    ClickHouse arrival order.
-  - **Effect:** when three or more patterns share a future, `aggregate_potential`,
-    and the `predictive_information` derived from it, are floating-point sums whose
-    last bits can vary with that order.
-  - **Not affected:** the ranked predictions and their `potential`, which do not depend
-    on these values, and the order of `future_potentials`, whose ties are settled by a
-    hash of the future.
-  - **Status:** identified by reading the code; not yet reproduced.
-- **Cross-hardware reproducibility is not shown.** `itfdf_similarity` uses BLAS
-  matrix-vector products and norms, and the Bayesian posterior uses `np.dot`. Their
-  reduction order can differ between CPU architectures. Values can then differ in the
-  last bits on different hardware, and a near-tie in `potential` could swap order.
+- **Cross-platform reproducibility is not shown.** The scores are built from
+  logarithms and exponentials (`log`, `log2`, `exp`, powers of two) taken from the C
+  math library, which is not required to round them correctly. Two platforms with
+  different math libraries can differ in the last bit of a value, and a near-tie in
+  the ranking key could then swap order. Sums are plain floating-point additions in
+  a fixed order, so the order of addition is not a source of difference.
   Byte-identical output has been shown across runs and workers on the same build and
   hardware.
 - **Approximate vector search: unverified.** Vector observations become symbols partly

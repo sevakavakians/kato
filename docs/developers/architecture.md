@@ -421,7 +421,7 @@ session_manager.delete_session(session_id)
 1. **Candidate Retrieval**: Query ClickHouse for potential matches
 2. **Similarity Calculation**: Token-level or character-level matching
 3. **Threshold Filtering**: Filter by `recall_threshold`
-4. **Ranking**: Sort by `potential`, `similarity`, or `evidence`
+4. **Scoring and Ranking** (in `PatternProcessor.predictPattern`): score every candidate, sort by the session's `rank_sort_algo` (`potential` by default), cut to `max_predictions`
 5. **Result Formatting**: Convert to prediction structure
 
 **Token-Level Matching** (Default):
@@ -530,7 +530,8 @@ print(settings.learning.recall_threshold)  # 0.1
    │   ├─→ Calculate similarities
    │   └─→ Filter and rank
    ├─→ Format predictions (past/present/future)
-   ├─→ Calculate metrics (potential, confidence)
+   ├─→ Score every candidate (potential, good_odds, posteriors, future_potentials)
+   ├─→ Rank by rank_sort_algo and cut to max_predictions
    └─→ Aggregate emotive statistics
    ↓
 3. Predictions returned to client

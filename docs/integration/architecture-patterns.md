@@ -490,10 +490,10 @@ async def process_sensor_data(message):
     )
 
     # Check for anomalies
-    predictions = await kato.get_predictions(session_id=f"sensor_{sensor_id}")
+    response = await kato.get_predictions(session_id=f"sensor_{sensor_id}")
 
-    if not predictions or predictions[0]["potential"] < 0.5:
-        # Anomaly detected
+    if not response["predictions"] or response["chance_posterior"] > 0.5:
+        # Anomaly detected: nothing learned explains this reading better than chance
         await send_alert(sensor_id, readings)
 ```
 

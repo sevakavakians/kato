@@ -179,11 +179,13 @@ def score_hypothesis(base_history, candidate_continuation):
         for event in candidate_continuation:
             requests.post(f"{KATO_URL}/sessions/{session_id}/observe",
                          json={"strings": event})
-        # Score it
-        predictions = requests.get(
+        # Score it: the bits by which the best learned pattern explains this history
+        # better than chance. good_odds is comparable from one request to the next;
+        # potential ranks the candidates of a single request.
+        response = requests.get(
             f"{KATO_URL}/sessions/{session_id}/predictions"
         ).json()
-        return predictions["predictions"][0]["potential"] if predictions["predictions"] else 0.0
+        return max((p["good_odds"] for p in response["predictions"]), default=float("-inf"))
     finally:
         requests.delete(f"{KATO_URL}/sessions/{session_id}")
 

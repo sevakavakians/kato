@@ -184,7 +184,7 @@ See [Performance Tuning](../operations/performance-tuning.md).
 1. You send observations (current STM)
 2. KATO searches LTM for matching patterns
 3. Returns matches with context (past, present, future)
-4. Ranked by information value (potential)
+4. Ranked by `potential`, a score of how well each pattern continues the observation, with the probability of each next event in `future_potentials`
 
 See [Predictions Guide](predictions.md).
 

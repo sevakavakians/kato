@@ -18,7 +18,7 @@ Welcome to the KATO reference documentation! This section provides technical spe
 
 ### Data Specifications
 - **[Database Schema](database-schema.md)** - Complete field-level reference for ClickHouse, Redis, and Qdrant
-- **[Prediction Object](prediction-object.md)** - Prediction structure specification
+- **[Prediction Object](prediction-object.md)** - Every prediction field with its formula, a table of the metrics, and their measured accuracy
 - **[Pattern Object](pattern-object.md)** - Pattern data structure
 - **[Observation Object](observation-object.md)** - Observation format
 

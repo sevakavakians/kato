@@ -357,3 +357,43 @@ python scripts/check_store_parity.py --purge-prefix test_ --execute  # remove it
 Only mismatched kb_ids are ever touched; kb_ids whose counts already agree are
 left alone whatever their prefix. Point it at other instances with the
 `CLICKHOUSE_URL` and `REDIS_URL` environment variables.
+
+## Recounting the Pattern-Frequency Total
+
+Each node keeps one counter, `{kb_id}:global:total_pattern_frequencies`, that
+holds the sum of every pattern's frequency. A learn adds 1 to it, whether the
+pattern is new or already known; a purge subtracts the purged pattern's
+frequency. It is the `F` in `bayesian_prior` (`frequency / F`), `good_odds` and
+`confluence`.
+
+A node whose counter does not hold that sum needs one recount. That is the case
+for a node trained while the counter went up only for a new pattern, so that it
+held the number of patterns. On such a node:
+
+- `bayesian_prior` comes out too high, and `good_odds` and `confluence` with it.
+  KATO never lets a prior exceed 1: when the candidates of a request hold more
+  frequency than the counter says the whole node does, it divides by the
+  candidates' total for that request and logs a warning that names this script.
+- Purging a pattern learned more often than the counter holds is refused, and
+  the error names this script.
+
+`scripts/recount_pattern_frequencies.py` sets the counter to the sum:
+
+```bash
+python scripts/recount_pattern_frequencies.py --all --dry-run   # report what would change, write nothing
+python scripts/recount_pattern_frequencies.py --all             # recount every node found in Redis
+python scripts/recount_pattern_frequencies.py --kb-ids node0_kato,node1_kato
+python scripts/recount_pattern_frequencies.py --all --redis-url redis://redis:6379
+```
+
+Run it while the node is not learning or purging. The count is a scan over the
+node's frequency keys, and the result is written only if the node's statistics
+did not change while the scan ran. No lock is held: a node that changes during
+the count is counted again, up to `--attempts` times (3 by default), and is then
+reported as busy with nothing written. A second count after the write confirms
+the stored value.
+
+Each node is reported as `already correct`, `recounted`, `BUSY` or `FAILED`. The
+exit status is 0 when every requested node was verified (or, with `--dry-run`,
+counted) and 1 when at least one was busy or failed. A node whose counter
+already holds the sum is left untouched, so the script is safe to run again.

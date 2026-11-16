@@ -129,7 +129,7 @@ Aggregate statistics per knowledge base. No TTL (persistent).
 | Key pattern | Redis type | Description | Example |
 |---|---|---|---|
 | `{kb_id}:global:total_symbols_in_patterns_frequencies` | STRING | Sum of all symbol frequency values | `"4821"` |
-| `{kb_id}:global:total_pattern_frequencies` | STRING | Frequency-weighted total pattern count | `"1542"` |
+| `{kb_id}:global:total_pattern_frequencies` | STRING | Sum of every pattern's frequency: each learn adds 1, new pattern or not. The `F` of `bayesian_prior`, `good_odds` and `confluence` | `"1542"` |
 | `{kb_id}:global:total_unique_patterns` | STRING | Count of unique (non-frequency-weighted) patterns | `"387"` |
 
 ---
@@ -210,7 +210,7 @@ TTL-based, automatically evicted.
 | `patterns:top:{session_id}:{limit}` | STRING (JSON) | 3600s | Top patterns by frequency |
 | `patterns:name:{pattern_name}` | STRING (JSON) | 3600s | Individual pattern document |
 | `symbols:probabilities` | STRING (JSON) | 1800s | Symbol probability map |
-| `kato:metrics:{metric_type}:{md5_hash}` | STRING | 3600s | Cached metric computations (entropy, conditional probability, ITFDF, potential) |
+| `kato:metrics:{metric_type}:{md5_hash}` | STRING | 3600s | Values cached by `CachedMetricsCalculator` (normalized entropy, global normalized entropy, conditional probability). The prediction path computes its metrics directly and does not use these keys |
 
 **Source**: [`kato/storage/pattern_cache.py`](../../kato/storage/pattern_cache.py), [`kato/storage/metrics_cache.py`](../../kato/storage/metrics_cache.py)
 

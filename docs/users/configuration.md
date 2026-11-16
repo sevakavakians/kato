@@ -301,6 +301,8 @@ Maximum number of predictions to return (1-10000).
 - Minimal impact below 100
 - Linear scaling above 100
 
+**What it does not limit**: every candidate above `recall_threshold` is matched and scored before the list is cut. The values of a returned prediction, `future_potentials` and `chance_posterior` are therefore the same whatever `max_predictions` is. To bound the work of a request, raise `recall_threshold` or configure a `filter_pipeline`.
+
 **Example - Limited Predictions**:
 ```bash
 # Return top 10 predictions only
@@ -321,46 +323,55 @@ Metric for ranking predictions.
 }
 ```
 
-**Options**:
+**Options**: every numeric metric of a prediction. Predictions are ranked highest value first, and equal values are ordered by pattern name.
 
 *Core metrics:*
-- **potential** (default): Information-theoretic value (recommended)
+- **potential** (default): Weighted sum of eleven match terms (recommended)
+- **good_odds**: Posterior log-odds of the pattern against chance, in bits
 - **similarity**: Pattern match score
-- **evidence**: Observation count
-- **confidence**: Bayesian confidence
+- **evidence**: Share of the pattern observed
+- **confidence**: Share of the matched events observed
 - **snr**: Signal-to-noise ratio
-- **fragmentation**: Pattern fragmentation score
+- **fragmentation**: Pattern fragmentation score (the most fragmented first)
 - **frequency**: Pattern frequency count
 
-*Information-theoretic:*
-- **normalized_entropy**: Entropy-normalized score
-- **global_normalized_entropy**: Global entropy normalization
-- **predictive_information**: Predictive information content
-
-*TF-IDF / confluence:*
-- **itfdf_similarity**: TF-IDF-inspired similarity
-- **tfidf_score**: TF-IDF score
-- **confluence**: Pattern confluence score
-
 *Bayesian:*
-- **bayesian_posterior**: Bayesian posterior probability
-- **bayesian_prior**: Bayesian prior probability
-- **bayesian_likelihood**: Bayesian likelihood
+- **bayesian_posterior**: Probability of the pattern (ranks as `good_odds` does)
+- **bayesian_prior**: The pattern's share of the node's learns (ranks as `frequency` does)
+- **bayesian_likelihood**: Weight of evidence for the pattern over chance, in bits
 
-*Affinity-weighted (emotive-weighted variants):*
+*Information-theoretic:*
+- **predictive_information**: The prediction's part of the STM's information about the next event
+- **confluence**: How far the pattern is from a chance co-occurrence, in bits
+- **entropy**: Shannon entropy of the pattern's symbols
+- **normalized_entropy**: Entropy over the node's maximum
+- **global_normalized_entropy**: Entropy from node-wide symbol probabilities
+
+*TF-IDF:*
+- **itfdf_similarity**: Closeness on shared symbols, scaled by frequency share
+- **tfidf_score**: TF-IDF score
+
+*Position:*
+- **event_cohesion**: Observed events sitting together in pattern events
+- **onset_alignment**: How early in the pattern the observation lands
+
+*Affinity-weighted (emotive-weighted variants, set when `affinity_emotive` is configured):*
 - **weighted_similarity**: Emotive-weighted similarity
 - **weighted_evidence**: Emotive-weighted evidence
 - **weighted_confidence**: Emotive-weighted confidence
 - **weighted_snr**: Emotive-weighted SNR
 
 **Use Cases**:
-- **potential**: General purpose (default)
-- **similarity**: Exact match priority
-- **evidence**: Popular patterns first
-- **confidence**: Risk-averse applications
-- **predictive_information**: Maximum information gain
-- **bayesian_posterior**: Probabilistic inference
+- **potential**: General purpose (default); the most accurate ranking for next-event prediction
+- **good_odds**: Rankings that must be explained term by term, in bits
+- **bayesian_likelihood**: Match strength alone, leaving out how often a pattern was learned
+- **frequency**: Most often learned patterns first
+- **similarity**: Whole-sequence match priority
 - **weighted_similarity**: Emotionally-relevant matches
+
+A prediction whose value for the chosen metric is `null` (an affinity-weighted metric without `affinity_emotive`) ranks below every prediction that has one.
+
+What each metric measures, and how each performs as a ranking key: [Prediction Object Reference](../reference/prediction-object.md#metrics-at-a-glance).
 
 **Example - Similarity Ranking**:
 ```bash

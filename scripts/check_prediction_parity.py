@@ -77,10 +77,10 @@ CORPUS = [
 ]
 
 # A block of patterns that all match one probe, so a low max_predictions makes
-# the top-K prune actually fire. Without this the corpus is far below
-# max_predictions * 3 and the pruned path -- where metadata is attached only to
-# the survivors -- is never exercised, so a gate built on the corpus above would
-# pass while testing nothing.
+# the cut to max_predictions actually fire. Without this every probe returns all
+# its candidates and the cut path -- every candidate scored, metadata attached
+# only to the predictions that are returned -- is never exercised, so a gate
+# built on the corpus above would pass while testing nothing.
 CROWD_SIZE = 14
 CROWD = [
     ([["crowd", "head"], [f"tail{i:02d}"]], 1 + (i % 4),
@@ -202,10 +202,10 @@ BOUNDARY_PROBES = [
 ]
 
 
-# Probes run with a low max_predictions so max_predictions * 3 falls below the
-# number of matching patterns and the top-K prune fires.
+# Probes run with a max_predictions below the number of matching patterns, so
+# the cut fires.
 PRUNED_PROBES = [
-    ([["crowd", "head"]], 2),          # 14 candidates -> prune to 6 -> return 2
+    ([["crowd", "head"]], 2),          # 14 candidates, all scored -> return 2
     ([["crowd", "head"], ["tail03"]], 3),
     ([["crowd", "head"]], 1),
 ]
@@ -263,6 +263,7 @@ def _run_probe(probe, max_predictions=None, recall_threshold=None):
         # order is part of the contract, so it is NOT sorted here
         "predictions": predictions["predictions"],
         "future_potentials": predictions.get("future_potentials"),
+        "chance_posterior": predictions.get("chance_posterior"),
         "count": predictions["count"],
     }
 
@@ -354,6 +355,9 @@ def diff(before, after):
             problems.append(f"{label}: count {b['count']} -> {a['count']}")
         if b.get("future_potentials") != a.get("future_potentials"):
             problems.append(f"{label}: future_potentials differ")
+        if b.get("chance_posterior") != a.get("chance_posterior"):
+            problems.append(
+                f"{label}: chance_posterior {b.get('chance_posterior')!r} -> {a.get('chance_posterior')!r}")
         bp, ap = b["predictions"], a["predictions"]
         if len(bp) != len(ap):
             problems.append(f"{label}: {len(bp)} -> {len(ap)} predictions")

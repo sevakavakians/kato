@@ -289,37 +289,27 @@ results = qdrant.search(
 **Inverse Term Frequency - Document Frequency**:
 
 ```python
-def itfdf_similarity(pattern, query, kb):
+def itfdf_similarity(stm_counts, present_counts, frequency, candidate_frequency, pattern_share):
     """
-    TF-IDF-inspired metric for patterns.
+    1 - distance × frequency / candidate_frequency
 
-    Rare symbols weighted higher than common symbols.
+    stm_counts, present_counts: symbol -> number of occurrences in the STM / in `present`
+    pattern_share:              symbol -> share of the node's patterns that hold it
+    candidate_frequency:        summed frequency of every candidate of the request
     """
-    similarity = 0.0
-
-    pattern_symbols = get_all_symbols(pattern)
-    query_symbols = get_all_symbols(query)
-
-    for symbol in pattern_symbols:
-        if symbol in query_symbols:
-            # Get symbol frequency across all patterns
-            freq = kb.get_symbol_frequency(symbol)
-            total_patterns = kb.get_total_patterns()
-
-            # Inverse frequency weight
-            weight = 1.0 / (1.0 + np.log2(1.0 + freq / total_patterns))
-
-            similarity += weight
-
-    # Normalize
-    max_symbols = max(len(pattern_symbols), len(query_symbols))
-    return similarity / max_symbols if max_symbols > 0 else 0.0
+    dot = sum(pattern_share[s] ** 2 * stm_counts[s] * present_counts[s]
+              for s in stm_counts if s in present_counts)
+    norm_stm = math.sqrt(sum((pattern_share[s] * n) ** 2 for s, n in stm_counts.items()))
+    norm_present = math.sqrt(sum((pattern_share[s] * n) ** 2 for s, n in present_counts.items()))
+    cosine = min(dot / (norm_stm * norm_present), 1.0) if norm_stm and norm_present else 0.0
+    return 1.0 - (1.0 - cosine) * frequency / candidate_frequency
 ```
 
 **Properties**:
-- Rewards rare symbol matches
-- Penalizes common symbol matches
-- Contextually aware (uses KB statistics)
+- Compares the STM with `present`, the pattern events the match spans
+- Weights each symbol by the share of the node's patterns that hold it (uses KB statistics)
+- Scales the distance by the pattern's share of the candidates' frequency
+- Exactly 1.0 when the STM holds the same symbols as `present`
 
 ### Jaccard Similarity
 

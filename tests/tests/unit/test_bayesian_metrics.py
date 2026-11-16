@@ -1,306 +1,267 @@
 """
-Unit tests for Bayesian probability metrics in KATO predictions.
+The Bayesian fields and good-odds of a prediction, end to end.
 
-Tests that Bayesian posterior, prior, and likelihood calculations follow proper
-probabilistic rules and Bayes' theorem.
+    bayesian_prior        f / F: the pattern's share of every learn the node has seen
+    bayesian_likelihood   Good's weight of evidence, in bits:
+                          sum over matches of log2(0.95 / q(s)) - log2(20) x (missing + extras)
+    good_odds             log2(bayesian_prior) + bayesian_likelihood
+    bayesian_posterior    2^good_odds / (1 + sum of 2^good_odds over every candidate)
+    chance_posterior      1 / (1 + the same sum), returned beside the predictions
+
+q(s) is the symbol's share of all learned symbol occurrences. Each test learns
+into a node of its own, so every count in the expected values below is exactly
+what the test learned.
 """
 
+import math
 import os
 import sys
+
+import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from fixtures.kato_fixtures import kato_fixture as kato_fixture
 
+CLOSE = {'rel': 1e-9, 'abs': 1e-12}
 
-def test_bayesian_metrics_present(kato_fixture):
-    """Test that Bayesian metrics are present in all predictions."""
+
+def _learn(fixture, symbols, times=1):
+    """Learn one symbol per event, `times` times. Returns the pattern's bare name."""
+    name = None
+    for _ in range(times):
+        fixture.clear_short_term_memory()
+        for symbol in symbols:
+            fixture.observe({'strings': [symbol], 'vectors': [], 'emotives': {}})
+        name = fixture.learn()
+    return name[5:] if name.startswith('PTRN|') else name
+
+
+def _predict(fixture, symbols):
+    """Observe one symbol per event and return the whole predictions response."""
+    fixture.clear_short_term_memory()
+    for symbol in symbols:
+        fixture.observe({'strings': [symbol], 'vectors': [], 'emotives': {}})
+    response = fixture.get_predictions_response()
+    return {p['name']: p for p in response['predictions']}, response
+
+
+def test_bayesian_fields_are_present_and_numeric(kato_fixture):
     kato_fixture.clear_all_memory()
     kato_fixture.set_recall_threshold(0.2)
+    _learn(kato_fixture, ['a', 'b', 'c'])
 
-    # Learn a pattern
-    sequence = ['a', 'b', 'c']
-    for item in sequence:
-        kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
-    kato_fixture.learn()
+    predictions, response = _predict(kato_fixture, ['a', 'b'])
 
-    # Observe to generate predictions (meet 2+ requirement)
-    kato_fixture.observe({'strings': ['a'], 'vectors': [], 'emotives': {}})
-    kato_fixture.observe({'strings': ['b'], 'vectors': [], 'emotives': {}})
-    predictions = kato_fixture.get_predictions()
-
-    assert len(predictions) > 0, "Should have at least one prediction"
-
-    # Check all predictions have Bayesian metrics
-    for pred in predictions:
-        assert 'bayesian_posterior' in pred, "Missing bayesian_posterior"
-        assert 'bayesian_prior' in pred, "Missing bayesian_prior"
-        assert 'bayesian_likelihood' in pred, "Missing bayesian_likelihood"
-
-        # Check they're floats
-        assert isinstance(pred['bayesian_posterior'], float), "posterior should be float"
-        assert isinstance(pred['bayesian_prior'], float), "prior should be float"
-        assert isinstance(pred['bayesian_likelihood'], float), "likelihood should be float"
+    assert len(predictions) == 1
+    for prediction in predictions.values():
+        for field in ('bayesian_posterior', 'bayesian_prior', 'bayesian_likelihood', 'good_odds'):
+            assert isinstance(prediction[field], float), f"{field} should be a float"
+    assert isinstance(response['chance_posterior'], float)
 
 
-def test_posteriors_sum_to_one(kato_fixture):
-    """Test that posterior probabilities sum to 1.0 across the ensemble."""
+def test_the_prior_is_the_share_of_every_learn_in_the_node(kato_fixture):
+    """f / F, with F counting each learn: two of x y z, one of x y w, three of q r s."""
     kato_fixture.clear_all_memory()
     kato_fixture.set_recall_threshold(0.2)
+    twice = _learn(kato_fixture, ['x', 'y', 'z'], times=2)
+    once = _learn(kato_fixture, ['x', 'y', 'w'])
+    _learn(kato_fixture, ['q', 'r', 's'], times=3)
 
-    # Learn multiple patterns with different frequencies
-    patterns = [
-        ['a', 'b', 'c'],
-        ['a', 'b', 'd'],
-        ['a', 'b', 'e']
-    ]
+    predictions, _ = _predict(kato_fixture, ['x', 'y'])
 
-    for pattern in patterns:
-        for item in pattern:
-            kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
-        kato_fixture.learn()
-
-    # Observe partial sequence (meet 2+ requirement)
-    kato_fixture.observe({'strings': ['a'], 'vectors': [], 'emotives': {}})
-    kato_fixture.observe({'strings': ['b'], 'vectors': [], 'emotives': {}})
-    predictions = kato_fixture.get_predictions()
-
-    assert len(predictions) > 0, "Should have multiple predictions"
-
-    # Sum all posteriors
-    posterior_sum = sum(p['bayesian_posterior'] for p in predictions)
-
-    # Should sum to 1.0 (within floating point tolerance)
-    assert abs(posterior_sum - 1.0) < 1e-6, \
-        f"Posteriors should sum to 1.0, got {posterior_sum}"
+    assert set(predictions) == {twice, once}, "q r s shares nothing with the STM"
+    assert predictions[twice]['frequency'] == 2
+    assert predictions[twice]['bayesian_prior'] == pytest.approx(2 / 6, **CLOSE)
+    assert predictions[once]['bayesian_prior'] == pytest.approx(1 / 6, **CLOSE)
+    # The base rate does not depend on what was observed: the two candidates
+    # hold half of the node's learns, so their priors add up to a half.
+    assert sum(p['bayesian_prior'] for p in predictions.values()) == pytest.approx(0.5, **CLOSE)
 
 
-def test_bayesian_prior_reflects_frequency(kato_fixture):
-    """Test that prior probabilities reflect pattern frequencies."""
+def test_the_likelihood_is_the_weight_of_evidence_in_bits(kato_fixture):
+    """Two matches, each on a symbol that is one of three learned occurrences."""
     kato_fixture.clear_all_memory()
     kato_fixture.set_recall_threshold(0.2)
+    name = _learn(kato_fixture, ['p', 'q', 'r'])
 
-    # Learn same pattern twice (frequency = 2)
-    for _ in range(2):
-        for item in ['x', 'y', 'z']:
-            kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
-        kato_fixture.learn()
+    predictions, _ = _predict(kato_fixture, ['p', 'q'])
 
-    # Learn different pattern once (frequency = 1)
-    for item in ['x', 'y', 'w']:
-        kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
-    kato_fixture.learn()
-
-    # Observe to generate predictions (meet 2+ requirement)
-    kato_fixture.observe({'strings': ['x'], 'vectors': [], 'emotives': {}})
-    kato_fixture.observe({'strings': ['y'], 'vectors': [], 'emotives': {}})
-    predictions = kato_fixture.get_predictions()
-
-    assert len(predictions) == 2, "Should have exactly 2 predictions"
-
-    # All priors should sum to 1.0 (proper probability distribution)
-    priors = [p['bayesian_prior'] for p in predictions]
-    assert abs(sum(priors) - 1.0) < 1e-6, f"Priors should sum to 1.0, got {sum(priors)}"
-
-    # Each pattern should have a prior >= 0
-    for prior in priors:
-        assert prior >= 0, f"Prior should be non-negative, got {prior}"
-        assert prior <= 1, f"Prior should be <= 1, got {prior}"
+    assert predictions[name]['matches'] == ['p', 'q']
+    assert predictions[name]['bayesian_likelihood'] == pytest.approx(2 * math.log2(0.95 * 3), **CLOSE)
 
 
-def test_bayesian_likelihood_equals_similarity(kato_fixture):
-    """Test that likelihood equals the similarity score."""
+def test_an_extra_symbol_costs_the_penalty(kato_fixture):
+    """Observing p, then q with an unknown symbol beside it: one extra, log2(20) bits."""
     kato_fixture.clear_all_memory()
     kato_fixture.set_recall_threshold(0.2)
+    name = _learn(kato_fixture, ['p', 'q', 'r'])
 
-    # Learn a pattern
-    for item in ['p', 'q', 'r']:
-        kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
-    kato_fixture.learn()
-
-    # Observe to generate predictions (meet 2+ requirement)
+    kato_fixture.clear_short_term_memory()
     kato_fixture.observe({'strings': ['p'], 'vectors': [], 'emotives': {}})
-    kato_fixture.observe({'strings': ['q'], 'vectors': [], 'emotives': {}})
-    predictions = kato_fixture.get_predictions()
+    kato_fixture.observe({'strings': ['q', 'unknown'], 'vectors': [], 'emotives': {}})
+    prediction = {p['name']: p for p in kato_fixture.get_predictions()}[name]
 
-    assert len(predictions) > 0, "Should have at least one prediction"
-
-    for pred in predictions:
-        # Likelihood should equal similarity (P(obs|pattern) = similarity)
-        assert abs(pred['bayesian_likelihood'] - pred['similarity']) < 1e-9, \
-            f"Likelihood {pred['bayesian_likelihood']} should equal similarity {pred['similarity']}"
+    assert prediction['extras'] == [[], ['unknown']]
+    assert prediction['bayesian_likelihood'] == pytest.approx(
+        2 * math.log2(0.95 * 3) - math.log2(20), **CLOSE)
 
 
-def test_bayes_theorem_identity(kato_fixture):
-    """Test that Bayes' theorem identity holds: P(pattern|obs) = P(obs|pattern) × P(pattern) / P(obs)."""
+def test_good_odds_is_the_log_prior_plus_the_likelihood(kato_fixture):
     kato_fixture.clear_all_memory()
     kato_fixture.set_recall_threshold(0.2)
+    _learn(kato_fixture, ['alpha', 'beta', 'gamma'], times=3)
+    _learn(kato_fixture, ['alpha', 'beta', 'delta'])
 
-    # Learn multiple patterns
-    patterns = [
-        ['alpha', 'beta', 'gamma'],
-        ['alpha', 'beta', 'delta']
-    ]
+    predictions, _ = _predict(kato_fixture, ['alpha', 'beta'])
 
-    for pattern in patterns:
-        for item in pattern:
-            kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
-        kato_fixture.learn()
-
-    # Observe to generate predictions (meet 2+ requirement)
-    kato_fixture.observe({'strings': ['alpha'], 'vectors': [], 'emotives': {}})
-    kato_fixture.observe({'strings': ['beta'], 'vectors': [], 'emotives': {}})
-    predictions = kato_fixture.get_predictions()
-
-    assert len(predictions) > 0, "Should have predictions"
-
-    # Calculate P(obs) = Σ P(obs|pattern) × P(pattern)
-    evidence = sum(p['bayesian_likelihood'] * p['bayesian_prior'] for p in predictions)
-
-    # Verify Bayes' theorem for each prediction
-    for pred in predictions:
-        prior = pred['bayesian_prior']
-        likelihood = pred['bayesian_likelihood']
-        posterior = pred['bayesian_posterior']
-
-        # P(pattern|obs) should equal P(obs|pattern) × P(pattern) / P(obs)
-        expected_posterior = (likelihood * prior) / evidence if evidence > 0 else 0.0
-
-        assert abs(posterior - expected_posterior) < 1e-9, \
-            f"Bayes' theorem violated: posterior={posterior}, expected={expected_posterior}"
+    assert len(predictions) == 2
+    for prediction in predictions.values():
+        assert prediction['good_odds'] == pytest.approx(
+            math.log2(prediction['bayesian_prior']) + prediction['bayesian_likelihood'], **CLOSE)
 
 
-def test_high_frequency_high_similarity_gets_highest_posterior(kato_fixture):
-    """Test that patterns with both high frequency and high similarity get highest posterior."""
+def test_the_posterior_is_the_odds_over_one_plus_the_total_odds(kato_fixture):
     kato_fixture.clear_all_memory()
-    kato_fixture.set_recall_threshold(0.1)  # Lower threshold to catch partial matches
+    kato_fixture.set_recall_threshold(0.2)
+    for tail in ('c', 'd', 'e'):
+        _learn(kato_fixture, ['a', 'b', tail])
 
-    # Learn pattern A multiple times (high frequency)
-    for _ in range(3):
-        for item in ['m', 'n', 'o']:
-            kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
-        kato_fixture.learn()
+    predictions, response = _predict(kato_fixture, ['a', 'b'])
 
-    # Learn pattern B once (low frequency)
-    for item in ['m', 'n', 'p']:
-        kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
-    kato_fixture.learn()
-
-    # Observe exact match to pattern A (high similarity for A, also high for B since ['m','n'] match)
-    kato_fixture.observe({'strings': ['m'], 'vectors': [], 'emotives': {}})
-    kato_fixture.observe({'strings': ['n'], 'vectors': [], 'emotives': {}})
-    predictions = kato_fixture.get_predictions()
-
-    assert len(predictions) > 0, "Should have predictions"
-
-    # Find pattern with highest posterior
-    max_posterior_pred = max(predictions, key=lambda p: p['bayesian_posterior'])
-
-    # The high-frequency pattern should have the highest posterior
-    # Note: ClickHouse may deduplicate patterns, so frequency may be 1
-    # The key is that the highest posterior exists
-    assert max_posterior_pred['frequency'] >= 1, \
-        f"Highest posterior pattern should have frequency >= 1, got {max_posterior_pred['frequency']}"
-    assert max_posterior_pred['bayesian_posterior'] > 0, \
-        f"Highest posterior should be > 0, got {max_posterior_pred['bayesian_posterior']}"
+    assert len(predictions) == 3
+    total_odds = sum(2 ** p['good_odds'] for p in predictions.values())
+    for prediction in predictions.values():
+        assert prediction['bayesian_posterior'] == pytest.approx(
+            2 ** prediction['good_odds'] / (1 + total_odds), **CLOSE)
+    assert response['chance_posterior'] == pytest.approx(1 / (1 + total_odds), **CLOSE)
 
 
-def test_posterior_tracks_similarity_across_patterns(kato_fixture):
-    """Posterior is proportional to similarity x prior, and normalised to 1.
+def test_the_posteriors_and_the_chance_posterior_add_up_to_one(kato_fixture):
+    kato_fixture.clear_all_memory()
+    kato_fixture.set_recall_threshold(0.2)
+    for tail in ('c', 'd', 'e'):
+        _learn(kato_fixture, ['a', 'b', tail])
 
-    This replaces a test that drove the same computation with
-    recall_threshold=0.0 to obtain a zero-similarity prediction. Zero is now
-    rejected at the config boundary, so that path is unreachable; the
-    proportionality and normalisation it depended on are still reachable and
-    are what is actually asserted here.
+    predictions, response = _predict(kato_fixture, ['a', 'b'])
+
+    posteriors = [p['bayesian_posterior'] for p in predictions.values()]
+    assert sum(posteriors) + response['chance_posterior'] == pytest.approx(1.0, **CLOSE)
+    assert all(0.0 < posterior < 1.0 for posterior in posteriors)
+    assert 0.0 < response['chance_posterior'] < 1.0
+
+
+def test_equal_matches_are_told_apart_by_how_often_each_was_learned(kato_fixture):
+    """m n o learned three times and m n p once match the STM alike: the odds are 3 to 1."""
+    kato_fixture.clear_all_memory()
+    kato_fixture.set_recall_threshold(0.1)
+    often = _learn(kato_fixture, ['m', 'n', 'o'], times=3)
+    seldom = _learn(kato_fixture, ['m', 'n', 'p'])
+
+    predictions, _ = _predict(kato_fixture, ['m', 'n'])
+
+    assert predictions[often]['bayesian_likelihood'] == pytest.approx(
+        predictions[seldom]['bayesian_likelihood'], **CLOSE)
+    assert predictions[often]['bayesian_posterior'] / predictions[seldom]['bayesian_posterior'] == pytest.approx(
+        3.0, **CLOSE)
+
+
+def test_a_better_match_outweighs_a_pattern_learned_more_often(kato_fixture):
+    """a b c learned once explains `a b` far better than a x y learned three times.
+
+    Twelve symbol occurrences are learned: a 4, b 1, c 1, x 3, y 3, and four
+    patterns occurrences. a b c matches both symbols; a x y matches `a` and has
+    `b` as an extra.
     """
     kato_fixture.clear_all_memory()
     kato_fixture.set_recall_threshold(0.1)
+    exact = _learn(kato_fixture, ['a', 'b', 'c'])
+    frequent = _learn(kato_fixture, ['a', 'x', 'y'], times=3)
 
-    # Two patterns sharing a prefix with the probe, but differing in how much
-    # of each pattern the probe covers -- so they get different similarities.
-    for item in ['u', 'v', 'w']:
-        kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
-    kato_fixture.learn()
+    predictions, response = _predict(kato_fixture, ['a', 'b'])
 
-    kato_fixture.clear_short_term_memory()
-    for item in ['u', 'v', 'x', 'y', 'z']:
-        kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
-    kato_fixture.learn()
-
-    kato_fixture.clear_short_term_memory()
-    for item in ['u', 'v']:
-        kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
-    predictions = kato_fixture.get_predictions()
-
-    assert len(predictions) >= 2, \
-        f"Expected both patterns to be recalled, got {len(predictions)}"
-
-    for pred in predictions:
-        assert pred['bayesian_posterior'] >= 0.0, \
-            f"Posterior must be non-negative, got {pred['bayesian_posterior']}"
-
-    total = sum(p['bayesian_posterior'] for p in predictions)
-    assert abs(total - 1.0) < 1e-6, \
-        f"Posteriors over the recalled set should sum to 1.0, got {total}"
-
-    # Higher similarity must not yield a lower posterior at equal frequency.
-    ordered = sorted(predictions, key=lambda p: p['similarity'])
-    assert ordered[0]['bayesian_posterior'] <= ordered[-1]['bayesian_posterior'], \
-        "Posterior must not decrease as similarity increases at equal frequency"
+    odds_exact = (1 / 4) * (0.95 * 12 / 4) * (0.95 * 12 / 1)
+    odds_frequent = (3 / 4) * (0.95 * 12 / 4) / 20
+    total = 1 + odds_exact + odds_frequent
+    assert predictions[exact]['bayesian_posterior'] == pytest.approx(odds_exact / total, **CLOSE)
+    assert predictions[frequent]['bayesian_posterior'] == pytest.approx(odds_frequent / total, **CLOSE)
+    assert response['chance_posterior'] == pytest.approx(1 / total, **CLOSE)
+    assert predictions[exact]['bayesian_posterior'] == pytest.approx(0.880, abs=5e-4)
+    assert predictions[frequent]['bayesian_posterior'] == pytest.approx(0.012, abs=5e-4)
+    assert response['chance_posterior'] == pytest.approx(0.108, abs=5e-4)
 
 
-def test_single_pattern_gets_posterior_one(kato_fixture):
-    """Test that a single pattern gets posterior probability of 1.0."""
+def test_a_lone_pattern_is_weighed_against_chance(kato_fixture):
+    """The only candidate does not get a posterior of 1: chance is always the other hypothesis."""
     kato_fixture.clear_all_memory()
     kato_fixture.set_recall_threshold(0.2)
+    name = _learn(kato_fixture, ['one', 'pattern', 'only'])
 
-    # Learn only one pattern
-    for item in ['one', 'pattern', 'only']:
-        kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
-    kato_fixture.learn()
+    predictions, response = _predict(kato_fixture, ['one', 'pattern'])
 
-    # Observe to generate predictions (meet 2+ requirement)
-    kato_fixture.observe({'strings': ['one'], 'vectors': [], 'emotives': {}})
-    kato_fixture.observe({'strings': ['pattern'], 'vectors': [], 'emotives': {}})
-    predictions = kato_fixture.get_predictions()
-
-    assert len(predictions) == 1, "Should have exactly one prediction"
-
-    # Single pattern should have posterior = 1.0 (it's the only explanation)
-    posterior = predictions[0]['bayesian_posterior']
-    assert abs(posterior - 1.0) < 1e-6, \
-        f"Single pattern should have posterior=1.0, got {posterior}"
+    assert list(predictions) == [name]
+    odds = (0.95 * 3) ** 2                      # prior 1, two matches at q = 1/3
+    assert predictions[name]['bayesian_prior'] == 1.0
+    assert predictions[name]['bayesian_posterior'] == pytest.approx(odds / (1 + odds), **CLOSE)
+    assert response['chance_posterior'] == pytest.approx(1 / (1 + odds), **CLOSE)
 
 
-def test_bayesian_posterior_as_ranking_metric(kato_fixture):
-    """Test that bayesian_posterior can be used as a ranking metric."""
+def test_no_prediction_leaves_everything_to_chance(kato_fixture):
     kato_fixture.clear_all_memory()
     kato_fixture.set_recall_threshold(0.2)
+    _learn(kato_fixture, ['a', 'b', 'c'])
 
-    # Set bayesian_posterior as ranking algorithm
-    kato_fixture.update_config({'rank_sort_algo': 'bayesian_posterior'})
+    predictions, response = _predict(kato_fixture, ['never', 'seen'])
 
-    # Learn multiple patterns
-    patterns = [
-        ['rank', 'test', 'a'],
-        ['rank', 'test', 'b'],
-        ['rank', 'test', 'c']
-    ]
+    assert predictions == {}
+    assert response['chance_posterior'] == 1.0
+    assert response['future_potentials'] == []
 
-    for pattern in patterns:
-        for item in pattern:
-            kato_fixture.observe({'strings': [item], 'vectors': [], 'emotives': {}})
-        kato_fixture.learn()
 
-    # Observe to generate predictions (meet 2+ requirement)
-    kato_fixture.observe({'strings': ['rank'], 'vectors': [], 'emotives': {}})
-    kato_fixture.observe({'strings': ['test'], 'vectors': [], 'emotives': {}})
+def test_an_empty_stm_computes_no_posterior(kato_fixture):
+    kato_fixture.clear_all_memory()
+    _learn(kato_fixture, ['a', 'b', 'c'])
+    kato_fixture.clear_short_term_memory()
+
+    response = kato_fixture.get_predictions_response()
+
+    assert response['predictions'] == []
+    assert response['chance_posterior'] is None
+
+
+@pytest.mark.parametrize('metric', ['bayesian_posterior', 'good_odds', 'bayesian_prior', 'bayesian_likelihood'])
+def test_the_bayesian_fields_rank_predictions(kato_fixture, metric):
+    kato_fixture.clear_all_memory()
+    kato_fixture.set_recall_threshold(0.1)
+    kato_fixture.update_config({'rank_sort_algo': metric})
+    _learn(kato_fixture, ['rank', 'test', 'a'], times=2)
+    _learn(kato_fixture, ['rank', 'test', 'b'])
+    _learn(kato_fixture, ['rank', 'other', 'c'], times=3)
+
+    kato_fixture.clear_short_term_memory()
+    for symbol in ('rank', 'test'):
+        kato_fixture.observe({'strings': [symbol], 'vectors': [], 'emotives': {}})
     predictions = kato_fixture.get_predictions()
 
-    assert len(predictions) > 0, "Should have predictions"
+    assert len(predictions) == 3
+    values = [p[metric] for p in predictions]
+    assert values == sorted(values, reverse=True), f"predictions should be ranked by {metric}, highest first"
 
-    # Verify predictions are sorted by bayesian_posterior (descending)
-    posteriors = [p['bayesian_posterior'] for p in predictions]
-    assert posteriors == sorted(posteriors, reverse=True), \
-        "Predictions should be sorted by bayesian_posterior in descending order"
+
+def test_good_odds_and_the_posterior_rank_alike(kato_fixture):
+    """The posterior is a rising function of good-odds, so the two orders are the same."""
+    kato_fixture.clear_all_memory()
+    kato_fixture.set_recall_threshold(0.1)
+    _learn(kato_fixture, ['rank', 'test', 'a'], times=2)
+    _learn(kato_fixture, ['rank', 'test', 'b'])
+    _learn(kato_fixture, ['rank', 'other', 'c'], times=3)
+
+    orders = {}
+    for metric in ('good_odds', 'bayesian_posterior'):
+        kato_fixture.update_config({'rank_sort_algo': metric})
+        kato_fixture.clear_short_term_memory()
+        for symbol in ('rank', 'test'):
+            kato_fixture.observe({'strings': [symbol], 'vectors': [], 'emotives': {}})
+        orders[metric] = [p['name'] for p in kato_fixture.get_predictions()]
+
+    assert orders['good_odds'] == orders['bayesian_posterior']

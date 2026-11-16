@@ -34,30 +34,36 @@ Session configuration allows per-session customization of KATO's behavior. Each 
 
 ### Prediction Ranking
 
-The `rank_sort_algo` parameter controls how predictions are sorted and prioritized:
+The `rank_sort_algo` parameter controls how predictions are sorted and prioritized. It accepts every numeric metric of the prediction object. Predictions are ranked highest value first, equal values are ordered by pattern name, and every candidate above `recall_threshold` is ranked before the list is cut to `max_predictions`.
 
 | Value | Description | Use Case |
 |-------|-------------|----------|
-| `potential` | Information-theoretic value (default) | General purpose, balanced results |
-| `similarity` | Pattern match score | Prioritize exact matches |
-| `evidence` | Observation count | Popular patterns first |
-| `confidence` | Bayesian confidence | Risk-averse applications |
-| `snr` | Signal-to-noise ratio | High-quality signals |
-| `fragmentation` | Pattern fragmentation score | Cohesive patterns |
+| `potential` | Weighted sum of eleven match terms (default) | General purpose; the most accurate ranking for next-event prediction |
+| `good_odds` | Posterior log-odds of the pattern against chance, in bits | Rankings explained term by term; comparing matches across requests |
+| `similarity` | Pattern match score | Whole-sequence matches |
+| `evidence` | Share of the pattern observed | Nearly complete patterns first |
+| `confidence` | Share of the matched events observed | Complete events first |
+| `snr` | Signal-to-noise ratio | Matches with few unexpected symbols |
+| `fragmentation` | Matched blocks minus one | Diagnostics: the most fragmented matches first |
 | `frequency` | Pattern frequency | Common patterns first |
-| `normalized_entropy` | Entropy-normalized score | Information density |
-| `global_normalized_entropy` | Global entropy normalization | Cross-pattern comparison |
-| `itfdf_similarity` | TF-IDF-inspired similarity | Text-like patterns |
-| `tfidf_score` | TF-IDF score | Term frequency ranking |
-| `confluence` | Pattern confluence score | Convergent patterns |
-| `predictive_information` | Predictive information content | Maximum information gain |
-| `bayesian_posterior` | Bayesian posterior probability | Probabilistic inference |
-| `bayesian_prior` | Bayesian prior probability | Prior-weighted ranking |
-| `bayesian_likelihood` | Bayesian likelihood | Likelihood-based ranking |
+| `bayesian_posterior` | Probability that the pattern produced the observation | Same order as `good_odds` |
+| `bayesian_prior` | The pattern's share of the node's learns | Same order as `frequency` |
+| `bayesian_likelihood` | Weight of evidence for the pattern over chance, in bits | Match strength without frequency |
+| `predictive_information` | The prediction's part of the STM's information about the next event, in bits | Informative patterns first |
+| `confluence` | How far the pattern is from a chance co-occurrence, in bits | Distinctive learned patterns first |
+| `entropy` | Shannon entropy of the pattern's symbols | Varied patterns first |
+| `normalized_entropy` | Entropy over the node's maximum | Information density |
+| `global_normalized_entropy` | Entropy from node-wide symbol probabilities | Cross-pattern comparison |
+| `tfidf_score` | TF-IDF score of the pattern | Patterns with rare symbols first |
+| `itfdf_similarity` | Closeness on shared symbols, scaled by frequency share | Symbol-overlap ranking |
+| `event_cohesion` | Observed events sitting together in pattern events | Co-occurrence over sequence |
+| `onset_alignment` | How early in the pattern the observation lands | Patterns that start with the observation first |
 | `weighted_similarity` | Emotive-weighted similarity | Emotionally-relevant matches |
 | `weighted_evidence` | Emotive-weighted evidence | Emotionally-relevant evidence |
 | `weighted_confidence` | Emotive-weighted confidence | Emotionally-relevant confidence |
 | `weighted_snr` | Emotive-weighted SNR | Emotionally-relevant signals |
+
+The affinity-weighted metrics are `null` unless `affinity_emotive` is set; a prediction with a `null` value ranks below every prediction that has one. Formulas and measured accuracy: [Prediction Object Reference](prediction-object.md#metrics-at-a-glance).
 
 **Example:**
 ```json

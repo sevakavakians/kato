@@ -21,6 +21,10 @@ def rank_predictions(predictions, metric, limit):
     Pattern names are unique, so ``(metric, name)`` is a total order and the
     result cannot depend on the order `predictions` is supplied in.
 
+    A prediction whose `metric` is None ranks below every prediction that has
+    a value. The affinity-weighted fields are None unless the session sets
+    `affinity_emotive`; ranking by one of them without it orders by name.
+
     Args:
         predictions: Iterable of prediction dicts; each needs `metric` and 'name'.
         metric: Name of the ranking field (KATO's ``rank_sort_algo``).
@@ -33,7 +37,10 @@ def rank_predictions(predictions, metric, limit):
         KeyError: If a prediction lacks `metric` or 'name'.
     """
     def key(prediction):
-        return (prediction[metric], prediction['name'])
+        value = prediction[metric]
+        if value is None:
+            return (False, 0.0, prediction['name'])
+        return (True, value, prediction['name'])
 
     return sorted(heapq.nlargest(limit, predictions, key=key), key=key, reverse=True)
 
@@ -320,10 +327,12 @@ class Prediction(dict):
             self['snr'] = float((2.0 * len(self['matches']) - total_extras) / denominator)
         else:
             self['snr'] = float(0)  # Default to 0 when no matches or extras
-        # Note: entropy, normalized_entropy, global_normalized_entropy, and confluence
-        # are calculated in pattern_processor.py and set via prediction.update()
+        # potential (above), confluence and predictive_information are
+        # placeholders here. predictPattern sets them, with good_odds, the
+        # Bayesian fields, the entropy metrics, tfidf_score and
+        # itfdf_similarity, once every candidate's frequency is known.
         self['confluence'] = float(0)
-        self['predictive_information'] = float(0)  # Excess entropy / mutual information between past and future
+        self['predictive_information'] = float(0)
         self['sequence'] = _pattern['pattern_data']
         self['pattern_data'] = _pattern['pattern_data']  # Keep for later popping in pattern_processor
 
@@ -427,8 +436,8 @@ class Prediction(dict):
         __present_length__ = sum([len(_event) for _event in self['present']])
         self['confidence'] = float(len(self['matches'])/__present_length__) if __present_length__ > 0 else 0.0
 
-        # Positional metrics. predictPattern adds onset_alignment to potential
-        # only when the STM is a single event.
+        # Positional metrics. Reported, and available as ranking keys; neither
+        # is a term of potential.
         self['event_cohesion'], self['onset_alignment'] = event_overlap_metrics(sequence, stm_events)
 
         # Affinity-weighted metrics (None when disabled)

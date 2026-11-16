@@ -101,7 +101,7 @@ An entropy-like measure of pattern complexity. Calculates the information conten
 Extended version of the normalized entropy using global symbol probability cache. Provides a more comprehensive entropy calculation considering the entire knowledge base.
 
 ### Confluence
-The probability of a pattern occurring versus random chance. Calculated as: `p(e|h) * (1 - conditionalProbability)`. Returns 0 for empty state.
+How far a pattern is from a chance co-occurrence of its symbols, in bits: `log2(frequency / total_pattern_frequencies) + Σ log2(1 / q(s))` over the pattern's symbols, where `q(s)` is the symbol's share of all learned symbol occurrences. A property of the pattern and the node, the same for every prediction of the pattern.
 
 ### Evidence
 The strength of pattern match, calculated as the ratio of matched symbols to total pattern length (0.0 to 1.0).
@@ -122,13 +122,42 @@ Overall pattern similarity score (0.0 to 1.0) computed using sequence matching a
 A measure of pattern cohesion, calculated as the number of matching blocks minus 1. Can be -1 in edge cases, indicating no matches.
 
 ### Potential
-Composite metric for ranking predictions, combining multiple factors:
+The default metric for ranking predictions: a weighted sum of eleven terms that describe the match, with fixed weights.
 ```
-potential = (evidence + confidence) * snr + itfdf_similarity + (1/(fragmentation + 1))
+potential = Σ weight × term
 ```
+The terms cover agreement on rare symbols, whether the newest event is matched, recency, coverage of the pattern up to the last matched event, missing and extra symbols, fragmentation and frequency. See [Prediction Object Reference](prediction-object.md#25-potential-float).
+
+### Good-Odds
+The base-2 logarithm of the posterior odds of a pattern against chance, named for I. J. Good:
+```
+good_odds = log2(bayesian_prior) + bayesian_likelihood
+```
+Above 0 the pattern explains the observation better than chance does. Each further bit doubles the odds.
+
+### Weight of Evidence
+The logarithm of the factor by which an observation multiplies the odds of a hypothesis. In KATO it is the `bayesian_likelihood` field, in bits: each matched symbol adds `log2(0.95 / q(s))`, and each missing or extra symbol costs `log2(20)` = 4.32.
+
+### Bayesian Prior
+A pattern's share of everything the node has learned: `frequency / total_pattern_frequencies`.
+
+### Bayesian Posterior
+The probability that a pattern, and not another candidate or chance, produced the observation: `2^good_odds / (1 + Σ 2^good_odds)` over every candidate above the recall threshold.
+
+### Chance Posterior
+The probability that no learned pattern explains the observation better than chance: `1 / (1 + Σ 2^good_odds)`. Returned beside the predictions. It is 1.0 when nothing matched, which is KATO's "I don't know".
+
+### Future Potentials
+The probability of each next event the candidates propose, returned beside the predictions. Each candidate that has a `future` votes for its next event with weight `e^potential`, and the votes are normalised to add up to 1.
+
+### Predictive Information
+A prediction's part of the information the STM carries about the next event, in bits. Over the predictions of a request the values add up to the Kullback-Leibler divergence of the next-event distribution from chance.
+
+### Candidate
+A learned pattern whose similarity to the STM reaches the recall threshold. Every candidate is scored before the list is ranked and cut to `max_predictions`.
 
 ### ITFDF Similarity
-Inverse Term Frequency-Document Frequency similarity. Measures pattern relevance based on frequency and distance. Used in information retrieval-style matching.
+Inverse Term Frequency-Document Frequency similarity: `1 - distance × frequency / candidate_frequency`. The distance is one minus the cosine between the STM and `present`, each symbol weighted by the share of patterns that hold it; `candidate_frequency` is the summed frequency of every candidate.
 
 ## Processing Modes
 
@@ -246,4 +275,4 @@ Various metrics include protection against division by zero:
 - Confidence calculations check for zero present length
 
 ### Fragmentation = -1
-Special case indicating no matching blocks found. Handled specially in potential calculations.
+Special case indicating no matching blocks found. In `potential` it counts as no blocks broken and earns no `inverse_fragmentation`.

@@ -969,8 +969,9 @@ async def get_session_predictions(session_id: str):
     async with lock:
         # NO PROCESSOR LOCK NEEDED (stateless processor)
         # Get predictions with session state - stateless call. The future
-        # potentials come back with the predictions they were computed from;
-        # nothing is read off the node's shared processor.
+        # potentials and the chance posterior come back with the predictions
+        # they were computed from; nothing is read off the node's shared
+        # processor.
         result = await processor.get_predictions(
             session_state=session,
             config=session.session_config
@@ -979,6 +980,7 @@ async def get_session_predictions(session_id: str):
     return PredictionsResponse(
         predictions=result.predictions,
         future_potentials=result.future_potentials,
+        chance_posterior=result.chance_posterior,
         session_id=session_id,
         count=len(result.predictions)
     )

@@ -259,10 +259,12 @@ curl http://localhost:8000/sessions/$SESSION_ID/predictions | jq .
       "extras": [[]],
       "name": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
       "type": "prototypical",
-      "similarity": 1.0,
-      "potential": 2.85,
-      "evidence": 1.0,
-      "confidence": 0.95,
+      "similarity": 0.4,
+      "potential": 16.646,
+      "good_odds": 5.852,
+      "bayesian_posterior": 0.983,
+      "evidence": 0.25,
+      "confidence": 1.0,
       "snr": 1.0,
       "emotives": {
         "energy": 0.43,
@@ -270,18 +272,28 @@ curl http://localhost:8000/sessions/$SESSION_ID/predictions | jq .
       }
     }
   ],
+  "future_potentials": [
+    {"next_event": ["get_dressed", "shower"], "probability": 1.0, "supporting_patterns": 1}
+  ],
+  "chance_posterior": 0.017,
   "count": 1
 }
 ```
+
+Only some of the prediction's fields are shown. The full list is in the [Prediction Object Reference](../reference/prediction-object.md).
 
 **Understanding Predictions**:
 - **past**: Events before first match (empty - we matched from beginning)
 - **present**: Events containing matches (our input)
 - **future**: Events expected after last match (next 3 steps)
-- **missing**: Expected symbols not observed (empty - perfect match)
-- **extras**: Observed symbols not expected (empty - perfect match)
-- **similarity**: 1.0 = perfect match
-- **potential**: 2.85 = high predictive value
+- **missing**: Expected symbols not observed (empty - both symbols of the event were observed)
+- **extras**: Observed symbols not expected (empty)
+- **similarity**: 0.4 = 2 of the pattern's 8 symbols observed, and nothing else: `2 × 2 / (8 + 2)`
+- **evidence**: 0.25 = a quarter of the pattern observed; **confidence**: 1.0 = the matched event observed in full
+- **potential**: 16.646 = the ranking score. It matters when several patterns compete; here there is one
+- **good_odds**: 5.852 bits = the observation is about 58 times more probable under this pattern than by chance
+- **future_potentials**: the next event, with its probability
+- **chance_posterior**: 0.017 = the probability that nothing learned explains this observation
 - **emotives**: Averaged emotional values from learned pattern
 
 ## Step 8: Test Partial Recall
@@ -322,20 +334,27 @@ curl http://localhost:8000/sessions/$SESSION_ID/predictions | jq .
       "extras": [[]],
       "name": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
       "type": "prototypical",
-      "similarity": 1.0,
-      "potential": 2.25,
-      "evidence": 1.0,
-      "confidence": 0.95,
+      "similarity": 0.4,
+      "potential": 15.176,
+      "good_odds": 5.852,
+      "bayesian_posterior": 0.983,
+      "evidence": 0.25,
+      "confidence": 1.0,
       "snr": 1.0
     }
-  ]
+  ],
+  "future_potentials": [
+    {"next_event": ["drive_to_work", "leave_home"], "probability": 1.0, "supporting_patterns": 1}
+  ],
+  "chance_posterior": 0.017
 }
 ```
 
 **Key Observations**:
 - **past**: Shows 2 events that came before in the pattern
 - **future**: Shows 1 event remaining
-- **potential**: Lower (2.25) - less future information available
+- **good_odds**: The same 5.852 bits as before. Two symbols matched, nothing missing, nothing extra: where in the pattern the match sits does not change the evidence
+- **potential**: Lower (15.176). It scores a pattern higher the less of it lies before the match, and here four unobserved symbols do
 - KATO reconstructs full pattern context from any matching event
 
 ## Step 9: Test Fuzzy Matching
@@ -372,20 +391,29 @@ curl http://localhost:8000/sessions/$SESSION_ID/predictions | jq .
       "extras": [[]],
       "name": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
       "type": "prototypical",
-      "similarity": 0.5,
-      "potential": 1.25,
-      "evidence": 0.5,
-      "confidence": 0.71,
+      "similarity": 0.2222,
+      "potential": 10.555,
+      "good_odds": -1.396,
+      "bayesian_posterior": 0.275,
+      "evidence": 0.125,
+      "confidence": 0.5,
       "snr": 1.0
     }
-  ]
+  ],
+  "future_potentials": [
+    {"next_event": ["drive_to_work", "leave_home"], "probability": 1.0, "supporting_patterns": 1}
+  ],
+  "chance_posterior": 0.725
 }
 ```
 
 **Key Observations**:
 - **missing**: Shows "breakfast" was expected but not observed
-- **similarity**: 0.5 (1 of 2 symbols matched)
-- **confidence**: Lower (0.71) due to incomplete match
+- **similarity**: 0.2222 (1 symbol matched, of 8 in the pattern and 1 in the observation: `2 × 1 / (8 + 1)`)
+- **confidence**: Lower (0.5): half of the matched event was observed
+- **good_odds**: Negative (-1.396 bits). One matched symbol earns 2.93 bits, and the missing one costs 4.32
+- **chance_posterior**: 0.725. KATO returns the pattern, and says that chance explains a lone `coffee` better than the pattern does. That number is how an application tells a firm recall from a weak one
+- **future_potentials**: The only candidate proposes the only next event, so it gets 1.0. Read it together with `chance_posterior`
 - Pattern still recalled despite imperfect match (threshold = 0.1)
 
 ## Step 10: Understanding Persistence

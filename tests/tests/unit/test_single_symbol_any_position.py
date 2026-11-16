@@ -5,10 +5,13 @@ Single-symbol candidate selection used to read only patterns whose first stored
 token was the symbol. Events are sorted, so of [['A','B','C'], ['marker']] a lone
 'A' matched while a lone 'B' or 'C' did not: alphabetical order decided
 eligibility. Selection now takes every pattern containing the symbol, and the
-preference for patterns that start with the observed symbols moved into ranking
-as `onset_alignment`, alongside the position-free `event_cohesion`.
+preference for patterns that start with the observed symbols is left to ranking:
+`potential` scores a pattern higher the less of it lies before the match (its
+`evidence_to_end` term), and `onset_alignment` reports the position, alongside
+the position-free `event_cohesion`.
 """
 
+import math
 import os
 import sys
 
@@ -18,6 +21,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 from fixtures.kato_fixtures import kato_fixture as kato_fixture
 
+from kato.informatics.prediction_metrics import POTENTIAL_WEIGHTS as W
 from kato.representations.prediction import event_overlap_metrics
 
 
@@ -121,7 +125,8 @@ def test_symbol_in_a_later_event_selects_the_pattern(kato_fixture):
 
 def test_single_event_ranking_prefers_patterns_that_start_with_the_symbol(kato_fixture):
     kato_fixture.clear_all_memory()
-    # Same shape and length, so every other metric is equal and onset decides.
+    # Same shape and length, so the match is the same and only its position
+    # differs: nothing precedes it in one pattern, two events do in the other.
     starts = _learn(kato_fixture, [['B', 'k1'], ['k2'], ['k3']])
     late = _learn(kato_fixture, [['k4'], ['k5'], ['B', 'k6']])
 
@@ -130,8 +135,35 @@ def test_single_event_ranking_prefers_patterns_that_start_with_the_symbol(kato_f
     assert first is not None and last is not None
     assert first['onset_alignment'] == 1.0
     assert last['onset_alignment'] == pytest.approx(1 / 3)
-    assert first['potential'] - last['potential'] == pytest.approx(2 / 3)
+    # evidence_to_end: one match over the two symbols up to the end of present,
+    # against one match over four.
+    assert first['potential'] - last['potential'] == pytest.approx(
+        W['evidence_to_end'] * (1 / 2 - 1 / 4), rel=1e-9)
     assert predictions.index(first) < predictions.index(last)
+
+
+def test_single_event_potential_is_the_weighted_sum_of_its_terms(kato_fixture):
+    """The lone `B` against [['B','k1'], ['k2'], ['k3']], in a node of two patterns.
+
+    One match, `k1` missing from the matched event, nothing extra. `B` is held
+    by both patterns (weight 1 in the cosine), `k1` by one (weight 2).
+    """
+    kato_fixture.clear_all_memory()
+    starts = _learn(kato_fixture, [['B', 'k1'], ['k2'], ['k3']])
+    _learn(kato_fixture, [['k4'], ['k5'], ['B', 'k6']])
+
+    prediction = _by_name(_predict(kato_fixture, [['B']]), starts)
+    assert prediction is not None
+    expected = (
+        W['snr']                                  # snr 1: no extras
+        + W['inverse_fragmentation']              # one block
+        + W['last_event_matched'] + W['last_event_share']
+        + W['recency_07'] + W['recency_09']       # one matched symbol, in the newest event
+        + W['tversky'] / 3                        # 1 / (1 + 2 x 1 missing)
+        + W['cosine_idf_present'] / math.sqrt(5)  # STM {B}; present {B: 1, k1: 2}
+        + W['evidence_to_end'] / 2                # 1 match of 2 symbols up to the end of present
+    )                                             # frequency 1: log_frequency adds nothing
+    assert prediction['potential'] == pytest.approx(expected, rel=1e-9)
 
 
 def test_multi_symbol_single_event_uses_cohesion_and_onset(kato_fixture):
@@ -146,17 +178,29 @@ def test_multi_symbol_single_event_uses_cohesion_and_onset(kato_fixture):
     assert (p_split['event_cohesion'], p_split['onset_alignment']) == (0.5, 0.5)
 
 
-def test_multi_event_stm_potential_excludes_onset(kato_fixture):
+def test_multi_event_stm_potential_is_the_weighted_sum_of_its_terms(kato_fixture):
+    """[['A'], ['marker']] against [['A','B','C'], ['marker'], ['tail']], the node's only pattern.
+
+    Two matches in two blocks, `B` and `C` missing, nothing extra. Every symbol
+    is held by the one pattern, so each weighs 1 in the cosine. onset_alignment
+    is reported and is not a term.
+    """
     kato_fixture.clear_all_memory()
     name = _learn(kato_fixture, [['A', 'B', 'C'], ['marker'], ['tail']])
 
     prediction = _by_name(_predict(kato_fixture, [['A'], ['marker']]), name)
     assert prediction is not None
     assert prediction['onset_alignment'] > 0
-    frag = prediction['fragmentation']
+    assert prediction['fragmentation'] == 1.0
     expected = (
-        (prediction['evidence'] + prediction['confidence']) * prediction['snr']
-        + prediction['itfdf_similarity']
-        + (0.0 if frag == -1 else 1.0 / (frag + 1))
-    )
-    assert prediction['potential'] == pytest.approx(expected, rel=1e-9, abs=1e-12)
+        W['snr']                                  # snr 1: no extras
+        + W['fragmentation']                      # one break between the two blocks
+        + W['inverse_fragmentation'] / 2
+        + W['last_event_matched'] + W['last_event_share']
+        + 1.7 * W['recency_07']                   # `A` one event back (0.7), `marker` newest (1)
+        + 1.9 * W['recency_09']
+        + W['tversky'] / 3                        # 2 / (2 + 2 x 2 missing)
+        + W['cosine_idf_present'] / math.sqrt(2)  # 2 / (sqrt 2 x sqrt 4)
+        + W['evidence_to_end'] / 2                # 2 matches of 4 symbols up to the end of present
+    )                                             # frequency 1: log_frequency adds nothing
+    assert prediction['potential'] == pytest.approx(expected, rel=1e-9)

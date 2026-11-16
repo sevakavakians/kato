@@ -7,7 +7,131 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Upgrade notes
+- **Recount the pattern-frequency total once per Redis:**
+  `python scripts/recount_pattern_frequencies.py --all` (`--dry-run` first to see
+  what would change). `total_pattern_frequencies` now counts every learn, and a
+  node written before this change holds the number of patterns instead. Until it
+  is recounted, `bayesian_prior`, `good_odds` and `confluence` come out too high
+  on that node. Where a request's candidates were learned more often than the
+  counter says the whole node was, KATO takes the priors against the candidates'
+  own total and logs a warning that names the script. A purge of a pattern
+  learned more often than the counter holds is refused, with the same pointer.
+- **The predictions response changed shape.** `future_potentials` entries are now
+  `{next_event, probability, supporting_patterns}`, and a `chance_posterior` field
+  sits beside them. Clients that read `future`, `aggregate_potential` or
+  `total_weighted_frequency` need updating.
+- **Metric values changed scale.** `potential` is no longer a number between 0 and
+  about 4, and `bayesian_likelihood`, `predictive_information` and `confluence` are
+  in bits. Any threshold an application applies to these fields has to be set
+  again. To decide whether to act on a prediction, use `probability` in
+  `future_potentials` and `chance_posterior`.
+- **Sessions that set `affinity_emotive`** and rely on the default ranking: the
+  affinity-weighted metrics no longer enter `potential`. Set `rank_sort_algo` to
+  `weighted_similarity` (or another weighted metric) to rank by affinity.
+
+### Added
+- **`good_odds`, a new field of every prediction.** The base-2 logarithm of the
+  posterior odds of the pattern against chance, named for I. J. Good:
+  `log2(frequency / F) + Σ log2((1 - e) / q(s))` over the matched symbols
+  `- log2(1 / e) × (missing + extras)`. `F` is the node's total of pattern
+  frequencies, `q(s)` a symbol's share of all learned symbol occurrences, and
+  `e` = 0.05 the only constant. Above 0 the pattern explains the observation
+  better than chance. `log2(bayesian_prior) + bayesian_likelihood == good_odds`
+  holds exactly, which is Good's identity: prior log-odds plus weight of evidence
+  equal posterior log-odds.
+- **`chance_posterior`, beside `predictions` and `future_potentials`.** The
+  probability that no learned pattern explains the observation better than
+  chance: `1 / (1 + Σ 2^good_odds)` over every candidate. It is 1.0 when nothing
+  matched and `null` when no prediction was computed. It is the graded form of
+  the empty ensemble's "I don't know".
+- **Every numeric metric of a prediction is a `rank_sort_algo` value.** `good_odds`,
+  `entropy`, `event_cohesion` and `onset_alignment` join the list. Equal values
+  are ordered by pattern name, and a prediction whose value for the key is `null`
+  ranks below every prediction that has one.
+- **`scripts/recount_pattern_frequencies.py`** sets a node's
+  `total_pattern_frequencies` to the sum of its patterns' frequencies. It holds
+  no lock: the count is written only if the node's statistics did not change
+  while it was taken, and a node that changes is counted again and then reported
+  as busy.
+- **`kato/informatics/prediction_metrics.py`** holds the scores that read the
+  node's counts, as pure functions with a stated order for every sum.
+
+### Changed
+- **`potential` is a weighted sum of eleven terms.** The terms: the cosine between
+  the STM and `present` with rare symbols counting more, whether the newest STM
+  event is matched and how much of it, two recency counts of the matched symbols,
+  matches over the symbols of `past` and `present`, a Tversky index over missing
+  and extra symbols, `snr`, `fragmentation` and its inverse, and the logarithm of
+  the frequency. The weights are constants in the code (`POTENTIAL_WEIGHTS`),
+  fitted once on held-out sequences from generated libraries, system logs, click
+  streams and text; nothing is fitted at prediction time and no seed is involved.
+  It reads nothing from the other candidates and does not fall as a pattern's
+  unobserved future grows. On 117,200 test queries the top prediction that has a
+  future names the right next event 63.1% of the time (mean of the four kinds of
+  data), against 43.1% for the previous formula.
+  - `onset_alignment` is no longer added for a single-event STM. Position enters
+    through the `evidence_to_end` term: the less of a pattern lies before the
+    match, the higher it scores.
+  - The affinity-weighted metrics no longer replace `evidence`, `confidence` and
+    `snr` inside `potential` when `affinity_emotive` is set.
+- **`bayesian_prior` is the pattern's share of the node:** `frequency / F`. It was
+  the share among the candidates kept for the request, so it depended on the
+  observation, and a lone candidate had a prior of 1.0.
+- **`bayesian_likelihood` is the weight of evidence, in bits:** the logarithm of how
+  much more probable the observation is under the pattern than under chance. It
+  was a copy of `similarity`, which falls as a pattern's unobserved part grows.
+- **`bayesian_posterior` is weighed against chance:** `2^good_odds / (1 + Σ 2^good_odds)`
+  over every candidate above the recall threshold. A lone weak match is no longer
+  given 1.0. The posteriors of every candidate and `chance_posterior` add up to 1;
+  the returned predictions alone add up to less when `max_predictions` cuts the
+  list.
+- **`future_potentials` is the probability of each next event.** Each candidate that
+  has a `future` votes for the first event of it with weight `e^potential`. Entries
+  are `{next_event, probability, supporting_patterns}`, most probable first, equal
+  probabilities going to the event that sorts first. It was a share of
+  `frequency × similarity` grouped by the whole remaining future, so two patterns
+  that agreed on the next event and differed later split their support.
+- **`predictive_information` is in bits:** the prediction's part of the
+  Kullback-Leibler divergence of the next-event distribution from chance,
+  `share × log2(P(E | STM) / q(E))`. It is 0.0 for a prediction with no future and
+  can be negative.
+- **`confluence` is in bits:** `log2(frequency / F) + Σ log2(1 / q(s))` over the
+  pattern's symbols, the logarithm of how much more often the pattern was learned
+  than chance would produce it. It was a product whose second factor is 1 to many
+  decimals for any pattern past two or three symbols.
+- **`itfdf_similarity` and `tfidf_score` no longer depend on which candidates were
+  kept.** `itfdf_similarity` counts every STM symbol, holds the cosine to [0, 1]
+  so that an STM equal to `present` scores exactly 1.0, and takes the frequency
+  share over every candidate. `tfidf_score` reads each symbol's stored pattern
+  count.
+- **Every candidate is scored before the list is cut.** The provisional cut to
+  `3 × max_predictions` is gone, and the frequency of every candidate is read
+  (in batches of 5,000) before scoring. A returned value no longer depends on
+  `max_predictions`, on the order storage returns the candidates in, or on the
+  ranking key, and `rank_sort_algo` ranks every candidate instead of the survivors
+  of a cut made on a provisional `potential`. Cost, measured on a node of 20,000
+  patterns with about 10,400 candidates per request at a recall threshold of 0.1:
+  11.5% more time in the prediction path, plus the frequency reads.
+- **Sums over the candidates run in pattern-name order.** `bayesian_posterior`,
+  `chance_posterior`, `future_potentials` and `predictive_information` give the
+  same bits whatever order the candidates arrive in.
+
+### Removed
+- **`pattern_probability` and `weighted_strength`** no longer appear in a
+  prediction. They were undocumented by-products of the ensemble pass.
+- **`kato/informatics/predictive_information.py`**, and `confluence()` in
+  `kato/informatics/metrics.py`. Their replacements are in
+  `kato/informatics/prediction_metrics.py`.
+
 ### Fixed
+- **`total_pattern_frequencies` counts every learn.** The counter went up only when
+  a pattern was new, so it held the number of patterns, and every prior and
+  `confluence` computed from it was too high on a node that had learned any
+  pattern twice. A learn now adds 1 whether or not the pattern is new, a purge
+  subtracts the purged pattern's frequency, and setting or deleting a pattern's
+  frequency through the pattern-edit paths moves the counter by the difference in
+  one atomic step. See the upgrade notes for the one-time recount.
 - **`deployment/kato-manager.sh` now loads a local `docker-compose.override.yml`.**
   The script passes `-f docker-compose.yml` explicitly, which stops Compose from
   loading the override file on its own. So `start`, `stop`, `restart`, `update`,
@@ -20,6 +144,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `start kato`.
 
 ### Documentation
+- **The Prediction Object reference has a table of every metric.** "Metrics at a
+  Glance" gives, for each metric, what it answers, its formula, its unit and
+  range, what it reads, what to use it for and what kind of data it suits.
+  "Measured Accuracy" gives each metric's accuracy and precision as a ranking key
+  on four kinds of data, and how well `future_potentials` and `chance_posterior`
+  state their own certainty. The page also has the ensemble fields, the order in
+  which scores are computed, and a worked example with every number derived.
+- **The research notes on the potential function, the Bayesian framework and
+  predictive information describe the formulas KATO computes,** with their
+  derivations, their limits and the references they come from.
 - **The configuration guide now shows how much of a pattern each
   `recall_threshold` requires.** A table under `recall_threshold` gives, for
   thresholds from 0.02 to 1.0, the share of a pattern that must be observed

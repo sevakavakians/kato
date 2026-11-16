@@ -1489,18 +1489,20 @@ class PatternSearcher:
             return []
 
         # No metadata is loaded here. Predictions are built with placeholder
-        # frequency/emotives and PatternProcessor.predictPattern fills them in
-        # after it prunes to max_predictions * 3.
+        # frequency/emotives and PatternProcessor.predictPattern fills them in:
+        # the frequency of every candidate from Redis before it scores them,
+        # and the emotives of the predictions it returns.
         #
-        # Loading it here meant one ClickHouse+Redis lookup per matched pattern
-        # -- every pattern in the node when the default empty filter_pipeline is
-        # in use -- to serve a list that is then cut to a fixed 300. At 6000
-        # matches that was 12 chunked queries and roughly a third of the request;
-        # the cost grew with the corpus while the number of rows actually used
-        # never did. Nothing the prune reads comes from metadata: evidence,
-        # confidence, snr and fragmentation are all computed in
-        # Prediction.__init__ from matcher output and the patterns_data columns
-        # already cached by the filter pipeline. See attach_pattern_metadata.
+        # Loading the metadata rows here meant one ClickHouse+Redis lookup per
+        # matched pattern -- every pattern in the node when the default empty
+        # filter_pipeline is in use -- to serve a list that is then cut to
+        # max_predictions. At 6000 matches that was 12 chunked queries and
+        # roughly a third of the request; the cost grew with the corpus while
+        # the number of rows actually used never did. Nothing built here comes
+        # from metadata: evidence, confidence, snr and fragmentation are all
+        # computed in Prediction.__init__ from matcher output and the
+        # patterns_data columns already cached by the filter pipeline. See
+        # attach_pattern_metadata.
 
         # Split results into batches for async processing
         batch_size = max(1, len(results) // max_workers)
@@ -1549,15 +1551,17 @@ class PatternSearcher:
         return self._metadata_router
 
     def attach_pattern_metadata(self, predictions: list[dict[str, Any]]) -> dict[str, Any]:
-        """Fill in frequency and emotives on the given predictions, in place.
+        """Fill in emotives on the given predictions, in place.
 
-        Called by PatternProcessor.predictPattern after pruning, so the lookup
-        covers only the predictions that survive rather than every pattern that
-        matched. Those two fields are all a prediction takes from
-        patterns_metadata, and nothing computed before the prune reads them.
+        Called by PatternProcessor.predictPattern after it has ranked the
+        candidates and cut them to max_predictions, so the lookup covers only
+        the predictions that are returned rather than every pattern that
+        matched. Frequency is not set here: predictPattern reads it for every
+        candidate before scoring, and the returned predictions keep the value
+        their scores were computed from.
 
-        Predictions with no metadata row keep the defaults set when they were
-        built (frequency 1, no emotives).
+        Predictions with no metadata row keep the default set when they were
+        built (no emotives).
 
         Returns the precomputed entropy/tf metrics from the same rows, so the
         caller does not have to read patterns_metadata a second time for them.
@@ -1577,18 +1581,6 @@ class PatternSearcher:
             if not metadata:
                 continue
 
-            # Floor frequency at 1: a pattern present in ClickHouse with
-            # frequency 0 in Redis means Redis metadata was lost, not that the
-            # pattern was unlearned.
-            frequency = metadata.get('frequency', 1)
-            if frequency == 0:
-                logger.warning(
-                    "Pattern %s found in ClickHouse but has frequency=0 in Redis "
-                    "— possible Redis data loss. Defaulting to 1.", prediction['name']
-                )
-                frequency = 1
-
-            prediction['frequency'] = frequency
             prediction['emotives'] = metadata.get('emotives', {})
 
             if metadata.get('entropy') is not None:
@@ -1640,7 +1632,7 @@ class PatternSearcher:
         Build predictions for a batch of results, without pattern metadata.
 
         frequency and emotives are left at their defaults; PatternProcessor
-        fills them in after pruning. See attach_pattern_metadata.
+        fills them in. See attach_pattern_metadata.
 
         Args:
             batch: Batch of match results
@@ -1667,13 +1659,13 @@ class PatternSearcher:
                 # Hybrid architecture: pattern data already in filter_executor cache from pipeline
                 pattern_dict = self.filter_executor.patterns_cache.get(pattern_hash, {})
                 if pattern_dict:
-                    # frequency and emotives are placeholders here; they are the
-                    # only two fields a prediction takes from patterns_metadata,
-                    # nothing computed before the prune reads them, and
-                    # attach_pattern_metadata fills them in for the survivors.
-                    # These defaults are the ones this code already used when a
-                    # pattern had no metadata row, so a pattern that genuinely
-                    # has none is unaffected.
+                    # frequency and emotives are placeholders here. Nothing
+                    # computed while a prediction is built reads them:
+                    # predictPattern reads every candidate's frequency before
+                    # it scores them, and attach_pattern_metadata fills in the
+                    # emotives of the predictions that are returned. These
+                    # defaults are the ones a pattern with no metadata row
+                    # keeps, so a pattern that genuinely has none is unaffected.
                     pattern_data = {
                         'name': pattern_hash,
                         'pattern_data': pattern_dict.get('pattern_data', []),

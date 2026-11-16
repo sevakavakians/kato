@@ -349,9 +349,10 @@ class KatoProcessor:
             unique_id: Optional unique ID to retrieve stored predictions
 
         Returns:
-            PredictionResult with the predictions and the future potentials
-            aggregated over them. Stored predictions carry no future
-            potentials, so a unique_id lookup returns an empty list for them.
+            PredictionResult with the predictions, and the future potentials
+            and chance posterior computed over their whole ensemble. Stored
+            predictions carry neither, so a unique_id lookup returns an empty
+            list and None for them.
         """
         if unique_id:
             # Retrieve stored predictions from database (no state needed)

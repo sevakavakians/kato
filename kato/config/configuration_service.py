@@ -21,6 +21,7 @@ from kato.config.session_config import (
     DEFAULT_VECTOR_SEARCH_LIMIT,
     MAX_VECTOR_SEARCH_LIMIT,
     VALID_FILTERS,
+    VALID_RANK_SORT_ALGORITHMS,
     VALID_VECTOR_EVENT_MODES,
     SessionConfiguration,
 )
@@ -362,18 +363,8 @@ class ConfigurationService:
         # Validate rank_sort_algo
         if 'rank_sort_algo' in updates:
             value = updates['rank_sort_algo']
-            valid_algorithms = [
-                'potential', 'similarity', 'evidence', 'confidence', 'snr',
-                'fragmentation', 'frequency', 'normalized_entropy',
-                'global_normalized_entropy', 'itfdf_similarity', 'confluence',
-                'predictive_information', 'bayesian_posterior', 'bayesian_prior',
-                'bayesian_likelihood', 'tfidf_score',
-                'weighted_similarity', 'weighted_evidence',
-                'weighted_confidence', 'weighted_snr',
-                'event_cohesion', 'onset_alignment',
-            ]
-            if not isinstance(value, str) or value not in valid_algorithms:
-                errors['rank_sort_algo'] = f'Must be one of: {", ".join(valid_algorithms)}'
+            if not isinstance(value, str) or value not in VALID_RANK_SORT_ALGORITHMS:
+                errors['rank_sort_algo'] = f'Must be one of: {", ".join(VALID_RANK_SORT_ALGORITHMS)}'
 
         return errors
 

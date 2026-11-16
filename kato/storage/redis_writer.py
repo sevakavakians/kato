@@ -182,8 +182,17 @@ if had_pattern then
     local global_symbols = tonumber(redis.call('GET', prefix .. ':global:total_symbols_in_patterns_frequencies') or '0')
     local global_patterns = tonumber(redis.call('GET', prefix .. ':global:total_pattern_frequencies') or '0')
     local global_unique = tonumber(redis.call('GET', prefix .. ':global:total_unique_patterns') or '0')
-    if global_symbols < expected_total_symbols * frequency or global_patterns < 1 or global_unique < 1 then
+    if global_symbols < expected_total_symbols * frequency or global_unique < 1 then
         return redis.error_reply('global counters changed after purge preparation')
+    end
+    -- total_pattern_frequencies counts every learn, so it holds at least this
+    -- pattern's frequency. A smaller value means the counter was written before
+    -- it counted re-learns and has not been recounted since; subtracting from
+    -- it would leave it wrong for good, so say what to do instead.
+    if global_patterns < frequency then
+        return redis.error_reply(
+            'total_pattern_frequencies is smaller than the frequency of this pattern: '
+            .. 'recount it (scripts/recount_pattern_frequencies.py), then purge again')
     end
 
     -- Mutation phase.
@@ -207,13 +216,14 @@ if had_pattern then
     end
 
     decrement_string(prefix .. ':global:total_symbols_in_patterns_frequencies', total_symbols * frequency)
-    -- Both pattern counters move by 1, not by frequency: the learn path
-    -- increments each once per unique pattern, not once per learn (see
-    -- batch_update_symbol_stats, where both sit behind is_new_pattern).
+    -- The two pattern counters accrue differently, and each is reversed the
+    -- way it accrued (see batch_update_symbol_stats): total_pattern_frequencies
+    -- gains 1 on every learn, so this pattern's share of it is its frequency;
+    -- total_unique_patterns gains 1 on the first learn only.
     -- test_purge_reverses_frequency_weighted_share learns three times and
-    -- compares the whole node before and after, so it fails loudly if the learn
-    -- path ever starts accruing these per learn.
-    decrement_string(prefix .. ':global:total_pattern_frequencies', 1)
+    -- compares the whole node before and after, so it fails loudly if the two
+    -- paths ever disagree.
+    decrement_string(prefix .. ':global:total_pattern_frequencies', frequency)
     decrement_string(prefix .. ':global:total_unique_patterns', 1)
 end
 
@@ -235,6 +245,33 @@ redis.call('SET', prefix .. ':stats:version', stats_version)
 
 redis.call('HSET', registry_key, pattern_name, cleaned_record)
 return 1
+"""
+
+# Set or delete one pattern's frequency and move total_pattern_frequencies by
+# the difference, in one atomic step. The total is the sum of every pattern's
+# frequency; a frequency written outside the learn path has to keep it so, and
+# two round trips would let a concurrent learn of the same pattern land between
+# the read and the write.
+#
+# KEYS[1] the pattern's frequency key, KEYS[2] total_pattern_frequencies,
+# KEYS[3] stats:version. ARGV[1] the new frequency; 0 deletes the key.
+# ARGV[2] the new stats version. Returns the previous frequency.
+_SET_PATTERN_FREQUENCY_SCRIPT = """
+local previous = tonumber(redis.call('GET', KEYS[1]) or '0')
+local updated = tonumber(ARGV[1])
+if updated > 0 then
+    redis.call('SET', KEYS[1], string.format('%d', updated))
+else
+    redis.call('DEL', KEYS[1])
+end
+local total = tonumber(redis.call('GET', KEYS[2]) or '0') + updated - previous
+if total > 0 then
+    redis.call('SET', KEYS[2], string.format('%d', total))
+else
+    redis.call('DEL', KEYS[2])
+end
+redis.call('SET', KEYS[3], ARGV[2])
+return previous
 """
 
 # Create the ledger sentinel and add this learn's contribution in one atomic
@@ -709,6 +746,36 @@ class RedisWriter:
             logger.error(f"Failed to check if pattern {pattern_name} exists: {e}")
             return False
 
+    def set_frequency(self, pattern_name: str, frequency: int) -> int:
+        """Set a pattern's frequency outright, keeping the node total in step.
+
+        The learn path never calls this: it claims a new pattern with SETNX and
+        counts a re-learn with INCR. This is for the administrative override
+        (PatternProcessor.update_pattern) and for dropping a pattern's counter
+        (frequency 0 deletes the key). total_pattern_frequencies moves by the
+        difference in the same atomic step, so it stays the sum of every
+        pattern's frequency, and the stats version is bumped with it.
+
+        Args:
+            pattern_name: Pattern name (hash)
+            frequency: New frequency; 0 removes the pattern's frequency key
+
+        Returns:
+            The frequency the pattern had before (0 if it had none)
+        """
+        frequency = int(frequency)
+        if frequency < 0:
+            raise ValueError(f"frequency must not be negative, got {frequency}")
+        clean_name = self.normalize_pattern_name(pattern_name)
+        return int(self.client.eval(
+            _SET_PATTERN_FREQUENCY_SCRIPT, 3,
+            f"{self.kb_id}:frequency:{clean_name}",
+            f"{self.kb_id}:global:total_pattern_frequencies",
+            self.stats_version_key,
+            frequency,
+            str(time.time_ns()),
+        ))
+
     def get_frequency_batch(self, pattern_names: list[str]) -> dict[str, int]:
         """
         Batch fetch pattern frequencies via a single MGET.
@@ -753,6 +820,10 @@ class RedisWriter:
             pattern_name: Pattern name hash
             is_new_pattern: True if this is a new pattern (updates pmf and global unique count)
             total_symbol_count: Total number of symbols (sum of counts)
+
+        Called once per learn, new pattern or not: symbols:freq, the symbol
+        total and total_pattern_frequencies accrue on every learn, while
+        symbols:pmf and total_unique_patterns accrue once per pattern.
         """
         try:
             pipe = self.client.pipeline(transaction=False)
@@ -767,16 +838,15 @@ class RedisWriter:
                     # Increment pattern_member_frequency by 1 (new pattern contains this symbol)
                     pipe.hincrby(f"{self.kb_id}:symbols:pmf", symbol, 1)
 
-            # Global counters
+            # Global counters. Every learn adds its symbols and one learned
+            # pattern occurrence, so total_pattern_frequencies is the sum of
+            # every pattern's frequency. Only a new pattern adds to the number
+            # of patterns.
             pipe.incrby(f"{self.kb_id}:global:total_symbols_in_patterns_frequencies", total_symbol_count)
+            pipe.incrby(f"{self.kb_id}:global:total_pattern_frequencies", 1)
 
             if is_new_pattern:
-                pipe.incrby(f"{self.kb_id}:global:total_pattern_frequencies", 1)
                 pipe.incrby(f"{self.kb_id}:global:total_unique_patterns", 1)
-            else:
-                # Re-learned pattern: only increment pattern frequency total
-                # (not unique count, since pattern already exists)
-                pass
 
             # Announce the change to every other process. Rides along in this
             # pipeline, so it costs no extra round trip.
@@ -902,7 +972,7 @@ class RedisWriter:
         Increment global total_pattern_frequencies counter.
 
         Args:
-            count: Number to increment by (typically 1 for each pattern learned)
+            count: Number to increment by (1 for each learn of a pattern)
 
         Returns:
             New total value after increment

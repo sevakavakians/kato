@@ -1,5 +1,4 @@
 import asyncio
-import itertools
 import logging
 from collections import Counter, OrderedDict, deque
 from itertools import chain
@@ -7,19 +6,23 @@ from math import log2
 from os import environ
 from typing import Any, NamedTuple, Optional
 
-import numpy as np
-
 from kato.config.session_config import SessionConfiguration
 from kato.exceptions import DataConsistencyError
 from kato.informatics.knowledge_base import SuperKnowledgeBase
 from kato.informatics.metrics import (
     accumulate_metadata,
     average_emotives,
-    confluence,
     global_normalized_entropy,
     normalized_entropy,
 )
-from kato.informatics.predictive_information import calculate_ensemble_predictive_information
+from kato.informatics.prediction_metrics import (
+    NodeStatistics,
+    Observation,
+    confluence,
+    itfdf_similarity,
+    score_ensemble,
+    tfidf_score,
+)
 from kato.representations.pattern import Pattern
 from kato.representations.prediction import Prediction, rank_predictions
 from kato.searches.pattern_search import PatternSearcher
@@ -43,6 +46,21 @@ logger.setLevel(getattr(logging, environ.get('LOG_LEVEL', 'INFO')))
 # being deleted.
 SESSION_SEARCHER_CACHE_SIZE = 1024
 
+# Pattern names per MGET when the candidates' frequencies are read. A request
+# can have tens of thousands of candidates; one MGET of that size holds Redis,
+# which serves one command at a time, for the whole of it.
+FREQUENCY_BATCH_SIZE = 5000
+
+# Metrics that predictPattern works out after ranking, for the predictions it
+# returns: each describes one prediction (most of them the pattern alone) and
+# needs nothing from the other candidates but a total that is already known. A
+# session that ranks by one of them gets it worked out for every candidate
+# first, so the ranking is over all of them.
+PATTERN_METRICS = frozenset({
+    'entropy', 'normalized_entropy', 'global_normalized_entropy',
+    'tfidf_score', 'itfdf_similarity', 'confluence',
+})
+
 
 class PredictionSettings(NamedTuple):
     """A session's prediction settings, read from its stored configuration.
@@ -60,17 +78,25 @@ class PredictionSettings(NamedTuple):
 
 
 class PredictionResult(NamedTuple):
-    """One request's predictions and the future potentials aggregated over them.
+    """One request's predictions and the figures computed over its whole ensemble.
 
-    future_potentials is an ensemble figure, so it comes back with the
-    predictions it was computed from rather than being left on the processor.
-    A processor is shared by every session on a node: when it was kept there,
-    the predictions endpoint read it back after the request, and a request that
-    computed none -- an empty STM returns before predicting -- served the
-    previous request's value, which could be another session's.
+    future_potentials and chance_posterior are ensemble figures, so they come
+    back with the predictions they were computed from rather than being left on
+    the processor. A processor is shared by every session on a node: when
+    future_potentials was kept there, the predictions endpoint read it back
+    after the request, and a request that computed none -- an empty STM returns
+    before predicting -- served the previous request's value, which could be
+    another session's.
+
+    chance_posterior is the probability that no learned pattern explains the
+    STM better than chance: what the candidates' bayesian_posterior values
+    leave over. It is 1.0 when no pattern reached the recall threshold and
+    None when no prediction was attempted (an empty STM, or predictions read
+    back by unique_id).
     """
     predictions: list[dict[str, Any]]
     future_potentials: list[dict[str, Any]]
+    chance_posterior: Optional[float] = None
 
 
 class PatternProcessor:
@@ -541,8 +567,9 @@ class PatternProcessor:
             f"ALTER TABLE kato.patterns_data DELETE "
             f"WHERE kb_id = '{safe_kb_id}' AND name = '{safe_name}'"
         )
-        # Frequency lives in Redis only — delete it directly.
-        self.superkb.redis_writer.client.delete(f"{self.kb_id}:frequency:{name}")
+        # Frequency lives in Redis only. Dropping it takes this pattern's
+        # learns out of total_pattern_frequencies in the same step.
+        self.superkb.redis_writer.set_frequency(name, 0)
         # Delete emotives/metadata/metric data from both stores via the router.
         self.superkb.metadata_router.delete_pattern_metadata(name)
         # Invalidate symbol cache since pattern data changed
@@ -568,7 +595,8 @@ class PatternProcessor:
                 raise Exception(f'{emotive} array length ({len(values_list)}) exceeds system persistence ({self.persistence})')
         # Admin override: explicitly set frequency in Redis (the only path that bypasses
         # the SETNX/INCR atomic flow), then upsert emotives via the router.
-        self.superkb.redis_writer.client.set(f"{self.kb_id}:frequency:{name}", frequency)
+        # total_pattern_frequencies moves by the difference in the same step.
+        self.superkb.redis_writer.set_frequency(name, frequency)
         self.superkb.metadata_router.upsert_pattern_metadata(
             pattern_name=name,
             emotives=emotives,
@@ -1176,6 +1204,37 @@ class PatternProcessor:
                 logger.debug(f"Local cache eviction for {name} failed: {e}")
 
 
+    def _attach_frequencies(self, predictions: list[dict[str, Any]]) -> None:
+        """Read the frequency of every given prediction's pattern, in place.
+
+        Frequency lives in Redis, one key per pattern, so this is an MGET per
+        FREQUENCY_BATCH_SIZE names and no ClickHouse query.
+
+        A pattern with no frequency recorded keeps 1: it was found in
+        ClickHouse, so it was learned at least once, and a missing or zero
+        counter means the Redis record was lost, not that the pattern was
+        unlearned.
+        """
+        names = [prediction['name'] for prediction in predictions]
+        frequencies: dict[str, int] = {}
+        for start in range(0, len(names), FREQUENCY_BATCH_SIZE):
+            frequencies.update(
+                self.superkb.redis_writer.get_frequency_batch(names[start:start + FREQUENCY_BATCH_SIZE]))
+
+        unrecorded = 0
+        for prediction in predictions:
+            frequency = frequencies.get(prediction['name'], 0)
+            if frequency < 1:
+                unrecorded += 1
+                frequency = 1
+            prediction['frequency'] = frequency
+        if unrecorded:
+            logger.warning(
+                "%d of %d candidate patterns of %s have no frequency in Redis "
+                "-- possible Redis data loss. Counting each as learned once.",
+                unrecorded, len(predictions), self.kb_id,
+            )
+
     def filter_retired_predictions(self, predictions: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Drop predictions for patterns this node has retired.
 
@@ -1224,21 +1283,20 @@ class PatternProcessor:
         are sorted, so that made eligibility depend on alphabetical order: of
         [['A','B','C'], ['marker']], a lone 'A' matched and a lone 'B' did not
         (issue #15). Preferring patterns that start with the observed symbols is
-        now a ranking concern -- `onset_alignment` -- not a selection filter. Everything after selection
-        (metadata, metrics, potential, ranking) is the shared tail in
+        a ranking concern, not a selection filter: `potential` scores a pattern
+        higher the less of it lies before the match (`evidence_to_end`), and
+        `onset_alignment` reports the position. Everything after selection
+        (frequencies, scores, ranking, metadata, metrics) is the shared tail in
         predictPattern, so the two paths cannot disagree.
 
         It used to compute its own metrics and return, which left single-symbol
-        predictions missing fourteen fields the normal path returns
-        (`predictive_information`, `confluence`, `entropy`, the three `bayesian_*`,
-        `itfdf_similarity`, `tfidf_score`, `pattern_probability`,
-        `normalized_entropy`, `global_normalized_entropy`, `weighted_strength`,
-        `type`, `sequence`) and, worse, disagreeing on three it did return:
-        `snr` used `m/(m+x)` where Prediction uses `(2m-x)/(2m+x)`, `evidence`
-        divided by a different length, and `potential` omitted the
-        `itfdf_similarity` term -- so the ranking key itself was not comparable
-        between paths. A client reading any of the fourteen got a KeyError for a
-        one-symbol STM and a value for a two-symbol one.
+        predictions missing fields the normal path returns and, worse,
+        disagreeing on three it did return: `snr` used `m/(m+x)` where
+        Prediction uses `(2m-x)/(2m+x)`, `evidence` divided by a different
+        length, and `potential` left out a term -- so the ranking key itself was
+        not comparable between paths. A client reading one of the missing
+        fields got a KeyError for a one-symbol STM and a value for a two-symbol
+        one.
 
         Returns:
             Unranked Prediction objects with placeholder frequency/emotives, ready
@@ -1313,8 +1371,8 @@ class PatternProcessor:
                  alignment) = prediction_info[:11]
 
                 # Placeholder frequency/emotives, exactly as the searcher does:
-                # attach_pattern_metadata fills them for the survivors of pruning,
-                # and nothing before that point reads them.
+                # predictPattern reads the frequency of every candidate before
+                # it scores them and the emotives of the ones it returns.
                 built.append(Prediction(
                     {
                         'name': pattern_dict['name'],
@@ -1370,8 +1428,20 @@ class PatternProcessor:
         - Bypasses expensive filter pipeline
         - Direct ClickHouse batch loading
 
+        Scoring order:
+        - Every candidate above the recall threshold gets its frequency, then
+          the scores that need the whole ensemble (prediction_metrics.score_ensemble).
+        - The candidates are ranked by the settings' rank_sort_algo and cut to
+          max_predictions.
+        - The metrics that describe one prediction at a time (PATTERN_METRICS)
+          and the pattern's emotives are worked out for what is returned.
+        Nothing is cut before it is scored, so no returned value depends on
+        max_predictions.
+
         Args:
             state: Flattened list of symbols representing current STM state.
+            stm_events: The STM's events, as the session holds them. None reads
+                `state` as a single event.
             max_workers: Maximum number of worker threads (defaults to CPU count)
             batch_size: Number of patterns per batch for parallel processing
             settings: This request's settings, from _prediction_settings. None
@@ -1380,8 +1450,9 @@ class PatternProcessor:
 
         Returns:
             PredictionResult: the prediction dictionaries, ranked by the
-            settings' rank_sort_algo and carrying their metrics, and the future
-            potentials aggregated over the scored candidates.
+            settings' rank_sort_algo and carrying their metrics; the future
+            potentials (the probability of each next event) and the chance
+            posterior, both computed over every candidate.
 
         Raises:
             Exception: If async pattern search fails.
@@ -1444,17 +1515,12 @@ class PatternProcessor:
         # for both.
         causal_patterns = self.filter_retired_predictions(causal_patterns)
 
-        # Positional heuristic: with a single-event STM -- a cleared STM's first
-        # observation -- a pattern whose early events hold the observed symbols is
-        # the more likely one, so onset_alignment joins the ranking. With more
-        # events the observation is a window into a sequence and position says
-        # nothing; the term is 0 and rankings are as before.
-        onset_weight = 1.0 if stm_events is not None and sum(1 for e in stm_events if e) == 1 else 0.0
-
-        # Early return if no patterns found
+        # Early return if no patterns found. No learned pattern reached the
+        # recall threshold, so nothing competes with chance for this STM: the
+        # chance posterior is 1.
         if not causal_patterns:
             logger.debug(f" {self.name} [ PatternProcessor predictPattern (async) ] No causal patterns found, returning empty list")
-            return PredictionResult([], [])
+            return PredictionResult([], [], 1.0)
 
         # Validate all predictions have required fields (same validation as sync version)
         for idx, prediction in enumerate(causal_patterns):
@@ -1477,13 +1543,12 @@ class PatternProcessor:
                 extras = p.get('extras', [])
                 pattern_data = p.get('pattern_data', [])
 
-                from itertools import chain as _chain
-                present_flat = list(_chain(*present_events)) if present_events and isinstance(present_events[0], list) else (present_events or [])
-                pattern_flat = list(_chain(*pattern_data)) if pattern_data and isinstance(pattern_data[0], list) else (pattern_data or [])
+                present_flat = list(chain(*present_events)) if present_events and isinstance(present_events[0], list) else (present_events or [])
+                pattern_flat = list(chain(*pattern_data)) if pattern_data and isinstance(pattern_data[0], list) else (pattern_data or [])
 
                 # Handle event-structured extras
                 if extras and isinstance(extras[0], list):
-                    extras_flat = list(_chain(*extras))
+                    extras_flat = list(chain(*extras))
                 else:
                     extras_flat = extras or []
 
@@ -1496,52 +1561,18 @@ class PatternProcessor:
                 p['weighted_confidence'] = (w_matched / w_present) if w_present > 0 else 0.0
                 p['weighted_snr'] = (w_matched / (w_matched + w_extras)) if (w_matched + w_extras) > 0 else 0.0
 
-        # Top-K pruning: reduce candidates before expensive metrics loop
-        # Uses a cheap pre-potential from already-available fields (same formula as
-        # final potential minus itfdf_similarity which hasn't been computed yet).
-        # The onset term must be here too: a lone symbol now selects every pattern
-        # containing it, and pruning without it would drop the patterns that start
-        # with it before the final ranking could prefer them.
-        # itfdf_similarity is bounded [0,1], so a 3x safety margin prevents losing
-        # high-quality predictions that might reorder after full metrics.
-        PRUNING_FACTOR = 3
-        max_for_metrics = settings.max_predictions * PRUNING_FACTOR
-        if len(causal_patterns) > max_for_metrics:
-            original_count = len(causal_patterns)
-            for p in causal_patterns:
-                frag = p['fragmentation']
-                p['_pre_potential'] = (
-                    (p['evidence'] + p['confidence']) * p['snr']
-                    + (0.0 if frag == -1 else 1.0 / (frag + 1))
-                    + onset_weight * p['onset_alignment']
-                )
-            # Same total order as the final ranking: ties here decide which
-            # candidates even reach the metrics loop, so settling them by
-            # arrival order would make the final result non-deterministic too.
-            causal_patterns = rank_predictions(
-                causal_patterns, '_pre_potential', max_for_metrics
-            )
-            logger.debug(f"Top-K pruning: kept {len(causal_patterns)} of {original_count} candidates for metrics loop")
-
-        # Now that the list is cut to its final size, fetch the pattern metadata.
-        # The searcher builds predictions with placeholder frequency/emotives
-        # precisely so this can happen here: fetching before the prune meant a
-        # ClickHouse+Redis lookup for every pattern that matched -- the whole
-        # node under the default empty filter_pipeline -- to populate two fields
-        # on a list about to be cut to max_predictions * 3. That cost scaled with
-        # the corpus; this does not. Everything that reads frequency or emotives
-        # (total_ensemble_pattern_frequencies, patternProbability,
-        # itfdf_similarity, average_emotives, the Bayesian priors) runs below
-        # this line.
-        # Also returns the precomputed entropy/tf metrics from the same rows,
-        # so the second read of patterns_metadata below is no longer needed.
-        precomputed_metrics = searcher.attach_pattern_metadata(causal_patterns)
+        # Every candidate is scored before anything is cut. `potential` and the
+        # prior need each pattern's frequency, and the posterior,
+        # future_potentials and predictive_information are sums over all the
+        # candidates: cut first, and their values depend on the cut and on
+        # max_predictions. So the frequencies are read here, for all of them,
+        # in chunked MGETs against Redis. The rest of a pattern's metadata
+        # (emotives, the precomputed entropy and tf columns) is a ClickHouse
+        # lookup per chunk of names and is read further down, for the
+        # predictions that are returned.
+        self._attach_frequencies(causal_patterns)
 
         try:
-            # Pre-calculate symbol probability cache using optimized aggregation pipeline
-            symbol_probability_cache = {}
-            total_ensemble_pattern_frequencies = 0
-
             # Read the global counters fresh on every prediction, rather than
             # memoising them per process. They are three small integers in one
             # MGET, and caching them was a source of cross-worker divergence:
@@ -1550,8 +1581,6 @@ class PatternProcessor:
             # MGET also returns stats_version, which tells the (genuinely
             # expensive) symbol table whether another process changed the data.
             global_metadata = self.superkb.redis_writer.get_global_metadata()
-            total_pattern_frequencies = global_metadata.get('total_pattern_frequencies', 0)
-            total_unique_patterns = global_metadata.get('total_unique_patterns', 1)  # Use 1 to avoid div by zero
             stats_version = global_metadata.get('stats_version', 0)
 
             # Load all symbols (cached by QueryManager, validated against the
@@ -1562,105 +1591,65 @@ class PatternProcessor:
             total_symbols = len(symbol_cache)
             logger.debug(f"Loaded {total_symbols} symbols using optimized aggregation pipeline (async)")
 
-            def _corpus_probability(symbol: str) -> float:
-                """Probability that a random pattern contains `symbol`."""
-                symbol_data = symbol_cache.get(symbol)
-                if symbol_data is None or total_unique_patterns <= 0:
-                    return 0.0
-                return float(symbol_data['pattern_member_frequency'] / total_unique_patterns)
+            node = NodeStatistics(
+                symbol_cache,
+                global_metadata.get('total_symbols_in_patterns_frequencies', 0),
+                global_metadata.get('total_pattern_frequencies', 0),
+                global_metadata.get('total_unique_patterns', 0),
+            )
+            # The STM as the candidates were matched against it. A caller that
+            # passes no event structure gets the state read as one event.
+            observation = Observation(stm_events if stm_events and any(stm_events) else [state], node)
 
-            # Calculate totals and caches
-            for prediction in causal_patterns:
-                total_ensemble_pattern_frequencies += prediction['frequency']
-                # Flatten missing if it's event-structured (list of lists)
-                missing_symbols_calc = prediction['missing']
-                if missing_symbols_calc and isinstance(missing_symbols_calc[0], list):
-                    missing_symbols_calc = [s for event in missing_symbols_calc for s in event]
-                for symbol in itertools.chain(prediction['matches'], missing_symbols_calc):
-                    if symbol not in symbol_probability_cache:
-                        # total_unique_patterns, not total frequency: pattern-based
-                        # probability, in units compatible with pattern_member_frequency.
-                        symbol_probability_cache[symbol] = _corpus_probability(symbol)
+            # Sets bayesian_prior, bayesian_likelihood, good_odds, potential,
+            # bayesian_posterior and predictive_information on every candidate.
+            scores = score_ensemble(causal_patterns, observation, node)
+            if scores.candidate_frequency > node.total_pattern_frequency:
+                # total_pattern_frequencies counts every learn, so it can never
+                # be smaller than the frequencies of some of the node's
+                # patterns. A node whose counter was written before it counted
+                # re-learns is the one way it is; the priors are then taken
+                # against the candidates' own total, which keeps them at or
+                # below 1, until the counter is recounted.
+                logger.warning(
+                    "%s total_pattern_frequencies is %d but the %d candidates of this request were learned "
+                    "%d times. Recount it with scripts/recount_pattern_frequencies.py.",
+                    self.kb_id, node.total_pattern_frequency, len(causal_patterns), scores.candidate_frequency,
+                )
 
-            symbol_frequency_in_state = Counter(state)
+            def ranked(predictions):
+                # rank_predictions tie-breaks on the pattern name, which is what
+                # makes repeated identical requests return the same predictions
+                # in the same order -- see its docstring.
+                try:
+                    return rank_predictions(predictions, settings.rank_sort_algo, settings.max_predictions)
+                except KeyError:
+                    raise ValueError(f"Invalid rank_sort_algo '{settings.rank_sort_algo}': metric not found in predictions. Available metrics: {list(predictions[0].keys()) if predictions else 'none'}")
+                except Exception as e:
+                    raise Exception(f"\nException in PatternProcessor.predictPattern (async): Error in sorting predictions! {self.kb_id}: {e}")
 
-            if total_ensemble_pattern_frequencies == 0:
-                logger.warning(f" {self.name} [ PatternProcessor predictPattern (async) ] total_ensemble_pattern_frequencies is 0")
+            # Rank and cut as soon as the ranking key exists. The metrics below
+            # describe one prediction at a time, so they are worked out only
+            # for the predictions that are returned -- unless the session ranks
+            # by one of them, in which case every candidate needs it first.
+            rank_after_pattern_metrics = settings.rank_sort_algo in PATTERN_METRICS
+            if not rank_after_pattern_metrics:
+                causal_patterns = ranked(causal_patterns)
 
-            # Pre-computed pattern-intrinsic metrics (entropy, normalized_entropy,
-            # global_normalized_entropy, tf_vector) came back with the metadata
-            # attached above. They live in the same patterns_metadata rows and
-            # the same query already selected them, so reading them here a second
-            # time was a duplicate round trip for information already in hand.
+            # Emotives, and the precomputed entropy/tf metrics from the same
+            # patterns_metadata rows.
+            precomputed_metrics = searcher.attach_pattern_metadata(causal_patterns)
             precomputed_hit = len(precomputed_metrics)
-            precomputed_miss = len(causal_patterns) - precomputed_hit
             if precomputed_hit > 0:
-                logger.debug(f"Pre-computed metrics: {precomputed_hit} hits, {precomputed_miss} misses")
+                logger.debug(f"Pre-computed metrics: {precomputed_hit} hits, {len(causal_patterns) - precomputed_hit} misses")
 
-            # Vectorized cosine distance: batch compute all distances before the loop
-            N = len(causal_patterns)
-            present_lists = []
-            all_present_symbols = set()
             for prediction in causal_patterns:
-                _present = list(chain(*prediction.present))
-                present_lists.append(_present)
-                all_present_symbols.update(_present)
-
-            global_symbols = sorted(all_present_symbols | set(state))
-            symbol_to_idx = {s: i for i, s in enumerate(global_symbols)}
-            D = len(global_symbols)
-
-            # Pre-compute state vector once (weighted by symbol_probability_cache)
-            state_vec = np.zeros(D)
-            for symbol, count in symbol_frequency_in_state.items():
-                if symbol in symbol_to_idx:
-                    state_vec[symbol_to_idx[symbol]] = symbol_probability_cache.get(symbol, 0) * count
-            state_norm = np.linalg.norm(state_vec)
-
-            # Build pattern frequency matrix (N x D)
-            pattern_matrix = np.zeros((N, D))
-            for i, _present in enumerate(present_lists):
-                for symbol, count in Counter(_present).items():
-                    if symbol in symbol_to_idx:
-                        pattern_matrix[i, symbol_to_idx[symbol]] = symbol_probability_cache.get(symbol, 0) * count
-
-            # Batch cosine distance computation
-            if state_norm > 0:
-                dots = pattern_matrix @ state_vec
-                pattern_norms = np.linalg.norm(pattern_matrix, axis=1)
-                denom = pattern_norms * state_norm
-                cosine_sims = np.where(denom > 0, dots / denom, 0.0)
-                distances = 1.0 - cosine_sims
-            else:
-                distances = np.ones(N)
-
-            # Process predictions with metrics calculations
-            for i, prediction in enumerate(causal_patterns):
-                _present = present_lists[i]
-                distance = float(distances[i])
-                _p_e_h = float(self.patternProbability(prediction['frequency'], total_pattern_frequencies))
-
-                if total_ensemble_pattern_frequencies > 0:
-                    itfdf_similarity = 1 - (distance * prediction['frequency'] / total_ensemble_pattern_frequencies)
-                else:
-                    itfdf_similarity = 0.0
-
-                # Calculate confluence with conditional probability caching if available
-                # Let exceptions propagate - client should receive HTTP 500 on calculation failure
-                if len(_present) > 0:
-                    if self.cached_calculator:
-                        try:
-                            conditional_prob = await self.cached_calculator.conditional_probability_cached(
-                                _present, symbol_probability_cache
-                            )
-                            confluence_val = _p_e_h * (1 - conditional_prob)
-                        except Exception as e:
-                            logger.debug(f"Cached conditional probability failed: {e}, falling back to direct calculation")
-                            confluence_val = _p_e_h * (1 - confluence(_present, symbol_probability_cache))
-                    else:
-                        confluence_val = _p_e_h * (1 - confluence(_present, symbol_probability_cache))
-                else:
-                    confluence_val = 0.0
+                # The pattern's own events. They are what past, present and
+                # future were cut from, so the three rebuild them if needed.
+                pattern_events = prediction.get('pattern_data') or (
+                    prediction['past'] + prediction['present'] + prediction['future'])
+                pattern_symbols = [s for event in pattern_events for s in event]
+                pattern_length = len(pattern_symbols)
 
                 # Average emotives (convert from list of dicts to single dict)
                 try:
@@ -1671,159 +1660,66 @@ class PatternProcessor:
                     raise
 
                 # Pattern-intrinsic entropy metrics: use pre-computed if available
-                pred_name = prediction.get('name', '')
-                precomp = precomputed_metrics.get(pred_name)
+                precomp = precomputed_metrics.get(prediction.get('name', ''))
+                symbol_counts = Counter(pattern_symbols)
 
                 if precomp:
                     entropy_val = precomp['entropy']
                     normalized_entropy_val = precomp['normalized_entropy']
                     global_normalized_entropy_val = precomp['global_normalized_entropy']
-                else:
+                elif pattern_symbols:
                     # Fallback: compute at runtime (pattern predates finalize-training).
                     # These are pattern-intrinsic, so they are computed over the
                     # whole pattern exactly as finalize_training does -- not over
                     # `present`, which is only the matched events and gave the same
                     # pattern a different value before and after finalization.
-                    pattern_symbols = [s for event in prediction['pattern_data'] for s in event]
-                    pattern_length = len(pattern_symbols)
-                    if pattern_symbols:
-                        symbol_counts = Counter(pattern_symbols)
-                        # Shannon entropy (log base 2)
-                        entropy_val = 0.0
-                        for count in symbol_counts.values():
-                            if count > 0:
-                                p = count / pattern_length
-                                entropy_val -= p * log2(p)
-                        normalized_entropy_val = normalized_entropy(pattern_symbols, total_symbols)
-                        # Not symbol_probability_cache: that holds only matched and
-                        # missing symbols, so past/future symbols would read as 0.
-                        # finalize_training uses the whole symbol table; so must this.
-                        pattern_probabilities = {
-                            symbol: _corpus_probability(symbol) for symbol in set(pattern_symbols)
-                        }
-                        global_normalized_entropy_val = global_normalized_entropy(
-                            pattern_symbols, pattern_probabilities, total_symbols
-                        )
-                    else:
-                        entropy_val = 0.0
-                        normalized_entropy_val = 0.0
-                        global_normalized_entropy_val = 0.0
-
-                # TF-IDF: use pre-computed TF vector if available, else compute at runtime
-                if precomp and total_unique_patterns > 0:
-                    tf_vector = precomp['tf_vector']
-                    tfidf_scores = []
-                    for symbol, tf in tf_vector.items():
-                        if symbol in symbol_probability_cache:
-                            patterns_with_symbol = int(symbol_probability_cache[symbol] * total_unique_patterns)
-                            if patterns_with_symbol == 0:
-                                patterns_with_symbol = 1
-                        else:
-                            patterns_with_symbol = 1
-                        idf = log2(total_unique_patterns / patterns_with_symbol) + 1
-                        tfidf_scores.append(tf * idf)
-                    tfidf_score = sum(tfidf_scores) / len(tfidf_scores) if tfidf_scores else 0.0
+                    # Shannon entropy (log base 2)
+                    entropy_val = 0.0
+                    for count in symbol_counts.values():
+                        if count > 0:
+                            p = count / pattern_length
+                            entropy_val -= p * log2(p)
+                    normalized_entropy_val = normalized_entropy(pattern_symbols, total_symbols)
+                    # The whole symbol table, as finalize_training uses: every
+                    # symbol of the pattern has its own share of the node's
+                    # patterns, whether or not it was observed.
+                    pattern_probabilities = {
+                        symbol: node.pattern_share(symbol) for symbol in symbol_counts
+                    }
+                    global_normalized_entropy_val = global_normalized_entropy(
+                        pattern_symbols, pattern_probabilities, total_symbols
+                    )
                 else:
-                    # Fallback: compute TF and IDF at runtime, over the whole
-                    # pattern to match the pre-computed tf_vector.
-                    if not precomp:
-                        pattern_symbols = [s for event in prediction['pattern_data'] for s in event]
-                    else:
-                        pattern_symbols = []  # precomp exists but total_unique_patterns == 0
-                    # Counter, not repeated list.count(): counting each unique
-                    # symbol by rescanning the list is O(n^2) in pattern length.
-                    symbol_counts = Counter(pattern_symbols)
-                    pattern_length = len(pattern_symbols)
+                    entropy_val = 0.0
+                    normalized_entropy_val = 0.0
+                    global_normalized_entropy_val = 0.0
 
-                    if pattern_length > 0 and total_unique_patterns > 0:
-                        tfidf_scores = []
-                        for symbol, symbol_count in symbol_counts.items():
-                            tf = symbol_count / pattern_length
-                            if symbol in symbol_probability_cache:
-                                patterns_with_symbol = int(symbol_probability_cache[symbol] * total_unique_patterns)
-                                if patterns_with_symbol == 0:
-                                    patterns_with_symbol = 1
-                            else:
-                                patterns_with_symbol = 1
-                            idf = log2(total_unique_patterns / patterns_with_symbol) + 1
-                            tfidf_scores.append(tf * idf)
-                        tfidf_score = sum(tfidf_scores) / len(tfidf_scores) if tfidf_scores else 0.0
-                    else:
-                        tfidf_score = 0.0
+                # TF-IDF: the pre-computed TF vector if there is one, else the
+                # same shares counted from the pattern.
+                tf_vector = precomp.get('tf_vector') if precomp else None
+                if not tf_vector:
+                    tf_vector = {symbol: count / pattern_length for symbol, count in symbol_counts.items()}
 
-                # Update prediction with calculated values
                 prediction.update({
                     'entropy': entropy_val,
                     'normalized_entropy': normalized_entropy_val,
                     'global_normalized_entropy': global_normalized_entropy_val,
-                    'itfdf_similarity': itfdf_similarity,
-                    'confluence': confluence_val,
-                    'tfidf_score': tfidf_score
+                    'itfdf_similarity': itfdf_similarity(
+                        observation, prediction['present'], prediction['frequency'],
+                        scores.candidate_frequency, node),
+                    'confluence': confluence(
+                        pattern_events, prediction['frequency'], scores.total_pattern_frequency, node),
+                    'tfidf_score': tfidf_score(tf_vector, node),
                 })
 
                 # Remove pattern_data to save bandwidth
                 prediction.pop('pattern_data', None)
 
-            # Calculate ensemble-based predictive information for metrics
-            # Let exceptions propagate - client should receive HTTP 500 on calculation failure
-            causal_patterns, future_potentials = calculate_ensemble_predictive_information(causal_patterns)
+            if rank_after_pattern_metrics:
+                causal_patterns = ranked(causal_patterns)
 
-            # Vectorized Bayesian posterior probabilities
-            # P(pattern|obs) = P(obs|pattern) × P(pattern) / P(obs)
-            freqs = np.array([p.get('frequency', 1) for p in causal_patterns], dtype=float)
-            sims = np.array([p['similarity'] for p in causal_patterns], dtype=float)
-            sum_freqs = freqs.sum()
-
-            if sum_freqs > 0:
-                priors = freqs / sum_freqs
-                evidence_sum = np.dot(sims, priors)
-                if evidence_sum > 0:
-                    posteriors = (sims * priors) / evidence_sum
-                else:
-                    posteriors = np.zeros(len(freqs))
-                for i, p in enumerate(causal_patterns):
-                    p['bayesian_posterior'] = float(posteriors[i])
-                    p['bayesian_prior'] = float(priors[i])
-                    p['bayesian_likelihood'] = float(sims[i])
-            else:
-                for p in causal_patterns:
-                    p['bayesian_posterior'] = 0.0
-                    p['bayesian_prior'] = 0.0
-                    p['bayesian_likelihood'] = p['similarity']
-
-            logger.debug(f"Calculated Bayesian posteriors for {len(causal_patterns)} predictions")
-
-            # Vectorized potential calculation
-            # potential = (evidence + confidence) * snr + itfdf_similarity + (1/(fragmentation + 1))
-            #             + onset_alignment (single-event STM only)
-            # Use weighted metrics when available
-            use_weighted = weights and any(p.get('weighted_evidence') is not None for p in causal_patterns)
-            evidence_arr = np.array([p.get('weighted_evidence', p['evidence']) if use_weighted else p['evidence'] for p in causal_patterns])
-            confidence_arr = np.array([p.get('weighted_confidence', p['confidence']) if use_weighted else p['confidence'] for p in causal_patterns])
-            snr_arr = np.array([p.get('weighted_snr', p['snr']) if use_weighted else p['snr'] for p in causal_patterns])
-            itfdf_arr = np.array([p.get('itfdf_similarity', 0.0) for p in causal_patterns])
-            frag_arr = np.array([p['fragmentation'] for p in causal_patterns])
-            frag_contrib = np.where(frag_arr == -1, 0.0, 1.0 / (frag_arr + 1))
-            onset_arr = np.array([p['onset_alignment'] for p in causal_patterns])
-            potentials = (evidence_arr + confidence_arr) * snr_arr + itfdf_arr + frag_contrib + onset_weight * onset_arr
-            for i, p in enumerate(causal_patterns):
-                p['potential'] = float(potentials[i])
-
-            try:
-                # Rank using the configurable algorithm (default: 'potential').
-                # rank_predictions tie-breaks on the pattern name, which is what
-                # makes repeated identical requests return the same predictions
-                # in the same order -- see its docstring.
-                active_causal_patterns = rank_predictions(
-                    causal_patterns, settings.rank_sort_algo, settings.max_predictions
-                )
-            except KeyError:
-                raise ValueError(f"Invalid rank_sort_algo '{settings.rank_sort_algo}': metric not found in predictions. Available metrics: {list(causal_patterns[0].keys()) if causal_patterns else 'none'}")
-            except Exception as e:
-                raise Exception(f"\nException in PatternProcessor.predictPattern (async): Error in sorting predictions! {self.kb_id}: {e}")
-
-            logger.debug(f" [ PatternProcessor predictPattern (async) ] {len(active_causal_patterns)} active_causal_patterns")
-            return PredictionResult(active_causal_patterns, future_potentials)
+            logger.debug(f" [ PatternProcessor predictPattern (async) ] {len(causal_patterns)} predictions returned")
+            return PredictionResult(causal_patterns, scores.future_potentials, scores.chance_posterior)
 
         except Exception as e:
             raise Exception(f"\nException in PatternProcessor.predictPattern (async): Error in metrics calculation! {self.kb_id}: {e}")
@@ -1840,8 +1736,9 @@ class PatternProcessor:
             config: Optional SessionConfiguration with prediction parameters
 
         Returns:
-            PredictionResult with the predictions and their future potentials;
-            both are empty when the STM holds no symbols.
+            PredictionResult with the predictions, their future potentials and
+            the chance posterior. When the STM holds no symbols nothing is
+            predicted: both lists are empty and the chance posterior is None.
         """
         # Flatten STM to state
         state = list(chain(*stm))

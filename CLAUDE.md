@@ -189,7 +189,7 @@ POST /sessions/{session_id}/config
 ## Key Behavioral Properties (Quick Reference)
 
 ### Critical Rules
-1. **Minimum Sequence Length**: 1+ strings in STM required for predictions. A single symbol uses the fast path `_single_symbol_candidates`, which skips the filter pipeline and selects every pattern containing the symbol, in any event. For a single-event STM, `potential` adds `onset_alignment`, so patterns that start with the observed symbols rank first.
+1. **Minimum Sequence Length**: 1+ strings in STM required for predictions. A single symbol uses the fast path `_single_symbol_candidates`, which skips the filter pipeline and selects every pattern containing the symbol, in any event. `potential` scores a pattern higher the less of it lies before the match (its `evidence_to_end` term), so for a one-symbol STM patterns that start with the symbol rank first, other things equal; `onset_alignment` reports the position and is not a term of `potential`.
 2. **Alphanumeric Sorting**: Strings sorted within events. `sort_symbols` is stored per session and derived from `use_token_matching`, but it **does not currently affect sorting**: `ObservationProcessor` is constructed with `pattern_processor.sort` (`kato_processor.py:86`), and a processor is shared by every session on a node — so the node's default wins and a per-session override has no effect. Verified: two sessions on one node with `sort_symbols` true and false produce identically sorted events. Tracked as a P2; fixing it changes pattern hashes for anyone relying on the shared default.
 3. **Deterministic**: Same inputs → same outputs (always)
 4. **Session Isolation**: Each session has isolated STM, shared LTM per node_id

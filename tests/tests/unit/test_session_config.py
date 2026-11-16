@@ -17,6 +17,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 from fixtures.kato_fixtures import kato_fixture as kato_fixture
 
+from kato.config.session_config import VALID_RANK_SORT_ALGORITHMS
+
 
 def test_session_creation_with_default_config(kato_fixture):
     """Test that new sessions start with default configuration values."""
@@ -246,15 +248,12 @@ def test_config_rank_sort_algorithms(kato_fixture):
     kato = kato_fixture
     kato.clear_all_memory()
 
-    # Test setting different valid ranking algorithms
-    valid_algorithms = [
-        'potential', 'similarity', 'evidence', 'confidence', 'snr',
-        'fragmentation', 'frequency', 'normalized_entropy',
-        'bayesian_posterior', 'bayesian_prior', 'bayesian_likelihood',
-        'tfidf_score', 'predictive_information'
-    ]
+    # Every numeric metric of a prediction can be the ranking key.
+    assert {'potential', 'good_odds', 'entropy', 'confluence', 'predictive_information',
+            'bayesian_posterior', 'itfdf_similarity', 'tfidf_score', 'frequency',
+            'weighted_similarity', 'onset_alignment'} <= set(VALID_RANK_SORT_ALGORITHMS)
 
-    for algorithm in valid_algorithms:
+    for algorithm in VALID_RANK_SORT_ALGORITHMS:
         result = kato.update_config({'rank_sort_algo': algorithm})
         assert result.get('status') == 'okay', \
             f"Failed to set rank_sort_algo={algorithm}: {result}"

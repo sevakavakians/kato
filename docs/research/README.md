@@ -14,13 +14,14 @@ Welcome to the KATO research documentation! This section covers the theoretical 
 
 ### Algorithms
 - **[Pattern Matching](pattern-matching.md)** - Similarity and matching algorithms
-- **[Predictive Information](predictive-information.md)** - Prediction generation
+- **[Predictive Information](predictive-information.md)** - Bits the short-term memory carries about the next event
 - **[Vector Processing](vector-processing.md)** - Embedding and similarity
 
 ### Metrics & Calculations
 - **[Similarity Metrics](similarity-metrics.md)** - ITFDF, LCS, token vs character
 - **[Entropy Calculations](entropy-calculations.md)** - Normalized entropy
-- **[Potential Function](potential-function.md)** - Prediction ranking
+- **[Potential Function](potential-function.md)** - Prediction ranking: the eleven terms, their weights and how they were fitted
+- **[Bayesian Framework](bayesian-framework-for-kato.md)** - Good-odds, weight of evidence, the posterior and the chance hypothesis
 
 ### Multi-Modal Processing
 - **[Emotives Processing](emotives-processing.md)** - Emotional context modeling

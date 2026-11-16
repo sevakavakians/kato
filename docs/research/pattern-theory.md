@@ -565,7 +565,7 @@ patterns = [
 ]
 
 # Given observation ["A"], ["B"]
-# Predict: ["C"] (potential = 2.0) or ["D"] (potential = 1.0)
+# Predict: ["C"] (potential = 17.67, probability 0.616) or ["D"] (potential = 17.20, probability 0.384)
 ```
 
 ### Anomaly Detection

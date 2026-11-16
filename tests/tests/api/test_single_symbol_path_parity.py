@@ -6,11 +6,11 @@ running the filter pipeline. That is a legitimate optimisation of *selection*.
 What it must not change is the prediction.
 
 It did. The fast path used to compute its own metrics and return early, so a
-one-symbol STM produced predictions missing fourteen fields the normal path
-returns, and disagreeing on three it did return:
+one-symbol STM produced predictions missing fields the normal path returns, and
+disagreeing on three it did return:
 
-  * `potential` -- the ranking key -- omitted the `itfdf_similarity` term, so
-    scores from the two paths were not comparable at all;
+  * `potential` -- the ranking key -- left out a term, so scores from the two
+    paths were not comparable at all;
   * `snr` used m/(m+x) where Prediction uses (2m-x)/(2m+x);
   * `evidence` divided by a different length.
 
@@ -29,6 +29,8 @@ import pytest
 import requests
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from kato.informatics.prediction_metrics import POTENTIAL_WEIGHTS as W
 
 
 def _base_url():
@@ -73,7 +75,7 @@ def _predict(session_id, observe):
 def test_one_symbol_returns_the_same_fields_as_two():
     """The field set must not depend on how many symbols are in STM.
 
-    This is the regression that started it: fourteen fields were absent on the
+    This is the regression that started it: fields were absent on the
     one-symbol path, so the same client code raised KeyError for one STM length
     and worked for another.
     """
@@ -93,11 +95,11 @@ def test_one_symbol_returns_the_same_fields_as_two():
 @pytest.mark.parametrize("field", [
     "predictive_information", "confluence", "entropy", "normalized_entropy",
     "global_normalized_entropy", "itfdf_similarity", "tfidf_score",
-    "pattern_probability", "bayesian_prior", "bayesian_likelihood",
-    "bayesian_posterior", "weighted_strength", "type", "sequence",
+    "good_odds", "bayesian_prior", "bayesian_likelihood",
+    "bayesian_posterior", "type", "sequence",
 ])
 def test_one_symbol_populates_every_previously_missing_field(field):
-    """Each of the fourteen, named individually so a regression says which one."""
+    """Each one named individually, so a regression says which."""
     session_id, _ = _session()
     _learn(session_id, ["sq_a", "sq_b", "sq_c"], emotives={"joy": 0.4})
 
@@ -113,25 +115,31 @@ def test_one_symbol_populates_every_previously_missing_field(field):
 def test_one_symbol_potential_uses_the_shared_formula():
     """`potential` is the ranking key, so the two paths must compute it alike.
 
-    The fast path used the pre-potential formula -- the real one minus
-    `itfdf_similarity` -- which made its scores incomparable with the normal
-    path's rather than merely imprecise.
+    The fast path once computed it by a formula of its own, which made its
+    scores incomparable with the normal path's rather than merely imprecise.
 
-    A one-symbol STM is a single event, so the shared formula includes the
-    `onset_alignment` term.
+    One pattern of four single-symbol events, and its first symbol observed:
+    one match, nothing missing, nothing extra, nothing before the match. Every
+    term that is a share is 1, and the pattern was learned once.
     """
     session_id, _ = _session()
     _learn(session_id, ["sr_a", "sr_b", "sr_c", "sr_d"], emotives={"joy": 0.5})
 
-    prediction = _predict(session_id, ["sr_a"])["predictions"][0]
-    frag = prediction["fragmentation"]
-    expected = (
-        (prediction["evidence"] + prediction["confidence"]) * prediction["snr"]
-        + prediction["itfdf_similarity"]
-        + (0.0 if frag == -1 else 1.0 / (frag + 1))
-        + prediction["onset_alignment"]
+    one_symbol = (
+        W["snr"] + W["inverse_fragmentation"]
+        + W["last_event_matched"] + W["last_event_share"]
+        + W["recency_07"] + W["recency_09"]
+        + W["tversky"] + W["cosine_idf_present"] + W["evidence_to_end"]
     )
-    assert prediction["potential"] == pytest.approx(expected, rel=1e-9, abs=1e-12)
+    prediction = _predict(session_id, ["sr_a"])["predictions"][0]
+    assert prediction["potential"] == pytest.approx(one_symbol, rel=1e-9, abs=1e-12)
+
+    # Two symbols go through the normal path. The match is as clean; the one
+    # thing that differs is the second matched symbol, one event back from the
+    # newest: 0.7 and 0.9 more in the two recency terms.
+    two_symbols = _predict(session_id, ["sr_a", "sr_b"])["predictions"][0]
+    assert two_symbols["potential"] - prediction["potential"] == pytest.approx(
+        0.7 * W["recency_07"] + 0.9 * W["recency_09"], rel=1e-9)
 
 
 def test_one_symbol_snr_uses_the_prediction_formula():
@@ -173,9 +181,9 @@ def test_one_symbol_reports_future_potentials():
     assert response["predictions"], "should predict from a single symbol"
     potentials = response["future_potentials"]
     assert potentials, "future_potentials should be populated for a single-symbol state"
-    entry = potentials[0]
-    for key in ("future", "aggregate_potential", "supporting_patterns", "total_weighted_frequency"):
-        assert key in entry, f"future_potentials entry missing {key}"
+    # One pattern: the event after the observed symbol is the next event, for certain.
+    assert potentials == [{"next_event": ["st_b"], "probability": 1.0, "supporting_patterns": 1}]
+    assert isinstance(response["chance_posterior"], float)
 
 
 # ------------------------------------------------------------------ regressions

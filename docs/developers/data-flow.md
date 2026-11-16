@@ -408,9 +408,10 @@ class Prediction:
 
     # Metrics
     similarity: float          # Overall similarity score
-    potential: float          # Predictive information
+    potential: float          # Ranking score (weighted sum of eleven match terms)
+    good_odds: float          # Posterior log-odds against chance, in bits
     confidence: float         # Evidence-based confidence
-    evidence: float           # Observation count / max
+    evidence: float           # Share of the pattern observed
 ```
 
 ### Prediction Formatting
@@ -467,16 +468,27 @@ def _format_prediction(
       "missing": [["bus"]],
       "extras": [[]],
       "similarity": 0.85,
-      "potential": 0.72,
+      "potential": 14.21,
+      "good_odds": 6.3,
       "confidence": 0.91,
       "evidence": 0.15,
       "pattern_name": "PTN|abc123"
     }
   ],
+  "future_potentials": [
+    {"next_event": ["arrive", "work"], "probability": 1.0, "supporting_patterns": 1}
+  ],
+  "chance_posterior": 0.012,
   "stm": [["commute", "train"]],
   "stm_length": 1
 }
 ```
+
+Every candidate above the recall threshold is scored before the list is ranked
+and cut to `max_predictions`, so `future_potentials`, `chance_posterior` and
+each returned prediction's values do not depend on the cut. The fields and
+their formulas are in the
+[Prediction Object Reference](../reference/prediction-object.md).
 
 ## Data Flow Optimization Points
 

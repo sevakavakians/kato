@@ -190,9 +190,10 @@ while the second reports it as **future**.
 
 A lone `[['B']]` also predicts this pattern, with `past: [['A']]` and
 `present: [['B']]`. A single symbol matches every pattern that contains it, in
-any event. When the STM is a single event, `potential` includes
-`onset_alignment`, so patterns that *start* with the observed symbols rank
-above patterns that hold them later.
+any event. `potential` scores a pattern higher the less of it lies before the
+match, so patterns that *start* with the observed symbols rank above patterns
+that hold them later, other things equal. `onset_alignment` reports the
+position.
 
 ##### Partial Match with Missing Symbols
 ```python
@@ -259,7 +260,7 @@ observe({'strings': ['happy']})
 - Tokens with high absolute affinity for the chosen emotive are treated as signal
 - Tokens with near-zero affinity are treated as noise and discounted in similarity
 - Predictions include both standard and weighted metrics (`weighted_similarity`, etc.)
-- The `potential` ranking uses weighted metrics, so signal-rich matches rank higher
+- To rank signal-rich matches first, set `rank_sort_algo` to a weighted metric such as `weighted_similarity`; the default key, `potential`, does not read them
 
 ```python
 # Configure session to weight by "cost" emotive

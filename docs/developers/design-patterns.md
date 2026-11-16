@@ -556,7 +556,7 @@ prediction = (PredictionBuilder()
     .set_future(future_events)
     .calculate_missing(pattern.events, stm)
     .calculate_extras(stm, pattern.events)
-    .set_metrics(similarity=0.85, potential=0.72, confidence=0.91, evidence=0.15)
+    .set_metrics(similarity=0.85, potential=14.21, confidence=0.91, evidence=0.15)
     .build()
 )
 ```

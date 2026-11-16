@@ -189,26 +189,29 @@ Information-theoretic calculations and metrics.
 ```
 informatics/
 ├── __init__.py
+├── extractor.py             # Sequence matching (alignment of a pattern and the STM)
 ├── knowledge_base.py        # Knowledge base operations
-├── normalized_entropy.py    # Entropy calculations
-├── potential_function.py    # Predictive information
-└── metrics.py              # Various metrics
+├── metrics.py               # Entropy functions, emotive and metadata accumulation
+└── prediction_metrics.py    # Prediction scores that read the node's counts
 ```
 
 **Key Files**:
-- **normalized_entropy.py**: Shannon entropy, information content
-- **potential_function.py**: Predictive potential calculations
-- **metrics.py**: Similarity, confidence, evidence metrics
+- **extractor.py**: Sequence matcher behind `matches`, `missing`, `extras` and the past / present / future split
+- **metrics.py**: Normalized entropy, global normalized entropy, emotive averaging, metadata accumulation
+- **prediction_metrics.py**: `potential`, `good_odds`, the Bayesian fields, `future_potentials`, `predictive_information`, `confluence`, `tfidf_score` and `itfdf_similarity`, as pure functions of a prediction's match fields, the STM and the node's counts
 
 **Usage**:
 ```python
-from kato.informatics import calculate_potential
+from kato.informatics.prediction_metrics import NodeStatistics, Observation, score_ensemble
 
-potential = calculate_potential(
-    past_entropy=0.5,
-    future_entropy=0.8,
-    evidence=0.9
-)
+node = NodeStatistics(symbol_table, total_symbol_occurrences, total_pattern_frequency, pattern_count)
+observation = Observation(stm_events, node)
+
+# Sets bayesian_prior, bayesian_likelihood, good_odds, potential, bayesian_posterior
+# and predictive_information on every candidate, and returns the ensemble's figures.
+scores = score_ensemble(candidates, observation, node)
+scores.future_potentials     # probability of each next event
+scores.chance_posterior      # probability that no learned pattern explains the STM
 ```
 
 ### kato/representations/ - Data Models

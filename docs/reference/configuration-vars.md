@@ -177,7 +177,7 @@ Where `aff(t, e)` is the cumulative affinity of symbol `t` for emotive `e`, `fre
 - `weighted_similarity` — affinity-weighted Dice-Sorensen coefficient
 - `weighted_evidence`, `weighted_confidence`, `weighted_snr` — weighted versions of standard metrics
 
-The `potential` ranking formula uses the weighted metrics, so predictions with strong emotive signal are ranked higher.
+To rank predictions by emotive signal, set `rank_sort_algo` to one of the weighted metrics, for example `weighted_similarity`. The default key, `potential`, does not read them.
 
 **Configuration via API**:
 ```bash

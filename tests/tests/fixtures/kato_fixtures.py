@@ -364,6 +364,17 @@ class KATOFastAPIFixture:
         result = response.json()
         return result.get('predictions', [])
 
+    def get_predictions_response(self) -> dict[str, Any]:
+        """The whole predictions response: the predictions, and the figures
+        computed over their ensemble (future_potentials, chance_posterior)."""
+        if not self.services_available:
+            pytest.skip("KATO services not available")
+
+        self._ensure_session()
+        response = self.requests_session.get(f"{self.base_url}/sessions/{self.session_id}/predictions")
+        response.raise_for_status()
+        return response.json()
+
     def learn(self) -> str:
         """Force learning of current short-term memory."""
         if not self.services_available:

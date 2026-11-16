@@ -210,7 +210,8 @@ similarity = calculate_similarity(stm, pattern)  # Always 0.667
 ```python
 # Consistent ordering by potential
 predictions = get_predictions()
-# Sorted by: potential = (evidence + confidence) * snr + itfdf + (1/(frag+1))
+# Sorted by potential, a weighted sum of eleven match terms with fixed weights.
+# Equal scores are ordered by pattern name.
 # Same inputs → same ordering
 ```
 
@@ -258,7 +259,8 @@ prediction = {
     "missing": [["train"]],               # Expected but not observed
     "extras": [["bus"]],                  # Observed but not expected
     "confidence": 0.85,                   # Match quality
-    "potential": 2.3,                     # Overall score
+    "potential": 14.2,                    # Ranking score
+    "good_odds": 6.1,                     # Bits by which the pattern beats chance
     "similarity": 0.67,                   # Sequence similarity
     "frequency": 42,                      # Pattern reliability
     "evidence": 0.67,                     # Proportion observed
@@ -286,10 +288,19 @@ confidence = matched_symbols / present_symbols
 snr = matched_symbols / (matched_symbols + extra_symbols)
 ```
 
-**Potential** (composite score):
+**Good-odds** (bits by which the pattern explains the observation better than chance):
 ```
-potential = (evidence + confidence) * snr + itfdf_similarity + (1/(fragmentation + 1))
+good_odds = log2(frequency / total_pattern_frequencies)
+          + Σ over matched symbols of log2(0.95 / q(symbol))
+          - log2(20) × (missing_symbols + extra_symbols)
 ```
+`q(symbol)` is the symbol's share of all learned symbol occurrences.
+
+**Potential** (ranking score):
+```
+potential = Σ weight × term     over eleven named terms with fixed weights
+```
+The terms and weights are listed in [Potential Function](potential-function.md).
 
 ## Temporal Processing
 
@@ -403,22 +414,32 @@ I(Past; Future) = Σ P(past, future) log₂[P(past, future) / (P(past)·P(future
 
 **Interpretation**: How much does knowing the past reduce uncertainty about the future?
 
+Each response reports that quantity for its own observation: the `predictive_information` values of a request add up to the bits the short-term memory carries about the next event, measured against chance.
+
 ### Ensemble Predictions
 
 KATO returns **multiple predictions**, not single answer:
 
 ```python
+# Learned: A, B, E (42 times); A, B, F (15 times); A, B, G (8 times). Observed: A, B.
 predictions = [
-    {"future": [["E"]], "potential": 2.3, "frequency": 42},
-    {"future": [["F"]], "potential": 1.8, "frequency": 15},
-    {"future": [["G"]], "potential": 1.2, "frequency": 8}
+    {"future": [["E"]], "potential": 18.64, "frequency": 42},
+    {"future": [["F"]], "potential": 17.94, "frequency": 15},
+    {"future": [["G"]], "potential": 17.52, "frequency": 8}
 ]
+future_potentials = [
+    {"next_event": ["E"], "probability": 0.549, "supporting_patterns": 1},
+    {"next_event": ["F"], "probability": 0.273, "supporting_patterns": 1},
+    {"next_event": ["G"], "probability": 0.178, "supporting_patterns": 1}
+]
+chance_posterior = 0.110
 ```
 
 **Benefits**:
 - Shows alternative possibilities
 - Weighted by reliability (frequency, potential)
-- Enables probabilistic reasoning
+- Gives each next event a probability (`future_potentials`)
+- Says how probable it is that nothing learned explains the observation (`chance_posterior`)
 - Supports decision-making under uncertainty
 
 ### Prediction Filtering
@@ -434,7 +455,9 @@ RECALL_THRESHOLD = 0.3  # Minimum similarity
 ```python
 MAX_PREDICTIONS = 100  # Limit result set
 
-# Return top 100 by potential
+# Return top 100 by potential.
+# Every candidate above the recall threshold is scored first, so
+# future_potentials and chance_posterior cover all of them.
 ```
 
 ## Theoretical Foundations

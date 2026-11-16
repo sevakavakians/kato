@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [7.1.0] - 2026-11-16
+
 ### Upgrade notes
 - **`probability` in `future_potentials` no longer adds up to 1 on its own.** The
   entries and the new `ends_here` field add up to 1. A client that treats the

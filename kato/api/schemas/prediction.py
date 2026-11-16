@@ -31,13 +31,21 @@ class PredictionsResponse(BaseModel):
     predictions: list[dict] = Field(default_factory=list, description="List of predictions")
     future_potentials: Optional[list[dict]] = Field(
         None,
-        description="Probability of each next event the predictions propose, most probable first"
+        description="Probability of each next event the candidates propose, most probable first; with ends_here they add up to 1"
     )
     chance_posterior: Optional[float] = Field(
         None,
         description=(
             "Probability that no learned pattern explains the STM better than chance: what the "
             "bayesian_posterior values of every candidate leave over. Null when no prediction was computed."
+        )
+    )
+    ends_here: Optional[float] = Field(
+        None,
+        description=(
+            "Probability that no event follows the STM: the share of the candidates' weight held by "
+            "patterns that end where the observation ends. With the probabilities in future_potentials "
+            "it adds up to 1. Null when there is no candidate."
         )
     )
     session_id: Optional[str] = Field(None, description="Session ID")

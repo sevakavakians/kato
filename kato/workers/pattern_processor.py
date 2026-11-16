@@ -93,10 +93,16 @@ class PredictionResult(NamedTuple):
     leave over. It is 1.0 when no pattern reached the recall threshold and
     None when no prediction was attempted (an empty STM, or predictions read
     back by unique_id).
+
+    ends_here is the probability that no event follows the STM: the share of
+    the candidates' weight held by patterns that end where the observation
+    ends. With the probabilities in future_potentials it adds up to 1. It is
+    None when there is no candidate to take a share of.
     """
     predictions: list[dict[str, Any]]
     future_potentials: list[dict[str, Any]]
     chance_posterior: Optional[float] = None
+    ends_here: Optional[float] = None
 
 
 class PatternProcessor:
@@ -1719,7 +1725,9 @@ class PatternProcessor:
                 causal_patterns = ranked(causal_patterns)
 
             logger.debug(f" [ PatternProcessor predictPattern (async) ] {len(causal_patterns)} predictions returned")
-            return PredictionResult(causal_patterns, scores.future_potentials, scores.chance_posterior)
+            return PredictionResult(
+                causal_patterns, scores.future_potentials, scores.chance_posterior, scores.ends_here
+            )
 
         except Exception as e:
             raise Exception(f"\nException in PatternProcessor.predictPattern (async): Error in metrics calculation! {self.kb_id}: {e}")

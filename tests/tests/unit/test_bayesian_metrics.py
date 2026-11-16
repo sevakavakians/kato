@@ -216,6 +216,7 @@ def test_no_prediction_leaves_everything_to_chance(kato_fixture):
     assert predictions == {}
     assert response['chance_posterior'] == 1.0
     assert response['future_potentials'] == []
+    assert response['ends_here'] is None
 
 
 def test_an_empty_stm_computes_no_posterior(kato_fixture):
@@ -227,6 +228,7 @@ def test_an_empty_stm_computes_no_posterior(kato_fixture):
 
     assert response['predictions'] == []
     assert response['chance_posterior'] is None
+    assert response['ends_here'] is None
 
 
 @pytest.mark.parametrize('metric', ['bayesian_posterior', 'good_odds', 'bayesian_prior', 'bayesian_likelihood'])

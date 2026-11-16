@@ -264,6 +264,7 @@ def _run_probe(probe, max_predictions=None, recall_threshold=None):
         "predictions": predictions["predictions"],
         "future_potentials": predictions.get("future_potentials"),
         "chance_posterior": predictions.get("chance_posterior"),
+        "ends_here": predictions.get("ends_here"),
         "count": predictions["count"],
     }
 
@@ -358,6 +359,8 @@ def diff(before, after):
         if b.get("chance_posterior") != a.get("chance_posterior"):
             problems.append(
                 f"{label}: chance_posterior {b.get('chance_posterior')!r} -> {a.get('chance_posterior')!r}")
+        if b.get("ends_here") != a.get("ends_here"):
+            problems.append(f"{label}: ends_here {b.get('ends_here')!r} -> {a.get('ends_here')!r}")
         bp, ap = b["predictions"], a["predictions"]
         if len(bp) != len(ap):
             problems.append(f"{label}: {len(bp)} -> {len(ap)} predictions")

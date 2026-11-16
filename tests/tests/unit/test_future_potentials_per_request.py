@@ -66,6 +66,7 @@ def test_the_sync_wrapper_still_returns_only_the_predictions(monkeypatch):
 
 def test_a_result_without_a_prediction_attempt_has_no_chance_posterior():
     assert PredictionResult([], []).chance_posterior is None
+    assert PredictionResult([], []).ends_here is None
 
 
 def _tied_predictions():
@@ -153,6 +154,7 @@ def test_an_empty_stm_does_not_receive_another_sessions_future_potentials(two_se
         assert response['count'] == 0
         assert response['future_potentials'] == []
         assert response['chance_posterior'] is None
+        assert response['ends_here'] is None
 
 
 def test_concurrent_sessions_get_the_future_potentials_of_their_own_predictions(two_sessions):
@@ -169,3 +171,4 @@ def test_concurrent_sessions_get_the_future_potentials_of_their_own_predictions(
             # One pattern, one event still to come: it is the next event, for certain.
             assert response['future_potentials'] == [
                 {'next_event': expected[0], 'probability': 1.0, 'supporting_patterns': 1}]
+            assert response['ends_here'] == 0.0

@@ -366,7 +366,8 @@ class KATOFastAPIFixture:
 
     def get_predictions_response(self) -> dict[str, Any]:
         """The whole predictions response: the predictions, and the figures
-        computed over their ensemble (future_potentials, chance_posterior)."""
+        computed over their ensemble (future_potentials, chance_posterior,
+        ends_here)."""
         if not self.services_available:
             pytest.skip("KATO services not available")
 

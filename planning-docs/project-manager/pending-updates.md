@@ -102,3 +102,7 @@ Confirmed live cross-session data exposure in GET predictions with an empty STM 
 
 ## 2026-10-14 - RESOLVED 2026-10-16: commit/PR/release of future_potentials fix (approved; PR #18 merged, v6.4.2 released, :8000 updated)
 Implemented and verified (898 passed, 0 failed), not committed. On approval: commit, open PR, merge, release 6.4.2 (PATCH), then update the :8000 deployment, which is still exposed to the cross-session leak on 6.4.1.
+
+## 2026-11-16 - Release 7.0.0 (MAJOR) prerequisites
+- `scripts/recount_pattern_frequencies.py` is not in the image (Dockerfile copies only `kato/`) and has not been run anywhere; the upgrade notes must say how existing nodes run it.
+- The 11.5% prediction-path cost was measured on a generated 20,000-pattern node only, not on the live instance.

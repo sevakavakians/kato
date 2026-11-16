@@ -3736,3 +3736,7 @@ The investigation surfaced five real, unrelated defects, fixed in the same pass:
 ## 2026-11-12 - Housekeeping: Branch Cleanup (main is the only branch)
 **Classification**: Housekeeping (no trigger-class event).
 **Done**: Recorded in SESSION_STATE.md Current Task. All merged branches deleted; main is the only branch locally and on origin, in sync, no open PRs. Local via `git branch -d`: fix/clear-stm-between-accumulators (was fb3dca4, never pushed, merged via 3516685), fix/issue-15-single-symbol-any-position (was e730e96). Remote (all merged): deps/certifi-security-floor (PR #20), readme/full-deterministic-control (PR #19), fix/issue-15-single-symbol-any-position. User ran the remote deletion push themselves after the permission check blocked it. Nothing committed by this agent.
+
+## 2026-11-16 - Milestone: Prediction Metrics Rebuild Merged and Gated (DECISION-051)
+**Classification**: Architectural Decision + Task Completion (first planning pass; release 7.0.0 not done).
+**Done**: Added DECISION-051 to DECISIONS.md; demoted the v6.4.3 Current Task in SESSION_STATE.md to a Previous Task and wrote the new Current Task (main = dff5169, PR #22, gate 1092 passed / 3 skipped / 1 xfailed / 0 failed); created completed/features/2026-11-16-prediction-metrics-rebuild.md; updated README.md current-state line and test coverage. No release recorded.

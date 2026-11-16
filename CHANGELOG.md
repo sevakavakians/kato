@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Upgrade notes
+- **`probability` in `future_potentials` no longer adds up to 1 on its own.** The
+  entries and the new `ends_here` field add up to 1. A client that treats the
+  entries as a complete distribution, or that acts on a threshold over
+  `probability`, should read `ends_here` as well. Requests in which no candidate
+  has ended return the same values as before, with `ends_here` at 0.0.
+- **`predictive_information` changes** for requests in which some candidate has
+  ended, because it is built on the same probabilities.
+
+### Added
+- **`ends_here`, beside `future_potentials` and `chance_posterior`.** The
+  probability that no event follows the observation: the share of the
+  candidates' weight (`e^potential`) held by patterns that end where the STM
+  ends. `null` when there is no candidate.
+
+### Changed
+- **`future_potentials` shares the probability among every candidate.** It used
+  to share it among the candidates that have a future. A pattern that ends
+  where the STM ends is often the best match, and it proposes no next event;
+  with it left out, a poor match could be given 1.0 for an event the fitting
+  pattern never led to. A node that learned `a b c` and `a b d` and observed
+  `a`, `b`, `c` returned `d` at 1.0. It now returns `d` at 0.0004 and
+  `ends_here` at 0.9996. The denominator is the one the weights of `potential`
+  were fitted under.
+- **`predictive_information` uses the same shares.** Its values add up over the
+  events proposed; the total is the Kullback-Leibler divergence from chance when
+  no candidate has ended.
+- **Measured on 58,600 held-out queries, each followed by an event:** `ends_here`
+  averages 0.046 and is above 0.5 for 0.6% of them. The top entry of
+  `future_potentials` is the same entry as before and right as often (0.648,
+  mean of four kinds of data); its stated probability averages 0.593, where it
+  was 0.616. As a ranking key `predictive_information` moves from 0.617 to
+  0.616. `ends_here` has not been measured on sequences that end.
+
 ## [7.0.0] - 2026-11-16
 
 ### Upgrade notes

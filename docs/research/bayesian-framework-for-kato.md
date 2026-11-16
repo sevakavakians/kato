@@ -287,7 +287,7 @@ Measured on 58,600 held-out queries from four kinds of data, the probability giv
 | | Generated sequences | HDFS logs | MSNBC clicks | WikiText-2 text |
 |---|---|---|---|---|
 | Posteriors summed by next event, as shares of the candidates that have a future: said / right | 0.909 / 0.837 | 0.906 / 0.874 | 0.662 / 0.686 | 0.564 / 0.127 |
-| `e^potential` summed by next event (`future_potentials`): said / right | 0.812 / 0.851 | 0.837 / 0.860 | 0.615 / 0.688 | 0.202 / 0.193 |
+| `e^potential` summed by next event, as shares of every candidate (`future_potentials`): said / right | 0.789 / 0.851 | 0.834 / 0.860 | 0.553 / 0.689 | 0.194 / 0.193 |
 
 On text the sum of posteriors claims 56% and delivers 13%. With chance left in the sum the claim falls to 26%, still twice what is delivered. The weights of `potential` were fitted on outcomes, to make the probability of the event that actually followed as large as possible, and the probabilities built on it track what happens.
 

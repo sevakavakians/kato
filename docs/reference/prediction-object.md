@@ -511,7 +511,7 @@ The three ensemble fields, in the same terms:
 | Field | Answers | Formula | Unit and range | Reads | Use it for | Suits |
 |---|---|---|---|---|---|---|
 | `future_potentials` | What comes next, and how probable is it? | `e^potential` summed by next event, over the sum for every candidate | Probability; with `ends_here` the entries add up to 1 | Candidates | The next-event answer and its confidence | Every kind of data measured. On the mean of the four kinds its top entry is right more often than the top prediction of any ranking key; the gain is largest on text (0.193 against 0.127), and on logs it is 1 point behind |
-| `ends_here` | Has the sequence come to its end? | `e^potential` of the candidates with no future, over the sum for every candidate | Probability; 0 to 1 | Candidates | Not naming a next event when the patterns that fit have none left | {{ENDS_SUITS}} |
+| `ends_here` | Has the sequence come to its end? | `e^potential` of the candidates with no future, over the sum for every candidate | Probability; 0 to 1 | Candidates | Not naming a next event when the patterns that fit have none left | Data in which sequences have learned endings. Not measured on sequences that end. Where an event did follow, it averaged 0.05 and was above 0.5 for 0.6% of the queries |
 | `chance_posterior` | Does anything learned explain the observation? | `1 / (1 + Σ 2^G)` over every candidate | Probability; 0 to 1 | Candidates | Declining to answer | Telling a learned situation from an unfamiliar one. Above 0.5 for 4% of the queries on sequence libraries and 50% on text |
 
 **Reads** says what a value depends on. *Prediction*: the pattern, the STM and the match between them. *Node*: counts kept for the whole node (symbol occurrences, how many patterns hold a symbol, pattern totals). *Candidates*: every pattern above the recall threshold for this request.
@@ -545,7 +545,7 @@ Every candidate is ranked by the metric, highest value first, as `rank_sort_algo
 | *Top entry of `future_potentials`* | *0.648* | *0.851* | *0.860* | *0.689* | *0.193* |
 | `potential` | 0.633 | 0.849 | 0.871 | 0.683 | 0.127 |
 | `good_odds`, `bayesian_posterior` | 0.618 | 0.834 | 0.870 | 0.671 | 0.097 |
-| `predictive_information` | 0.617 | 0.840 | 0.857 | 0.680 | 0.089 |
+| `predictive_information` | 0.616 | 0.839 | 0.857 | 0.679 | 0.088 |
 | `bayesian_likelihood` | 0.532 | 0.777 | 0.768 | 0.496 | 0.086 |
 | `snr` | 0.473 | 0.662 | 0.703 | 0.455 | 0.073 |
 | `itfdf_similarity` | 0.437 | 0.527 | 0.775 | 0.384 | 0.064 |
@@ -576,7 +576,7 @@ The top-ranked prediction can be a pattern that ends where the STM ends. Its `fu
 |---|---|---|---|---|---|
 | `potential` | 0.486 / 0.626 / 0.782 | 0.831 / 0.855 / 0.966 | 0.871 / 0.872 / 0.999 | 0.115 / 0.649 / 0.185 | 0.124 / 0.129 / 0.976 |
 | `good_odds`, `bayesian_posterior` | 0.478 / 0.612 / 0.776 | 0.810 / 0.845 / 0.945 | 0.870 / 0.870 / 0.999 | 0.143 / 0.630 / 0.247 | 0.089 / 0.102 / 0.913 |
-| `predictive_information` | 0.617 / 0.617 / 1.000 | 0.840 / 0.840 / 1.000 | 0.857 / 0.857 / 1.000 | 0.680 / 0.680 / 1.000 | 0.089 / 0.089 / 1.000 |
+| `predictive_information` | 0.616 / 0.616 / 1.000 | 0.839 / 0.839 / 1.000 | 0.857 / 0.857 / 1.000 | 0.679 / 0.679 / 1.000 | 0.088 / 0.088 / 1.000 |
 | `bayesian_likelihood` | 0.509 / 0.531 / 0.937 | 0.754 / 0.783 / 0.948 | 0.768 / 0.768 / 1.000 | 0.431 / 0.487 / 0.887 | 0.080 / 0.087 / 0.913 |
 | `snr` | 0.445 / 0.468 / 0.923 | 0.638 / 0.665 / 0.942 | 0.701 / 0.703 / 0.998 | 0.375 / 0.430 / 0.877 | 0.067 / 0.076 / 0.877 |
 | `itfdf_similarity` | 0.421 / 0.443 / 0.922 | 0.512 / 0.540 / 0.921 | 0.775 / 0.775 / 1.000 | 0.339 / 0.391 / 0.867 | 0.059 / 0.066 / 0.900 |
@@ -627,17 +627,32 @@ The `probability` of the top entry, against how often that entry is right:
 
 | | Generated | Logs | Click streams | Text |
 |---|---|---|---|---|
-| Probability stated, on average | 0.812 | 0.837 | 0.615 | 0.202 |
+| Probability stated, on average | 0.789 | 0.834 | 0.553 | 0.194 |
 | Share of the answers that were right | 0.851 | 0.860 | 0.689 | 0.193 |
-| Answers with a probability of 0.9 or more | 65% | 55% | 3% | 1% |
-| Right among those | 98% | 98% | 100% | 92% |
-| Answers with a probability of 0.5 or more | 82% | 92% | 70% | 8% |
-| Right among those | 95% | 89% | 78% | 61% |
-| Right among the most confident quarter of the answers | 98% | 97% | 91% | 39% |
+| Answers with a probability of 0.9 or more | 61% | 55% | none | 1% |
+| Right among those | 98% | 98% | | 91% |
+| Answers with a probability of 0.5 or more | 80% | 92% | 61% | 7% |
+| Right among those | 96% | 90% | 81% | 63% |
+| Right among the most confident quarter of the answers | 98% | 97% | 90% | 39% |
 
-1. **The probability tracks the outcome.** Over all four kinds the top entry states 0.616 on average and is right 0.648 of the time; the mean gap between stated and observed, over ten probability bins, is 0.032. It errs on the cautious side on three kinds and is level on text.
-2. **A high probability can be acted on.** At 0.9 or more the top entry is right at least 92% of the time on every kind of data. How often it gets there depends on the data: for 65% of the answers on generated data and 1% on text (57 answers on click streams and 41 on text, so those two figures rest on few cases).
+1. **The probability tracks the outcome, on the cautious side.** Over all four kinds the top entry states 0.593 on average and is right 0.648 of the time; the mean gap between stated and observed, over ten probability bins, is 0.056. It is cautious on three kinds and level on text. Part of the caution comes from the queries: an event followed every one of them, and the share that went to `ends_here` (0.046 on average) was held back from events that did follow.
+2. **A high probability can be acted on.** At 0.9 or more the top entry is right at least 91% of the time. How often it gets there depends on the data: for 61% of the answers on generated data, 1% on text (39 answers, so that figure rests on few cases) and none on click streams, where patterns that have ended hold a tenth of the weight on average.
 3. **It separates right answers from wrong ones.** As a score for whether the top entry is right, `probability` has an area under the ROC curve of 0.80.
+
+### How Sure: `ends_here`
+
+Every query of the study is the opening of a sequence that went on, so an event followed each one. The figures below therefore say one thing only: how much probability went to "nothing follows" when something did. How well `ends_here` recognises a sequence that has ended was not measured.
+
+| | Generated | Logs | Click streams | Text |
+|---|---|---|---|---|
+| `ends_here`, on average | 0.038 | 0.005 | 0.102 | 0.039 |
+| Queries with `ends_here` below 0.01 | 59% | 91% | 1% | 57% |
+| Queries with `ends_here` above 0.5 | 1.7% | none | none | 0.6% |
+| Queries where the top entry is more probable than `ends_here` | 97% | 100% | 100% | 90% |
+
+1. **It rarely speaks out of turn.** When an event did follow, `ends_here` was above 0.5 for 0.6% of the queries (mean of the four kinds).
+2. **Where it is high, the answer is weak anyway.** On generated data the top entry is right for 47% of the queries with `ends_here` above 0.5, against 85% of the others.
+3. **Text is where it competes with the answer.** For one query in ten there, "nothing follows" outweighs every next event. The top entry is right for 19% of the text queries, so its probability is often small.
 
 ### How Sure: `chance_posterior`
 
@@ -667,6 +682,7 @@ A high `chance_posterior` marks the queries where nothing learned explains the S
 
 - **The affinity-weighted metrics.** The data sets carry no emotives.
 - **Fuzzy token matching** and character-level matching.
+- **Sequences that end.** An event followed every query, so `ends_here` was measured only as probability given to an ending that did not come.
 - **STMs of one symbol.** Every query has at least two.
 - **Other recall thresholds, for every metric.** The tables are at 0.1.
 - **Other domains.** Four kinds of data are not all kinds. The figures say how the metrics behave on these, and which conditions help or hurt each one; they are not a forecast for a new data set.

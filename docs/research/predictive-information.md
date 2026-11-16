@@ -227,23 +227,23 @@ The sum of `predictive_information` over a request is a claim: this many bits ab
 
 | Mean bits per query | Generated sequences | HDFS logs | MSNBC clicks | WikiText-2 text |
 |---|---|---|---|---|
-| Claimed (sum of `predictive_information`) | 8.64 | 2.47 | 1.78 | 3.67 |
-| Delivered | 8.42 | 2.42 | 2.09 | 0.73 |
+| Claimed (sum of `predictive_information`) | 8.35 | 2.45 | 1.46 | 3.46 |
+| Delivered | 8.36 | 2.42 | 1.93 | 0.67 |
 | Available (chance bits of the event that followed) | 9.85 | 3.06 | 3.75 | 9.87 |
 
-The claim holds on three kinds of data. On text it overclaims: for 14% of the queries there, no candidate proposes the event that actually followed, and the ensemble is confident about the events it does propose.
+The claim holds on generated data and on logs, and it is on the cautious side on click streams. On text it overclaims: for 14% of the queries there, no candidate proposes the event that actually followed, and the ensemble is confident about the events it does propose.
 
 "Delivered" is computed with a floor: the ensemble's probability is mixed 99 to 1 with the chance probability, so that an event no candidate proposed counts as slightly below chance instead of minus infinity.
 
 ### 7.2 As a Ranking Key
 
-Ranked by `predictive_information`, the top prediction that has a future names the right next event for 0.617 of the queries (mean of the four kinds), against 0.633 when ranked by `potential`: 1.6 points lower.
+Ranked by `predictive_information`, the top prediction that has a future names the right next event for 0.616 of the queries (mean of the four kinds), against 0.633 when ranked by `potential`: 1.7 points lower.
 
 The reason is in the formula. It multiplies a probability by a rarity, and the most probable next event is the best single guess whatever its rarity.
 
 ### 7.3 As a Confidence Value
 
-Used to separate right answers from wrong ones, the `predictive_information` of the top prediction has an AUROC of 0.70. The `probability` of the top entry of `future_potentials` has 0.80.
+Used to separate right answers from wrong ones, the `predictive_information` of the top prediction has an AUROC of 0.71. The `probability` of the top entry of `future_potentials` has 0.80.
 
 ## 8. Edge Cases and Considerations
 

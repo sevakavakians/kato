@@ -10,6 +10,7 @@ test_ranking_benchmark_live.py.
 import gzip
 import hashlib
 import io
+import itertools
 import json
 import math
 import re
@@ -322,12 +323,22 @@ def test_the_fingerprint_sees_one_bit_and_ignores_order():
 # the runner, against a stand-in
 
 class ToyKato:
-    """Enough of the REST API to drive the runner. Matching here is a toy; ranking is KATO's function."""
+    """Enough of the REST API to drive the runner. Matching here is a toy; ranking is KATO's function.
+
+    The runner calls it from several threads. Every update of shared state is one
+    atomic step (an append, a setdefault, the next value of a counter), so no
+    count is lost and no lock is needed.
+    """
 
     def __init__(self):
-        self.sessions, self.nodes, self.calls = {}, {}, Counter()
+        self.sessions, self.nodes, self.asked = {}, {}, []
+        self.session_ids = itertools.count()
         self.corrupt_learns = False
         self.lose_a_pattern = False
+
+    @property
+    def calls(self) -> Counter:
+        return Counter(self.asked)
 
     def __call__(self, method, path, payload=None):
         payload = payload or {}
@@ -339,7 +350,7 @@ class ToyKato:
             node = self.nodes.get(re.search(r"node_id=([^&]+)", path).group(1), {})
             return {"pattern_count": len(node) - (1 if self.lose_a_pattern and node else 0)}
         if path == "/sessions":
-            session = f"s{len(self.sessions)}"
+            session = f"s{next(self.session_ids)}"
             self.sessions[session] = {"node": payload["node_id"], "stm": [],
                                       "config": {"recall_threshold": 0.1, "max_predictions": 100,
                                                  "rank_sort_algo": "potential", **payload["config"]}}
@@ -349,7 +360,7 @@ class ToyKato:
             raise KatoError(404, "no such session", path)
         state = self.sessions[session]
         node = self.nodes.setdefault(state["node"], {})
-        self.calls[action or method] += 1
+        self.asked.append(action or method)
         if method == "DELETE":
             del self.sessions[session]
         elif action == "config":
@@ -366,7 +377,7 @@ class ToyKato:
             learned = None
             if payload.get("learn_at_end"):
                 learned = Pattern(state["stm"]).name
-                node.setdefault(learned, [state["stm"], 0])[1] += 1
+                node.setdefault(learned, (state["stm"], []))[1].append(session)     # one entry per learn
                 state["stm"] = []
                 if self.corrupt_learns:
                     learned = "0" * 40
@@ -379,7 +390,8 @@ class ToyKato:
     def predict(self, node, state):
         observed = [name for event in state["stm"] for name in event]
         predictions = []
-        for name, (events, frequency) in sorted(node.items()):     # a fixed order, so the sums below are too
+        for name, (events, learns) in sorted(node.items()):         # a fixed order, so the sums below are too
+            frequency = len(learns)
             flat = [x for event in events for x in event]
             matched = [i for i, event in enumerate(events) if any(x in observed for x in event)]
             similarity = 2 * sum(1 for x in observed if x in flat) / (len(observed) + len(flat))
@@ -533,11 +545,28 @@ def test_a_run_refuses_results_measured_another_way(finished):
 def test_clear_nodes_empties_the_suites_nodes_and_nothing_else(tmp_path):
     toy = ToyKato()
     assert run.run(arguments(tmp_path, "--keep-nodes"), log=lambda *a: None, kato=Kato(transport=toy)) == 0
-    toy.nodes["someone_elses_node"] = {"x": [[["a"], ["b"]], 1]}
+    toy.nodes["someone_elses_node"] = {"x": ([["a"], ["b"]], ["s"])}
     assert all(toy.nodes[f"rankbench_smoke_{key}"] for key in ("gen_small", "gen_small_multi")), "kept, as asked"
     assert run.run(arguments(tmp_path, "--clear-nodes"), log=lambda *a: None, kato=Kato(transport=toy)) == 0
     assert not toy.nodes["rankbench_smoke_gen_small"] and not toy.nodes["rankbench_smoke_gen_small_multi"]
     assert toy.nodes["someone_elses_node"], "a node of another name is never touched"
+    assert not toy.sessions
+
+
+def test_loading_reports_progress_without_a_lock(tmp_path, monkeypatch):
+    """Each session counts its own learns; the first one reports the sum. 240 sequences over 3 sessions."""
+    monkeypatch.setattr(run, "PROGRESS_EVERY", 60)
+    lines = []
+    toy = ToyKato()
+    assert run.run(arguments(tmp_path, "--only", "gen_small", "--keep-nodes"), log=lines.append,
+                   kato=Kato(transport=toy)) == 0
+    found = [re.fullmatch(r" +learned ([\d,]+) of 240 sequences \(\d+ per second\)", line) for line in lines]
+    totals = [int(match.group(1).replace(",", "")) for match in found if match]
+    assert len(totals) == 3, "the first session reports after 20, 40 and 60 of its 80 sequences"
+    assert totals == sorted(totals) and totals[0] >= 20 and totals[-1] <= 240
+    learns = [session for _, sessions in toy.nodes["rankbench_smoke_gen_small"].values() for session in sessions]
+    assert len(learns) == 240, "every sequence was learned exactly once"
+    assert sorted(Counter(learns).values()) == [80, 80, 80], "by three sessions, a third each"
     assert not toy.sessions
 
 

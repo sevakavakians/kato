@@ -1,2 +1,7 @@
 # The smoke suite is a check of the tool, not a measurement: its results are not kept.
 smoke/
+# A query set's working file while a run is going. Its stored form, <set>.jsonl.gz, is what is kept.
+*/sets/*.jsonl
+*/sets/*.part
+# The interactive report is rebuilt from the results: python -m benchmarks.ranking.report
+*/report.html

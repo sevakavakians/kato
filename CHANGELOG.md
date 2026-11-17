@@ -14,9 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   of the 20 `rank_sort_algo` values would have put on top, together with
   `future_potentials`, `ends_here`, `chance_posterior` and request times.
   `python -m benchmarks.ranking.report` builds a docs page with charts and a
-  self-contained interactive page from the result files. Standard library only;
-  it writes to nodes named `rankbench_...` and clears them. No change to the
-  service.
+  self-contained interactive page from the result files, which are kept
+  compressed. Standard library only; it writes to nodes named `rankbench_...`
+  and clears them. No change to the service.
 
 ### Deprecated
 - **Affinity-weighted matching: `affinity_emotive` and the metrics

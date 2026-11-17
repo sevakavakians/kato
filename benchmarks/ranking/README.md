@@ -97,11 +97,13 @@ Downloads use HTTPS with the server's certificate verified, and each file is che
 ## Results
 
 ```
-benchmarks/results/ranking/<name>/run.json            what was run, on what, and each node's sizes and times
-benchmarks/results/ranking/<name>/sets/<set>.jsonl    one line per query
+benchmarks/results/ranking/<name>/run.json               what was run, on what, and each node's sizes and times
+benchmarks/results/ranking/<name>/sets/<set>.jsonl.gz    one line per query, compressed
 ```
 
-`<name>` is the suite's name unless `--name` is given. A line of a set file:
+`<name>` is the suite's name unless `--name` is given. While a node is being asked, each of its sets is a plain `<set>.jsonl` that the run appends to; when the node is complete its sets are compressed and the plain files removed (`store.py`). The compressed files are what is kept in git: the guide suite's 5,112 queries are about 6 MB as lines and about 1 MB stored. Their bytes carry no file name and no time, so a file changes only when its results change. To read one: `gzip -dc <set>.jsonl.gz`.
+
+A line of a set file:
 
 | Field | Meaning |
 |---|---|
@@ -134,9 +136,9 @@ Two instances on the same KATO build must agree on every one. That is KATO's det
 `python -m benchmarks.ranking.report` reads a run's files and writes, from the same figures:
 
 - `docs/reference/ranking-benchmark.md`, with its charts as SVG files in `docs/reference/ranking-benchmark/`;
-- `docs/reference/ranking-benchmark/report.html`, one self-contained interactive page: the recall threshold and the read-out can be switched, every mark shows its value on hover and on keyboard focus, and every chart has its table.
+- `<run>/report.html`, one self-contained interactive page: the recall threshold and the read-out can be switched, every mark shows its value on hover and on keyboard focus, and every chart has its table. It is about 2 MB for the guide suite, so it is written beside the results and not kept in git; open it in a browser, or publish it as it is.
 
-Both are generated; change `report.py`, not the pages. Text written by hand goes in `<run>/notes.md` and is placed under "Reading the Results". `--run` and `--out` choose another run and another place.
+Both are generated; change `report.py`, not the pages. Text written by hand goes in `<run>/notes.md` and is placed under "Reading the Results". `--run` chooses another run, `--out` another place for the docs page and its charts.
 
 The guidance table at the top of the page follows one rule: in each case the best key is the one with the highest share of queries answered right, and a key is level with it when the 95% interval of the difference between the two, measured on the same queries, includes zero.
 

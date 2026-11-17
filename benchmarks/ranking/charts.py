@@ -291,10 +291,10 @@ def stacked_bars(title: str, subtitle: str, rows: list, series: list, standalone
     return chart.svg(standalone)
 
 
-def diverging_bars(title: str, subtitle: str, rows: list, unit: str = "points", standalone: bool = True) -> str:
+def diverging_bars(title: str, subtitle: str, rows: list, standalone: bool = True) -> str:
     """Bars to the right of zero (ahead) and to the left (behind), with their intervals.
 
-    rows: [{'label', 'value', 'lo', 'hi', 'tip', 'gap_before' (optional)}], values in `unit`.
+    rows: [{'label', 'value', 'lo', 'hi', 'tip', 'gap_before' (optional)}]. The subtitle names the unit.
     """
     gutter = max(text_width(row["label"]) for row in rows) + 28
     pitch, thick = 22, 14
@@ -313,7 +313,6 @@ def diverging_bars(title: str, subtitle: str, rows: list, unit: str = "points", 
         chart.line(scale(tick), top, scale(tick), bottom, "axis" if abs(tick) < 1e-9 else "grid")
         chart.text(scale(tick), bottom + 16, f"{tick:+.0f}" if tick else "0", "tick", "middle")
         tick += step
-    chart.text(right + 8, bottom + 16, unit, "tick")
     y = top
     for row in rows:
         if row.get("gap_before"):

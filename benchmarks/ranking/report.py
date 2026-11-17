@@ -73,6 +73,11 @@ def table(headers: list, rows: list, align: str = "") -> str:
     return "\n".join(lines) + "\n"
 
 
+def listed(names: list) -> str:
+    """'a', 'a and b', 'a, b and c'."""
+    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+
+
 def details(summary: str, body: str) -> str:
     return f"<details>\n<summary>{summary}</summary>\n\n{body}\n</details>\n"
 
@@ -273,7 +278,7 @@ def chart_transfer(run: dict, standalone: bool) -> str:
     return charts.diverging_bars(
         "potential against the best other key, data set by data set",
         "Difference in the share answered right, in points, on the same queries. Lines: 95% intervals.",
-        bars, "points", standalone)
+        bars, standalone)
 
 
 def pooled_sets(run: dict) -> list:
@@ -354,7 +359,7 @@ def table_guide(rows: list) -> str:
     def body(selected):
         return table(
             ["Case", "Queries", "Best key", "Share right", "Level with the best"],
-            [[row["label"] if row["group"] != "data" else f"{row['kind']}: {row['label']}", row["queries"],
+            [[row["label"] if row["group"] != "data" else f"{row['kind']}: {row['label']}", f"{row['queries']:,}",
               ", ".join(code(name) for name in row["best"]), f3(row["share"]["p"]),
               ", ".join(code(name) for name in row["level"]) or "none"] for row in selected], "lrlrl")
     out = ""
@@ -460,15 +465,15 @@ def table_calibration(run: dict, threshold: str) -> str:
     columns = kind_columns(run) + [{"label": "All", "sets": [s["key"] for s in pooled_sets(run)]}]
     figures = [stats.calibration([run["sets"][key] for key in c["sets"]], threshold) for c in columns]
     lines = [
-        ["Queries with an entry"] + [f["answers"] for f in figures],
+        ["Queries with an entry"] + [f"{f['answers']:,}" for f in figures],
         ["Probability stated, on average"] + [f3(f["stated"]) for f in figures],
         ["Share of the top entries that were right"] + [f3(f["right"]) for f in figures],
         ["Mean gap between stated and observed"] + [f3(f["gap"]) for f in figures],
         ["Area under the ROC curve"] + [f3(f["auroc"]) for f in figures],
         ["Answers with a probability of 0.9 or more"] + [pct(f["at"]["0.9"]["share"], 0) for f in figures],
-        ["Right among those"] + [pct(f["at"]["0.9"]["right"]["p"], 0) for f in figures],
+        ["Right among those"] + [pct(f["at"]["0.9"]["right"]["p"], 0) or "–" for f in figures],
         ["Answers with a probability of 0.5 or more"] + [pct(f["at"]["0.5"]["share"], 0) for f in figures],
-        ["Right among those"] + [pct(f["at"]["0.5"]["right"]["p"], 0) for f in figures],
+        ["Right among those"] + [pct(f["at"]["0.5"]["right"]["p"], 0) or "–" for f in figures],
         ["Right among the most confident quarter"] + [pct(f["top_quarter_right"], 0) for f in figures],
     ]
     return table([""] + [c["label"] for c in columns], lines)
@@ -531,14 +536,18 @@ def table_nodes(run: dict) -> str:
             continue
         queries = sum(info["queries"] for info in node["sets"].values())
         rows.append([node["label"], node["kind"], f"{node['learned_sequences']:,}", f"{node['events']:,}",
-                     f"{node['patterns']:,}", f"{node['vocabulary']:,}", queries])
+                     f"{node['patterns']:,}", f"{node['vocabulary']:,}", f"{queries:,}"])
     return table(["Node", "Kind of data", "Sequences learned", "Events", "Patterns", "Symbols", "Queries"], rows,
                  "llrrrrr")
 
 
 def table_sources(run: dict) -> str:
     rows = []
-    for source in run["record"].get("sources", {}).values():
+    sources = run["record"].get("sources", {})
+    order = [run["record"]["nodes"][key].get("dataset") for key in run["record"].get("node_order", [])
+             if key in run["record"]["nodes"]]
+    for name in [name for name in order if name in sources] + sorted(set(sources) - set(order)):
+        source = sources[name]
         rows.append([f"[{source['title']}]({source['page']})", source["kind"], source["what"], source["licence"],
                      source["cite"]])
     return table(["Data set", "Kind", "What a sequence is", "Licence", "Source"], rows, "lllll")
@@ -608,6 +617,7 @@ How often each key is best or level, over the {total} single cases (groups not c
 {table_counts(run, counts, total)}
 {image('headline', 'Share answered right by ranking key')}
 {details('Table', table_headline(run, threshold))}
+The table's last column is how often a key's top value is shared by several predictions. KATO then orders them by pattern name, so the more often a key ties, the more often its top prediction is chosen by name.
 """]
     if notes:
         parts.append(f"## Reading the Results\n\n{notes}\n")
@@ -616,7 +626,7 @@ How often each key is best or level, over the {total} single cases (groups not c
 
 1. **The task.** Next-event prediction. A query is a stretch of a sequence the node has not learned, taken as the STM, together with the event that followed it. An answer is right when the predicted next event is exactly that event.
 2. **The nodes.** Each node learns one data set through `POST /sessions/{{id}}/observe-sequence`, one sequence per pattern, and `finalize-training` is called before the queries. A learned sequence is cut to its first 100 events. Every node is checked after loading: the pattern name KATO returns for each sequence, and the number of patterns it reports.
-3. **The data.** Generated sequence libraries that change one condition at a time, and public data sets. The weights of `potential` were fitted on generated data, system logs, click streams and text{'; ' + ', '.join(unseen).lower() + ' are kinds of data it never saw' if unseen else ''}.
+3. **The data.** Generated sequence libraries that change one condition at a time, and public data sets. The weights of `potential` were fitted on generated data, system logs, click streams and text{'; ' + listed([name.lower() for name in unseen]) + ' are kinds of data it never saw' if unseen else ''}.
 4. **The queries.** On a public data set, a position is drawn uniformly from the held-out sequences; the STM is the five events before it, or fewer when fewer came before, and never less than two. On generated data the query follows the condition named. For each node a second set asks about sequences that have ended: the STM is the last five events of a complete held-out sequence, and nothing follows.
 5. **The settings.** Token-level matching, fuzzy matching off, no filter pipeline, so every pattern above the recall threshold is a candidate. One response with `max_predictions` at its maximum holds every candidate, and the client ranks it by each key with KATO's own rule: highest value first, and among equal values the pattern name that sorts last.
 6. **The read-outs.** *The top prediction that has a future*: the highest-ranked prediction whose `future` is not empty. *The top prediction itself*: the highest-ranked prediction, which names no event when its pattern ends where the STM ends. *The top entry of `future_potentials`*: the most probable next event over all candidates; it does not depend on the ranking key.
@@ -698,13 +708,13 @@ Every metric is computed for every candidate whichever key ranks them, so the ke
 - **STMs of one symbol.** Every query has at least two.
 - **Vectors and emotives.** Every event is one or more string symbols.
 - **Nodes of more than 10,000 patterns.** The suite keeps each node below what one response can carry.
-- **Other domains.** {len(kinds)} kinds of data are not all kinds. The figures say how the keys behave on these.
+- **Other domains.** The suite holds {len(kinds)} kinds of data, not all kinds. The figures say how the keys behave on these.
 
 ## Reproducing
 
 ```bash
 ./start.sh start                                  # a KATO instance must be running
-python -m benchmarks.ranking.run --suite smoke    # two minutes, no downloads
+python -m benchmarks.ranking.run --suite smoke    # a couple of minutes, no downloads
 python -m benchmarks.ranking.run                  # the guide suite
 python -m benchmarks.ranking.report               # this page and the interactive report
 ```
@@ -821,8 +831,9 @@ details { margin: 8px 0 16px; }
 summary { cursor: pointer; font-size: 13px; color: var(--kz-ink2); width: max-content; padding: 2px 0; }
 .table-wrap { overflow-x: auto; margin: 8px 0 16px; border: 1px solid var(--kz-border); border-radius: 8px; background: var(--kz-surface); }
 table { border-collapse: collapse; font-size: 13px; width: 100%; font-variant-numeric: tabular-nums; }
-th, td { padding: 6px 10px; border-bottom: 1px solid var(--kz-grid); white-space: nowrap; }
-td:first-child, th:first-child { white-space: normal; min-width: 180px; }
+th, td { padding: 6px 10px; border-bottom: 1px solid var(--kz-grid); vertical-align: top; }
+td[style*="right"], th[style*="right"] { white-space: nowrap; }
+td:first-child, th:first-child { min-width: 200px; }
 th { font-weight: 600; color: var(--kz-ink); background: var(--kz-surface); }
 tbody tr:last-child td { border-bottom: 0; }
 td { color: var(--kz-ink2); }
@@ -914,7 +925,7 @@ def build_html(run: dict) -> str:
         if selected:
             guide_html += f"<h3>{heading}</h3>" + section_table(table(
                 ["Case", "Queries", "Best key", "Share right", "Level with the best"],
-                [[row["label"] if row["group"] != "data" else f"{row['kind']}: {row['label']}", row["queries"],
+                [[row["label"] if row["group"] != "data" else f"{row['kind']}: {row['label']}", f"{row['queries']:,}",
                   ", ".join(code(n) for n in row["best"]), f3(row["share"]["p"]),
                   ", ".join(code(n) for n in row["level"]) or "none"] for row in selected], "lrlrl"))
 

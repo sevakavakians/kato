@@ -10,6 +10,7 @@ have put on top, time a few requests, and clear the node again.
     python -m benchmarks.ranking.run                      # the guide suite
     python -m benchmarks.ranking.run --only gen_base hdfs # some of its nodes
     python -m benchmarks.ranking.run --check-data         # fetch and read every data set, then stop
+    python -m benchmarks.ranking.run --clear-nodes        # empty the suite's nodes after a run that was killed
     python -m benchmarks.ranking.report                   # tables and charts from the results
 
 Results go to benchmarks/results/ranking/<name>/. A run that is interrupted, or
@@ -108,52 +109,52 @@ def load_node(kato: Kato, node_id: str, sequences: list, workers: int, log=print
     repeated learn would raise a pattern's frequency unnoticed.
     """
     started = time.perf_counter()
-    keeper = kato.new_session(node_id, MATCHING)
+    clear_node(kato, node_id)
+    shares = [[] for _ in range(max(1, workers))]
+    for index, sequence in enumerate(sequences):
+        shares[index % len(shares)].append(sequence)
+    done = [0]
+    lock = threading.Lock()
+    stop = threading.Event()
+
+    def learn(share: list) -> None:
+        session = kato.new_session(node_id, MATCHING)
+        try:
+            for sequence in share:
+                if stop.is_set():
+                    return
+                result = kato.observe(session, sequence, learn=True)
+                learned = (result.get("final_learned_pattern") or "").replace("PTRN|", "")
+                if learned != scoring.pattern_name(sequence):
+                    raise BenchmarkError(
+                        f"{node_id}: KATO learned pattern '{learned}' where "
+                        f"'{scoring.pattern_name(sequence)}' was expected. The node is not usable.")
+                if result.get("final_stm_length"):
+                    kato.clear_stm(session)
+                with lock:
+                    done[0] += 1
+                    if done[0] % 2000 == 0:
+                        rate = done[0] / (time.perf_counter() - started)
+                        log(f"      learned {done[0]:,} of {len(sequences):,} sequences ({rate:.0f} per second)")
+        except BaseException:
+            stop.set()                                  # the other sessions stop at their next sequence
+            raise
+        finally:
+            _quietly(kato.delete_session, session)
+
+    with ThreadPoolExecutor(max_workers=len(shares)) as pool:
+        list(pool.map(learn, [share for share in shares if share]))
+
+    expected = suites.distinct_patterns(sequences)
+    reported = kato.pattern_count(node_id)
+    if reported != expected:
+        raise BenchmarkError(
+            f"{node_id}: KATO reports {reported} patterns, the data has {expected}. The node is not usable.")
+    session = kato.new_session(node_id, MATCHING)
     try:
-        kato.clear_node(keeper)
-        shares = [[] for _ in range(max(1, workers))]
-        for index, sequence in enumerate(sequences):
-            shares[index % len(shares)].append(sequence)
-        done = [0]
-        lock = threading.Lock()
-        stop = threading.Event()
-
-        def learn(share: list) -> None:
-            session = kato.new_session(node_id, MATCHING)
-            try:
-                for sequence in share:
-                    if stop.is_set():
-                        return
-                    result = kato.observe(session, sequence, learn=True)
-                    learned = (result.get("final_learned_pattern") or "").replace("PTRN|", "")
-                    if learned != scoring.pattern_name(sequence):
-                        raise BenchmarkError(
-                            f"{node_id}: KATO learned pattern '{learned}' where "
-                            f"'{scoring.pattern_name(sequence)}' was expected. The node is not usable.")
-                    if result.get("final_stm_length"):
-                        kato.clear_stm(session)
-                    with lock:
-                        done[0] += 1
-                        if done[0] % 2000 == 0:
-                            rate = done[0] / (time.perf_counter() - started)
-                            log(f"      learned {done[0]:,} of {len(sequences):,} sequences ({rate:.0f} per second)")
-            except BaseException:
-                stop.set()                                  # the other sessions stop at their next sequence
-                raise
-            finally:
-                _quietly(kato.delete_session, session)
-
-        with ThreadPoolExecutor(max_workers=len(shares)) as pool:
-            list(pool.map(learn, [share for share in shares if share]))
-
-        expected = suites.distinct_patterns(sequences)
-        reported = kato.pattern_count(node_id)
-        if reported != expected:
-            raise BenchmarkError(
-                f"{node_id}: KATO reports {reported} patterns, the data has {expected}. The node is not usable.")
-        finalized = kato.finalize_training(keeper)
+        finalized = kato.finalize_training(session)
     finally:
-        _quietly(kato.delete_session, keeper)
+        _quietly(kato.delete_session, session)
     return {
         "load_seconds": round(time.perf_counter() - started, 1),
         "pattern_count": reported,
@@ -407,6 +408,11 @@ def run(args, log=print, kato: Kato = None) -> int:
     kato = kato or Kato(args.url)
     if not kato.healthy():
         raise BenchmarkError(f"KATO is not reachable at {args.url}. Start it with ./start.sh start")
+    if args.clear_nodes:
+        for plan in plans:
+            clear_node(kato, f"{args.node_prefix}_{args.suite}_{plan.key}")
+            log(f"  cleared {args.node_prefix}_{args.suite}_{plan.key}")
+        return 0
     service = kato.info()
 
     out_dir = Path(args.results_dir) / (args.name or args.suite)
@@ -522,6 +528,8 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--discard-data", action="store_true",
                    help="delete each download from the data directory once its node is done")
     p.add_argument("--keep-nodes", action="store_true", help="leave the nodes in KATO afterwards")
+    p.add_argument("--clear-nodes", action="store_true",
+                   help="clear every node of the suite on the instance, then stop (after a run that was killed)")
     p.add_argument("--note", help="a line shown at the top of the reports, for example the machine")
     p.add_argument("--fresh", action="store_true", help="delete this run's stored results first")
     return p

@@ -530,6 +530,17 @@ def test_a_run_refuses_results_measured_another_way(finished):
         run.run(arguments(tmp_path, "--response-cap", "4"), log=lambda *a: None, kato=Kato(transport=ToyKato()))
 
 
+def test_clear_nodes_empties_the_suites_nodes_and_nothing_else(tmp_path):
+    toy = ToyKato()
+    assert run.run(arguments(tmp_path, "--keep-nodes"), log=lambda *a: None, kato=Kato(transport=toy)) == 0
+    toy.nodes["someone_elses_node"] = {"x": [[["a"], ["b"]], 1]}
+    assert all(toy.nodes[f"rankbench_smoke_{key}"] for key in ("gen_small", "gen_small_multi")), "kept, as asked"
+    assert run.run(arguments(tmp_path, "--clear-nodes"), log=lambda *a: None, kato=Kato(transport=toy)) == 0
+    assert not toy.nodes["rankbench_smoke_gen_small"] and not toy.nodes["rankbench_smoke_gen_small_multi"]
+    assert toy.nodes["someone_elses_node"], "a node of another name is never touched"
+    assert not toy.sessions
+
+
 def test_check_data_reads_every_node_without_kato(tmp_path):
     lines = []
     assert run.run(arguments(tmp_path, "--check-data"), log=lines.append) == 0

@@ -32,7 +32,7 @@ When a response comes back full (10,000 predictions), the node has more candidat
 
 ### What It Writes to Your Instance
 
-Only nodes whose id is `<prefix>_<suite>_<node>`, by default `rankbench_guide_...` and `rankbench_smoke_...`. Each is cleared before it is loaded and again when its queries are done (`--keep-nodes` leaves them). No other node is read or written. Do not use a node prefix that starts with `test`, `topology_`, `perf_` or `load_test`: KATO's own test suite purges such nodes.
+Only nodes whose id is `<prefix>_<suite>_<node>`, by default `rankbench_guide_...` and `rankbench_smoke_...`. Each is cleared before it is loaded and again when its queries are done (`--keep-nodes` leaves them). No other node is read or written. A run that is killed leaves the node it was working on; the next run clears it, and so does `--clear-nodes`. Do not use a node prefix that starts with `test`, `topology_`, `perf_` or `load_test`: KATO's own test suite purges such nodes.
 
 ### Settings It Pins
 
@@ -151,6 +151,7 @@ The guidance table at the top of the page follows one rule: in each case the bes
 | `--check-data` | | Fetch, verify and read every data set, then stop. KATO is not needed |
 | `--discard-data` | | Delete each download once its node is done |
 | `--keep-nodes` | | Leave the nodes in KATO afterwards |
+| `--clear-nodes` | | Clear every node of the suite on the instance, then stop |
 | `--note TEXT` | | A line shown at the top of the reports, for example the machine |
 | `--fresh` | | Delete this run's stored results first |
 

@@ -47,3 +47,7 @@ This document contains future feature ideas and aspirational enhancements for KA
 
 ---
 *This document captures future possibilities. For current development work, see PROJECT_OVERVIEW.md and ARCHITECTURE.md*
+
+## Pre-major-release removals
+
+- **Remove affinity-weighted matching** - BLOCKER for the next major release (DECISION-053, SPRINT_BACKLOG item 26). Scope: `affinity_emotive`, `weighted_similarity`/`weighted_evidence`/`weighted_confidence`/`weighted_snr`, and those four as `rank_sort_algo` values. Breaking change, so it waits for a major.

@@ -3752,3 +3752,8 @@ The investigation surfaced five real, unrelated defects, fixed in the same pass:
 ## 2026-11-16 - Milestone: KATO v7.1.0 Released (MINOR) and Deployed (clean store), Fourth Planning Pass
 **Classification**: Architectural Decision + Task Completion + Milestone Completion (wipe, gate, release, deployment). Silent.
 **Done**: Created completed/features/2026-11-16-kato-v7.1.0-release.md; added DECISION-052 to DECISIONS.md; SESSION_STATE.md header and Current Task (7.0.0 task demoted to Previous Task); README.md Current state, Version and Test Coverage; SPRINT_BACKLOG.md item 14 closed by 7.1.0, items 24-25 added. Pending with the user: delete of remote branch feat/ends-here-share.
+
+## 2026-11-17 - Architectural Decision: Affinity-Weighted Matching To Be Removed Before Next Major (DECISION-053)
+**Classification**: Architectural Decision + New Task (major-release blocker) + closure of open follow-up. Silent.
+**Done**: Added DECISION-053 to DECISIONS.md; closed SPRINT_BACKLOG item 15 (both parts: affinity not measured with the new potential, and weights for an STM of two or more symbols) with a pointer to DECISION-053; added SPRINT_BACKLOG item 26 (blocker for the next major release) and a pre-major-release entry in FUTURE_FEATURES.md; SESSION_STATE.md header and Current Task note. No code changed; docs deprecation was PR #24 (`31dcfa0`).
+**Open question recorded**: whether stored affinity sums (`{kb_id}:affinity:{symbol}`) and `/symbols/affinity` endpoints stay.

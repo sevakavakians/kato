@@ -3757,3 +3757,7 @@ The investigation surfaced five real, unrelated defects, fixed in the same pass:
 **Classification**: Architectural Decision + New Task (major-release blocker) + closure of open follow-up. Silent.
 **Done**: Added DECISION-053 to DECISIONS.md; closed SPRINT_BACKLOG item 15 (both parts: affinity not measured with the new potential, and weights for an STM of two or more symbols) with a pointer to DECISION-053; added SPRINT_BACKLOG item 26 (blocker for the next major release) and a pre-major-release entry in FUTURE_FEATURES.md; SESSION_STATE.md header and Current Task note. No code changed; docs deprecation was PR #24 (`31dcfa0`).
 **Open question recorded**: whether stored affinity sums (`{kb_id}:affinity:{symbol}`) and `/symbols/affinity` endpoints stay.
+
+## 2026-11-17 - Milestone: Ranking Benchmark Guide Suite Run On Deployed Instance
+**Classification**: Milestone Completion + Performance Benchmark. Silent.
+**Done**: SESSION_STATE.md header and Current Task note; triggers.md entry. Facts: benchmarks/ranking/ merged to main (PRs 25-29); guide suite on :8000, KATO 7.1.0, 4 workers, 1:05:00, 5,112 responses, no FAILED lines, pre-flight 51 tests and data hash matched; results on branch bench/ranking-guide-results (851f802), not merged. Next (KATO Lab session): response-by-response comparison with the in-memory run, write "Reading the Results", link the page, merge. No release needed.

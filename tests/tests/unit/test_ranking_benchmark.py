@@ -720,6 +720,11 @@ def test_the_reports_are_built_from_the_result_files(finished, tmp_path):
     loaded = stats.load_run(results / "results" / "smoke")
     best = stats.verdict(loaded, stats.cases(loaded)[0])
     assert f"{best['shares'][best['best'][0]]['p']:.3f}" in page
+    # what the page says about the time per ranking key is read from the run, not assumed
+    timed = [row["by_key"] for row in stats.latency(loaded)["nodes"] if row["by_key"]]
+    assert len(timed) == 1, "the smoke suite times each key on one node"
+    spread = f"span {min(timed[0].values()):,.0f} to {max(timed[0].values()):,.0f} ms"
+    assert spread in page and spread in html_page
 
 
 def test_a_chart_is_a_complete_picture_with_light_and_dark_values():

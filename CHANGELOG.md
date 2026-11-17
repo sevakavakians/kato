@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **A ranking benchmark for running instances, `benchmarks/ranking/`.** It
+  learns generated data and seven public data sets through the REST API, asks
+  held-out next-event queries at three recall thresholds, and records what each
+  of the 20 `rank_sort_algo` values would have put on top, together with
+  `future_potentials`, `ends_here`, `chance_posterior` and request times.
+  `python -m benchmarks.ranking.report` builds a docs page with charts and a
+  self-contained interactive page from the result files. Standard library only;
+  it writes to nodes named `rankbench_...` and clears them. No change to the
+  service.
+
 ### Deprecated
 - **Affinity-weighted matching: `affinity_emotive` and the metrics
   `weighted_similarity`, `weighted_evidence`, `weighted_confidence` and

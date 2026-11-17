@@ -10,6 +10,27 @@ This directory contains performance benchmarking tools for KATO pattern matching
 2. **bottleneck_runner.py** - In-process timing breakdown of the learn and predict paths
 3. **baseline.py** - Baseline pattern-matching measurement (pre-optimization)
 4. **compare_matchers.py** - Compare RapidFuzz vs difflib performance (Phase 2)
+5. **ranking/** - Which `rank_sort_algo` to use: accuracy of every ranking key over the HTTP API, with a report. **Start here when choosing a ranking key or judging a change to a prediction metric.**
+
+---
+
+## Ranking (accuracy, end to end)
+
+`benchmarks/ranking/` asks a running instance held-out next-event queries on
+generated data and on seven public data sets, and records what each of the 20
+ranking keys would have put on top. It needs only the standard library.
+
+```bash
+./start.sh start                                  # the service must be running
+
+python -m benchmarks.ranking.run --suite smoke    # a couple of minutes, no downloads
+python -m benchmarks.ranking.run                  # the guide suite
+python -m benchmarks.ranking.report               # a docs page and an interactive report
+```
+
+It writes only to nodes named `rankbench_...` and clears each afterwards. See
+[ranking/README.md](ranking/README.md) for what it measures, the data sets and
+their licences, and the result files.
 
 ---
 

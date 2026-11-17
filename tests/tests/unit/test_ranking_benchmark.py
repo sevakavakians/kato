@@ -14,8 +14,10 @@ import itertools
 import json
 import math
 import re
+import ssl
 import sys
 import tarfile
+import urllib.error
 import zipfile
 from collections import Counter
 from pathlib import Path
@@ -212,6 +214,53 @@ def test_a_download_is_checked_against_its_pin(tmp_path):
     with pytest.raises(ValueError, match="non-HTTPS"):
         datasets.fetch(datasets.Download("http://example.invalid/x", "missing.bin", 1, sha256="0" * 64),
                        tmp_path, lambda *a: None)
+
+
+class _Served:
+    """Stands in for urllib.request.urlopen. A Python without CA certificates fails unless given a bundle."""
+
+    def __init__(self, body: bytes, has_certificates: bool):
+        self.body, self.has_certificates, self.contexts = body, has_certificates, []
+
+    def __call__(self, request, timeout=None, context=None):
+        self.contexts.append(context)
+        if context is None and not self.has_certificates:
+            raise urllib.error.URLError(ssl.SSLCertVerificationError(1, "certificate verify failed"))
+        return io.BytesIO(self.body)
+
+
+def test_a_download_is_verified_with_certifi_where_python_has_no_certificates(tmp_path, monkeypatch):
+    certifi = pytest.importorskip("certifi")
+    served = _Served(b"hello", has_certificates=False)
+    monkeypatch.setattr(datasets.urllib.request, "urlopen", served)
+    wanted = datasets.Download("https://example.invalid/plain.txt", "plain.txt", 5,
+                               sha256=hashlib.sha256(b"hello").hexdigest())
+    assert datasets.fetch(wanted, tmp_path, lambda *a: None).read_bytes() == b"hello"
+    assert served.contexts[0] is None, "the first attempt uses Python's own certificates"
+    context = served.contexts[1]
+    assert context.verify_mode == ssl.CERT_REQUIRED and context.check_hostname, "verification stays on"
+    assert context.cert_store_stats()["x509_ca"] > 0 and Path(certifi.where()).exists()
+    assert not list(tmp_path.glob("*.part"))
+
+    # Without certifi there is nothing to verify against: say what to do, and fetch nothing.
+    monkeypatch.setitem(sys.modules, "certifi", None)
+    with pytest.raises(ValueError, match="Install Certificates"):
+        datasets.fetch(datasets.Download("https://example.invalid/other.txt", "other.txt", 5, sha256="0" * 64),
+                       tmp_path, lambda *a: None)
+    assert not (tmp_path / "other.txt").exists()
+
+    # Any other failure is passed on as it is; and where Python has certificates, certifi is not asked.
+    def refused(request, timeout=None, context=None):
+        raise urllib.error.URLError(ConnectionRefusedError(61, "refused"))
+    monkeypatch.setattr(datasets.urllib.request, "urlopen", refused)
+    with pytest.raises(urllib.error.URLError):
+        datasets.fetch(datasets.Download("https://example.invalid/third.txt", "third.txt", 5, sha256="0" * 64),
+                       tmp_path, lambda *a: None)
+    fine = _Served(b"hello", has_certificates=True)
+    monkeypatch.setattr(datasets.urllib.request, "urlopen", fine)
+    again = datasets.Download("https://example.invalid/again.txt", "again.txt", 5,
+                              sha256=hashlib.sha256(b"hello").hexdigest())
+    assert datasets.fetch(again, tmp_path, lambda *a: None).read_bytes() == b"hello" and fine.contexts == [None]
 
 
 def test_every_data_set_names_its_source_and_pins_its_files():
@@ -574,6 +623,25 @@ def test_check_data_reads_every_node_without_kato(tmp_path):
     lines = []
     assert run.run(arguments(tmp_path, "--check-data"), log=lines.append) == 0
     assert len(lines) == 2 and "gen_small:" in lines[0] and "12 mid5" in lines[0]
+    # The fingerprints cover every sequence to learn and every query. They are the same on every
+    # machine and Python, which is what lets two instances be compared on the same data.
+    assert lines[0].endswith("data 80d5027643891abe, queries 41675c8f3fa4dfc8")
+    assert lines[1].endswith("data 1ee2d8cb210ed762, queries b73a7aed5bda9f08")
+
+
+def test_the_command_line_writes_each_line_at_once(tmp_path, monkeypatch):
+    """A run of hours is followed through a redirected log, so no line may wait in a buffer."""
+    class Stream(io.StringIO):
+        flushed = 0
+
+        def flush(self):
+            self.flushed += 1
+            super().flush()
+
+    stream = Stream()
+    monkeypatch.setattr(sys, "stdout", stream)
+    assert run.main(["--suite", "smoke", "--check-data", "--data-dir", str(tmp_path)]) == 0
+    assert len(stream.getvalue().splitlines()) == 2 and stream.flushed >= 2
 
 
 # ----------------------------------------------------------------------------
@@ -652,6 +720,11 @@ def test_the_reports_are_built_from_the_result_files(finished, tmp_path):
     loaded = stats.load_run(results / "results" / "smoke")
     best = stats.verdict(loaded, stats.cases(loaded)[0])
     assert f"{best['shares'][best['best'][0]]['p']:.3f}" in page
+    # what the page says about the time per ranking key is read from the run, not assumed
+    timed = [row["by_key"] for row in stats.latency(loaded)["nodes"] if row["by_key"]]
+    assert len(timed) == 1, "the smoke suite times each key on one node"
+    spread = f"span {min(timed[0].values()):,.0f} to {max(timed[0].values()):,.0f} ms"
+    assert spread in page and spread in html_page
 
 
 def test_a_chart_is_a_complete_picture_with_light_and_dark_values():

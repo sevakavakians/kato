@@ -528,6 +528,16 @@ def table_latency_keys(run: dict) -> str:
                  [[code(key)] + [f"{row['by_key'][key]:,.0f} ms" for row in nodes] for key in run["keys"]])
 
 
+def latency_key_sentence(run: dict) -> str:
+    """What the by-key times show, in words: the spread of the keys' medians on each node timed."""
+    spans = [f"{min(row['by_key'].values()):,.0f} to {max(row['by_key'].values()):,.0f} ms ({row['label']})"
+             for row in stats.latency(run)["nodes"] if row["by_key"]]
+    if not spans:
+        return ""
+    return ("KATO computes every metric for every candidate and ranks afterwards, whichever key is asked for. "
+            f"Measured, the {len(run['keys'])} keys' median request times span " + " and ".join(spans) + ":")
+
+
 def table_nodes(run: dict) -> str:
     rows = []
     for node_key in run["record"].get("node_order") or sorted(run["record"]["nodes"]):
@@ -727,7 +737,7 @@ Times are from the machine recorded in [`run.json`]({run_link}): one request at 
 
 {image('latency', 'Request time against the number of candidates')}
 {table_latency(run)}
-Every metric is computed for every candidate whichever key ranks them, so the key does not change the time:
+{latency_key_sentence(run)}
 
 {table_latency_keys(run)}""")
     parts.append(f"""## What Was Not Measured
@@ -1037,12 +1047,13 @@ def build_html(run: dict) -> str:
 {''.join(f'<div data-threshold="{t}">{section_table(table_chance(run, t))}</div>' for t in thresholds)}
 """)
     if stats.latency(run)["points"]:
+        by_key = latency_key_sentence(run)
+        by_key_html = f"<p>{inline_html(by_key)}</p>\n{section_table(table_latency_keys(run))}" if by_key else ""
         body.append(f"""
 <h2>Request time</h2>
 <p>One request at a time, <code>max_predictions</code> 100, <code>recall_threshold</code> {stats.GUIDE_THRESHOLD}, on the machine of the run. Times depend on the hardware.</p>
 {figure(chart_latency(run, False), table_latency(run))}
-<p>Every metric is computed for every candidate whichever key ranks them, so the key does not change the time:</p>
-{section_table(table_latency_keys(run))}
+{by_key_html}
 """)
     body.append(f"""
 <h2>How it was measured</h2>

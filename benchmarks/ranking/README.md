@@ -90,6 +90,10 @@ python -m benchmarks.ranking.run --check-data     # fetch, verify and read every
 python -m benchmarks.ranking.run --discard-data   # delete each download once its node is done
 ```
 
+`--check-data` prints one line per node: its sizes, its query sets, and two fingerprints, one of every sequence the node learns and one of every query. The fingerprints do not depend on the machine or the Python version, so two machines that print the same lines measure the same thing. A run stores the first as `data_digest` in `run.json`.
+
+Downloads use HTTPS with the server's certificate verified, and each file is checked against a SHA-256 pinned in `datasets.py`. A Python that comes without CA certificates (python.org's build for macOS, until its "Install Certificates" command has been run) uses the bundle of the `certifi` package when that is installed; verification is never turned off.
+
 ## Results
 
 ```
@@ -148,7 +152,7 @@ The guidance table at the top of the page follows one rule: in each case the bes
 | `--name NAME` | the suite's name | Folder of this run under the results directory |
 | `--node-prefix P` | `rankbench` | Start of the node ids the run writes |
 | `--response-cap N` | 10000 | Predictions asked for per response; at or above it, each key is asked separately |
-| `--check-data` | | Fetch, verify and read every data set, then stop. KATO is not needed |
+| `--check-data` | | Fetch, verify and read every data set, print each node's sizes and fingerprints, then stop. KATO is not needed |
 | `--discard-data` | | Delete each download once its node is done |
 | `--keep-nodes` | | Leave the nodes in KATO afterwards |
 | `--clear-nodes` | | Clear every node of the suite on the instance, then stop |

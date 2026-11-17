@@ -14,7 +14,9 @@ import csv
 import gzip
 import hashlib
 import io
+import ssl
 import tarfile
+import urllib.error
 import urllib.request
 import zipfile
 from dataclasses import dataclass, field
@@ -117,6 +119,30 @@ def verify(download: Download, path: Path) -> None:
                     )
 
 
+def _open(request: urllib.request.Request):
+    """Open an HTTPS request with the server's certificate verified.
+
+    Some Python builds come without CA certificates (python.org's for macOS,
+    until its "Install Certificates" command has been run). There the bundle of
+    the `certifi` package is used when that package is installed. Verification
+    is never turned off.
+    """
+    try:
+        return urllib.request.urlopen(request, timeout=120)
+    except urllib.error.URLError as error:
+        if not isinstance(error.reason, ssl.SSLCertVerificationError):
+            raise
+        try:
+            import certifi
+        except ImportError:
+            raise ValueError(
+                f"{request.full_url}: the server's certificate could not be verified, because this Python "
+                "has no CA certificates. Install them (python.org's Python for macOS: run its "
+                "'Install Certificates.command'; any Python: `pip install certifi`) and run again."
+            ) from error
+        return urllib.request.urlopen(request, timeout=120, context=ssl.create_default_context(cafile=certifi.where()))
+
+
 def fetch(download: Download, data_dir: Path, log=print) -> Path:
     """The local path of a download, fetching it first if it is not there. Verified either way."""
     data_dir.mkdir(parents=True, exist_ok=True)
@@ -127,7 +153,7 @@ def fetch(download: Download, data_dir: Path, log=print) -> Path:
         log(f"    downloading {download.filename} ({download.size / 1e6:.1f} MB) from {download.url}")
         partial = path.with_name(path.name + ".part")
         request = urllib.request.Request(download.url, headers={"User-Agent": "kato-ranking-benchmark"})
-        with urllib.request.urlopen(request, timeout=120) as response, partial.open("wb") as out:
+        with _open(request) as response, partial.open("wb") as out:
             for block in iter(lambda: response.read(1 << 20), b""):
                 out.write(block)
         partial.replace(path)

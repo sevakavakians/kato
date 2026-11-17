@@ -355,7 +355,7 @@ Metric for ranking predictions.
 - **event_cohesion**: Observed events sitting together in pattern events
 - **onset_alignment**: How early in the pattern the observation lands
 
-*Affinity-weighted (emotive-weighted variants, set when `affinity_emotive` is configured):*
+*Affinity-weighted (deprecated; do not use):*
 - **weighted_similarity**: Emotive-weighted similarity
 - **weighted_evidence**: Emotive-weighted evidence
 - **weighted_confidence**: Emotive-weighted confidence
@@ -367,7 +367,6 @@ Metric for ranking predictions.
 - **bayesian_likelihood**: Match strength alone, leaving out how often a pattern was learned
 - **frequency**: Most often learned patterns first
 - **similarity**: Whole-sequence match priority
-- **weighted_similarity**: Emotionally-relevant matches
 
 A prediction whose value for the chosen metric is `null` (an affinity-weighted metric without `affinity_emotive`) ranks below every prediction that has one.
 

@@ -210,10 +210,10 @@ When fuzzy token matching is enabled (`fuzzy_token_threshold` > 0.0), the `fuzzy
 | `bayesian_likelihood` | bits, unbounded | Weight of evidence the observation gives for the pattern over chance |
 | `bayesian_posterior` | 0.0-1.0 | P(pattern\|observation); with `chance_posterior`, sums to 1.0 over every candidate |
 | `predictive_information` | bits, unbounded | The prediction's part of what the STM tells about the next event |
-| `weighted_similarity` | 0.0-1.0 or null | Affinity-weighted similarity (null when `affinity_emotive` not set) |
-| `weighted_evidence` | 0.0-1.0 or null | Affinity-weighted evidence |
-| `weighted_confidence` | 0.0-1.0 or null | Affinity-weighted confidence |
-| `weighted_snr` | 0.0-1.0 or null | Affinity-weighted signal-to-noise ratio |
+| `weighted_similarity` | 0.0-1.0 or null | Deprecated, do not use. Affinity-weighted similarity (null when `affinity_emotive` not set) |
+| `weighted_evidence` | 0.0-1.0 or null | Deprecated, do not use. Affinity-weighted evidence |
+| `weighted_confidence` | 0.0-1.0 or null | Deprecated, do not use. Affinity-weighted confidence |
+| `weighted_snr` | 0.0-1.0 or null | Deprecated, do not use. Affinity-weighted signal-to-noise ratio |
 
 **Formulas**:
 
@@ -246,6 +246,8 @@ potential = (6.038 * cosine_idf(stm, present)
 Every term and the full-precision weights are in the [Prediction Object Reference](../prediction-object.md#25-potential-float).
 
 **Weighted formulas** (when `affinity_emotive` is set):
+
+**Deprecated. Do not use.** Affinity-weighted matching (`affinity_emotive` and the metrics `weighted_similarity`, `weighted_evidence`, `weighted_confidence` and `weighted_snr`) is scheduled for removal. For an STM of two or more symbols only the observed symbols are weighted and the rest of the pattern counts as zero, so the values overstate the match: a pattern one third observed can score a `weighted_evidence` of 1.0. The metrics have not been measured on any data set. Leave `affinity_emotive` unset and do not use a weighted metric as `rank_sort_algo`.
 
 ```python
 # w(t) = |affinity(t, emotive)| / frequency(t) + epsilon

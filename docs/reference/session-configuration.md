@@ -58,12 +58,12 @@ The `rank_sort_algo` parameter controls how predictions are sorted and prioritiz
 | `itfdf_similarity` | Closeness on shared symbols, scaled by frequency share | Symbol-overlap ranking |
 | `event_cohesion` | Observed events sitting together in pattern events | Co-occurrence over sequence |
 | `onset_alignment` | How early in the pattern the observation lands | Patterns that start with the observation first |
-| `weighted_similarity` | Emotive-weighted similarity | Emotionally-relevant matches |
-| `weighted_evidence` | Emotive-weighted evidence | Emotionally-relevant evidence |
-| `weighted_confidence` | Emotive-weighted confidence | Emotionally-relevant confidence |
-| `weighted_snr` | Emotive-weighted SNR | Emotionally-relevant signals |
+| `weighted_similarity` | Emotive-weighted similarity | Deprecated: do not use |
+| `weighted_evidence` | Emotive-weighted evidence | Deprecated: do not use |
+| `weighted_confidence` | Emotive-weighted confidence | Deprecated: do not use |
+| `weighted_snr` | Emotive-weighted SNR | Deprecated: do not use |
 
-The affinity-weighted metrics are `null` unless `affinity_emotive` is set; a prediction with a `null` value ranks below every prediction that has one. Formulas and measured accuracy: [Prediction Object Reference](prediction-object.md#metrics-at-a-glance).
+The affinity-weighted metrics and `affinity_emotive` are deprecated: do not use them. The metrics are `null` unless `affinity_emotive` is set; a prediction with a `null` value ranks below every prediction that has one. Formulas and measured accuracy: [Prediction Object Reference](prediction-object.md#metrics-at-a-glance).
 
 **Example:**
 ```json

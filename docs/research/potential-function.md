@@ -264,14 +264,6 @@ rank_sort_algo = "similarity"
 
 **When to use**: Structural pattern matching, where the observation covers most of each pattern.
 
-### Affinity-Weighted Ranking
-
-```python
-rank_sort_algo = "weighted_similarity"   # with affinity_emotive set
-```
-
-**When to use**: Matches should be weighed by the symbols that matter to an emotive such as utility.
-
 ### Re-ranking in the Application
 
 `potential` is not configurable: the weights are constants. An application that needs another tradeoff can sort the returned predictions by its own function of their fields.

@@ -258,6 +258,8 @@ observed token is also listed in `anomalies` alongside any missing/extras symbol
 
 ### 2.4 Affinity-Weighted Matching
 
+**Deprecated. Do not use.** Affinity-weighted matching (`affinity_emotive` and the metrics `weighted_similarity`, `weighted_evidence`, `weighted_confidence` and `weighted_snr`) is scheduled for removal. For an STM of two or more symbols only the observed symbols are weighted and the rest of the pattern counts as zero, so the values overstate the match: a pattern one third observed can score a `weighted_evidence` of 1.0. The metrics have not been measured on any data set. Leave `affinity_emotive` unset and do not use a weighted metric as `rank_sort_algo`. This section describes the design; the code departs from it as stated.
+
 **Location**: `kato/searches/pattern_search.py`, `kato/workers/pattern_processor.py`
 
 When `affinity_emotive` is set in session configuration, pattern matching incorporates per-symbol affinity weights derived from KATO's emotive system. This allows the similarity calculation to discount noise tokens and amplify signal tokens based on their emotive charge.

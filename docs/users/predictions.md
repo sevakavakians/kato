@@ -617,6 +617,8 @@ The four fields below come from one model. A pattern that is occurring shows eac
 
 ### Affinity-Weighted Metrics
 
+**Deprecated. Do not use.** Affinity-weighted matching (`affinity_emotive` and the metrics `weighted_similarity`, `weighted_evidence`, `weighted_confidence` and `weighted_snr`) is scheduled for removal. For an STM of two or more symbols only the observed symbols are weighted and the rest of the pattern counts as zero, so the values overstate the match: a pattern one third observed can score a `weighted_evidence` of 1.0. The metrics have not been measured on any data set. Leave `affinity_emotive` unset and do not use a weighted metric as `rank_sort_algo`.
+
 When emotive affinity is configured (`affinity_emotive`), these metrics weight the base metrics by emotive similarity between the current observation and the pattern's historical emotive profile.
 
 - **weighted_similarity**: Similarity weighted by emotive affinity
@@ -704,7 +706,7 @@ curl -X POST http://localhost:8000/sessions \
 - **event_cohesion**: Observed events sitting together in pattern events
 - **onset_alignment**: How early in the pattern the observation lands
 
-*Affinity-weighted (emotive-weighted variants):*
+*Affinity-weighted (deprecated; do not use):*
 - **weighted_similarity**: Emotive-weighted similarity
 - **weighted_evidence**: Emotive-weighted evidence
 - **weighted_confidence**: Emotive-weighted confidence

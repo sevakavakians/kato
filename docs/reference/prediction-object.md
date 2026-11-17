@@ -689,6 +689,8 @@ A high `chance_posterior` marks the queries where nothing learned explains the S
 - **Other recall thresholds, for every metric.** The tables are at 0.1.
 - **Other domains.** Four kinds of data are not all kinds. The figures say how the metrics behave on these, and which conditions help or hurt each one; they are not a forecast for a new data set.
 
+The [ranking benchmark](../../benchmarks/ranking/README.md) measures the ranking keys through the REST API of a running instance, at three recall thresholds, on these kinds of data and on four more. Run it to see the figures for your own instance.
+
 ## Metric Categories
 
 ### Matching Metrics

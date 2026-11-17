@@ -372,6 +372,8 @@ A prediction whose value for the chosen metric is `null` (an affinity-weighted m
 
 What each metric measures, and how each performs as a ranking key: [Prediction Object Reference](../reference/prediction-object.md#metrics-at-a-glance).
 
+To see how the keys rank on your own instance and your own kinds of data, run the [ranking benchmark](../../benchmarks/ranking/README.md). It measures all of them through the REST API and builds a report.
+
 **Example - Similarity Ranking**:
 ```bash
 # Rank by match quality

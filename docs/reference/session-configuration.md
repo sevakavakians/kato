@@ -65,6 +65,8 @@ The `rank_sort_algo` parameter controls how predictions are sorted and prioritiz
 
 The affinity-weighted metrics and `affinity_emotive` are deprecated: do not use them. The metrics are `null` unless `affinity_emotive` is set; a prediction with a `null` value ranks below every prediction that has one. Formulas and measured accuracy: [Prediction Object Reference](prediction-object.md#metrics-at-a-glance).
 
+To measure the keys on your own instance, run the [ranking benchmark](../../benchmarks/ranking/README.md).
+
 **Example:**
 ```json
 {

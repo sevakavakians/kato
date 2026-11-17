@@ -433,6 +433,8 @@ def run(args, log=print, kato: Kato = None) -> int:
                   "kato": {"version": service.get("version"), "service": service.get("service"), "url": args.url}}
     record["client"] = {"python": platform.python_version(), "platform": platform.platform(),
                         "concurrency": args.concurrency}
+    if args.note:
+        record["note"] = args.note
     record["queries_per_set"] = max(count, record.get("queries_per_set", 0))
     record["node_order"] = node_order
     write_json(run_path, record)
@@ -520,6 +522,7 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--discard-data", action="store_true",
                    help="delete each download from the data directory once its node is done")
     p.add_argument("--keep-nodes", action="store_true", help="leave the nodes in KATO afterwards")
+    p.add_argument("--note", help="a line shown at the top of the reports, for example the machine")
     p.add_argument("--fresh", action="store_true", help="delete this run's stored results first")
     return p
 

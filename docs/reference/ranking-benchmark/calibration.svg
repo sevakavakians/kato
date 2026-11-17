@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="kz" role="img" aria-label="future_potentials: the probability stated against how often the top entry is right. Every next-event query, in ten bins of stated probability. recall_threshold 0.1." viewBox="0 0 760 432" width="760" height="432"><style>.kz { --kz-surface: #fcfcfb; --kz-ink: #0b0b0b; --kz-ink2: #52514e; --kz-muted: #898781; --kz-grid: #e1e0d9; --kz-axis: #c3c2b7; --kz-s1: #2a78d6; --kz-s2: #eb6834; --kz-quiet: #898781; --kz-quiet2: #c3c2b7; --kz-neg: #e34948; --kz-q1: #cde2fb; --kz-q2: #9ec5f4; --kz-q3: #6da7ec; --kz-q4: #3987e5; --kz-q5: #256abf; --kz-q6: #184f95; --kz-q7: #0d366b; --kz-qt1: #0b0b0b; --kz-qt2: #0b0b0b; --kz-qt3: #0b0b0b; --kz-qt4: #ffffff; --kz-qt5: #ffffff; --kz-qt6: #ffffff; --kz-qt7: #ffffff; }
+@media (prefers-color-scheme: dark) { .kz { --kz-surface: #1a1a19; --kz-ink: #f0efec; --kz-ink2: #c3c2b7; --kz-muted: #898781; --kz-grid: #2c2c2a; --kz-axis: #383835; --kz-s1: #3987e5; --kz-s2: #d95926; --kz-quiet: #898781; --kz-quiet2: #52514e; --kz-neg: #e66767; --kz-q1: #0d366b; --kz-q2: #184f95; --kz-q3: #256abf; --kz-q4: #3987e5; --kz-q5: #6da7ec; --kz-q6: #9ec5f4; --kz-q7: #cde2fb; --kz-qt1: #ffffff; --kz-qt2: #ffffff; --kz-qt3: #ffffff; --kz-qt4: #ffffff; --kz-qt5: #0b0b0b; --kz-qt6: #0b0b0b; --kz-qt7: #0b0b0b; } }
+
+.kz { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+.kz .surface { fill: var(--kz-surface); }
+.kz text { fill: var(--kz-ink2); font-size: 12px; }
+.kz .title { fill: var(--kz-ink); font-size: 14px; font-weight: 600; }
+.kz .sub { fill: var(--kz-ink2); font-size: 12px; }
+.kz .tick { fill: var(--kz-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.kz .value { fill: var(--kz-ink); font-size: 11px; font-variant-numeric: tabular-nums; }
+.kz .head { fill: var(--kz-ink); font-size: 12px; font-weight: 600; }
+.kz .grid { stroke: var(--kz-grid); stroke-width: 1; }
+.kz .axis { stroke: var(--kz-axis); stroke-width: 1; }
+.kz .whisker { stroke: var(--kz-ink2); stroke-width: 1.5; }
+.kz .line { stroke: var(--kz-s1); stroke-width: 2; fill: none; stroke-linejoin: round; stroke-linecap: round; }
+.kz .dot { fill: var(--kz-s1); stroke: var(--kz-surface); stroke-width: 2; }
+.kz .s1 { fill: var(--kz-s1); } .kz .s2 { fill: var(--kz-s2); }
+.kz .quiet { fill: var(--kz-quiet); } .kz .quiet2 { fill: var(--kz-quiet2); }
+.kz .neg { fill: var(--kz-neg); }
+.kz .cell-text { font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.kz .inside { fill: #ffffff; font-size: 11px; font-variant-numeric: tabular-nums; }
+.kz .inside.dark { fill: #0b0b0b; }
+.kz .q1 { fill: var(--kz-q1); } .kz .qt1 { fill: var(--kz-qt1); }
+.kz .q2 { fill: var(--kz-q2); } .kz .qt2 { fill: var(--kz-qt2); }
+.kz .q3 { fill: var(--kz-q3); } .kz .qt3 { fill: var(--kz-qt3); }
+.kz .q4 { fill: var(--kz-q4); } .kz .qt4 { fill: var(--kz-qt4); }
+.kz .q5 { fill: var(--kz-q5); } .kz .qt5 { fill: var(--kz-qt5); }
+.kz .q6 { fill: var(--kz-q6); } .kz .qt6 { fill: var(--kz-qt6); }
+.kz .q7 { fill: var(--kz-q7); } .kz .qt7 { fill: var(--kz-qt7); }
+</style><rect class="surface" width="760" height="432" rx="8"/><text x="16" y="24" class="title">future_potentials: the probability stated against how often the top entry is right</text><text x="16" y="42" class="sub">Every next-event query, in ten bins of stated probability. recall_threshold 0.1.</text><line x1="76.0" y1="376.0" x2="376.0" y2="376.0" class="axis"/><text x="68.0" y="380.0" text-anchor="end" class="tick">0%</text><line x1="76.0" y1="301.0" x2="376.0" y2="301.0" class="grid"/><text x="68.0" y="305.0" text-anchor="end" class="tick">25%</text><line x1="76.0" y1="226.0" x2="376.0" y2="226.0" class="grid"/><text x="68.0" y="230.0" text-anchor="end" class="tick">50%</text><line x1="76.0" y1="151.0" x2="376.0" y2="151.0" class="grid"/><text x="68.0" y="155.0" text-anchor="end" class="tick">75%</text><line x1="76.0" y1="76.0" x2="376.0" y2="76.0" class="grid"/><text x="68.0" y="80.0" text-anchor="end" class="tick">100%</text><text x="76.0" y="392.0" text-anchor="middle" class="tick">0%</text><text x="151.0" y="392.0" text-anchor="middle" class="tick">25%</text><text x="226.0" y="392.0" text-anchor="middle" class="tick">50%</text><text x="301.0" y="392.0" text-anchor="middle" class="tick">75%</text><text x="376.0" y="392.0" text-anchor="middle" class="tick">100%</text><line x1="76.0" y1="76.0" x2="76.0" y2="376.0" class="axis"/><text x="226.0" y="412.0" text-anchor="middle">Probability stated</text><text x="30.0" y="66.0" text-anchor="start">Share right</text><line x1="76.0" y1="376.0" x2="376.0" y2="76.0" class="axis"/><text x="384.0" y="80.0" text-anchor="start" class="tick">stated = observed</text><path d="M97.9,355.3 L122.8,333.0 L150.6,294.4 L180.8,267.1 L211.0,247.2 L241.1,204.2 L272.8,163.6 L300.4,142.3 L332.3,113.5 L370.1,88.7" class="line"/><circle cx="97.9" cy="355.3" r="5" class="dot" data-tip="6.9% right where 7.3% was stated · 58 answers" tabindex="0"/><circle cx="122.8" cy="333.0" r="5" class="dot" data-tip="14.3% right where 15.6% was stated · 244 answers" tabindex="0"/><circle cx="150.6" cy="294.4" r="5" class="dot" data-tip="27.2% right where 24.9% was stated · 294 answers" tabindex="0"/><circle cx="180.8" cy="267.1" r="5" class="dot" data-tip="36.3% right where 34.9% was stated · 270 answers" tabindex="0"/><circle cx="211.0" cy="247.2" r="5" class="dot" data-tip="42.9% right where 45.0% was stated · 240 answers" tabindex="0"/><circle cx="241.1" cy="204.2" r="5" class="dot" data-tip="57.3% right where 55.0% was stated · 262 answers" tabindex="0"/><circle cx="272.8" cy="163.6" r="5" class="dot" data-tip="70.8% right where 65.6% was stated · 298 answers" tabindex="0"/><circle cx="300.4" cy="142.3" r="5" class="dot" data-tip="77.9% right where 74.8% was stated · 294 answers" tabindex="0"/><circle cx="332.3" cy="113.5" r="5" class="dot" data-tip="87.5% right where 85.4% was stated · 400 answers" tabindex="0"/><circle cx="370.1" cy="88.7" r="5" class="dot" data-tip="95.8% right where 98.0% was stated · 2038 answers" tabindex="0"/></svg>

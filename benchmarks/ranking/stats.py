@@ -11,6 +11,7 @@ import json
 import math
 from pathlib import Path
 
+from benchmarks.ranking import store
 from benchmarks.ranking.scoring import KEYS, NO_EVENT, RIGHT
 
 Z = 1.959963984540054          # the 97.5th percentile of the standard normal
@@ -31,10 +32,7 @@ def load_run(run_dir: Path) -> dict:
             continue
         for set_key in node.get("set_order") or sorted(node["sets"]):
             info = node["sets"][set_key]
-            path = run_dir / "sets" / f"{set_key}.jsonl"
-            if not path.exists():
-                continue
-            rows = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+            rows = [json.loads(line) for line in store.read_lines(run_dir / "sets", set_key)]
             if rows:
                 sets[set_key] = {
                     "key": set_key, "node": node_key, "label": info["label"], "group": info["group"],

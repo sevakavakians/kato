@@ -8,7 +8,11 @@ Writes, from the same figures:
 
     <out>/ranking-benchmark.md                  the docs page: tables, with the charts as SVG files
     <out>/ranking-benchmark/*.svg               the charts
-    <out>/ranking-benchmark/report.html         one self-contained interactive page
+    <run>/report.html                           one self-contained interactive page
+
+The docs page and its charts are small and are kept in git. The interactive
+page is about 2 MB for the guide suite; it is written beside the results, is
+not kept in git, and can be opened in a browser or published as it is.
 
 Nothing is asked of KATO here: every figure is arithmetic on the stored
 outcomes, so the reports can be rebuilt at any time and always agree with the
@@ -1083,8 +1087,8 @@ def build(run_dir: Path, out_dir: Path, log=print) -> None:
     for name, svg in build_charts(run, stats.GUIDE_THRESHOLD, True).items():
         (images / f"{name}.svg").write_text(svg)
     (out_dir / f"{PAGE}.md").write_text(build_markdown(run, PAGE))
-    (images / "report.html").write_text(build_html(run))
-    log(f"wrote {out_dir / (PAGE + '.md')}, the charts and {images / 'report.html'}")
+    (run_dir / "report.html").write_text(build_html(run))
+    log(f"wrote {out_dir / (PAGE + '.md')} with its charts in {images}, and {run_dir / 'report.html'}")
 
 
 def main(argv=None) -> int:

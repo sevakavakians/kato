@@ -27,7 +27,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from benchmarks.ranking import charts, datasets, report, run, scoring, stats, suite  # noqa: E402
+from benchmarks.ranking import charts, datasets, report, run, scoring, stats, store, suite  # noqa: E402
 from benchmarks.ranking.client import Kato, KatoError  # noqa: E402
 from benchmarks.ranking.generated import Library, Rng, Sampler, zipf_weights  # noqa: E402
 from kato.representations.pattern import Pattern  # noqa: E402
@@ -467,9 +467,15 @@ def arguments(tmp_path, *extra):
                                     "--data-dir", str(tmp_path / "data"), "--concurrency", "3", *extra])
 
 
+def sets_of(tmp_path, name="smoke"):
+    return tmp_path / "results" / name / "sets"
+
+
 def records(tmp_path, name="smoke"):
-    return {path.name: [json.loads(line) for line in path.read_text().splitlines()]
-            for path in sorted((tmp_path / "results" / name / "sets").glob("*.jsonl"))}
+    """Every set of a run, by `<set>.jsonl`, whichever form it is kept in."""
+    folder = sets_of(tmp_path, name)
+    keys = sorted({path.name.split(".jsonl")[0] for path in folder.glob("*.jsonl*")})
+    return {f"{key}.jsonl": [json.loads(line) for line in store.read_lines(folder, key)] for key in keys}
 
 
 def untimed(record):
@@ -506,6 +512,9 @@ def test_a_run_writes_one_record_per_query_and_clears_its_nodes(finished):
     assert all(not node for node in toy.nodes.values()), "every node is cleared when its queries are done"
     assert not toy.sessions, "every session is deleted"
     assert all(node_id.startswith("rankbench_smoke_") for node_id in toy.nodes)
+    assert sorted(path.name for path in sets_of(tmp_path).iterdir()) == [
+        "gen_small.end.jsonl.gz", "gen_small.mid5.jsonl.gz", "gen_small_multi.mid5.jsonl.gz"], \
+        "a complete set is kept compressed, and its working file is gone"
 
 
 def test_a_finished_run_asks_nothing_again(finished):
@@ -529,28 +538,79 @@ def test_more_queries_extend_a_run_and_keep_what_is_stored(finished):
         assert after[name][:len(rows)] == rows
 
 
-def test_an_interrupted_set_is_repaired_and_continued(finished):
+@pytest.mark.parametrize("an_earlier_run_stored_the_set", [False, True])
+def test_an_interrupted_set_is_repaired_and_continued(finished, an_earlier_run_stored_the_set):
+    """A run that is killed leaves a set's working file, cut wherever it was. The working file is the
+    newer of the two forms, so it is what the next run continues from, with or without a stored file."""
     tmp_path, _ = finished
-    path = tmp_path / "results" / "smoke" / "sets" / "gen_small.mid5.jsonl"
-    whole = path.read_text().splitlines()
-    path.write_text("\n".join(whole[:7]) + "\n" + whole[7][:40])          # cut inside the eighth record
+    folder, key = sets_of(tmp_path), "gen_small.mid5"
+    whole = store.read_lines(folder, key)
+    store.working(folder, key).write_text("\n".join(whole[:7]) + "\n" + whole[7][:40])   # cut inside the eighth
+    if not an_earlier_run_stored_the_set:
+        store.stored(folder, key).unlink()
     resumed = ToyKato()
     assert run.run(arguments(tmp_path, "--only", "gen_small"), log=lambda *a: None, kato=Kato(transport=resumed)) == 0
-    after = path.read_text().splitlines()
+    after = store.read_lines(folder, key)
     assert after[:7] == whole[:7], "what was stored whole is kept as it was"
     assert [untimed(json.loads(line)) for line in after] == [untimed(json.loads(line)) for line in whole]
     probe = 1 + 12 + 5 * len(scoring.KEYS)                  # the timing pass: a warm-up, 12 requests, 5 per key
     assert resumed.calls["predictions"] == 5 * 3 + probe, "only the five missing queries are asked again"
+    assert store.stored(folder, key).exists() and not store.working(folder, key).exists()
 
 
 def test_results_of_another_query_set_are_refused(finished):
     tmp_path, _ = finished
-    path = tmp_path / "results" / "smoke" / "sets" / "gen_small.mid5.jsonl"
+    path = store.restore(sets_of(tmp_path), "gen_small.mid5")
     rows = [json.loads(line) for line in path.read_text().splitlines()]
     rows[3]["q"] = "0" * 16
     path.write_text("".join(json.dumps(row) + "\n" for row in rows))
     with pytest.raises(run.BenchmarkError, match="--fresh"):
         run.stored_records(path, suite.smoke_plans()[0].build(tmp_path, 12).query_sets[0].queries, run.THRESHOLDS)
+
+
+def test_a_set_is_stored_compressed_and_changes_only_when_its_results_do(finished, tmp_path_factory):
+    tmp_path, _ = finished
+    folder, key = sets_of(tmp_path), "gen_small.mid5"
+    packed = store.stored(folder, key)
+    lines = store.read_lines(folder, key)
+    content = packed.read_bytes()
+    assert gzip.decompress(content).decode().splitlines() == lines and len(lines) == 12
+    assert content[3] & 0x08 == 0 and content[4:8] == b"\x00" * 4, "no file name and no time in the stored bytes"
+
+    # The same lines give the same bytes wherever and whenever they are packed.
+    elsewhere = tmp_path_factory.mktemp("elsewhere")
+    store.working(elsewhere, key).write_text("".join(line + "\n" for line in lines))
+    store.pack(elsewhere, key)
+    assert store.stored(elsewhere, key).read_bytes() == content and not store.working(elsewhere, key).exists()
+
+    # A run that has nothing to ask leaves the stored files as they are, to the modification time.
+    before = {path.name: (path.read_bytes(), path.stat().st_mtime_ns) for path in folder.iterdir()}
+    assert run.run(arguments(tmp_path), log=lambda *a: None, kato=Kato(transport=ToyKato())) == 0
+    assert {path.name: (path.read_bytes(), path.stat().st_mtime_ns) for path in folder.iterdir()} == before
+
+    # Reading prefers the working file of a run in progress.
+    store.working(folder, key).write_text(lines[0] + "\n")
+    assert store.read_lines(folder, key) == lines[:1]
+    store.working(folder, key).unlink()
+    assert store.read_lines(folder, key) == lines and store.read_lines(folder, "no_such_set") == []
+
+    # A stored file that cannot be read stops its node and says which file it is; the other node is not affected.
+    packed.write_bytes(content[:40])
+    said = []
+    assert run.run(arguments(tmp_path), log=said.append, kato=Kato(transport=ToyKato())) == 1
+    assert any("FAILED" in line and "gen_small.mid5.jsonl.gz cannot be read" in line for line in said)
+    assert len(store.read_lines(folder, "gen_small_multi.mid5")) == 12
+
+    # --fresh starts the run again: both forms and the interactive report go, and every query is asked.
+    (tmp_path / "results" / "smoke" / "report.html").write_text("an earlier report")
+    store.working(folder, "left_over").write_text("{}\n")
+    again = ToyKato()
+    assert run.run(arguments(tmp_path, "--fresh"), log=lambda *a: None, kato=Kato(transport=again)) == 0
+    assert not (tmp_path / "results" / "smoke" / "report.html").exists()
+    assert sorted(path.name for path in folder.iterdir()) == sorted(before)
+    assert {name: len(rows) for name, rows in records(tmp_path).items()} == {
+        "gen_small.end.jsonl": 6, "gen_small.mid5.jsonl": 12, "gen_small_multi.mid5.jsonl": 12}
+    assert again.calls["observe-sequence"] > 480, "both nodes were loaded and asked again"
 
 
 def test_asking_each_key_separately_gives_what_one_full_response_gives(finished):
@@ -713,7 +773,8 @@ def test_the_reports_are_built_from_the_result_files(finished, tmp_path):
         ElementTree.fromstring((out / "ranking-benchmark" / f"{name}.svg").read_text())      # well-formed
     assert {"headline", "kinds", "situations", "top", "thresholds", "calibration", "endings", "latency"} <= set(
         re.findall(r"\]\(ranking-benchmark/([a-z]+)\.svg\)", page))
-    html_page = (out / "ranking-benchmark" / "report.html").read_text()
+    assert not (out / "ranking-benchmark" / "report.html").exists(), "the interactive page is not a docs file"
+    html_page = (results / "results" / "smoke" / "report.html").read_text()
     assert html_page.startswith("<!DOCTYPE html>") and 'name="threshold"' in html_page and "data-tip=" in html_page
     assert "<script src" not in html_page and "http://" not in html_page.replace("http://www.w3.org/2000/svg", "")
     # the same figures in both: the best key's share in the first case
@@ -725,6 +786,14 @@ def test_the_reports_are_built_from_the_result_files(finished, tmp_path):
     assert len(timed) == 1, "the smoke suite times each key on one node"
     spread = f"span {min(timed[0].values()):,.0f} to {max(timed[0].values()):,.0f} ms"
     assert spread in page and spread in html_page
+    # What goes into git passes the repository's own checks on text files: no trailing blanks, one final newline.
+    kept = [out / "ranking-benchmark.md", results / "results" / "smoke" / "run.json",
+            *sorted((out / "ranking-benchmark").glob("*.svg"))]
+    assert len(kept) >= 10
+    for path in kept:
+        text = path.read_text()
+        assert text.endswith("\n") and not text.endswith("\n\n"), path.name
+        assert all(line == line.rstrip() for line in text.split("\n")), path.name
 
 
 def test_a_chart_is_a_complete_picture_with_light_and_dark_values():

@@ -13,10 +13,11 @@ have put on top, time a few requests, and clear the node again.
     python -m benchmarks.ranking.run --clear-nodes        # empty the suite's nodes after a run that was killed
     python -m benchmarks.ranking.report                   # tables and charts from the results
 
-Results go to benchmarks/results/ranking/<name>/. A run that is interrupted, or
-asked for more queries later, continues from what is stored: completed queries
-are never asked twice. Only nodes whose id starts with the node prefix are
-written, and each is cleared when its queries are done.
+Results go to benchmarks/results/ranking/<name>/: run.json and one compressed
+file per query set (store.py). A run that is interrupted, or asked for more
+queries later, continues from what is stored: completed queries are never asked
+twice. Only nodes whose id starts with the node prefix are written, and each is
+cleared when its queries are done.
 """
 
 from __future__ import annotations
@@ -33,7 +34,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
-from benchmarks.ranking import datasets, scoring
+from benchmarks.ranking import datasets, scoring, store
 from benchmarks.ranking import suite as suites
 from benchmarks.ranking.client import Kato, KatoError
 
@@ -436,7 +437,8 @@ def run(args, log=print, kato: Kato = None) -> int:
     out_dir = Path(args.results_dir) / (args.name or args.suite)
     sets_dir = out_dir / "sets"
     if args.fresh and out_dir.exists():
-        for path in sorted(sets_dir.glob("*.jsonl")) + [out_dir / "run.json"]:
+        store.discard(sets_dir)
+        for path in (out_dir / "run.json", out_dir / "report.html"):
             if path.exists():
                 path.unlink()
     sets_dir.mkdir(parents=True, exist_ok=True)
@@ -496,10 +498,17 @@ def _run_node(kato, plan, node_id, count, data_dir, sets_dir, record, run_path, 
     if known.get("data_digest") not in (None, summary["data_digest"]):
         raise BenchmarkError(f"{plan.key}: the data is not what the stored results were measured on. Use --fresh.")
 
-    done = all(
-        len(stored_records(sets_dir / f"{s.key}.jsonl", s.queries, THRESHOLDS)) == len(s.queries)
-        for s in node.query_sets)
+    # A run appends to a set's working file. What an earlier run stored comes back as that file first.
+    paths = {}
+    for query_set in node.query_sets:
+        try:
+            paths[query_set.key] = store.restore(sets_dir, query_set.key)
+        except ValueError as error:
+            raise BenchmarkError(str(error)) from error
+    done = all(len(stored_records(paths[s.key], s.queries, THRESHOLDS)) == len(s.queries) for s in node.query_sets)
     if done and "latency" in known and "error" not in known:
+        for query_set in node.query_sets:
+            store.pack(sets_dir, query_set.key)
         log("      complete already")
         return
 
@@ -514,8 +523,7 @@ def _run_node(kato, plan, node_id, count, data_dir, sets_dir, record, run_path, 
         summary["sets"] = {}
         summary["set_order"] = [query_set.key for query_set in node.query_sets]
         for query_set in node.query_sets:
-            summary["sets"][query_set.key] = run_set(
-                asker, query_set, sets_dir / f"{query_set.key}.jsonl", args.concurrency, log)
+            summary["sets"][query_set.key] = run_set(asker, query_set, paths[query_set.key], args.concurrency, log)
         summary["latency"] = probe_latency(kato, node_id, node.query_sets[0].queries, plan.key in TIME_KEYS_ON)
     finally:
         asker.close()
@@ -523,6 +531,8 @@ def _run_node(kato, plan, node_id, count, data_dir, sets_dir, record, run_path, 
             _quietly(clear_node, kato, node_id)
     record["nodes"][plan.key] = summary
     write_json(run_path, record)
+    for query_set in node.query_sets:                   # the node is complete: keep its sets in their stored form
+        store.pack(sets_dir, query_set.key)
     if args.discard_data and node.dataset:
         datasets.discard(datasets.DATASETS[node.dataset], data_dir)
 

@@ -246,7 +246,7 @@ request; database isolation follows from that, not from configuration.
   - `entropy`, `normalized_entropy`, `global_normalized_entropy`: Information content of the pattern
   - `tfidf_score`, `itfdf_similarity`: TF-IDF measures
   - `event_cohesion`, `onset_alignment`: Position of the observation in the pattern
-  - `weighted_similarity`, `weighted_evidence`, `weighted_confidence`, `weighted_snr`: Affinity-weighted metrics (need `affinity_emotive`)
+  - `weighted_similarity`, `weighted_evidence`, `weighted_confidence`, `weighted_snr`: Affinity-weighted metrics (need `affinity_emotive`). Deprecated: do not use
 - **Example**: `potential`, `good_odds`, `similarity`
 - **Notes**:
   - Controls how predictions are sorted in the response: highest value first, equal values by pattern name
@@ -529,7 +529,7 @@ Configuration can be updated at runtime using session-based endpoints:
 - `use_token_matching` - Pattern matching mode (token vs character level)
 - `sort_symbols` - Sort symbols alphabetically within events
 - `fuzzy_token_threshold` - Fuzzy token matching threshold
-- `affinity_emotive` - Emotive used for affinity-weighted matching (session-only; there is no `AFFINITY_EMOTIVE` environment variable)
+- `affinity_emotive` - Deprecated: do not set. Emotive used for affinity-weighted matching (session-only; there is no `AFFINITY_EMOTIVE` environment variable)
 
 ### Example Update Request
 ```bash

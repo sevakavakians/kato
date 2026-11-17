@@ -329,6 +329,8 @@ The weights are constants, held in `kato/informatics/prediction_metrics.py` to f
 **Purpose**: Reports where in the pattern the observation begins. When the STM is a single event (the first observation after the STM is cleared), that position is most of what separates the candidates. Reported only; it is not a term of `potential`, which accounts for position through `evidence_to_end`: the less of a pattern lies before the match, the higher it scores.
 
 ### 32. **weighted_similarity**, **weighted_evidence**, **weighted_confidence**, **weighted_snr** (float or null)
+**Deprecated. Do not use.** Affinity-weighted matching (`affinity_emotive` and the metrics `weighted_similarity`, `weighted_evidence`, `weighted_confidence` and `weighted_snr`) is scheduled for removal. For an STM of two or more symbols only the observed symbols are weighted and the rest of the pattern counts as zero, so the values overstate the match: a pattern one third observed can score a `weighted_evidence` of 1.0. The metrics have not been measured on any data set. Leave `affinity_emotive` unset and do not use a weighted metric as `rank_sort_algo`.
+
 **Description**: Four matching metrics with every symbol weighted by its affinity to one emotive.  
 **Formula**: with `w(t) = |affinity(t, emotive)| / frequency(t) + epsilon` for a symbol `t`:
 - `weighted_similarity = 2 * Σ w(matches) / (Σ w(STM) + Σ w(pattern))`
@@ -504,7 +506,7 @@ The weights relative to the best are 1, `e^-8.18` = 0.0003 and `e^-12.05` = 0.00
 | `global_normalized_entropy` | How evenly are the pattern's symbols spread over the node's patterns? | `-Σ g(s) × log_V g(s)`, `g(s)` the share of patterns holding `s`, `V` the distinct symbols in the node | 0 or more | Pattern, node | Describing patterns | Not a ranking key |
 | `tfidf_score` | Does the pattern hold symbols that few other patterns hold? | Mean over the pattern's distinct symbols of `TF(s) × IDF(s)` | 0 or more; typically under 2 | Pattern, node | Finding distinctive patterns | Not a ranking key: it does not read the observation |
 | `itfdf_similarity` | How close are the STM and `present` on the symbols patterns share? | `1 - (1 - cosine) × f / candidate frequency` | 0 to 1 | Prediction, node, candidates | A symbol-overlap check | Clean observations: 0.844 without noise, 0.356 at 20% noise. 0.775 on the logs |
-| `weighted_similarity`, `weighted_evidence`, `weighted_confidence`, `weighted_snr` | The matching metrics, with each symbol counted by its affinity to an emotive | [Field 32](#32-weighted_similarity-weighted_evidence-weighted_confidence-weighted_snr-float-or-null) | 0 to 1; `null` without `affinity_emotive` | Prediction, node | Ranking by what matters to an emotive | Nodes that learn emotives. Not measured: the data sets carry none |
+| `weighted_similarity`, `weighted_evidence`, `weighted_confidence`, `weighted_snr` | The matching metrics, with each symbol counted by its affinity to an emotive | [Field 32](#32-weighted_similarity-weighted_evidence-weighted_confidence-weighted_snr-float-or-null) | 0 to 1; `null` without `affinity_emotive` | Prediction, node | Nothing: deprecated, do not use | Not measured. Overstates the match for an STM of two or more symbols |
 
 The three ensemble fields, in the same terms:
 
@@ -680,7 +682,7 @@ A high `chance_posterior` marks the queries where nothing learned explains the S
 
 ### What Was Not Measured
 
-- **The affinity-weighted metrics.** The data sets carry no emotives.
+- **The affinity-weighted metrics.** The data sets carry no emotives. The metrics are deprecated.
 - **Fuzzy token matching** and character-level matching.
 - **Sequences that end.** An event followed every query, so `ends_here` was measured only as probability given to an ending that did not come.
 - **STMs of one symbol.** Every query has at least two.
@@ -723,7 +725,7 @@ A high `chance_posterior` marks the queries where nothing learned explains the S
 - **tfidf_score**: TF-IDF measure of pattern distinctiveness
 
 ### Affinity-Weighted Metrics
-- **weighted_similarity, weighted_evidence, weighted_confidence, weighted_snr**: Matching metrics with each symbol weighted by its affinity to an emotive (set when the session configures `affinity_emotive`, `null` otherwise)
+- **weighted_similarity, weighted_evidence, weighted_confidence, weighted_snr**: Deprecated; do not use. Matching metrics with each symbol weighted by its affinity to an emotive (set when the session configures `affinity_emotive`, `null` otherwise)
 
 ### Data Dependencies
 

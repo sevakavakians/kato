@@ -696,10 +696,10 @@ Common HTTP status codes:
 - `bayesian_posterior`: P(pattern|observation); with `chance_posterior`, sums to 1.0 over every candidate (0-1)
 - `predictive_information`: The prediction's part of what the STM tells about the next event, in bits (unbounded; 0 with no future)
 - `emotives`: Emotional/utility values (averaged from pattern)
-- `weighted_similarity`: Affinity-weighted similarity (null when disabled)
-- `weighted_evidence`: Affinity-weighted evidence (null when disabled)
-- `weighted_confidence`: Affinity-weighted confidence (null when disabled)
-- `weighted_snr`: Affinity-weighted SNR (null when disabled)
+- `weighted_similarity`: Deprecated, do not use. Affinity-weighted similarity (null when disabled)
+- `weighted_evidence`: Deprecated, do not use. Affinity-weighted evidence (null when disabled)
+- `weighted_confidence`: Deprecated, do not use. Affinity-weighted confidence (null when disabled)
+- `weighted_snr`: Deprecated, do not use. Affinity-weighted SNR (null when disabled)
 
 Formulas, ranges and what each metric is for: [Prediction Object Reference](../reference/prediction-object.md).
 

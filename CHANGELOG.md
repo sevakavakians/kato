@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Deprecated
+- **Affinity-weighted matching: `affinity_emotive` and the metrics
+  `weighted_similarity`, `weighted_evidence`, `weighted_confidence` and
+  `weighted_snr`, including their use as `rank_sort_algo`.** Do not use them;
+  they are scheduled for removal in the next major release. For an STM of two
+  or more symbols only the observed symbols are weighted, so the values
+  overstate the match, and the metrics have not been measured on any data set.
+  No code changes in this entry: the fields are still returned. Stored symbol
+  affinities and the `/symbols/affinity` endpoints are not affected.
+
 ## [7.1.0] - 2026-11-16
 
 ### Upgrade notes

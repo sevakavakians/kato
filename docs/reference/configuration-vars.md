@@ -167,6 +167,8 @@ is no `AFFINITY_EMOTIVE` environment variable.
 
 ### Affinity-Weighted Matching
 
+**Deprecated. Do not use.** Affinity-weighted matching (`affinity_emotive` and the metrics `weighted_similarity`, `weighted_evidence`, `weighted_confidence` and `weighted_snr`) is scheduled for removal. For an STM of two or more symbols only the observed symbols are weighted and the rest of the pattern counts as zero, so the values overstate the match: a pattern one third observed can score a `weighted_evidence` of 1.0. The metrics have not been measured on any data set. Leave `affinity_emotive` unset and do not use a weighted metric as `rank_sort_algo`.
+
 When `affinity_emotive` is set in the session configuration, KATO uses per-symbol affinity values to weight the pattern matching similarity calculation. Symbols with high absolute affinity for the chosen emotive are treated as signal; symbols with low or zero affinity are treated as noise and discounted.
 
 **Weight formula**: `w(t) = |aff(t, e)| / freq(t) + epsilon`

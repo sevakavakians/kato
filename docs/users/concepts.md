@@ -255,6 +255,9 @@ observe({'strings': ['happy']})
 ```
 
 #### Affinity-Weighted Pattern Matching
+
+**Deprecated. Do not use.** Affinity-weighted matching (`affinity_emotive` and the metrics `weighted_similarity`, `weighted_evidence`, `weighted_confidence` and `weighted_snr`) is scheduled for removal. For an STM of two or more symbols only the observed symbols are weighted and the rest of the pattern counts as zero, so the values overstate the match: a pattern one third observed can score a `weighted_evidence` of 1.0. The metrics have not been measured on any data set. Leave `affinity_emotive` unset and do not use a weighted metric as `rank_sort_algo`.
+
 - Symbol affinities (cumulative emotive values per symbol) can be used to weight pattern matching
 - Enable by setting `affinity_emotive` in session config to an emotive name (e.g., `"cost"`)
 - Tokens with high absolute affinity for the chosen emotive are treated as signal

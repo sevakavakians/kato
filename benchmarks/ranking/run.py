@@ -70,6 +70,10 @@ def now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _clock(seconds: float) -> str:
+    return f"{int(seconds) // 3600}:{int(seconds) % 3600 // 60:02d}:{int(seconds) % 60:02d}"
+
+
 def digest_of(value) -> str:
     text = json.dumps(value, separators=(",", ":"), sort_keys=True)
     return hashlib.sha256(text.encode()).hexdigest()[:16]
@@ -298,6 +302,8 @@ def run_set(asker: Asker, query_set, path: Path, workers: int, log=print) -> dic
                     record = {"i": index, **describe(queries[index]), "t": by_threshold}
                     out.write(json.dumps(record, separators=(",", ":")) + "\n")
                     out.flush()
+                    if (index + 1) % 50 == 0 and index + 1 < len(queries):
+                        log(f"      {query_set.key}: {index + 1} of {len(queries)}")
         finally:
             pool.shutdown(wait=True, cancel_futures=True)   # on a failure, do not ask the rest
     seconds = time.perf_counter() - started
@@ -448,9 +454,10 @@ def run(args, log=print, kato: Kato = None) -> int:
     log(f"KATO {service.get('version')} at {args.url}; suite '{args.suite}', {len(plans)} nodes, "
         f"{count} queries per set, results in {out_dir}")
     failed = []
+    began = time.perf_counter()
     for number, plan in enumerate(plans, 1):
         node_id = f"{args.node_prefix}_{args.suite}_{plan.key}"
-        log(f"[{number}/{len(plans)}] {plan.key}: {plan.label}")
+        log(f"[{number}/{len(plans)}] {plan.key}: {plan.label}  (at {_clock(time.perf_counter() - began)})")
         try:
             _run_node(kato, plan, node_id, count, data_dir, sets_dir, record, run_path, args, log)
         except KeyboardInterrupt:
@@ -465,7 +472,8 @@ def run(args, log=print, kato: Kato = None) -> int:
     if failed:
         log(f"Not complete: {', '.join(failed)}. Run the same command again to continue.")
         return 1
-    log(f"Complete. Build the report with: python -m benchmarks.ranking.report --run {out_dir}")
+    log(f"Complete after {_clock(time.perf_counter() - began)}. "
+        f"Build the report with: python -m benchmarks.ranking.report --run {out_dir}")
     return 0
 
 

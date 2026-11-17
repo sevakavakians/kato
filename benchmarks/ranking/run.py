@@ -75,6 +75,12 @@ def _clock(seconds: float) -> str:
     return f"{int(seconds) // 3600}:{int(seconds) % 3600 // 60:02d}:{int(seconds) % 60:02d}"
 
 
+def _say(line: str) -> None:
+    """Print a line now. A run of hours is followed through a redirected log, where an
+    unflushed line would wait in a buffer until thousands more had been written."""
+    print(line, flush=True)
+
+
 def digest_of(value) -> str:
     text = json.dumps(value, separators=(",", ":"), sort_keys=True)
     return hashlib.sha256(text.encode()).hexdigest()[:16]
@@ -377,7 +383,11 @@ def node_summary(node) -> dict:
 
 
 def check_data(plans: list, data_dir: Path, count: int, log=print) -> int:
-    """Fetch, verify and read every data set of the suite, and print what each node would hold."""
+    """Fetch, verify and read every data set of the suite, and print what each node would hold.
+
+    The two fingerprints at the end of a line cover every sequence to learn and
+    every query, so two machines that print the same line measure the same thing.
+    """
     failures = 0
     for plan in plans:
         try:
@@ -387,9 +397,11 @@ def check_data(plans: list, data_dir: Path, count: int, log=print) -> int:
             log(f"  {plan.key}: FAILED: {error}")
             continue
         summary = node_summary(node)
+        asked = digest_of([[list(query) for query in s.queries] for s in node.query_sets])
         log(f"  {plan.key}: {summary['learned_sequences']:,} sequences, {summary['events']:,} events, "
             f"{summary['patterns']:,} patterns, {summary['vocabulary']:,} symbols; "
-            + ", ".join(f"{len(s.queries)} {s.key.split('.', 1)[1]}" for s in node.query_sets) + " queries")
+            + ", ".join(f"{len(s.queries)} {s.key.split('.', 1)[1]}" for s in node.query_sets) + " queries; "
+            f"data {summary['data_digest']}, queries {asked}")
         if summary["patterns"] >= suites.RESPONSE_CAP:
             log(f"      note: more than {suites.RESPONSE_CAP - 1:,} patterns; queries with that many candidates "
                 f"are read per key, {DEPTH} predictions deep")
@@ -451,8 +463,8 @@ def run(args, log=print, kato: Kato = None) -> int:
     record["node_order"] = node_order
     write_json(run_path, record)
 
-    log(f"KATO {service.get('version')} at {args.url}; suite '{args.suite}', {len(plans)} nodes, "
-        f"{count} queries per set, results in {out_dir}")
+    log(f"KATO {service.get('version')} at {args.url}; suite '{args.suite}', "
+        f"{len(plans)} node{'' if len(plans) == 1 else 's'}, {count} queries per set, results in {out_dir}")
     failed = []
     began = time.perf_counter()
     for number, plan in enumerate(plans, 1):
@@ -546,7 +558,7 @@ def parser() -> argparse.ArgumentParser:
 def main(argv=None) -> int:
     args = parser().parse_args(argv)
     try:
-        return run(args)
+        return run(args, log=_say)
     except BenchmarkError as error:
         print(f"error: {error}", file=sys.stderr)
         return 2

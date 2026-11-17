@@ -43,6 +43,7 @@ DEPTH = 100                    # predictions read per key when a response cannot
 LATENCY_QUERIES = 20
 LATENCY_KEY_QUERIES = 5
 LATENCY_MAX_PREDICTIONS = 100  # KATO's default
+PROGRESS_EVERY = 2000          # sequences learned between two progress lines
 TIME_KEYS_ON = ("gen_base", "gen_smallvocab", "gen_small")
 
 RESULTS_DIR = Path(__file__).resolve().parent.parent / "results" / "ranking"
@@ -117,14 +118,15 @@ def load_node(kato: Kato, node_id: str, sequences: list, workers: int, log=print
     shares = [[] for _ in range(max(1, workers))]
     for index, sequence in enumerate(sequences):
         shares[index % len(shares)].append(sequence)
-    done = [0]
-    lock = threading.Lock()
+    # No lock: each session counts in a slot of its own, and the first session reports the total.
+    counts = [0] * len(shares)
+    every = max(1, PROGRESS_EVERY // len(shares))
     stop = threading.Event()
 
-    def learn(share: list) -> None:
+    def learn(slot: int) -> None:
         session = kato.new_session(node_id, MATCHING)
         try:
-            for sequence in share:
+            for sequence in shares[slot]:
                 if stop.is_set():
                     return
                 result = kato.observe(session, sequence, learn=True)
@@ -135,11 +137,11 @@ def load_node(kato: Kato, node_id: str, sequences: list, workers: int, log=print
                         f"'{scoring.pattern_name(sequence)}' was expected. The node is not usable.")
                 if result.get("final_stm_length"):
                     kato.clear_stm(session)
-                with lock:
-                    done[0] += 1
-                    if done[0] % 2000 == 0:
-                        rate = done[0] / (time.perf_counter() - started)
-                        log(f"      learned {done[0]:,} of {len(sequences):,} sequences ({rate:.0f} per second)")
+                counts[slot] += 1
+                if slot == 0 and counts[0] % every == 0 and counts[0] < len(shares[0]):
+                    total = sum(counts)
+                    rate = total / (time.perf_counter() - started)
+                    log(f"      learned {total:,} of {len(sequences):,} sequences ({rate:.0f} per second)")
         except BaseException:
             stop.set()                                  # the other sessions stop at their next sequence
             raise
@@ -147,7 +149,7 @@ def load_node(kato: Kato, node_id: str, sequences: list, workers: int, log=print
             _quietly(kato.delete_session, session)
 
     with ThreadPoolExecutor(max_workers=len(shares)) as pool:
-        list(pool.map(learn, [share for share in shares if share]))
+        list(pool.map(learn, [slot for slot, share in enumerate(shares) if share]))
 
     expected = suites.distinct_patterns(sequences)
     reported = kato.pattern_count(node_id)
@@ -192,13 +194,11 @@ class Asker:
         self.thresholds, self.cap, self.depth = thresholds, cap, depth
         self._local = threading.local()
         self._sessions = []
-        self._lock = threading.Lock()
 
     def _session(self, fresh: bool = False) -> str:
         if fresh or not getattr(self._local, "session", None):
             self._local.session = self.kato.new_session(self.node_id, MATCHING)
-            with self._lock:
-                self._sessions.append(self._local.session)
+            self._sessions.append(self._local.session)          # one append is atomic; no lock is needed
         return self._local.session
 
     def close(self) -> None:

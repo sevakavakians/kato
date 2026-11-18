@@ -26,6 +26,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   trusted, and what a request costs. It is generated from the result files in
   `benchmarks/results/ranking/guide/`, and a unit test rebuilds it and compares
   it byte for byte.
+- **Why `future_potentials` is weighted by `e^potential`, measured:
+  `python -m benchmarks.ranking.weights`.** It rebuilds `future_potentials` and
+  `ends_here` from every candidate of the guide suite's queries under 23 other
+  weights (each ranking key, `2^good_odds`, `frequency`, every candidate
+  equal). None names the next event as often as `e^potential` or states its
+  probability as faithfully; the closest, `2^good_odds`, is 1.8 points behind.
+  The table is under `future_potentials` in the Prediction Object Reference.
+  No change to the service.
 
 ### Changed
 - **Docs: `potential` is no longer called the most accurate ranking key

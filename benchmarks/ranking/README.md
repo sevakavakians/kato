@@ -144,6 +144,21 @@ Both are generated; change `report.py`, not the pages. Text written by hand goes
 
 The guidance table at the top of the page follows one rule: in each case the best key is the one with the highest share of queries answered right, and a key is level with it when the 95% interval of the difference between the two, measured on the same queries, includes zero.
 
+## The Weight of `future_potentials`
+
+KATO weights every candidate by `e^potential` when it builds `future_potentials` and `ends_here`. `python -m benchmarks.ranking.weights` asks whether another weight would do better. It loads each node of the guide suite, asks every query once at `recall_threshold` 0.1 with every candidate in the response, and rebuilds the two figures under 23 weightings: `e^metric` for each of the 20 ranking keys, `2^good_odds`, `frequency` taken linearly, and every candidate counting equally. Each is scored as the reports score the real figures: the share of queries whose top entry names the event that followed (mean of the kinds, with the difference from `e^potential` on the same queries), the probability stated against the share right, a calibration error over ten bins, and the area under the ROC curve of `ends_here` on sequences that ended against those that went on.
+
+The rebuild sums the shares one candidate at a time in pattern-name order, as KATO does, so the rebuild with `e^potential` is KATO's own response to the last bit. The run stops on any query where it is not.
+
+```bash
+python -m benchmarks.ranking.weights                # the guide suite; about an hour, nodes rankweights_...
+python -m benchmarks.ranking.weights --summarize    # the summary again from the stored rows
+```
+
+It writes one compressed row file per node to `benchmarks/results/ranking/weights/rows/` (about 3 MB, not kept in git) and `summary.json` beside it, which is kept. The summary in git was produced with KATO's prediction code in one process. A running instance returns the same candidates to the last bit (the guide suite's comparison shows it), so it gives the same figures.
+
+The result: no weighting beats `e^potential` on the mean of the kinds, and every other weighting states its probabilities less faithfully. `2^good_odds` comes closest (0.562 against 0.580) and is ahead only on the loan-application log. [`future_potentials`](../../docs/reference/prediction-object.md#future_potentials) in the Prediction Object Reference has the table.
+
 ## Options
 
 | Option | Default | |
@@ -168,4 +183,5 @@ The guidance table at the top of the page follows one rule: in each case the bes
 ```bash
 python -m pytest tests/tests/unit/test_ranking_benchmark.py        # in process
 python -m pytest tests/tests/unit/test_ranking_benchmark_live.py   # needs a running service
+python -m pytest tests/tests/unit/test_ranking_weights.py          # the weight of future_potentials, in process
 ```

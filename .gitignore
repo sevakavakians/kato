@@ -100,3 +100,6 @@ benchmarks/results/*.csv
 # Test-run summaries and one-off benchmark output (generated, not source)
 logs/test-runs/
 benchmark_results.json
+
+# Per-query rows of benchmarks.ranking.weights (about 3 MB); summary.json is kept
+benchmarks/results/ranking/weights/rows/

@@ -3765,3 +3765,7 @@ The investigation surfaced five real, unrelated defects, fixed in the same pass:
 ## 2026-11-18 - Milestone: Ranking Benchmark Guide Results Merged (PR #30, 337437f)
 **Classification**: Task Completion + Milestone Completion + Performance Benchmark + new backlog items. Silent.
 **Done**: SESSION_STATE.md header and Current Task (replaced the "Next (owned by the KATO Lab session)" line with the merge record, verification, conclusions of the page); SPRINT_BACKLOG.md items 27-32 added; triggers.md entry. No release: nothing under kato/ changed.
+
+## 2026-11-18 - Task Completion: Six Merged Remote Branches Deleted (SPRINT_BACKLOG item 32)
+**Classification**: Task Completion (housekeeping). Silent.
+**Done**: With the owner's approval, after re-confirming each was fully merged into main, deleted from GitHub: bench/ranking-guide, bench/ranking-progress, bench/ranking-no-locks, bench/ranking-handover, bench/ranking-compact-results, bench/ranking-guide-results; local bench/ranking-guide-results also deleted. SPRINT_BACKLOG.md item 32 marked DONE; SESSION_STATE.md pending-deletion note updated (open items now 27-31). No code changed.

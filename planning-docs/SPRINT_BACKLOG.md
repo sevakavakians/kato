@@ -1326,4 +1326,4 @@ New candidates (not started):
 29. **Benchmark per-key timing pass cannot separate ranking keys** - five requests per key on a laptop is too few. A pass with more repeats and a rotated key order would.
 30. **Lead for `potential`** - among patterns that all contain the whole STM it prefers the shorter and more frequent one. Seen on one data set (loan-application log). Not pursued.
 31. **4TU General Terms of Use not read** - the two event logs are published under them.
-32. **Delete six merged remote branches** - `bench/ranking-guide`, `bench/ranking-progress`, `bench/ranking-no-locks`, `bench/ranking-handover`, `bench/ranking-compact-results`, `bench/ranking-guide-results`; all confirmed fully merged into main; awaits owner approval.
+32. **DONE 2026-11-18: Delete six merged remote branches** - with the owner's approval, after re-confirming each was fully merged into main, `bench/ranking-guide`, `bench/ranking-progress`, `bench/ranking-no-locks`, `bench/ranking-handover`, `bench/ranking-compact-results` and `bench/ranking-guide-results` were deleted from GitHub; the local copy of `bench/ranking-guide-results` was deleted too.

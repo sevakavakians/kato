@@ -1,0 +1,489 @@
+{
+ "queries": 5112,
+ "recall_threshold": 0.1,
+ "weights": [
+  {
+   "by_kind": {
+    "Click streams": 0.695,
+    "Computing": 0.55,
+    "Finance": 0.785,
+    "Generated": 0.8160000000000001,
+    "Healthcare": 0.575,
+    "Music": 0.255,
+    "System logs": 0.865,
+    "Text": 0.1
+   },
+   "calibration_error": 0.023537441348168296,
+   "difference": 0.0,
+   "ends_here_auroc": 0.9012343195142378,
+   "high": 0.0,
+   "low": 0.0,
+   "right": 0.580125,
+   "right_when_answered": 0.7303932711979996,
+   "stated": 0.7314723680220057,
+   "weight": "e^potential"
+  },
+  {
+   "by_kind": {
+    "Click streams": 0.665,
+    "Computing": 0.535,
+    "Finance": 0.835,
+    "Generated": 0.7996666666666667,
+    "Healthcare": 0.555,
+    "Music": 0.18,
+    "System logs": 0.875,
+    "Text": 0.05
+   },
+   "calibration_error": 0.10842081774900883,
+   "difference": -0.018291666666666664,
+   "ends_here_auroc": 0.884836844639866,
+   "high": -0.005395237704768302,
+   "low": -0.031188095628565025,
+   "right": 0.5618333333333334,
+   "right_when_answered": 0.7133439418049556,
+   "stated": 0.8131666303050262,
+   "weight": "2^good_odds"
+  },
+  {
+   "by_kind": {
+    "Click streams": 0.66,
+    "Computing": 0.535,
+    "Finance": 0.815,
+    "Generated": 0.7986666666666667,
+    "Healthcare": 0.565,
+    "Music": 0.18,
+    "System logs": 0.85,
+    "Text": 0.05
+   },
+   "calibration_error": 0.13607905602021908,
+   "difference": -0.023416666666666665,
+   "ends_here_auroc": 0.8809734484924623,
+   "high": -0.009931737757796762,
+   "low": -0.03690159557553657,
+   "right": 0.5567083333333334,
+   "right_when_answered": 0.7108433734939759,
+   "stated": 0.8386505335513943,
+   "weight": "e^good_odds"
+  },
+  {
+   "by_kind": {
+    "Click streams": 0.655,
+    "Computing": 0.53,
+    "Finance": 0.8,
+    "Generated": 0.7716666666666666,
+    "Healthcare": 0.565,
+    "Music": 0.18,
+    "System logs": 0.835,
+    "Text": 0.05
+   },
+   "calibration_error": 0.11433113557561614,
+   "difference": -0.03179166666666667,
+   "ends_here_auroc": 0.8769438651591289,
+   "high": -0.018633719558679263,
+   "low": -0.044949613774654076,
+   "right": 0.5483333333333333,
+   "right_when_answered": 0.6906115026142305,
+   "stated": 0.7986279362842675,
+   "weight": "e^bayesian_likelihood"
+  },
+  {
+   "by_kind": {
+    "Click streams": 0.615,
+    "Computing": 0.255,
+    "Finance": 0.69,
+    "Generated": 0.32,
+    "Healthcare": 0.49,
+    "Music": 0.295,
+    "System logs": 0.755,
+    "Text": 0.09
+   },
+   "calibration_error": 0.1410953426927899,
+   "difference": -0.141375,
+   "ends_here_auroc": 0.8047956239530988,
+   "high": -0.12219838203604569,
+   "low": -0.1605516179639543,
+   "right": 0.43875,
+   "right_when_answered": 0.3632643782677881,
+   "stated": 0.2245155373435896,
+   "weight": "e^snr"
+  },
+  {
+   "by_kind": {
+    "Click streams": 0.435,
+    "Computing": 0.28,
+    "Finance": 0.6,
+    "Generated": 0.6256666666666667,
+    "Healthcare": 0.5,
+    "Music": 0.255,
+    "System logs": 0.725,
+    "Text": 0.075
+   },
+   "calibration_error": 0.20274911128282624,
+   "difference": -0.14316666666666666,
+   "ends_here_auroc": 0.8097659149916248,
+   "high": -0.12355179755100994,
+   "low": -0.16278153578232338,
+   "right": 0.43695833333333334,
+   "right_when_answered": 0.5571720845646738,
+   "stated": 0.37105816415142795,
+   "weight": "e^predictive_information"
+  },
+  {
+   "by_kind": {
+    "Click streams": 0.44,
+    "Computing": 0.24,
+    "Finance": 0.69,
+    "Generated": 0.232,
+    "Healthcare": 0.495,
+    "Music": 0.295,
+    "System logs": 0.725,
+    "Text": 0.07
+   },
+   "calibration_error": 0.043205166277783376,
+   "difference": -0.18175,
+   "ends_here_auroc": 0.8149610720268007,
+   "high": -0.1601464514289931,
+   "low": -0.2033535485710069,
+   "right": 0.398375,
+   "right_when_answered": 0.2925664923846329,
+   "stated": 0.2603968553141399,
+   "weight": "frequency, linear"
+  },
+  {
+   "by_kind": {
+    "Click streams": 0.42,
+    "Computing": 0.255,
+    "Finance": 0.625,
+    "Generated": 0.2783333333333333,
+    "Healthcare": 0.5,
+    "Music": 0.3,
+    "System logs": 0.73,
+    "Text": 0.075
+   },
+   "calibration_error": 0.1096183210723401,
+   "difference": -0.18220833333333333,
+   "ends_here_auroc": 0.7961421451005025,
+   "high": -0.16134769732129112,
+   "low": -0.20306896934537555,
+   "right": 0.39791666666666664,
+   "right_when_answered": 0.32189133894066835,
+   "stated": 0.21502189443731473,
+   "weight": "e^event_cohesion"
+  },
+  {
+   "by_kind": {
+    "Click streams": 0.455,
+    "Computing": 0.245,
+    "Finance": 0.625,
+    "Generated": 0.24000000000000002,
+    "Healthcare": 0.495,
+    "Music": 0.285,
+    "System logs": 0.725,
+    "Text": 0.07
+   },
+   "calibration_error": 0.09224828765027217,
+   "difference": -0.18762500000000001,
+   "ends_here_auroc": 0.7926323848408711,
+   "high": -0.16686980685322295,
+   "low": -0.20838019314677708,
+   "right": 0.3925,
+   "right_when_answered": 0.29552170947942713,
+   "stated": 0.20673255069124274,
+   "weight": "e^similarity"
+  },
+  {
+   "by_kind": {
+    "Click streams": 0.51,
+    "Computing": 0.245,
+    "Finance": 0.6,
+    "Generated": 0.213,
+    "Healthcare": 0.5,
+    "Music": 0.27,
+    "System logs": 0.725,
+    "Text": 0.07
+   },
+   "calibration_error": 0.08746576076078158,
+   "difference": -0.1885,
+   "ends_here_auroc": 0.784337712520938,
+   "high": -0.1678473029281204,
+   "low": -0.2091526970718796,
+   "right": 0.391625,
+   "right_when_answered": 0.27801773130256874,
+   "stated": 0.19311902897158212,
+   "weight": "e^tfidf_score"
+  },
+  {
+   "by_kind": {
+    "Click streams": 0.425,
+    "Computing": 0.24,
+    "Finance": 0.66,
+    "Generated": 0.23566666666666666,
+    "Healthcare": 0.5,
+    "Music": 0.26,
+    "System logs": 0.745,
+    "Text": 0.055
+   },
+   "calibration_error": 0.08940395234934018,
+   "difference": -0.19004166666666666,
+   "ends_here_auroc": 0.7760950502512562,
+   "high": -0.1694158400368688,
+   "low": -0.21066749329646453,
+   "right": 0.39008333333333334,
+   "right_when_answered": 0.2918845192089111,
+   "stated": 0.2071520297026274,
+   "weight": "e^confidence"
+  },
+  {
+   "by_kind": {
+    "Click streams": 0.45,
+    "Computing": 0.245,
+    "Finance": 0.6,
+    "Generated": 0.23333333333333334,
+    "Healthcare": 0.5,
+    "Music": 0.285,
+    "System logs": 0.725,
+    "Text": 0.07
+   },
+   "calibration_error": 0.0887131904934975,
+   "difference": -0.19158333333333333,
+   "ends_here_auroc": 0.7874839572864322,
+   "high": -0.17050679204417565,
+   "low": -0.212659874622491,
+   "right": 0.3885416666666667,
+   "right_when_answered": 0.28983859968174586,
+   "stated": 0.20398023785301403,
+   "weight": "e^evidence"
+  },
+  {
+   "by_kind": {
+    "Click streams": 0.32,
+    "Computing": 0.245,
+    "Finance": 0.59,
+    "Generated": 0.3393333333333333,
+    "Healthcare": 0.49,
+    "Music": 0.275,
+    "System logs": 0.725,
+    "Text": 0.1
+   },
+   "calibration_error": 0.13232277644438048,
+   "difference": -0.19458333333333333,
+   "ends_here_auroc": 0.778938009840871,
+   "high": -0.17289973880705325,
+   "low": -0.2162669278596134,
+   "right": 0.38554166666666667,
+   "right_when_answered": 0.35621732211866336,
+   "stated": 0.22931374520276368,
+   "weight": "e^entropy"
+  },
+  {
+   "by_kind": {
+    "Click streams": 0.34,
+    "Computing": 0.245,
+    "Finance": 0.62,
+    "Generated": 0.2816666666666667,
+    "Healthcare": 0.495,
+    "Music": 0.28,
+    "System logs": 0.725,
+    "Text": 0.08
+   },
+   "calibration_error": 0.10164590504149562,
+   "difference": -0.19679166666666667,
+   "ends_here_auroc": 0.7958612489530988,
+   "high": -0.17541916293632387,
+   "low": -0.21816417039700947,
+   "right": 0.38333333333333336,
+   "right_when_answered": 0.3187087974539668,
+   "stated": 0.21943263747835748,
+   "weight": "e^global_normalized_entropy"
+  },
+  {
+   "by_kind": {
+    "Click streams": 0.415,
+    "Computing": 0.24,
+    "Finance": 0.59,
+    "Generated": 0.224,
+    "Healthcare": 0.495,
+    "Music": 0.28,
+    "System logs": 0.745,
+    "Text": 0.07
+   },
+   "calibration_error": 0.07541397300229903,
+   "difference": -0.19775,
+   "ends_here_auroc": 0.7879893739530989,
+   "high": -0.17667560233783647,
+   "low": -0.21882439766216355,
+   "right": 0.382375,
+   "right_when_answered": 0.2816549215730848,
+   "stated": 0.20891146651479525,
+   "weight": "e^onset_alignment"
+  },
+  {
+   "by_kind": {
+    "Click streams": 0.375,
+    "Computing": 0.245,
+    "Finance": 0.6,
+    "Generated": 0.2326666666666667,
+    "Healthcare": 0.5,
+    "Music": 0.295,
+    "System logs": 0.725,
+    "Text": 0.07
+   },
+   "calibration_error": 0.08162834528274539,
+   "difference": -0.19979166666666667,
+   "ends_here_auroc": 0.784991905360134,
+   "high": -0.1783459298626796,
+   "low": -0.22123740347065374,
+   "right": 0.3803333333333333,
+   "right_when_answered": 0.2864287338031371,
+   "stated": 0.207498323885803,
+   "weight": "e^bayesian_prior"
+  },
+  {
+   "by_kind": {
+    "Click streams": 0.375,
+    "Computing": 0.245,
+    "Finance": 0.6,
+    "Generated": 0.229,
+    "Healthcare": 0.495,
+    "Music": 0.295,
+    "System logs": 0.725,
+    "Text": 0.07
+   },
+   "calibration_error": 0.07892223381447565,
+   "difference": -0.200875,
+   "ends_here_auroc": 0.784771280360134,
+   "high": -0.17947032996805515,
+   "low": -0.22227967003194485,
+   "right": 0.37925,
+   "right_when_answered": 0.28370084110025007,
+   "stated": 0.20748063565434105,
+   "weight": "uniform"
+  },
+  {
+   "by_kind": {
+    "Click streams": 0.375,
+    "Computing": 0.245,
+    "Finance": 0.6,
+    "Generated": 0.24000000000000002,
+    "Healthcare": 0.5,
+    "Music": 0.27,
+    "System logs": 0.725,
+    "Text": 0.07
+   },
+   "calibration_error": 0.08552896547471346,
+   "difference": -0.202,
+   "ends_here_auroc": 0.7904106867671692,
+   "high": -0.1806503333405122,
+   "low": -0.22334966665948783,
+   "right": 0.378125,
+   "right_when_answered": 0.29029324846556037,
+   "stated": 0.20848338224985594,
+   "weight": "e^bayesian_posterior"
+  },
+  {
+   "by_kind": {
+    "Click streams": 0.375,
+    "Computing": 0.245,
+    "Finance": 0.6,
+    "Generated": 0.22866666666666668,
+    "Healthcare": 0.5,
+    "Music": 0.28,
+    "System logs": 0.725,
+    "Text": 0.07
+   },
+   "calibration_error": 0.07798883109596068,
+   "difference": -0.20216666666666666,
+   "ends_here_auroc": 0.784816905360134,
+   "high": -0.18082020892810108,
+   "low": -0.22351312440523224,
+   "right": 0.37795833333333334,
+   "right_when_answered": 0.2830188679245283,
+   "stated": 0.2076296735819105,
+   "weight": "e^itfdf_similarity"
+  },
+  {
+   "by_kind": {
+    "Click streams": 0.35,
+    "Computing": 0.245,
+    "Finance": 0.59,
+    "Generated": 0.23966666666666664,
+    "Healthcare": 0.495,
+    "Music": 0.285,
+    "System logs": 0.725,
+    "Text": 0.07
+   },
+   "calibration_error": 0.08314106838122899,
+   "difference": -0.20516666666666666,
+   "ends_here_auroc": 0.784632530360134,
+   "high": -0.18372395638414432,
+   "low": -0.226609376949189,
+   "right": 0.37495833333333334,
+   "right_when_answered": 0.2889293021141168,
+   "stated": 0.20927391352744393,
+   "weight": "e^normalized_entropy"
+  },
+  {
+   "by_kind": {
+    "Click streams": 0.26,
+    "Computing": 0.265,
+    "Finance": 0.435,
+    "Generated": 0.23466666666666666,
+    "Healthcare": 0.47,
+    "Music": 0.26,
+    "System logs": 0.72,
+    "Text": 0.09
+   },
+   "calibration_error": 0.06651236504477016,
+   "difference": -0.23829166666666665,
+   "ends_here_auroc": 0.7988643425460636,
+   "high": -0.21593387294993432,
+   "low": -0.260649460383399,
+   "right": 0.3418333333333333,
+   "right_when_answered": 0.273698567856331,
+   "stated": 0.2223777658113519,
+   "weight": "e^fragmentation"
+  },
+  {
+   "by_kind": {
+    "Click streams": 0.325,
+    "Computing": 0.315,
+    "Finance": 0.605,
+    "Generated": 0.2793333333333334,
+    "Healthcare": 0.345,
+    "Music": 0.215,
+    "System logs": 0.24,
+    "Text": 0.015
+   },
+   "calibration_error": 0.6685597272243682,
+   "difference": -0.28770833333333334,
+   "ends_here_auroc": 0.792627287479062,
+   "high": -0.2649036286521183,
+   "low": -0.3105130380145484,
+   "right": 0.29241666666666666,
+   "right_when_answered": 0.2841554898840646,
+   "stated": 0.939586758470833,
+   "weight": "e^confluence"
+  },
+  {
+   "by_kind": {
+    "Click streams": 0.41,
+    "Computing": 0.04,
+    "Finance": 0.29,
+    "Generated": 0.17200000000000001,
+    "Healthcare": 0.305,
+    "Music": 0.295,
+    "System logs": 0.715,
+    "Text": 0.07
+   },
+   "calibration_error": 0.5335364890721084,
+   "difference": -0.293,
+   "ends_here_auroc": 0.7063046136934673,
+   "high": -0.2699581688087633,
+   "low": -0.3160418311912367,
+   "right": 0.28712499999999996,
+   "right_when_answered": 0.2139122527847238,
+   "stated": 0.6878009420420218,
+   "weight": "e^frequency"
+  }
+ ]
+}

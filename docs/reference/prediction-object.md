@@ -363,6 +363,20 @@ The next event of a candidate is the first event of its `future`. A candidate wi
 **Scope**: Computed over every candidate above the recall threshold, including those `max_predictions` leaves out of the response. Empty when the STM is empty, when nothing matches, or when no candidate has a future.  
 **What the probability is a share of**: the weight of the candidates. It does not say how well those candidates explain the STM. A lone candidate with a future gets a probability of 1.0, however weak its match. Whether to believe the candidates at all is what `chance_posterior` says.
 
+**Why `e^potential`**: `potential` was fitted as the logarithm of a candidate's weight in exactly this sum, so its shares are probabilities the fit was trained to produce. The other metrics were tried in its place: `future_potentials` and `ends_here` were rebuilt from every candidate of the ranking benchmark's guide-suite queries (`recall_threshold` 0.1, mean of 8 kinds of data) with each candidate weighted by `e^metric`, by `2^good_odds`, by `frequency`, or equally. None names the next event as often, and none states its probability as faithfully:
+
+| Weight of each candidate | Top entry right | Difference (95% interval) | Probability stated | Right when answered | `ends_here` AUROC |
+|---|---:|---:|---:|---:|---:|
+| `e^potential` | 0.580 | | 0.731 | 0.730 | 0.901 |
+| `2^good_odds` (the shares of `bayesian_posterior`) | 0.562 | −1.8 (−3.1 to −0.5) | 0.813 | 0.713 | 0.885 |
+| `e^bayesian_likelihood` | 0.548 | −3.2 (−4.5 to −1.9) | 0.799 | 0.691 | 0.877 |
+| `e^predictive_information` | 0.437 | −14.3 (−16.3 to −12.4) | 0.371 | 0.557 | 0.810 |
+| `frequency` | 0.398 | −18.2 (−20.3 to −16.0) | 0.260 | 0.293 | 0.815 |
+| Every candidate equal | 0.379 | −20.1 (−22.2 to −17.9) | 0.207 | 0.284 | 0.785 |
+| `e^frequency` | 0.287 | −29.3 (−31.6 to −27.0) | 0.688 | 0.214 | 0.706 |
+
+A metric between 0 and 1 changes little under `e^x`, so it comes out close to every candidate counting equally (0.375 to 0.393). `2^good_odds` comes closest and overstates its certainty. It is ahead on one kind of data, the loan-application log (0.835 against 0.785). The weight does not follow `rank_sort_algo`, so the ranking key orders the list and changes no value in the response. All 23 weightings, the method and how to run it are in [`benchmarks/ranking/README.md`](../../benchmarks/ranking/README.md#the-weight-of-future_potentials).
+
 ### ends_here
 
 **Description**: The probability that no event follows the observation.  

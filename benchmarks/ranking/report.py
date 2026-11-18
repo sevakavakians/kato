@@ -1083,7 +1083,7 @@ summary { cursor: pointer; font-size: 13px; color: var(--kz-ink2); width: max-co
 .table-wrap { overflow-x: auto; margin: 8px 0 16px; border: 1px solid var(--kz-border); border-radius: 8px; background: var(--kz-surface); }
 table { border-collapse: collapse; font-size: 13px; width: 100%; font-variant-numeric: tabular-nums; }
 th, td { padding: 6px 10px; border-bottom: 1px solid var(--kz-grid); vertical-align: top; }
-td[style*="right"], th[style*="right"] { white-space: nowrap; }
+td[style*="right"] { white-space: nowrap; }
 td:first-child, th:first-child { min-width: 200px; }
 th { font-weight: 600; color: var(--kz-ink); background: var(--kz-surface); }
 tbody tr:last-child td { border-bottom: 0; }

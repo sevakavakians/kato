@@ -1318,3 +1318,12 @@ New candidates (not started):
     - Tests: `tests/tests/unit/test_affinity_weighted_matching.py` and any test that sets `affinity_emotive` or reads a `weighted_*` field.
     - Docs: remove the deprecated sections and rows that PR #24 marked.
     - OPEN QUESTION for the owner: whether the stored per-symbol affinity sums in Redis (`{kb_id}:affinity:{symbol}`) and the `/symbols/affinity` endpoints stay. They were not deprecated.
+
+### Open follow-ups after the ranking benchmark merge (2026-11-18; none started, each waits on the owner's decision)
+
+27. **`docs/users/configuration.md` recall_threshold "Use Cases" advice is unsupported** - it suggests 0.3 to 0.6 and 0.7 to 1.0 for some uses. The ranking run measured next-event prediction only, up to 0.5, and found no gain from a higher threshold (share right under `potential` falls 0.545 to 0.344 from 0.1 to 0.5).
+28. **`.pre-commit-config.yaml` trailing-whitespace hook lacks `--markdown-linebreak-ext=md`** - it would strip the 120 two-space line breaks of `docs/reference/prediction-object.md`.
+29. **Benchmark per-key timing pass cannot separate ranking keys** - five requests per key on a laptop is too few. A pass with more repeats and a rotated key order would.
+30. **Lead for `potential`** - among patterns that all contain the whole STM it prefers the shorter and more frequent one. Seen on one data set (loan-application log). Not pursued.
+31. **4TU General Terms of Use not read** - the two event logs are published under them.
+32. **Delete six merged remote branches** - `bench/ranking-guide`, `bench/ranking-progress`, `bench/ranking-no-locks`, `bench/ranking-handover`, `bench/ranking-compact-results`, `bench/ranking-guide-results`; all confirmed fully merged into main; awaits owner approval.

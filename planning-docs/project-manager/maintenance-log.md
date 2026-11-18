@@ -3761,3 +3761,7 @@ The investigation surfaced five real, unrelated defects, fixed in the same pass:
 ## 2026-11-17 - Milestone: Ranking Benchmark Guide Suite Run On Deployed Instance
 **Classification**: Milestone Completion + Performance Benchmark. Silent.
 **Done**: SESSION_STATE.md header and Current Task note; triggers.md entry. Facts: benchmarks/ranking/ merged to main (PRs 25-29); guide suite on :8000, KATO 7.1.0, 4 workers, 1:05:00, 5,112 responses, no FAILED lines, pre-flight 51 tests and data hash matched; results on branch bench/ranking-guide-results (851f802), not merged. Next (KATO Lab session): response-by-response comparison with the in-memory run, write "Reading the Results", link the page, merge. No release needed.
+
+## 2026-11-18 - Milestone: Ranking Benchmark Guide Results Merged (PR #30, 337437f)
+**Classification**: Task Completion + Milestone Completion + Performance Benchmark + new backlog items. Silent.
+**Done**: SESSION_STATE.md header and Current Task (replaced the "Next (owned by the KATO Lab session)" line with the merge record, verification, conclusions of the page); SPRINT_BACKLOG.md items 27-32 added; triggers.md entry. No release: nothing under kato/ changed.

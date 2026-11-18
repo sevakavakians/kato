@@ -732,7 +732,8 @@ def method_points(run: dict) -> list:
         "**The read-outs.** *The top prediction that has a future*: the highest-ranked prediction whose "
         "`future` is not empty. *The top prediction itself*: the highest-ranked prediction, which names no "
         "event when its pattern ends where the STM ends. *The top entry of `future_potentials`*: the most "
-        "probable next event over all candidates; it does not depend on the ranking key.",
+        "probable next event over all candidates, each weighted by `e^potential`; it is the same whatever "
+        "`rank_sort_algo` is.",
         "**The figures.** A share is the number of queries that meet a condition, such as being answered right, "
         "divided by the number of queries asked: 132 right out of 200 is a share of 0.660. For a group, it is the mean "
         "over the group's query sets, each set counting the same; \"mean of the kinds\" counts each kind of data "
@@ -819,7 +820,7 @@ The table's last column is how often a key's top value is shared by several pred
 
 ## What to Read From the Response
 
-A response offers three ways to read a next event. The top entry of `future_potentials` is the event with the largest share over every candidate; it does not depend on the ranking key. The first prediction that has a `future` is found by going down the ranked list past the patterns that end where the STM ends. `predictions[0]` is the top-ranked prediction as it stands, and it names no event when its pattern has ended. Share of the queries answered right, at `recall_threshold` {threshold}:
+A response offers three ways to read a next event. The top entry of `future_potentials` is the event with the largest share over every candidate, each weighted by `e^potential`; it is the same whatever `rank_sort_algo` is. The first prediction that has a `future` is found by going down the ranked list past the patterns that end where the STM ends. `predictions[0]` is the top-ranked prediction as it stands, and it names no event when its pattern has ended. Share of the queries answered right, at `recall_threshold` {threshold}:
 
 {table_readouts(run, threshold)}
 {' '.join(readout_sentences(run, threshold))}
@@ -1208,7 +1209,7 @@ def build_html(run: dict) -> str:
 </form>
 
 <h2>What to read from the response</h2>
-<p>A response offers three ways to read a next event. The top entry of <code>future_potentials</code> is the event with the largest share over every candidate; it does not depend on the ranking key. The first prediction that has a <code>future</code> is found by going down the ranked list past the patterns that end where the STM ends. <code>predictions[0]</code> is the top-ranked prediction as it stands, and it names no event when its pattern has ended. Share of the queries answered right:</p>
+<p>A response offers three ways to read a next event. The top entry of <code>future_potentials</code> is the event with the largest share over every candidate, each weighted by <code>e^potential</code>; it is the same whatever <code>rank_sort_algo</code> is. The first prediction that has a <code>future</code> is found by going down the ranked list past the patterns that end where the STM ends. <code>predictions[0]</code> is the top-ranked prediction as it stands, and it names no event when its pattern has ended. Share of the queries answered right:</p>
 {''.join(f'<div data-threshold="{t}">{section_table(table_readouts(run, t))}<p>{inline_html(" ".join(readout_sentences(run, t)))}</p></div>' for t in thresholds)}
 
 <h3>The top prediction itself</h3>

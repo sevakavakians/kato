@@ -10,7 +10,33 @@ For what each metric is and how it is computed, see the [Prediction Object Refer
 
 ## At a Glance
 
-`potential` is the best key, or level with the best, in 21 of the 22 cases. Next: `predictive_information` (19), `good_odds` (17), `bayesian_posterior` (17). On the 4 kinds of data `potential` never saw when its weights were fitted, it is ahead of the best other key on 1, level on 2 and behind on 1.
+`potential` is the best key, or level with the best, in 21 of the 22 cases. Next: `predictive_information` (19), `good_odds` (17), `bayesian_posterior` (17). On the 4 kinds of data `potential` never saw when its weights were fitted, it is ahead of the best other key on 1, level on 2 and behind on 1. On the mean of the kinds, `potential` puts a right prediction on top in 0.545 of the queries; the top entry of `future_potentials`, which is the same whatever the key, is right in 0.580.
+
+## Reading the Results
+
+What this run says about the choices a KATO user has to make, in the order they come up. Every figure is in a table further down. A point is one query in a hundred.
+
+**For the next event, read `future_potentials`.** Its top entry is right in 0.580 of the queries on the mean of the eight kinds of data. That is 3.5 points more often than the first prediction with a future under `potential`, the best ranking key, and it is the same whatever `rank_sort_algo` is. A ranking picks one pattern. The entry adds up every candidate that proposes the same event, and that is the stronger evidence where many patterns match equally well.
+
+**For a ranked list, keep the default, `potential`.** It is the best key or level with the best in 21 of the 22 cases, and a right answer is among its first five predictions in 0.713 of the queries, against 0.649 for `predictive_information`. Go down the list to the first prediction whose `future` is not empty, because `potential` often ranks a pattern that has ended first. On click streams its first prediction is right in 0.215 of the queries and its first prediction with a future in 0.650.
+
+**If your code takes `predictions[0]` as it stands, rank by `predictive_information`.** Its first prediction names an event in 99.9% of the queries and is right in 0.535. That of `potential` names an event in 89.3% and is right in 0.478.
+
+**Where the default loses.** On the loan-application log `potential` answers 0.660 of the queries right and `predictive_information` 0.785. In all 28 queries that only `predictive_information` gets right, both keys choose a pattern that contains the whole STM. `potential` takes the shorter of the two, in 26 of them also the more frequent one, and its pattern has 2.4 events left on average where the other has 5.0. The top entry of `future_potentials` names the right event in 21 of the 28. What is said here about the candidates comes from asking those 28 queries again, since the result files keep counts and no candidates. One data set shows this. The mechanism says to expect it wherever many learned sequences share a stretch and then go different ways, as the cases of a process do. There, read `future_potentials`.
+
+**Leave `recall_threshold` at 0.1 unless you need the time.** From 0.1 to 0.5 the share right falls from 0.545 to 0.344 under `potential`, and the answers that remain are no more reliable: on no kind of data does the share right among the answered queries rise. `similarity` divides by the length of the pattern, so a higher threshold removes the long patterns first, and for a short STM those are the ones it came from. The configuration guide shows [how much of a pattern must be observed](../users/configuration.md#recall_threshold) at each threshold. What the threshold buys is time. On generated data the candidates per request fall from 935 to 14, and on the machine of this run a request takes about 41 ms plus 0.42 ms per candidate.
+
+**The ranking key does not change the request time,** as far as this run can tell. Keys that return the very same response differ in their median times as much as any two keys do.
+
+**Do not rank by a key that ties.** `confidence`, `event_cohesion`, `onset_alignment`, `snr` and `fragmentation` share their top value among several predictions in more than 80% of the queries, and the pattern name then decides which comes first.
+
+**To know whether a sequence is over, read `ends_here`.** On six of the eight kinds it tells ended sequences from continuing ones with an area under the ROC curve of 0.957 to 0.996. On click streams it does not (0.597), and the music node has only 12 endings.
+
+**Trust the stated probability on a well-filled node, not on a sparse one.** Over all queries the top entry of `future_potentials` states 0.731 on average and is right in 0.730. On the music node it states 0.658 and is right in 0.255; on text, 0.313 and 0.101. `chance_posterior` marks both: it is above 0.5 in 39.5% of the music queries and 63.3% of the text queries, and in 0% to 9.5% of the queries elsewhere.
+
+**How far this goes.** A case has 200 queries, so a share carries about 7 points either way. Eight kinds of data are not every kind. The times are from one laptop.
+
+## Which Key for Which Case
 
 The table follows one rule, fixed before the run. In each case the best key is the one with the highest share of queries answered right. A key is **level** with it when the 95% interval of the difference between the two, measured on the same queries, includes zero. Read-out: the top-ranked prediction that has a `future`. `recall_threshold` 0.1.
 
@@ -113,6 +139,49 @@ How often each key is best or level, over the 22 single cases (groups not counte
 </details>
 
 The table's last column is how often a key's top value is shared by several predictions. KATO then orders them by pattern name, so the more often a key ties, the more often its top prediction is chosen by name.
+
+## What to Read From the Response
+
+A response offers three ways to read a next event. The top entry of `future_potentials` is the event with the largest share over every candidate; it does not depend on the ranking key. The first prediction that has a `future` is found by going down the ranked list past the patterns that end where the STM ends. `predictions[0]` is the top-ranked prediction as it stands, and it names no event when its pattern has ended. Share of the queries answered right, at `recall_threshold` 0.1:
+
+| Read-out | Mean of the kinds | Generated | System logs | Click streams | Text | Finance | Healthcare | Music | Computing |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| The top entry of `future_potentials` | 0.580 | 0.816 | 0.865 | 0.695 | 0.100 | 0.785 | 0.575 | 0.255 | 0.550 |
+| The first prediction that has a `future`, ranked by `potential` | 0.545 | 0.818 | 0.880 | 0.650 | 0.060 | 0.660 | 0.550 | 0.225 | 0.520 |
+| The first prediction that has a `future`, ranked by `predictive_information` | 0.535 | 0.804 | 0.870 | 0.655 | 0.040 | 0.785 | 0.490 | 0.200 | 0.435 |
+| `predictions[0]`, ranked by `predictive_information` | 0.535 | 0.804 | 0.870 | 0.655 | 0.040 | 0.785 | 0.490 | 0.200 | 0.435 |
+| `predictions[0]`, ranked by `potential` | 0.478 | 0.806 | 0.880 | 0.215 | 0.060 | 0.660 | 0.470 | 0.225 | 0.505 |
+
+On the mean of the kinds, the top entry of `future_potentials` is right 3.5 points more often (95% interval +2.1 to +4.9) than the first prediction that has a `future` under `potential`. Each difference here is measured on the same queries. Taken as `predictions[0]`, `predictive_information` is right 5.7 points more often (95% interval +4.1 to +7.3) than `potential`: its top prediction names an event in 99.9% of the queries, that of `potential` in 89.3%.
+
+### The Top Prediction Itself
+
+Accuracy is the share of all queries the top prediction gets right, precision the share it gets right of those where it names an event. The last three columns look further down the list.
+
+![What the top prediction does, by ranking key](ranking-benchmark/top.svg)
+
+| Ranking key | Accuracy | Precision | Names an event | Top with a future | Among the first five | Mean reciprocal rank |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `predictive_information` | 0.535 | 0.535 | 0.999 | 0.535 | 0.649 | 0.587 |
+| `bayesian_likelihood` | 0.489 | 0.506 | 0.968 | 0.502 | 0.692 | 0.577 |
+| `potential` | 0.478 | 0.534 | 0.893 | 0.545 | 0.713 | 0.583 |
+| `good_odds` | 0.461 | 0.513 | 0.901 | 0.522 | 0.685 | 0.562 |
+| `bayesian_posterior` | 0.461 | 0.513 | 0.901 | 0.522 | 0.685 | 0.562 |
+| `itfdf_similarity` | 0.441 | 0.455 | 0.963 | 0.454 | 0.654 | 0.536 |
+| `snr` | 0.438 | 0.455 | 0.962 | 0.456 | 0.680 | 0.544 |
+| `event_cohesion` | 0.368 | 0.380 | 0.957 | 0.380 | 0.635 | 0.485 |
+| `global_normalized_entropy` | 0.291 | 0.294 | 0.980 | 0.292 | 0.537 | 0.397 |
+| `confluence` | 0.283 | 0.289 | 0.975 | 0.292 | 0.580 | 0.423 |
+| `confidence` | 0.251 | 0.257 | 0.961 | 0.256 | 0.494 | 0.359 |
+| `onset_alignment` | 0.249 | 0.256 | 0.964 | 0.257 | 0.507 | 0.363 |
+| `similarity` | 0.225 | 0.383 | 0.642 | 0.367 | 0.530 | 0.358 |
+| `fragmentation` | 0.210 | 0.219 | 0.943 | 0.221 | 0.414 | 0.309 |
+| `entropy` | 0.182 | 0.188 | 0.958 | 0.193 | 0.456 | 0.316 |
+| `normalized_entropy` | 0.182 | 0.188 | 0.958 | 0.193 | 0.456 | 0.316 |
+| `frequency` | 0.166 | 0.273 | 0.621 | 0.248 | 0.393 | 0.278 |
+| `bayesian_prior` | 0.166 | 0.273 | 0.621 | 0.248 | 0.393 | 0.278 |
+| `tfidf_score` | 0.153 | 0.192 | 0.696 | 0.189 | 0.316 | 0.230 |
+| `evidence` | 0.147 | 0.297 | 0.473 | 0.289 | 0.376 | 0.258 |
 
 ## How It Was Measured
 
@@ -235,35 +304,6 @@ Generated data, one condition changed at a time.
 
 </details>
 
-## The Top Prediction Itself
-
-The top-ranked prediction can be a pattern that ends where the STM ends. Its `future` is empty and it names no next event. Accuracy is the share of all queries the top prediction gets right, precision the share it gets right of those where it names an event. The last three columns look further down the list.
-
-![What the top prediction does, by ranking key](ranking-benchmark/top.svg)
-
-| Ranking key | Accuracy | Precision | Names an event | Top with a future | Among the first five | Mean reciprocal rank |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `predictive_information` | 0.535 | 0.535 | 0.999 | 0.535 | 0.649 | 0.587 |
-| `bayesian_likelihood` | 0.489 | 0.506 | 0.968 | 0.502 | 0.692 | 0.577 |
-| `potential` | 0.478 | 0.534 | 0.893 | 0.545 | 0.713 | 0.583 |
-| `good_odds` | 0.461 | 0.513 | 0.901 | 0.522 | 0.685 | 0.562 |
-| `bayesian_posterior` | 0.461 | 0.513 | 0.901 | 0.522 | 0.685 | 0.562 |
-| `itfdf_similarity` | 0.441 | 0.455 | 0.963 | 0.454 | 0.654 | 0.536 |
-| `snr` | 0.438 | 0.455 | 0.962 | 0.456 | 0.680 | 0.544 |
-| `event_cohesion` | 0.368 | 0.380 | 0.957 | 0.380 | 0.635 | 0.485 |
-| `global_normalized_entropy` | 0.291 | 0.294 | 0.980 | 0.292 | 0.537 | 0.397 |
-| `confluence` | 0.283 | 0.289 | 0.975 | 0.292 | 0.580 | 0.423 |
-| `confidence` | 0.251 | 0.257 | 0.961 | 0.256 | 0.494 | 0.359 |
-| `onset_alignment` | 0.249 | 0.256 | 0.964 | 0.257 | 0.507 | 0.363 |
-| `similarity` | 0.225 | 0.383 | 0.642 | 0.367 | 0.530 | 0.358 |
-| `fragmentation` | 0.210 | 0.219 | 0.943 | 0.221 | 0.414 | 0.309 |
-| `entropy` | 0.182 | 0.188 | 0.958 | 0.193 | 0.456 | 0.316 |
-| `normalized_entropy` | 0.182 | 0.188 | 0.958 | 0.193 | 0.456 | 0.316 |
-| `frequency` | 0.166 | 0.273 | 0.621 | 0.248 | 0.393 | 0.278 |
-| `bayesian_prior` | 0.166 | 0.273 | 0.621 | 0.248 | 0.393 | 0.278 |
-| `tfidf_score` | 0.153 | 0.192 | 0.696 | 0.189 | 0.316 | 0.230 |
-| `evidence` | 0.147 | 0.297 | 0.473 | 0.289 | 0.376 | 0.258 |
-
 ## Recall Threshold
 
 A higher `recall_threshold` leaves fewer candidates. Share answered right by the top prediction that has a future, mean of the kinds:
@@ -293,6 +333,19 @@ A higher `recall_threshold` leaves fewer candidates. Share answered right by the
 | *future_potentials, top entry* | 0.580 | 0.507 | 0.362 |
 
 ![Outcome of the top prediction at each recall threshold](ranking-benchmark/thresholds.svg)
+
+Does a higher threshold make the answers that remain more reliable? A query is answered when some prediction has a `future`. Share right among the answered queries, ranked by `potential`, with the share of queries answered:
+
+| Kind of data | recall_threshold 0.1 | recall_threshold 0.3 | recall_threshold 0.5 |
+| --- | ---: | ---: | ---: |
+| Generated | 81.8% (100.0% answered) | 68.9% (99.6% answered) | 57.9% (86.1% answered) |
+| System logs | 88.0% (100.0% answered) | 85.0% (100.0% answered) | 60.4% (72.0% answered) |
+| Click streams | 65.0% (100.0% answered) | 64.5% (100.0% answered) | 65.0% (100.0% answered) |
+| Text | 6.0% (99.5% answered) | 2.9% (52.5% answered) | too few (4.5% answered) |
+| Finance | 66.0% (100.0% answered) | 64.5% (91.5% answered) | 58.7% (54.5% answered) |
+| Healthcare | 55.0% (100.0% answered) | 54.0% (100.0% answered) | 48.2% (99.5% answered) |
+| Music | 22.5% (100.0% answered) | none answered | none answered |
+| Computing | 52.0% (100.0% answered) | 49.7% (99.5% answered) | 42.0% (88.0% answered) |
 
 What the threshold costs and what it removes: candidates per request, queries with no prediction at all (KATO's "I don't know"), and queries where at least one prediction names the right event.
 
@@ -384,6 +437,8 @@ Times are from the machine recorded in [`run.json`](../../benchmarks/results/ran
 
 ![Request time against the number of candidates](ranking-benchmark/latency.svg)
 
+Over the 280 requests, a least-squares line gives 41 ms plus 0.42 ms per candidate; it accounts for 69% of the variance in the times.
+
 | Node | Patterns | Candidates, median | Request time, median | 90th percentile |
 | --- | ---: | ---: | ---: | ---: |
 | Generated: the base setting | 1,957 | 621 | 225 ms | 552 ms |
@@ -401,7 +456,17 @@ Times are from the machine recorded in [`run.json`](../../benchmarks/results/ran
 | Generated: a stream, pattern boundaries given | 304 | 136 | 80 ms | 96 ms |
 | Generated: a stream, pattern boundaries not given | 2,683 | 2,178 | 561 ms | 924 ms |
 
-KATO computes every metric for every candidate and ranks afterwards, whichever key is asked for. Measured, the 20 keys' median request times span 184 to 414 ms (Generated: the base setting) and 355 to 821 ms (Generated: a vocabulary of 50 symbols):
+KATO computes every metric for every candidate and ranks afterwards, whichever key is asked for. Each of the 20 keys was timed on the same 5 requests of a node. The rows below the first say how much a time varies when nothing about the request differs. Keys that agree on every read-out of every query of a node order its candidates the same way, so they return the same response.
+
+|  | Generated: the base setting | Generated: a vocabulary of 50 symbols |
+| --- | ---: | ---: |
+| The keys' medians, lowest to highest | 184 to 414 ms | 355 to 821 ms |
+| One request asked twice with the same key: the two times differ by | 13 to 190 ms | 138 to 530 ms |
+| `good_odds` and `bayesian_posterior`, which return the same response: medians | 184 and 248 ms | 700 and 393 ms |
+| `frequency` and `bayesian_prior`, which return the same response: medians | 276 and 358 ms | 590 and 529 ms |
+
+<details>
+<summary>Median request time by ranking key</summary>
 
 | Ranking key | Generated: the base setting, median | Generated: a vocabulary of 50 symbols, median |
 | --- | ---: | ---: |
@@ -425,6 +490,8 @@ KATO computes every metric for every candidate and ranks afterwards, whichever k
 | `itfdf_similarity` | 383 ms | 729 ms |
 | `event_cohesion` | 254 ms | 355 ms |
 | `onset_alignment` | 381 ms | 649 ms |
+
+</details>
 
 ## What Was Not Measured
 

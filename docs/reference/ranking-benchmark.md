@@ -14,11 +14,11 @@ For what each metric is and how it is computed, see the [Prediction Object Refer
 
 ## Reading the Results
 
-What this run says about the choices a KATO user has to make, in the order they come up. Every figure is in a table further down. A point is one query in a hundred.
+What this run says about the choices a KATO user has to make, in the order they come up. A figure is in a table further down unless the text says where else it comes from. A point is one query in a hundred.
 
-**For the next event, read `future_potentials`.** Its top entry is right in 0.580 of the queries on the mean of the eight kinds of data. That is 3.5 points more often than the first prediction with a future under `potential`, the best ranking key, and it is the same whatever `rank_sort_algo` is. A ranking picks one pattern. The entry adds up every candidate that proposes the same event, and that is the stronger evidence where many patterns match equally well.
+**For the next event, read `future_potentials`.** Its top entry is right in 0.580 of the queries on the mean of the eight kinds of data. That is 3.5 points more often than the first prediction with a future under `potential`, the best ranking key, and it is the same whatever `rank_sort_algo` is. A ranking picks one pattern. The entry adds up every candidate that proposes the same event, and that is the stronger evidence where many patterns match equally well. The answer stays traceable: the patterns behind an entry are the predictions whose `future` begins with its event. `supporting_patterns` counts them, and `max_predictions` has to be large enough to return them all.
 
-**For a ranked list, keep the default, `potential`.** It is the best key or level with the best in 21 of the 22 cases, and a right answer is among its first five predictions in 0.713 of the queries, against 0.649 for `predictive_information`. Go down the list to the first prediction whose `future` is not empty, because `potential` often ranks a pattern that has ended first. On click streams its first prediction is right in 0.215 of the queries and its first prediction with a future in 0.650.
+**For a ranked list, keep the default, `potential`.** It is the best key or level with the best in 21 of the 22 cases, and a right answer is among its first five predictions in 0.713 of the queries, against 0.649 for `predictive_information`. Go down the list to the first prediction whose `future` is not empty, because `potential` can rank a pattern that has ended first: on click streams its first prediction is right in 0.215 of the queries and its first prediction with a future in 0.650.
 
 **If your code takes `predictions[0]` as it stands, rank by `predictive_information`.** Its first prediction names an event in 99.9% of the queries and is right in 0.535. That of `potential` names an event in 89.3% and is right in 0.478.
 
@@ -28,7 +28,7 @@ What this run says about the choices a KATO user has to make, in the order they 
 
 **The ranking key does not change the request time,** as far as this run can tell. Keys that return the very same response differ in their median times as much as any two keys do.
 
-**Do not rank by a key that ties.** `confidence`, `event_cohesion`, `onset_alignment`, `snr` and `fragmentation` share their top value among several predictions in more than 80% of the queries, and the pattern name then decides which comes first.
+**Do not rank by a key that ties.** `confidence`, `event_cohesion`, `onset_alignment`, `snr` and `fragmentation` share their top value among several predictions in more than 80% of the queries, and the pattern name then decides which comes first. `good_odds` and `bayesian_posterior` rank alike, as do `frequency` and `bayesian_prior`, so the choice within a pair changes nothing.
 
 **To know whether a sequence is over, read `ends_here`.** On six of the eight kinds it tells ended sequences from continuing ones with an area under the ROC curve of 0.957 to 0.996. On click streams it does not (0.597), and the music node has only 12 endings.
 

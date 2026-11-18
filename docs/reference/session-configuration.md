@@ -38,7 +38,7 @@ The `rank_sort_algo` parameter controls how predictions are sorted and prioritiz
 
 | Value | Description | Use Case |
 |-------|-------------|----------|
-| `potential` | Weighted sum of eleven match terms (default) | General purpose; the most accurate ranking for next-event prediction |
+| `potential` | Weighted sum of eleven match terms (default) | General purpose; the best ranking key, or level with the best, in nearly every case measured |
 | `good_odds` | Posterior log-odds of the pattern against chance, in bits | Rankings explained term by term; comparing matches across requests |
 | `similarity` | Pattern match score | Whole-sequence matches |
 | `evidence` | Share of the pattern observed | Nearly complete patterns first |
@@ -65,7 +65,7 @@ The `rank_sort_algo` parameter controls how predictions are sorted and prioritiz
 
 The affinity-weighted metrics and `affinity_emotive` are deprecated: do not use them. The metrics are `null` unless `affinity_emotive` is set; a prediction with a `null` value ranks below every prediction that has one. Formulas and measured accuracy: [Prediction Object Reference](prediction-object.md#metrics-at-a-glance).
 
-To measure the keys on your own instance, run the [ranking benchmark](../../benchmarks/ranking/README.md).
+Which key to use when, measured on eight kinds of data: [Ranking Benchmark](ranking-benchmark.md). To measure the keys on your own instance, run the [benchmark](../../benchmarks/ranking/README.md) yourself.
 
 **Example:**
 ```json

@@ -362,7 +362,8 @@ Metric for ranking predictions.
 - **weighted_snr**: Emotive-weighted SNR
 
 **Use Cases**:
-- **potential**: General purpose (default); the most accurate ranking for next-event prediction
+- **potential**: General purpose (default); the best ranking key, or level with the best, in nearly every case measured
+- **predictive_information**: When `predictions[0]` is taken as it stands; its top prediction almost always names a next event
 - **good_odds**: Rankings that must be explained term by term, in bits
 - **bayesian_likelihood**: Match strength alone, leaving out how often a pattern was learned
 - **frequency**: Most often learned patterns first
@@ -372,7 +373,9 @@ A prediction whose value for the chosen metric is `null` (an affinity-weighted m
 
 What each metric measures, and how each performs as a ranking key: [Prediction Object Reference](../reference/prediction-object.md#metrics-at-a-glance).
 
-To see how the keys rank on your own instance and your own kinds of data, run the [ranking benchmark](../../benchmarks/ranking/README.md). It measures all of them through the REST API and builds a report.
+For the next event alone, read the top entry of `future_potentials`: it does not depend on the ranking key and is right more often than any key's top prediction.
+
+Which key to use when, measured on eight kinds of data at three recall thresholds: [Ranking Benchmark](../reference/ranking-benchmark.md). To see how the keys rank on your own instance and your own kinds of data, run the [benchmark](../../benchmarks/ranking/README.md) yourself. It measures all of them through the REST API and builds the same report.
 
 **Example - Similarity Ranking**:
 ```bash

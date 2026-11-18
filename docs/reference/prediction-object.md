@@ -689,7 +689,7 @@ A high `chance_posterior` marks the queries where nothing learned explains the S
 - **Other recall thresholds, for every metric.** The tables are at 0.1.
 - **Other domains.** Four kinds of data are not all kinds. The figures say how the metrics behave on these, and which conditions help or hurt each one; they are not a forecast for a new data set.
 
-The [ranking benchmark](../../benchmarks/ranking/README.md) measures the ranking keys through the REST API of a running instance, at three recall thresholds, on these kinds of data and on four more. Run it to see the figures for your own instance.
+The [Ranking Benchmark](ranking-benchmark.md) measures the ranking keys through the REST API of a running instance, at three recall thresholds, on these kinds of data and on four more, with sequences that end and with request times, and it says which key to use when. Run [the benchmark](../../benchmarks/ranking/README.md) to see the figures for your own instance.
 
 ## Metric Categories
 
@@ -753,7 +753,8 @@ Notes:
 
 ## Usage Notes
 
-1. **Prediction Selection**: Predictions arrive ranked by `potential`, the default `rank_sort_algo`. It is the most accurate ranking key on the mean of the four kinds of data it was measured on, and first or level on each. Other keys answer other questions:
+1. **Prediction Selection**: Predictions arrive ranked by `potential`, the default `rank_sort_algo`. It is the most accurate ranking key on the mean of the four kinds of data it was measured on, and first or level on each; on eight kinds of data it is the best key or level with the best in nearly every case ([Ranking Benchmark](ranking-benchmark.md)). Other keys answer other questions:
+   - `predictive_information`: a first prediction that almost always names a next event, for code that takes `predictions[0]` as it stands
    - `good_odds` (or `bayesian_posterior`, which ranks the same): a ranking in which every term has a closed-form meaning in bits
    - `bayesian_likelihood`: match strength alone, leaving out how often a pattern was learned
    - `frequency`: the most often learned candidates

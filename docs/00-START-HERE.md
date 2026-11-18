@@ -97,6 +97,7 @@ Welcome to KATO documentation! This guide helps you find the right documentation
 - **API Reference**: [docs/reference/api/](reference/api/) - Detailed endpoint specs
 - **Configuration Variables**: [docs/reference/configuration-vars.md](reference/configuration-vars.md)
 - **Prediction Object**: [docs/reference/prediction-object.md](reference/prediction-object.md)
+- **Ranking Benchmark** (which `rank_sort_algo` to use): [docs/reference/ranking-benchmark.md](reference/ranking-benchmark.md)
 - **Error Codes**: [docs/reference/error-codes.md](reference/error-codes.md)
 - **Glossary**: [docs/reference/glossary.md](reference/glossary.md)
 

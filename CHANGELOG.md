@@ -17,6 +17,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   self-contained interactive page from the result files, which are kept
   compressed. Standard library only; it writes to nodes named `rankbench_...`
   and clears them. No change to the service.
+- **Which `rank_sort_algo` to use, measured:
+  `docs/reference/ranking-benchmark.md`.** The benchmark's guide suite on a
+  running instance: 5,112 held-out queries on eight kinds of data, four of
+  them kinds that `potential` was not fitted on. The page says which key to use
+  for which way of reading a response, what a higher `recall_threshold` costs,
+  how far `future_potentials`, `ends_here` and `chance_posterior` can be
+  trusted, and what a request costs. It is generated from the result files in
+  `benchmarks/results/ranking/guide/`, and a unit test rebuilds it and compares
+  it byte for byte.
+
+### Changed
+- **Docs: `potential` is no longer called the most accurate ranking key
+  without qualification.** It is the best key or level with the best in nearly
+  every case measured; `predictive_information` is the better choice when
+  `predictions[0]` is taken as it stands, and for the next event alone the top
+  entry of `future_potentials` is right more often than any key's top
+  prediction. No change to the service.
 
 ### Deprecated
 - **Affinity-weighted matching: `affinity_emotive` and the metrics

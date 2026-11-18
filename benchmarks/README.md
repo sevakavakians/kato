@@ -28,6 +28,9 @@ python -m benchmarks.ranking.run                  # the guide suite
 python -m benchmarks.ranking.report               # a docs page and an interactive report
 ```
 
+The guide suite's results, measured on a running instance, are in
+[docs/reference/ranking-benchmark.md](../docs/reference/ranking-benchmark.md).
+
 It writes only to nodes named `rankbench_...` and clears each afterwards. See
 [ranking/README.md](ranking/README.md) for what it measures, the data sets and
 their licences, and the result files.

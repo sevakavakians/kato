@@ -456,7 +456,7 @@ It is a measure, not a probability: it says how informative a context is, and wh
 | Goal | Use | Why |
 |------|---------------|-----|
 | Best next-event prediction | `future_potentials` | Pools the patterns that agree; its probability tracks how often it is right |
-| Default ranking of patterns | `potential` | The most accurate ranking key |
+| Default ranking of patterns | `potential` | The best ranking key, or level with the best, in nearly every case measured |
 | Most probable explanation, term by term | `good_odds` / `bayesian_posterior` | Prior plus weight of evidence, in bits |
 | Match strength without frequency | `bayesian_likelihood` | Weight of evidence alone |
 | Best match template | `similarity` | Direct sequence similarity |

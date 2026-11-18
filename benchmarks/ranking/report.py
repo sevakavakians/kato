@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -120,8 +121,8 @@ def mean_cell(cells: list) -> dict:
     if not known:
         return {"p": None, "lo": None, "hi": None, "n": 0}
     m = len(known)
-    p = sum(c["p"] for c in known) / m
-    half = stats.Z * (sum(((c["hi"] - c["lo"]) / (2 * stats.Z)) ** 2 for c in known) ** 0.5) / m
+    p = stats.total(c["p"] for c in known) / m
+    half = stats.Z * math.sqrt(stats.total(((c["hi"] - c["lo"]) / (2 * stats.Z)) ** 2 for c in known)) / m
     return {"p": p, "lo": max(0.0, p - half), "hi": min(1.0, p + half), "n": sum(c["n"] for c in known)}
 
 
@@ -134,6 +135,78 @@ def key_order(run: dict, columns: list, threshold: str, measure: str) -> list:
     means = {k: mean_cell([cell(run, c, threshold, measure, k) for c in columns])["p"] or 0.0
              for k in range(len(run["keys"]))}
     return sorted(means, key=lambda k: (-means[k], k))
+
+
+def kinds_difference(run: dict, columns: list, threshold: str, a: tuple, b: tuple) -> dict:
+    """The mean over the columns of the difference a - b, each measured on the same queries.
+
+    `a` and `b` are (measure, key index); a key index of None is the top entry of `future_potentials`.
+    """
+    def flags(set_key: str, which: tuple) -> list:
+        measure, k = which
+        if k is None:
+            return stats.entry_flags(run["sets"][set_key], threshold)
+        return stats.flags(run["sets"][set_key], threshold, measure, k)
+
+    return stats.mean_of_paired([
+        stats.mean_of_paired([stats.paired(flags(key, a), flags(key, b)) for key in column["sets"]])
+        for column in columns])
+
+
+def difference_phrase(difference: dict) -> str:
+    """'3.5 points more often (95% interval +2.1 to +4.9)', or what the interval allows."""
+    low, high = stats.interval(difference)
+    within = f"95% interval {low * 100:+.1f} to {high * 100:+.1f}"
+    if low > 0:
+        return f"{difference['d'] * 100:.1f} points more often ({within})"
+    if high < 0:
+        return f"{-difference['d'] * 100:.1f} points less often ({within})"
+    return f"about as often: the difference is {difference['d'] * 100:+.1f} points ({within})"
+
+
+def readouts(run: dict, threshold: str) -> dict:
+    """The ways to read a next event out of one response, with their shares by kind of data.
+
+    Shown for the default key and, where it is another one, for the key that
+    does best when the first prediction is taken as it stands.
+    """
+    keys = run["keys"]
+    columns = kind_columns(run)
+    default = keys.index("potential") if "potential" in keys else key_order(run, columns, threshold, "future")[0]
+    first = key_order(run, columns, threshold, "top")[0]
+    chosen = [default] if first == default else [default, first]
+    rows = [{"label": "The top entry of `future_potentials`", "measure": "future", "k": None}]
+    rows += [{"label": f"The first prediction that has a `future`, ranked by {code(keys[k])}", "measure": "future", "k": k}
+             for k in chosen]
+    rows += [{"label": f"`predictions[0]`, ranked by {code(keys[k])}", "measure": "top", "k": k} for k in chosen]
+    for row in rows:
+        row["cells"] = [cell(run, column, threshold, row["measure"], row["k"]) for column in columns]
+        row["mean"] = mean_cell(row["cells"])
+    rows.sort(key=lambda row: -(row["mean"]["p"] or 0.0))
+    return {"rows": rows, "columns": columns, "default": default, "first": first}
+
+
+def table_readouts(run: dict, threshold: str) -> str:
+    figures = readouts(run, threshold)
+    return table(["Read-out", "Mean of the kinds"] + [column["label"] for column in figures["columns"]],
+                 [[row["label"], f3(row["mean"]["p"])] + [f3(c["p"]) for c in row["cells"]] for row in figures["rows"]])
+
+
+def readout_sentences(run: dict, threshold: str) -> list:
+    """What the read-outs table shows, with each difference measured on the same queries."""
+    figures = readouts(run, threshold)
+    keys, columns, default, first = run["keys"], figures["columns"], figures["default"], figures["first"]
+    entry = kinds_difference(run, columns, threshold, ("future", None), ("future", default))
+    out = [f"On the mean of the kinds, the top entry of `future_potentials` is right "
+           f"{difference_phrase(entry)} than the first prediction that has a `future` under {code(keys[default])}. "
+           f"Each difference here is measured on the same queries."]
+    if first != default:
+        ahead = kinds_difference(run, columns, threshold, ("top", first), ("top", default))
+        named = [mean_cell([cell(run, column, threshold, "named", k) for column in columns])["p"] for k in (first, default)]
+        out.append(f"Taken as `predictions[0]`, {code(keys[first])} is right {difference_phrase(ahead)} than "
+                   f"{code(keys[default])}: its top prediction names an event in {pct(named[0])} of the queries, "
+                   f"that of {code(keys[default])} in {pct(named[1])}.")
+    return out
 
 
 # ----------------------------------------------------------------------------
@@ -191,7 +264,7 @@ def top_outcomes(run: dict, column: dict, threshold: str, k: int) -> list:
         parts[1].append(sum(1 for e in entries if e["top"][k] not in (stats.RIGHT, stats.NO_EVENT)) / n)
         parts[2].append(sum(1 for e in entries if e["top"][k] == stats.NO_EVENT and e["n"] > 0) / n)
         parts[3].append(sum(1 for e in entries if e["n"] == 0) / n)
-    return [sum(p) / len(p) for p in parts]
+    return [stats.mean(p) for p in parts]
 
 
 TOP_SERIES = [("s1", "names the right event"), ("s2", "names a wrong event"),
@@ -203,7 +276,7 @@ def chart_top(run: dict, threshold: str, standalone: bool) -> str:
     rows = []
     for k in key_order(run, columns, threshold, "top"):
         by_column = [top_outcomes(run, c, threshold, k) for c in columns]
-        parts = [sum(p[i] for p in by_column) / len(by_column) for i in range(4)]
+        parts = [stats.mean(p[i] for p in by_column) for i in range(4)]
         rows.append({"label": run["keys"][k], "parts": parts,
                      "tips": [f"{pct(part)} · {name} · {run['keys'][k]}" for part, (_, name) in zip(parts, TOP_SERIES)]})
     return charts.stacked_bars(
@@ -225,7 +298,7 @@ def future_outcomes(run: dict, column: dict, threshold: str, k: int) -> list:
         parts[1].append(sum(1 for e in entries if e["future"][k] not in (stats.RIGHT, stats.NO_EVENT)) / n)
         parts[2].append(sum(1 for e in entries if e["future"][k] == stats.NO_EVENT and e["n"] > 0) / n)
         parts[3].append(sum(1 for e in entries if e["n"] == 0) / n)
-    return [sum(p) / len(p) for p in parts]
+    return [stats.mean(p) for p in parts]
 
 
 def chart_thresholds(run: dict, key_name: str, standalone: bool) -> str:
@@ -417,7 +490,7 @@ def table_top(run: dict, threshold: str) -> str:
     rows = []
     for k in key_order(run, columns, threshold, "top"):
         figures = [[stats.key_figures(run["sets"][key], threshold, k) for key in c["sets"]] for c in columns]
-        mrr = sum(sum(f["mrr"] for f in column) / len(column) for column in figures) / len(figures)
+        mrr = stats.mean(stats.mean(f["mrr"] for f in column) for column in figures)
         rows.append([code(run["keys"][k])]
                     + [mean_over_kinds(figures, field) for field in ("top", "precision", "named", "future", "hit5")]
                     + [f3(mrr)])
@@ -442,7 +515,7 @@ def table_threshold_cost(run: dict) -> str:
         row = [column["label"]]
         for threshold in run["thresholds"]:
             figures = [stats.set_figures(run["sets"][key], threshold) for key in column["sets"]]
-            row.append(f"{sum(f['candidates'] for f in figures) / len(figures):,.0f}")
+            row.append(f"{stats.mean(f['candidates'] for f in figures):,.0f}")
         for threshold in run["thresholds"]:
             figures = [stats.set_figures(run["sets"][key], threshold) for key in column["sets"]]
             row.append(pct(stats.mean_of_shares([f["empty"] for f in figures])["p"]))
@@ -454,6 +527,30 @@ def table_threshold_cost(run: dict) -> str:
     return table(["Kind of data"] + [f"Candidates at {t}" for t in thresholds]
                  + [f"No prediction at {t}" for t in thresholds]
                  + [f"Some prediction right at {t}" for t in thresholds], rows)
+
+
+def table_threshold_answers(run: dict, key_name: str) -> str:
+    """Per kind of data and threshold: the share right among the queries that get an answer, and how many do.
+
+    A query is answered when some prediction has a `future`. Each figure is over all the kind's queries.
+    """
+    k = run["keys"].index(key_name)
+    lines = []
+    for column in kind_columns(run):
+        cells = []
+        for threshold in run["thresholds"]:
+            entries = [row["t"][threshold] for key in column["sets"] for row in run["sets"][key]["rows"]]
+            named = [entry for entry in entries if entry["future"][k] != stats.NO_EVENT]
+            answered = f"{pct(len(named) / len(entries))} answered"
+            if not named:
+                cells.append("none answered")
+            elif len(named) < 20:
+                cells.append(f"too few ({answered})")
+            else:
+                right = sum(1 for entry in named if entry["future"][k] == stats.RIGHT) / len(named)
+                cells.append(f"{pct(right)} ({answered})")
+        lines.append([column["label"]] + cells)
+    return table(["Kind of data"] + [f"recall_threshold {t}" for t in run["thresholds"]], lines)
 
 
 def table_transfer(run: dict) -> str:
@@ -532,14 +629,53 @@ def table_latency_keys(run: dict) -> str:
                  [[code(key)] + [f"{row['by_key'][key]:,.0f} ms" for row in nodes] for key in run["keys"]])
 
 
-def latency_key_sentence(run: dict) -> str:
-    """What the by-key times show, in words: the spread of the keys' medians on each node timed."""
-    spans = [f"{min(row['by_key'].values()):,.0f} to {max(row['by_key'].values()):,.0f} ms ({row['label']})"
-             for row in stats.latency(run)["nodes"] if row["by_key"]]
-    if not spans:
+def latency_fit_sentence(run: dict) -> str:
+    """How request time grows with the number of candidates, as a least-squares line over every request timed."""
+    fit = stats.latency(run)["fit"]
+    if not fit:
         return ""
-    return ("KATO computes every metric for every candidate and ranks afterwards, whichever key is asked for. "
-            f"Measured, the {len(run['keys'])} keys' median request times span " + " and ".join(spans) + ":")
+    if fit["a"] >= 0:
+        line = f"{fit['a']:,.0f} ms plus {fit['b']:.2f} ms per candidate"
+    else:
+        line = f"{fit['b']:.2f} ms per candidate, less {-fit['a']:,.0f} ms"
+    return (f"Over the {fit['n']} requests, a least-squares line gives {line}; "
+            f"it accounts for {fit['r2'] * 100:.0f}% of the variance in the times.")
+
+
+def latency_key_sentence(run: dict) -> str:
+    """What was timed per ranking key, and how to read the table that follows."""
+    nodes = [row for row in stats.latency(run)["nodes"] if row["by_key"]]
+    if not nodes:
+        return ""
+    requests = listed([str(n) for n in sorted({row["timed"] for row in nodes})])
+    out = ("KATO computes every metric for every candidate and ranks afterwards, whichever key is asked for. "
+           f"Each of the {len(run['keys'])} keys was timed on the same {requests} requests of a node.")
+    if any(row["repeat"] or row["same_order"] for row in nodes):
+        out += " The rows below the first say how much a time varies when nothing about the request differs."
+    if any(row["same_order"] for row in nodes):
+        out += (" Keys that agree on every read-out of every query of a node order its candidates the same way, "
+                "so they return the same response.")
+    return out
+
+
+def table_latency_noise(run: dict) -> str:
+    """The spread of the keys' median times beside two measures of the noise in a time, node by node."""
+    nodes = [row for row in stats.latency(run)["nodes"] if row["by_key"]]
+    if not nodes:
+        return ""
+    lines = [["The keys' medians, lowest to highest"] + [
+        f"{min(row['by_key'].values()):,.0f} to {max(row['by_key'].values()):,.0f} ms" for row in nodes]]
+    if any(row["repeat"] for row in nodes):
+        lines.append(["One request asked twice with the same key: the two times differ by"] + [
+            f"{min(row['repeat']):,.0f} to {max(row['repeat']):,.0f} ms" if row["repeat"] else "" for row in nodes])
+    groups = []
+    for row in nodes:
+        groups += [group for group in row["same_order"] if group not in groups]
+    for group in groups:
+        lines.append([f"{listed([code(key) for key in group])}, which return the same response: medians"] + [
+            listed([format(row["by_key"][key], ",.0f") for key in group]) + " ms" if group in row["same_order"] else ""
+            for row in nodes])
+    return table([""] + [row["label"] for row in nodes], lines)
 
 
 def table_nodes(run: dict) -> str:
@@ -622,6 +758,14 @@ def sentences(run: dict, counts: dict, total: int) -> list:
         out.append(
             f"On the {len(unseen)} kinds of data {code('potential')} never saw when its weights were fitted, it is "
             f"ahead of the best other key on {tally['ahead']}, level on {tally['level']} and behind on {tally['behind']}.")
+    columns, threshold = kind_columns(run), stats.GUIDE_THRESHOLD
+    best = key_order(run, columns, threshold, "future")[0]
+    best_share = mean_cell([cell(run, column, threshold, "future", best) for column in columns])["p"]
+    entry = mean_cell([cell(run, column, threshold, "future", None) for column in columns])["p"]
+    if best_share is not None and entry is not None:
+        out.append(
+            f"On the mean of the kinds, {code(keys[best])} puts a right prediction on top in {f3(best_share)} of the "
+            f"queries; the top entry of `future_potentials`, which is the same whatever the key, is right in {f3(entry)}.")
     return out
 
 
@@ -656,6 +800,11 @@ For what each metric is and how it is computed, see the [Prediction Object Refer
 ## At a Glance
 
 {' '.join(sentences(run, counts, total))}
+"""]
+    if notes:
+        parts.append(f"## Reading the Results\n\n{notes}\n")
+
+    parts.append(f"""## Which Key for Which Case
 
 The table follows one rule, fixed before the run. In each case the best key is the one with the highest share of queries answered right. A key is **level** with it when the 95% interval of the difference between the two, measured on the same queries, includes zero. Read-out: the top-ranked prediction that has a `future`. `recall_threshold` {threshold}.
 
@@ -666,9 +815,20 @@ How often each key is best or level, over the {total} single cases (groups not c
 {image('headline', 'Share answered right by ranking key')}
 {details('Table', table_headline(run, threshold))}
 The table's last column is how often a key's top value is shared by several predictions. KATO then orders them by pattern name, so the more often a key ties, the more often its top prediction is chosen by name.
-"""]
-    if notes:
-        parts.append(f"## Reading the Results\n\n{notes}\n")
+
+## What to Read From the Response
+
+A response offers three ways to read a next event. The top entry of `future_potentials` is the event with the largest share over every candidate; it does not depend on the ranking key. The first prediction that has a `future` is found by going down the ranked list past the patterns that end where the STM ends. `predictions[0]` is the top-ranked prediction as it stands, and it names no event when its pattern has ended. Share of the queries answered right, at `recall_threshold` {threshold}:
+
+{table_readouts(run, threshold)}
+{' '.join(readout_sentences(run, threshold))}
+
+### The Top Prediction Itself
+
+Accuracy is the share of all queries the top prediction gets right, precision the share it gets right of those where it names an event. The last three columns look further down the list.
+
+{image('top', 'What the top prediction does, by ranking key')}
+{table_top(run, threshold)}""")
 
     method = "\n".join(f"{number}. {point}" for number, point in enumerate(method_points(run), 1))
     parts.append(f"""## How It Was Measured
@@ -698,18 +858,16 @@ Generated data, one condition changed at a time.
 {image('situations', 'Share answered right by situation and ranking key')}
 {details('Table', table_keys(run, situation_columns(run), threshold, 'future', 'Mean'))}""")
 
-    parts.append(f"""## The Top Prediction Itself
-
-The top-ranked prediction can be a pattern that ends where the STM ends. Its `future` is empty and it names no next event. Accuracy is the share of all queries the top prediction gets right, precision the share it gets right of those where it names an event. The last three columns look further down the list.
-
-{image('top', 'What the top prediction does, by ranking key')}
-{table_top(run, threshold)}
-## Recall Threshold
+    default_key = "potential" if "potential" in run["keys"] else run["keys"][0]
+    parts.append(f"""## Recall Threshold
 
 A higher `recall_threshold` leaves fewer candidates. Share answered right by the top prediction that has a future, mean of the kinds:
 
 {table_thresholds(run)}
 {image('thresholds', 'Outcome of the top prediction at each recall threshold')}
+Does a higher threshold make the answers that remain more reliable? A query is answered when some prediction has a `future`. Share right among the answered queries, ranked by {code(default_key)}, with the share of queries answered:
+
+{table_threshold_answers(run, default_key)}
 What the threshold costs and what it removes: candidates per request, queries with no prediction at all (KATO's "I don't know"), and queries where at least one prediction names the right event.
 
 {table_threshold_cost(run)}
@@ -740,10 +898,13 @@ The ranking key decides how often the top prediction is a pattern that has ended
 Times are from the machine recorded in [`run.json`]({run_link}): one request at a time, `max_predictions` 100, `recall_threshold` {threshold}. They depend on the hardware; compare them with a run of your own.
 
 {image('latency', 'Request time against the number of candidates')}
+{latency_fit_sentence(run)}
+
 {table_latency(run)}
 {latency_key_sentence(run)}
 
-{table_latency_keys(run)}""")
+{table_latency_noise(run)}
+{details('Median request time by ranking key', table_latency_keys(run)) if table_latency_keys(run) else ''}""")
     parts.append(f"""## What Was Not Measured
 
 - **The affinity-weighted metrics.** They are deprecated, and the data sets carry no emotives.
@@ -845,6 +1006,42 @@ def md_table_to_html(markdown: str) -> str:
     return f'<div class="table-wrap"><table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div>'
 
 
+def notes_html(markdown: str) -> str:
+    """The hand-written notes as HTML: paragraphs, `###` headings, bullet and numbered lists, tables.
+
+    A link is kept when it is an https address; the label of any other link is kept as text,
+    since the page is read on its own, away from the repository.
+    """
+    def inline(text: str) -> str:
+        out, rest = "", text
+        while "](" in rest and "[" in rest.split("](", 1)[0]:
+            before, after = rest.split("](", 1)
+            lead, label = before.rsplit("[", 1)
+            if ")" not in after:
+                break
+            target, rest = after.split(")", 1)
+            out += inline_html(lead)
+            out += (f'<a href="{html.escape(target, quote=True)}">{inline_html(label)}</a>'
+                    if target.startswith("https://") else inline_html(label))
+        return out + inline_html(rest)
+
+    blocks, out = [block for block in markdown.strip().split("\n\n") if block.strip()], []
+    for block in blocks:
+        lines = [line.rstrip() for line in block.strip().splitlines()]
+        if lines[0].startswith("#"):
+            level = min(4, max(3, len(lines[0]) - len(lines[0].lstrip("#"))))
+            out.append(f"<h{level}>{inline(lines[0].lstrip('#').strip())}</h{level}>")
+        elif all(line.startswith("|") for line in lines):
+            out.append(md_table_to_html(block))
+        elif all(line.startswith("- ") for line in lines):
+            out.append("<ul>" + "".join(f"<li>{inline(line[2:])}</li>" for line in lines) + "</ul>")
+        elif all(line.split(". ", 1)[0].isdigit() and ". " in line for line in lines):
+            out.append("<ol>" + "".join(f"<li>{inline(line.split('. ', 1)[1])}</li>" for line in lines) + "</ol>")
+        else:
+            out.append(f"<p>{inline(' '.join(lines))}</p>")
+    return "\n".join(out)
+
+
 PAGE_CSS = """
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
@@ -886,7 +1083,7 @@ summary { cursor: pointer; font-size: 13px; color: var(--kz-ink2); width: max-co
 .table-wrap { overflow-x: auto; margin: 8px 0 16px; border: 1px solid var(--kz-border); border-radius: 8px; background: var(--kz-surface); }
 table { border-collapse: collapse; font-size: 13px; width: 100%; font-variant-numeric: tabular-nums; }
 th, td { padding: 6px 10px; border-bottom: 1px solid var(--kz-grid); vertical-align: top; }
-td[style*="right"], th[style*="right"] { white-space: nowrap; }
+td[style*="right"] { white-space: nowrap; }
 td:first-child, th:first-child { min-width: 200px; }
 th { font-weight: 600; color: var(--kz-ink); background: var(--kz-surface); }
 tbody tr:last-child td { border-bottom: 0; }
@@ -955,6 +1152,9 @@ def build_html(run: dict) -> str:
     kinds = kind_columns(run)
     situations = situation_columns(run)
     thresholds = run["thresholds"]
+    notes_path = Path(run["dir"]) / "notes.md"
+    notes = notes_path.read_text().strip() if notes_path.exists() else ""
+    default_key = "potential" if "potential" in run["keys"] else run["keys"][0]
 
     def figure(svg: str, table_markdown: str = "", attributes: str = "") -> str:
         twin = (f"<details><summary>Table</summary>{md_table_to_html(table_markdown)}</details>"
@@ -988,6 +1188,7 @@ def build_html(run: dict) -> str:
 <p class="lede">How often each ranking key puts a prediction with the right next event on top: {queries:,} held-out queries on {len(record['nodes'])} nodes, {len(run['keys'])} ranking keys, recall thresholds {', '.join(thresholds)}.</p>
 {f'<p><strong>Note.</strong> {html.escape(record["note"])}</p>' if record.get('note') else ''}
 <p>{code_html(' '.join(sentences(run, counts, total)))}</p>
+{f'<h2>Reading the results</h2>{notes_html(notes)}' if notes else ''}
 
 <h2>Which key for which case</h2>
 <p>One rule, fixed before the run. In each case the best key is the one with the highest share of queries answered right. A key is <strong>level</strong> with it when the 95% interval of the difference between the two, measured on the same queries, includes zero. Read-out: the top-ranked prediction that has a <code>future</code>. <code>recall_threshold</code> {stats.GUIDE_THRESHOLD}. This table does not follow the settings below.</p>
@@ -1004,6 +1205,14 @@ def build_html(run: dict) -> str:
   </fieldset>
   <button type="button" class="theme" id="theme">Theme: auto</button>
 </form>
+
+<h2>What to read from the response</h2>
+<p>A response offers three ways to read a next event. The top entry of <code>future_potentials</code> is the event with the largest share over every candidate; it does not depend on the ranking key. The first prediction that has a <code>future</code> is found by going down the ranked list past the patterns that end where the STM ends. <code>predictions[0]</code> is the top-ranked prediction as it stands, and it names no event when its pattern has ended. Share of the queries answered right:</p>
+{''.join(f'<div data-threshold="{t}">{section_table(table_readouts(run, t))}<p>{inline_html(" ".join(readout_sentences(run, t)))}</p></div>' for t in thresholds)}
+
+<h3>The top prediction itself</h3>
+<p>Accuracy is the share of all queries the top prediction gets right, precision the share it gets right of those where it names an event.</p>
+{per_threshold(lambda t: (chart_top(run, t, False), table_top(run, t)))}
 
 <h2>By ranking key</h2>
 {per_view(lambda t, m: (chart_headline(run, t, m, False), table_keys(run, kinds, t, m, 'Mean of the kinds')))}
@@ -1025,13 +1234,12 @@ def build_html(run: dict) -> str:
 {section_table(table_transfer(run))}
 """)
     body.append(f"""
-<h2>The top prediction itself</h2>
-<p>The top-ranked prediction can be a pattern that ends where the STM ends. Its <code>future</code> is empty and it names no next event.</p>
-{per_threshold(lambda t: (chart_top(run, t, False), table_top(run, t)))}
-
 <h2>Recall threshold</h2>
 <p>A higher <code>recall_threshold</code> leaves fewer candidates. All three thresholds are shown; the settings above do not apply here.</p>
-{figure(chart_thresholds(run, 'potential' if 'potential' in run['keys'] else run['keys'][0], False), table_thresholds(run))}
+{figure(chart_thresholds(run, default_key, False), table_thresholds(run))}
+<p>Does a higher threshold make the answers that remain more reliable? A query is answered when some prediction has a <code>future</code>. Share right among the answered queries, ranked by <code>{default_key}</code>, with the share of queries answered:</p>
+{section_table(table_threshold_answers(run, default_key))}
+<p>What the threshold costs and what it removes: candidates per request, queries with no prediction at all (KATO's "I don't know"), and queries where at least one prediction names the right event.</p>
 {section_table(table_threshold_cost(run))}
 
 <h2>How sure: <code>future_potentials</code></h2>
@@ -1052,11 +1260,15 @@ def build_html(run: dict) -> str:
 """)
     if stats.latency(run)["points"]:
         by_key = latency_key_sentence(run)
-        by_key_html = f"<p>{inline_html(by_key)}</p>\n{section_table(table_latency_keys(run))}" if by_key else ""
+        by_key_html = (f"<p>{inline_html(by_key)}</p>\n{section_table(table_latency_noise(run))}\n"
+                       f"<details><summary>Median request time by ranking key</summary>"
+                       f"{section_table(table_latency_keys(run))}</details>") if by_key else ""
+        fit = latency_fit_sentence(run)
         body.append(f"""
 <h2>Request time</h2>
 <p>One request at a time, <code>max_predictions</code> 100, <code>recall_threshold</code> {stats.GUIDE_THRESHOLD}, on the machine of the run. Times depend on the hardware.</p>
 {figure(chart_latency(run, False), table_latency(run))}
+{f'<p>{inline_html(fit)}</p>' if fit else ''}
 {by_key_html}
 """)
     body.append(f"""

@@ -1,0 +1,670 @@
+{
+ "benchmark": "ranking",
+ "client": {
+  "concurrency": 4,
+  "platform": "macOS-15.8.2-x86_64-i386-64bit-Mach-O",
+  "python": "3.14.2"
+ },
+ "finished": "2026-11-17T22:46:41Z",
+ "kato": {
+  "service": "KATO API",
+  "url": "http://localhost:8000",
+  "version": "7.1.0"
+ },
+ "node_order": ["gen_base", "hdfs", "msnbc", "wikitext", "bpi2012", "sepsis", "bach", "unix", "gen_flat", "gen_skewed", "gen_multi", "gen_smallvocab", "gen_stream_units", "gen_stream_windows"],
+ "nodes": {
+  "bach": {
+   "data_digest": "b495052ec597bafe",
+   "dataset": "bach",
+   "events": 2436,
+   "finalize_ms": 28.9,
+   "in_fit": false,
+   "kind": "Music",
+   "label": "Bach chorale chord progressions",
+   "latency": {
+    "max_predictions": 100,
+    "ms": [30.2, 28.3, 27.8, 26.0, 38.1, 38.8, 30.6, 28.8, 26.2, 21.3, 30.5, 37.6, 34.1, 37.3, 29.9, 43.9, 35.7, 23.7, 32.8, 47.1],
+    "recall_threshold": 0.1
+   },
+   "learned_sequences": 48,
+   "load_seconds": 3.8,
+   "pattern_count": 48,
+   "patterns": 48,
+   "set_order": ["bach.next", "bach.end"],
+   "sets": {
+    "bach.end": {
+     "group": "ending",
+     "label": "Bach chorale chord progressions",
+     "queries": 12
+    },
+    "bach.next": {
+     "group": "data",
+     "label": "Bach chorale chord progressions",
+     "queries": 200
+    }
+   },
+   "symbols": 2436,
+   "vocabulary": 101
+  },
+  "bpi2012": {
+   "data_digest": "7e07aadb42259a80",
+   "dataset": "bpi2012",
+   "events": 129930,
+   "finalize_ms": 601.92,
+   "in_fit": false,
+   "kind": "Finance",
+   "label": "Loan applications (BPI Challenge 2012)",
+   "latency": {
+    "max_predictions": 100,
+    "ms": [701.3, 1446.0, 1280.8, 1120.7, 1266.3, 1318.5, 794.1, 1096.6, 589.0, 1161.2, 427.2, 1386.6, 1283.1, 599.9, 537.8, 480.9, 1510.4, 1054.8, 579.6, 929.1],
+    "recall_threshold": 0.1
+   },
+   "learned_sequences": 6544,
+   "load_seconds": 170.9,
+   "pattern_count": 2383,
+   "patterns": 2383,
+   "set_order": ["bpi2012.next", "bpi2012.end"],
+   "sets": {
+    "bpi2012.end": {
+     "group": "ending",
+     "label": "Loan applications (BPI Challenge 2012)",
+     "queries": 100
+    },
+    "bpi2012.next": {
+     "group": "data",
+     "label": "Loan applications (BPI Challenge 2012)",
+     "queries": 200
+    }
+   },
+   "symbols": 129930,
+   "vocabulary": 36
+  },
+  "gen_base": {
+   "data_digest": "7870b2de0edc3859",
+   "dataset": "",
+   "events": 244159,
+   "finalize_ms": 444.56,
+   "in_fit": true,
+   "kind": "Generated",
+   "label": "Generated: the base setting",
+   "latency": {
+    "by_key_ms": {
+     "bayesian_likelihood": [295.0, 450.2, 347.5, 447.0, 176.2],
+     "bayesian_posterior": [127.2, 247.9, 351.1, 385.2, 186.7],
+     "bayesian_prior": [237.4, 455.6, 358.0, 591.9, 339.6],
+     "confidence": [156.9, 264.8, 180.3, 416.2, 330.2],
+     "confluence": [171.6, 481.1, 228.9, 507.0, 376.1],
+     "entropy": [157.0, 466.1, 235.8, 520.3, 216.1],
+     "event_cohesion": [147.4, 253.9, 354.8, 434.5, 193.0],
+     "evidence": [260.5, 421.8, 330.4, 374.6, 331.6],
+     "fragmentation": [296.3, 421.1, 338.2, 447.9, 329.5],
+     "frequency": [136.6, 463.0, 183.6, 426.4, 275.5],
+     "global_normalized_entropy": [172.9, 477.0, 350.2, 534.5, 362.6],
+     "good_odds": [132.0, 410.9, 183.9, 447.0, 171.2],
+     "itfdf_similarity": [143.6, 578.4, 371.7, 507.4, 383.3],
+     "normalized_entropy": [318.5, 331.1, 489.8, 505.2, 212.7],
+     "onset_alignment": [290.6, 405.2, 190.0, 440.3, 381.1],
+     "potential": [293.1, 253.2, 185.9, 294.8, 194.1],
+     "predictive_information": [281.5, 438.3, 209.2, 276.9, 176.2],
+     "similarity": [418.6, 414.1, 338.6, 430.5, 167.1],
+     "snr": [164.6, 255.3, 345.9, 287.0, 186.2],
+     "tfidf_score": [161.9, 584.9, 207.2, 497.4, 235.9]
+    },
+    "max_predictions": 100,
+    "ms": [156.3, 442.8, 210.9, 478.5, 180.9, 385.1, 72.6, 125.8, 552.4, 553.5, 395.7, 238.2, 54.5, 168.2, 90.8, 65.6, 582.0, 177.7, 407.8, 486.9],
+    "recall_threshold": 0.1
+   },
+   "learned_sequences": 12000,
+   "load_seconds": 172.9,
+   "pattern_count": 1957,
+   "patterns": 1957,
+   "set_order": ["gen_base.mid5", "gen_base.mid2", "gen_base.mid10", "gen_base.first5", "gen_base.share25", "gen_base.share75", "gen_base.noise0", "gen_base.noise20", "gen_base.span", "gen_base.end"],
+   "sets": {
+    "gen_base.end": {
+     "group": "ending",
+     "label": "Generated: the base setting",
+     "queries": 100
+    },
+    "gen_base.first5": {
+     "group": "situation",
+     "label": "First 5 events of a pattern",
+     "queries": 200
+    },
+    "gen_base.mid10": {
+     "group": "situation",
+     "label": "STM of 10 events",
+     "queries": 200
+    },
+    "gen_base.mid2": {
+     "group": "situation",
+     "label": "STM of 2 events",
+     "queries": 200
+    },
+    "gen_base.mid5": {
+     "group": "situation",
+     "label": "STM of 5 events, mid-pattern",
+     "queries": 200
+    },
+    "gen_base.noise0": {
+     "group": "situation",
+     "label": "No noise",
+     "queries": 200
+    },
+    "gen_base.noise20": {
+     "group": "situation",
+     "label": "20% noise",
+     "queries": 200
+    },
+    "gen_base.share25": {
+     "group": "situation",
+     "label": "First quarter of a pattern",
+     "queries": 200
+    },
+    "gen_base.share75": {
+     "group": "situation",
+     "label": "First three quarters of a pattern",
+     "queries": 200
+    },
+    "gen_base.span": {
+     "group": "situation",
+     "label": "STM across two patterns",
+     "queries": 200
+    }
+   },
+   "symbols": 244159,
+   "vocabulary": 914
+  },
+  "gen_flat": {
+   "data_digest": "54a699bbf081d536",
+   "dataset": "",
+   "events": 293766,
+   "finalize_ms": 485.93,
+   "in_fit": true,
+   "kind": "Generated",
+   "label": "Generated: patterns learned equally often",
+   "latency": {
+    "max_predictions": 100,
+    "ms": [178.8, 1431.0, 811.1, 274.8, 646.2, 155.7, 138.5, 322.2, 294.7, 1062.7, 578.1, 649.3, 1415.9, 792.3, 687.5, 283.8, 649.4, 403.7, 836.5, 1203.8],
+    "recall_threshold": 0.1
+   },
+   "learned_sequences": 12000,
+   "load_seconds": 242.0,
+   "pattern_count": 2952,
+   "patterns": 2952,
+   "set_order": ["gen_flat.mid5"],
+   "sets": {
+    "gen_flat.mid5": {
+     "group": "situation",
+     "label": "Patterns learned equally often",
+     "queries": 200
+    }
+   },
+   "symbols": 293766,
+   "vocabulary": 966
+  },
+  "gen_multi": {
+   "data_digest": "b716c77b660ba28d",
+   "dataset": "",
+   "events": 271223,
+   "finalize_ms": 548.92,
+   "in_fit": true,
+   "kind": "Generated",
+   "label": "Generated: events of 1 to 5 symbols",
+   "latency": {
+    "max_predictions": 100,
+    "ms": [1029.3, 452.0, 1124.7, 677.0, 448.0, 375.4, 721.3, 566.5, 909.2, 713.1, 971.5, 530.2, 1150.7, 850.1, 1298.5, 438.7, 1073.5, 541.1, 817.8, 744.7],
+    "recall_threshold": 0.1
+   },
+   "learned_sequences": 12000,
+   "load_seconds": 181.8,
+   "pattern_count": 2003,
+   "patterns": 2003,
+   "set_order": ["gen_multi.mid5"],
+   "sets": {
+    "gen_multi.mid5": {
+     "group": "situation",
+     "label": "Events of 1 to 5 symbols",
+     "queries": 200
+    }
+   },
+   "symbols": 810436,
+   "vocabulary": 996
+  },
+  "gen_skewed": {
+   "data_digest": "f1a71c1d974c93b7",
+   "dataset": "",
+   "events": 221445,
+   "finalize_ms": 179.76,
+   "in_fit": true,
+   "kind": "Generated",
+   "label": "Generated: strongly skewed pattern frequencies",
+   "latency": {
+    "max_predictions": 100,
+    "ms": [194.1, 69.9, 77.0, 73.0, 182.0, 115.1, 236.8, 36.4, 68.0, 113.6, 144.5, 152.3, 35.4, 159.9, 81.8, 87.5, 454.4, 149.5, 82.4, 50.7],
+    "recall_threshold": 0.1
+   },
+   "learned_sequences": 12000,
+   "load_seconds": 111.6,
+   "pattern_count": 611,
+   "patterns": 611,
+   "set_order": ["gen_skewed.mid5"],
+   "sets": {
+    "gen_skewed.mid5": {
+     "group": "situation",
+     "label": "Strongly skewed frequencies",
+     "queries": 200
+    }
+   },
+   "symbols": 221445,
+   "vocabulary": 709
+  },
+  "gen_smallvocab": {
+   "data_digest": "6dfe378fd95f4e9f",
+   "dataset": "",
+   "events": 232980,
+   "finalize_ms": 281.15,
+   "in_fit": true,
+   "kind": "Generated",
+   "label": "Generated: a vocabulary of 50 symbols",
+   "latency": {
+    "by_key_ms": {
+     "bayesian_likelihood": [698.6, 255.3, 349.1, 1037.0, 930.2],
+     "bayesian_posterior": [393.0, 264.4, 316.3, 1052.0, 489.4],
+     "bayesian_prior": [776.7, 262.3, 332.1, 629.2, 529.2],
+     "confidence": [408.2, 418.0, 323.0, 1068.5, 929.6],
+     "confluence": [871.3, 726.9, 400.4, 1256.1, 630.6],
+     "entropy": [461.8, 329.0, 716.2, 804.0, 1141.6],
+     "event_cohesion": [355.0, 266.1, 322.9, 1106.1, 882.3],
+     "evidence": [835.9, 361.4, 312.3, 749.5, 482.8],
+     "fragmentation": [765.6, 678.4, 665.2, 1046.5, 481.6],
+     "frequency": [388.7, 589.6, 307.9, 1013.6, 1021.0],
+     "global_normalized_entropy": [571.1, 541.1, 826.3, 821.2, 1045.5],
+     "good_odds": [421.7, 700.2, 317.9, 997.3, 930.1],
+     "itfdf_similarity": [558.0, 749.1, 449.3, 1205.7, 728.6],
+     "normalized_entropy": [455.6, 339.3, 400.4, 1477.5, 662.5],
+     "onset_alignment": [718.1, 649.0, 323.3, 602.8, 947.0],
+     "potential": [419.9, 262.5, 321.1, 1037.0, 867.9],
+     "predictive_information": [381.5, 262.2, 717.6, 1037.2, 885.7],
+     "similarity": [416.4, 637.1, 744.0, 1109.5, 865.7],
+     "snr": [795.3, 278.1, 727.4, 627.7, 508.6],
+     "tfidf_score": [847.0, 357.3, 1018.6, 782.3, 668.9]
+    },
+    "max_predictions": 100,
+    "ms": [950.2, 401.0, 512.1, 1414.1, 726.8, 1000.9, 1191.5, 170.9, 701.8, 897.8, 965.6, 215.5, 1095.5, 720.0, 838.2, 734.4, 908.7, 468.4, 722.5, 914.9],
+    "recall_threshold": 0.1
+   },
+   "learned_sequences": 12000,
+   "load_seconds": 172.5,
+   "pattern_count": 2016,
+   "patterns": 2016,
+   "set_order": ["gen_smallvocab.mid5"],
+   "sets": {
+    "gen_smallvocab.mid5": {
+     "group": "situation",
+     "label": "Vocabulary of 50 symbols",
+     "queries": 200
+    }
+   },
+   "symbols": 232980,
+   "vocabulary": 50
+  },
+  "gen_stream_units": {
+   "data_digest": "bec2d67bc39dc25c",
+   "dataset": "",
+   "events": 52637,
+   "finalize_ms": 123.09,
+   "in_fit": true,
+   "kind": "Generated",
+   "label": "Generated: a stream, pattern boundaries given",
+   "latency": {
+    "max_predictions": 100,
+    "ms": [78.0, 81.4, 94.8, 53.9, 80.4, 86.2, 95.3, 64.9, 75.2, 84.9, 79.9, 62.1, 84.5, 78.0, 96.1, 99.3, 40.3, 70.5, 75.9, 109.4],
+    "recall_threshold": 0.1
+   },
+   "learned_sequences": 1600,
+   "load_seconds": 28.7,
+   "pattern_count": 304,
+   "patterns": 304,
+   "set_order": ["gen_stream_units.stream"],
+   "sets": {
+    "gen_stream_units.stream": {
+     "group": "situation",
+     "label": "Stream, boundaries given",
+     "queries": 200
+    }
+   },
+   "symbols": 52637,
+   "vocabulary": 466
+  },
+  "gen_stream_windows": {
+   "data_digest": "602f740a42c9661f",
+   "dataset": "",
+   "events": 52630,
+   "finalize_ms": 348.81,
+   "in_fit": true,
+   "kind": "Generated",
+   "label": "Generated: a stream, pattern boundaries not given",
+   "latency": {
+    "max_predictions": 100,
+    "ms": [413.0, 781.3, 501.5, 228.3, 868.5, 807.2, 923.9, 263.8, 395.3, 366.3, 324.2, 851.2, 615.4, 368.0, 934.2, 860.4, 214.0, 784.7, 937.1, 507.5],
+    "recall_threshold": 0.1
+   },
+   "learned_sequences": 5263,
+   "load_seconds": 178.7,
+   "pattern_count": 2683,
+   "patterns": 2683,
+   "set_order": ["gen_stream_windows.stream"],
+   "sets": {
+    "gen_stream_windows.stream": {
+     "group": "situation",
+     "label": "Stream, boundaries not given",
+     "queries": 200
+    }
+   },
+   "symbols": 52630,
+   "vocabulary": 466
+  },
+  "hdfs": {
+   "data_digest": "ad038ae4db7d0735",
+   "dataset": "hdfs",
+   "events": 159392,
+   "finalize_ms": 185.76,
+   "in_fit": true,
+   "kind": "System logs",
+   "label": "HDFS block traces",
+   "latency": {
+    "max_predictions": 100,
+    "ms": [639.2, 456.4, 642.9, 380.7, 406.6, 741.6, 613.7, 567.9, 502.5, 460.6, 409.8, 646.3, 556.2, 548.4, 459.4, 574.9, 458.7, 408.9, 571.0, 359.0],
+    "recall_threshold": 0.1
+   },
+   "learned_sequences": 8216,
+   "load_seconds": 115.7,
+   "pattern_count": 1282,
+   "patterns": 1282,
+   "set_order": ["hdfs.next", "hdfs.end"],
+   "sets": {
+    "hdfs.end": {
+     "group": "ending",
+     "label": "HDFS block traces",
+     "queries": 100
+    },
+    "hdfs.next": {
+     "group": "data",
+     "label": "HDFS block traces",
+     "queries": 200
+    }
+   },
+   "symbols": 159392,
+   "vocabulary": 24
+  },
+  "msnbc": {
+   "data_digest": "e1135716f3b0b8d1",
+   "dataset": "msnbc",
+   "events": 42489,
+   "finalize_ms": 315.45,
+   "in_fit": true,
+   "kind": "Click streams",
+   "label": "msnbc.com page visits",
+   "latency": {
+    "max_predictions": 100,
+    "ms": [421.3, 117.1, 145.4, 616.6, 142.4, 168.2, 509.3, 94.1, 84.2, 508.2, 552.5, 397.0, 272.7, 135.3, 300.3, 474.4, 221.7, 582.2, 317.0, 229.6],
+    "recall_threshold": 0.1
+   },
+   "learned_sequences": 6270,
+   "load_seconds": 196.1,
+   "pattern_count": 3107,
+   "patterns": 3107,
+   "set_order": ["msnbc.next", "msnbc.end"],
+   "sets": {
+    "msnbc.end": {
+     "group": "ending",
+     "label": "msnbc.com page visits",
+     "queries": 100
+    },
+    "msnbc.next": {
+     "group": "data",
+     "label": "msnbc.com page visits",
+     "queries": 200
+    }
+   },
+   "symbols": 42489,
+   "vocabulary": 17
+  },
+  "sepsis": {
+   "data_digest": "a037a42187145829",
+   "dataset": "sepsis",
+   "events": 12154,
+   "finalize_ms": 81.38,
+   "in_fit": false,
+   "kind": "Healthcare",
+   "label": "Hospital pathways of sepsis cases",
+   "latency": {
+    "max_predictions": 100,
+    "ms": [338.3, 188.0, 437.4, 190.5, 157.3, 204.2, 453.0, 197.5, 203.2, 177.8, 203.5, 240.0, 329.1, 393.8, 197.7, 193.6, 183.6, 371.2, 434.6, 410.6],
+    "recall_threshold": 0.1
+   },
+   "learned_sequences": 840,
+   "load_seconds": 44.1,
+   "pattern_count": 691,
+   "patterns": 691,
+   "set_order": ["sepsis.next", "sepsis.end"],
+   "sets": {
+    "sepsis.end": {
+     "group": "ending",
+     "label": "Hospital pathways of sepsis cases",
+     "queries": 100
+    },
+    "sepsis.next": {
+     "group": "data",
+     "label": "Hospital pathways of sepsis cases",
+     "queries": 200
+    }
+   },
+   "symbols": 12154,
+   "vocabulary": 16
+  },
+  "unix": {
+   "data_digest": "4cb9f3e85681e152",
+   "dataset": "unix",
+   "events": 93060,
+   "finalize_ms": 655.61,
+   "in_fit": false,
+   "kind": "Computing",
+   "label": "UNIX shell sessions",
+   "latency": {
+    "max_predictions": 100,
+    "ms": [521.0, 643.2, 782.3, 765.8, 838.9, 590.7, 602.6, 677.4, 1234.0, 886.6, 749.4, 117.4, 530.4, 613.4, 697.7, 863.2, 242.2, 587.3, 807.3, 364.3],
+    "recall_threshold": 0.1
+   },
+   "learned_sequences": 4119,
+   "load_seconds": 201.0,
+   "pattern_count": 3065,
+   "patterns": 3065,
+   "set_order": ["unix.next", "unix.end"],
+   "sets": {
+    "unix.end": {
+     "group": "ending",
+     "label": "UNIX shell sessions",
+     "queries": 100
+    },
+    "unix.next": {
+     "group": "data",
+     "label": "UNIX shell sessions",
+     "queries": 200
+    }
+   },
+   "symbols": 93060,
+   "vocabulary": 1308
+  },
+  "wikitext": {
+   "data_digest": "391201702d4eebb5",
+   "dataset": "wikitext",
+   "events": 104151,
+   "finalize_ms": 901.28,
+   "in_fit": true,
+   "kind": "Text",
+   "label": "WikiText-2 sentences",
+   "latency": {
+    "max_predictions": 100,
+    "ms": [206.8, 214.6, 503.1, 42.2, 127.2, 405.0, 187.8, 509.2, 60.4, 867.1, 334.4, 125.0, 1249.7, 259.1, 27.9, 523.6, 115.2, 615.9, 143.1, 159.0],
+    "recall_threshold": 0.1
+   },
+   "learned_sequences": 3985,
+   "load_seconds": 248.7,
+   "pattern_count": 3967,
+   "patterns": 3967,
+   "set_order": ["wikitext.next", "wikitext.end"],
+   "sets": {
+    "wikitext.end": {
+     "group": "ending",
+     "label": "WikiText-2 sentences",
+     "queries": 100
+    },
+    "wikitext.next": {
+     "group": "data",
+     "label": "WikiText-2 sentences",
+     "queries": 200
+    }
+   },
+   "symbols": 104151,
+   "vocabulary": 10582
+  }
+ },
+ "note": "Intel Core i9-8950HK, 6 cores (12 threads), 32 GB, macOS 15.8.2; KATO under Docker Desktop (12 CPUs, 23.5 GB), 4 workers",
+ "queries_per_set": 200,
+ "settings": {
+  "depth": 100,
+  "format": 1,
+  "keys": ["potential", "good_odds", "similarity", "evidence", "confidence", "snr", "fragmentation", "frequency", "bayesian_posterior", "bayesian_prior", "bayesian_likelihood", "predictive_information", "confluence", "entropy", "normalized_entropy", "global_normalized_entropy", "tfidf_score", "itfdf_similarity", "event_cohesion", "onset_alignment"],
+  "matching": {
+   "filter_pipeline": [],
+   "fuzzy_token_threshold": 0.0,
+   "max_pattern_length": 0,
+   "process_predictions": false,
+   "stm_mode": "CLEAR",
+   "use_token_matching": true
+  },
+  "response_cap": 10000,
+  "suite": "guide",
+  "thresholds": [0.1, 0.3, 0.5]
+ },
+ "sources": {
+  "bach": {
+   "cite": "Radicioni and Esposito, Bach Choral Harmony, UCI Machine Learning Repository, 2014, doi:10.24432/C5B61F",
+   "files": [
+    {
+     "members": {
+      "jsbach_chorals_harmony.data": "81554b251ca9183686b0aa207f214ea92fd48dbb73ef89fa1678a257d3a57457"
+     },
+     "sha256": "",
+     "url": "https://archive.ics.uci.edu/static/public/298/bach+choral+harmony.zip"
+    }
+   ],
+   "kind": "Music",
+   "licence": "CC BY 4.0",
+   "page": "https://doi.org/10.24432/C5B61F",
+   "title": "Bach chorale chord progressions",
+   "what": "One sequence per chorale: its chords in order, repeats of a sounding chord merged (60 chorales, 102 chord labels). Four chorales in five are learned, one in five held out."
+  },
+  "bpi2012": {
+   "cite": "BPI Challenge 2012, 4TU.ResearchData, doi:10.4121/uuid:3926db30-f712-4394-aebc-75976070e91f",
+   "files": [
+    {
+     "members": {},
+     "sha256": "5cd9cc16b9bcb20bd4aae45666a5d87479ddbf47e6371618b6ad217174cecdf3",
+     "url": "https://data.4tu.nl/file/533f66a4-8911-4ac7-8612-1235d65d1f37/3276db7f-8bee-4f2b-88ee-92dbffb5a893"
+    }
+   ],
+   "kind": "Finance",
+   "licence": "4TU General Terms of Use (https://doi.org/10.4121/resource:terms_of_use)",
+   "page": "https://doi.org/10.4121/uuid:3926db30-f712-4394-aebc-75976070e91f",
+   "title": "Loan applications (BPI Challenge 2012)",
+   "what": "One sequence per loan application: the steps of its handling in order, each event an activity with its lifecycle state (36 symbols). Two applications in four are learned, one in four held out."
+  },
+  "hdfs": {
+   "cite": "Zhu, He, He, Liu and Lyu, Loghub: A Large Collection of System Log Datasets for AI-driven Log Analytics, ISSRE 2023 (https://arxiv.org/abs/2008.06448); the logs are from Xu, Huang, Fox, Patterson and Jordan, SOSP 2009",
+   "files": [
+    {
+     "members": {},
+     "sha256": "04f919f2185821f23f045dca611a7586429bdabc601bd7b43f30005f8e289b01",
+     "url": "https://zenodo.org/records/8196385/files/HDFS_v1.zip?download=1"
+    }
+   ],
+   "kind": "System logs",
+   "licence": "CC BY 4.0 on the Zenodo record; Loghub asks that the data be used for research or academic work and that its paper be cited",
+   "page": "https://doi.org/10.5281/zenodo.8196385",
+   "title": "HDFS block traces",
+   "what": "One sequence per HDFS block: its log events in order, each event a log template id. One trace in 70 is learned, one in 70 held out."
+  },
+  "msnbc": {
+   "cite": "Heckerman, msnbc.com Anonymous Web Data, UCI Machine Learning Repository",
+   "files": [
+    {
+     "members": {
+      "msnbc990928.seq.gz": "d0ad0edf726fe265f956b43d2d02bf07b58b5c27df3fdbc7b02b7195061374a2"
+     },
+     "sha256": "",
+     "url": "https://archive.ics.uci.edu/static/public/133/msnbc+com+anonymous+web+data.zip"
+    }
+   ],
+   "kind": "Click streams",
+   "licence": "CC BY 4.0",
+   "page": "https://archive.ics.uci.edu/dataset/133/msnbc+com+anonymous+web+data",
+   "title": "msnbc.com page visits",
+   "what": "One sequence per visitor on 28 September 1999: the page categories requested, in order (17 categories). One visitor in 100 is learned, one in 100 held out."
+  },
+  "sepsis": {
+   "cite": "Mannhardt, Sepsis Cases - Event Log, 4TU.ResearchData, 2016, doi:10.4121/uuid:915d2bfb-7e84-49ad-a286-dc35f063a460",
+   "files": [
+    {
+     "members": {},
+     "sha256": "709c52340306415952811b9b9c5dc6bcc8f8d47d583eba39df9a538459dc543a",
+     "url": "https://data.4tu.nl/file/33632f3c-5c48-40cf-8d8f-2db57f5a6ce7/643dccf2-985a-459e-835c-a82bce1c0339"
+    }
+   ],
+   "kind": "Healthcare",
+   "licence": "4TU General Terms of Use (https://doi.org/10.4121/resource:terms_of_use)",
+   "page": "https://doi.org/10.4121/uuid:915d2bfb-7e84-49ad-a286-dc35f063a460",
+   "title": "Hospital pathways of sepsis cases",
+   "what": "One sequence per patient: the activities recorded on the way through the hospital, in order (16 activities). Four cases in five are learned, one in five held out."
+  },
+  "unix": {
+   "cite": "Lane, UNIX User Data, UCI Machine Learning Repository, doi:10.24432/C5302K",
+   "files": [
+    {
+     "members": {
+      "UNIX_user_data.tar.gz": "3aabaaebce9c30e008ad65ad3dd9b1916d85f03b3272b28f59d980e9f6821ee8"
+     },
+     "sha256": "",
+     "url": "https://archive.ics.uci.edu/static/public/141/unix+user+data.zip"
+    }
+   ],
+   "kind": "Computing",
+   "licence": "CC BY 4.0 on the UCI page. The README in the archive is stricter: research use only, no literal tokens or token sequences published, not part of a commercial product",
+   "page": "https://doi.org/10.24432/C5302K",
+   "title": "UNIX shell sessions",
+   "what": "One sequence per shell session of eight users: command names, flags and shell metacharacters in order, file names replaced by a count. Every second session is learned, one in ten held out."
+  },
+  "wikitext": {
+   "cite": "Merity, Xiong, Bradbury and Socher, Pointer Sentinel Mixture Models, 2016 (https://arxiv.org/abs/1609.07843); the files as distributed in pytorch/examples",
+   "files": [
+    {
+     "members": {},
+     "sha256": "f0737ed31fc1329026e95cb8b98e19c2a182c39c240ab909dc31abf2f8af58e8",
+     "url": "https://raw.githubusercontent.com/pytorch/examples/acc295dc7b90714f1bf47f06004fc19a7fe235c4/word_language_model/data/wikitext-2/valid.txt"
+    },
+    {
+     "members": {},
+     "sha256": "d790b833ef8cf03a90db7bf1271b7520b83c45ce07ba3c1a9699df81e239eca0",
+     "url": "https://raw.githubusercontent.com/pytorch/examples/acc295dc7b90714f1bf47f06004fc19a7fe235c4/word_language_model/data/wikitext-2/test.txt"
+    }
+   ],
+   "kind": "Text",
+   "licence": "CC BY-SA (the text is from Wikipedia)",
+   "page": "https://arxiv.org/abs/1609.07843",
+   "title": "WikiText-2 sentences",
+   "what": "One sequence per sentence, one word per event. Every second sentence of the validation file is learned; the queries come from the test file."
+  }
+ },
+ "started": "2026-11-17T21:41:40Z"
+}

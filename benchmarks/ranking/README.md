@@ -8,7 +8,7 @@ It is written to be run against your own instance. It needs Python 3.9 or later 
 ./start.sh start                                  # a KATO instance must be running
 
 python -m benchmarks.ranking.run --suite smoke    # a couple of minutes, no downloads
-python -m benchmarks.ranking.run                  # the guide suite: hours, not minutes
+python -m benchmarks.ranking.run                  # the guide suite: about an hour on a laptop
 python -m benchmarks.ranking.report               # the docs page and the interactive report
 ```
 
@@ -138,7 +138,9 @@ Two instances on the same KATO build must agree on every one. That is KATO's det
 - `docs/reference/ranking-benchmark.md`, with its charts as SVG files in `docs/reference/ranking-benchmark/`;
 - `<run>/report.html`, one self-contained interactive page: the recall threshold and the read-out can be switched, every mark shows its value on hover and on keyboard focus, and every chart has its table. It is about 2 MB for the guide suite, so it is written beside the results and not kept in git; open it in a browser, or publish it as it is.
 
-Both are generated; change `report.py`, not the pages. Text written by hand goes in `<run>/notes.md` and is placed under "Reading the Results". `--run` chooses another run, `--out` another place for the docs page and its charts.
+Both are generated; change `report.py`, not the pages. Text written by hand goes in `<run>/notes.md` and is placed under "Reading the Results" in both. `--run` chooses another run, `--out` another place for the docs page and its charts.
+
+**The page in the docs is the guide suite on a running instance.** Its result files are in `benchmarks/results/ranking/guide/`, with the reading of them in `notes.md`. A unit test builds the page again from those files and compares it byte for byte with `docs/reference/ranking-benchmark.md` and its charts, so the page cannot drift from the results or from the generator. After a new run of the guide suite, or a change to `report.py`, run the report and commit what it writes. The figures are summed exactly (`math.fsum`), so the page is the same whichever Python builds it.
 
 The guidance table at the top of the page follows one rule: in each case the best key is the one with the highest share of queries answered right, and a key is level with it when the 95% interval of the difference between the two, measured on the same queries, includes zero.
 

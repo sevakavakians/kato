@@ -1125,3 +1125,4 @@ future_potentials fix implemented (DECISION-050 accepted, SPRINT_BACKLOG 11). Si
 - 2026-11-16: Milestone Completion - KATO v7.0.0 released (MAJOR, 987374c, tag v7.0.0); DECISION-051 RELEASED; not deployed; follow-ups 13-22 filed. Silent.
 - 2026-11-16 (~16:05 EST): Milestone Completion - KATO v7.0.0 deployed to :8000 on a freshly wiped store (user-approved; recount not needed); backlog 13 and 22 DONE; item 23 filed. Silent.
 - 2026-11-16: Architectural Decision + Milestone Completion - KATO v7.1.0 (ends_here, DECISION-052) gated (1099 passed), released (MINOR, fe8e470, tag v7.1.0) and deployed to :8000 on a clean store; backlog 14 closed; items 24-25 filed. Silent.
+- 2026-11-17: Milestone Completion + Performance Benchmark - ranking benchmark merged (PRs 25-29); guide suite run on deployed 7.1.0 instance, results on bench/ranking-guide-results (851f802), not merged. Silent.

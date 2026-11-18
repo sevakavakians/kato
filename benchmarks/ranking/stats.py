@@ -55,6 +55,25 @@ def wilson(successes: int, n: int) -> tuple:
     return (p, max(0.0, centre - half), min(1.0, centre + half))
 
 
+def total(values) -> float:
+    """The sum of floats, correctly rounded.
+
+    Python's own `sum` adds from left to right, so its last bit depends on the
+    order of the terms, and from Python 3.12 it adds with compensation, so the
+    last bit also depends on the Python version. A figure that sits on a
+    rounding boundary would then print differently from one Python to the next.
+    `math.fsum` returns the same bits everywhere, so a page built from the same
+    result files is the same page, whoever builds it.
+    """
+    return math.fsum(values)
+
+
+def mean(values) -> float:
+    """The mean of floats, from their correctly rounded sum."""
+    values = list(values)
+    return math.fsum(values) / len(values)
+
+
 def share(flags: list) -> dict:
     """A share with its interval: {'p', 'lo', 'hi', 'n'}."""
     n = len(flags)
@@ -69,8 +88,8 @@ def mean_of_shares(shares: list) -> dict:
     if not shares:
         return {"p": None, "lo": None, "hi": None, "n": 0}
     m = len(shares)
-    p = sum(s["p"] for s in shares) / m
-    se = math.sqrt(sum(s["p"] * (1 - s["p"]) / s["n"] for s in shares)) / m
+    p = total(s["p"] for s in shares) / m
+    se = math.sqrt(total(s["p"] * (1 - s["p"]) / s["n"] for s in shares)) / m
     return {"p": p, "lo": max(0.0, p - Z * se), "hi": min(1.0, p + Z * se), "n": sum(s["n"] for s in shares)}
 
 
@@ -81,8 +100,8 @@ def paired(a: list, b: list) -> dict:
     if n == 0:
         return {"d": None, "se": None, "n": 0}
     diffs = [x - y for x, y in zip(a, b)]
-    d = sum(diffs) / n
-    variance = sum((x - d) ** 2 for x in diffs) / (n - 1) if n > 1 else 0.0
+    d = sum(diffs) / n                                  # whole numbers: exact
+    variance = total((x - d) ** 2 for x in diffs) / (n - 1) if n > 1 else 0.0
     return {"d": d, "se": math.sqrt(variance / n), "n": n}
 
 
@@ -92,7 +111,7 @@ def mean_of_paired(pairs: list) -> dict:
     if not pairs:
         return {"d": None, "se": None, "n": 0}
     m = len(pairs)
-    return {"d": sum(p["d"] for p in pairs) / m, "se": math.sqrt(sum(p["se"] ** 2 for p in pairs)) / m,
+    return {"d": total(p["d"] for p in pairs) / m, "se": math.sqrt(total(p["se"] ** 2 for p in pairs)) / m,
             "n": sum(p["n"] for p in pairs)}
 
 
@@ -126,6 +145,42 @@ def auroc(scores: list, positives: list):
         rank_sum += mid_rank * sum(1 for k in range(i, j) if pairs[k][1])
         i = j
     return (rank_sum - n_pos * (n_pos + 1) / 2) / (n_pos * n_neg)
+
+
+def line_fit(points: list):
+    """The least-squares line y = a + b x through (x, y) points: {'a', 'b', 'r2', 'n'}.
+
+    None when there are fewer than three points or every x is the same.
+    """
+    n = len(points)
+    if n < 3:
+        return None
+    mean_x, mean_y = mean(x for x, _ in points), mean(y for _, y in points)
+    spread = total((x - mean_x) ** 2 for x, _ in points)
+    if spread == 0:
+        return None
+    b = total((x - mean_x) * (y - mean_y) for x, y in points) / spread
+    a = mean_y - b * mean_x
+    around_mean = total((y - mean_y) ** 2 for _, y in points)
+    around_line = total((y - (a + b * x)) ** 2 for x, y in points)
+    return {"a": a, "b": b, "r2": 1 - around_line / around_mean if around_mean else None, "n": n}
+
+
+def same_order(run: dict, set_keys: list) -> list:
+    """Groups of ranking keys that agree on every stored read-out of every query in the sets.
+
+    Two such keys put the same prediction on top, find the first right one at the
+    same rank and tie as often, query after query and at every threshold: they
+    order the candidates the same way. Only groups of two or more are returned,
+    each in the order of the run's keys.
+    """
+    signatures = {}
+    for k, key in enumerate(run["keys"]):
+        signature = tuple(
+            (entry["top"][k], entry["future"][k], entry["rank"][k], entry["tied"][k])
+            for set_key in set_keys for row in run["sets"][set_key]["rows"] for entry in row["t"].values())
+        signatures.setdefault(signature, []).append(key)
+    return [group for group in signatures.values() if len(group) > 1]
 
 
 def median(values: list):
@@ -173,7 +228,7 @@ def flags(query_set: dict, threshold: str, measure: str, k: int) -> list:
 
 def reciprocal_rank(query_set: dict, threshold: str, k: int) -> float:
     ranks = [row["t"][threshold]["rank"][k] for row in query_set["rows"]]
-    return sum(1 / r for r in ranks if r) / len(ranks) if ranks else 0.0
+    return total(1 / r for r in ranks if r) / len(ranks) if ranks else 0.0
 
 
 def entry_flags(query_set: dict, threshold: str) -> list:
@@ -295,7 +350,7 @@ def calibration(query_sets: list, threshold: str, bins: int = 10) -> dict:
         members = [i for i, p in enumerate(stated) if low <= p < high or (b == bins - 1 and p == 1.0)]
         if members:
             table.append({"low": low, "high": high, "n": len(members),
-                          "stated": sum(stated[i] for i in members) / len(members),
+                          "stated": mean(stated[i] for i in members),
                           "right": sum(right[i] for i in members) / len(members)})
         else:
             table.append({"low": low, "high": high, "n": 0, "stated": None, "right": None})
@@ -308,9 +363,9 @@ def calibration(query_sets: list, threshold: str, bins: int = 10) -> dict:
     quarter = sorted(range(n), key=lambda i: -stated[i])[:max(1, n // 4)] if n else []
     return {
         "answers": n,
-        "stated": sum(stated) / n if n else None,
+        "stated": mean(stated) if n else None,
         "right": sum(right) / n if n else None,
-        "gap": sum(row["n"] * abs(row["stated"] - row["right"]) for row in table if row["n"]) / n if n else None,
+        "gap": total(row["n"] * abs(row["stated"] - row["right"]) for row in table if row["n"]) / n if n else None,
         "auroc": auroc(stated, right),
         "at": at,
         "top_quarter_right": sum(right[i] for i in quarter) / len(quarter) if quarter else None,
@@ -351,10 +406,10 @@ def endings(run: dict, threshold: str, bins: int = 10) -> list:
             for b in range(bins)]
         out.append({
             "node": node, "label": ended["label"], "kind": ended["kind"],
-            "ended": {"n": len(e_values), "mean": sum(e_values) / len(e_values) if e_values else None,
+            "ended": {"n": len(e_values), "mean": mean(e_values) if e_values else None,
                       "above_half": share([v > 0.5 for v in e_values]), "says_end": share(e_says),
                       "histogram": histogram(e_values)},
-            "went_on": {"n": len(w_values), "mean": sum(w_values) / len(w_values) if w_values else None,
+            "went_on": {"n": len(w_values), "mean": mean(w_values) if w_values else None,
                         "above_half": share([v > 0.5 for v in w_values]), "says_end": share(w_says),
                         "histogram": histogram(w_values)},
             "auroc": auroc(e_values + w_values, [1] * len(e_values) + [0] * len(w_values)),
@@ -409,13 +464,23 @@ def latency(run: dict) -> dict:
         candidates = [row["t"][threshold]["n"] for row in rows[:len(probe["ms"])] if threshold in row["t"]]
         for n, ms in zip(candidates, probe["ms"]):
             points.append({"node": node_key, "candidates": n, "ms": ms})
+        by_key = probe.get("by_key_ms", {})
+        # The first pass asks its requests with one key; the per-key pass asks the first of them again with
+        # every key, that one included. The two times of the same request under the same key say how much
+        # one request varies from call to call on this machine.
+        again = by_key.get(probe.get("rank_sort_algo", "potential"), [])
+        sets_here = [key for key in (node.get("set_order") or sorted(node["sets"])) if key in run["sets"]]
         nodes.append({
             "node": node_key, "label": node["label"], "patterns": node["patterns"],
             "candidates": median(candidates), "ms": median(probe["ms"]), "ms_p90": percentile(probe["ms"], 0.9),
             "requests": len(probe["ms"]),
-            "by_key": {key: median(values) for key, values in probe.get("by_key_ms", {}).items()},
+            "by_key": {key: median(values) for key, values in by_key.items()},
+            "timed": len(next(iter(by_key.values()))) if by_key else 0,
+            "repeat": [abs(first - second) for first, second in zip(probe["ms"], again)],
+            "same_order": same_order(run, sets_here) if by_key else [],
         })
-    return {"nodes": nodes, "points": points}
+    fit = line_fit([(point["candidates"], point["ms"]) for point in points])
+    return {"nodes": nodes, "points": points, "fit": fit}
 
 
 # ----------------------------------------------------------------------------

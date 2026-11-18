@@ -77,7 +77,7 @@ def _clock(seconds: float) -> str:
 
 
 def _say(line: str) -> None:
-    """Print a line now. A run of hours is followed through a redirected log, where an
+    """Print a line now. A long run is followed through a redirected log, where an
     unflushed line would wait in a buffer until thousands more had been written."""
     print(line, flush=True)
 
@@ -331,7 +331,8 @@ def probe_latency(kato: Kato, node_id: str, queries: list, time_keys: bool) -> d
     config = {**MATCHING, "recall_threshold": THRESHOLDS[0], "max_predictions": LATENCY_MAX_PREDICTIONS,
               "rank_sort_algo": "potential"}
     session = kato.new_session(node_id, config)
-    result = {"recall_threshold": THRESHOLDS[0], "max_predictions": LATENCY_MAX_PREDICTIONS, "ms": []}
+    result = {"recall_threshold": THRESHOLDS[0], "max_predictions": LATENCY_MAX_PREDICTIONS,
+              "rank_sort_algo": config["rank_sort_algo"], "ms": []}
     try:
         chosen = queries[:LATENCY_QUERIES]
         if chosen:

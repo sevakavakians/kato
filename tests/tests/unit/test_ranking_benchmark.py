@@ -14,6 +14,7 @@ import itertools
 import json
 import math
 import re
+import shutil
 import ssl
 import sys
 import tarfile
@@ -25,7 +26,8 @@ from xml.etree import ElementTree
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+REPO = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(REPO))
 
 from benchmarks.ranking import charts, datasets, report, run, scoring, stats, store, suite  # noqa: E402
 from benchmarks.ranking.client import Kato, KatoError  # noqa: E402
@@ -439,6 +441,7 @@ class ToyKato:
     def predict(self, node, state):
         observed = [name for event in state["stm"] for name in event]
         predictions = []
+        learned = sum(len(learns) for _, learns in node.values())
         for name, (events, learns) in sorted(node.items()):         # a fixed order, so the sums below are too
             frequency = len(learns)
             flat = [x for event in events for x in event]
@@ -447,7 +450,8 @@ class ToyKato:
             if not matched or similarity < state["config"]["recall_threshold"]:
                 continue
             values = {key: (int(name[i:i + 2], 16) % 5) / 4 for i, key in enumerate(scoring.KEYS)}   # ties on purpose
-            values.update(potential=similarity + math.log(frequency), similarity=similarity, frequency=frequency)
+            values.update(potential=similarity + math.log(frequency), similarity=similarity, frequency=frequency,
+                          bayesian_prior=frequency / learned)        # as in KATO: it ranks as `frequency` does
             predictions.append({"name": name, "future": events[matched[-1] + 1:], **values})
         total = sum(math.exp(p["potential"]) for p in predictions)
         by_event = Counter()
@@ -724,6 +728,32 @@ def test_intervals():
     assert round(mean["p"], 3) == 0.5 and round(mean["hi"] - mean["lo"], 3) == round(2 * stats.Z * 0.04 / math.sqrt(2), 3)
 
 
+def test_sums_are_the_same_in_any_order_and_on_any_python():
+    """Python's own sum depends on the order of its terms and, from 3.12, on the Python version. A page
+    built from the same result files must be the same page whoever builds it, so figures are summed exactly."""
+    def left_to_right(values):                  # what the built-in sum did before Python 3.12
+        result = 0.0
+        for value in values:
+            result += value
+        return result
+
+    values = [0.1] * 10 + [1e16, 1.0, -1e16]
+    assert stats.total(values) == stats.total(reversed(values)) == 2.0
+    assert left_to_right(values) != left_to_right(reversed(values)), "added one by one, the order decides"
+    assert stats.mean([0.1, 0.2, 0.3]) == stats.mean([0.3, 0.1, 0.2]) == stats.mean([0.2, 0.3, 0.1])
+    # A mean of shares that falls exactly on a rounding boundary: 557/2000 and 13/80, as in a real run.
+    shares = [stats.share([1] * right + [0] * (200 - right)) for right in (41, 51, 19, 6, 73, 49, 21, 37)]
+    assert len({stats.mean_of_shares(order)["p"] for order in (shares, shares[::-1], shares[3:] + shares[:3])}) == 1
+
+
+def test_a_line_through_points():
+    fit = stats.line_fit([(x, 40 + 0.5 * x) for x in range(0, 1000, 50)])
+    assert (round(fit["a"], 9), round(fit["b"], 9), round(fit["r2"], 9), fit["n"]) == (40.0, 0.5, 1.0, 20)
+    noisy = stats.line_fit([(0, 1), (1, 3), (2, 2), (3, 5), (4, 4)])
+    assert (round(noisy["a"], 6), round(noisy["b"], 6), round(noisy["r2"], 6)) == (1.4, 0.8, 0.64)
+    assert stats.line_fit([(1, 2), (2, 3)]) is None and stats.line_fit([(1, 2), (1, 3), (1, 4)]) is None
+
+
 def test_area_under_the_roc_curve():
     assert stats.auroc([0.1, 0.2, 0.8, 0.9], [0, 0, 1, 1]) == 1.0
     assert stats.auroc([0.9, 0.8, 0.2, 0.1], [0, 0, 1, 1]) == 0.0
@@ -747,6 +777,37 @@ def test_the_guidance_rule(finished):
         difference = stats.case_difference(loaded, cases[0], "0.1", "future", best, k)
         low, high = stats.interval(difference)
         assert (k in result["level"]) == (k not in result["best"] and low <= 0 <= high)
+
+
+def test_keys_that_rank_alike_are_found_from_the_records(finished):
+    """In KATO `bayesian_prior` is a pattern's frequency over the node's total, so it orders the candidates
+    as `frequency` does (and `bayesian_posterior` as `good_odds`). The report uses such keys, which return
+    the same response, to show how much a request time varies when nothing about the request differs."""
+    tmp_path, _ = finished
+    loaded = stats.load_run(tmp_path / "results" / "smoke")
+    groups = stats.same_order(loaded, list(loaded["sets"]))
+    assert ["frequency", "bayesian_prior"] in groups or ["bayesian_prior", "frequency"] in groups
+    for group in groups:
+        assert len(group) > 1
+        first = loaded["keys"].index(group[0])
+        for name in group[1:]:
+            k = loaded["keys"].index(name)
+            for query_set in loaded["sets"].values():
+                for row in query_set["rows"]:
+                    for entry in row["t"].values():
+                        assert (entry["top"][k], entry["rank"][k], entry["tied"][k]) == (
+                            entry["top"][first], entry["rank"][first], entry["tied"][first])
+    # a key that differs on one read-out of one query leaves its group
+    k = loaded["keys"].index("bayesian_prior")
+    entry = loaded["sets"]["gen_small.mid5"]["rows"][0]["t"]["0.1"]
+    entry["rank"][k] = (entry["rank"][k] or 0) + 1
+    assert not any("bayesian_prior" in group for group in stats.same_order(loaded, list(loaded["sets"])))
+
+    node = next(row for row in stats.latency(stats.load_run(tmp_path / "results" / "smoke"))["nodes"] if row["by_key"])
+    record = json.loads((tmp_path / "results" / "smoke" / "run.json").read_text())["nodes"][node["node"]]["latency"]
+    assert record["rank_sort_algo"] == "potential"
+    assert node["timed"] == 5 and node["repeat"] == [
+        abs(a - b) for a, b in zip(record["ms"], record["by_key_ms"]["potential"])]
 
 
 def test_two_runs_of_the_same_thing_agree_response_by_response(finished, tmp_path):
@@ -782,10 +843,56 @@ def test_the_reports_are_built_from_the_result_files(finished, tmp_path):
     best = stats.verdict(loaded, stats.cases(loaded)[0])
     assert f"{best['shares'][best['best'][0]]['p']:.3f}" in page
     # what the page says about the time per ranking key is read from the run, not assumed
-    timed = [row["by_key"] for row in stats.latency(loaded)["nodes"] if row["by_key"]]
+    timed = [row for row in stats.latency(loaded)["nodes"] if row["by_key"]]
     assert len(timed) == 1, "the smoke suite times each key on one node"
-    spread = f"span {min(timed[0].values()):,.0f} to {max(timed[0].values()):,.0f} ms"
-    assert spread in page and spread in html_page
+    medians, repeat = timed[0]["by_key"], timed[0]["repeat"]
+    spread = f"| The keys' medians, lowest to highest | {min(medians.values()):,.0f} to {max(medians.values()):,.0f} ms |"
+    again = (f"| One request asked twice with the same key: the two times differ by | "
+             f"{min(repeat):,.0f} to {max(repeat):,.0f} ms |")
+    alike = (f"| `frequency` and `bayesian_prior`, which return the same response: medians | "
+             f"{medians['frequency']:,.0f} and {medians['bayesian_prior']:,.0f} ms |")
+    assert spread in page and again in page and alike in page and "order its candidates the same way" in page
+    for cell in (f"{min(medians.values()):,.0f} to {max(medians.values()):,.0f} ms",
+                 f"{min(repeat):,.0f} to {max(repeat):,.0f} ms", "which return the same response"):
+        assert cell in html_page
+    fit = stats.latency(loaded)["fit"]
+    assert f"{fit['b']:.2f} ms per candidate" in page and f"Over the {fit['n']} requests" in html_page
+
+    # The ways to read a next event, each figure recomputed here from the records.
+    keys, sets = loaded["keys"], loaded["sets"]
+    columns = report.kind_columns(loaded)
+    assert [column["label"] for column in columns] == ["Generated"]
+
+    def mean_share(flags_of):
+        return stats.mean([sum(flags_of(sets[key])) / len(sets[key]["rows"]) for key in columns[0]["sets"]])
+
+    p = keys.index("potential")
+    entry_share = mean_share(lambda s: [bool(row["t"]["0.1"]["fp_right"]) for row in s["rows"]])
+    first_share = mean_share(lambda s: [row["t"]["0.1"]["top"][p] == scoring.RIGHT for row in s["rows"]])
+    with_future = mean_share(lambda s: [row["t"]["0.1"]["future"][p] == scoring.RIGHT for row in s["rows"]])
+    figures = {row["label"]: row["mean"]["p"] for row in report.readouts(loaded, "0.1")["rows"]}
+    assert figures["The top entry of `future_potentials`"] == entry_share
+    assert figures["`predictions[0]`, ranked by `potential`"] == first_share
+    assert figures["The first prediction that has a `future`, ranked by `potential`"] == with_future
+    assert f"| The top entry of `future_potentials` | {entry_share:.3f} |" in page
+    difference = report.kinds_difference(loaded, columns, "0.1", ("future", None), ("future", p))
+    assert round(difference["d"], 12) == round(entry_share - with_future, 12)
+    assert report.difference_phrase({"d": 0.035, "se": 0.007, "n": 200}).startswith("3.5 points more often (95% interval +2.1")
+    assert report.difference_phrase({"d": -0.035, "se": 0.007, "n": 200}).startswith("3.5 points less often")
+    assert report.difference_phrase({"d": 0.005, "se": 0.007, "n": 200}).startswith("about as often")
+
+    # Right among the answered, and the share answered, at each threshold, from the records.
+    lines = [line for line in report.table_threshold_answers(loaded, "potential").splitlines() if line.startswith("| Generated")]
+    cells = [cell.strip() for cell in lines[0].strip("|").split("|")]
+    assert len(cells) == 1 + len(loaded["thresholds"])
+    for i, threshold in enumerate(loaded["thresholds"]):
+        entries = [row["t"][threshold] for key in columns[0]["sets"] for row in sets[key]["rows"]]
+        named = [entry for entry in entries if entry["future"][p] != scoring.NO_EVENT]
+        answered = f"{100 * len(named) / len(entries):.1f}% answered"
+        right = sum(entry["future"][p] == scoring.RIGHT for entry in named)
+        assert cells[1 + i] == (f"{100 * right / len(named):.1f}% ({answered})" if len(named) >= 20 else
+                                (f"too few ({answered})" if named else "none answered"))
+        assert cells[1 + i] in page
     # What goes into git passes the repository's own checks on text files: no trailing blanks, one final newline.
     kept = [out / "ranking-benchmark.md", results / "results" / "smoke" / "run.json",
             *sorted((out / "ranking-benchmark").glob("*.svg"))]
@@ -794,6 +901,52 @@ def test_the_reports_are_built_from_the_result_files(finished, tmp_path):
         text = path.read_text()
         assert text.endswith("\n") and not text.endswith("\n\n"), path.name
         assert all(line == line.rstrip() for line in text.split("\n")), path.name
+
+
+def test_notes_are_read_into_both_reports(finished, tmp_path):
+    """`notes.md` in a run's folder is the hand-written reading of that run. It heads both reports."""
+    results, _ = finished
+    run_dir = tmp_path / "copy"
+    shutil.copytree(results / "results" / "smoke", run_dir)
+    report.build(run_dir, tmp_path / "plain", log=lambda *a: None)       # first without notes
+    assert "Reading the" not in (run_dir / "report.html").read_text()
+    assert "Reading the" not in (tmp_path / "plain" / "ranking-benchmark.md").read_text()
+    (run_dir / "notes.md").write_text(
+        "**Read `future_potentials`.** It adds up *every* candidate, see [the guide](../users/configuration.md) "
+        "and [the paper](https://example.org/paper).\n\n### A heading\n\n- one & two\n- `three`\n\n"
+        "1. first\n2. second\n\n| Key | Share |\n| --- | ---: |\n| `potential` | 0.5 |\n")
+    report.build(run_dir, tmp_path / "out", log=lambda *a: None)
+    page = (tmp_path / "out" / "ranking-benchmark.md").read_text()
+    assert page.index("## At a Glance") < page.index("## Reading the Results") < page.index("## Which Key for Which Case")
+    assert "**Read `future_potentials`.** It adds up *every* candidate" in page
+    html_page = (run_dir / "report.html").read_text()
+    assert "<h2>Reading the results</h2>" in html_page
+    assert "<strong>Read <code>future_potentials</code>.</strong> It adds up <em>every</em> candidate" in html_page
+    assert '<a href="https://example.org/paper">the paper</a>' in html_page
+    assert "see the guide and" in html_page and "configuration.md" not in html_page, "a link into the repository is text"
+    assert "<h3>A heading</h3>" in html_page and "<ul><li>one &amp; two</li><li><code>three</code></li></ul>" in html_page
+    assert "<ol><li>first</li><li>second</li></ol>" in html_page and "<td style=\"text-align:right\">0.5</td>" in html_page
+
+
+GUIDE = REPO / "benchmarks" / "results" / "ranking" / "guide"
+
+
+@pytest.mark.skipif(not (GUIDE / "run.json").exists(), reason="the guide suite's results are not in this checkout")
+def test_the_committed_page_is_what_the_generator_writes(tmp_path):
+    """docs/reference/ranking-benchmark.md and its charts are generated from the guide run's result files.
+    Built again here they must come out byte for byte, on any Python: nobody edits them by hand, and a
+    change to the generator shows up as a change to the page."""
+    report.build(GUIDE, tmp_path, log=lambda *a: None)
+    docs = REPO / "docs" / "reference"
+    assert (tmp_path / "ranking-benchmark.md").read_text() == (docs / "ranking-benchmark.md").read_text(), \
+        "run `python -m benchmarks.ranking.report` and commit the page"
+    built = sorted(path.name for path in (tmp_path / "ranking-benchmark").iterdir())
+    assert built == sorted(path.name for path in (docs / "ranking-benchmark").iterdir())
+    for name in built:
+        assert (tmp_path / "ranking-benchmark" / name).read_bytes() == (docs / "ranking-benchmark" / name).read_bytes(), name
+    loaded = stats.load_run(GUIDE)
+    assert sum(len(query_set["rows"]) for query_set in loaded["sets"].values()) == 5112
+    assert all(len(row["t"]) == 3 for query_set in loaded["sets"].values() for row in query_set["rows"])
 
 
 def test_a_chart_is_a_complete_picture_with_light_and_dark_values():
